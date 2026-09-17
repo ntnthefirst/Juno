@@ -10,10 +10,10 @@
  * was handed, even though it never uses the import on that path. Every piece
  * below is a published subpath export, and this mirrors exactly what its own
  * `construct()` does.
+ *
+ * This module deliberately does NOT import `electron`. Paths live in ./paths.ts,
+ * so a service and its test can build a database in a plain Node process.
  */
-import { app } from "electron";
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session";
 import { createTableRelationsHelpers, extractTablesRelationalConfig } from "drizzle-orm/relations";
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
@@ -25,18 +25,6 @@ export type Db = BaseSQLiteDatabase<"sync", unknown, typeof schema>;
 
 let connection: ShimDatabase | null = null;
 let db: Db | null = null;
-
-/**
- * Where the file lives. `userData` differs between a dev run and a packaged run
- * unless the product name matches, which is the usual cause of an app that
- * appears to have "lost" its data. Dev deliberately uses a separate file so that
- * development cannot damage real business records.
- */
-export function databasePath(): string {
-	const dir = app.getPath("userData");
-	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-	return join(dir, process.env.BUREAU_DEV ? "bureau.dev.sqlite" : "bureau.sqlite");
-}
 
 export function createDrizzle(client: ShimDatabase): Db {
 	const dialect = new SQLiteSyncDialect({ casing: undefined });
@@ -65,7 +53,7 @@ export function getConnection(): ShimDatabase {
 	return connection;
 }
 
-export function openDb(filename = databasePath()): Db {
+export function openDb(filename: string): Db {
 	if (db) return db;
 	connection = openDatabase(filename);
 	db = createDrizzle(connection);

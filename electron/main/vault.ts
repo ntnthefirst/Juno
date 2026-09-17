@@ -11,30 +11,30 @@
  * - `safeStorage` is unusable before `app.whenReady()`. Every entry point here
  *   checks, because calling it early hands back a buffer that decrypts to
  *   garbage later, which looks exactly like a wrong password.
+ *
+ * The decisions this file makes about cryptography and lockout live in
+ * ./vault-core.ts, which is pure and tested. This module is only storage.
  */
 import { app, safeStorage } from "electron";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { LockMethod } from "../shared/types";
-
-/**
- * scrypt rather than Argon2id, per decision 17: Argon2 needs a native module and
- * this project deliberately has none. The parameters are stored alongside the
- * verifier so they can be raised, or the algorithm swapped, without guessing
- * what produced an existing record.
- */
-const KDF = { name: "scrypt" as const, N: 2 ** 15, r: 8, p: 1, keylen: 64 };
-
-/** Five wrong tries, then a delay that doubles from 30 seconds up to 15 minutes. */
-const FREE_ATTEMPTS = 5;
-const FIRST_PENALTY_MS = 30_000;
-const MAX_PENALTY_MS = 15 * 60_000;
+import {
+	KDF,
+	activePenalty,
+	deriveVerifier,
+	newSalt,
+	nextPenalty,
+	remainingAttempts as coreRemaining,
+	validateSecret,
+	verifyAgainst,
+	type KdfParams,
+} from "./vault-core";
 
 interface VaultRecord {
 	v: 1;
 	method: Exclude<LockMethod, "none">;
-	kdf: typeof KDF;
+	kdf: KdfParams;
 	salt: string;
 	verifier: string;
 	failedAttempts: number;
@@ -53,10 +53,6 @@ function assertReady(): void {
 	}
 }
 
-function derive(secret: string, salt: Buffer): Buffer {
-	return scryptSync(secret, salt, KDF.keylen, { N: KDF.N, r: KDF.r, p: KDF.p });
-}
-
 function read(): VaultRecord | null {
 	if (cache !== undefined) return cache;
 	assertReady();
@@ -66,10 +62,9 @@ function read(): VaultRecord | null {
 		return null;
 	}
 	try {
-		const raw = safeStorage.decryptString(readFileSync(path));
-		cache = JSON.parse(raw) as VaultRecord;
+		cache = JSON.parse(safeStorage.decryptString(readFileSync(path))) as VaultRecord;
 	} catch {
-		// A vault that cannot be decrypted is a vault from a different OS user or a
+		// A vault that will not decrypt belongs to a different OS user or a
 		// different machine. Treating it as absent would silently drop the lock, so
 		// it stays an error the interface has to surface.
 		throw new Error("The lock file exists but could not be read on this account.");
@@ -103,12 +98,8 @@ export function configuredMethod(): LockMethod {
 export function penaltyState(): { lockedOutUntil: string | null; failedAttempts: number } {
 	const record = read();
 	if (!record) return { lockedOutUntil: null, failedAttempts: 0 };
-	// An expired penalty is reported as absent rather than rewritten here, so that
-	// reading state never writes to disk.
-	const until = record.lockedOutUntil;
-	const expired = until !== null && Date.parse(until) <= Date.now();
 	return {
-		lockedOutUntil: expired ? null : until,
+		lockedOutUntil: activePenalty(record),
 		failedAttempts: record.failedAttempts,
 	};
 }
@@ -122,19 +113,14 @@ export function setSecret(
 	if (existing && !verifySecret(currentSecret ?? "")) {
 		throw new Error("The current passphrase is wrong.");
 	}
-	if (method === "pin" && !/^\d{4,12}$/.test(secret)) {
-		throw new Error("A PIN has to be 4 to 12 digits.");
-	}
-	if (method === "passphrase" && secret.length < 8) {
-		throw new Error("A passphrase has to be at least 8 characters.");
-	}
-	const salt = randomBytes(32);
+	validateSecret(method, secret);
+	const salt = newSalt();
 	write({
 		v: 1,
 		method,
 		kdf: KDF,
-		salt: salt.toString("base64"),
-		verifier: derive(secret, salt).toString("base64"),
+		salt,
+		verifier: deriveVerifier(secret, salt),
 		failedAttempts: 0,
 		lockedOutUntil: null,
 	});
@@ -149,29 +135,22 @@ export function clearSecret(currentSecret: string): void {
 }
 
 /**
- * Constant-time comparison against the stored verifier. Returns only a boolean:
- * no part of the record leaves this module.
+ * Returns only a boolean. No part of the record leaves this module.
+ * The stored KDF parameters are used rather than the current constant, so an
+ * existing verifier still validates after the parameters are raised.
  */
 export function verifySecret(secret: string): boolean {
 	const record = read();
 	if (!record) return false;
-	const expected = Buffer.from(record.verifier, "base64");
-	const actual = derive(secret, Buffer.from(record.salt, "base64"));
-	return expected.length === actual.length && timingSafeEqual(expected, actual);
+	return verifyAgainst(secret, record.salt, record.verifier, record.kdf);
 }
 
 export function recordFailure(): { lockedOutUntil: string | null; failedAttempts: number } {
 	const record = read();
 	if (!record) return { lockedOutUntil: null, failedAttempts: 0 };
-	const failedAttempts = record.failedAttempts + 1;
-	let lockedOutUntil: string | null = null;
-	if (failedAttempts > FREE_ATTEMPTS) {
-		const over = failedAttempts - FREE_ATTEMPTS - 1;
-		const penalty = Math.min(FIRST_PENALTY_MS * 2 ** over, MAX_PENALTY_MS);
-		lockedOutUntil = new Date(Date.now() + penalty).toISOString();
-	}
-	write({ ...record, failedAttempts, lockedOutUntil });
-	return { lockedOutUntil, failedAttempts };
+	const next = nextPenalty(record);
+	write({ ...record, ...next });
+	return next;
 }
 
 export function recordSuccess(): void {
@@ -183,8 +162,8 @@ export function recordSuccess(): void {
 
 export function remainingAttempts(): number {
 	const record = read();
-	if (!record) return FREE_ATTEMPTS;
-	return Math.max(0, FREE_ATTEMPTS - record.failedAttempts);
+	if (!record) return coreRemaining({ failedAttempts: 0, lockedOutUntil: null });
+	return coreRemaining(record);
 }
 
 /** Test seam. Never called by application code. */

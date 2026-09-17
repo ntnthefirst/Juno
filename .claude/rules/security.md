@@ -131,3 +131,41 @@ Decision 6 is explicit, and it decides where things belong.
   joined onto a filesystem root without validating it stays inside that root.
 - Anything that signs, sends, files or deletes requires explicit confirmation and
   never fires unattended. See [mcp.md](mcp.md) section 4.
+
+## 8. The lock is three layers, and only one of them is a lock screen
+
+Decision 15 in [../../docs/decisions.md](../../docs/decisions.md). Be precise
+about what each layer buys, because a lock screen over an unencrypted file is
+theatre.
+
+| Layer | Protects against | Does not protect against |
+| --- | --- | --- |
+| OS account, always on | Another person's login on the same machine | Anyone holding the machine while the owner is signed in |
+| Lock screen, optional, default on | Someone walking up to the running, unlocked laptop | Anything done to `bureau.db` on disk |
+| Database encryption, optional, off by default | A stolen machine or a copied file | A running, unlocked Bureau. The key is in memory while unlocked |
+
+- **Lock state lives in the main process.** It is the only place that knows
+  whether Bureau is locked. Every IPC handler and every MCP tool checks it before
+  it does anything, and a renderer claiming to be unlocked proves nothing: a
+  renderer that believes it is locked is a renderer that can be told it is not.
+- **A PIN is never the key-derivation input for encryption.** The encryption key
+  is random, generated once, and stored wrapped by `safeStorage`. A passphrase, a
+  PIN or a biometric unwraps it. A four-digit PIN fed straight into a KDF is
+  brute-forceable offline in seconds, and the indirection that avoids this costs
+  one step.
+- Unlock methods: passphrase with Argon2id and a per-install random salt, with the
+  parameters stored alongside; PIN, rate-limited with an escalating lockout, and
+  convenience only; Touch ID through `systemPreferences.promptTouchID()`. Windows
+  Hello needs a native module and is the last one built, not the first.
+- **Locking drops state, it does not only draw over it.** Sensitive renderer state
+  is discarded rather than hidden behind an overlay, mail sync pauses, and no
+  background job resumes until a person has re-authenticated. A screenshot of a
+  locked window must not contain a client record.
+- Lock triggers: idle timeout, OS lock or sleep, minimise (optional), and manually.
+- **The settings screen states in one plain sentence that the lock screen does not
+  protect the file on disk.** Not a tooltip, not a help page. Copy that implies
+  otherwise is a bug in the same class as claiming an eIDAS signature (section 7).
+- Turning encryption on requires the passphrase twice and states, in those words,
+  that a forgotten passphrase means the data is unrecoverable and there is no reset.
+- An MCP tool may lock Bureau and may never unlock it. There is no `app.unlock`
+  ([mcp.md](mcp.md), PLAN.md section 4). Unlocking is a person at the keyboard.

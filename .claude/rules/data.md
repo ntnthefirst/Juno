@@ -126,3 +126,46 @@ from the dead in one screen and not another.
   gitignored and never committed ([git.md](git.md)).
 - Seed and demo data go through the same service functions as real data. A
   hand-written `INSERT` skips validation and produces rows the app cannot have made.
+
+## 9. Seeded reference data is hidden, never deleted
+
+Decision 16. Document types, statuses, labels, reminder presets and email
+templates ship with defaults on first run, stay editable, and can be reset.
+
+They still carry the five mandatory columns from section 2, including
+`deleted_at`. These five are **extra**, on top of them:
+
+| Column | Type | Why |
+| --- | --- | --- |
+| `is_system` | integer boolean, not null | It shipped with Bureau rather than being user-created. Decides what a reset restores |
+| `hidden_at` | text, UTC ISO-8601, nullable | The user removed it from the pickers. See below |
+| `sort_order` | integer, not null | The user's ordering, not the shipped one |
+| `seed_key` | text, not null for system rows | Stable identifier, so an upgrade updates the right row after a rename |
+| `customised_at` | text, UTC ISO-8601, nullable | Set on first edit. An upgrade must not overwrite an edited row |
+
+**Removing a system row sets `hidden_at`. It does not delete and it does not soft
+delete.** A status that twelve documents already point at cannot be removed
+without breaking those rows or silently rewriting their history. Hidden means: not
+offered when creating or editing a record, still resolved and still rendered
+correctly on every record that already uses it. The same applies to a user-created
+row the moment anything references it, so check for references before offering a
+delete at all.
+
+So reads come in two shapes, and picking the wrong one is the bug this section
+exists to prevent:
+
+- **Pickers and creation forms** filter `hidden_at IS NULL` on top of the usual
+  `deleted_at IS NULL`, ordered by `sort_order`.
+- **Rendering an existing row's value** filters neither. Resolve by id and display
+  it, hidden or not.
+
+**Reset** is per set ("reset statuses") and also global. It restores system rows to
+their shipped values, clears `hidden_at` and `customised_at`, and asks separately
+what to do with user-created rows, because deleting someone's own labels without
+asking is data loss wearing the word reset. It runs in one transaction and through
+the service, like any other seed (section 8).
+
+**Upgrades** carry a `seed_version` per set. A newer version may add rows and may
+update rows whose `customised_at` is null. It may never touch an edited row and it
+may never resurrect a hidden one. Bumping `seed_version` without checking those two
+conditions is how a user's configuration silently reverts after an update.

@@ -39,10 +39,10 @@ any of these. It records what would have to stop being true for each to change.
 | File | Covers |
 | --- | --- |
 | [.claude/rules/architecture.md](.claude/rules/architecture.md) | Main/renderer split, the services layer, folder layout, props types |
-| [.claude/rules/data.md](.claude/rules/data.md) | Schema rules, the five mandatory columns, migrations, timestamps, money |
-| [.claude/rules/security.md](.claude/rules/security.md) | Credentials, the preload bridge, CSP, treating mail HTML as hostile |
+| [.claude/rules/data.md](.claude/rules/data.md) | Schema rules, the five mandatory columns, migrations, timestamps, money, seeded reference data |
+| [.claude/rules/security.md](.claude/rules/security.md) | Credentials, the preload bridge, CSP, treating mail HTML as hostile, the lock |
 | [.claude/rules/mcp.md](.claude/rules/mcp.md) | Tool naming and shapes, read-only vs side-effectful, confirmation |
-| [.claude/rules/styling.md](.claude/rules/styling.md) | Tokens not values, density, dark mode, focus, tabular numerals |
+| [.claude/rules/styling.md](.claude/rules/styling.md) | Tokens not values, density, the three-state theme, focus, tabular numerals |
 | [.claude/rules/writing.md](.claude/rules/writing.md) | Interface English, client output Dutch, the AI-tells blacklist |
 | [.claude/rules/git.md](.claude/rules/git.md) | Commits, staging, **no AI attribution** |
 | [.claude/rules/verify.md](.claude/rules/verify.md) | What must pass, and the traps in this stack |
@@ -109,7 +109,33 @@ Accounts are **runtime data the user types into the app**. Nothing account
 related belongs in `.env`, in `electron-builder`, or in a CI secret. Only the
 code-signing certificate and the update feed URL are build configuration.
 
+## The lock
+
+Three layers (decision 15): the OS account, always on; a lock screen, optional and
+on by default; database encryption, optional and off, and out of scope for now.
+**The lock screen protects against a walk-up, not against the file on disk**, and
+the settings screen has to say so. Lock state lives in the main process, never in
+the renderer. A PIN is never the key-derivation input for encryption: the key is
+random and wrapped by `safeStorage`, and the PIN unwraps it. An MCP tool may lock
+Bureau and may never unlock it. Details in
+[.claude/rules/security.md](.claude/rules/security.md).
+
+## Seeded reference data
+
+Document types, statuses, labels, reminder presets and email templates ship
+seeded, stay editable, and are **never hard-deleted** (decision 16). Removing one
+sets `hidden_at`, because rows already point at it. Those rows carry `is_system`,
+`hidden_at`, `sort_order`, `seed_key` and `customised_at` on top of the five
+mandatory columns. Reset is per set and global; an upgrade never overwrites an
+edited row and never resurrects a hidden one.
+[.claude/rules/data.md](.claude/rules/data.md).
+
 ## Styling
+
+Theme is a three-state setting: `system`, `light`, `dark`, defaulting to `system`
+(decision 14). Applying it is two writes, `data-theme` on `<html>` and
+`nativeTheme.themeSource` in the main process. Doing only one leaves a light title
+bar over a dark window.
 
 Colours, type, spacing, radius and motion come from the tokens in
 [brand/tokens.css](brand/tokens.css). **Never a raw hex in a component.** A

@@ -44,10 +44,10 @@ it is not where MCP starts.
 **Goal:** replace the spreadsheet and the scattered folders with one window that
 knows who the clients are.
 
-- **Ships:** Electron + React + TS + Vite shell mirroring `parrel-cockpit-desktop`, `brand/tokens.css` wired in light and dark. Drizzle schema carrying the five mandatory columns, migrations running forward on launch. `client`, `contact`, `project`: CRUD, search, soft delete with undo. Owner profile in settings (company name, VAT, address), because phase 1 needs it. Backup and restore. Packaging and auto-update.
-- **Deferred:** network calls of any kind, dashboard, tags, attachments, import, multi-owner UI.
-- **Size:** 8 to 12 sessions, 3 to 5 weeks. Driven by how much of the Parrel shell lifts rather than gets rewritten, and by getting a signed build updating before anything is stacked on it.
-- **Done when:** Nathan opens the packaged app on his own machine, enters bodhi, hyge, noir and obet with their contacts and live projects, reboots, opens it again and they are all there. He then deletes the spreadsheet.
+- **Ships:** Electron + React + TS + Vite shell mirroring `parrel-cockpit-desktop`, `brand/tokens.css` wired in light and dark. Theme as a three-state setting, `system` / `light` / `dark`, applied by `data-theme` on `<html>` and `nativeTheme.themeSource` together (decision 14). Drizzle schema carrying the five mandatory columns, migrations running forward on launch. `client`, `contact`, `project`: CRUD, search, soft delete with undo. The seeded reference-data framework (decision 16), with statuses and labels usable from day one: editable, reorderable, hideable rather than deletable, resettable per set. Lock screen, on by default, with passphrase (Argon2id) and PIN, lock state owned by the main process (decision 15). Owner profile in settings (company name, VAT, address), because phase 1 needs it. Backup and restore. Packaging and auto-update.
+- **Deferred:** network calls of any kind, dashboard, tags, attachments, import, multi-owner UI. Windows Hello and Touch ID unlock, and database encryption, which is section 6 for now.
+- **Size:** 12 to 17 sessions, 5 to 7 weeks, up from 8 to 12 because the lock screen and the seeded reference-data framework were added to this phase. Driven by how much of the Parrel shell lifts rather than gets rewritten, by getting a signed build updating before anything is stacked on it, and by the key wrapping behind the PIN, which is little code and careful review.
+- **Done when:** Nathan opens the packaged app on his own machine, enters bodhi, hyge, noir and obet with their contacts and live projects, renames a project status to the word he actually uses, reboots, opens it again, unlocks it with his passphrase and finds all of it there in the theme he chose. He then deletes the spreadsheet.
 
 Packaging belongs here, not later. An app that only runs under `npm run dev` is
 not shippable to yourself, and every later phase inherits the build.
@@ -57,7 +57,7 @@ not shippable to yourself, and every later phase inherits the build.
 **Goal:** an NDA that took twenty minutes of find-and-replace takes one minute and
 cannot contain last client's name.
 
-- **Ships:** `document_template` registry over the existing `.docx` files (NDA/geheimhouding, ontwikkelovereenkomst, hosting & service overeenkomst, project scope / MVP definitie, addendum), a placeholder convention, and a linter flagging what the app cannot fill. docxtemplater generation from client, project and owner profile, with a fill form for the rest. Output as `.docx` and PDF. pdf-lib stamping: signature PNG, UTC timestamp, document hash, appended audit page. The signing screen states in plain Dutch what this signature is and is not.
+- **Ships:** `document_template` registry over the existing `.docx` files (NDA/geheimhouding, ontwikkelovereenkomst, hosting & service overeenkomst, project scope / MVP definitie, addendum), a placeholder convention, and a linter flagging what the app cannot fill. The document types themselves are seeded reference data from phase 0 (decision 16), so adding a type or renaming one is a settings edit, not a migration. docxtemplater generation from client, project and owner profile, with a fill form for the rest. Output as `.docx` and PDF. pdf-lib stamping: signature PNG, UTC timestamp, document hash, appended audit page. The signing screen states in plain Dutch what this signature is and is not.
 - **Deferred:** sending it (export and attach by hand for now), client countersigning in-app, in-app template editing (they stay Word files, decision 8), version diffs.
 - **Size:** 12 to 18 sessions, 5 to 8 weeks. Driven almost entirely by the templates: reworking the Dutch `.docx` files into clean placeholders without breaking the legal text or Word's formatting is careful manual work, not code. Budget a third of the phase for it.
 - **Done when:** Nathan picks obet and ontwikkelovereenkomst, fills three fields, gets a PDF with his signature on it, and sends it from his normal mail client without editing anything.
@@ -138,7 +138,7 @@ to keep the sketch readable.
 | `client` | `name`, `legal_name`, `vat_number`, `address`, `country`, `status`, `notes` | root. Has many contacts, projects, documents, threads, reminders |
 | `contact` | `client_id`, `name`, `email`, `phone`, `role`, `is_primary` | `email` is what mail linking matches |
 | `project` | `client_id`, `name`, `kind`, `status`, `started_at`, `deadline_at`, `rate`, `currency` | has many documents, reminders, events |
-| `document_template` | `key`, `label_nl`, `file_path`, `placeholders` (json), `kind`, `version` | source for `document` |
+| `document_template` | `key`, `label_nl`, `file_path`, `placeholders` (json), `kind`, `version` | source for `document`. A seeded set, so it also carries the decision 16 columns |
 | `document` | `template_id`, `client_id`, `project_id`, `title`, `status`, `docx_path`, `pdf_path`, `content_hash`, `fill_values` (json), `signed_at` | client required, project optional |
 | `document_signature` | `document_id`, `signer_name`, `image_path`, `signed_at`, `document_hash`, `audit` (json) | the hash is what makes the audit page mean anything |
 | `mail_account` | `label`, `email`, `imap_host/port`, `smtp_host/port`, `security`, `credential_ref`, `last_sync_at`, `sync_state` | `credential_ref` points into `safeStorage`. **No secret here.** |
@@ -146,16 +146,18 @@ to keep the sketch readable.
 | `mail_message` | `account_id`, `folder_id`, `thread_id`, `uid`, `message_id`, `in_reply_to`, `references`, `from_address`, `to_addresses`, `subject`, `sent_at`, `body_text`, `body_html`, `flags` | FTS5 over subject and `body_text` |
 | `mail_thread` | `subject_norm`, `client_id`, `last_message_at`, `message_count`, `link_source` (auto/manual) | `link_source` protects a manual override from the next sync |
 | `mail_attachment` | `message_id`, `filename`, `mime_type`, `size`, `file_path` | on disk, not in SQLite |
-| `mail_template` | `key`, `label`, `subject`, `body_html`, `variables` (json) | phase 4 compose |
+| `mail_template` | `key`, `label`, `subject`, `body_html`, `variables` (json) | phase 4 compose. A seeded set, so it also carries the decision 16 columns |
 | `outbox_message` | `account_id`, `state`, `payload` (json), `attempts`, `last_error`, `sent_at`, `appended_to_sent_at` | the send queue, separate until sent |
 | `calendar_event` | `title`, `starts_at`, `ends_at`, `all_day`, `timezone`, `rrule`, `exdates`, `recurrence_id`, `parent_event_id`, `client_id`, `project_id`, `ics_uid` | self-referencing for overridden occurrences |
 | `reminder` | `title`, `due_at`, `rrule`, `status`, `snoozed_until`, `completed_at`, `kind`, `client_id`, `project_id`, `document_id`, `link_url` | polymorphic by nullable FKs, not a generic entity table |
 | `automation` | `name`, `trigger` (json), `steps` (json: service calls), `enabled`, `last_run_at` | a recorded call sequence, never a second engine |
 | `automation_run` | `automation_id`, `started_at`, `finished_at`, `status`, `log` (json) | one per execution |
 | `audit_event` | `actor` (user/agent), `tool_name`, `args_digest`, `entity_type`, `entity_id`, `result`, `occurred_at` | written by every side-effectful service call |
-| `setting` | `key`, `value` (json) | owner profile, signature PNG path, theme, sync intervals |
+| `reference_set` | `key`, `label`, `seed_version` | one row per seeded set: document types, statuses, labels, reminder presets, email templates |
+| `reference_item` | `set_id`, `seed_key`, `label`, `value` (json), `is_system`, `hidden_at`, `sort_order`, `customised_at` | decision 16. Removing sets `hidden_at`; nothing here is ever hard-deleted |
+| `setting` | `key`, `value` (json) | owner profile, signature PNG path, sync intervals |
 
-Three things that matter more than the columns:
+Four things that matter more than the columns:
 
 - `reminder` and `calendar_event` stay separate. A reminder is a thing you owe; an
   event is a block of time. Merging them makes both worse.
@@ -163,6 +165,9 @@ Three things that matter more than the columns:
   client record.
 - Soft deletes mean every query filters `deleted_at IS NULL`. Put that in a shared
   query helper in phase 0, not in 200 call sites later.
+- Theme and lock are not tables. The theme belongs to the installation rather than
+  to the data (decision 14), lock state belongs to the main process (decision 15),
+  and the encryption key is wrapped by `safeStorage`, never stored in a row.
 
 ---
 
@@ -177,12 +182,17 @@ delegates, nothing more (decision 2).
 | --- | --- | --- | --- |
 | 0 | `clients.list/get/search`, `contacts.list/get`, `projects.list/get` | read | no |
 | 0 | `clients.create/update/archive`, `contacts.create/update/delete`, `projects.create/update/setStatus` | write | yes |
+| 0 | `settings.get_theme`, `reference.list/get` | read | no |
+| 0 | `settings.set_theme` | write, local display only | no |
+| 0 | `reference.create/update/hide/restore/reorder` | write | yes |
+| 0 | `reference.reset` | write, discards customisation | yes, listing what it will restore |
+| 0 | `app.lock` | write, local | no. Locking is always the safe direction |
 | 1 | `templates.list/inspect`, `documents.list/get/preview` | read | no |
 | 1 | `documents.generate/renderPdf/setStatus/void` | write, writes files | yes |
 | 1 | `documents.sign` | write | yes, and never silently |
 | 2 | `reminders.list/due/get` | read | no |
 | 2 | `reminders.create/complete/snooze/delete` | write | yes |
-| 3 | `mail.accounts.list`, `mail.syncStatus`, `mail.search`, `mail.threads.list`, `mail.thread.get`, `mail.message.get` | read | no |
+| 3 | `mail.accounts.list`, `mail.sync_status`, `mail.search`, `mail.threads.list`, `mail.thread.get`, `mail.message.get` | read | no |
 | 3 | `mail.sync` | write, local only | no, but rate limited |
 | 3 | `mail.accounts.add/update`, `mail.thread.linkClient/unlinkClient` | write | yes |
 | 4 | `mail.templates.list/render`, `mail.outbox.list` | read | no |
@@ -198,6 +208,10 @@ delegates, nothing more (decision 2).
 worth being paranoid about. An agent may prepare them completely and may never
 fire them.
 
+**There is no `app.unlock`, and there will not be.** A tool that can unlock Bureau
+makes the lock screen decorative, because anything that can talk to the MCP server
+can then open the app. Locking is exposed, unlocking is a person at the keyboard.
+
 ---
 
 ## 5. Risks, and what this plan does about them
@@ -211,6 +225,8 @@ fire them.
 | **Generalising too early** | Building for imagined users adds settings, abstractions and migrations with nobody to validate them. | `owner_id` is the only concession, four columns of foresight (decision 4). Everything else stays specific to Nathan's business until a second real person is blocked. A second user is a bug report, not a feature request. |
 | **Services layer erosion** | Phase 6 is cheap only if decision 2 held. Logic leaking into an IPC handler stays invisible until the MCP tool needs it. | The MCP tool ships with the feature, from phase 0. If a service is awkward to declare as a tool, the service is wrong and gets fixed then, the only time it is cheap. |
 | **Credential handling** | A mail password in the database or the renderer is the one security mistake here that matters. | Decision 6. `mail_account` stores a `credential_ref`. No IPC method returns a secret. No account data in the build, `.env` or CI. |
+| **A lock screen mistaken for encryption** | A lock screen over a plain SQLite file protects against a walk-up and nothing else. Someone who believes it protects the file will take the laptop places, and hand it to a repair shop, on a promise the app never made. | Decision 15 names the three layers separately, and the settings screen states in one plain sentence that the lock screen does not protect the file on disk. Encryption is a separate switch with its own warning. The PIN never derives the key: the key is random and wrapped by `safeStorage`, so a four-digit PIN is not an offline brute-force target. |
+| **A seeded-data reset destroying customisation** | Reset is the one settings button that can quietly throw away real work: renamed statuses, a chosen order, rows hidden on purpose. And a reset that also deletes the user's own labels is not a reset, it is data loss. | Decision 16. Reset is per set before it is global, states which rows it will restore before it runs, and asks separately what to do with user-created rows. An upgrade never touches a row with `customised_at` set and never resurrects a hidden one. Because removing hides rather than deletes, the documents pointing at an old status survive every one of these paths. |
 | **Data loss** | One SQLite file, one machine, no cloud backup by definition. | Backup and restore ship in phase 0, not later. |
 | **Mail store size** | Four accounts with years of history and attachments is gigabytes. | Attachments on disk. Bodies after headers. A per-folder sync horizon, so the first sync can be bounded to recent mail and extended later. |
 
@@ -227,6 +243,7 @@ fire them.
 | Multi-user, roles, permissions | One owner. `owner_id` exists so this stays possible, not so it gets built. |
 | Cloud sync between machines | Wanted eventually, and large. UUIDv7, `owner_id` and `deleted_at` keep the door open; nothing else is spent on it. |
 | CalDAV two-way sync | Decision 11: import before sync. Additive after phase 5. |
+| Database encryption at rest | Optional and off by default (decision 15), and additive whenever the threat becomes a stolen machine. It replaces `better-sqlite3` with `better-sqlite3-multiple-ciphers`, a native dependency swap that would put rebuild and packaging risk into phase 0 in exchange for protection phase 0 does not need. The lock screen ships in phase 0; this does not. |
 | Read receipts, open and link tracking | Will not be built. |
 | Calendar invitations and attendee replies | The iTIP flow is a phase of its own and the pain is small: send an `.ics`. |
 | Writing flags, moves or deletes back to IMAP | Phase 3 is read-only on purpose. A read bug costs a redownload; a write bug costs mail. |

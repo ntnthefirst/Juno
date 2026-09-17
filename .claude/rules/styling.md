@@ -87,13 +87,27 @@ already dense; don't reach past it.
   breathing room (`--space-12` and up) belongs to empty states and onboarding,
   nowhere else.
 
-## 5. Dark mode is checked, not assumed
+## 5. Theme is three states, and both of them get checked
+
+The setting is `system`, `light` or `dark`, defaulting to `system` (decision 14).
+A two-state toggle cannot say "follow the OS", which is what the setting is on
+most machines most of the time.
 
 Theme resolution is `:root` (light), then `@media (prefers-color-scheme: dark)`
 guarded by `:root:not([data-theme="light"])`, then `:root[data-theme="dark"]` for
-an explicit choice that wins.
+an explicit choice that wins. That cascade in `brand/tokens.css` already handles
+all three states. Do not add a second mechanism next to it.
 
-- Every screen gets looked at in **both** themes before it is done. Toggle the
+**Applying the setting is two writes, and one without the other is a bug you will
+see immediately:** the renderer sets `data-theme` on `<html>`, and the main process
+sets `nativeTheme.themeSource` to the same value so the title bar, the menus and
+the native dialogs follow. Set only the first and a light title bar sits over a
+dark window. Set only the second and the window chrome changes while the app does
+not. `system` means removing the attribute and setting `themeSource` to `system`,
+not resolving the OS preference yourself.
+
+- Every screen gets looked at in **both** themes before it is done, and that
+  includes screens reached only from a settings page or a lock screen. Toggle the
   `data-theme` attribute on `<html>`, don't just trust the tokens.
 - The dark palette is not an inversion. `--accent` goes from a dark blue to a
   light one, and `--accent-ink` flips with it. A hardcoded white label on an

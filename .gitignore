@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-electron/
+release/
+out/
+.vite/
+*.tsbuildinfo
+
+# The database is the user's own business data. It never belongs in git.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-journal
+data/
+
+# Secrets and credentials. Mail accounts are runtime data, never build config.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+
+# Personal assets that identify the user or sign on their behalf
+signatures/
+brand/logo/*-personal.*
+
+# Generated client documents. Real client data, and reproducible from templates.
+generated/
+exports/
+
+# Test and tooling artefacts
+.smoke/
+coverage/
+*.log
+npm-debug.log*
+
+# Local machine settings, per developer
+.claude/settings.local.json
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

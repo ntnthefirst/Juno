@@ -1,0 +1,367 @@
+import { useCallback, useEffect, useState } from "react";
+import type { Client, Contact, Project, ProjectSummary, ReferenceItem } from "@shared/types";
+import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
+import { ContactForm } from "./ContactForm";
+import { ProjectForm } from "./ProjectForm";
+
+/** Tone is a token name, never a hex. See brand/BRAND.md section 5. */
+const TONES: Record<string, string> = {
+	ok: "bg-[var(--ok-soft)] text-[var(--ok)]",
+	warn: "bg-[var(--warn-soft)] text-[var(--warn)]",
+	risk: "bg-[var(--risk-soft)] text-[var(--risk)]",
+	seal: "bg-[var(--seal-soft)] text-[var(--seal)]",
+	accent: "bg-[var(--accent-soft)] text-[var(--accent)]",
+};
+
+export function StatusBadge({ label, tone }: { label: string; tone: string | null }) {
+	const classes = (tone && TONES[tone]) || "bg-[var(--sunken)] text-[var(--ink-muted)]";
+	return (
+		<span
+			className={`inline-block shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${classes}`}
+		>
+			{label}
+		</span>
+	);
+}
+
+/** A non-breaking space, so an amount never wraps between its thousands. */
+const NBSP = String.fromCharCode(0xa0);
+const THOUSANDS = /\B(?=(\d{3})+(?!\d))/g;
+
+/** Integer cents to a Belgian amount. No float arithmetic anywhere on the way. */
+function formatEuros(cents: number): string {
+	const absolute = Math.abs(cents);
+	const whole = String(Math.trunc(absolute / 100)).replace(THOUSANDS, NBSP);
+	const fraction = String(absolute % 100).padStart(2, "0");
+	return `${cents < 0 ? "-" : ""}${whole},${fraction}`;
+}
+
+/** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
+function formatDate(date: string | null): string {
+	if (!date) return "";
+	const parts = date.split("-");
+	return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
+}
+
+function messageOf(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+type Detail = {
+	client: Client;
+	status: ReferenceItem | null;
+	contacts: Contact[];
+	projects: ProjectSummary[];
+};
+
+type Load =
+	| { status: "loading" }
+	| { status: "ready"; detail: Detail }
+	| { status: "error"; message: string };
+
+type Pending = { kind: "contact" | "project"; id: string; name: string };
+
+type ClientDetailProps = {
+	clientId: string;
+	onEdit: (client: Client) => void;
+	onDelete: (client: Client) => void;
+};
+
+export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) {
+	const [load, setLoad] = useState<Load>({ status: "loading" });
+	const [contactDialog, setContactDialog] = useState<{ contact: Contact | null } | null>(null);
+	const [projectDialog, setProjectDialog] = useState<{ project: Project | null } | null>(null);
+	const [pending, setPending] = useState<Pending | null>(null);
+	const [busy, setBusy] = useState(false);
+
+	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
+		const [client, contacts, projects, statusSet] = await Promise.all([
+			window.bureau.clients.get(clientId),
+			window.bureau.contacts.listForClient(clientId),
+			window.bureau.projects.list({ clientId }),
+			window.bureau.reference.getSet("client_status"),
+		]);
+		if (!client) return null;
+		const status = client.statusId
+			? (statusSet?.items.find((item) => item.id === client.statusId) ?? null)
+			: null;
+		return { client, status, contacts, projects };
+	}, [clientId]);
+
+	useEffect(() => {
+		let cancelled = false;
+		fetchDetail()
+			.then((detail) => {
+				if (cancelled) return;
+				setLoad(
+					detail
+						? { status: "ready", detail }
+						: { status: "error", message: "This client is no longer in your bureau." },
+				);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setLoad({ status: "error", message: messageOf(cause) });
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [fetchDetail]);
+
+	// Refreshing after a mutation replaces the value in place, so the pane does not
+	// drop back to the loading state on every edit.
+	const refresh = useCallback(() => {
+		fetchDetail()
+			.then((detail) => {
+				if (detail) setLoad({ status: "ready", detail });
+			})
+			.catch((cause: unknown) => {
+				setLoad({ status: "error", message: messageOf(cause) });
+			});
+	}, [fetchDetail]);
+
+	async function confirmRemove() {
+		if (!pending || busy) return;
+		setBusy(true);
+		try {
+			if (pending.kind === "contact") await window.bureau.contacts.remove(pending.id);
+			else await window.bureau.projects.remove(pending.id);
+			setPending(null);
+			refresh();
+		} catch (cause: unknown) {
+			setPending(null);
+			setLoad({ status: "error", message: messageOf(cause) });
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function makePrimary(id: string) {
+		try {
+			await window.bureau.contacts.setPrimary(id);
+			refresh();
+		} catch (cause: unknown) {
+			setLoad({ status: "error", message: messageOf(cause) });
+		}
+	}
+
+	async function editProject(id: string) {
+		try {
+			const project = await window.bureau.projects.get(id);
+			if (project) setProjectDialog({ project });
+		} catch (cause: unknown) {
+			setLoad({ status: "error", message: messageOf(cause) });
+		}
+	}
+
+	if (load.status === "loading") return <p className="text-[var(--ink-muted)]">Loading.</p>;
+
+	if (load.status === "error") {
+		return (
+			<div className="border-l-2 border-[var(--risk)] pl-4">
+				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load this client.</p>
+				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					{load.message}
+				</p>
+			</div>
+		);
+	}
+
+	const { client, status, contacts, projects } = load.detail;
+
+	return (
+		<div>
+			<div className="flex items-start justify-between gap-4">
+				<div className="min-w-0">
+					<h2
+						data-selectable
+						className="truncate text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]"
+					>
+						{client.name}
+					</h2>
+					<div className="mt-2 flex items-center gap-3">
+						{status ? <StatusBadge label={status.label} tone={status.tone} /> : null}
+						{client.city ? (
+							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								{client.city}
+							</span>
+						) : null}
+					</div>
+				</div>
+
+				<div className="flex gap-2">
+					<Button onClick={() => onEdit(client)}>Edit</Button>
+					<Button variant="danger" onClick={() => onDelete(client)}>
+						Delete
+					</Button>
+				</div>
+			</div>
+
+			<section className="mt-10">
+				<div className="mb-4 flex items-center justify-between gap-4">
+					<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Contacts</h3>
+					<Button size="dense" onClick={() => setContactDialog({ contact: null })}>
+						Add contact
+					</Button>
+				</div>
+
+				{contacts.length === 0 ? (
+					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						No contacts for this client yet.
+					</p>
+				) : (
+					<ul>
+						{contacts.map((contact) => (
+							<li
+								key={contact.id}
+								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							>
+								{/* Two lines rather than columns. Fixed-width columns reserved space
+								    for fields most contacts do not have, which squeezed the name to
+								    a few characters even in a wide pane. */}
+								<div className="min-w-0">
+									<div className="flex items-center gap-2">
+										<span data-selectable className="truncate font-[var(--weight-medium)]">
+											{contact.name}
+										</span>
+										{contact.isPrimary ? <StatusBadge label="Primary" tone="accent" /> : null}
+									</div>
+									{[contact.role, contact.email, contact.phone].some(Boolean) ? (
+										<div
+											data-selectable
+											className="mt-0.5 truncate text-[var(--ink-muted)]"
+										>
+											{[contact.role, contact.email, contact.phone]
+												.filter(Boolean)
+												.join("  ·  ")}
+										</div>
+									) : null}
+								</div>
+								<span className="flex shrink-0 gap-1">
+									{contact.isPrimary ? null : (
+										<Button size="dense" onClick={() => void makePrimary(contact.id)}>
+											Make primary
+										</Button>
+									)}
+									<Button size="dense" onClick={() => setContactDialog({ contact })}>
+										Edit
+									</Button>
+									<Button
+										size="dense"
+										variant="danger"
+										onClick={() =>
+											setPending({ kind: "contact", id: contact.id, name: contact.name })
+										}
+									>
+										Remove
+									</Button>
+								</span>
+							</li>
+						))}
+					</ul>
+				)}
+			</section>
+
+			<section className="mt-10">
+				<div className="mb-4 flex items-center justify-between gap-4">
+					<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Projects</h3>
+					<Button size="dense" onClick={() => setProjectDialog({ project: null })}>
+						Add project
+					</Button>
+				</div>
+
+				{projects.length === 0 ? (
+					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						No projects for this client yet.
+					</p>
+				) : (
+					<ul>
+						{projects.map((project) => (
+							<li
+								key={project.id}
+								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							>
+								<div className="min-w-0">
+									<div className="flex items-center gap-2">
+										<span data-selectable className="truncate font-[var(--weight-medium)]">
+											{project.name}
+										</span>
+										{project.status ? (
+											<StatusBadge label={project.status.label} tone={project.status.tone} />
+										) : null}
+									</div>
+									<div className="tabular mt-0.5 text-[var(--ink-muted)]">
+										{[
+											project.dueOn ? `Due ${formatDate(project.dueOn)}` : null,
+											project.agreedValueCents === null
+												? null
+												: `€ ${formatEuros(project.agreedValueCents)}`,
+										]
+											.filter(Boolean)
+											.join("  ·  ")}
+									</div>
+								</div>
+								<span className="flex shrink-0 gap-1">
+									<Button size="dense" onClick={() => void editProject(project.id)}>
+										Edit
+									</Button>
+									<Button
+										size="dense"
+										variant="danger"
+										onClick={() =>
+											setPending({ kind: "project", id: project.id, name: project.name })
+										}
+									>
+										Remove
+									</Button>
+								</span>
+							</li>
+						))}
+					</ul>
+				)}
+			</section>
+
+			{contactDialog ? (
+				<ContactForm
+					clientId={client.id}
+					contact={contactDialog.contact}
+					onClose={() => setContactDialog(null)}
+					onSaved={() => {
+						setContactDialog(null);
+						refresh();
+					}}
+				/>
+			) : null}
+
+			{projectDialog ? (
+				<ProjectForm
+					clientId={client.id}
+					project={projectDialog.project}
+					onClose={() => setProjectDialog(null)}
+					onSaved={() => {
+						setProjectDialog(null);
+						refresh();
+					}}
+				/>
+			) : null}
+
+			{pending ? (
+				<Dialog
+					title={pending.kind === "contact" ? "Remove contact" : "Remove project"}
+					width="narrow"
+					onClose={() => setPending(null)}
+				>
+					<p className="mt-3 text-[var(--ink-muted)]">
+						{pending.name} is removed from {client.name}.
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setPending(null)}>Cancel</Button>
+						<Button variant="danger" disabled={busy} onClick={() => void confirmRemove()}>
+							{busy ? "Removing" : "Remove"}
+						</Button>
+					</div>
+				</Dialog>
+			) : null}
+		</div>
+	);
+}

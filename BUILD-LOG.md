@@ -14,8 +14,8 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 | | |
 | --- | --- |
 | **Phase** | 0, in progress |
-| **Runs?** | **Yes, including packaged.** `release/Bureau-Setup-0.1.0-x64.exe` builds and the installed app boots |
-| **Last verified** | The packaged exe migrates, seeds 4 sets and 17 items, and paints over `app://bundle` |
+| **Runs?** | **Yes, including packaged.** Clients, contacts and projects all work end to end |
+| **Last verified** | `BUREAU_SMOKE_DEMO=1 node scripts/smoke.mjs` creates real records through the preload bridge and screenshots both themes |
 
 ### What exists
 
@@ -276,3 +276,32 @@ already exists. Verification reads the parameters from the record rather than
 from the current constant, for the same reason.
 
 If `N` is ever raised, check `128 * N * r` against `maxmem` in the same edit.
+
+
+### Session 1, part 6: the client interface, and a layout bug only a screenshot caught
+
+Clients, contacts and projects can now be created, edited, deleted and restored
+from the interface. `src/components/` gained Dialog, Button, Field, Select and
+Toast; `src/features/clients/` gained ClientForm, ContactForm, ProjectForm and
+ClientDetail.
+
+**The smoke script now drives the real bridge.** With `BUREAU_SMOKE_DEMO=1` it
+calls `window.bureau.*` to create four clients, a primary contact and two
+projects, reloads, clicks a row, and screenshots both themes. This exercises
+IPC, the services and SQLite exactly as a person clicking would. Verifying the
+interface against a mock would prove nothing about any of them.
+
+**The bug it caught:** contact and project rows used fixed-width columns for
+role, phone, due date and amount. Measuring the rendered row showed the name had
+collapsed to **31px** while an empty phone column still reserved **120px**, so
+"Laura" rendered as "La...". Typecheck, lint and tests were all clean throughout.
+
+Both rows are now two lines: name and badge on the first, the metadata that
+actually exists joined on the second. Missing fields take no space at all. The
+general lesson is that a fixed-width column in a flex row is a promise that the
+field is always populated, and in a CRM most fields are not.
+
+Also confirmed working: integer cents render as `2 100,00` in Belgian format,
+`YYYY-MM-DD` dates render as `14/11/2026` without passing through a Date, status
+tones resolve from token names, and the seeded reference data drives both status
+dropdowns.

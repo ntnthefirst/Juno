@@ -89,6 +89,45 @@ if (!app.requestSingleInstanceLock()) {
 			window.webContents.once("did-finish-load", () => {
 				setTimeout(() => {
 					void (async () => {
+						// Drives the real preload bridge, so this exercises IPC, the services
+						// and the database exactly as a person clicking would. Verifying the
+						// interface against a mock would prove nothing about any of them.
+						if (process.env.BUREAU_SMOKE_DEMO) {
+							const created = await window.webContents.executeJavaScript(`(async () => {
+								const b = window.bureau;
+								const statuses = await b.reference.getSet("client_status");
+								const active = statuses.items.find((i) => i.key === "active") ?? statuses.items[0];
+								const lead = statuses.items.find((i) => i.key === "lead") ?? statuses.items[0];
+								const made = [];
+								for (const c of [
+									{ name: "obet", city: "Gent", email: "hallo@obet.be", statusId: active.id },
+									{ name: "bodhi", city: "Brugge", email: "info@bodhi.be", statusId: active.id },
+									{ name: "noir", city: "Antwerpen", statusId: active.id },
+									{ name: "hyge", city: "Leuven", statusId: lead.id },
+								]) made.push(await b.clients.create(c));
+								await b.contacts.create({ clientId: made[0].id, name: "Laura", role: "Zaakvoerder", email: "laura@obet.be", isPrimary: true });
+								const ps = await b.reference.getSet("project_status");
+								const running = ps.items.find((i) => i.key === "active") ?? ps.items[0];
+								await b.projects.create({ clientId: made[0].id, name: "Ontwikkelovereenkomst site", statusId: running.id, dueOn: "2026-11-14", agreedValueCents: 210000 });
+								await b.projects.create({ clientId: made[1].id, name: "Project scope", statusId: running.id, dueOn: "2026-10-03", agreedValueCents: 125000 });
+								return (await b.clients.list()).length;
+							})()`);
+							console.log(`SMOKE_DEMO clients=${created}`);
+							window.webContents.reload();
+							await new Promise((r) => {
+								window.webContents.once("did-finish-load", () => setTimeout(r, 900));
+							});
+							// Selects a row, so the screenshot covers the detail pane as well as
+							// the list. Clicking the real button also proves the row is reachable.
+							await window.webContents.executeJavaScript(
+								`(() => { const b = [...document.querySelectorAll("tbody button")]
+									.find((el) => el.textContent.trim() === "obet");
+									if (b) b.click(); return Boolean(b); })()`,
+							);
+							await new Promise((r) => setTimeout(r, 900));
+
+						}
+
 						// A screenshot is the only part of this that can catch a window that
 						// loads without error and still renders nothing.
 						const shotDir = process.env.BUREAU_SMOKE_SHOT;

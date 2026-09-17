@@ -16,6 +16,11 @@ Run from the repo root. The project uses npm.
 | `npm run smoke` | Launches the packaged-mode app, waits for the window, asserts the DB opened and migrations ran, exits | Before any commit touching main, preload, the schema or a native module |
 | `npm run build` | Vite build plus electron-builder package | Before claiming the app ships, and after touching a native dependency |
 | `npm run dev` | Vite dev server plus Electron | To actually look at the change |
+| `npm run db:generate` | Drizzle turns a schema change into a migration file | After editing anything under `electron/main/db/schema/` |
+| `npm run db:migrate` | Applies pending migrations forward | After generating one, and on a copy of the real database before the real one |
+
+These names are the canonical set. A skill or a script that invents a different
+one (`npm run package`, `npm test`) is wrong and should be corrected to match.
 
 Fix forward between steps and re-run the step that failed plus everything after
 it. Don't reorder: a type error makes the build fail with a worse message.

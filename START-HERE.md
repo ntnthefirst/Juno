@@ -35,12 +35,17 @@ Open a session in this folder and say what you want, or invoke a skill directly:
 /feature-new clients
 ```
 
-Phase 0 is the shell, the database and one real screen: Electron plus Vite, the
-first Drizzle migration with the five mandatory columns, a `clients` service, its
-IPC and MCP adapters, and a list you can actually put your own clients into.
+Phase 0 is the shell, the database and the client records: Electron plus Vite,
+the first Drizzle migration with the five mandatory columns, `client`, `contact`
+and `project` with their services, IPC and MCP adapters, backup and restore, and
+a packaged build that updates itself.
 
-It is deliberately small. The point is an application that opens and holds real
-data by the end of the first week, not a perfect foundation nobody has run.
+Roughly 8 to 12 evenings. Packaging is in there on purpose, because an app that
+only runs under `npm run dev` cannot be shipped even to yourself, and every later
+phase inherits that build.
+
+**It is done when you put bodhi, hyge, noir and obet into it, reboot, open it
+again, and delete the spreadsheet.** Not when the foundation feels right.
 
 ## 4. Then work a phase at a time
 

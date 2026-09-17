@@ -76,6 +76,7 @@ docs/decisions.md       Locked technical decisions and the reason for each
 brand/
   BRAND.md              Name, values, voice, colour and logo rules
   tokens.css            The design tokens. The source of truth for every value
+  preview.html          The kit rendered in both themes. Open it in a browser
   logo/                 Mark, wordmark, application icon, favicon
 .claude/
   rules/                How to write code here, one file per topic

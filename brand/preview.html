@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bureau design kit</title>
+<link rel="icon" href="logo/favicon.svg">
+<link rel="stylesheet" href="tokens.css">
+<style>
+	/* This page uses only the tokens. If something here needs a raw value that
+	   tokens.css does not have, that is a missing token, not a special case. */
+	* { box-sizing: border-box; }
+	body {
+		margin: 0; padding: var(--space-8);
+		background: var(--paper); color: var(--ink);
+		font-family: var(--font-ui); font-size: var(--text-base);
+		line-height: var(--leading-normal);
+	}
+	h1 { font-size: var(--text-h1); margin: 0 0 var(--space-2); letter-spacing: -0.02em; }
+	h2 {
+		font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.08em;
+		color: var(--ink-muted); font-weight: var(--weight-semibold);
+		margin: var(--space-10) 0 var(--space-4);
+		padding-bottom: var(--space-2); border-bottom: 1px solid var(--line);
+	}
+	.lede { color: var(--ink-muted); max-width: 60ch; margin: 0 0 var(--space-4); }
+	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+	.sw { border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); }
+	.sw .chip { height: 56px; }
+	.sw .meta { padding: var(--space-2) var(--space-3); font-size: var(--text-micro); }
+	.sw .name { font-weight: var(--weight-medium); }
+	.sw .val { color: var(--ink-muted); font-family: var(--font-mono); }
+	.card {
+		background: var(--surface); border: 1px solid var(--line);
+		border-radius: var(--radius-lg); padding: var(--space-5);
+	}
+	.btn {
+		font: inherit; font-weight: var(--weight-medium);
+		padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
+		border: 1px solid transparent; cursor: pointer;
+		transition: background var(--duration-fast) var(--ease);
+	}
+	.btn-primary { background: var(--accent); color: var(--accent-ink); }
+	.btn-primary:hover { background: var(--accent-hover); }
+	.btn-quiet { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+	.btn-quiet:hover { background: var(--sunken); }
+	.btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+	input[type=text] {
+		font: inherit; padding: var(--space-2) var(--space-3);
+		border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+		background: var(--surface); color: var(--ink); width: 240px;
+	}
+	input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--accent); }
+	table { width: 100%; border-collapse: collapse; font-size: var(--text-dense); }
+	th {
+		text-align: left; background: var(--sunken); color: var(--ink-muted);
+		font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.06em;
+		padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line);
+	}
+	td { padding: 0 var(--space-3); height: var(--row-height); border-bottom: 1px solid var(--line); }
+	tr:hover td { background: var(--accent-soft); }
+	.badge {
+		display: inline-block; font-size: var(--text-micro); font-weight: var(--weight-medium);
+		padding: 2px var(--space-2); border-radius: var(--radius-sm);
+	}
+	.b-ok { background: var(--ok-soft); color: var(--ok); }
+	.b-warn { background: var(--warn-soft); color: var(--warn); }
+	.b-risk { background: var(--risk-soft); color: var(--risk); }
+	.b-seal { background: var(--seal-soft); color: var(--seal); }
+	.row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+	.stack > * + * { margin-top: var(--space-3); }
+	.toggle {
+		position: fixed; top: var(--space-4); right: var(--space-4);
+		background: var(--surface); border: 1px solid var(--line-strong);
+		color: var(--ink); border-radius: var(--radius-md);
+		padding: var(--space-2) var(--space-3); font: inherit; cursor: pointer;
+	}
+	code { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--ink-muted); }
+	#report { font-family: var(--font-mono); font-size: var(--text-sm); white-space: pre; }
+</style>
+</head>
+<body>
+<button class="toggle" id="toggle">Toggle theme</button>
+
+<header class="stack">
+	<img src="logo/bureau-wordmark-ink.svg" alt="Bureau" width="150" id="wordmark">
+	<h1>Design kit</h1>
+	<p class="lede">Every value on this page comes from
+	<code>tokens.css</code>. If it renders correctly in both themes, the tokens
+	parse and the theme cascade works.</p>
+</header>
+
+<h2>Surfaces and ink</h2>
+<div class="grid" id="sw-base"></div>
+
+<h2>Accent, seal and status</h2>
+<div class="grid" id="sw-accent"></div>
+
+<h2>Type scale</h2>
+<div class="card stack" id="type"></div>
+
+<h2>Controls</h2>
+<div class="card stack">
+	<div class="row">
+		<button class="btn btn-primary">Send reminder</button>
+		<button class="btn btn-quiet">Cancel</button>
+		<input type="text" placeholder="Search clients">
+	</div>
+	<div class="row">
+		<span class="badge b-ok">Signed</span>
+		<span class="badge b-warn">Due in 3 days</span>
+		<span class="badge b-risk">Overdue</span>
+		<span class="badge b-seal">Sealed</span>
+	</div>
+</div>
+
+<h2>Dense table</h2>
+<div class="card" style="padding:0;overflow:hidden">
+	<table>
+		<thead><tr><th>Client</th><th>Document</th><th>Due</th><th style="text-align:right">Amount</th></tr></thead>
+		<tbody id="rows"></tbody>
+	</table>
+</div>
+
+<h2>Token readback</h2>
+<div class="card"><div id="report"></div></div>
+
+<script>
+const base = [
+	['--paper','window'], ['--surface','card'], ['--sunken','well'],
+	['--ink','text'], ['--ink-muted','secondary'], ['--ink-faint','faint, large only'],
+	['--line','divider'], ['--line-strong','input border'],
+];
+const accent = [
+	['--accent','primary action'], ['--accent-hover','hover'], ['--accent-soft','selected row'],
+	['--seal','signed and done'], ['--ok','success'], ['--warn','attention'],
+	['--risk','problem'], ['--focus','focus ring'],
+];
+const swatch = (list, el) => document.getElementById(el).innerHTML = list.map(([t, use]) =>
+	`<div class="sw"><div class="chip" style="background:var(${t})"></div>
+	<div class="meta"><div class="name">${use}</div><div class="val">${t}</div></div></div>`).join('');
+swatch(base, 'sw-base'); swatch(accent, 'sw-accent');
+
+document.getElementById('type').innerHTML = [
+	['--text-h1','Contracts awaiting signature'], ['--text-h2','This week'],
+	['--text-h3','obet'], ['--text-lg','Emphasised body text'],
+	['--text-base','Default interface text at 14px'],
+	['--text-dense','Table row text at 13px'], ['--text-sm','Secondary label'],
+	['--text-micro','BADGE'],
+].map(([t, s]) => `<div style="font-size:var(${t})">${s} <code>${t}</code></div>`).join('');
+
+document.getElementById('rows').innerHTML = [
+	['bodhi','Ontwikkelovereenkomst','3 Oct','1 250,00'],
+	['hyge','NDA','12 Oct','0,00'],
+	['noir','Hosting overeenkomst','1 Nov','480,00'],
+	['obet','Project scope','14 Nov','2 100,00'],
+].map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="tabular">${r[2]}</td>
+	<td class="tabular" style="text-align:right">${r[3]}</td></tr>`).join('');
+
+// Readback proves the custom properties actually resolved rather than falling back.
+function report() {
+	const cs = getComputedStyle(document.documentElement);
+	const theme = document.documentElement.getAttribute('data-theme') || 'light';
+	const checks = ['--paper','--ink','--accent','--seal','--font-ui','--radius-lg','--row-height'];
+	const lines = checks.map(t => {
+		const v = cs.getPropertyValue(t).trim();
+		return (v ? '  ok  ' : '  MISSING  ') + t.padEnd(14) + (v || '(empty)');
+	});
+	document.getElementById('report').textContent = `theme: ${theme}\n` + lines.join('\n');
+}
+document.getElementById('toggle').addEventListener('click', () => {
+	const next = (document.documentElement.getAttribute('data-theme') === 'dark') ? 'light' : 'dark';
+	document.documentElement.setAttribute('data-theme', next);
+	document.getElementById('wordmark').src =
+		next === 'dark' ? 'logo/bureau-wordmark-paper.svg' : 'logo/bureau-wordmark-ink.svg';
+	report();
+});
+report();
+</script>
+</body>
+</html>

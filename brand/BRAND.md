@@ -4,6 +4,11 @@ What the product is called, what it sounds like, and how it looks. The tokens
 themselves live in [tokens.css](tokens.css); this file is the reasoning behind
 them and the rules for using them.
 
+Open [preview.html](preview.html) in a browser to see the whole kit rendered:
+swatches, type scale, controls and a dense table, in both themes. It is built
+only from the tokens, so if it renders correctly the tokens are correct. Use it
+as the check after changing any value.
+
 ---
 
 ## 1. The name

@@ -14,8 +14,8 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 | | |
 | --- | --- |
 | **Phase** | 0, in progress |
-| **Runs?** | No window yet. The data layer is proven end to end |
-| **Last verified** | Migrations, Drizzle reads and writes, transactions and foreign keys, all inside Electron |
+| **Runs?** | **Yes.** The window opens, migrates and paints |
+| **Last verified** | `node scripts/smoke.mjs` boots the real app, applies the migration and loads over `app://bundle` |
 
 ### What exists
 
@@ -158,3 +158,48 @@ horrible bug.
 The migration runner splits on drizzle-kit's `--> statement-breakpoint` marker
 rather than on semicolons, and applies each file in one transaction, so a
 half-applied migration cannot leave the journal disagreeing with the schema.
+
+
+### Session 1, part 3: the app boots
+
+`npm run build:main && node scripts/smoke.mjs` launches the real application
+against a throwaway user-data directory. It migrates, opens a window, and serves
+the renderer over `app://bundle`. Confirmed in the smoke output.
+
+Built in this part:
+
+- `electron/main.ts`, with the boot order spelled out in a comment because it
+  matters: scheme privileges before ready, single instance, database, lock, IPC,
+  window last.
+- `electron/main/scheme.ts`, serving the packaged renderer over `app://bundle`
+  with a path-traversal guard.
+- `electron/main/windows/main-window.ts`, with the CSP, the external-link
+  handler and the navigation guard.
+- `electron/preload.ts`, exposing methods rather than `ipcRenderer`.
+- `electron/main/vault.ts` and `services/lock.ts`.
+- `electron/main/ipc/lock-guard.ts`.
+- The renderer shell: `src/app/{App,Sidebar,TitleBar}.tsx`,
+  `src/components/LockScreen.tsx`, `src/features/clients/ClientsScreen.tsx`,
+  `src/lib/theme.ts`, `src/styles/`.
+- `scripts/smoke.mjs`.
+
+**Findings worth keeping:**
+
+- **The lock guard is a wrapper, not a per-handler check.** `installLockGuard()`
+  replaces `ipcMain.handle` before anything registers, so a new channel is
+  refused while locked by default and has to be named in `ALLOWED_WHILE_LOCKED`
+  to get through. It must keep running first in `ipc/index.ts`.
+- **Electron 41 changed the `console-message` signature.** The positional form
+  still fires but warns on every message. Use the single event object with
+  `event.level` as a string.
+- **The preload path is `join(__dirname, "..", "..", "preload.js")`** from
+  `dist-electron/main/windows/`. One `..` too few silently produces a window with
+  no bridge and no error.
+- The renderer bundles Inter and JetBrains Mono locally, per decision 10. Vite
+  emits them into `dist/assets`, so the app has no font CDN dependency.
+
+**Still missing at the end of this part:** the clients, contacts, projects,
+search, reference, settings and backup services, and their IPC and MCP adapters.
+Two agents were writing them in parallel. The smoke run correctly failed on
+`settings.getTheme` and `clients.list` having no handler, which is exactly what
+the smoke script exists to catch.

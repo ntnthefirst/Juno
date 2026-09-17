@@ -26,7 +26,7 @@ Consequences, all intentional:
 
 - Anything the UI can do, an agent can do, on the day the feature ships.
 - An automation is a recorded sequence of service calls, not a second engine.
-- Writing a feature twice — once for the UI, once for the agent — is a bug.
+- Writing a feature twice, once for the UI and once for the agent, is a bug.
 
 If a service function is hard to expose as an MCP tool, the service has the wrong
 shape. Fix the service, don't special-case the adapter.
@@ -91,7 +91,7 @@ as a separate phase, because they are separate risk.
 
 **Signing scope:** a signature image plus timestamp plus audit trail. That is
 appropriate for low-stakes and internal documents. It is *not* a qualified
-electronic signature under eIDAS — do not claim in the UI or the docs that it is.
+electronic signature under eIDAS. Do not claim in the UI or the docs that it is.
 High-stakes contracts keep going through a provider.
 
 ## 9. No invoicing, no payments, ever
@@ -120,15 +120,100 @@ useful long before two-way sync is.
 Unlike the client website kit, where it is gitignored to keep an AI out of a
 client's repo, here the rules are part of the project and worth versioning.
 
-The **no AI attribution in git history** rule still applies — see
+The **no AI attribution in git history** rule still applies. See
 [../.claude/rules/git.md](../.claude/rules/git.md). Commits should read as though a
 developer wrote them, because the decisions in them are the developer's.
 
 ## 13. Licence: undecided, and deliberately so
 
-The repo starts private with no `LICENSE` file, which means default copyright —
-all rights reserved. That is the right default while the answer is unknown,
+The repo starts private with no `LICENSE` file, which means default copyright,
+meaning all rights reserved. That is the right default while the answer is unknown,
 because adding a permissive licence later is easy and retracting one is not.
 
 Decide before the repo goes public. The question to answer first is whether a
 company should be able to take Bureau, host it, and sell it back.
+
+## 14. Theme is a three-state setting, not a toggle
+
+`system`, `light`, `dark`, defaulting to `system`. A two-state toggle cannot
+express "follow the OS", which is what most people want most of the time.
+
+The choice is an application setting, not a database row, because it belongs to
+the installation rather than to the data. It is applied by setting `data-theme`
+on `<html>`, and the main process sets `nativeTheme.themeSource` to the same
+value so the title bar, menus and native dialogs match. Setting only one of the
+two produces a light title bar over a dark window.
+
+The token cascade in `brand/tokens.css` already handles all three: `:root` is
+light, the `prefers-color-scheme` block follows the OS, and an explicit
+`data-theme` overrides both. Do not add a second mechanism.
+
+## 15. The lock has three layers, and only one of them is a lock screen
+
+The user chooses how Bureau locks. Be precise about what each choice protects
+against, because a lock screen over an unencrypted database is theatre.
+
+| Layer | Protects against | Cost |
+| --- | --- | --- |
+| **OS account** (always on) | Another person's login on the same machine. Credentials are already in DPAPI or Keychain, tied to the OS user | None, it is the baseline |
+| **Lock screen** (optional, default on) | Someone walking up to your unlocked, running laptop | Small |
+| **Database encryption** (optional, off by default) | Someone who steals the machine or copies the file | Real, see below |
+
+**The lock screen** blanks the window, drops sensitive state out of the renderer,
+pauses mail sync, and requires re-authentication. Triggers: idle timeout, on
+sleep or OS lock, on minimise (optional), and manually. It does **not** protect
+the file on disk, and the settings screen must say so in one plain sentence.
+
+**Database encryption** uses `better-sqlite3-multiple-ciphers` with SQLCipher,
+replacing plain `better-sqlite3`. It is off by default because the trade is real:
+the key must be held in memory while unlocked, a forgotten passphrase means the
+data is unrecoverable, and there is no reset. Turning it on must state that in
+those words and require the passphrase to be entered twice.
+
+**Unlock methods**, in order of how much work they are:
+
+- **Passphrase.** Argon2id, per-install random salt, parameters stored alongside.
+- **PIN.** Convenience only. Rate-limited, with a lockout that escalates.
+- **Windows Hello / Touch ID.** Touch ID is reachable through
+  `systemPreferences.promptTouchID()`. Windows Hello needs a native module, so it
+  is the most expensive option and should be last.
+
+**The rule that keeps a PIN from being a hole:** a PIN is never the key-derivation
+input for database encryption. The encryption key is random, generated once, and
+stored wrapped by `safeStorage`. The PIN or the biometric unwraps it. A four-digit
+PIN used directly as a KDF input is brute-forceable offline in seconds, and doing
+this correctly costs one extra indirection.
+
+Lock state lives in the main process. A renderer that believes it is locked is a
+renderer that can be told it is not.
+
+## 16. Reference data ships seeded, stays editable, and is never hard-deleted
+
+Document types, statuses, labels, reminder presets and email templates all arrive
+with sensible defaults on first run, so the app is usable before it is
+configured. All of them are editable, and each set can be reset.
+
+Every row in a seeded set carries:
+
+| Column | Why |
+| --- | --- |
+| `is_system` | It shipped with Bureau, rather than being user-created |
+| `hidden_at` | The user "removed" it. See below |
+| `sort_order` | The user's ordering, not the shipped one |
+| `seed_key` | Stable identifier, so an upgrade can update the right row |
+| `customised_at` | Set on first edit. An upgrade must not overwrite an edited row |
+
+**Removing a system row hides it, it does not delete it.** A status that twelve
+documents already point at cannot be deleted without either breaking those rows
+or silently rewriting history. Hidden means: not offered for new records, still
+rendered correctly on the records that already use it. The same applies to a
+user-created row once anything references it.
+
+**Reset** is per set ("reset statuses") and also global. It restores system rows
+to their shipped values, clears `hidden_at` and `customised_at`, and asks
+separately what to do with user-created rows, because deleting someone's own
+labels without asking is not a reset, it is data loss.
+
+**Upgrades** carry a `seed_version`. A new version may add rows and may update
+rows whose `customised_at` is null. It may never touch an edited row, and it may
+never resurrect a hidden one.

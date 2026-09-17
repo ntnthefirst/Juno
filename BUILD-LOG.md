@@ -14,8 +14,8 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 | | |
 | --- | --- |
 | **Phase** | 0, in progress |
-| **Runs?** | **Yes.** The window opens, migrates and paints |
-| **Last verified** | `node scripts/smoke.mjs` boots the real app, applies the migration and loads over `app://bundle` |
+| **Runs?** | **Yes, including packaged.** `release/Bureau-Setup-0.1.0-x64.exe` builds and the installed app boots |
+| **Last verified** | The packaged exe migrates, seeds 4 sets and 17 items, and paints over `app://bundle` |
 
 ### What exists
 
@@ -203,3 +203,54 @@ search, reference, settings and backup services, and their IPC and MCP adapters.
 Two agents were writing them in parallel. The smoke run correctly failed on
 `settings.getTheme` and `clients.list` having no handler, which is exactly what
 the smoke script exists to catch.
+
+
+### Session 1, part 4: services wired, lint clean, packaging works
+
+`npm run lint`, `npm run typecheck` and `npm run test` (29 tests) are all clean,
+and `npx electron-builder --win` produces a working installer.
+
+**Environment problems found and fixed:**
+
+- **Tests cannot run on the host's Node 23.9.** Its `node:sqlite` has no
+  `StatementSync.setReturnArrays`, which the shim's `raw()` needs, so every
+  Drizzle select throws. The `test` script now runs Vitest under Electron's Node
+  24.18 via `ELECTRON_RUN_AS_NODE=1`. If the host Node is ever upgraded past 24
+  this can go back to plain `vitest`.
+- **`tsconfig.main.json` was emitting the test files** into `dist-electron`,
+  where Vitest collected the compiled CommonJS copies and failed on
+  `require("vitest")`. Excluded there, and `vitest.config.ts` excludes the output
+  directories too.
+
+**A real bug in the shim, found by a subagent:** Drizzle does not call the
+function returned by `transaction()`. It calls `tx[behavior ?? "deferred"](...)`.
+The shim returned a bare function, so every transaction threw. It now returns a
+callable carrying `deferred`, `immediate` and `exclusive`. Worth remembering that
+a type check passed on this and only running it caught it.
+
+**Layering fix:** `settings.ts` and `backup.ts` had reached for `db/paths.ts`
+through a lazy `require()`, to avoid pulling Electron into a plain Node test.
+`main.ts` now injects the directories at startup instead, so no service knows
+about paths and none imports Electron.
+
+**Two React purity errors** in the lock screen, both real and both caught by
+lint, not by types: reading the clock during render, and calling setState
+straight from an effect body. The countdown now changes state only inside the
+interval callback.
+
+**Packaging:**
+
+- `scripts/make-icon.mjs` rasterises the SVG to `build/icon.png` using Electron
+  itself, since adding sharp or resvg would mean a native module. Note that
+  `capturePage()` returns device pixels, so the window is sized in CSS pixels
+  divided by the display scale factor, or a 1.5x display yields a 1536px image.
+- `electron-builder.yml` deliberately has **no `publish` block**. The repository
+  does not exist online yet, and an installed build pointing at the wrong feed is
+  worse than one that never checks. Add it, and enable the updater, once the repo
+  is created.
+- The **packaged** app was launched and verified, not just built. It migrates
+  from inside the asar and serves the renderer over `app://bundle`.
+
+**Still missing for phase 0:** the client create/edit/detail interface, the
+settings screen (theme, lock configuration, reference-data editor, backup), and
+auto-update.

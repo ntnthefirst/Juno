@@ -1,0 +1,55 @@
+appId: be.digistra.bureau
+productName: Bureau
+copyright: Nathan Perron
+
+directories:
+  buildResources: build
+  output: release
+
+# dist-electron holds the compiled main process, dist the renderer. Both are
+# built by `npm run build` before this runs. dist-electron/package.json is what
+# declares the main process CommonJS, so it has to ship.
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+# There is no `publish` block yet, deliberately. The repository does not exist
+# online, and an installed build that points at the wrong feed is worse than one
+# that does not check for updates at all. Add it, and turn on the updater, once
+# the repository is created.
+
+# The product name decides app.getPath("userData"). Changing it moves the
+# database out from under an existing installation, which looks exactly like
+# data loss. Do not rename this casually.
+
+win:
+  icon: build/icon.png
+  artifactName: Bureau-Setup-${version}-${arch}.${ext}
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Bureau
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.productivity
+  artifactName: Bureau-${version}-${arch}.${ext}
+  target:
+    - dmg
+    - zip
+
+linux:
+  icon: build/icon.png
+  artifactName: Bureau-${version}-${arch}.${ext}
+  category: Office
+  target:
+    - AppImage

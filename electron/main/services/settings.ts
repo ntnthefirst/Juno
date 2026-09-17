@@ -72,11 +72,12 @@ export function configureSettings(dir: string | null): void {
 }
 
 function settingsFile(): string {
-	if (directory) return join(directory, "settings.json");
-	// Required lazily rather than imported: db/paths.ts imports `electron`, and a
-	// plain Node test process cannot load that.
-	const paths = require("../db/paths") as typeof import("../db/paths");
-	return paths.settingsPath();
+	if (!directory) {
+		// Injected by main.ts at startup rather than read from db/paths.ts here,
+		// which imports `electron` and so cannot load in a plain Node test.
+		throw new Error("configureSettings() was not called before the settings store was used.");
+	}
+	return join(directory, "settings.json");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

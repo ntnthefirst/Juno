@@ -12,10 +12,10 @@ import { app, BrowserWindow, nativeTheme } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
-import { databasePath } from "./main/db/paths";
+import { backupsDir, databasePath, userDataDir } from "./main/db/paths";
 import { registerAllIpc } from "./main/ipc";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
-import { setCloseHook } from "./main/services/backup";
+import { configureBackups, setCloseHook } from "./main/services/backup";
 import * as lock from "./main/services/lock";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
@@ -37,6 +37,12 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	app.whenReady().then(async () => {
+		// Paths are injected here rather than read inside each service, so no
+		// service has to import `electron` and every one stays testable in plain
+		// Node.
+		settings.configureSettings(userDataDir());
+		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
+
 		const db = openDb(databasePath());
 
 		const migrations = runMigrations(getConnection());

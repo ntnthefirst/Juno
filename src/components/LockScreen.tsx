@@ -6,8 +6,7 @@ type LockScreenProps = {
 	onUnlocked: () => void;
 };
 
-function formatWait(until: string): string {
-	const seconds = Math.max(0, Math.ceil((Date.parse(until) - Date.now()) / 1000));
+function formatWait(seconds: number): string {
 	if (seconds >= 60) {
 		const minutes = Math.ceil(seconds / 60);
 		return `${minutes} minute${minutes === 1 ? "" : "s"}`;
@@ -20,25 +19,30 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [lockedOutUntil, setLockedOutUntil] = useState<string | null>(state.lockedOutUntil);
-	const [, forceTick] = useState(0);
+	const [secondsLeft, setSecondsLeft] = useState(0);
 	const input = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
 		input.current?.focus();
 	}, []);
 
-	// Re-renders once a second only while a penalty is running, so the countdown
-	// is live without the component ticking forever.
+	// The clock is read in the interval callback, never during render and never in
+	// the effect body. Reading it while rendering makes the output depend on when
+	// React happens to re-run the component, and setting state straight from an
+	// effect body cascades a second render on every mount.
 	useEffect(() => {
 		if (!lockedOutUntil) return;
 		const id = setInterval(() => {
-			if (Date.parse(lockedOutUntil) <= Date.now()) setLockedOutUntil(null);
-			else forceTick((n) => n + 1);
-		}, 1000);
+			const remaining = Date.parse(lockedOutUntil) - Date.now();
+			if (remaining <= 0) setLockedOutUntil(null);
+			else setSecondsLeft(Math.ceil(remaining / 1000));
+		}, 250);
 		return () => clearInterval(id);
 	}, [lockedOutUntil]);
 
-	const waiting = lockedOutUntil !== null && Date.parse(lockedOutUntil) > Date.now();
+	// Driven by the penalty itself rather than by the countdown, so the button
+	// stays disabled during the quarter second before the first tick lands.
+	const waiting = lockedOutUntil !== null;
 
 	async function submit(event: React.FormEvent) {
 		event.preventDefault();
@@ -121,8 +125,10 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 					aria-live="polite"
 					className="mt-3 min-h-[1.25rem] text-[length:var(--text-sm)] text-[var(--risk)]"
 				>
-					{waiting && lockedOutUntil
-						? `Too many attempts. Try again in ${formatWait(lockedOutUntil)}.`
+					{waiting
+						? secondsLeft > 0
+							? `Too many attempts. Try again in ${formatWait(secondsLeft)}.`
+							: "Too many attempts."
 						: (error ?? "")}
 				</p>
 

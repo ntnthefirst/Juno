@@ -49,22 +49,21 @@ export function setCloseHook(fn: (() => void) | null): void {
 	closeHook = fn;
 }
 
-function paths(): typeof import("../db/paths") {
-	// Required lazily: db/paths.ts imports `electron`, which a plain Node test
-	// process cannot load.
-	return require("../db/paths") as typeof import("../db/paths");
-}
-
 export function backupsFolder(): string {
-	if (directory) {
-		if (!existsSync(directory)) mkdirSync(directory, { recursive: true });
-		return directory;
+	if (!directory) {
+		// Injected by main.ts at startup rather than read from db/paths.ts here,
+		// which imports `electron` and so cannot load in a plain Node test.
+		throw new Error("configureBackups() was not called before the backup service was used.");
 	}
-	return paths().backupsDir();
+	if (!existsSync(directory)) mkdirSync(directory, { recursive: true });
+	return directory;
 }
 
 function liveDatabase(): string {
-	return databaseFile ?? paths().databasePath();
+	if (!databaseFile) {
+		throw new Error("configureBackups() was not called before the backup service was used.");
+	}
+	return databaseFile;
 }
 
 /** 2026-09-17T14-05-09Z: UTC, sortable, and legal in a filename on every platform. */

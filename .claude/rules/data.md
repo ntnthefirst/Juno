@@ -1,0 +1,128 @@
+# Data rules
+
+The schema, the migrations and the query habits that keep the local SQLite file
+trustworthy and syncable later.
+
+---
+
+## 1. SQLite via better-sqlite3, typed with Drizzle
+
+Decision 3 in [../../docs/decisions.md](../../docs/decisions.md). One file, no
+server, synchronous API, generated migrations.
+
+- Tables are declared in `electron/main/db/schema.ts`. That file is the schema.
+  There is no second source of truth and no hand-written `CREATE TABLE`.
+- Types come from the schema: `type Client = typeof clients.$inferSelect;` and
+  `typeof clients.$inferInsert` for writes. Never retype a row shape by hand.
+- Queries live in `electron/main/services/`. A Drizzle query in a component, an
+  IPC handler or an MCP tool is an architecture bug ([architecture.md](architecture.md)).
+- `better-sqlite3` is synchronous, so a long query blocks the main process and
+  therefore the window. Keep queries indexed and bounded; paginate lists.
+- Enable WAL mode and foreign keys once, when the connection opens:
+  `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;`.
+
+## 2. The five columns every table has
+
+Non-negotiable, from the first migration, on every table including join tables
+(decision 4).
+
+| Column | Type | Why |
+| --- | --- | --- |
+| `id` | text, UUIDv7, primary key | Two machines syncing integer ids is unfixable. v7 is time-sortable, so it indexes and pages well |
+| `owner_id` | text, not null | Decides who sees what the day a colleague or a sync server exists. Retrofitting it is a rewrite |
+| `created_at` | text, UTC ISO-8601, not null | Ordering and audit |
+| `updated_at` | text, UTC ISO-8601, not null | Last-write-wins needs it |
+| `deleted_at` | text, UTC ISO-8601, nullable | A sync that hard-deletes cannot tell "deleted" from "not yet received" |
+
+Put them in a shared `baseColumns` object in `schema.ts` and spread it into every
+table, so a new table cannot forget one. `created_at` and `updated_at` are set in
+the service, not by a DB default, so the value is the same on every platform.
+
+## 3. Migrations are append-only
+
+- Generated with Drizzle Kit, committed to git, and run forward on launch before
+  the first window opens.
+- **Never edit a migration that has been applied on a real machine.** Add a new
+  one. An edited migration means the developer's DB and the user's DB have the
+  same version number and different shapes, and nothing will ever tell you.
+- One migration per logical schema change, named for what it does.
+- Migration order is file order. Two migrations generated on two branches and
+  merged will apply in the wrong order or collide on a number. After any merge
+  that touches `migrations/`, regenerate rather than hand-merge, and check the
+  journal file.
+- A migration that drops or renames a column also carries the data move, in the
+  same file. A separate "fix the data" step is a step somebody skips.
+- Migrations run inside a transaction. If one fails, the app must refuse to open
+  rather than run on a half-migrated file.
+
+## 4. Time is UTC, everywhere, always
+
+- Stored as UTC ISO-8601 strings (`2026-03-14T09:05:00.000Z`). Not epoch seconds,
+  not `datetime('now','localtime')`, not a `Date` serialised by whatever the
+  locale does.
+- **Local time is a display concern.** Convert at the edge of the renderer, when
+  rendering, and nowhere else.
+- A date with no time (an invoice-reminder due date, a contract date) is stored as
+  a plain `YYYY-MM-DD` string in its own column type, not as midnight UTC. Midnight
+  UTC is the previous day in Brussels for half the year.
+- Never compare a stored timestamp against a locally constructed one without
+  normalising both to UTC first. See the DST trap in [verify.md](verify.md).
+
+## 5. Money is integer cents
+
+Bureau does not invoice or move money (decision 9), but it does track amounts
+owed and contract values. Those are integers.
+
+```ts
+/** An amount in euro cents. Never a float, never a formatted string. */
+export type Cents = number;
+```
+
+- Column type is integer. `4999` is 49,99 EUR.
+- No floats anywhere in the chain. `0.1 + 0.2` is a support ticket.
+- A currency column sits next to any amount column, even while everything is EUR.
+- Formatting to "49,99 EUR" happens in the renderer, at render time, with the
+  `nl-BE` locale. A service returns `Cents`.
+
+## 6. Soft deletes change every query
+
+Adding `deleted_at` is free. Forgetting it in one query is a row that comes back
+from the dead in one screen and not another.
+
+- **Every read filters `isNull(table.deletedAt)`** unless it is explicitly a trash
+  or audit view. Wrap it: a per-table `alive()` helper in the service beats
+  remembering.
+- Deleting is `update ... set deleted_at = now, updated_at = now`. `DELETE` is
+  reserved for a real purge, which is its own service function, confirmed by the
+  user, and never exposed as an unattended MCP tool ([mcp.md](mcp.md)).
+- Unique constraints and soft deletes fight each other: a deleted client's email
+  still occupies the unique index. Use a partial unique index conditioned on
+  `deleted_at IS NULL`.
+- Counts, aggregates and "does this exist" checks filter too. Especially those.
+
+## 7. Indexes
+
+- Index every foreign key. SQLite does not do it for you.
+- Index the columns you actually sort and filter lists by: `(owner_id, deleted_at,
+  created_at)` covers most list screens.
+- Mail needs more: `(account_id, folder, internal_date)` for the list, plus a
+  unique index on `(account_id, uid_validity, uid)` so a re-sync updates instead of
+  duplicating.
+- Full-text search on mail and documents uses SQLite FTS5, as a separate virtual
+  table kept in sync by the service. Do not bolt `LIKE '%x%'` onto a large table
+  and call it search.
+
+## 8. Where the file lives, and the backup story
+
+- The database is a single file at `app.getPath("userData")/bureau.db`, plus the
+  WAL and shm files next to it. Never in the install directory, never in the repo.
+- Attachments and generated documents are files on disk under the same userData
+  root, with the DB storing a relative path. Blobs in SQLite make backups slow and
+  the file fragile.
+- Backup is a copy of the whole folder while the app is closed, or the
+  `VACUUM INTO` a service exposes as an explicit export. Copying `bureau.db` alone
+  while the app is running loses whatever is in the WAL.
+- The DB file, the WAL, any `.sqlite` fixture and any real mail account are
+  gitignored and never committed ([git.md](git.md)).
+- Seed and demo data go through the same service functions as real data. A
+  hand-written `INSERT` skips validation and produces rows the app cannot have made.

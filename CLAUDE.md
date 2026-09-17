@@ -148,8 +148,8 @@ unless asked. Full rules in [.claude/rules/git.md](.claude/rules/git.md).
 ## Before saying something works
 
 Once phase 0 lands, the commands are `npm run lint`, `npm run typecheck`,
-`npm test` and `npm run smoke`, and a change is not done until all of them are
-clean and anything visual has been looked at in both themes. The stack's traps
+`npm run test` and `npm run smoke`, and a change is not done until all of them
+are clean and anything visual has been looked at in both themes. The stack's traps
 and the definition of done are in
 [.claude/rules/verify.md](.claude/rules/verify.md).
 

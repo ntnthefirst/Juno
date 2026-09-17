@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
+import { SettingsScreen } from "../features/settings/SettingsScreen";
 import { useTheme } from "../lib/theme";
 import { Sidebar, type ScreenId } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
@@ -39,6 +40,8 @@ export function App() {
 				<main className="min-w-0 flex-1 overflow-auto">
 					{screen === "clients" ? (
 						<ClientsScreen />
+					) : screen === "settings" ? (
+						<SettingsScreen theme={theme} onThemeChange={setTheme} />
 					) : (
 						<Placeholder title={LABELS[screen]} />
 					)}

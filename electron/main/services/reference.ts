@@ -140,7 +140,19 @@ export async function listSets(): Promise<ReferenceSetWithItems[]> {
 		.where(isNull(referenceSets.deletedAt))
 		.orderBy(referenceSets.label)
 		.all();
-	return sets.map((set) => ({ set: toSet(set), items: itemsForSet(db, set.id).map(toItem) }));
+
+	// Ordered the way the seed declares them, not alphabetically. Client, project,
+	// document, label follows how the records relate; the alphabet put document
+	// status between client and project, which reads as an accident.
+	const declared = SEED_SETS.map((set) => set.key);
+	const rank = (key: string) => {
+		const index = declared.indexOf(key as (typeof declared)[number]);
+		return index === -1 ? declared.length : index;
+	};
+
+	return sets
+		.sort((a, b) => rank(a.key) - rank(b.key) || a.label.localeCompare(b.label))
+		.map((set) => ({ set: toSet(set), items: itemsForSet(db, set.id).map(toItem) }));
 }
 
 export async function getSet(key: ReferenceSetKey): Promise<ReferenceSetWithItems | null> {

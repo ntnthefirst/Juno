@@ -135,14 +135,36 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							for (const theme of ["light", "dark"] as const) {
-								nativeTheme.themeSource = theme;
-								await window.webContents.executeJavaScript(
-									`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Clients", "Settings"] : ["Clients"];
+							for (const screen of screens) {
+								const clicked = await window.webContents.executeJavaScript(
+									`(() => { const b = [...document.querySelectorAll("nav button")]
+										.find((el) => el.textContent.trim() === ${JSON.stringify(screen)});
+										if (b) b.click(); return Boolean(b); })()`,
 								);
-								await new Promise((r) => setTimeout(r, 400));
-								const image = await window.webContents.capturePage();
-								writeFileSync(joinPath(shotDir, `bureau-${theme}.png`), image.toPNG());
+								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
+								await new Promise((r) => setTimeout(r, 800));
+								// Settings is taller than the window, so the lower sections are
+								// photographed too rather than assumed to render.
+								const offsets = screen === "Settings" ? [0, 1, 2] : [0];
+								for (const theme of ["light", "dark"] as const) {
+									nativeTheme.themeSource = theme;
+									await window.webContents.executeJavaScript(
+										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+									);
+									for (const page of offsets) {
+										await window.webContents.executeJavaScript(
+											`document.querySelector("main").scrollTop = ${page} * (window.innerHeight - 120)`,
+										);
+										await new Promise((r) => setTimeout(r, 400));
+										const image = await window.webContents.capturePage();
+										const suffix = offsets.length > 1 ? `-${page + 1}` : "";
+										writeFileSync(
+											joinPath(shotDir, `${screen.toLowerCase()}-${theme}${suffix}.png`),
+											image.toPNG(),
+										);
+									}
+								}
 							}
 						}
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);

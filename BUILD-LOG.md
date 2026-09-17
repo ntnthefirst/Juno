@@ -14,8 +14,8 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 | | |
 | --- | --- |
 | **Phase** | 0, in progress |
-| **Runs?** | Not yet. Scaffolding in progress |
-| **Last verified** | Dependency install clean, `node:sqlite` proven working inside Electron |
+| **Runs?** | No window yet. The data layer is proven end to end |
+| **Last verified** | Migrations, Drizzle reads and writes, transactions and foreign keys, all inside Electron |
 
 ### What exists
 
@@ -26,9 +26,22 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
   [.claude/rules/verify.md](.claude/rules/verify.md) section 1.
 - Dependencies installed and resolving.
 
+### What exists and is proven
+
+- Build pipeline: the main process is TypeScript compiled to CommonJS in
+  `dist-electron/`, the renderer is Vite. `npm run build:main` works.
+- `electron/main/db/`: the shim, the five standard columns with UUIDv7, the
+  first schema (clients, contacts, projects, reference_sets, reference_items),
+  the generated migration and a forward-only migration runner.
+- A full-stack test was run inside Electron and passed: migrations apply and
+  re-running is a no-op, Drizzle inserts, selects, updates, orders and joins
+  through the shim, UUIDv7 validates against the spec, `owner_id` and UTC
+  timestamps default correctly, soft deletes filter, booleans and integers
+  round-trip, transactions roll back, and foreign keys are enforced.
+
 ### What does not exist yet
 
-Everything under `electron/` and `src/`. No application code has been written.
+No window, no preload, no services, no IPC, no MCP, no renderer.
 
 ---
 
@@ -121,3 +134,27 @@ hit the `better-sqlite3` compile failure, diagnosed the toolchain, verified
 `node:sqlite` in Electron, and chose the storage path above.
 
 Nothing runs yet.
+
+
+### Session 1, continued
+
+Data layer built and proven. Two findings worth keeping:
+
+**Drizzle's `drizzle()` from `drizzle-orm/better-sqlite3` cannot be used.** It
+does a top-level `require("better-sqlite3")` and throws before it looks at the
+client you hand it, even though on that path it never uses the import. The
+database is therefore assembled by hand in `electron/main/db/index.ts` from
+`SQLiteSyncDialect`, `BetterSQLiteSession` and `BaseSQLiteDatabase`, which are
+all published subpath exports, mirroring what its own `construct()` does. A fake
+`better-sqlite3` package and a `Module._load` patch were both considered and
+rejected as more fragile.
+
+**`raw()` must not be sticky.** Drizzle reuses one prepared statement for both
+object rows and array rows, so the shim sets `setReturnArrays` for the duration
+of a single call and clears it in a `finally`. Leaving it on returns the wrong
+shape to whichever caller comes second, which would have been a subtle and
+horrible bug.
+
+The migration runner splits on drizzle-kit's `--> statement-breakpoint` marker
+rather than on semicolons, and applies each file in one transaction, so a
+half-applied migration cannot leave the journal disagreeing with the schema.

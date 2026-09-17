@@ -1,0 +1,123 @@
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { seededColumns, standardColumns } from "../columns";
+
+/**
+ * A client is an organisation Bureau does work for. Everything else that matters
+ * hangs off it: contacts, projects, documents and eventually mail threads.
+ */
+export const clients = sqliteTable(
+	"clients",
+	{
+		...standardColumns,
+		name: text("name").notNull(),
+		/** Lowercased name, kept for case-insensitive sort and lookup. */
+		sortName: text("sort_name").notNull(),
+		statusId: text("status_id").references(() => referenceItems.id),
+		email: text("email"),
+		phone: text("phone"),
+		website: text("website"),
+		vatNumber: text("vat_number"),
+		addressLine1: text("address_line1"),
+		addressLine2: text("address_line2"),
+		postalCode: text("postal_code"),
+		city: text("city"),
+		country: text("country"),
+		notes: text("notes"),
+	},
+	(t) => [
+		index("clients_owner_idx").on(t.ownerId),
+		index("clients_sort_name_idx").on(t.sortName),
+		index("clients_status_idx").on(t.statusId),
+		index("clients_deleted_idx").on(t.deletedAt),
+	],
+);
+
+export const contacts = sqliteTable(
+	"contacts",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		name: text("name").notNull(),
+		role: text("role"),
+		email: text("email"),
+		phone: text("phone"),
+		/** Exactly one contact per client should carry this. Enforced in the service. */
+		isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+		notes: text("notes"),
+	},
+	(t) => [
+		index("contacts_client_idx").on(t.clientId),
+		index("contacts_owner_idx").on(t.ownerId),
+		index("contacts_email_idx").on(t.email),
+		index("contacts_deleted_idx").on(t.deletedAt),
+	],
+);
+
+export const projects = sqliteTable(
+	"projects",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		name: text("name").notNull(),
+		statusId: text("status_id").references(() => referenceItems.id),
+		description: text("description"),
+		/** Dates without a time are stored as YYYY-MM-DD, not as a UTC instant. */
+		startsOn: text("starts_on"),
+		dueOn: text("due_on"),
+		/** Integer cents. Never a float, and never a decimal string. */
+		agreedValueCents: integer("agreed_value_cents"),
+		notes: text("notes"),
+	},
+	(t) => [
+		index("projects_client_idx").on(t.clientId),
+		index("projects_owner_idx").on(t.ownerId),
+		index("projects_status_idx").on(t.statusId),
+		index("projects_due_idx").on(t.dueOn),
+		index("projects_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
+ * Reference data, per decision 16. A set is a named list ("client_status",
+ * "label"); an item is one value in it. Shipped rows carry a seed key and are
+ * hidden rather than deleted, because records already point at them.
+ */
+export const referenceSets = sqliteTable(
+	"reference_sets",
+	{
+		...standardColumns,
+		/** Stable machine key: client_status, project_status, document_status, label. */
+		key: text("key").notNull(),
+		label: text("label").notNull(),
+		description: text("description"),
+		/** A set the user may add items to. Some sets are fixed by code. */
+		allowsCustomItems: integer("allows_custom_items", { mode: "boolean" })
+			.notNull()
+			.default(true),
+	},
+	(t) => [index("reference_sets_key_idx").on(t.key)],
+);
+
+export const referenceItems = sqliteTable(
+	"reference_items",
+	{
+		...standardColumns,
+		...seededColumns,
+		setId: text("set_id")
+			.notNull()
+			.references(() => referenceSets.id),
+		/** Stable machine key within the set: active, lead, draft, signed. */
+		key: text("key").notNull(),
+		label: text("label").notNull(),
+		/** A token name from brand/tokens.css, never a hex value. */
+		tone: text("tone"),
+	},
+	(t) => [
+		index("reference_items_set_idx").on(t.setId),
+		index("reference_items_hidden_idx").on(t.hiddenAt),
+	],
+);

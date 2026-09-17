@@ -217,3 +217,60 @@ labels without asking is not a reset, it is data loss.
 **Upgrades** carry a `seed_version`. A new version may add rows and may update
 rows whose `customised_at` is null. It may never touch an edited row, and it may
 never resurrect a hidden one.
+
+## 17. Phase 0 derives the lock secret with scrypt, not Argon2id
+
+Amends decision 15. `crypto.scryptSync` is in the Node standard library, so it
+adds no native module, no ABI rebuild and no prebuilt-binary risk to the one
+phase that has to boot before anything else can be built on it. scrypt is
+memory-hard and is a legitimate choice for this.
+
+The lock screen is layer 2: it stops someone using the running machine. Database
+encryption, which is where key derivation actually carries weight, is out of
+scope for now and named as such in the plan.
+
+**Revisit when encryption lands.** At that point move to Argon2id via
+`@node-rs/argon2`, which is a NAPI binding and therefore does not need rebuilding
+against Electron's ABI. Migrate existing hashes by re-deriving on next successful
+unlock, and store the algorithm and its parameters next to the hash from the
+start so that migration is possible at all.
+
+## 18. Storage is `node:sqlite`, with a shim so Drizzle can drive it
+
+Amends decision 3, which named `better-sqlite3`.
+
+`better-sqlite3` compiles through `node-gyp`. The development machine has Visual
+Studio 2026 without the C++ workload and no Windows SDK, so `npm install` fails
+at `find VS`. A compiler would also mean rebuilding against Electron's ABI on
+every Electron bump, which is already listed as a trap in
+[../.claude/rules/verify.md](../.claude/rules/verify.md).
+
+`node:sqlite` is in the Node standard library. It is synchronous, which is the
+property decision 3 actually wanted, needs no compilation, has no ABI to
+mismatch, and keeps `.node` files out of the packaging problem entirely. It also
+means the project builds on a machine with no compiler, which matters if Bureau
+is ever handed to another small business owner.
+
+Verified before adopting: Electron 41.10.7 bundles Node 24.18.0 with `node:sqlite`
+present and SQLite 3.53.1, and a real query ran inside Electron.
+
+**Drizzle has no `node:sqlite` driver.** A small shim in
+`electron/main/db/node-sqlite-shim.cjs` presents the `better-sqlite3` interface
+over it, so `drizzle-orm/better-sqlite3` can be used unchanged. Only two things
+need translating: `stmt.raw(bool)` becomes `stmt.setReturnArrays(bool)`, and
+`db.transaction(fn)` is implemented with `BEGIN` / `COMMIT` / `ROLLBACK`. Both
+were verified by inspecting the real method surface inside Electron.
+
+`drizzle-orm/sqlite-proxy` was the supported alternative and was rejected: it
+forces an async API and supports transactions poorly, which is a worse trade than
+a shim over an interface that has been measured rather than assumed.
+
+**What would reverse this:** `node:sqlite` leaving experimental with a breaking
+change, Drizzle shipping a real `node:sqlite` driver (switch to it), or the
+project needing SQLCipher (decision 15), which `node:sqlite` cannot do. That last
+one is the important one: **turning on database encryption means revisiting this
+decision**, and the likely answer then is `@libsql/client`, which ships prebuilt
+NAPI binaries and supports encryption without a compiler.
+
+Pin Drizzle's minor version and read its changelog before upgrading, because the
+shim depends on how its better-sqlite3 session calls the driver.

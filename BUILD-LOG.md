@@ -254,3 +254,25 @@ interval callback.
 **Still missing for phase 0:** the client create/edit/detail interface, the
 settings screen (theme, lock configuration, reference-data editor, backup), and
 auto-update.
+
+
+### Session 1, part 5: the lock's crypto, and a bug that would have shipped
+
+`vault.ts` imports `electron`, and the test runner is plain Node, so the code
+that decides whether a wrong passphrase gets in had no test. The pure parts were
+extracted into `vault-core.ts`.
+
+**The first run of those tests failed, and this is the entry to remember.**
+scrypt needs `128 * N * r` bytes. At `N = 2^15` and `r = 8` that is exactly
+32 MiB, and Node's default `maxmem` is also 32 MiB, so every derivation threw
+`MEMORY_LIMIT_EXCEEDED`. Nothing about this is visible to a typecheck, and the
+failure mode in production would have been ugly: configuring a lock writes the
+vault first, so the app would have accepted the new passphrase and then refused
+every unlock attempt afterwards, with the lock already on.
+
+`maxmem` is now explicit and stored in the record alongside `N`, `r`, `p` and
+`keylen`, so raising the cost parameters later cannot invalidate a verifier that
+already exists. Verification reads the parameters from the record rather than
+from the current constant, for the same reason.
+
+If `N` is ever raised, check `128 * N * r` against `maxmem` in the same edit.

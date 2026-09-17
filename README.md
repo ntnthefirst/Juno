@@ -11,8 +11,11 @@ generates the documents you would otherwise retype, and exposes everything it ca
 do to an AI agent so the boring parts can be asked for instead of clicked
 through.
 
-**Status: day zero.** Nothing is built yet. The plan, the rules and the design
-system are written; phase 0 is next. See [PLAN.md](PLAN.md).
+**Status: phase 0, working.** The app builds, packages, installs and runs.
+Clients, contacts and projects can be created, edited, deleted and restored;
+reference data is seeded and editable; the lock screen works. What is built and
+what is not is tracked in [BUILD-LOG.md](BUILD-LOG.md); what comes next is in
+[PLAN.md](PLAN.md).
 
 ---
 
@@ -81,15 +84,50 @@ brand/
 .claude/
   rules/                How to write code here, one file per topic
   skills/               Step-by-step workflows for recurring tasks
+electron/
+  main.ts               Entry point. The boot order is commented and matters
+  main/db/              Schema, migrations, the node:sqlite shim
+  main/services/        All business logic. The API, per docs/decisions.md
+  main/ipc/             Thin adapters over services, behind the lock guard
+  main/mcp/             Thin adapters over the same services, for agents
+  shared/               The contract both processes typecheck against
+src/
+  app/                  Shell, sidebar, title bar
+  features/             One folder per screen
+  components/           Dialog, Button, Field, Select, Toast
 ```
-
-Application code arrives in phase 0, under `electron/` and `src/`.
 
 ## Getting started
 
-Nothing to run yet. When phase 0 lands this section describes `npm install` and
-`npm run dev`; until then, start with [PLAN.md](PLAN.md) and
-[docs/decisions.md](docs/decisions.md).
+```bash
+npm install
+npm run dev
+```
+
+`npm run dev` compiles the main process, starts Vite on 5173 and launches
+Electron against it. The development build keeps its own database
+(`bureau.dev.sqlite`) so it cannot damage real records.
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Vite plus Electron, watching |
+| `npm run lint` | ESLint across renderer, main and scripts |
+| `npm run typecheck` | Three project references: renderer, main, build scripts |
+| `npm run test` | Vitest, under Electron's Node (see below) |
+| `npm run smoke` | Builds, launches the real app, and fails on any renderer error |
+| `npm run build` | Typecheck, compile main, build renderer |
+| `npm run dist` | The above plus an installer into `release/` |
+| `npm run db:generate` | Turns a schema change into a migration file |
+
+Two things that will otherwise waste an afternoon:
+
+- **Tests run under Electron's Node, not the host's.** `node:sqlite` before Node
+  24 has no `StatementSync.setReturnArrays`, which the storage shim depends on,
+  so every query throws on an older host Node. The `test` script handles this.
+- **`npm run smoke` is the only check that proves the app runs.** A clean
+  typecheck says nothing about the custom scheme, the preload bridge or the
+  database. Add `BUREAU_SMOKE_DEMO=1` to have it create real records through the
+  bridge and photograph both themes into `.smoke/`.
 
 ## Licence
 

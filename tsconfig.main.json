@@ -27,5 +27,8 @@
 		"types": ["node"],
 		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.main.tsbuildinfo"
 	},
-	"include": ["electron"]
+	"include": ["electron"],
+	// Tests must not be emitted into dist-electron. Vitest would then collect the
+	// compiled CommonJS copies alongside the sources and fail on require("vitest").
+	"exclude": ["electron/**/*.test.ts"]
 }

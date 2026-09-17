@@ -19,7 +19,12 @@ const child = spawn(
 	electron,
 	[".", "--user-data-dir=" + userData, "--no-sandbox"],
 	{
-		env: { ...process.env, BUREAU_SMOKE: "1", ELECTRON_ENABLE_LOGGING: "1" },
+		env: {
+			...process.env,
+			BUREAU_SMOKE: "1",
+			BUREAU_SMOKE_SHOT: process.env.BUREAU_SMOKE_SHOT ?? join(process.cwd(), ".smoke"),
+			ELECTRON_ENABLE_LOGGING: "1",
+		},
 		stdio: ["ignore", "pipe", "pipe"],
 	},
 );

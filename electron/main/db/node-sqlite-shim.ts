@@ -11,9 +11,14 @@
  * `node_modules/drizzle-orm/better-sqlite3/session.cjs`:
  *
  *   client.prepare(sql)                 -> statement
- *   client.transaction(fn)              -> a function that runs fn in a transaction
+ *   client.transaction(fn)              -> a function carrying .deferred,
+ *                                          .immediate and .exclusive
  *   stmt.run / stmt.get / stmt.all      -> positional parameters
  *   stmt.raw().get / stmt.raw().all     -> the same rows as arrays, not objects
+ *
+ * The transaction detail is easy to miss and fatal: Drizzle never calls the
+ * returned function directly, it calls `tx[behavior ?? "deferred"](...)`. A bare
+ * function passes a type check and then throws on the first transaction.
  *
  * `node:sqlite` covers all of it: `setReturnArrays(true)` is what `raw()` does,
  * and transactions are plain BEGIN / COMMIT / ROLLBACK. Verified against the real
@@ -38,10 +43,18 @@ export interface ShimStatement {
 	raw(): RawStatement;
 }
 
+/** better-sqlite3 returns a callable that also carries the three begin modes. */
+export interface ShimTransaction<A extends unknown[], R> {
+	(...args: A): R;
+	deferred(...args: A): R;
+	immediate(...args: A): R;
+	exclusive(...args: A): R;
+}
+
 export interface ShimDatabase {
 	prepare(sql: string): ShimStatement;
 	exec(sql: string): void;
-	transaction<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R;
+	transaction<A extends unknown[], R>(fn: (...args: A) => R): ShimTransaction<A, R>;
 	close(): void;
 	readonly native: DatabaseSync;
 }
@@ -98,25 +111,33 @@ export function openDatabase(filename: string): ShimDatabase {
 		exec: (sql) => native.exec(sql),
 		close: () => native.close(),
 		transaction<A extends unknown[], R>(fn: (...args: A) => R) {
-			return (...args: A): R => {
-				// Drizzle manages its own savepoints for nesting, but a service that
-				// wraps one transactional call in another would otherwise emit a
-				// second BEGIN and throw. Counting depth makes the inner call join
-				// the outer transaction instead.
-				if (depth > 0) return fn(...args);
-				native.exec("BEGIN");
-				depth++;
-				try {
-					const result = fn(...args);
-					native.exec("COMMIT");
-					return result;
-				} catch (error) {
-					native.exec("ROLLBACK");
-					throw error;
-				} finally {
-					depth--;
-				}
+			const begin = (statement: string) => {
+				return (...args: A): R => {
+					// Drizzle manages its own savepoints for nesting, but a service that
+					// wraps one transactional call in another would otherwise emit a
+					// second BEGIN and throw. Counting depth makes the inner call join
+					// the outer transaction instead.
+					if (depth > 0) return fn(...args);
+					native.exec(statement);
+					depth++;
+					try {
+						const result = fn(...args);
+						native.exec("COMMIT");
+						return result;
+					} catch (error) {
+						native.exec("ROLLBACK");
+						throw error;
+					} finally {
+						depth--;
+					}
+				};
 			};
+
+			const wrapper = begin("BEGIN") as ShimTransaction<A, R>;
+			wrapper.deferred = begin("BEGIN");
+			wrapper.immediate = begin("BEGIN IMMEDIATE");
+			wrapper.exclusive = begin("BEGIN EXCLUSIVE");
+			return wrapper;
 		},
 	};
 }

@@ -13,9 +13,9 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 
 | | |
 | --- | --- |
-| **Phase** | 0, in progress |
-| **Runs?** | **Yes, including packaged.** Clients, contacts and projects all work end to end |
-| **Last verified** | `BUREAU_SMOKE_DEMO=1 node scripts/smoke.mjs` creates real records through the preload bridge and screenshots both themes |
+| **Phase** | 0, essentially complete. Only auto-update is outstanding, and it is blocked on the repository existing |
+| **Runs?** | **Yes, including packaged.** Clients, contacts, projects, reference data, lock, backup and settings all work |
+| **Last verified** | lint, typecheck, 39 tests, and a smoke run that creates records through the bridge and photographs both screens in both themes |
 
 ### What exists
 
@@ -305,3 +305,45 @@ Also confirmed working: integer cents render as `2 100,00` in Belgian format,
 `YYYY-MM-DD` dates render as `14/11/2026` without passing through a Date, status
 tones resolve from token names, and the seeded reference data drives both status
 dropdowns.
+
+
+### Session 1, part 7: the settings screen, and phase 0 closing out
+
+Settings covers appearance, lock, statuses and labels, owner details, backup and
+about. `src/features/settings/`, one file per section.
+
+**Three lint errors of the same kind, worth knowing about.** React's
+`react-hooks/set-state-in-effect` rejects calling a setState-containing function
+directly from an effect body, even an async one that only sets state a microtask
+later. The accepted shape is a promise chain whose callback sets the state:
+
+```ts
+useEffect(() => {
+	let cancelled = false;
+	window.bureau.thing.list()
+		.then((v) => { if (!cancelled) setThing(v); })
+		.catch((e: unknown) => { if (!cancelled) setError(messageOf(e)); });
+	return () => { cancelled = true; };
+}, []);
+```
+
+Keep the `refresh()` callback for use after a mutation; just do not call it from
+the effect body. `messageOf` moved to `src/lib/errors.ts` because a file that
+exports both components and a helper breaks fast refresh.
+
+**A real ordering bug the screenshots caught.** `reference.listSets` ordered by
+label, which put Document status between Client status and Project status.
+Alphabetical order is an accident here; the sets now follow the order
+`seed-data.ts` declares them in, which matches how the records relate. Nothing in
+lint, typecheck or the tests could have found this.
+
+The smoke run now walks both screens in both themes, scrolling through settings
+because it is taller than the window. Eight images per run.
+
+**What is left in phase 0:** auto-update. It is deliberately not built, because
+`electron-builder.yml` has no publish block until the repository exists, and an
+installed build pointing at the wrong feed is worse than one that never checks.
+
+**Phase 0's done-when, from PLAN.md,** is now reachable: install the packaged
+build, enter the four clients with contacts and projects, reboot, and confirm
+they are still there.

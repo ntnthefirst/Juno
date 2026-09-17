@@ -17,12 +17,13 @@
 	/* ---- Surfaces: warm paper, not clinical white ---- */
 	--paper: #faf9f7; /* window background */
 	--surface: #ffffff; /* cards, rows, panels sitting on paper */
-	--sunken: #f2f0ec; /* wells, table headers, inset areas */
+	--sunken: #f2f0ec; /* wells, inset areas, the rare filled input */
+	--hover: #f1efea; /* row and control hover. Not a selected state */
 
 	/* ---- Ink ---- */
 	--ink: #1a1917; /* primary text */
 	--ink-muted: #6b6862; /* secondary text, labels — passes AA */
-	--ink-faint: #94908a; /* decorative and large text only, NOT body copy */
+	--ink-faint: #88847c; /* meta and large text only, NOT body copy. Clears 3:1 on every light surface including --hover */
 
 	/* ---- Lines ---- */
 	--line: #e5e2dc; /* default border, dividers */
@@ -110,6 +111,7 @@
 		--paper: #141311;
 		--surface: #1c1b19;
 		--sunken: #0e0d0c;
+		--hover: #232220;
 
 		--ink: #f0eee9;
 		--ink-muted: #a8a399;
@@ -144,6 +146,7 @@
 	--paper: #141311;
 	--surface: #1c1b19;
 	--sunken: #0e0d0c;
+	--hover: #232220;
 
 	--ink: #f0eee9;
 	--ink-muted: #a8a399;
@@ -180,6 +183,7 @@
 	--color-paper: var(--paper);
 	--color-surface: var(--surface);
 	--color-sunken: var(--sunken);
+	--color-hover: var(--hover);
 	--color-ink: var(--ink);
 	--color-ink-muted: var(--ink-muted);
 	--color-ink-faint: var(--ink-faint);

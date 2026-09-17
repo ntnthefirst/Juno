@@ -6,175 +6,319 @@
 <link rel="icon" href="logo/favicon.svg">
 <link rel="stylesheet" href="tokens.css">
 <style>
-	/* This page uses only the tokens. If something here needs a raw value that
-	   tokens.css does not have, that is a missing token, not a special case. */
+	/* Built only from tokens.css. A raw value here means a missing token. */
 	* { box-sizing: border-box; }
+	html, body { height: 100%; }
 	body {
-		margin: 0; padding: var(--space-8);
-		background: var(--paper); color: var(--ink);
+		margin: 0; background: var(--paper); color: var(--ink);
 		font-family: var(--font-ui); font-size: var(--text-base);
 		line-height: var(--leading-normal);
+		display: flex; flex-direction: column;
 	}
-	h1 { font-size: var(--text-h1); margin: 0 0 var(--space-2); letter-spacing: -0.02em; }
+	button { font: inherit; cursor: pointer; }
+	:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+
+	/* ---- Title bar: a hairline, not a panel ---- */
+	.titlebar {
+		height: var(--titlebar-height); flex: none;
+		display: flex; align-items: center; gap: var(--space-3);
+		padding: 0 var(--space-4); border-bottom: 1px solid var(--line);
+		font-size: var(--text-sm); color: var(--ink-muted);
+	}
+	.titlebar .name { color: var(--ink); font-weight: var(--weight-medium); }
+	.spacer { flex: 1; }
+
+	/* ---- Segmented control: one earned container ---- */
+	.seg { display: flex; gap: 2px; padding: 2px; background: var(--sunken); border-radius: var(--radius-md); }
+	.seg button {
+		border: 0; background: transparent; color: var(--ink-muted);
+		font-size: var(--text-sm); padding: var(--space-1) var(--space-3);
+		border-radius: var(--radius-sm); transition: background var(--duration-fast) var(--ease);
+	}
+	.seg button:hover { color: var(--ink); }
+	.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: var(--weight-medium); }
+
+	.shell { flex: 1; display: flex; min-height: 0; }
+
+	/* ---- Sidebar: space and one divider, no panel fill ---- */
+	.side {
+		width: var(--sidebar-width); flex: none; padding: var(--space-5) var(--space-3);
+		border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px;
+	}
+	.side .grouplabel {
+		font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.08em;
+		color: var(--ink-faint); padding: var(--space-4) var(--space-3) var(--space-2);
+	}
+	.nav {
+		display: flex; align-items: center; gap: var(--space-3);
+		height: var(--row-height); padding: 0 var(--space-3);
+		border-radius: var(--radius-md); color: var(--ink-muted);
+		border: 0; background: transparent; width: 100%; text-align: left;
+		transition: background var(--duration-fast) var(--ease);
+	}
+	.nav:hover { background: var(--hover); color: var(--ink); }
+	.nav[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: var(--weight-medium); }
+	.nav .count { margin-left: auto; font-size: var(--text-micro); color: var(--ink-faint); }
+	.dot { width: 6px; height: 6px; border-radius: var(--radius-full); background: currentColor; opacity: .55; flex: none; }
+
+	/* ---- Main ---- */
+	main { flex: 1; overflow: auto; padding: var(--space-8); }
+	.wrap { max-width: 860px; }
+	h1 { font-size: var(--text-h1); margin: 0; letter-spacing: -0.02em; font-weight: var(--weight-semibold); }
+	.head { display: flex; align-items: baseline; gap: var(--space-3); }
+	.head .sub { color: var(--ink-muted); font-size: var(--text-sm); }
 	h2 {
 		font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.08em;
 		color: var(--ink-muted); font-weight: var(--weight-semibold);
-		margin: var(--space-10) 0 var(--space-4);
-		padding-bottom: var(--space-2); border-bottom: 1px solid var(--line);
+		margin: var(--space-12) 0 var(--space-4);
 	}
-	.lede { color: var(--ink-muted); max-width: 60ch; margin: 0 0 var(--space-4); }
-	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
-	.sw { border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); }
-	.sw .chip { height: 56px; }
-	.sw .meta { padding: var(--space-2) var(--space-3); font-size: var(--text-micro); }
-	.sw .name { font-weight: var(--weight-medium); }
-	.sw .val { color: var(--ink-muted); font-family: var(--font-mono); }
-	.card {
-		background: var(--surface); border: 1px solid var(--line);
-		border-radius: var(--radius-lg); padding: var(--space-5);
-	}
-	.btn {
-		font: inherit; font-weight: var(--weight-medium);
-		padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
-		border: 1px solid transparent; cursor: pointer;
-		transition: background var(--duration-fast) var(--ease);
-	}
+
+	.btn { padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); border: 0; font-weight: var(--weight-medium); }
 	.btn-primary { background: var(--accent); color: var(--accent-ink); }
 	.btn-primary:hover { background: var(--accent-hover); }
-	.btn-quiet { background: transparent; color: var(--ink); border-color: var(--line-strong); }
-	.btn-quiet:hover { background: var(--sunken); }
-	.btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-	input[type=text] {
-		font: inherit; padding: var(--space-2) var(--space-3);
-		border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
-		background: var(--surface); color: var(--ink); width: 240px;
+	.btn-text { background: transparent; color: var(--ink-muted); }
+	.btn-text:hover { background: var(--hover); color: var(--ink); }
+
+	.field {
+		font: inherit; color: var(--ink); background: var(--sunken);
+		border: 1px solid transparent; border-radius: var(--radius-sm);
+		padding: var(--space-2) var(--space-3); width: 280px;
 	}
-	input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--accent); }
-	table { width: 100%; border-collapse: collapse; font-size: var(--text-dense); }
+	.field::placeholder { color: var(--ink-faint); }
+	.field:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+
+	/* ---- Table: rows are the structure. No outer box, no header fill. ---- */
+	table { width: 100%; border-collapse: collapse; }
 	th {
-		text-align: left; background: var(--sunken); color: var(--ink-muted);
-		font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.06em;
-		padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line);
+		text-align: left; font-size: var(--text-micro); text-transform: uppercase;
+		letter-spacing: 0.06em; color: var(--ink-faint); font-weight: var(--weight-medium);
+		padding: 0 var(--space-3) var(--space-2); border-bottom: 1px solid var(--line);
 	}
-	td { padding: 0 var(--space-3); height: var(--row-height); border-bottom: 1px solid var(--line); }
-	tr:hover td { background: var(--accent-soft); }
-	.badge {
-		display: inline-block; font-size: var(--text-micro); font-weight: var(--weight-medium);
-		padding: 2px var(--space-2); border-radius: var(--radius-sm);
+	td {
+		height: var(--row-height); padding: 0 var(--space-3);
+		border-bottom: 1px solid var(--line); font-size: var(--text-dense);
 	}
+	tbody tr { transition: background var(--duration-fast) var(--ease); }
+	tbody tr:hover { background: var(--hover); }
+	tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+	.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+	.badge { display: inline-block; font-size: var(--text-micro); font-weight: var(--weight-medium); padding: 2px var(--space-2); border-radius: var(--radius-sm); }
 	.b-ok { background: var(--ok-soft); color: var(--ok); }
 	.b-warn { background: var(--warn-soft); color: var(--warn); }
 	.b-risk { background: var(--risk-soft); color: var(--risk); }
 	.b-seal { background: var(--seal-soft); color: var(--seal); }
+	.b-plain { background: var(--sunken); color: var(--ink-muted); }
+
 	.row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
-	.stack > * + * { margin-top: var(--space-3); }
-	.toggle {
-		position: fixed; top: var(--space-4); right: var(--space-4);
-		background: var(--surface); border: 1px solid var(--line-strong);
-		color: var(--ink); border-radius: var(--radius-md);
-		padding: var(--space-2) var(--space-3); font: inherit; cursor: pointer;
+	.between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-6); }
+	.stack > * + * { margin-top: var(--space-4); }
+	.note { color: var(--ink-muted); font-size: var(--text-sm); max-width: 62ch; }
+
+	/* Reference data chips, per decision 16 */
+	.chipset { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+	.chip {
+		display: inline-flex; align-items: center; gap: var(--space-2);
+		font-size: var(--text-sm); padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+		border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink);
 	}
-	code { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--ink-muted); }
-	#report { font-family: var(--font-mono); font-size: var(--text-sm); white-space: pre; }
+	.chip.hidden-row { color: var(--ink-faint); border-style: dashed; }
+	.chip .x { border: 0; background: transparent; color: var(--ink-faint); padding: 0 var(--space-1); line-height: 1; }
+	.chip .x:hover { color: var(--risk); }
+	.chip.add { border-style: dashed; color: var(--ink-muted); cursor: pointer; background: transparent; }
+
+	/* Swatches: the one grid that legitimately uses boxes, because they ARE the colour */
+	.sw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: var(--space-3); }
+	.sw .chipc { height: 44px; border-radius: var(--radius-md); border: 1px solid var(--line); }
+	.sw .nm { font-size: var(--text-micro); margin-top: var(--space-2); }
+	.sw .vl { font-size: var(--text-micro); color: var(--ink-muted); font-family: var(--font-mono); }
+
+	/* Lock overlay: floats, so it earns a surface and a shadow */
+	.lock {
+		position: fixed; inset: 0; background: var(--paper);
+		display: none; place-items: center; z-index: 10;
+	}
+	.lock.on { display: grid; }
+	.lockcard {
+		width: 320px; text-align: center; background: var(--surface);
+		border: 1px solid var(--line); border-radius: var(--radius-xl);
+		padding: var(--space-8) var(--space-6); box-shadow: var(--shadow-modal);
+	}
+	.pin { display: flex; gap: var(--space-2); justify-content: center; margin: var(--space-5) 0; }
+	.pin i { width: 10px; height: 10px; border-radius: var(--radius-full); background: var(--line-strong); display: block; }
+	.pin i.f { background: var(--accent); }
+	#report { font-family: var(--font-mono); font-size: var(--text-sm); white-space: pre; color: var(--ink-muted); }
 </style>
 </head>
 <body>
-<button class="toggle" id="toggle">Toggle theme</button>
 
-<header class="stack">
-	<img src="logo/bureau-wordmark-ink.svg" alt="Bureau" width="150" id="wordmark">
-	<h1>Design kit</h1>
-	<p class="lede">Every value on this page comes from
-	<code>tokens.css</code>. If it renders correctly in both themes, the tokens
-	parse and the theme cascade works.</p>
-</header>
-
-<h2>Surfaces and ink</h2>
-<div class="grid" id="sw-base"></div>
-
-<h2>Accent, seal and status</h2>
-<div class="grid" id="sw-accent"></div>
-
-<h2>Type scale</h2>
-<div class="card stack" id="type"></div>
-
-<h2>Controls</h2>
-<div class="card stack">
-	<div class="row">
-		<button class="btn btn-primary">Send reminder</button>
-		<button class="btn btn-quiet">Cancel</button>
-		<input type="text" placeholder="Search clients">
+<div class="titlebar">
+	<img src="logo/bureau-mark.svg" width="14" height="14" alt="" style="opacity:.8">
+	<span class="name">Bureau</span>
+	<span class="spacer"></span>
+	<span>Theme</span>
+	<div class="seg" id="seg">
+		<button data-t="system" aria-pressed="true">System</button>
+		<button data-t="light" aria-pressed="false">Light</button>
+		<button data-t="dark" aria-pressed="false">Dark</button>
 	</div>
-	<div class="row">
-		<span class="badge b-ok">Signed</span>
-		<span class="badge b-warn">Due in 3 days</span>
-		<span class="badge b-risk">Overdue</span>
-		<span class="badge b-seal">Sealed</span>
-	</div>
+	<button class="btn btn-text" id="lockbtn">Lock</button>
 </div>
 
-<h2>Dense table</h2>
-<div class="card" style="padding:0;overflow:hidden">
-	<table>
-		<thead><tr><th>Client</th><th>Document</th><th>Due</th><th style="text-align:right">Amount</th></tr></thead>
-		<tbody id="rows"></tbody>
-	</table>
+<div class="shell">
+	<nav class="side">
+		<button class="nav"><span class="dot"></span>Today<span class="count">4</span></button>
+		<button class="nav" aria-current="page"><span class="dot"></span>Clients<span class="count">4</span></button>
+		<button class="nav"><span class="dot"></span>Documents<span class="count">17</span></button>
+		<button class="nav"><span class="dot"></span>Mail<span class="count">1 204</span></button>
+		<button class="nav"><span class="dot"></span>Calendar</button>
+		<button class="nav"><span class="dot"></span>Reminders<span class="count">2</span></button>
+		<div class="grouplabel">Setup</div>
+		<button class="nav"><span class="dot"></span>Templates</button>
+		<button class="nav"><span class="dot"></span>Settings</button>
+	</nav>
+
+	<main>
+	<div class="wrap">
+
+		<div class="between">
+			<div class="head">
+				<h1>Clients</h1>
+				<span class="sub">4 active</span>
+			</div>
+			<div class="row">
+				<input class="field" type="text" placeholder="Search clients and threads">
+				<button class="btn btn-primary">New client</button>
+			</div>
+		</div>
+
+		<table>
+			<thead><tr>
+				<th>Name</th><th>Status</th><th>Open document</th><th>Due</th><th class="num">Outstanding</th>
+			</tr></thead>
+			<tbody>
+				<tr aria-selected="true"><td>obet</td><td><span class="badge b-ok">Active</span></td><td>Ontwikkelovereenkomst</td><td>14 Nov</td><td class="num">2 100,00</td></tr>
+				<tr><td>bodhi</td><td><span class="badge b-ok">Active</span></td><td>Project scope</td><td>3 Oct</td><td class="num">1 250,00</td></tr>
+				<tr><td>noir</td><td><span class="badge b-warn">Awaiting signature</span></td><td>Hosting overeenkomst</td><td>1 Nov</td><td class="num">480,00</td></tr>
+				<tr><td>hyge</td><td><span class="badge b-plain">Lead</span></td><td>NDA</td><td>12 Oct</td><td class="num">0,00</td></tr>
+			</tbody>
+		</table>
+
+		<h2>Reference data, seeded and editable</h2>
+		<p class="note">Ships with defaults so the app works before it is configured.
+		Removing a system value hides it rather than deleting it, because records
+		already point at it. Reset restores the shipped set.</p>
+		<div class="stack">
+			<div>
+				<div class="sw nm" style="color:var(--ink-muted);margin-bottom:var(--space-2)">Document status</div>
+				<div class="chipset">
+					<span class="chip">Draft <button class="x" title="Hide">&times;</button></span>
+					<span class="chip">Sent <button class="x" title="Hide">&times;</button></span>
+					<span class="chip">Signed <button class="x" title="Hide">&times;</button></span>
+					<span class="chip hidden-row">Expired <button class="x" title="Restore">&#8634;</button></span>
+					<button class="chip add">+ Add</button>
+				</div>
+			</div>
+			<div>
+				<div class="sw nm" style="color:var(--ink-muted);margin-bottom:var(--space-2)">Labels</div>
+				<div class="chipset">
+					<span class="chip">Retainer <button class="x">&times;</button></span>
+					<span class="chip">Hosting <button class="x">&times;</button></span>
+					<span class="chip">One-off <button class="x">&times;</button></span>
+					<button class="chip add">+ Add</button>
+				</div>
+			</div>
+			<div class="row">
+				<button class="btn btn-text">Reset statuses to default</button>
+				<button class="btn btn-text">Reset everything</button>
+			</div>
+		</div>
+
+		<h2>Controls</h2>
+		<div class="row">
+			<button class="btn btn-primary">Send reminder</button>
+			<button class="btn btn-text">Cancel</button>
+			<span class="badge b-ok">Signed</span>
+			<span class="badge b-warn">Due in 3 days</span>
+			<span class="badge b-risk">Overdue</span>
+			<span class="badge b-seal">Sealed</span>
+		</div>
+
+		<h2>Surfaces and ink</h2>
+		<div class="sw-grid" id="sw-base"></div>
+
+		<h2>Accent, seal and status</h2>
+		<div class="sw-grid" id="sw-accent"></div>
+
+		<h2>Type scale</h2>
+		<div class="stack" id="type"></div>
+
+		<h2>Token readback</h2>
+		<div id="report"></div>
+
+	</div>
+	</main>
 </div>
 
-<h2>Token readback</h2>
-<div class="card"><div id="report"></div></div>
+<div class="lock" id="lock">
+	<div class="lockcard">
+		<img src="logo/bureau-icon.svg" width="44" height="44" alt="">
+		<div style="margin-top:var(--space-4);font-weight:var(--weight-medium)">Bureau is locked</div>
+		<div class="pin"><i class="f"></i><i class="f"></i><i></i><i></i></div>
+		<button class="btn btn-primary" id="unlock" style="width:100%">Unlock</button>
+		<p class="note" style="font-size:var(--text-micro);margin-top:var(--space-4)">
+			The lock screen protects against someone using this machine. It does not
+			encrypt the database on disk. Turn on encryption in Settings for that.</p>
+	</div>
+</div>
 
 <script>
-const base = [
-	['--paper','window'], ['--surface','card'], ['--sunken','well'],
-	['--ink','text'], ['--ink-muted','secondary'], ['--ink-faint','faint, large only'],
-	['--line','divider'], ['--line-strong','input border'],
-];
-const accent = [
-	['--accent','primary action'], ['--accent-hover','hover'], ['--accent-soft','selected row'],
-	['--seal','signed and done'], ['--ok','success'], ['--warn','attention'],
-	['--risk','problem'], ['--focus','focus ring'],
-];
-const swatch = (list, el) => document.getElementById(el).innerHTML = list.map(([t, use]) =>
-	`<div class="sw"><div class="chip" style="background:var(${t})"></div>
-	<div class="meta"><div class="name">${use}</div><div class="val">${t}</div></div></div>`).join('');
-swatch(base, 'sw-base'); swatch(accent, 'sw-accent');
+const base = [['--paper','window'],['--surface','floating'],['--sunken','well'],['--hover','hover'],
+	['--ink','text'],['--ink-muted','secondary'],['--ink-faint','faint, large only'],
+	['--line','divider'],['--line-strong','encloses']];
+const accent = [['--accent','primary'],['--accent-hover','hover'],['--accent-soft','selected'],
+	['--seal','signed'],['--ok','success'],['--warn','attention'],['--risk','problem'],['--focus','focus ring']];
+const sw = (list, id) => document.getElementById(id).innerHTML = list.map(([t,u]) =>
+	`<div class="sw"><div class="chipc" style="background:var(${t})"></div>
+	<div class="nm">${u}</div><div class="vl">${t}</div></div>`).join('');
+sw(base,'sw-base'); sw(accent,'sw-accent');
 
 document.getElementById('type').innerHTML = [
-	['--text-h1','Contracts awaiting signature'], ['--text-h2','This week'],
-	['--text-h3','obet'], ['--text-lg','Emphasised body text'],
-	['--text-base','Default interface text at 14px'],
-	['--text-dense','Table row text at 13px'], ['--text-sm','Secondary label'],
-	['--text-micro','BADGE'],
-].map(([t, s]) => `<div style="font-size:var(${t})">${s} <code>${t}</code></div>`).join('');
+	['--text-h1','Contracts awaiting signature'],['--text-h2','This week'],['--text-h3','obet'],
+	['--text-lg','Emphasised body'],['--text-base','Default interface text at 14px'],
+	['--text-dense','Table row text at 13px'],['--text-sm','Secondary label'],['--text-micro','BADGE'],
+].map(([t,s]) => `<div style="font-size:var(${t})">${s} <span class="vl">${t}</span></div>`).join('');
 
-document.getElementById('rows').innerHTML = [
-	['bodhi','Ontwikkelovereenkomst','3 Oct','1 250,00'],
-	['hyge','NDA','12 Oct','0,00'],
-	['noir','Hosting overeenkomst','1 Nov','480,00'],
-	['obet','Project scope','14 Nov','2 100,00'],
-].map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="tabular">${r[2]}</td>
-	<td class="tabular" style="text-align:right">${r[3]}</td></tr>`).join('');
-
-// Readback proves the custom properties actually resolved rather than falling back.
-function report() {
-	const cs = getComputedStyle(document.documentElement);
-	const theme = document.documentElement.getAttribute('data-theme') || 'light';
-	const checks = ['--paper','--ink','--accent','--seal','--font-ui','--radius-lg','--row-height'];
-	const lines = checks.map(t => {
-		const v = cs.getPropertyValue(t).trim();
-		return (v ? '  ok  ' : '  MISSING  ') + t.padEnd(14) + (v || '(empty)');
-	});
-	document.getElementById('report').textContent = `theme: ${theme}\n` + lines.join('\n');
+// Three-state theme, matching decision 14. "system" removes the attribute and
+// lets the prefers-color-scheme block decide.
+function applyTheme(mode) {
+	const el = document.documentElement;
+	if (mode === 'system') el.removeAttribute('data-theme');
+	else el.setAttribute('data-theme', mode);
+	[...document.querySelectorAll('#seg button')].forEach(b =>
+		b.setAttribute('aria-pressed', String(b.dataset.t === mode)));
+	const dark = mode === 'dark' || (mode === 'system' &&
+		matchMedia('(prefers-color-scheme: dark)').matches);
+	document.querySelectorAll('img[src*="wordmark"]').forEach(i =>
+		i.src = dark ? 'logo/bureau-wordmark-paper.svg' : 'logo/bureau-wordmark-ink.svg');
+	report(mode);
 }
-document.getElementById('toggle').addEventListener('click', () => {
-	const next = (document.documentElement.getAttribute('data-theme') === 'dark') ? 'light' : 'dark';
-	document.documentElement.setAttribute('data-theme', next);
-	document.getElementById('wordmark').src =
-		next === 'dark' ? 'logo/bureau-wordmark-paper.svg' : 'logo/bureau-wordmark-ink.svg';
-	report();
+document.getElementById('seg').addEventListener('click', e => {
+	const b = e.target.closest('button'); if (b) applyTheme(b.dataset.t);
 });
-report();
+document.getElementById('lockbtn').onclick = () => document.getElementById('lock').classList.add('on');
+document.getElementById('unlock').onclick = () => document.getElementById('lock').classList.remove('on');
+
+function report(mode) {
+	const cs = getComputedStyle(document.documentElement);
+	const checks = ['--paper','--surface','--hover','--ink','--accent','--seal','--row-height'];
+	document.getElementById('report').textContent = 'setting: ' + mode + '\n' +
+		checks.map(t => {
+			const v = cs.getPropertyValue(t).trim();
+			return (v ? '  ok  ' : '  MISSING  ') + t.padEnd(14) + (v || '(empty)');
+		}).join('\n');
+}
+applyTheme('system');
 </script>
 </body>
 </html>

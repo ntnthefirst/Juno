@@ -118,15 +118,63 @@ offline-first application cannot depend on a font CDN.
   do not line up are unreadable at a glance, which is the only way anyone reads
   a table.
 
-## 7. Shape, depth and motion
+## 7. Chrome: a container has to be earned
 
-- **Radius is small.** 4px on inputs, 6px on buttons and rows, 10px on cards. The
-  `--radius-full` token is for avatars and nothing else.
-- **Borders do the work, not shadows.** Shadow is reserved for things that
-  genuinely float above the page: popovers and modals. A card with a drop shadow
-  on a flat list is noise.
-- **Motion is fast and unshowy.** 120ms to 180ms, ease out. Animate opacity and
-  transform, nothing else. No bounce, no spring, no page transition.
+The default is **no container**. Content sits on the page, and structure comes
+from space, alignment and type. A box is a claim that something is separate from
+what surrounds it, and most things are not.
+
+A surface is justified in exactly three cases:
+
+1. **It floats.** A popover, a dropdown, a modal, a toast. It is above the page,
+   so it needs an edge and a shadow to say so.
+2. **It is one actionable unit.** A row you can select, a card in a grid you can
+   click. The edge marks the hit area.
+3. **Grouping is otherwise ambiguous.** Two adjacent lists that would read as one.
+   Try a heading and more space first; reach for a border only if that fails.
+
+Everything else is a section heading, generous space, and at most a hairline.
+
+What this rules out, all of which are easy to write by accident:
+
+- A card wrapped around the only thing on a screen.
+- A table inside a bordered panel. The rows are the structure already.
+- Filled table headers. A small uppercase label in `--ink-muted` is enough.
+- Nested boxes. A bordered card holding bordered rows is one border too many.
+- A panel behind the sidebar. Space and a single divider do it.
+- A shadow on anything that is not floating.
+
+### Shape and depth
+
+- **Radius is small and rare.** 4px on controls, 6px on buttons and selectable
+  rows, 10px on the few real surfaces, 14px on modals. `--radius-full` is for
+  avatars and nothing else. If there is no fill and no border, there is nothing
+  to round.
+- **Depth is binary.** Either something is on the page, with no shadow, or it
+  floats, with `--shadow-popover` or `--shadow-modal`. There is no in between and
+  no third elevation.
+- **`--line` separates, `--line-strong` encloses.** Dividers and row separators
+  take the first. A control that genuinely needs an edge takes the second.
+- **`--hover` is feedback, `--accent-soft` is state.** Hovering a row tints it
+  with `--hover`. A selected or active row uses `--accent-soft`. Using the accent
+  for hover makes everything look permanently selected.
+
+### Density and rhythm
+
+Space is the layout tool, so it has to be deliberate rather than whatever
+`--space-4` happened to be nearest.
+
+- Between a section heading and its content: `--space-4`.
+- Between sections: `--space-10`, or `--space-12` on a settings screen.
+- Inside a row: `--space-3` horizontally, and the row owns `--row-height`.
+- A screen's outer padding is `--space-8`, and content stops at a readable
+  measure rather than stretching to a wide window.
+
+### Motion
+
+- **Fast and unshowy.** 120ms to 180ms, ease out. Animate opacity and transform,
+  nothing else. No bounce, no spring, no page transition.
+- A theme change is instant. Crossfading the whole window looks broken.
 - Respect `prefers-reduced-motion` by dropping to an instant state change.
 
 ## 8. The logo

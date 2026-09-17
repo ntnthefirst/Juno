@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/* Fonts are bundled, not fetched. Decision 10: an offline-first app cannot
+ * depend on a font CDN, and a request to one on every launch leaks a signal. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+
+@import "./tokens.css";
+
+@layer base {
+	* {
+		box-sizing: border-box;
+	}
+
+	html,
+	body,
+	#root {
+		height: 100%;
+	}
+
+	body {
+		margin: 0;
+		background: var(--paper);
+		color: var(--ink);
+		font-family: var(--font-ui);
+		font-size: var(--text-base);
+		line-height: var(--leading-normal);
+		/* A desktop application is not a document. Selecting the chrome by dragging
+		 * across it looks broken, so text selection is opt-in per element. */
+		user-select: none;
+		cursor: default;
+		overflow: hidden;
+	}
+
+	input,
+	textarea,
+	[data-selectable] {
+		user-select: text;
+	}
+
+	button {
+		font: inherit;
+		color: inherit;
+		cursor: default;
+	}
+
+	/* Never removed, only restyled. See .claude/rules/styling.md. */
+	:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
+		border-radius: var(--radius-sm);
+	}
+
+	::selection {
+		background: var(--accent-soft);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			transition-duration: 0.01ms !important;
+		}
+	}
+}
+
+@layer utilities {
+	.tabular {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.drag-region {
+		-webkit-app-region: drag;
+	}
+
+	.no-drag {
+		-webkit-app-region: no-drag;
+	}
+}

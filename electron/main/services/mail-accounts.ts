@@ -19,6 +19,7 @@ import { now, uuidv7 } from "../db/columns";
 import { mailAccounts } from "../db/schema";
 import { credentialStore } from "./mail-credentials";
 import { describeMailError, openMailbox, type MailConnection } from "./mail-source";
+import { verifyTransport, type SmtpConnection } from "./mail-transport";
 
 type Row = typeof mailAccounts.$inferSelect;
 
@@ -43,6 +44,11 @@ function toRecord(row: Row): MailAccount {
 		lastSyncAt: row.lastSyncAt,
 		lastSyncError: row.lastSyncError,
 		hasCredential: credentialStore().get(row.credentialKey) !== null,
+		smtpHost: row.smtpHost,
+		smtpPort: row.smtpPort,
+		smtpSecurity: row.smtpSecurity as MailSecurity,
+		smtpUsername: row.smtpUsername,
+		fromName: row.fromName,
 	};
 }
 
@@ -68,6 +74,20 @@ function validate(input: MailAccountInput | MailAccountPatch): void {
 	if (input.password !== undefined && !input.password) {
 		throw new Error("The password cannot be empty.");
 	}
+	if (input.smtpHost !== undefined && input.smtpHost !== null && input.smtpHost.trim() && !/^[a-z0-9.-]+$/i.test(input.smtpHost.trim())) {
+		throw new Error("The SMTP server has to be a hostname, like smtp.example.be.");
+	}
+	if (input.smtpPort !== undefined && (!Number.isInteger(input.smtpPort) || input.smtpPort < 1 || input.smtpPort > 65535)) {
+		throw new Error("The SMTP port has to be between 1 and 65535.");
+	}
+	if (input.smtpSecurity !== undefined && !SECURITIES.includes(input.smtpSecurity)) {
+		throw new Error("SMTP security has to be tls or starttls. Bureau never sends in the clear.");
+	}
+}
+
+function hostOrNull(value: string | null | undefined): string | null {
+	const trimmed = value?.trim().toLowerCase() ?? "";
+	return trimmed ? trimmed : null;
 }
 
 export async function list(db: Db = getDb()): Promise<MailAccount[]> {
@@ -123,6 +143,11 @@ export async function create(input: MailAccountInput, db: Db = getDb()): Promise
 		horizonDays: input.horizonDays ?? 90,
 		syncIntervalMinutes: input.syncIntervalMinutes ?? 10,
 		syncEnabled: input.syncEnabled ?? true,
+		smtpHost: hostOrNull(input.smtpHost),
+		smtpPort: input.smtpPort ?? (input.smtpSecurity === "starttls" ? 587 : 465),
+		smtpSecurity: input.smtpSecurity ?? "tls",
+		smtpUsername: input.smtpUsername?.trim() || null,
+		fromName: input.fromName?.trim() || null,
 		createdAt: stamp,
 		updatedAt: stamp,
 	};
@@ -153,6 +178,11 @@ export async function update(id: string, patch: MailAccountPatch, db: Db = getDb
 	if (patch.horizonDays !== undefined) values.horizonDays = patch.horizonDays;
 	if (patch.syncIntervalMinutes !== undefined) values.syncIntervalMinutes = patch.syncIntervalMinutes;
 	if (patch.syncEnabled !== undefined) values.syncEnabled = patch.syncEnabled;
+	if (patch.smtpHost !== undefined) values.smtpHost = hostOrNull(patch.smtpHost);
+	if (patch.smtpPort !== undefined) values.smtpPort = patch.smtpPort;
+	if (patch.smtpSecurity !== undefined) values.smtpSecurity = patch.smtpSecurity;
+	if (patch.smtpUsername !== undefined) values.smtpUsername = patch.smtpUsername?.trim() || null;
+	if (patch.fromName !== undefined) values.fromName = patch.fromName?.trim() || null;
 	// A changed server or password deserves a fresh attempt, and the old
 	// failure message would be misleading beside the new settings.
 	if (patch.password !== undefined || patch.imapHost !== undefined || patch.username !== undefined) {
@@ -269,3 +299,75 @@ export async function test(
 		await source?.close();
 	}
 }
+
+/**
+ * The SMTP side of the same account, with the same secret. Null host means the
+ * account was set up for reading only, and the error says what to add.
+ */
+export function smtpConnectionFor(id: string, db: Db = getDb()): SmtpConnection {
+	const row = requireRow(id, db);
+	if (!row.smtpHost) {
+		throw new Error(`${row.email} has no outgoing server. Add one in account settings.`);
+	}
+	const password = credentialStore().get(row.credentialKey);
+	if (password === null) {
+		throw new Error(`No password is stored for ${row.email}. Enter it again in account settings.`);
+	}
+	return {
+		host: row.smtpHost,
+		port: row.smtpPort,
+		security: row.smtpSecurity as MailSecurity,
+		username: row.smtpUsername || row.username,
+		password,
+		fromAddress: row.email,
+		fromName: row.fromName,
+	};
+}
+
+/** Tries the outgoing settings without sending anything. */
+export async function testSmtp(
+	input: { id?: string; smtpHost?: string | null; smtpPort?: number; smtpSecurity?: MailSecurity; smtpUsername?: string | null; username?: string; password?: string },
+	db: Db = getDb(),
+): Promise<MailConnectionTest> {
+	let connection: SmtpConnection;
+	if (input.id && !input.password) {
+		const row = requireRow(input.id, db);
+		const password = credentialStore().get(row.credentialKey);
+		if (password === null) {
+			return { ok: false, message: `No password is stored for ${row.email}. Enter it again in account settings.`, folderCount: 0 };
+		}
+		const host = input.smtpHost !== undefined ? hostOrNull(input.smtpHost) : row.smtpHost;
+		if (!host) return { ok: false, message: "An outgoing server is needed to test.", folderCount: 0 };
+		connection = {
+			host,
+			port: input.smtpPort ?? row.smtpPort,
+			security: input.smtpSecurity ?? (row.smtpSecurity as MailSecurity),
+			username: (input.smtpUsername !== undefined ? input.smtpUsername?.trim() : row.smtpUsername) || row.username,
+			password,
+			fromAddress: row.email,
+			fromName: row.fromName,
+		};
+	} else {
+		const host = hostOrNull(input.smtpHost);
+		const username = input.smtpUsername?.trim() || input.username?.trim();
+		if (!host || !username || !input.password) {
+			return { ok: false, message: "An outgoing server, a username and a password are needed to test.", folderCount: 0 };
+		}
+		connection = {
+			host,
+			port: input.smtpPort ?? (input.smtpSecurity === "starttls" ? 587 : 465),
+			security: input.smtpSecurity ?? "tls",
+			username,
+			password: input.password,
+			fromAddress: username,
+			fromName: null,
+		};
+	}
+	try {
+		await verifyTransport(connection);
+		return { ok: true, message: null, folderCount: 0 };
+	} catch (error) {
+		return { ok: false, message: describeMailError(error, connection), folderCount: 0 };
+	}
+}
+

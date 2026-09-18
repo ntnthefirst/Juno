@@ -42,6 +42,15 @@ export function escapeHtml(value: string): string {
 	return value.replace(/[&<>"']/g, (char) => ESCAPES[char]!);
 }
 
+const UNESCAPES: Record<string, string> = Object.fromEntries(
+	Object.entries(ESCAPES).map(([char, entity]) => [entity, char]),
+);
+
+/** The inverse of escapeHtml, for a rendered value that is going into plain text. */
+export function unescapeHtml(value: string): string {
+	return value.replace(/&(amp|lt|gt|quot|#39);/g, (entity) => UNESCAPES[entity] ?? entity);
+}
+
 function lookup(context: TemplateContext, path: string): unknown {
 	return path
 		.trim()

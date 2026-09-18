@@ -451,6 +451,14 @@ export interface MailAccount extends Standard {
 	lastSyncAt: Iso | null;
 	lastSyncError: string | null;
 	hasCredential: boolean;
+	/** Null means the account cannot send. */
+	smtpHost: string | null;
+	smtpPort: number;
+	smtpSecurity: MailSecurity;
+	/** Overrides the login name for SMTP only. Null means the IMAP username. */
+	smtpUsername: string | null;
+	/** The display name on outgoing mail. Null means the owner's name. */
+	fromName: string | null;
 }
 
 export interface MailAccountInput {
@@ -465,6 +473,11 @@ export interface MailAccountInput {
 	horizonDays?: number;
 	syncIntervalMinutes?: number;
 	syncEnabled?: boolean;
+	smtpHost?: string | null;
+	smtpPort?: number;
+	smtpSecurity?: MailSecurity;
+	smtpUsername?: string | null;
+	fromName?: string | null;
 }
 
 export type MailAccountPatch = Partial<MailAccountInput>;
@@ -610,3 +623,131 @@ export interface MailSyncStatus {
 	newMessages: number;
 	fetchedBodies: number;
 }
+
+/* ------------------------------------------------------------- mail: sending */
+
+export type MailRegister = "u" | "je";
+
+export interface MailTemplate extends Standard {
+	key: string;
+	name: string;
+	description: string | null;
+	language: string;
+	register: MailRegister;
+	subject: string;
+	bodyHtml: string;
+	isSystem: boolean;
+	customisedAt: Iso | null;
+	placeholders: string[];
+}
+
+export interface MailTemplateInput {
+	name: string;
+	subject: string;
+	bodyHtml: string;
+	key?: string;
+	description?: string | null;
+	register?: MailRegister;
+}
+
+export type MailTemplatePatch = Partial<
+	Pick<MailTemplateInput, "name" | "subject" | "bodyHtml" | "description" | "register">
+>;
+
+/** A template filled against a client and project, ready to put in a draft. */
+export interface MailTemplateRender {
+	subject: string;
+	bodyHtml: string;
+	bodyText: string;
+	missing: string[];
+}
+
+export type MailOutboxState =
+	| "draft"
+	| "pending"
+	| "queued"
+	| "sending"
+	| "sent"
+	| "failed"
+	| "cancelled";
+
+export interface MailOutboxAttachment {
+	id: string;
+	documentId: string;
+	filename: string;
+}
+
+export interface MailOutboxMessage extends Standard {
+	accountId: string;
+	state: MailOutboxState;
+	to: MailAddress[];
+	cc: MailAddress[];
+	bcc: MailAddress[];
+	subject: string;
+	bodyText: string;
+	bodyHtml: string | null;
+	messageId: string;
+	inReplyTo: string | null;
+	replyToMessageId: string | null;
+	threadId: string | null;
+	clientId: string | null;
+	clientName: string | null;
+	projectId: string | null;
+	templateId: string | null;
+	requestedBy: "user" | "agent";
+	approvedAt: Iso | null;
+	queuedAt: Iso | null;
+	attempts: number;
+	lastError: string | null;
+	sentAt: Iso | null;
+	appendedToSentAt: Iso | null;
+	appendError: string | null;
+	attachments: MailOutboxAttachment[];
+}
+
+export interface MailDraftInput {
+	accountId: string;
+	to: MailAddress[];
+	cc?: MailAddress[];
+	bcc?: MailAddress[];
+	subject: string;
+	/** Plain text. The HTML version is made from it unless bodyHtml is given. */
+	bodyText: string;
+	/** Already rendered HTML, from a template. Left out for a plain message. */
+	bodyHtml?: string | null;
+	/** The local message this answers. Sets the threading headers. */
+	replyToMessageId?: string | null;
+	clientId?: string | null;
+	projectId?: string | null;
+	templateId?: string | null;
+	/** Documents to attach. Their PDF is rendered at send time if needed. */
+	documentIds?: string[];
+}
+
+export type MailDraftPatch = Partial<Omit<MailDraftInput, "accountId">>;
+
+/** What a reply starts from: the addresses and subject, worked out from the original. */
+export interface MailReplySeed {
+	accountId: string;
+	to: MailAddress[];
+	cc: MailAddress[];
+	subject: string;
+	/** The original, quoted, for under the reply. */
+	quotedText: string;
+	replyToMessageId: string;
+	clientId: string | null;
+}
+
+export interface MailOutboxListQuery {
+	accountId?: string;
+	states?: MailOutboxState[];
+	limit?: number;
+}
+
+export interface MailOutboxCounts {
+	pending: number;
+	queued: number;
+	failed: number;
+	drafts: number;
+}
+

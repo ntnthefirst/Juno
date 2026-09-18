@@ -19,4 +19,14 @@ const from = join(root, "electron", "main", "db", "migrations");
 const to = join(out, "main", "db", "migrations");
 cpSync(from, to, { recursive: true });
 
-console.log("dist-electron: package.json written, migrations copied");
+// Documents are rendered to PDF in an offscreen window, which has no access to
+// the renderer's bundled fonts. The two faces the document stylesheet needs are
+// copied here and embedded as data URIs at render time, so a contract looks the
+// same on every machine instead of falling back to whatever the OS has.
+const fontsOut = join(out, "fonts");
+mkdirSync(fontsOut, { recursive: true });
+for (const face of ["inter-latin-400-normal.woff2", "inter-latin-600-normal.woff2"]) {
+	cpSync(join(root, "node_modules", "@fontsource", "inter", "files", face), join(fontsOut, face));
+}
+
+console.log("dist-electron: package.json written, migrations and fonts copied");

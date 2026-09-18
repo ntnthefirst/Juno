@@ -29,6 +29,12 @@ export function backupsDir(): string {
 	return dir;
 }
 
+export function documentsDir(): string {
+	const dir = join(userDataDir(), "documents");
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
 export function settingsPath(): string {
 	return join(userDataDir(), "settings.json");
 }

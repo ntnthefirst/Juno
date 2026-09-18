@@ -12,10 +12,12 @@ import { app, BrowserWindow, nativeTheme } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
-import { backupsDir, databasePath, userDataDir } from "./main/db/paths";
+import { backupsDir, databasePath, documentsDir, userDataDir } from "./main/db/paths";
 import { registerAllIpc } from "./main/ipc";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
+import { configureDocuments } from "./main/services/document-pdf";
+import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import * as lock from "./main/services/lock";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
@@ -42,6 +44,7 @@ if (!app.requestSingleInstanceLock()) {
 		// Node.
 		settings.configureSettings(userDataDir());
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
+		configureDocuments(documentsDir());
 
 		const db = openDb(databasePath());
 
@@ -59,6 +62,13 @@ if (!app.requestSingleInstanceLock()) {
 				`Seed v${seeded.fromVersion} -> v${seeded.toVersion}: ` +
 					`${seeded.setsCreated} set(s), ${seeded.itemsCreated} new item(s), ` +
 					`${seeded.itemsUpdated} updated`,
+			);
+		}
+
+		const templateSeed = await ensureTemplatesSeeded(db);
+		if (templateSeed.created || templateSeed.updated) {
+			console.log(
+				`Templates: ${templateSeed.created} created, ${templateSeed.updated} updated`,
 			);
 		}
 

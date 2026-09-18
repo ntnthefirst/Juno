@@ -66,6 +66,9 @@ const api: BureauApi = {
 
 	settings: {
 		get: () => call("settings.get"),
+		getSignaturePath: () => call("settings.getSignaturePath"),
+		chooseSignature: () => call("settings.chooseSignature"),
+		clearSignature: () => call("settings.clearSignature"),
 		getTheme: () => call("settings.getTheme"),
 		setTheme: (theme) => call("settings.setTheme", theme),
 		getOwner: () => call("settings.getOwner"),
@@ -98,6 +101,31 @@ const api: BureauApi = {
 
 	search: {
 		global: (term, limit) => call("search.global", term, limit),
+	},
+
+	templates: {
+		list: () => call("templates.list"),
+		get: (id) => call("templates.get", id),
+		create: (input) => call("templates.create", input),
+		update: (id, patch) => call("templates.update", id, patch),
+		setReviewed: (id, reviewed) => call("templates.setReviewed", id, reviewed),
+		remove: (id) => call("templates.remove", id),
+		preview: (input) => call("templates.preview", input),
+	},
+
+	documents: {
+		list: (query) => call("documents.list", query),
+		get: (id) => call("documents.get", id),
+		generate: (input) => call("documents.generate", input),
+		setStatus: (id, statusId) => call("documents.setStatus", id, statusId),
+		remove: (id) => call("documents.remove", id),
+		restore: (id) => call("documents.restore", id),
+		previewHtml: (id) => call("documents.previewHtml", id),
+		renderPdf: (id) => call("documents.renderPdf", id),
+		sign: (input) => call("documents.sign", input),
+		signatures: (documentId) => call("documents.signatures", documentId),
+		openPdf: (id) => call("documents.openPdf", id),
+		revealPdf: (id) => call("documents.revealPdf", id),
 	},
 };
 

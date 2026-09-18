@@ -54,6 +54,7 @@ const DEFAULTS: AppSettings = {
 	lock: DEFAULT_LOCK,
 	owner: DEFAULT_OWNER,
 	seedVersion: 0,
+	signaturePath: null,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -125,6 +126,7 @@ function normalise(raw: unknown): AppSettings {
 		},
 		owner,
 		seedVersion: Math.max(0, int(raw.seedVersion, DEFAULTS.seedVersion)),
+		signaturePath: typeof raw.signaturePath === "string" && raw.signaturePath ? raw.signaturePath : null,
 	};
 }
 
@@ -203,6 +205,14 @@ export async function setLock(patch: Partial<LockSettings>): Promise<LockSetting
 }
 
 /** The seed version already applied to this installation. See seed.ts. */
+export async function getSignaturePath(): Promise<string | null> {
+	return read().signaturePath;
+}
+
+export async function setSignaturePath(path: string | null): Promise<string | null> {
+	return write({ ...read(), signaturePath: path }).signaturePath;
+}
+
 export async function getSeedVersion(): Promise<number> {
 	return read().seedVersion;
 }

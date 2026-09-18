@@ -10,12 +10,14 @@ import { installLockGuard } from "./lock-guard";
 import { registerAppIpc } from "./app";
 import { registerBackupIpc } from "./backup";
 import { registerClientsIpc } from "./clients";
+import { registerDocumentsIpc } from "./documents";
 import { registerContactsIpc } from "./contacts";
 import { registerLockIpc } from "./lock";
 import { registerProjectsIpc } from "./projects";
 import { registerReferenceIpc } from "./reference";
 import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
+import { registerTemplatesIpc } from "./templates";
 
 export function registerAllIpc(): void {
 	installLockGuard();
@@ -30,4 +32,6 @@ export function registerAllIpc(): void {
 	registerSearchIpc();
 	registerReferenceIpc();
 	registerBackupIpc();
+	registerTemplatesIpc();
+	registerDocumentsIpc();
 }

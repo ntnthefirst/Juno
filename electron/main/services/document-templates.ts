@@ -23,6 +23,8 @@ export interface SeedTemplate {
 
 export interface DocumentTemplate {
 	id: string;
+	ownerId: string;
+	deletedAt: string | null;
 	key: string;
 	name: string;
 	description: string | null;
@@ -55,6 +57,8 @@ type Row = typeof documentTemplates.$inferSelect;
 function toTemplate(row: Row): DocumentTemplate {
 	return {
 		id: row.id,
+		ownerId: row.ownerId,
+		deletedAt: row.deletedAt,
 		key: row.key,
 		name: row.name,
 		description: row.description,

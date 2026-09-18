@@ -192,6 +192,8 @@ export interface AppSettings {
 	lock: LockSettings;
 	owner: OwnerProfile;
 	seedVersion: number;
+	/** The signature image stamped onto signed PDFs, or null when none is set. */
+	signaturePath: string | null;
 }
 
 /* --------------------------------------------------------------------- lock */
@@ -246,4 +248,87 @@ export interface AppInfo {
 	databasePath: string;
 	isDev: boolean;
 	platform: NodeJS.Platform;
+}
+
+/* ---------------------------------------------------------------- documents */
+
+export interface DocumentTemplate extends Standard {
+	key: string;
+	name: string;
+	description: string | null;
+	language: string;
+	bodyHtml: string;
+	/**
+	 * Null means nobody has checked the text is sound. Every template that ships
+	 * starts null, because the shipped ones are invented. See docs/templates.md.
+	 */
+	reviewedAt: Iso | null;
+	version: number;
+	isSystem: boolean;
+	customisedAt: Iso | null;
+	/** Every path the body refers to, for showing what a template needs. */
+	placeholders: string[];
+}
+
+export type DocumentTemplateInput = {
+	name: string;
+	bodyHtml: string;
+	key?: string;
+	description?: string | null;
+	language?: string;
+};
+
+export type DocumentTemplatePatch = Partial<
+	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language">
+>;
+
+export interface DocumentRecord extends Standard {
+	clientId: string;
+	clientName: string;
+	projectId: string | null;
+	templateId: string | null;
+	templateVersion: number | null;
+	title: string;
+	statusId: string | null;
+	/** The rendered body, frozen at generation. Never re-rendered. */
+	bodyHtml: string;
+	issuedOn: IsoDate | null;
+	pdfPath: string | null;
+	/** Generated from a template that had not been reviewed. */
+	isSpecimen: boolean;
+}
+
+export interface GenerateDocumentInput {
+	clientId: string;
+	templateId: string;
+	projectId?: string | null;
+	title?: string;
+	issuedOn?: IsoDate;
+	/** Values typed for this document, such as an addendum's change summary. */
+	extras?: Record<string, string>;
+}
+
+export interface GenerateDocumentResult {
+	document: DocumentRecord;
+	/** Placeholders the template wanted and the records could not fill. */
+	missing: string[];
+}
+
+export interface DocumentSignature extends Standard {
+	documentId: string;
+	signerName: string;
+	signerRole: string | null;
+	signedAt: Iso;
+	signatureImagePath: string | null;
+	/** SHA-256 of the unsigned PDF, so later tampering is detectable. */
+	documentHash: string;
+	signedPdfPath: string | null;
+}
+
+export interface SignDocumentInput {
+	documentId: string;
+	signerName: string;
+	signerRole?: string | null;
+	/** Leave out to sign without an image, which is still timestamped and hashed. */
+	useSignatureImage?: boolean;
 }

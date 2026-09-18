@@ -16,6 +16,14 @@
 import type {
 	AppInfo,
 	AppSettings,
+	DocumentRecord,
+	DocumentSignature,
+	DocumentTemplate,
+	DocumentTemplateInput,
+	DocumentTemplatePatch,
+	GenerateDocumentInput,
+	GenerateDocumentResult,
+	SignDocumentInput,
 	BackupInfo,
 	Client,
 	ClientInput,
@@ -102,6 +110,11 @@ export interface BureauApi {
 
 	settings: {
 		get(): Promise<AppSettings>;
+		/** Where the signature image lives, or null when none is set. */
+		getSignaturePath(): Promise<string | null>;
+		/** Opens a file picker in the main process and copies the image in. */
+		chooseSignature(): Promise<string | null>;
+		clearSignature(): Promise<void>;
 		getTheme(): Promise<ThemeSetting>;
 		/** Also sets nativeTheme.themeSource, or the title bar disagrees with the window. */
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
@@ -137,6 +150,44 @@ export interface BureauApi {
 
 	search: {
 		global(term: string, limit?: number): Promise<SearchHit[]>;
+	};
+
+	templates: {
+		list(): Promise<DocumentTemplate[]>;
+		get(id: string): Promise<DocumentTemplate | null>;
+		create(input: DocumentTemplateInput): Promise<DocumentTemplate>;
+		update(id: string, patch: DocumentTemplatePatch): Promise<DocumentTemplate>;
+		/**
+		 * Marks the text as checked. Separate from update on purpose: reviewing is
+		 * a claim about the content and must never be a side effect of an edit.
+		 */
+		setReviewed(id: string, reviewed: boolean): Promise<DocumentTemplate>;
+		remove(id: string): Promise<DocumentTemplate>;
+		/** Renders against a client without storing anything, for the editor. */
+		preview(input: {
+			bodyHtml: string;
+			clientId?: string | null;
+			projectId?: string | null;
+			isSpecimen: boolean;
+		}): Promise<{ html: string; missing: string[] }>;
+	};
+
+	documents: {
+		list(query?: { clientId?: string }): Promise<DocumentRecord[]>;
+		get(id: string): Promise<DocumentRecord | null>;
+		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
+		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;
+		remove(id: string): Promise<DocumentRecord>;
+		restore(id: string): Promise<DocumentRecord>;
+		/** The full printable HTML, for showing in a sandboxed frame. */
+		previewHtml(id: string): Promise<string>;
+		/** Writes the PDF and returns the document with its path filled in. */
+		renderPdf(id: string): Promise<DocumentRecord>;
+		sign(input: SignDocumentInput): Promise<DocumentSignature>;
+		signatures(documentId: string): Promise<DocumentSignature[]>;
+		/** Opens the PDF in whatever the OS uses for one. */
+		openPdf(id: string): Promise<void>;
+		revealPdf(id: string): Promise<void>;
 	};
 }
 

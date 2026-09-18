@@ -16,6 +16,8 @@ import * as settings from "./settings";
 
 export interface DocumentRecord {
 	id: string;
+	ownerId: string;
+	deletedAt: string | null;
 	clientId: string;
 	clientName: string;
 	projectId: string | null;
@@ -52,6 +54,8 @@ type Row = typeof documents.$inferSelect;
 function toRecord(row: Row, clientName: string): DocumentRecord {
 	return {
 		id: row.id,
+		ownerId: row.ownerId,
+		deletedAt: row.deletedAt,
 		clientId: row.clientId,
 		clientName,
 		projectId: row.projectId,
@@ -190,6 +194,55 @@ export async function generate(
 		.all();
 
 	return { document: toRecord(row!, client.name), missing: rendered.missing };
+}
+
+/**
+ * The same context a real generation would get, for previewing a template.
+ * Falls back to empty records rather than inventing plausible ones, so a preview
+ * shows exactly the gaps a real document would.
+ */
+export async function previewContext(
+	input: { clientId?: string | null; projectId?: string | null },
+	db: Db = getDb(),
+): Promise<Record<string, unknown>> {
+	const client = input.clientId
+		? db.select().from(clients).where(eq(clients.id, input.clientId)).get()
+		: undefined;
+
+	const primaryContact = client
+		? db
+				.select()
+				.from(contacts)
+				.where(and(eq(contacts.clientId, client.id), eq(contacts.isPrimary, true)))
+				.get()
+		: undefined;
+
+	const project = input.projectId
+		? db.select().from(projects).where(eq(projects.id, input.projectId)).get()
+		: undefined;
+
+	return buildContext({
+		owner: await settings.getOwner(),
+		client: (client ?? { name: "" }) as unknown as Client,
+		primaryContact: (primaryContact ?? null) as unknown as Contact | null,
+		project: (project ?? null) as unknown as Project | null,
+	});
+}
+
+/**
+ * Throws unless the document may be signed.
+ *
+ * Lives here, in a module with no Electron import, so the rule that stops an
+ * invented contract being signed is covered by a test rather than only by the
+ * interface that happens to call it.
+ */
+export function assertSignable(record: Pick<DocumentRecord, "isSpecimen">): void {
+	if (record.isSpecimen) {
+		throw new Error(
+			"This document came from a template that has not been reviewed, so it cannot be signed. " +
+				"Rewrite the template with your own text and mark it as reviewed first.",
+		);
+	}
 }
 
 export async function setStatus(

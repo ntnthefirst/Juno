@@ -9,6 +9,7 @@
 import { ipcMain, nativeTheme } from "electron";
 import type { OwnerProfile, ThemeSetting } from "../../shared/types";
 import * as settings from "../services/settings";
+import * as signature from "../services/signature";
 
 /**
  * Stores the theme and tells Electron about it, in that order. Both adapters
@@ -27,6 +28,10 @@ export async function applyStoredTheme(): Promise<ThemeSetting> {
 }
 
 export function registerSettingsIpc(): void {
+	ipcMain.handle("settings.getSignaturePath", () => signature.getPath());
+	ipcMain.handle("settings.chooseSignature", () => signature.choose());
+	ipcMain.handle("settings.clearSignature", () => signature.clear());
+
 	ipcMain.handle("settings.get", () => settings.get());
 	ipcMain.handle("settings.getTheme", () => settings.getTheme());
 	ipcMain.handle("settings.setTheme", (_event, theme: ThemeSetting) => applyTheme(theme));

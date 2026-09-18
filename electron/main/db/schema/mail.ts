@@ -26,6 +26,17 @@ export const mailAccounts = sqliteTable(
 		/** Where the password is. A reference, never the value. */
 		credentialKey: text("credential_key").notNull(),
 		/**
+		 * Sending, phase 4. Null host means the account is read-only. The same
+		 * credential serves both directions; `smtp_username` only overrides the
+		 * login name when a provider wants a different one.
+		 */
+		smtpHost: text("smtp_host"),
+		smtpPort: integer("smtp_port").notNull().default(465),
+		smtpSecurity: text("smtp_security").notNull().default("tls"),
+		smtpUsername: text("smtp_username"),
+		/** The display name on outgoing mail. Defaults to the owner's name. */
+		fromName: text("from_name"),
+		/**
 		 * How far back the first sync of a folder reaches, in days. Bounds a large
 		 * mailbox to something that finishes tonight; raise it later to pull more.
 		 */

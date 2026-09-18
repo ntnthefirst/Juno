@@ -13,9 +13,9 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 
 | | |
 | --- | --- |
-| **Phase** | 0, essentially complete. Only auto-update is outstanding, and it is blocked on the repository existing |
-| **Runs?** | **Yes, including packaged.** Clients, contacts, projects, reference data, lock, backup and settings all work |
-| **Last verified** | lint, typecheck, 39 tests, and a smoke run that creates records through the bridge and photographs both screens in both themes |
+| **Phase** | 0 and 1 complete. Auto-update is the only phase 0 item left, blocked on the repository existing |
+| **Runs?** | **Yes, including packaged.** Clients, documents with PDF generation and signing, templates, reference data, lock, backup and settings |
+| **Last verified** | lint, typecheck, 76 tests, and a smoke run that generates a document through the bridge and photographs four screens in both themes |
 
 ### What exists
 
@@ -347,3 +347,46 @@ installed build pointing at the wrong feed is worse than one that never checks.
 **Phase 0's done-when, from PLAN.md,** is now reachable: install the packaged
 build, enter the four clients with contacts and projects, reboot, and confirm
 they are still there.
+
+
+### Session 1, part 8: phase 1
+
+A template is HTML with placeholders, rendered against a client, printed to PDF
+in an offscreen window and stamped with a signature, a timestamp and a SHA-256.
+
+**Decision 19 amends decision 8.** The plan had docxtemplater filling `.docx`
+and `printToPDF` rendering HTML, and never said how a filled `.docx` becomes the
+signed PDF. It cannot without LibreOffice or a paid API. Templates are HTML now.
+Nathan confirmed this was fine: it was never meant to be a Word editor.
+
+**The specimen mechanism.** Every shipped template is invented, so this is
+structural rather than a note in a file:
+
+- Templates seed with `reviewedAt: null`.
+- `isSpecimen` is recorded **on the document**, not looked up, so reviewing a
+  template later cannot reclassify a contract that has already gone out.
+- The red banner comes from `documentShell`, not from any template body, so it
+  cannot be edited out.
+- `documents.assertSignable` refuses outright, and it lives in a module with no
+  Electron import specifically so a test covers it.
+- No MCP tool marks a template reviewed, and none signs. Both are claims a person
+  has to make.
+
+**Traps and findings:**
+
+- **An offscreen window cannot see the renderer's bundled fonts.** The two Inter
+  faces are copied beside the main process by `after-main.mjs` and inlined as
+  data URIs at render time. Without that a contract prints in whatever the
+  machine happens to have, which is different on every machine.
+- **`printToPDF` needs a settling delay after `loadURL` resolves.** `loadURL`
+  resolves on `did-finish-load`, but layout with a just-decoded webfont settles a
+  frame later, and the first page prints in the fallback face without it.
+- **Reading the generated PDF caught a raw ISO timestamp** printed on a
+  client-facing page. Now formatted, with the exact UTC kept on the audit page.
+- **The renderer CSP allows `img-src data:` but not `file:`.** The signature
+  preview therefore comes back from the main process as a data URL. Widening the
+  policy would let a renderer bug read arbitrary local images.
+- The preview iframe carries `sandbox=""`, with no privileges at all.
+
+**What phase 1 does not do:** `.docx` import or export. Neither is on the path to
+a signed PDF, and both are reasonable later additions.

@@ -7,7 +7,7 @@
  * discover that.
  */
 import { app, dialog } from "electron";
-import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { extname, join } from "node:path";
 import * as settings from "./settings";
 
@@ -25,6 +25,19 @@ export async function getPath(): Promise<string | null> {
 	// offers to set one instead of failing at signing time.
 	if (!path || !existsSync(path)) return null;
 	return path;
+}
+
+/**
+ * The image as a data URL, for showing in the renderer.
+ *
+ * Returned as data rather than as a path because the renderer's CSP allows
+ * `data:` but not `file:`, and widening it to `file:` would let any bug in the
+ * renderer read arbitrary local images. The filesystem stays on this side.
+ */
+export async function getDataUrl(): Promise<string | null> {
+	const path = await getPath();
+	if (!path) return null;
+	return `data:image/png;base64,${readFileSync(path).toString("base64")}`;
 }
 
 /**

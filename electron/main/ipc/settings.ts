@@ -29,6 +29,7 @@ export async function applyStoredTheme(): Promise<ThemeSetting> {
 
 export function registerSettingsIpc(): void {
 	ipcMain.handle("settings.getSignaturePath", () => signature.getPath());
+	ipcMain.handle("settings.getSignatureImage", () => signature.getDataUrl());
 	ipcMain.handle("settings.chooseSignature", () => signature.choose());
 	ipcMain.handle("settings.clearSignature", () => signature.clear());
 

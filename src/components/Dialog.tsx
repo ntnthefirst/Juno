@@ -14,8 +14,11 @@ type DialogProps = {
 	title: string;
 	onClose: () => void;
 	children: ReactNode;
-	/** Wider for forms with two columns, narrower for a confirmation. */
-	width?: "narrow" | "base";
+	/**
+	 * narrow for a confirmation, base for a form, wide for a document preview,
+	 * which has to be near A4 proportions to be worth looking at.
+	 */
+	width?: "narrow" | "base" | "wide";
 };
 
 /**
@@ -87,7 +90,11 @@ export function Dialog({ title, onClose, children, width = "base" }: DialogProps
 				aria-labelledby={labelId}
 				tabIndex={-1}
 				className={`w-full rounded-[var(--radius-xl)] border border-[var(--line)] bg-[var(--surface)] focus:outline-none ${
-					width === "narrow" ? "max-w-[400px]" : "max-w-[560px]"
+					width === "narrow"
+						? "max-w-[400px]"
+						: width === "wide"
+							? "max-w-[860px]"
+							: "max-w-[560px]"
 				}`}
 				style={{ boxShadow: "var(--shadow-modal)" }}
 			>

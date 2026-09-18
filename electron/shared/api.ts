@@ -112,6 +112,12 @@ export interface BureauApi {
 		get(): Promise<AppSettings>;
 		/** Where the signature image lives, or null when none is set. */
 		getSignaturePath(): Promise<string | null>;
+		/**
+		 * The image as a data URL, for display. Returned as data rather than a path
+		 * because the renderer's CSP allows `data:` and not `file:`, and widening it
+		 * would let a renderer bug read arbitrary local images.
+		 */
+		getSignatureImage(): Promise<string | null>;
 		/** Opens a file picker in the main process and copies the image in. */
 		chooseSignature(): Promise<string | null>;
 		clearSignature(): Promise<void>;

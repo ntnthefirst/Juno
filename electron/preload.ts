@@ -67,6 +67,7 @@ const api: BureauApi = {
 	settings: {
 		get: () => call("settings.get"),
 		getSignaturePath: () => call("settings.getSignaturePath"),
+		getSignatureImage: () => call("settings.getSignatureImage"),
 		chooseSignature: () => call("settings.chooseSignature"),
 		clearSignature: () => call("settings.clearSignature"),
 		getTheme: () => call("settings.getTheme"),

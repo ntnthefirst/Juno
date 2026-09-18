@@ -120,6 +120,13 @@ if (!app.requestSingleInstanceLock()) {
 								const running = ps.items.find((i) => i.key === "active") ?? ps.items[0];
 								await b.projects.create({ clientId: made[0].id, name: "Ontwikkelovereenkomst site", statusId: running.id, dueOn: "2026-11-14", agreedValueCents: 210000 });
 								await b.projects.create({ clientId: made[1].id, name: "Project scope", statusId: running.id, dueOn: "2026-10-03", agreedValueCents: 125000 });
+								// Phase 1: generate a document through the same bridge the
+								// interface uses, so the smoke run covers it too.
+								const tpl = (await b.templates.list()).find((t) => t.key === "development_agreement");
+								const gen = await b.documents.generate({
+									clientId: made[0].id, templateId: tpl.id, projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
+								});
+								await b.documents.renderPdf(gen.document.id);
 								return (await b.clients.list()).length;
 							})()`);
 							console.log(`SMOKE_DEMO clients=${created}`);
@@ -145,7 +152,7 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Clients", "Settings"] : ["Clients"];
+							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Clients", "Documents", "Templates", "Settings"] : ["Clients"];
 							for (const screen of screens) {
 								const clicked = await window.webContents.executeJavaScript(
 									`(() => { const b = [...document.querySelectorAll("nav button")]

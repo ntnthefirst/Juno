@@ -6,6 +6,7 @@ import { BackupSection } from "./BackupSection";
 import { LockSection } from "./LockSection";
 import { OwnerSection } from "./OwnerSection";
 import { ReferenceSection } from "./ReferenceSection";
+import { SignatureSection } from "./SignatureSection";
 import { messageOf } from "../../lib/errors";
 import { Section } from "./Section";
 
@@ -29,6 +30,7 @@ export function SettingsScreen({
 				<LockSection />
 				<ReferenceSection />
 				<OwnerSection onSaved={setToast} />
+				<SignatureSection />
 				<BackupSection onDone={setToast} />
 				<AboutSection />
 			</div>

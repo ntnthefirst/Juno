@@ -6,6 +6,7 @@ export type ScreenId =
 	| "mail"
 	| "calendar"
 	| "reminders"
+	| "templates"
 	| "settings";
 
 type Item = { id: ScreenId; label: string };
@@ -20,7 +21,10 @@ const PRIMARY: Item[] = [
 	{ id: "reminders", label: "Reminders" },
 ];
 
-const SECONDARY: Item[] = [{ id: "settings", label: "Settings" }];
+const SECONDARY: Item[] = [
+	{ id: "templates", label: "Templates" },
+	{ id: "settings", label: "Settings" },
+];
 
 /**
  * No panel fill and no card, per brand/BRAND.md section 7: a container has to be

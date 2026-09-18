@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import type { DocumentTemplate } from "@shared/types";
+import type { DocumentTemplate, MailTemplate } from "@shared/types";
 import { messageOf } from "../../lib/errors";
+import { MailTemplateEditor } from "./MailTemplateEditor";
 import { TemplateEditor } from "./TemplateEditor";
 
 type Load =
@@ -11,6 +12,28 @@ type Load =
 export function TemplatesScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const [mailTemplates, setMailTemplates] = useState<MailTemplate[]>([]);
+	const [selectedMailId, setSelectedMailId] = useState<string | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		window.bureau.mail.templates
+			.list()
+			.then((rows) => {
+				if (!cancelled) setMailTemplates(rows);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const refreshMail = useCallback(() => {
+		window.bureau.mail.templates
+			.list()
+			.then(setMailTemplates)
+			.catch(() => undefined);
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -34,7 +57,7 @@ export function TemplatesScreen() {
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, []);
 
-	const split = selectedId !== null;
+	const split = selectedId !== null || selectedMailId !== null;
 
 	return (
 		<div className="flex h-full flex-col p-8">
@@ -86,8 +109,47 @@ export function TemplatesScreen() {
 									key={row.id}
 									template={row}
 									selected={row.id === selectedId}
-									onSelect={setSelectedId}
+									onSelect={(id) => {
+										setSelectedId(id);
+										setSelectedMailId(null);
+									}}
 								/>
+							))}
+						</ul>
+					)}
+
+					<h2 className="mt-10 border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+						Mail templates
+					</h2>
+					<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						The subject and body of the emails Bureau composes for you. Dutch, one register each.
+					</p>
+					{mailTemplates.length === 0 ? (
+						<p className="mt-4 text-[var(--ink-muted)]">No mail templates yet.</p>
+					) : (
+						<ul className="mt-4">
+							{mailTemplates.map((row) => (
+								<li key={row.id} className="border-b border-[var(--line)]">
+									<button
+										type="button"
+										aria-current={row.id === selectedMailId ? "true" : undefined}
+										onClick={() => {
+											setSelectedMailId(row.id);
+											setSelectedId(null);
+										}}
+										className={`block w-full rounded-[var(--radius-md)] px-3 py-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+											row.id === selectedMailId ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
+										}`}
+									>
+										<span className="flex items-center gap-2">
+											<span className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">{row.name}</span>
+											<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+												{row.register}
+											</span>
+										</span>
+										<span className="mt-0.5 block truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">{row.subject}</span>
+									</button>
+								</li>
 							))}
 						</ul>
 					)}
@@ -96,6 +158,10 @@ export function TemplatesScreen() {
 				{selectedId !== null ? (
 					<div className="min-w-0 flex-1 overflow-y-auto pl-6">
 						<TemplateEditor key={selectedId} templateId={selectedId} onSaved={refreshList} />
+					</div>
+				) : selectedMailId !== null ? (
+					<div className="min-w-0 flex-1 overflow-y-auto pl-6">
+						<MailTemplateEditor key={selectedMailId} templateId={selectedMailId} onSaved={refreshMail} />
 					</div>
 				) : null}
 			</div>

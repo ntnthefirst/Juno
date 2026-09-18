@@ -8,6 +8,7 @@ type MessageViewProps = {
 	message: MailMessage;
 	initiallyOpen: boolean;
 	onNotice: (message: string) => void;
+	onReply: (messageId: string, all: boolean) => void;
 };
 
 /**
@@ -16,7 +17,7 @@ type MessageViewProps = {
  * no remote images unless this message's button is pressed. Links are listed
  * below the frame with their real targets, because a click inside goes nowhere.
  */
-export function MessageView({ message, initiallyOpen, onNotice }: MessageViewProps) {
+export function MessageView({ message, initiallyOpen, onNotice, onReply }: MessageViewProps) {
 	const [open, setOpen] = useState(initiallyOpen);
 	const [body, setBody] = useState<MailMessageBody | null>(null);
 	const [bodyError, setBodyError] = useState<string | null>(null);
@@ -154,6 +155,14 @@ export function MessageView({ message, initiallyOpen, onNotice }: MessageViewPro
 								style={{ height: tall ? 1600 : 520 }}
 							/>
 							<div className="flex items-center justify-between gap-4 border-t border-[var(--line)] px-4 py-2">
+								<div className="flex gap-2">
+									<Button size="dense" onClick={() => onReply(message.id, false)}>
+										Reply
+									</Button>
+									<Button size="dense" onClick={() => onReply(message.id, true)}>
+										Reply all
+									</Button>
+								</div>
 								<Button size="dense" onClick={() => setTall((current) => !current)}>
 									{tall ? "Shorter" : "Taller"}
 								</Button>

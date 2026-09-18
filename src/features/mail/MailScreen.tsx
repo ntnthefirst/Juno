@@ -1,54 +1,71 @@
 import { useCallback, useEffect, useState } from "react";
-import type { MailAccount, MailFolder, MailSyncStatus, MailThreadSummary } from "@shared/types";
+import type {
+	MailAccount,
+	MailFolder,
+	MailOutboxCounts,
+	MailOutboxMessage,
+	MailSyncStatus,
+	MailThreadSummary,
+} from "@shared/types";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
-import { FolderNav } from "./FolderNav";
+import { ComposeDialog, type ComposeSeed } from "./ComposeDialog";
+import { FolderNav, type NavSelection } from "./FolderNav";
 import { isSyncing } from "./format";
+import { OutboxDetail } from "./OutboxDetail";
+import { OutboxList } from "./OutboxList";
 import { ThreadList } from "./ThreadList";
 import { ThreadView } from "./ThreadView";
 
-type Selection = { accountId: string; folderId: string | null };
-
 /**
- * Three panes: where (accounts and folders), what (threads), and the thread
- * itself. Search replaces the folder with a ranked list across the account.
+ * Three panes: where (accounts, folders and the outbox), what (threads or
+ * composed messages), and the thing itself. Search replaces the folder with a
+ * ranked list across the account.
  */
 export function MailScreen() {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [folders, setFolders] = useState<Record<string, MailFolder[]>>({});
-	const [selection, setSelection] = useState<Selection | null>(null);
+	const [outboxCounts, setOutboxCounts] = useState<Record<string, MailOutboxCounts>>({});
+	const [selection, setSelection] = useState<NavSelection | null>(null);
 	const [search, setSearch] = useState("");
 	const [unreadOnly, setUnreadOnly] = useState(false);
 	const [threads, setThreads] = useState<MailThreadSummary[] | null>(null);
-	const [threadError, setThreadError] = useState<string | null>(null);
+	const [outboxRows, setOutboxRows] = useState<MailOutboxMessage[] | null>(null);
+	const [listError, setListError] = useState<string | null>(null);
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+	const [selectedOutboxId, setSelectedOutboxId] = useState<string | null>(null);
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});
 	const [notice, setNotice] = useState<string | null>(null);
+	const [compose, setCompose] = useState<ComposeSeed | null>(null);
 	const [accountsVersion, setAccountsVersion] = useState(0);
+	const [outboxVersion, setOutboxVersion] = useState(0);
 
 	const loadAccounts = useCallback(async () => {
 		const list = await window.bureau.mail.accounts.list();
 		const byAccount: Record<string, MailFolder[]> = {};
+		const counts: Record<string, MailOutboxCounts> = {};
 		for (const account of list) {
 			byAccount[account.id] = await window.bureau.mail.folders.list(account.id);
+			counts[account.id] = await window.bureau.mail.outbox.counts(account.id);
 		}
-		return { list, byAccount };
+		return { list, byAccount, counts };
 	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
 		loadAccounts()
-			.then(({ list, byAccount }) => {
+			.then(({ list, byAccount, counts }) => {
 				if (cancelled) return;
 				setAccounts(list);
 				setFolders(byAccount);
+				setOutboxCounts(counts);
 				setSelection((current) => {
 					if (current && list.some((a) => a.id === current.accountId)) return current;
 					const first = list[0];
 					if (!first) return null;
 					const inbox = byAccount[first.id]?.find((f) => f.specialUse === "inbox");
-					return { accountId: first.id, folderId: inbox?.id ?? null };
+					return { accountId: first.id, folderId: inbox?.id ?? null, outbox: false };
 				});
 			})
 			.catch((cause: unknown) => {
@@ -57,7 +74,7 @@ export function MailScreen() {
 		return () => {
 			cancelled = true;
 		};
-	}, [loadAccounts, accountsVersion]);
+	}, [loadAccounts, accountsVersion, outboxVersion]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -68,23 +85,27 @@ export function MailScreen() {
 				setSync(Object.fromEntries(list.map((s) => [s.accountId, s])));
 			})
 			.catch(() => undefined);
-		const off = window.bureau.mail.sync.onChange((status) => {
+		const offSync = window.bureau.mail.sync.onChange((status) => {
 			setSync((current) => ({ ...current, [status.accountId]: status }));
 			// A finished run means new rows: refresh the counts and the list.
 			if (status.phase === "done" || status.phase === "failed") {
 				setAccountsVersion((v) => v + 1);
 			}
 		});
+		// The sender reports as it works, so the outbox moves without a reload.
+		const offOutbox = window.bureau.mail.outbox.onChange(() => setOutboxVersion((v) => v + 1));
 		return () => {
 			cancelled = true;
-			off();
+			offSync();
+			offOutbox();
 		};
 	}, []);
 
 	const term = search.trim();
+	const showingOutbox = selection?.outbox === true;
 
 	const fetchThreads = useCallback(() => {
-		if (!selection) return Promise.resolve<MailThreadSummary[]>([]);
+		if (!selection || selection.outbox) return Promise.resolve<MailThreadSummary[]>([]);
 		return window.bureau.mail.threads.list({
 			accountId: selection.accountId,
 			...(term ? { search: term } : selection.folderId ? { folderId: selection.folderId } : {}),
@@ -94,6 +115,7 @@ export function MailScreen() {
 	}, [selection, term, unreadOnly]);
 
 	useEffect(() => {
+		if (showingOutbox) return;
 		let cancelled = false;
 		const id = setTimeout(
 			() => {
@@ -101,10 +123,10 @@ export function MailScreen() {
 					.then((rows) => {
 						if (cancelled) return;
 						setThreads(rows);
-						setThreadError(null);
+						setListError(null);
 					})
 					.catch((cause: unknown) => {
-						if (!cancelled) setThreadError(messageOf(cause));
+						if (!cancelled) setListError(messageOf(cause));
 					});
 			},
 			term ? 200 : 0,
@@ -113,11 +135,46 @@ export function MailScreen() {
 			cancelled = true;
 			clearTimeout(id);
 		};
-	}, [fetchThreads, term, accountsVersion]);
+	}, [fetchThreads, term, accountsVersion, showingOutbox]);
+
+	useEffect(() => {
+		if (!showingOutbox || !selection) return;
+		let cancelled = false;
+		window.bureau.mail.outbox
+			.list({ accountId: selection.accountId, limit: 200 })
+			.then((rows) => {
+				if (cancelled) return;
+				setOutboxRows(rows);
+				setListError(null);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setListError(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [showingOutbox, selection, outboxVersion]);
 
 	async function syncNow(accountId?: string) {
 		try {
 			await window.bureau.mail.sync.run(accountId);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	async function reply(messageId: string, all: boolean) {
+		try {
+			const seed = await window.bureau.mail.outbox.replySeed(messageId, all);
+			setCompose({
+				accountId: seed.accountId,
+				to: seed.to,
+				cc: seed.cc,
+				subject: seed.subject,
+				bodyText: `\n\n${seed.quotedText}`,
+				replyToMessageId: seed.replyToMessageId,
+				clientId: seed.clientId,
+			});
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 		}
@@ -141,7 +198,7 @@ export function MailScreen() {
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">No accounts yet</h2>
 					<p className="mt-2 text-[var(--ink-muted)]">
 						Add an IMAP account under Settings, then come back here. Bureau pulls mail onto this
-						machine and never writes anything back to the server.
+						machine and sends only what you press Send on.
 					</p>
 				</div>
 			</div>
@@ -149,6 +206,7 @@ export function MailScreen() {
 	}
 
 	const anySyncing = Object.values(sync).some(isSyncing);
+	const selectedOutbox = outboxRows?.find((m) => m.id === selectedOutboxId) ?? null;
 
 	return (
 		<div className="flex h-full min-h-0">
@@ -161,15 +219,26 @@ export function MailScreen() {
 						{anySyncing ? "Syncing" : "Sync now"}
 					</Button>
 				</div>
+				<div className="px-5 pb-3">
+					<Button
+						variant="primary"
+						size="dense"
+						onClick={() => setCompose({ accountId: selection?.accountId })}
+					>
+						New message
+					</Button>
+				</div>
 				<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
 					<FolderNav
 						accounts={accounts}
 						folders={folders}
 						sync={sync}
+						outbox={outboxCounts}
 						selection={selection}
 						onSelect={(next) => {
 							setSelection(next);
 							setSelectedThreadId(null);
+							setSelectedOutboxId(null);
 						}}
 						onSyncAccount={(id) => void syncNow(id)}
 					/>
@@ -177,48 +246,88 @@ export function MailScreen() {
 			</div>
 
 			<div className="flex w-[400px] shrink-0 flex-col border-r border-[var(--line)]">
-				<div className="flex items-center gap-2 px-4 pt-6 pb-3">
-					<input
-						type="search"
-						value={search}
-						onChange={(event) => setSearch(event.target.value)}
-						placeholder="Search mail"
-						aria-label="Search mail"
-						className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-					/>
-					<Button
-						size="dense"
-						aria-pressed={unreadOnly}
-						onClick={() => setUnreadOnly((current) => !current)}
-					>
-						<span className={unreadOnly ? "text-[var(--accent)]" : ""}>Unread</span>
-					</Button>
-				</div>
+				{showingOutbox ? (
+					<div className="px-4 pt-6 pb-3">
+						<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Outbox</h2>
+					</div>
+				) : (
+					<div className="flex items-center gap-2 px-4 pt-6 pb-3">
+						<input
+							type="search"
+							value={search}
+							onChange={(event) => setSearch(event.target.value)}
+							placeholder="Search mail"
+							aria-label="Search mail"
+							className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+						/>
+						<Button
+							size="dense"
+							aria-pressed={unreadOnly}
+							onClick={() => setUnreadOnly((current) => !current)}
+						>
+							<span className={unreadOnly ? "text-[var(--accent)]" : ""}>Unread</span>
+						</Button>
+					</div>
+				)}
 				<div className="min-h-0 flex-1 overflow-y-auto">
-					<ThreadList
-						threads={threads}
-						error={threadError}
-						searching={term.length > 0}
-						selectedId={selectedThreadId}
-						onSelect={setSelectedThreadId}
-					/>
+					{showingOutbox ? (
+						<OutboxList
+							messages={outboxRows}
+							error={listError}
+							selectedId={selectedOutboxId}
+							onSelect={setSelectedOutboxId}
+						/>
+					) : (
+						<ThreadList
+							threads={threads}
+							error={listError}
+							searching={term.length > 0}
+							selectedId={selectedThreadId}
+							onSelect={setSelectedThreadId}
+						/>
+					)}
 				</div>
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto">
-				{selectedThreadId ? (
+				{showingOutbox && selectedOutbox ? (
+					<OutboxDetail
+						key={`${selectedOutbox.id}:${selectedOutbox.updatedAt}`}
+						message={selectedOutbox}
+						onEdit={(draft) => setCompose({ draft })}
+						onChanged={() => setOutboxVersion((v) => v + 1)}
+						onNotice={setNotice}
+					/>
+				) : !showingOutbox && selectedThreadId ? (
 					<ThreadView
 						key={selectedThreadId}
 						threadId={selectedThreadId}
 						onChanged={() => setAccountsVersion((v) => v + 1)}
 						onNotice={setNotice}
+						onReply={(messageId, all) => void reply(messageId, all)}
 					/>
 				) : (
 					<div className="flex h-full items-center justify-center">
-						<p className="text-[var(--ink-faint)]">Select a thread to read it</p>
+						<p className="text-[var(--ink-faint)]">
+							{showingOutbox ? "Select a message" : "Select a thread to read it"}
+						</p>
 					</div>
 				)}
 			</div>
+
+			{compose ? (
+				<ComposeDialog
+					seed={compose}
+					onClose={() => setCompose(null)}
+					onDone={(message, queued) => {
+						setCompose(null);
+						setNotice(queued ? "Message queued." : "Draft saved.");
+						setOutboxVersion((v) => v + 1);
+						setSelection({ accountId: message.accountId, folderId: null, outbox: true });
+						setSelectedOutboxId(message.id);
+					}}
+				/>
+			) : null}
 
 			{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
 		</div>

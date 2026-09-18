@@ -9,6 +9,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { ComposeDialog } from "../mail/ComposeDialog";
 import { DocumentPreview } from "./DocumentPreview";
 import { SignDialog } from "./SignDialog";
 
@@ -68,6 +69,8 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 	const [busy, setBusy] = useState(false);
 	const [previewing, setPreviewing] = useState(false);
 	const [signing, setSigning] = useState(false);
+	const [sending, setSending] = useState(false);
+	const [sent, setSent] = useState<string | null>(null);
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 
 	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
@@ -222,6 +225,7 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 					Show in folder
 				</Button>
 				<Button onClick={() => setSigning(true)}>Sign</Button>
+				<Button onClick={() => setSending(true)}>Send by email</Button>
 				<Button variant="danger" onClick={() => setConfirmingDelete(true)}>
 					Delete
 				</Button>
@@ -234,6 +238,11 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 					className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
 				>
 					{action}
+				</p>
+			) : null}
+			{sent ? (
+				<p role="status" className="mt-4 border-l-2 border-[var(--ok)] pl-3 text-[length:var(--text-sm)] text-[var(--ok)]">
+					{sent}
 				</p>
 			) : null}
 
@@ -320,6 +329,22 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 						setSigning(false);
 						refresh();
 						onChanged();
+					}}
+				/>
+			) : null}
+
+			{sending ? (
+				<ComposeDialog
+					seed={{
+						clientId: record.clientId,
+						projectId: record.projectId,
+						documentIds: [record.id],
+						templateKey: "contract_cover",
+					}}
+					onClose={() => setSending(false)}
+					onDone={(_message, queued) => {
+						setSending(false);
+						setSent(queued ? "Message queued. Follow it in the mail outbox." : "Draft saved in the mail outbox.");
 					}}
 				/>
 			) : null}

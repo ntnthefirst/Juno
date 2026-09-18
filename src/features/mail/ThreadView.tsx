@@ -10,6 +10,7 @@ type ThreadViewProps = {
 	/** The thread's link changed, so the list needs a refresh. */
 	onChanged: () => void;
 	onNotice: (message: string) => void;
+	onReply: (messageId: string, all: boolean) => void;
 };
 
 type Load =
@@ -17,7 +18,7 @@ type Load =
 	| { status: "ready"; thread: MailThread }
 	| { status: "error"; message: string };
 
-export function ThreadView({ threadId, onChanged, onNotice }: ThreadViewProps) {
+export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadViewProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [linking, setLinking] = useState(false);
 	const [version, setVersion] = useState(0);
@@ -108,6 +109,7 @@ export function ThreadView({ threadId, onChanged, onNotice }: ThreadViewProps) {
 						message={message}
 						initiallyOpen={openByDefault.has(message.id)}
 						onNotice={onNotice}
+						onReply={onReply}
 					/>
 				))}
 			</div>

@@ -23,6 +23,11 @@ type Values = {
 	password: string;
 	horizonDays: string;
 	syncIntervalMinutes: string;
+	smtpHost: string;
+	smtpPort: string;
+	smtpSecurity: MailSecurity;
+	smtpUsername: string;
+	fromName: string;
 };
 
 function toValues(account: MailAccount | null): Values {
@@ -37,8 +42,18 @@ function toValues(account: MailAccount | null): Values {
 		password: "",
 		horizonDays: String(account?.horizonDays ?? 90),
 		syncIntervalMinutes: String(account?.syncIntervalMinutes ?? 10),
+		smtpHost: account?.smtpHost ?? "",
+		smtpPort: String(account?.smtpPort ?? 465),
+		smtpSecurity: account?.smtpSecurity ?? "tls",
+		smtpUsername: account?.smtpUsername ?? "",
+		fromName: account?.fromName ?? "",
 	};
 }
+
+const SMTP_SECURITY_OPTIONS: { value: MailSecurity; label: string }[] = [
+	{ value: "tls", label: "TLS (port 465)" },
+	{ value: "starttls", label: "STARTTLS (port 587)" },
+];
 
 const SECURITY_OPTIONS: { value: MailSecurity; label: string }[] = [
 	{ value: "tls", label: "TLS (port 993)" },
@@ -54,19 +69,45 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 	const [values, setValues] = useState<Values>(() => toValues(account));
 	const [error, setError] = useState<string | null>(null);
 	const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
-	const [busy, setBusy] = useState<"save" | "test" | null>(null);
+	const [smtpResult, setSmtpResult] = useState<{ ok: boolean; message: string } | null>(null);
+	const [busy, setBusy] = useState<"save" | "test" | "smtp" | null>(null);
 
 	const set = <K extends keyof Values>(key: K, value: Values[K]) => {
 		setValues((current) => ({ ...current, [key]: value }));
 		setTestResult(null);
 	};
 
-	function numbers(): { imapPort: number; horizonDays: number; syncIntervalMinutes: number } {
+	function numbers(): { imapPort: number; horizonDays: number; syncIntervalMinutes: number; smtpPort: number } {
 		return {
 			imapPort: Number(values.imapPort),
 			horizonDays: Number(values.horizonDays),
 			syncIntervalMinutes: Number(values.syncIntervalMinutes),
+			smtpPort: Number(values.smtpPort),
 		};
+	}
+
+	async function testSmtp() {
+		setBusy("smtp");
+		setError(null);
+		try {
+			const result = await window.bureau.mail.accounts.testSmtp({
+				...(account ? { id: account.id } : {}),
+				smtpHost: values.smtpHost,
+				smtpPort: numbers().smtpPort,
+				smtpSecurity: values.smtpSecurity,
+				smtpUsername: values.smtpUsername || null,
+				username: values.username || values.email,
+				...(values.password ? { password: values.password } : {}),
+			});
+			setSmtpResult({
+				ok: result.ok,
+				message: result.ok ? "Connected and signed in. Nothing was sent." : (result.message ?? "The connection failed."),
+			});
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		} finally {
+			setBusy(null);
+		}
 	}
 
 	async function test() {
@@ -106,6 +147,10 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 				imapHost: values.imapHost,
 				imapSecurity: values.imapSecurity,
 				username: values.username,
+				smtpHost: values.smtpHost.trim() || null,
+				smtpSecurity: values.smtpSecurity,
+				smtpUsername: values.smtpUsername.trim() || null,
+				fromName: values.fromName.trim() || null,
 				...numbers(),
 			};
 			let saved: MailAccount;
@@ -212,6 +257,65 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 					The password is stored in the operating system keychain and never shown again.
 				</p>
 
+				<div className="border-t border-[var(--line)] pt-4">
+					<h3 className="text-[length:var(--text-base)] font-[var(--weight-medium)]">Sending</h3>
+					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						Leave the server empty for an account you only read. The same password is used;
+						fill in a username only if the provider wants a different one for sending.
+					</p>
+					<div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Field
+							label="SMTP server"
+							value={values.smtpHost}
+							onChange={(v) => set("smtpHost", v)}
+							placeholder="smtp.example.be"
+						/>
+						<Select
+							label="Security"
+							value={values.smtpSecurity}
+							onChange={(v) => {
+								const security = v as MailSecurity;
+								setValues((current) => ({
+									...current,
+									smtpSecurity: security,
+									smtpPort:
+										current.smtpPort === "465" || current.smtpPort === "587"
+											? security === "tls"
+												? "465"
+												: "587"
+											: current.smtpPort,
+								}));
+								setSmtpResult(null);
+							}}
+							options={SMTP_SECURITY_OPTIONS}
+						/>
+						<Field label="Port" type="number" value={values.smtpPort} onChange={(v) => set("smtpPort", v)} tabular />
+						<Field
+							label="Username for sending"
+							value={values.smtpUsername}
+							onChange={(v) => set("smtpUsername", v)}
+							placeholder="Same as above"
+						/>
+						<Field
+							label="Sender name"
+							value={values.fromName}
+							onChange={(v) => set("fromName", v)}
+							placeholder="Defaults to your name in Settings"
+						/>
+					</div>
+					{smtpResult ? (
+						<p
+							role="status"
+							data-selectable
+							className={`mt-3 border-l-2 pl-3 text-[length:var(--text-sm)] ${
+								smtpResult.ok ? "border-[var(--ok)] text-[var(--ok)]" : "border-[var(--risk)] text-[var(--risk)]"
+							}`}
+						>
+							{smtpResult.message}
+						</p>
+					) : null}
+				</div>
+
 				{testResult ? (
 					<p
 						role="status"
@@ -232,9 +336,14 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 				) : null}
 
 				<div className="flex items-center justify-between gap-3">
-					<Button disabled={busy !== null} onClick={() => void test()}>
-						{busy === "test" ? "Testing" : "Test connection"}
-					</Button>
+					<div className="flex gap-2">
+						<Button disabled={busy !== null} onClick={() => void test()}>
+							{busy === "test" ? "Testing" : "Test incoming"}
+						</Button>
+						<Button disabled={busy !== null || !values.smtpHost.trim()} onClick={() => void testSmtp()}>
+							{busy === "smtp" ? "Testing" : "Test outgoing"}
+						</Button>
+					</div>
 					<div className="flex gap-2">
 						<Button onClick={onClose}>Cancel</Button>
 						<Button type="submit" variant="primary" disabled={busy !== null}>

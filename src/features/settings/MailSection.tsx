@@ -93,6 +93,8 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 									{", "}
 									{account.hasCredential ? "password set" : "no password"}
 									{", "}
+									{account.smtpHost ? `sends via ${account.smtpHost}:${account.smtpPort}` : "read only"}
+									{", "}
 									{account.syncEnabled
 										? `every ${account.syncIntervalMinutes} min, ${account.horizonDays} days back`
 										: "sync off"}

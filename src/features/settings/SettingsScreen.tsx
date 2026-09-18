@@ -5,6 +5,7 @@ import { AccountingSection } from "./AccountingSection";
 import { AppearanceSection } from "./AppearanceSection";
 import { BackupSection } from "./BackupSection";
 import { LockSection } from "./LockSection";
+import { MailSection } from "./MailSection";
 import { OwnerSection } from "./OwnerSection";
 import { ReferenceSection } from "./ReferenceSection";
 import { SignatureSection } from "./SignatureSection";
@@ -32,6 +33,7 @@ export function SettingsScreen({
 				<ReferenceSection />
 				<OwnerSection onSaved={setToast} />
 				<AccountingSection onSaved={setToast} />
+				<MailSection onSaved={setToast} />
 				<SignatureSection />
 				<BackupSection onDone={setToast} />
 				<AboutSection />

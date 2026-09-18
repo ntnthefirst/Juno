@@ -3,6 +3,7 @@ import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
+import { MailScreen } from "../features/mail/MailScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
 import { TemplatesScreen } from "../features/templates/TemplatesScreen";
@@ -50,6 +51,8 @@ export function App() {
 						<RemindersScreen />
 					) : screen === "documents" ? (
 						<DocumentsScreen />
+					) : screen === "mail" ? (
+						<MailScreen />
 					) : screen === "templates" ? (
 						<TemplatesScreen />
 					) : screen === "settings" ? (

@@ -429,3 +429,184 @@ export interface ReminderCompletion {
 	completedAt: Iso;
 	note: string | null;
 }
+
+/* --------------------------------------------------------------------- mail */
+
+export type MailSecurity = "tls" | "starttls";
+
+/**
+ * An account as the renderer sees it. There is no password field, and there
+ * never will be: `hasCredential` is the whole of what the interface learns.
+ */
+export interface MailAccount extends Standard {
+	label: string;
+	email: string;
+	imapHost: string;
+	imapPort: number;
+	imapSecurity: MailSecurity;
+	username: string;
+	horizonDays: number;
+	syncIntervalMinutes: number;
+	syncEnabled: boolean;
+	lastSyncAt: Iso | null;
+	lastSyncError: string | null;
+	hasCredential: boolean;
+}
+
+export interface MailAccountInput {
+	label?: string;
+	email: string;
+	imapHost: string;
+	imapPort?: number;
+	imapSecurity?: MailSecurity;
+	username?: string;
+	/** Stored in the credential store on the way in. Never read back. */
+	password: string;
+	horizonDays?: number;
+	syncIntervalMinutes?: number;
+	syncEnabled?: boolean;
+}
+
+export type MailAccountPatch = Partial<MailAccountInput>;
+
+export interface MailConnectionTest {
+	ok: boolean;
+	/** What went wrong, for a person, when ok is false. */
+	message: string | null;
+	folderCount: number;
+}
+
+export type MailSpecialUse = "inbox" | "sent" | "drafts" | "trash" | "junk" | "archive";
+
+export interface MailFolder extends Standard {
+	accountId: string;
+	path: string;
+	name: string;
+	delimiter: string | null;
+	specialUse: MailSpecialUse | null;
+	syncEnabled: boolean;
+	messageCount: number;
+	unreadCount: number;
+	lastSyncAt: Iso | null;
+}
+
+export interface MailAddress {
+	name: string | null;
+	address: string;
+}
+
+export interface MailThreadSummary {
+	id: string;
+	accountId: string;
+	subject: string;
+	clientId: string | null;
+	clientName: string | null;
+	linkSource: "auto" | "manual" | null;
+	firstMessageAt: Iso;
+	lastMessageAt: Iso;
+	messageCount: number;
+	unreadCount: number;
+	hasAttachments: boolean;
+	/** The people on the thread other than the account itself, deduplicated. */
+	participants: MailAddress[];
+	/** The newest message's first line, or a search snippet when searching. */
+	snippet: string;
+}
+
+export interface MailAttachment {
+	id: string;
+	messageId: string;
+	filename: string;
+	mimeType: string;
+	size: number;
+	isInline: boolean;
+}
+
+/** A message in a thread. Headers always; the body only once fetched. */
+export interface MailMessage {
+	id: string;
+	accountId: string;
+	folderId: string;
+	threadId: string;
+	uid: number;
+	messageId: string | null;
+	from: MailAddress | null;
+	to: MailAddress[];
+	cc: MailAddress[];
+	replyTo: MailAddress[];
+	subject: string;
+	snippet: string;
+	sentAt: Iso | null;
+	internalDate: Iso;
+	size: number | null;
+	isSeen: boolean;
+	isFlagged: boolean;
+	isAnswered: boolean;
+	hasAttachments: boolean;
+	bodyFetched: boolean;
+	bodyError: string | null;
+	attachments: MailAttachment[];
+}
+
+/**
+ * Where a message body is served from, as a document of its own with a CSP
+ * that allows nothing but inline styles and data: images. The reader points a
+ * fully sandboxed frame at `${MAIL_FRAME_ORIGIN}/message/<id>`, and adds
+ * `?images=1` only when the person asked for the remote images of that one
+ * message.
+ */
+export const MAIL_FRAME_ORIGIN = "app://mail";
+
+/**
+ * What the reader needs beside the frame: the plain text for a message with no
+ * HTML, how many remote images were blocked so it can offer to load them, and
+ * every link with its real target, since a click inside the frame goes nowhere.
+ */
+export interface MailMessageBody {
+	messageId: string;
+	text: string | null;
+	hasHtml: boolean;
+	remoteImages: number;
+	links: { href: string; text: string }[];
+}
+
+export interface MailThread {
+	summary: MailThreadSummary;
+	messages: MailMessage[];
+}
+
+export interface MailThreadListQuery {
+	accountId?: string;
+	folderId?: string;
+	clientId?: string;
+	/** Full-text over subject, body and sender. */
+	search?: string;
+	unreadOnly?: boolean;
+	limit?: number;
+	/** The `lastMessageAt` of the last row seen, for the next page. */
+	before?: Iso;
+}
+
+export type MailSyncPhase =
+	| "idle"
+	| "connecting"
+	| "folders"
+	| "headers"
+	| "bodies"
+	| "done"
+	| "failed";
+
+export interface MailSyncStatus {
+	accountId: string;
+	phase: MailSyncPhase;
+	folderPath: string | null;
+	/** Progress inside the current phase, when it is known. */
+	done: number;
+	total: number;
+	startedAt: Iso | null;
+	finishedAt: Iso | null;
+	error: string | null;
+	/** What the run produced so far. */
+	newMessages: number;
+	fetchedBodies: number;
+}

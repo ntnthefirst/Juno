@@ -35,6 +35,13 @@ export function documentsDir(): string {
 	return dir;
 }
 
+/** Attachments, one folder per account and message. Never in the database. */
+export function mailDir(): string {
+	const dir = join(userDataDir(), "mail");
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
 export function settingsPath(): string {
 	return join(userDataDir(), "settings.json");
 }

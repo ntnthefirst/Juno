@@ -13,9 +13,9 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 
 | | |
 | --- | --- |
-| **Phase** | 0, 1 and 2 complete. Phase 3 built through 3d and proven against a fake mailbox; not yet run against a real account. Auto-update is the only phase 0 item left, blocked on the repository existing |
-| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings, and a read-only mail client |
-| **Last verified** | lint, typecheck, 158 tests, and a smoke run that creates records, generates a document, syncs a mailbox held in memory, opens a message in the reader and photographs seven screens in both themes |
+| **Phase** | 0 to 2 complete. Phases 3 and 4 built and proven against a fake mailbox and a fake transport; neither has met a real server yet. Auto-update is the only phase 0 item left, blocked on the repository existing |
+| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings, a mail client that reads, and an outbox that sends with a confirmation gate |
+| **Last verified** | lint, typecheck, 174 tests, and a smoke run that creates records, generates a document, syncs a mailbox held in memory, sends a cover mail with the document attached through a transport held in memory, opens a message in the reader and photographs eight screens in both themes |
 
 ### What exists
 
@@ -498,4 +498,64 @@ type.
 should default to synced (it is `\All`, mapped to archive, off by default), how
 the first sync of a 40,000-message inbox feels at 2,000 headers and 150 bodies
 per run, and whether STARTTLS on 143 is offered by any of the four providers.
+
+
+### Session 2, continued: phase 4, sending
+
+SMTP per account, an outbox with a confirmation gate, a composer with reply and
+reply-all, documents attached in two clicks, four Dutch mail templates in the
+house style, and a copy of every sent message in the account's Sent folder.
+
+**The gate is a state, not a flag.** Decision 22 has the reasoning. The short
+version: `mail_outbox.state` goes draft, pending, queued, sending, sent, failed,
+cancelled; the sender only reads `queued`; a person's Send queues, an agent's
+`mail.send` parks in `pending`; `approve` exists over IPC and not as a tool. The
+test that matters is "holds an agent's message until a person approves it" in
+`mail-outbox.test.ts`, and the smoke run leaves one draft and one sent message
+behind so the Outbox view is photographed with both.
+
+**What has and has not been proven.** The whole path runs in the smoke against
+a transport held in memory: the account gains an SMTP host through the bridge,
+a cover mail is rendered from the `contract_cover` template against a client,
+the generated document is attached, the message is queued by the bridge, the
+sender picks it up, and the row comes out the other side as sent with its
+attachment. Sixteen service tests cover the gate, the retry rules, the reply
+seed, threading headers, the template seed and re-seed, the gap rule and the
+attachment resolution. **Nothing has yet talked to a real SMTP server**, which
+means deliverability (SPF, DKIM, DMARC on the real domains) and how Outlook
+renders the shell are both untested. That is the real-account run, again.
+
+**Traps and findings:**
+
+- **A template gap went out in the smoke run.** The first Outbox screenshot
+  showed `[ontbreekt: owner.contactName]` in a sent message, because the smoke
+  owner profile was empty and nothing refused it. The gate now rejects a
+  subject or body carrying the marker, with the placeholder named. The
+  screenshot caught it; no test would have, because no test thought to send a
+  gap.
+- **An adapter that sequences a second call is an adapter with logic.** The
+  first cut had the IPC handler call `requestSend` and then kick the sender.
+  The outbox now fires an `onQueued` listener the sender subscribes to at
+  scheduler start, and both adapters are one line again.
+- **`bm25` all over again, in a different coat:** `documentActions.renderPdf`
+  imports Electron, so a sender that called it directly could not be tested.
+  The renderer is injected at startup, like the mailbox source and the
+  credential store, and the test hands it a function that writes a fake PDF.
+- **The subject is text, not HTML.** The renderer escapes every value, which is
+  right for a body and wrong for a subject line; `unescapeHtml` undoes it for
+  the subject only, and a missing-value marker keeps its words and loses its
+  markup.
+- **A raw message needs an envelope.** nodemailer does not parse `raw` bytes
+  for recipients, so Bcc would silently go nowhere; the envelope from
+  `MimeNode.getEnvelope()` is passed alongside.
+- **Inner scripts inside template literals need doubled escapes.** The smoke
+  demo builds JavaScript inside a template literal in `main.ts`; a backslash-n
+  in a draft body there became a real newline in the inner script and a syntax
+  error in the renderer. The file now carries a doubled backslash at that spot,
+  and the smoke run is what catches it.
+
+**What phase 4 does not do, on purpose:** rich text beyond plain paragraphs,
+scheduled send, mail merge, and anything that tracks a recipient. The last one
+is permanent (PLAN.md, phase 4). Sent messages appear in the reader only after
+the Sent folder is synced; the outbox is the record until then.
 

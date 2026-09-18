@@ -4,9 +4,9 @@
 then read [BUILD-LOG.md](BUILD-LOG.md), then start work.**
 
 Bureau is a working Electron desktop app. Phases 0, 1 and 2 of [PLAN.md](PLAN.md)
-are complete and phase 3, the mail client, is built and proven against a fake
-mailbox but not yet against a real account. It builds, packages, installs and
-runs.
+are complete. Phases 3 and 4, reading and sending mail, are built and proven
+against a fake mailbox and a fake transport, but neither has met a real server
+yet. It builds, packages, installs and runs.
 
 ```bash
 npm install
@@ -23,12 +23,11 @@ npm run dev
 | **Reminders** | Grouped by bucket, recurring, snooze and complete, one daily notification |
 | **Clients** | Clients, contacts and projects, with search and undo |
 | **Documents** | Generated from templates, rendered to PDF, signed with an audit page |
-| **Mail** | IMAP accounts pulled into SQLite, read-only. Threads, a sandboxed reader, search, client linking |
-| **Templates** | The contract texts, editable, with a live preview |
+| **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. An outbox that sends over SMTP behind a confirmation gate, with reply, templates and document attachments |
+| **Templates** | The contract texts and the mail templates, editable, with a live preview |
 | **Settings** | Theme, lock, reference data, owner details, accounting link, mail accounts, signature, backup |
 
-Not built: mail sending (phase 4), calendar (phase 5), the MCP server itself
-(phase 6).
+Not built: calendar (phase 5), the MCP server itself (phase 6).
 The MCP **tool descriptors** exist for every service already, so phase 6 is
 assembly rather than archaeology.
 
@@ -39,13 +38,13 @@ assembly rather than archaeology.
 | [BUILD-LOG.md](BUILD-LOG.md) | **Start here.** Where things stand, every deviation from the plan, and every trap found the hard way |
 | [TODO.md](TODO.md) | The three things waiting on Nathan, and what unblocks each |
 | [PLAN.md](PLAN.md) | The phases, what ships in each, and the test for when one is done |
-| [docs/decisions.md](docs/decisions.md) | 21 decisions, each with what would have to change to reopen it |
+| [docs/decisions.md](docs/decisions.md) | 22 decisions, each with what would have to change to reopen it |
 | [CLAUDE.md](CLAUDE.md) | Loaded automatically. The rules index and the highest-value rules inline |
 
 `BUILD-LOG.md` first, because several things in `PLAN.md` and `decisions.md` have
 been amended by what actually happened. The log says which.
 
-## The five things that will bite you
+## The six things that will bite you
 
 1. **Tests run under Electron's Node, not the host's.** `node:sqlite` before Node
    24 has no `StatementSync.setReturnArrays`, which the storage shim needs, so
@@ -53,8 +52,8 @@ been amended by what actually happened. The log says which.
 2. **`npm run smoke` is the only check that proves the app runs.** A clean
    typecheck says nothing about the custom scheme, the preload bridge or the
    database. `BUREAU_SMOKE_DEMO=1 node scripts/smoke.mjs` creates real records
-   through the bridge, syncs a mailbox held in memory, and photographs seven
-   screens in both themes into `.smoke/`.
+   through the bridge, syncs a mailbox held in memory, sends through a transport
+   held in memory, and photographs eight screens in both themes into `.smoke/`.
    Several real bugs were found only by looking at those images.
 3. **Storage is `node:sqlite` behind a shim**, not `better-sqlite3`, because this
    machine has no C++ compiler. Decision 18. Drizzle is assembled by hand in
@@ -67,23 +66,31 @@ been amended by what actually happened. The log says which.
    `app://mail/message/<id>` with its own policy into a frame with an empty
    sandbox, and the window's CSP handler must leave those responses alone
    (decision 20). Widening either policy to make something work is the wrong fix.
+6. **Nothing an agent can call produces a queued message.** The outbox state is
+   the gate (decision 22): `mail.send` parks a draft in `pending`, and `approve`
+   has an IPC channel and no tool. Adding a tool that queues, or an adapter that
+   says `actor: "user"` for anything but the window, is the one change that
+   would make the rule in `.claude/rules/mcp.md` section 4 false.
 
 ## What to do next
 
-**Run the mail client against a real account.** Phase 3 exists end to end and
-every piece of it is tested against a mailbox held in memory, which is exactly
-the kind of server that never disagrees with the RFCs. Add one of the real
-accounts under Settings, sync it, and read the session entry in
-[BUILD-LOG.md](BUILD-LOG.md) for the open questions that run is meant to
-answer. Expect the first real inbox to find something the fake could not.
+**Run mail against a real account, both ways.** Phases 3 and 4 exist end to
+end and every piece of them is tested against a mailbox and a transport held in
+memory, which are exactly the kind of servers that never disagree with the RFCs.
+Add one of the real accounts under Settings with its SMTP server, sync it, send
+one message to yourself, and read the two session entries in
+[BUILD-LOG.md](BUILD-LOG.md) for the open questions those runs are meant to
+answer. Expect the first real inbox and the first real send to find something
+the fakes could not.
 
 The sync is read-only by construction: `MailboxSource` in
-`electron/main/services/mail-source.ts` has no method that writes, so a bug
-cannot become a lost message. Keep it that way until phase 4.
+`electron/main/services/mail-source.ts` has no method that writes. The one IMAP
+write, the copy into Sent, lives on a separate appender in `mail-transport.ts`.
+Keep them apart.
 
-After that, the honest move is still to install the packaged build and use
-phases 0 to 3 on real work for a while before starting phase 4. A phase that is
-not being used is evidence the next phase is the wrong thing to build.
+After that, the honest move is to install the packaged build and use phases 0
+to 4 on real work for a while before starting phase 5. A phase that is not being
+used is evidence the next phase is the wrong thing to build.
 
 ## The two open decisions
 

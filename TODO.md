@@ -46,16 +46,23 @@ documented in `docs/templates.md`.
 That is what the banner is for, and why it is on the page rather than in a
 tooltip.
 
-## 3. Sync a real mail account and report back - **you**
+## 3. Run mail against a real account, both ways - **you**
 
-Phase 3 has never seen a real IMAP server. Add one account under Settings,
-press Sync now, and note anything that looks wrong: a folder missing, a body
-that will not fetch, a thread split in two, a date off by a few hours. The
-questions the run is meant to answer are at the end of the session entry in
-`BUILD-LOG.md`.
+Phases 3 and 4 have never seen a real IMAP or SMTP server. Add one account
+under Settings with both servers, press Sync now, then send one message to
+yourself from the composer. Note anything that looks wrong: a folder missing, a
+body that will not fetch, a thread split in two, a date off by a few hours, a
+message that never arrives, a copy missing from Sent, or the house shell
+looking broken in Outlook or on the phone. The questions the runs are meant to
+answer are at the end of the two session entries in `BUILD-LOG.md`.
 
-Nothing is written to the server, so the worst a bug can do is show something
-incorrectly on this machine.
+Deliverability is the other half: SPF, DKIM and DMARC on the real domains have
+to align with the SMTP server the account uses, or the first client mail lands
+in spam. That is DNS, not Bureau, and it is worth checking before a real
+contract goes out this way.
+
+The sync writes nothing to the server. The sender writes exactly two things:
+the message, and a copy into Sent.
 
 ## 4. Smaller things
 
@@ -75,3 +82,9 @@ incorrectly on this machine.
 - **The reader frame has a fixed height** with a taller and shorter toggle,
   because a sandboxed frame cannot report its content height. A resize handle
   would be nicer.
+- **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
+  is the phase 4 promise not yet kept. Templates carry their own layout, so it
+  matters least for the messages Bureau writes on its own.
+- **Sent messages show in the reader only after the Sent folder is synced.**
+  Until then the outbox is the record. Showing outbox rows inside a thread
+  would close the gap.

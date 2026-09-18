@@ -368,3 +368,42 @@ Ranking has a shape SQLite insists on: `bm25()` and `snippet()` only work in
 the query that runs the MATCH, and the planner flattens a plain subquery into
 the surrounding join, which breaks that. The ranking lives in a `materialized`
 CTE for that reason, and `mail-threads.ts` says so.
+
+## 22. Sending is a queue with a gate, and the gate is a state
+
+Phase 4 sends mail, and `mcp.md` section 4 says a tool that sends requires a
+person's explicit confirmation, enforced in the service, never in the adapter.
+That rule became a table rather than a flag.
+
+`mail_outbox` holds every composed message with a state: draft, pending,
+queued, sending, sent, failed, cancelled. The sender reads `queued` and nothing
+else. A message reaches `queued` through exactly two service functions.
+`requestSend(id, { actor })` queues it when the actor is a person and parks it
+in `pending` when the actor is an agent; `approve(id)` moves pending to queued.
+The IPC adapter says `actor: "user"` because it is only reachable from the
+window; the MCP tool says `actor: "agent"`; and `approve` has an IPC channel and
+no MCP tool, so nothing an agent can call ever produces a queued row. The actor
+is the one thing an adapter states, and it is a fact about the caller rather
+than a decision.
+
+Three consequences that follow from the state being the gate:
+
+- A pending message edited by a person becomes that person's draft again, so an
+  agent's request cannot be approved with different words than the agent asked
+  for.
+- A failed message is retried under the same Message-ID, without a second
+  approval, because it was approved once and the retry is the same message.
+- A template gap (`[ontbreekt: ...]`) is refused at the gate, not at render
+  time, so no path from any adapter sends a placeholder to a client.
+
+The message bytes are built once with nodemailer's MailComposer, sent as raw
+bytes with an explicit envelope, and those same bytes are appended to the
+account's Sent folder. Building twice would produce two messages that differ
+in boundaries and dates and look, to a phone, like two messages. The append is
+the one IMAP write in the project and lives beside the read-only source
+interface rather than on it, so the phase 3 promise stays enforced by the type.
+
+**What would reverse this:** a second sending channel (a queue in a cloud
+worker, say) that could not share the SQLite row as its source of truth. Then
+the gate would have to move to wherever the queue lives, and decision 5 would be
+the first thing to reopen.

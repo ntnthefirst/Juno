@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AppInfo, ThemeSetting } from "@shared/types";
 import { Toast } from "../../components/Toast";
+import { AccountingSection } from "./AccountingSection";
 import { AppearanceSection } from "./AppearanceSection";
 import { BackupSection } from "./BackupSection";
 import { LockSection } from "./LockSection";
@@ -30,6 +31,7 @@ export function SettingsScreen({
 				<LockSection />
 				<ReferenceSection />
 				<OwnerSection onSaved={setToast} />
+				<AccountingSection onSaved={setToast} />
 				<SignatureSection />
 				<BackupSection onDone={setToast} />
 				<AboutSection />

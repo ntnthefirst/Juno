@@ -137,6 +137,25 @@ if (!app.requestSingleInstanceLock()) {
 									clientId: made[0].id, templateId: tpl.id, projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
 								});
 								await b.documents.renderPdf(gen.document.id);
+
+								// Phase 2: a few reminders across the buckets, plus a delivered
+								// project so a suggestion appears.
+								const iso = (offset) => {
+									const d = new Date();
+									d.setDate(d.getDate() + offset);
+									return d.toISOString().slice(0, 10);
+								};
+								await b.reminders.create({ title: "Chase the noir deposit", dueOn: iso(-4), category: "payment", clientId: made[2].id });
+								await b.reminders.create({ title: "Send hyge the proposal", dueOn: iso(0), category: "other", clientId: made[3].id });
+								await b.reminders.create({ title: "Renew the hosting for bodhi", dueOn: iso(5), category: "renewal", pattern: "years", interval: 1, leadDays: 30, clientId: made[1].id });
+								await b.settings.setAccountingTool({ name: "the accounting tool", url: "https://example.invalid" });
+								const ps2 = await b.reference.getSet("project_status");
+								const delivered = ps2.items.find((i) => i.key === "delivered");
+								const bodhiProjects = await b.projects.list({ clientId: made[1].id });
+								if (delivered && bodhiProjects[0]) {
+									await b.projects.update(bodhiProjects[0].id, { statusId: delivered.id });
+								}
+
 								return (await b.clients.list()).length;
 							})()`);
 							console.log(`SMOKE_DEMO clients=${created}`);
@@ -162,7 +181,7 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Clients", "Documents", "Templates", "Settings"] : ["Clients"];
+							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Documents", "Templates", "Settings"] : ["Clients"];
 							for (const screen of screens) {
 								const clicked = await window.webContents.executeJavaScript(
 									`(() => { const b = [...document.querySelectorAll("nav button")]

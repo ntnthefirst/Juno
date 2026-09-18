@@ -214,6 +214,25 @@ export async function get(
 	return row ? toRecord(row, today) : null;
 }
 
+/**
+ * A monthly or yearly series has to remember the day it was anchored to.
+ *
+ * Without this, a reminder set for the 31st clamps to 28 February and then
+ * advances from the clamped date, so every later occurrence is on the 28th. The
+ * series walks backwards once and never recovers. Derived here rather than asked
+ * for, because nobody setting a reminder thinks in anchor days.
+ */
+function anchorFor(
+	pattern: RecurrencePattern | undefined,
+	dueOn: string | undefined,
+	given: number | null | undefined,
+): number | null {
+	if (given !== undefined && given !== null) return given;
+	if (pattern !== "months" && pattern !== "years") return null;
+	if (!dueOn) return null;
+	return Number(dueOn.slice(8, 10));
+}
+
 function validate(input: ReminderInput | ReminderPatch): void {
 	if (input.title !== undefined && !input.title.trim()) {
 		throw new Error("A reminder needs a title.");
@@ -242,7 +261,7 @@ export async function create(
 			dueOn: input.dueOn,
 			pattern: input.pattern ?? "once",
 			interval: input.interval ?? 1,
-			anchorDay: input.anchorDay ?? null,
+			anchorDay: anchorFor(input.pattern, input.dueOn, input.anchorDay),
 			leadDays: input.leadDays ?? 0,
 			category: input.category ?? "other",
 			clientId: input.clientId ?? null,
@@ -263,6 +282,13 @@ export async function update(
 	today: string = todayIsoDate(),
 ): Promise<ReminderRecord> {
 	validate(patch);
+	const existing = db
+		.select()
+		.from(reminders)
+		.where(and(eq(reminders.id, id), isNull(reminders.deletedAt)))
+		.get();
+	if (!existing) throw new Error("That reminder no longer exists.");
+
 	const [row] = db
 		.update(reminders)
 		.set({
@@ -271,7 +297,17 @@ export async function update(
 			...(patch.dueOn !== undefined ? { dueOn: patch.dueOn } : {}),
 			...(patch.pattern !== undefined ? { pattern: patch.pattern } : {}),
 			...(patch.interval !== undefined ? { interval: patch.interval } : {}),
-			...(patch.anchorDay !== undefined ? { anchorDay: patch.anchorDay } : {}),
+			// Recomputed whenever the pattern or the date moves, so an edit cannot
+			// leave a series anchored to a day it no longer starts on.
+			...(patch.anchorDay !== undefined || patch.pattern !== undefined || patch.dueOn !== undefined
+				? {
+						anchorDay: anchorFor(
+							patch.pattern ?? (existing.pattern as RecurrencePattern),
+							patch.dueOn ?? existing.dueOn,
+							patch.anchorDay,
+						),
+					}
+				: {}),
 			...(patch.leadDays !== undefined ? { leadDays: patch.leadDays } : {}),
 			...(patch.category !== undefined ? { category: patch.category } : {}),
 			...(patch.clientId !== undefined ? { clientId: patch.clientId } : {}),

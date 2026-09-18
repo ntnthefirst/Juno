@@ -5,7 +5,16 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { clients } from "../db/schema";
-import { bucketFor, complete, create, list, snooze, history, reopen } from "./reminders";
+import {
+	bucketFor,
+	complete,
+	create,
+	history,
+	list,
+	reopen,
+	snooze,
+	update,
+} from "./reminders";
 
 const migrations = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 
@@ -177,5 +186,59 @@ describe("reopen", () => {
 		const back = await reopen(made.id, db, "2026-05-10");
 		expect(back.completedAt).toBeNull();
 		expect(back.bucket).toBe("today");
+	});
+});
+
+describe("anchor day", () => {
+	it("is derived from the due date for a monthly series", async () => {
+		const made = await create(
+			{ title: "Month end", dueOn: "2026-01-31", pattern: "months", interval: 1 },
+			db,
+			"2026-01-31",
+		);
+		expect(made.anchorDay).toBe(31);
+	});
+
+	it("keeps a month-end series on the month end instead of walking backwards", async () => {
+		// The bug this exists to stop: clamp to 28 February once, then advance from
+		// the clamped date, and every later occurrence is on the 28th.
+		const made = await create(
+			{ title: "Month end", dueOn: "2026-01-31", pattern: "months", interval: 1 },
+			db,
+			"2026-01-31",
+		);
+
+		const feb = await complete(made.id, {}, db, "2026-01-31");
+		expect(feb.dueOn).toBe("2026-02-28");
+
+		const mar = await complete(made.id, {}, db, "2026-02-28");
+		expect(mar.dueOn).toBe("2026-03-31");
+
+		const apr = await complete(made.id, {}, db, "2026-03-31");
+		expect(apr.dueOn).toBe("2026-04-30");
+
+		const may = await complete(made.id, {}, db, "2026-04-30");
+		expect(may.dueOn).toBe("2026-05-31");
+	});
+
+	it("is null for a pattern that does not need one", async () => {
+		const made = await create(
+			{ title: "Weekly", dueOn: "2026-01-31", pattern: "weeks", interval: 1 },
+			db,
+			"2026-01-31",
+		);
+		expect(made.anchorDay).toBeNull();
+	});
+
+	it("is recomputed when the date moves", async () => {
+		const made = await create(
+			{ title: "Monthly", dueOn: "2026-01-15", pattern: "months", interval: 1 },
+			db,
+			"2026-01-15",
+		);
+		expect(made.anchorDay).toBe(15);
+
+		const moved = await update(made.id, { dueOn: "2026-01-31" }, db, "2026-01-15");
+		expect(moved.anchorDay).toBe(31);
 	});
 });

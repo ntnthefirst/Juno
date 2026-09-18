@@ -3,15 +3,17 @@ import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
+import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
 import { TemplatesScreen } from "../features/templates/TemplatesScreen";
+import { TodayScreen } from "../features/today/TodayScreen";
 import { useTheme } from "../lib/theme";
 import { Sidebar, type ScreenId } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 
 export function App() {
 	const [theme, setTheme] = useTheme();
-	const [screen, setScreen] = useState<ScreenId>("clients");
+	const [screen, setScreen] = useState<ScreenId>("today");
 	const [lock, setLock] = useState<LockState | null>(null);
 
 	useEffect(() => {
@@ -40,8 +42,12 @@ export function App() {
 			<div className="flex min-h-0 flex-1">
 				<Sidebar current={screen} onNavigate={setScreen} />
 				<main className="min-w-0 flex-1 overflow-auto">
-					{screen === "clients" ? (
+					{screen === "today" ? (
+						<TodayScreen />
+					) : screen === "clients" ? (
 						<ClientsScreen />
+					) : screen === "reminders" ? (
+						<RemindersScreen />
 					) : screen === "documents" ? (
 						<DocumentsScreen />
 					) : screen === "templates" ? (

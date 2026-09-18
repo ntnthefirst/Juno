@@ -13,9 +13,9 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 
 | | |
 | --- | --- |
-| **Phase** | 0 and 1 complete. Auto-update is the only phase 0 item left, blocked on the repository existing |
-| **Runs?** | **Yes, including packaged.** Clients, documents with PDF generation and signing, templates, reference data, lock, backup and settings |
-| **Last verified** | lint, typecheck, 76 tests, and a smoke run that generates a document through the bridge and photographs four screens in both themes |
+| **Phase** | 0, 1 and 2 complete. Auto-update is the only phase 0 item left, blocked on the repository existing |
+| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings |
+| **Last verified** | lint, typecheck, 129 tests, and a smoke run that creates records, generates a document and photographs six screens in both themes |
 
 ### What exists
 
@@ -390,3 +390,47 @@ structural rather than a note in a file:
 
 **What phase 1 does not do:** `.docx` import or export. Neither is on the path to
 a signed PDF, and both are reasonable later additions.
+
+
+### Session 1, part 9: phase 2, reminders
+
+Today and Reminders screens, recurring paperwork, computed suggestions, and one
+daily notification. The app now opens on Today rather than Clients.
+
+**The recurrence set is deliberately small**: once, every N days, weeks, months
+or years, and the quarter end. Anything wider is phase 5, which has `rrule`. A
+half-built recurrence engine is worse than none, because a subtly wrong calendar
+is worse than a missing one.
+
+**All date maths is on `YYYY-MM-DD` strings in UTC.** A calendar date has no time
+and no zone. The moment one goes through a local `Date`, the 1st becomes the 31st
+at 23:00 somewhere and the reminder fires on the wrong day twice a year. Tests
+cover both Brussels DST boundaries.
+
+**The anchor-day bug, which is the one to remember.** A monthly series set for
+the 31st clamps to 28 February. If the next step advances from the clamped date,
+every later occurrence is on the 28th: the series walks backwards once and never
+recovers. Reminders therefore store an `anchorDay`, derived from the due date on
+create and recomputed whenever the pattern or date changes. A subagent reported
+this as already handled when it was not; the test that walks Jan 31 to May 31 is
+what actually proves it.
+
+**Completing a recurring reminder** rolls it forward past everything missed
+rather than landing on the oldest occurrence, and the completion log records the
+date that was *due*, not the day it was ticked. That is the difference between
+"did I file Q1" and "did I touch this recently".
+
+**The seeded Belgian paperwork leans early and says so.** Bureau does not know
+anyone's filing deadlines; every seeded reminder carries a note saying to confirm
+the date once. A wrong date asserted confidently is worse than a prompt to check.
+Seeding also moves the first occurrence forward past today, so a fresh install in
+November does not open with four overdue reminders from earlier in the year.
+
+**Suggestions are computed, never stored**, so one disappears when the situation
+changes instead of leaving a stale row to clean up. An invoice suggestion carries
+a link to wherever invoicing happens and nothing more, per decision 9.
+
+**One notification a day, summarising.** Not one per reminder. An app that fires
+five notifications on launch gets its notifications switched off, and then the
+feature is worth nothing. `lastNotifiedOn` is persisted so a restart does not
+repeat it.

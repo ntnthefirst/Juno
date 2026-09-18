@@ -13,7 +13,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb, type Db } from "../db";
 import { clients, projects, referenceItems, reminders } from "../db/schema";
-import { formatEuros, todayIsoDate } from "./document-context";
+import { formatDate, formatEuros, todayIsoDate } from "./document-context";
 import { SEED_REMINDERS, type SeedReminder } from "./reminders-seed";
 import * as settings from "./settings";
 import { addDays, compare, nextOccurrence } from "./recurrence";
@@ -75,9 +75,8 @@ export async function invoiceSuggestions(
 			key: `invoice:${row.project.id}`,
 			title: `Invoice ${row.client.name} for ${row.project.name}`,
 			notes:
-				`${row.project.name} is marked ${row.status!.label.toLowerCase()} and has an agreed ` +
-				`value of ${formatEuros(row.project.agreedValueCents)}. Bureau does not raise invoices; ` +
-				`this is a prompt to do it wherever you normally do.`,
+				`Marked ${row.status!.label.toLowerCase()}, agreed value ` +
+				`${formatEuros(row.project.agreedValueCents)}. Bureau does not raise invoices.`,
 			category: "invoice" as const,
 			dueOn: today,
 			clientId: row.client.id,
@@ -120,7 +119,7 @@ export async function deadlineSuggestions(
 		.map((row) => ({
 			key: `deadline:${row.project.id}`,
 			title: `${row.project.name} is due for ${row.client.name}`,
-			notes: `The project's due date is ${row.project.dueOn}.`,
+			notes: `The project's due date is ${formatDate(row.project.dueOn)}.`,
 			category: "other" as const,
 			dueOn: row.project.dueOn!,
 			clientId: row.client.id,

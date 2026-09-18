@@ -274,3 +274,43 @@ NAPI binaries and supports encryption without a compiler.
 
 Pin Drizzle's minor version and read its changelog before upgrading, because the
 shim depends on how its better-sqlite3 session calls the driver.
+
+## 19. Templates are HTML, rendered to PDF. `.docx` is an export, not the source.
+
+Amends decision 8, which had `docxtemplater` filling the existing `.docx`
+contracts and `printToPDF` rendering HTML templates, without saying how a filled
+`.docx` was supposed to become the PDF that gets signed.
+
+It cannot, without an external converter. Turning `.docx` into PDF means
+LibreOffice, a print service, or a paid API. LibreOffice is a several hundred
+megabyte dependency that has to be installed separately and driven by spawning a
+process, which breaks the promise that Bureau is one installer that works
+offline. There is no pure-JavaScript `.docx` to PDF renderer worth trusting with
+a contract's layout.
+
+So the canonical template body is **HTML**, with a small documented placeholder
+syntax. The pipeline is one path, entirely inside Electron:
+
+```
+template HTML + record data  ->  rendered HTML
+rendered HTML  ->  printToPDF  ->  PDF
+PDF + signature PNG  ->  pdf-lib  ->  signed PDF with an audit page
+```
+
+What this costs: the legal text is edited as HTML rather than in Word. That is a
+real loss for a non-technical owner and an acceptable one here, since the person
+editing it writes software. Templates are stored in the database and edited in
+the app, so a text editor is not required either.
+
+What it buys: one rendering path, no external binary, identical output on every
+machine, and page layout that is actually controllable, which Word round-trips
+are not.
+
+`.docx` is not gone, it is demoted. Importing one to bootstrap a template body,
+and exporting a generated document as `.docx` for a client who asks, are both
+reasonable later additions. Neither is on the path to a signed PDF.
+
+**Client data is escaped on the way into the template.** A client called
+`<script>` or a note containing HTML must not become markup. The renderer escapes
+every substituted value, and a template that genuinely needs markup in a value
+has to opt in per field.

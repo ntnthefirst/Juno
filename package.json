@@ -28,6 +28,7 @@
 		"@fontsource/jetbrains-mono": "^5.2.5",
 		"drizzle-orm": "^0.44.2",
 		"electron-updater": "^6.8.3",
+		"pdf-lib": "^1.17.1",
 		"react": "^19.2.4",
 		"react-dom": "^19.2.4",
 		"uuid": "^11.1.0"

@@ -15,6 +15,7 @@ import { registerContactsIpc } from "./contacts";
 import { registerLockIpc } from "./lock";
 import { registerProjectsIpc } from "./projects";
 import { registerReferenceIpc } from "./reference";
+import { registerRemindersIpc } from "./reminders";
 import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
 import { registerTemplatesIpc } from "./templates";
@@ -34,4 +35,5 @@ export function registerAllIpc(): void {
 	registerBackupIpc();
 	registerTemplatesIpc();
 	registerDocumentsIpc();
+	registerRemindersIpc();
 }

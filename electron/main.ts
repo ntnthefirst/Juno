@@ -18,6 +18,8 @@ import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
+import * as notifications from "./main/services/notifications";
+import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
@@ -72,6 +74,11 @@ if (!app.requestSingleInstanceLock()) {
 			);
 		}
 
+		const reminderSeed = await ensureRemindersSeeded(db);
+		if (reminderSeed.created) {
+			console.log(`Reminders: ${reminderSeed.created} created`);
+		}
+
 		// Restoring a backup replaces the live file, which cannot happen while the
 		// connection holds it open. The service asks for the close rather than
 		// importing app lifecycle code itself.
@@ -85,6 +92,9 @@ if (!app.requestSingleInstanceLock()) {
 
 		const window = createMainWindow(isDev);
 		lock.watchWindow(window);
+
+		// One summary a day, never one per reminder. See services/notifications.ts.
+		if (!process.env.BUREAU_SMOKE) notifications.start();
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
 		// its database, rather than proving only that it compiles.
@@ -203,6 +213,7 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	app.on("before-quit", () => {
+		notifications.stop();
 		closeDb();
 	});
 }

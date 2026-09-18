@@ -22,6 +22,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
+	AccountingTool,
 	AppSettings,
 	LockSettings,
 	OwnerProfile,
@@ -49,12 +50,16 @@ const DEFAULT_OWNER: OwnerProfile = {
 	iban: "",
 };
 
+const DEFAULT_ACCOUNTING: AccountingTool = { name: "", url: "" };
+
 const DEFAULTS: AppSettings = {
 	theme: "system",
 	lock: DEFAULT_LOCK,
 	owner: DEFAULT_OWNER,
 	seedVersion: 0,
 	signaturePath: null,
+	accountingTool: DEFAULT_ACCOUNTING,
+	lastNotifiedOn: null,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -127,6 +132,12 @@ function normalise(raw: unknown): AppSettings {
 		owner,
 		seedVersion: Math.max(0, int(raw.seedVersion, DEFAULTS.seedVersion)),
 		signaturePath: typeof raw.signaturePath === "string" && raw.signaturePath ? raw.signaturePath : null,
+		lastNotifiedOn:
+			typeof raw.lastNotifiedOn === "string" && raw.lastNotifiedOn ? raw.lastNotifiedOn : null,
+		accountingTool: {
+			name: str(isRecord(raw.accountingTool) ? raw.accountingTool.name : undefined, ""),
+			url: str(isRecord(raw.accountingTool) ? raw.accountingTool.url : undefined, ""),
+		},
 	};
 }
 
@@ -205,6 +216,24 @@ export async function setLock(patch: Partial<LockSettings>): Promise<LockSetting
 }
 
 /** The seed version already applied to this installation. See seed.ts. */
+export async function getLastNotifiedOn(): Promise<string | null> {
+	return read().lastNotifiedOn;
+}
+
+export async function setLastNotifiedOn(day: string | null): Promise<void> {
+	write({ ...read(), lastNotifiedOn: day });
+}
+
+export async function getAccountingTool(): Promise<AccountingTool> {
+	return read().accountingTool;
+}
+
+export async function setAccountingTool(patch: Partial<AccountingTool>): Promise<AccountingTool> {
+	const current = read();
+	return write({ ...current, accountingTool: { ...current.accountingTool, ...patch } })
+		.accountingTool;
+}
+
 export async function getSignaturePath(): Promise<string | null> {
 	return read().signaturePath;
 }

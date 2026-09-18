@@ -194,6 +194,18 @@ export interface AppSettings {
 	seedVersion: number;
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
+	/**
+	 * Where invoicing actually happens. Bureau never raises an invoice; an invoice
+	 * reminder links here instead. See decision 9.
+	 */
+	accountingTool: AccountingTool;
+	/** The last day the daily summary was sent, so a restart does not repeat it. */
+	lastNotifiedOn: IsoDate | null;
+}
+
+export interface AccountingTool {
+	name: string;
+	url: string;
 }
 
 /* --------------------------------------------------------------------- lock */
@@ -331,4 +343,89 @@ export interface SignDocumentInput {
 	signerRole?: string | null;
 	/** Leave out to sign without an image, which is still timestamped and hashed. */
 	useSignatureImage?: boolean;
+}
+
+/* ---------------------------------------------------------------- reminders */
+
+export type RecurrencePattern = "once" | "days" | "weeks" | "months" | "years" | "quarter_end";
+
+export type ReminderCategory = "paperwork" | "invoice" | "payment" | "renewal" | "other";
+
+/** Which pile a reminder is in today. Computed, never stored. */
+export type ReminderBucket = "overdue" | "today" | "soon" | "later" | "snoozed" | "done";
+
+export interface Reminder extends Standard {
+	title: string;
+	notes: string | null;
+	dueOn: IsoDate;
+	pattern: RecurrencePattern;
+	interval: number;
+	anchorDay: number | null;
+	/** How many days before the due date it starts asking. */
+	leadDays: number;
+	category: ReminderCategory;
+	clientId: string | null;
+	clientName: string | null;
+	projectId: string | null;
+	projectName: string | null;
+	documentId: string | null;
+	snoozedUntil: IsoDate | null;
+	completedAt: Iso | null;
+	lastCompletedOn: IsoDate | null;
+	/** Where to go to actually do it. Bureau never does it. See decision 9. */
+	actionUrl: string | null;
+	actionLabel: string | null;
+	isSystem: boolean;
+	bucket: ReminderBucket;
+	recurrenceLabel: string;
+}
+
+export interface ReminderInput {
+	title: string;
+	dueOn: IsoDate;
+	notes?: string | null;
+	pattern?: RecurrencePattern;
+	interval?: number;
+	anchorDay?: number | null;
+	leadDays?: number;
+	category?: ReminderCategory;
+	clientId?: string | null;
+	projectId?: string | null;
+	documentId?: string | null;
+	actionUrl?: string | null;
+	actionLabel?: string | null;
+}
+
+export type ReminderPatch = Partial<ReminderInput>;
+
+export interface ReminderListQuery {
+	actionableOnly?: boolean;
+	includeDone?: boolean;
+	clientId?: string;
+	category?: ReminderCategory;
+}
+
+/**
+ * Worked out from the records rather than stored, so it disappears when the
+ * situation that produced it changes. Accepting one writes a real reminder.
+ */
+export interface ReminderSuggestion {
+	key: string;
+	title: string;
+	notes: string;
+	category: ReminderCategory;
+	dueOn: IsoDate;
+	clientId: string | null;
+	projectId: string | null;
+	actionUrl: string | null;
+	actionLabel: string | null;
+}
+
+export interface ReminderCompletion {
+	id: string;
+	reminderId: string;
+	/** The date the occurrence was due, not the date it was ticked. */
+	dueOn: IsoDate;
+	completedAt: Iso;
+	note: string | null;
 }

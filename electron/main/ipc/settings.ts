@@ -28,6 +28,8 @@ export async function applyStoredTheme(): Promise<ThemeSetting> {
 }
 
 export function registerSettingsIpc(): void {
+	ipcMain.handle("settings.getAccountingTool", () => settings.getAccountingTool());
+	ipcMain.handle("settings.setAccountingTool", (_event, patch) => settings.setAccountingTool(patch));
 	ipcMain.handle("settings.getSignaturePath", () => signature.getPath());
 	ipcMain.handle("settings.getSignatureImage", () => signature.getDataUrl());
 	ipcMain.handle("settings.chooseSignature", () => signature.choose());

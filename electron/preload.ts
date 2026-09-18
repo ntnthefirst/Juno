@@ -72,6 +72,8 @@ const api: BureauApi = {
 		clearSignature: () => call("settings.clearSignature"),
 		getTheme: () => call("settings.getTheme"),
 		setTheme: (theme) => call("settings.setTheme", theme),
+		getAccountingTool: () => call("settings.getAccountingTool"),
+		setAccountingTool: (patch) => call("settings.setAccountingTool", patch),
 		getOwner: () => call("settings.getOwner"),
 		setOwner: (patch) => call("settings.setOwner", patch),
 	},
@@ -127,6 +129,22 @@ const api: BureauApi = {
 		signatures: (documentId) => call("documents.signatures", documentId),
 		openPdf: (id) => call("documents.openPdf", id),
 		revealPdf: (id) => call("documents.revealPdf", id),
+	},
+
+	reminders: {
+		list: (query) => call("reminders.list", query),
+		get: (id) => call("reminders.get", id),
+		create: (input) => call("reminders.create", input),
+		update: (id, patch) => call("reminders.update", id, patch),
+		complete: (id, note) => call("reminders.complete", id, note),
+		snooze: (id, until) => call("reminders.snooze", id, until),
+		reopen: (id) => call("reminders.reopen", id),
+		remove: (id) => call("reminders.remove", id),
+		restore: (id) => call("reminders.restore", id),
+		history: (id) => call("reminders.history", id),
+		suggestions: () => call("reminders.suggestions"),
+		accept: (suggestion) => call("reminders.accept", suggestion),
+		openAction: (id) => call("reminders.openAction", id),
 	},
 };
 

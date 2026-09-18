@@ -15,6 +15,13 @@
       "when": 1789698690417,
       "tag": "0001_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789712245077,
+      "tag": "0002_reminders",
+      "breakpoints": true
     }
   ]
 }

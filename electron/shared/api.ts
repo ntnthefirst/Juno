@@ -23,6 +23,14 @@ import type {
 	DocumentTemplatePatch,
 	GenerateDocumentInput,
 	GenerateDocumentResult,
+	IsoDate,
+	AccountingTool,
+	Reminder,
+	ReminderCompletion,
+	ReminderInput,
+	ReminderListQuery,
+	ReminderPatch,
+	ReminderSuggestion,
 	SignDocumentInput,
 	BackupInfo,
 	Client,
@@ -126,6 +134,9 @@ export interface BureauApi {
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
 		getOwner(): Promise<OwnerProfile>;
 		setOwner(patch: Partial<OwnerProfile>): Promise<OwnerProfile>;
+		/** Where invoicing happens. Invoice reminders link here; Bureau never bills. */
+		getAccountingTool(): Promise<AccountingTool>;
+		setAccountingTool(patch: Partial<AccountingTool>): Promise<AccountingTool>;
 	};
 
 	lock: {
@@ -194,6 +205,26 @@ export interface BureauApi {
 		/** Opens the PDF in whatever the OS uses for one. */
 		openPdf(id: string): Promise<void>;
 		revealPdf(id: string): Promise<void>;
+	};
+
+	reminders: {
+		list(query?: ReminderListQuery): Promise<Reminder[]>;
+		get(id: string): Promise<Reminder | null>;
+		create(input: ReminderInput): Promise<Reminder>;
+		update(id: string, patch: ReminderPatch): Promise<Reminder>;
+		/** A one-off finishes. A recurring one rolls forward to its next occurrence. */
+		complete(id: string, note?: string | null): Promise<Reminder>;
+		snooze(id: string, until: IsoDate): Promise<Reminder>;
+		reopen(id: string): Promise<Reminder>;
+		remove(id: string): Promise<Reminder>;
+		restore(id: string): Promise<Reminder>;
+		history(id: string): Promise<ReminderCompletion[]>;
+		/** Computed from the records, never stored. */
+		suggestions(): Promise<ReminderSuggestion[]>;
+		/** Turns a suggestion into a real reminder. */
+		accept(suggestion: ReminderSuggestion): Promise<Reminder>;
+		/** Opens a reminder's action link in the real browser. */
+		openAction(id: string): Promise<void>;
 	};
 }
 

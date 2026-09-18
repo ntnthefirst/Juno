@@ -1,5 +1,6 @@
 import { BrowserWindow, shell } from "electron";
 import { join } from "node:path";
+import { MAIL_FRAME_ORIGIN } from "../../shared/types";
 import { APP_ORIGIN } from "../scheme";
 
 const DEV_URL = "http://localhost:5173";
@@ -27,6 +28,9 @@ function contentSecurityPolicy(isDev: boolean): string {
 		"base-uri 'none'",
 		"form-action 'none'",
 		"frame-ancestors 'none'",
+		// The one frame the app may show: a message body, on its own origin,
+		// with its own policy. See main/scheme.ts.
+		`frame-src ${MAIL_FRAME_ORIGIN}`,
 	].join("; ");
 }
 
@@ -54,6 +58,13 @@ export function createMainWindow(isDev: boolean): BrowserWindow {
 	});
 
 	window.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+		// A message body arrives with its own, stricter policy from the scheme
+		// handler. Stamping the application's policy on it too would add
+		// frame-ancestors 'none' and block the very frame it is meant for.
+		if (details.url.startsWith(`${MAIL_FRAME_ORIGIN}/`)) {
+			callback({ responseHeaders: details.responseHeaders });
+			return;
+		}
 		callback({
 			responseHeaders: {
 				...details.responseHeaders,

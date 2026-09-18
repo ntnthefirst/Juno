@@ -42,6 +42,18 @@ import type {
 	ContactPatch,
 	LockSettings,
 	LockState,
+	MailAccount,
+	MailAccountInput,
+	MailAccountPatch,
+	MailConnectionTest,
+	MailFolder,
+	MailMessage,
+	MailMessageBody,
+	MailSecurity,
+	MailSyncStatus,
+	MailThread,
+	MailThreadListQuery,
+	MailThreadSummary,
 	Project,
 	ProjectInput,
 	ProjectPatch,
@@ -225,6 +237,61 @@ export interface BureauApi {
 		accept(suggestion: ReminderSuggestion): Promise<Reminder>;
 		/** Opens a reminder's action link in the real browser. */
 		openAction(id: string): Promise<void>;
+	};
+
+	mail: {
+		accounts: {
+			list(): Promise<MailAccount[]>;
+			get(id: string): Promise<MailAccount | null>;
+			/** The password goes in here and is never readable again. */
+			create(input: MailAccountInput): Promise<MailAccount>;
+			update(id: string, patch: MailAccountPatch): Promise<MailAccount>;
+			/** Also forgets the password. Messages stay until a purge. */
+			remove(id: string): Promise<MailAccount>;
+			/**
+			 * Tries the settings without saving. Leave the password out to test an
+			 * existing account with its stored one.
+			 */
+			test(input: {
+				id?: string;
+				imapHost?: string;
+				imapPort?: number;
+				imapSecurity?: MailSecurity;
+				username?: string;
+				password?: string;
+			}): Promise<MailConnectionTest>;
+		};
+		folders: {
+			list(accountId: string): Promise<MailFolder[]>;
+			setSyncEnabled(id: string, enabled: boolean): Promise<MailFolder>;
+		};
+		sync: {
+			/** One account, or every enabled one. Resolves when the run is over. */
+			run(accountId?: string): Promise<MailSyncStatus[]>;
+			status(): Promise<MailSyncStatus[]>;
+			/** Progress, pushed by the main process while a sync runs. */
+			onChange(listener: (status: MailSyncStatus) => void): () => void;
+		};
+		threads: {
+			list(query?: MailThreadListQuery): Promise<MailThreadSummary[]>;
+			get(id: string): Promise<MailThread | null>;
+			linkClient(id: string, clientId: string): Promise<MailThreadSummary>;
+			unlinkClient(id: string): Promise<MailThreadSummary>;
+			countForClient(clientId: string): Promise<number>;
+		};
+		messages: {
+			get(id: string): Promise<MailMessage | null>;
+			/** Beside the frame: text, blocked-image count and links. See MAIL_FRAME_ORIGIN. */
+			body(id: string): Promise<MailMessageBody | null>;
+		};
+		attachments: {
+			/** Shows the file in the file manager. Never opens it. */
+			reveal(id: string): Promise<void>;
+			/** Copies it wherever the person chooses. Null when they cancel. */
+			save(id: string): Promise<string | null>;
+		};
+		/** Opens a link from a message in the real browser, after a protocol check. */
+		openLink(url: string): Promise<void>;
 	};
 }
 

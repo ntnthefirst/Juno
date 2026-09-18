@@ -14,7 +14,7 @@
  */
 import { contextBridge, ipcRenderer } from "electron";
 import type { BureauApi } from "./shared/api";
-import type { LockState } from "./shared/types";
+import type { LockState, MailSyncStatus } from "./shared/types";
 
 const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
 	ipcRenderer.invoke(channel, ...args) as Promise<T>;
@@ -145,6 +145,49 @@ const api: BureauApi = {
 		suggestions: () => call("reminders.suggestions"),
 		accept: (suggestion) => call("reminders.accept", suggestion),
 		openAction: (id) => call("reminders.openAction", id),
+	},
+
+	mail: {
+		accounts: {
+			list: () => call("mail.accounts.list"),
+			get: (id) => call("mail.accounts.get", id),
+			create: (input) => call("mail.accounts.create", input),
+			update: (id, patch) => call("mail.accounts.update", id, patch),
+			remove: (id) => call("mail.accounts.remove", id),
+			test: (input) => call("mail.accounts.test", input),
+		},
+		folders: {
+			list: (accountId) => call("mail.folders.list", accountId),
+			setSyncEnabled: (id, enabled) => call("mail.folders.setSyncEnabled", id, enabled),
+		},
+		sync: {
+			run: (accountId) => call("mail.sync.run", accountId),
+			status: () => call("mail.sync.status"),
+			onChange: (listener) => {
+				const handler = (_event: Electron.IpcRendererEvent, status: MailSyncStatus) =>
+					listener(status);
+				ipcRenderer.on("mail.syncChanged", handler);
+				return () => {
+					ipcRenderer.off("mail.syncChanged", handler);
+				};
+			},
+		},
+		threads: {
+			list: (query) => call("mail.threads.list", query),
+			get: (id) => call("mail.threads.get", id),
+			linkClient: (id, clientId) => call("mail.threads.linkClient", id, clientId),
+			unlinkClient: (id) => call("mail.threads.unlinkClient", id),
+			countForClient: (clientId) => call("mail.threads.countForClient", clientId),
+		},
+		messages: {
+			get: (id) => call("mail.messages.get", id),
+			body: (id) => call("mail.messages.body", id),
+		},
+		attachments: {
+			reveal: (id) => call("mail.attachments.reveal", id),
+			save: (id) => call("mail.attachments.save", id),
+		},
+		openLink: (url) => call("mail.openLink", url),
 	},
 };
 

@@ -13,6 +13,7 @@ import { registerClientsIpc } from "./clients";
 import { registerDocumentsIpc } from "./documents";
 import { registerContactsIpc } from "./contacts";
 import { registerLockIpc } from "./lock";
+import { registerMailIpc } from "./mail";
 import { registerProjectsIpc } from "./projects";
 import { registerReferenceIpc } from "./reference";
 import { registerRemindersIpc } from "./reminders";
@@ -36,4 +37,5 @@ export function registerAllIpc(): void {
 	registerTemplatesIpc();
 	registerDocumentsIpc();
 	registerRemindersIpc();
+	registerMailIpc();
 }

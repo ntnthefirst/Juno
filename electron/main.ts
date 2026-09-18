@@ -12,7 +12,8 @@ import { app, BrowserWindow, nativeTheme } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
-import { backupsDir, databasePath, documentsDir, userDataDir } from "./main/db/paths";
+import { backupsDir, databasePath, documentsDir, mailDir, userDataDir } from "./main/db/paths";
+import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
@@ -21,6 +22,11 @@ import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import * as notifications from "./main/services/notifications";
 import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
+import { configureCredentialStore } from "./main/services/mail-credentials";
+import { openImapSource } from "./main/services/mail-imap";
+import { configureMailboxSource } from "./main/services/mail-source";
+import * as mailSync from "./main/services/mail-sync";
+import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
 import { createMainWindow } from "./main/windows/main-window";
@@ -47,6 +53,13 @@ if (!app.requestSingleInstanceLock()) {
 		settings.configureSettings(userDataDir());
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
 		configureDocuments(documentsDir());
+		configureMailThreads(mailDir());
+		// Sync never starts while locked and stops at the next step when the lock
+		// comes on, per decision 15.
+		mailSync.configureMailSync({ mailDir: mailDir(), isPaused: () => lock.isLocked() });
+		configureMailboxSource(openImapSource);
+		// safeStorage is usable now that the app is ready, and not before.
+		configureCredentialStore(safeStorageCredentialStore);
 
 		const db = openDb(databasePath());
 
@@ -88,13 +101,17 @@ if (!app.requestSingleInstanceLock()) {
 
 		registerAllIpc();
 
-		if (!isDev) registerAppScheme(join(app.getAppPath(), "dist"));
+		// In development only the mail host is served; the window comes from Vite.
+		registerAppScheme(isDev ? null : join(app.getAppPath(), "dist"));
 
 		const window = createMainWindow(isDev);
 		lock.watchWindow(window);
 
 		// One summary a day, never one per reminder. See services/notifications.ts.
-		if (!process.env.BUREAU_SMOKE) notifications.start();
+		if (!process.env.BUREAU_SMOKE) {
+			notifications.start();
+			mailSync.startScheduler();
+		}
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
 		// its database, rather than proving only that it compiles.
@@ -113,6 +130,9 @@ if (!app.requestSingleInstanceLock()) {
 						// and the database exactly as a person clicking would. Verifying the
 						// interface against a mock would prove nothing about any of them.
 						if (process.env.BUREAU_SMOKE_DEMO) {
+							// No server in a smoke run: the sync reads from a mailbox in memory.
+							const { openSmokeMailbox } = await import("./main/smoke-mailbox");
+							configureMailboxSource(openSmokeMailbox);
 							const created = await window.webContents.executeJavaScript(`(async () => {
 								const b = window.bureau;
 								const statuses = await b.reference.getSet("client_status");
@@ -156,6 +176,14 @@ if (!app.requestSingleInstanceLock()) {
 									await b.projects.update(bodhiProjects[0].id, { statusId: delivered.id });
 								}
 
+								// Phase 3: an account through the bridge, then a sync against the
+								// in-memory mailbox the main process swapped in above. This is
+								// what exercises the credential store, the scheme host and the
+								// reader's frame policy.
+								await b.mail.accounts.create({ email: "hallo@bureau.test", label: "Bureau", imapHost: "imap.bureau.test", password: "smoke" });
+								const synced = await b.mail.sync.run();
+								if (synced.some((s) => s.phase !== "done")) throw new Error("Smoke: mail sync did not finish: " + JSON.stringify(synced));
+
 								return (await b.clients.list()).length;
 							})()`);
 							console.log(`SMOKE_DEMO clients=${created}`);
@@ -181,7 +209,7 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Documents", "Templates", "Settings"] : ["Clients"];
+							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Mail", "Documents", "Templates", "Settings"] : ["Clients"];
 							for (const screen of screens) {
 								const clicked = await window.webContents.executeJavaScript(
 									`(() => { const b = [...document.querySelectorAll("nav button")]
@@ -190,9 +218,43 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
 								await new Promise((r) => setTimeout(r, 800));
+								if (screen === "Mail") {
+									// Opens the newest thread, so the reader and its frame are in
+									// the picture, and checks the frame actually loaded a body.
+									const mailResponses: { url: string; statusCode: number }[] = [];
+									window.webContents.session.webRequest.onCompleted({ urls: ["app://mail/*"] }, (details) => {
+										mailResponses.push({ url: details.url, statusCode: details.statusCode });
+									});
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const row = document.querySelector("ul li button");
+											if (!row) return "no rows";
+											row.click();
+											await new Promise((r) => setTimeout(r, 1200));
+											return document.querySelector("iframe") ? "ok" : "no frame";
+										})()`,
+									);
+									if (opened !== "ok") throw new Error(`Smoke: mail reader ${opened}`);
+									// A frame the CSP refused would sit on about:blank. One that
+									// navigated to the mail origin proves the scheme host answered
+									// and the frame-src rule let it through.
+									const mailFrame = window.webContents.mainFrame.framesInSubtree.find((f) =>
+										f.url.startsWith("app://mail/message/"),
+									);
+									if (!mailFrame) throw new Error("Smoke: the message frame did not load from app://mail");
+									// The frame is sandboxed, so nothing can be asked of its document,
+									// which is the point. The request log says whether the scheme
+									// host answered it with a body.
+									const served = mailResponses.find((r) => r.url === mailFrame.url);
+									if (!served || served.statusCode !== 200) {
+										throw new Error(`Smoke: the message frame got ${served?.statusCode ?? "no response"}`);
+									}
+									console.log(`SMOKE_DEMO mail frame=${mailFrame.url}`);
+									await new Promise((r) => setTimeout(r, 400));
+								}
 								// Settings is taller than the window, so the lower sections are
 								// photographed too rather than assumed to render.
-								const offsets = screen === "Settings" ? [0, 1, 2] : [0];
+								const offsets = screen === "Settings" ? [0, 1, 2, 3, 4, 5] : [0];
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;
 									await window.webContents.executeJavaScript(
@@ -233,6 +295,7 @@ if (!app.requestSingleInstanceLock()) {
 
 	app.on("before-quit", () => {
 		notifications.stop();
+		mailSync.stopScheduler();
 		closeDb();
 	});
 }

@@ -46,11 +46,21 @@ import type {
 	MailAccountInput,
 	MailAccountPatch,
 	MailConnectionTest,
+	MailDraftInput,
+	MailDraftPatch,
 	MailFolder,
 	MailMessage,
 	MailMessageBody,
+	MailOutboxCounts,
+	MailOutboxListQuery,
+	MailOutboxMessage,
+	MailReplySeed,
 	MailSecurity,
 	MailSyncStatus,
+	MailTemplate,
+	MailTemplateInput,
+	MailTemplatePatch,
+	MailTemplateRender,
 	MailThread,
 	MailThreadListQuery,
 	MailThreadSummary,
@@ -260,6 +270,16 @@ export interface BureauApi {
 				username?: string;
 				password?: string;
 			}): Promise<MailConnectionTest>;
+			/** The outgoing side, the same way. Nothing is sent. */
+			testSmtp(input: {
+				id?: string;
+				smtpHost?: string | null;
+				smtpPort?: number;
+				smtpSecurity?: MailSecurity;
+				smtpUsername?: string | null;
+				username?: string;
+				password?: string;
+			}): Promise<MailConnectionTest>;
 		};
 		folders: {
 			list(accountId: string): Promise<MailFolder[]>;
@@ -292,6 +312,38 @@ export interface BureauApi {
 		};
 		/** Opens a link from a message in the real browser, after a protocol check. */
 		openLink(url: string): Promise<void>;
+		templates: {
+			list(): Promise<MailTemplate[]>;
+			get(id: string): Promise<MailTemplate | null>;
+			create(input: MailTemplateInput): Promise<MailTemplate>;
+			update(id: string, patch: MailTemplatePatch): Promise<MailTemplate>;
+			remove(id: string): Promise<MailTemplate>;
+			/** Fills a template against a client and project. Stores nothing. */
+			render(input: {
+				templateId: string;
+				clientId?: string | null;
+				projectId?: string | null;
+				extras?: Record<string, string>;
+			}): Promise<MailTemplateRender>;
+		};
+		outbox: {
+			list(query?: MailOutboxListQuery): Promise<MailOutboxMessage[]>;
+			get(id: string): Promise<MailOutboxMessage | null>;
+			counts(accountId?: string): Promise<MailOutboxCounts>;
+			createDraft(input: MailDraftInput): Promise<MailOutboxMessage>;
+			updateDraft(id: string, patch: MailDraftPatch): Promise<MailOutboxMessage>;
+			/** The addresses, subject and quote a reply starts from. */
+			replySeed(messageId: string, all: boolean): Promise<MailReplySeed>;
+			/** The person's press. Queues the message; the sender picks it up at once. */
+			send(id: string): Promise<MailOutboxMessage>;
+			/** Approves what an agent prepared. Only a person can reach this. */
+			approve(id: string): Promise<MailOutboxMessage>;
+			cancel(id: string): Promise<MailOutboxMessage>;
+			retry(id: string): Promise<MailOutboxMessage>;
+			remove(id: string): Promise<MailOutboxMessage>;
+			/** State changes, pushed by the sender as it works. */
+			onChange(listener: (message: MailOutboxMessage) => void): () => void;
+		};
 	};
 }
 

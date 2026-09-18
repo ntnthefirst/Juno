@@ -14,7 +14,7 @@
  */
 import { contextBridge, ipcRenderer } from "electron";
 import type { BureauApi } from "./shared/api";
-import type { LockState, MailSyncStatus } from "./shared/types";
+import type { LockState, MailOutboxMessage, MailSyncStatus } from "./shared/types";
 
 const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
 	ipcRenderer.invoke(channel, ...args) as Promise<T>;
@@ -155,6 +155,7 @@ const api: BureauApi = {
 			update: (id, patch) => call("mail.accounts.update", id, patch),
 			remove: (id) => call("mail.accounts.remove", id),
 			test: (input) => call("mail.accounts.test", input),
+			testSmtp: (input) => call("mail.accounts.testSmtp", input),
 		},
 		folders: {
 			list: (accountId) => call("mail.folders.list", accountId),
@@ -188,6 +189,35 @@ const api: BureauApi = {
 			save: (id) => call("mail.attachments.save", id),
 		},
 		openLink: (url) => call("mail.openLink", url),
+		templates: {
+			list: () => call("mail.templates.list"),
+			get: (id) => call("mail.templates.get", id),
+			create: (input) => call("mail.templates.create", input),
+			update: (id, patch) => call("mail.templates.update", id, patch),
+			remove: (id) => call("mail.templates.remove", id),
+			render: (input) => call("mail.templates.render", input),
+		},
+		outbox: {
+			list: (query) => call("mail.outbox.list", query),
+			get: (id) => call("mail.outbox.get", id),
+			counts: (accountId) => call("mail.outbox.counts", accountId),
+			createDraft: (input) => call("mail.outbox.createDraft", input),
+			updateDraft: (id, patch) => call("mail.outbox.updateDraft", id, patch),
+			replySeed: (messageId, all) => call("mail.outbox.replySeed", messageId, all),
+			send: (id) => call("mail.outbox.send", id),
+			approve: (id) => call("mail.outbox.approve", id),
+			cancel: (id) => call("mail.outbox.cancel", id),
+			retry: (id) => call("mail.outbox.retry", id),
+			remove: (id) => call("mail.outbox.remove", id),
+			onChange: (listener) => {
+				const handler = (_event: Electron.IpcRendererEvent, message: MailOutboxMessage) =>
+					listener(message);
+				ipcRenderer.on("mail.outboxChanged", handler);
+				return () => {
+					ipcRenderer.off("mail.outboxChanged", handler);
+				};
+			},
+		},
 	},
 };
 

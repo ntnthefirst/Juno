@@ -22,10 +22,15 @@ import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import * as notifications from "./main/services/notifications";
 import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
+import * as documentActions from "./main/services/document-actions";
 import { configureCredentialStore } from "./main/services/mail-credentials";
 import { openImapSource } from "./main/services/mail-imap";
 import { configureMailboxSource } from "./main/services/mail-source";
+import * as mailSend from "./main/services/mail-send";
+import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
 import * as mailSync from "./main/services/mail-sync";
+import { ensureMailTemplatesSeeded } from "./main/services/mail-templates";
+import { configureMailTransport } from "./main/services/mail-transport";
 import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
@@ -58,6 +63,13 @@ if (!app.requestSingleInstanceLock()) {
 		// comes on, per decision 15.
 		mailSync.configureMailSync({ mailDir: mailDir(), isPaused: () => lock.isLocked() });
 		configureMailboxSource(openImapSource);
+		configureMailTransport(smtpTransport, imapSentAppender);
+		// The sender pauses with the lock too, and renders a PDF for an attached
+		// document through the same path the documents screen uses.
+		mailSend.configureMailSend({
+			isPaused: () => lock.isLocked(),
+			renderDocumentPdf: async (id) => (await documentActions.renderPdf(id)).pdfPath,
+		});
 		// safeStorage is usable now that the app is ready, and not before.
 		configureCredentialStore(safeStorageCredentialStore);
 
@@ -87,6 +99,13 @@ if (!app.requestSingleInstanceLock()) {
 			);
 		}
 
+		const mailTemplateSeed = await ensureMailTemplatesSeeded(db);
+		if (mailTemplateSeed.created || mailTemplateSeed.updated) {
+			console.log(
+				`Mail templates: ${mailTemplateSeed.created} created, ${mailTemplateSeed.updated} updated`,
+			);
+		}
+
 		const reminderSeed = await ensureRemindersSeeded(db);
 		if (reminderSeed.created) {
 			console.log(`Reminders: ${reminderSeed.created} created`);
@@ -111,6 +130,7 @@ if (!app.requestSingleInstanceLock()) {
 		if (!process.env.BUREAU_SMOKE) {
 			notifications.start();
 			mailSync.startScheduler();
+			mailSend.startScheduler();
 		}
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
@@ -131,8 +151,9 @@ if (!app.requestSingleInstanceLock()) {
 						// interface against a mock would prove nothing about any of them.
 						if (process.env.BUREAU_SMOKE_DEMO) {
 							// No server in a smoke run: the sync reads from a mailbox in memory.
-							const { openSmokeMailbox } = await import("./main/smoke-mailbox");
+							const { openSmokeMailbox, smokeTransport, smokeAppender } = await import("./main/smoke-mailbox");
 							configureMailboxSource(openSmokeMailbox);
+							configureMailTransport(smokeTransport, smokeAppender);
 							const created = await window.webContents.executeJavaScript(`(async () => {
 								const b = window.bureau;
 								const statuses = await b.reference.getSet("client_status");
@@ -180,13 +201,37 @@ if (!app.requestSingleInstanceLock()) {
 								// in-memory mailbox the main process swapped in above. This is
 								// what exercises the credential store, the scheme host and the
 								// reader's frame policy.
-								await b.mail.accounts.create({ email: "hallo@bureau.test", label: "Bureau", imapHost: "imap.bureau.test", password: "smoke" });
+								await b.settings.setOwner({ businessName: "Bureau", contactName: "Nathan", email: "hallo@bureau.test", city: "Gent" });
+								const mailAccount = await b.mail.accounts.create({ email: "hallo@bureau.test", label: "Bureau", imapHost: "imap.bureau.test", smtpHost: "smtp.bureau.test", password: "smoke" });
 								const synced = await b.mail.sync.run();
 								if (synced.some((s) => s.phase !== "done")) throw new Error("Smoke: mail sync did not finish: " + JSON.stringify(synced));
+
+								// Phase 4: a cover mail from a template with the document attached,
+								// sent by a person, and a second one an agent would have to wait on.
+								const coverTemplate = (await b.mail.templates.list()).find((t) => t.key === "contract_cover");
+								const rendered = await b.mail.templates.render({ templateId: coverTemplate.id, clientId: made[0].id, extras: { title: "de ontwikkelovereenkomst" } });
+								const draft = await b.mail.outbox.createDraft({
+									accountId: mailAccount.id, to: [{ name: "Laura", address: "laura@obet.be" }], subject: rendered.subject,
+									bodyText: rendered.bodyText, bodyHtml: rendered.bodyHtml, clientId: made[0].id, templateId: coverTemplate.id,
+									documentIds: [gen.document.id],
+								});
+								await b.mail.outbox.send(draft.id);
+								await b.mail.outbox.createDraft({
+									accountId: mailAccount.id, to: [{ name: null, address: "info@noir.be" }], subject: "Even navragen",
+									bodyText: "Dag,\\n\\nIs de offerte goed ontvangen?\\n\\nGroeten", clientId: made[2].id,
+								});
 
 								return (await b.clients.list()).length;
 							})()`);
 							console.log(`SMOKE_DEMO clients=${created}`);
+							// The sender is not scheduled in a smoke run, so it is asked directly,
+							// and the row has to come out the other side as sent.
+							const sentCount = await mailSend.processQueue();
+							const outboxRows = await (await import("./main/services/mail-outbox")).list({ states: ["sent"] });
+							if (sentCount !== 1 || outboxRows.length !== 1 || outboxRows[0]!.attachments.length !== 1) {
+								throw new Error(`Smoke: the outbox did not send the cover mail: ${JSON.stringify(outboxRows)}`);
+							}
+							console.log(`SMOKE_DEMO outbox sent=${outboxRows[0]!.messageId}`);
 							window.webContents.reload();
 							await new Promise((r) => {
 								window.webContents.once("did-finish-load", () => setTimeout(r, 900));
@@ -209,15 +254,33 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Mail", "Documents", "Templates", "Settings"] : ["Clients"];
+							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Mail", "Outbox", "Documents", "Templates", "Settings"] : ["Clients"];
 							for (const screen of screens) {
+								// Outbox is a view inside Mail rather than a sidebar entry.
+								const sidebarEntry = screen === "Outbox" ? "Mail" : screen;
 								const clicked = await window.webContents.executeJavaScript(
 									`(() => { const b = [...document.querySelectorAll("nav button")]
-										.find((el) => el.textContent.trim() === ${JSON.stringify(screen)});
+										.find((el) => el.textContent.trim() === ${JSON.stringify(sidebarEntry)});
 										if (b) b.click(); return Boolean(b); })()`,
 								);
 								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
 								await new Promise((r) => setTimeout(r, 800));
+								if (screen === "Outbox") {
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Outbox"));
+											if (!nav) return "no outbox entry";
+											nav.click();
+											await new Promise((r) => setTimeout(r, 600));
+											const row = document.querySelector("ul li button");
+											if (!row) return "no rows";
+											row.click();
+											await new Promise((r) => setTimeout(r, 600));
+											return "ok";
+										})()`,
+									);
+									if (opened !== "ok") throw new Error(`Smoke: outbox ${opened}`);
+								}
 								if (screen === "Mail") {
 									// Opens the newest thread, so the reader and its frame are in
 									// the picture, and checks the frame actually loaded a body.
@@ -296,6 +359,7 @@ if (!app.requestSingleInstanceLock()) {
 	app.on("before-quit", () => {
 		notifications.stop();
 		mailSync.stopScheduler();
+		mailSend.stopScheduler();
 		closeDb();
 	});
 }

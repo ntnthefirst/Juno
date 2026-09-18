@@ -4,9 +4,11 @@
  * The smoke run has no server, and a run that never syncs proves nothing about
  * the scheme host, the frame policy or the reader. Three messages are enough
  * to exercise threading, an HTML body with a blocked image and a link, and an
- * attachment on disk. Never loaded outside the smoke run.
+ * attachment on disk. The transport at the bottom accepts anything, so the
+ * outbox can be driven end to end as well. Never loaded outside the smoke run.
  */
 import type { MailboxSource, RemoteHeader } from "./services/mail-source";
+import type { MailTransport, SentAppender } from "./services/mail-transport";
 
 interface Sample {
 	uid: number;
@@ -174,3 +176,21 @@ export async function openSmokeMailbox(): Promise<MailboxSource> {
 		},
 	};
 }
+
+/** A transport that accepts everything and remembers it, for the smoke run. */
+export const smokeTransport: MailTransport = {
+	async verify() {
+		return;
+	},
+	async send(_connection, message) {
+		return {
+			raw: Buffer.from(`smoke:${message.messageId}`),
+			accepted: message.to.map((a) => a.address),
+			rejected: [],
+		};
+	},
+};
+
+export const smokeAppender: SentAppender = async () => {
+	return;
+};

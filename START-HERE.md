@@ -4,7 +4,9 @@
 then read [BUILD-LOG.md](BUILD-LOG.md), then start work.**
 
 Bureau is a working Electron desktop app. Phases 0, 1 and 2 of [PLAN.md](PLAN.md)
-are complete. It builds, packages, installs and runs.
+are complete and phase 3, the mail client, is built and proven against a fake
+mailbox but not yet against a real account. It builds, packages, installs and
+runs.
 
 ```bash
 npm install
@@ -21,10 +23,12 @@ npm run dev
 | **Reminders** | Grouped by bucket, recurring, snooze and complete, one daily notification |
 | **Clients** | Clients, contacts and projects, with search and undo |
 | **Documents** | Generated from templates, rendered to PDF, signed with an audit page |
+| **Mail** | IMAP accounts pulled into SQLite, read-only. Threads, a sandboxed reader, search, client linking |
 | **Templates** | The contract texts, editable, with a live preview |
-| **Settings** | Theme, lock, reference data, owner details, signature, accounting link, backup |
+| **Settings** | Theme, lock, reference data, owner details, accounting link, mail accounts, signature, backup |
 
-Not built: mail (phase 3), calendar (phase 5), the MCP server itself (phase 6).
+Not built: mail sending (phase 4), calendar (phase 5), the MCP server itself
+(phase 6).
 The MCP **tool descriptors** exist for every service already, so phase 6 is
 assembly rather than archaeology.
 
@@ -33,15 +37,15 @@ assembly rather than archaeology.
 | File | Why |
 | --- | --- |
 | [BUILD-LOG.md](BUILD-LOG.md) | **Start here.** Where things stand, every deviation from the plan, and every trap found the hard way |
-| [TODO.md](TODO.md) | The two things waiting on Nathan, and what unblocks each |
+| [TODO.md](TODO.md) | The three things waiting on Nathan, and what unblocks each |
 | [PLAN.md](PLAN.md) | The phases, what ships in each, and the test for when one is done |
-| [docs/decisions.md](docs/decisions.md) | 19 decisions, each with what would have to change to reopen it |
+| [docs/decisions.md](docs/decisions.md) | 21 decisions, each with what would have to change to reopen it |
 | [CLAUDE.md](CLAUDE.md) | Loaded automatically. The rules index and the highest-value rules inline |
 
 `BUILD-LOG.md` first, because several things in `PLAN.md` and `decisions.md` have
 been amended by what actually happened. The log says which.
 
-## The four things that will bite you
+## The five things that will bite you
 
 1. **Tests run under Electron's Node, not the host's.** `node:sqlite` before Node
    24 has no `StatementSync.setReturnArrays`, which the storage shim needs, so
@@ -49,7 +53,8 @@ been amended by what actually happened. The log says which.
 2. **`npm run smoke` is the only check that proves the app runs.** A clean
    typecheck says nothing about the custom scheme, the preload bridge or the
    database. `BUREAU_SMOKE_DEMO=1 node scripts/smoke.mjs` creates real records
-   through the bridge and photographs six screens in both themes into `.smoke/`.
+   through the bridge, syncs a mailbox held in memory, and photographs seven
+   screens in both themes into `.smoke/`.
    Several real bugs were found only by looking at those images.
 3. **Storage is `node:sqlite` behind a shim**, not `better-sqlite3`, because this
    machine has no C++ compiler. Decision 18. Drizzle is assembled by hand in
@@ -58,19 +63,27 @@ been amended by what actually happened. The log says which.
 4. **Calendar dates are `YYYY-MM-DD` strings and the maths is UTC.** Never round
    trip one through a local `Date`. That is how a reminder fires on the wrong day
    twice a year.
+5. **A message body is never a string in the renderer.** It is served over
+   `app://mail/message/<id>` with its own policy into a frame with an empty
+   sandbox, and the window's CSP handler must leave those responses alone
+   (decision 20). Widening either policy to make something work is the wrong fix.
 
 ## What to do next
 
-**Phase 3, the IMAP mail client**, is next in the plan and is also the phase most
-likely to kill the project: 10 to 16 weeks, and long stretches with nothing
-visible. It is cut into four sub-ships (3a one account and INBOX, 3b all accounts
-and folders, 3c search, 3d client linking) precisely so a stall leaves a working
-app rather than a dead repo. If 3a runs past six weeks, stop and reconsider,
-including not building it.
+**Run the mail client against a real account.** Phase 3 exists end to end and
+every piece of it is tested against a mailbox held in memory, which is exactly
+the kind of server that never disagrees with the RFCs. Add one of the real
+accounts under Settings, sync it, and read the session entry in
+[BUILD-LOG.md](BUILD-LOG.md) for the open questions that run is meant to
+answer. Expect the first real inbox to find something the fake could not.
 
-Before starting it, the honest move is to install the packaged build and use
-phases 0 to 2 on real work for a while. A phase that is not being used is
-evidence the next phase is the wrong thing to build.
+The sync is read-only by construction: `MailboxSource` in
+`electron/main/services/mail-source.ts` has no method that writes, so a bug
+cannot become a lost message. Keep it that way until phase 4.
+
+After that, the honest move is still to install the packaged build and use
+phases 0 to 3 on real work for a while before starting phase 4. A phase that is
+not being used is evidence the next phase is the wrong thing to build.
 
 ## The two open decisions
 

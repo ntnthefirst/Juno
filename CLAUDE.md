@@ -29,8 +29,9 @@ all of it. No invoicing, no payments, no cloud requirement.
 Read [docs/decisions.md](docs/decisions.md) before proposing an alternative to
 any of these. It records what would have to stop being true for each to change.
 
-**Status: day zero.** No application code exists yet. Phase 0 in
-[PLAN.md](PLAN.md) is the next thing to build.
+**Status: phases 0 to 3 built.** Read [START-HERE.md](START-HERE.md) and then
+[BUILD-LOG.md](BUILD-LOG.md) before touching anything; several decisions above
+have been amended by what actually happened, and the log says which.
 
 ---
 

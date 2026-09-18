@@ -314,3 +314,57 @@ reasonable later additions. Neither is on the path to a signed PDF.
 `<script>` or a note containing HTML must not become markup. The renderer escapes
 every substituted value, and a template that genuinely needs markup in a value
 has to opt in per field.
+
+## 20. Mail bodies are sanitised with sanitize-html and shown from their own origin
+
+`.claude/rules/security.md` asks for a maintained sanitiser and names DOMPurify
+as the obvious choice. DOMPurify needs a DOM, which in the main process means
+jsdom, a large dependency whose only job here would be to host the sanitiser.
+`sanitize-html` parses with htmlparser2, needs no DOM, and is configured by
+allow-list. It is used with `parseStyleAttributes` off and the style
+declarations inspected by hand, because postcss rejects the odd but harmless
+markup mail clients produce.
+
+The sanitised body is not handed to the renderer as a string. It is served as a
+complete document over `app://mail/message/<id>` with its own
+Content-Security-Policy header (`default-src 'none'`, inline styles, `data:`
+images, and `https:` images only when the person asked for them on that one
+message), and the reader shows it in a frame with an empty `sandbox`. The main
+window's policy allows `frame-src app://mail` and nothing else. So a body is
+four layers away from the application: the sanitiser, the frame's own origin,
+the frame's own policy, and the sandbox. Links inside the body do not navigate;
+their targets are listed under the frame and opened through the shell after a
+protocol check.
+
+One consequence: the main window's `onHeadersReceived` must not stamp the
+application policy onto `app://mail` responses, because that policy carries
+`frame-ancestors 'none'` and would block the frame. The smoke run found this.
+
+**What would reverse this:** sanitize-html going unmaintained (switch to
+DOMPurify over a lightweight DOM), or Electron gaining a way to give a frame its
+own policy without a second origin.
+
+## 21. Mail search is FTS5, kept in sync by triggers, in the migration
+
+`data.md` section 7 says full-text search is a separate FTS5 virtual table kept
+in sync by the service. The table exists (`mail_messages_fts`), but it is kept
+in sync by three triggers on `mail_messages` rather than by service code,
+because a service that forgets to update the index in one code path produces a
+message that exists and cannot be found, and nothing tells you. Triggers cannot
+forget.
+
+Drizzle cannot declare a virtual table or a trigger, so both are appended by
+hand to the generated migration, `0003_mail.sql`, after the generated part. A
+future `drizzle-kit generate` does not know about them and will not drop them,
+because it diffs schema snapshots, not the database.
+
+The FTS table is standalone rather than an external-content table over
+`mail_messages`, because external content needs a stable integer rowid and a
+table with a text primary key can have its implicit rowids renumbered by
+`VACUUM`. The cost is that subject, text body and sender are stored twice. The
+HTML body is not indexed at all.
+
+Ranking has a shape SQLite insists on: `bm25()` and `snippet()` only work in
+the query that runs the MATCH, and the planner flattens a plain subquery into
+the surrounding join, which breaks that. The ranking lives in a `materialized`
+CTE for that reason, and `mail-threads.ts` says so.

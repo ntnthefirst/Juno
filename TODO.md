@@ -46,7 +46,18 @@ documented in `docs/templates.md`.
 That is what the banner is for, and why it is on the page rather than in a
 tooltip.
 
-## 3. Smaller things
+## 3. Sync a real mail account and report back - **you**
+
+Phase 3 has never seen a real IMAP server. Add one account under Settings,
+press Sync now, and note anything that looks wrong: a folder missing, a body
+that will not fetch, a thread split in two, a date off by a few hours. The
+questions the run is meant to answer are at the end of the session entry in
+`BUILD-LOG.md`.
+
+Nothing is written to the server, so the worst a bug can do is show something
+incorrectly on this machine.
+
+## 4. Smaller things
 
 - **Auto-update tests.** Nothing exercises the updater, because there is no feed.
 - **The MCP server itself.** The tool descriptors exist for every service, but
@@ -58,3 +69,9 @@ tooltip.
 - **Database encryption** is out of scope and would mean revisiting decision 18,
   since `node:sqlite` cannot do SQLCipher. The likely answer then is
   `@libsql/client`.
+- **Purging a removed mail account.** Removing an account forgets its password
+  and soft-deletes the row; its messages and attachments stay on disk until a
+  purge exists. That purge is a confirmed action, never an MCP tool.
+- **The reader frame has a fixed height** with a taller and shorter toggle,
+  because a sandboxed frame cannot report its content height. A resize handle
+  would be nicer.

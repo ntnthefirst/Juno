@@ -13,9 +13,9 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 
 | | |
 | --- | --- |
-| **Phase** | 0, 1 and 2 complete. Auto-update is the only phase 0 item left, blocked on the repository existing |
-| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings |
-| **Last verified** | lint, typecheck, 129 tests, and a smoke run that creates records, generates a document and photographs six screens in both themes |
+| **Phase** | 0, 1 and 2 complete. Phase 3 built through 3d and proven against a fake mailbox; not yet run against a real account. Auto-update is the only phase 0 item left, blocked on the repository existing |
+| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings, and a read-only mail client |
+| **Last verified** | lint, typecheck, 158 tests, and a smoke run that creates records, generates a document, syncs a mailbox held in memory, opens a message in the reader and photographs seven screens in both themes |
 
 ### What exists
 
@@ -434,3 +434,68 @@ a link to wherever invoicing happens and nothing more, per decision 9.
 five notifications on launch gets its notifications switched off, and then the
 feature is worth nothing. `lastNotifiedOn` is persisted so a restart does not
 repeat it.
+
+
+### Session 2: phase 3, the mail client
+
+Accounts with the password in safeStorage, IMAP sync into SQLite, a three-pane
+reader with the body in a sandboxed frame on its own origin, full-text search,
+and client linking. Built as one backend with the schema for all four sub-ships
+(3a to 3d), because a folder or a search index added later is a migration and a
+rewrite of the sync, and both are cheap now.
+
+**What has and has not been proven.** The whole path runs in `npm run smoke`
+against a mailbox held in memory (`electron/main/smoke-mailbox.ts`): the account
+goes in through the bridge, the credential lands in DPAPI, the sync threads and
+links three messages, an attachment is written to disk, and the reader's frame
+is served over `app://mail` with a 200. Eighteen service tests cover resume,
+UIDVALIDITY reset, deletion detection, flag refresh, the horizon, threading by
+Message-ID including a late-arriving root, manual links surviving a sync, and
+search. **Nothing has yet talked to a real IMAP server.** That is the next thing
+to do, with a real account, before anything else in this phase, because servers
+disagree with each other and a fake cannot disagree with anything.
+
+**Traps and findings:**
+
+- **Electron stamps the window's CSP onto every response of the session,
+  including the mail frame's.** `frame-ancestors 'none'` then blocks the very
+  frame it is meant for. `onHeadersReceived` now passes `app://mail` responses
+  through untouched, since the scheme handler set their policy. The smoke run
+  found this; nothing else could have.
+- **A sandboxed frame cannot be asked anything from the main process.**
+  `webFrame.executeJavaScript` is refused, which is correct. The smoke run proves
+  the frame loaded from the session's request log instead.
+- **`bm25()` and `snippet()` refuse to run outside the MATCH query**, and
+  SQLite's planner flattens a plain subquery into the join around it, so a query
+  that looks fine fails with "unable to use function bm25 in the requested
+  context". A `materialized` CTE keeps the ranking inside the full-text scan.
+  Decision 21.
+- **Soft-deleting messages must touch their threads.** The first cut left a
+  thread alive with no live messages after a server-side delete, and it showed
+  in the list with a stale count. Every removal now goes through one function
+  that recomputes the thread or retires it.
+- **A message can reference a root that has not arrived.** Two replies to an
+  absent original make two threads; when the original lands it references
+  neither, but both reference it. Threading therefore looks both ways, up the
+  References and down from this Message-ID, and merges what it finds.
+- **`--> statement-breakpoint` earns its keep.** The FTS triggers contain
+  semicolons; a migration runner splitting on semicolons would have broken on
+  the first one.
+- **Numeric escapes in a regex do not survive every editor.** A `\u0000` in a
+  character class became a literal NUL byte on the way through one, and a
+  shell heredoc collapsed doubled backslashes on the way through another, so a
+  regex that read correctly was silently a different regex. Character classes
+  for control characters now use `\p{Cc}`, which has no numeric escapes to
+  mangle, and every source file is checked for stray control bytes before a
+  commit.
+
+**What phase 3 does not do, on purpose:** any IMAP write. Read state, flags,
+moves and deletes are shown as the server has them and never sent back. The
+source interface has no method that could, so the promise is enforced by the
+type.
+
+**Open questions for the real-account run:** whether Gmail's `[Gmail]/All Mail`
+should default to synced (it is `\All`, mapped to archive, off by default), how
+the first sync of a 40,000-message inbox feels at 2,000 headers and 150 bodies
+per run, and whether STARTTLS on 143 is offered by any of the four providers.
+

@@ -751,3 +751,146 @@ export interface MailOutboxCounts {
 	drafts: number;
 }
 
+
+/* ----------------------------------------------------------------- calendar */
+
+/**
+ * A wall-clock reading with no zone: `YYYY-MM-DDTHH:MM:SS` for a timed event,
+ * `YYYY-MM-DD` for an all-day one. The zone is carried beside it.
+ */
+export type LocalDateTime = string;
+
+/** Which occurrences an edit or a removal of a recurring event reaches. */
+export type CalendarScope = "this" | "following" | "all";
+
+export interface CalendarException {
+	id: string;
+	eventId: string;
+	/** The start the rule produced, in the master's zone. RECURRENCE-ID in a file. */
+	occurrenceStartLocal: LocalDateTime;
+	cancelled: boolean;
+	title: string | null;
+	notes: string | null;
+	location: string | null;
+	startLocal: LocalDateTime | null;
+	endLocal: LocalDateTime | null;
+}
+
+/** A single event, or the master of a series, with its exceptions. */
+export interface CalendarEvent extends Standard {
+	title: string;
+	notes: string | null;
+	location: string | null;
+	allDay: boolean;
+	startLocal: LocalDateTime;
+	/** Exclusive. A one-day all-day event ends on the next date. */
+	endLocal: LocalDateTime;
+	/** IANA zone name. */
+	timezone: string;
+	/** RFC 5545 rule without the RRULE: prefix, null for a single event. */
+	rrule: string | null;
+	recurrenceLabel: string;
+	startUtc: Iso;
+	endUtc: Iso;
+	/** When the last occurrence ends, or null for a series with no end. */
+	seriesEndUtc: Iso | null;
+	icalUid: string;
+	clientId: string | null;
+	clientName: string | null;
+	projectId: string | null;
+	projectName: string | null;
+	exceptions: CalendarException[];
+}
+
+export interface CalendarEventInput {
+	title: string;
+	startLocal: LocalDateTime;
+	/** Left out: an hour after the start, or one day for an all-day event. */
+	endLocal?: LocalDateTime;
+	allDay?: boolean;
+	/** Left out: the machine's zone. */
+	timezone?: string;
+	rrule?: string | null;
+	notes?: string | null;
+	location?: string | null;
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+export type CalendarEventPatch = Partial<CalendarEventInput>;
+
+/** Where an edit or a removal of a recurring event applies. */
+export interface CalendarEditTarget {
+	scope: CalendarScope;
+	/** Required for this and following: the occurrence the person is looking at. */
+	occurrenceStartLocal?: LocalDateTime;
+}
+
+/** One occurrence of an event, as a range query returns it. */
+export interface CalendarOccurrence {
+	kind: "event";
+	eventId: string;
+	/** The key of this occurrence within its series. Equal to startLocal for a single event. */
+	occurrenceStartLocal: LocalDateTime;
+	title: string;
+	notes: string | null;
+	location: string | null;
+	allDay: boolean;
+	timezone: string;
+	startLocal: LocalDateTime;
+	endLocal: LocalDateTime;
+	startUtc: Iso;
+	endUtc: Iso;
+	isRecurring: boolean;
+	/** True when this occurrence was moved or edited on its own. */
+	isException: boolean;
+	rrule: string | null;
+	recurrenceLabel: string;
+	clientId: string | null;
+	clientName: string | null;
+	projectId: string | null;
+	projectName: string | null;
+}
+
+/** A reminder shown on the grid. Read-only here; it is managed on the Reminders screen. */
+export interface CalendarReminderItem {
+	kind: "reminder";
+	reminderId: string;
+	title: string;
+	dueOn: IsoDate;
+	bucket: ReminderBucket;
+	category: ReminderCategory;
+	clientName: string | null;
+}
+
+/** A project deadline shown on the grid. Read-only here; it is managed on the client. */
+export interface CalendarDeadlineItem {
+	kind: "deadline";
+	projectId: string;
+	projectName: string;
+	clientId: string;
+	clientName: string;
+	dueOn: IsoDate;
+}
+
+export type CalendarItem = CalendarOccurrence | CalendarReminderItem | CalendarDeadlineItem;
+
+export interface CalendarRangeQuery {
+	/** First calendar date of the range, inclusive. */
+	from: IsoDate;
+	/** Last calendar date of the range, inclusive. */
+	to: IsoDate;
+	/** The zone the dates are read in. Left out: the machine's zone. */
+	timezone?: string;
+	includeReminders?: boolean;
+	includeDeadlines?: boolean;
+	clientId?: string;
+	projectId?: string;
+}
+
+export interface CalendarImportResult {
+	created: number;
+	updated: number;
+	skipped: number;
+	warnings: string[];
+}

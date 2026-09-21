@@ -9,6 +9,7 @@
 import { installLockGuard } from "./lock-guard";
 import { registerAppIpc } from "./app";
 import { registerBackupIpc } from "./backup";
+import { registerCalendarIpc } from "./calendar";
 import { registerClientsIpc } from "./clients";
 import { registerDocumentsIpc } from "./documents";
 import { registerContactsIpc } from "./contacts";
@@ -38,4 +39,5 @@ export function registerAllIpc(): void {
 	registerDocumentsIpc();
 	registerRemindersIpc();
 	registerMailIpc();
+	registerCalendarIpc();
 }

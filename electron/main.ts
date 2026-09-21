@@ -221,6 +221,28 @@ if (!app.requestSingleInstanceLock()) {
 									bodyText: "Dag,\\n\\nIs de offerte goed ontvangen?\\n\\nGroeten", clientId: made[2].id,
 								});
 
+								// Phase 5: a weekly call anchored to this week's Tuesday, one
+								// occurrence moved, an all-day offsite, and the range read back
+								// through the same bridge the grid uses.
+								const monday = new Date();
+								monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+								const tuesday = new Date(monday); tuesday.setDate(monday.getDate() + 1);
+								const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+								const call = await b.calendar.create({
+									title: "Weekly call with obet", startLocal: ymd(tuesday) + "T10:00", endLocal: ymd(tuesday) + "T10:30",
+									rrule: "FREQ=WEEKLY;BYDAY=TU", clientId: made[0].id, location: "Video",
+								});
+								const nextTuesday = new Date(tuesday); nextTuesday.setDate(tuesday.getDate() + 7);
+								const thursday = new Date(tuesday); thursday.setDate(tuesday.getDate() + 9);
+								await b.calendar.update(call.id, { startLocal: ymd(thursday) + "T14:00" }, { scope: "this", occurrenceStartLocal: ymd(nextTuesday) + "T10:00:00" });
+								const wednesday = new Date(monday); wednesday.setDate(monday.getDate() + 2);
+								const friday = new Date(monday); friday.setDate(monday.getDate() + 5);
+								await b.calendar.create({ title: "Offsite, bodhi", startLocal: ymd(wednesday), endLocal: ymd(friday), allDay: true, clientId: made[1].id });
+								await b.calendar.create({ title: "Review proposal", startLocal: ymd(wednesday) + "T09:30", endLocal: ymd(wednesday) + "T11:00", clientId: made[3].id });
+								const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+								const onGrid = await b.calendar.list({ from: ymd(monday), to: ymd(sunday), includeReminders: true, includeDeadlines: true });
+								if (onGrid.filter((i) => i.kind === "event").length !== 3) throw new Error("Smoke: expected three events this week, got " + JSON.stringify(onGrid));
+
 								return (await b.clients.list()).length;
 							})()`);
 							console.log(`SMOKE_DEMO clients=${created}`);
@@ -254,10 +276,15 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Mail", "Outbox", "Documents", "Templates", "Settings"] : ["Clients"];
+							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Templates", "Settings"] : ["Clients"];
 							for (const screen of screens) {
-								// Outbox is a view inside Mail rather than a sidebar entry.
-								const sidebarEntry = screen === "Outbox" ? "Mail" : screen;
+								// A dialog left open by the previous step would sit over this one.
+								await window.webContents.executeJavaScript(
+									`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+								);
+								// Outbox is a view inside Mail; Week and the event form live inside
+								// Calendar. None of the three is a sidebar entry.
+								const sidebarEntry = screen === "Outbox" ? "Mail" : screen === "Week" || screen === "Event form" ? "Calendar" : screen;
 								const clicked = await window.webContents.executeJavaScript(
 									`(() => { const b = [...document.querySelectorAll("nav button")]
 										.find((el) => el.textContent.trim() === ${JSON.stringify(sidebarEntry)});
@@ -265,6 +292,71 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
 								await new Promise((r) => setTimeout(r, 800));
+								if (screen === "Calendar") {
+									// Opens a recurring occurrence, asks to edit it, answers the
+									// recurrence question, and checks the form came up for the whole
+									// series. Proves the detail, the scope dialog and the form chain
+									// through the real bridge before the grid is photographed.
+									const walked = await window.webContents.executeJavaScript(
+										`(async () => {
+											const chip = [...document.querySelectorAll("button[draggable=true]")].find((el) => el.textContent.includes("Weekly call"));
+											if (!chip) return "no recurring chip";
+											chip.click();
+											await new Promise((r) => setTimeout(r, 400));
+											const detail = document.querySelector("[role=dialog]");
+											if (!detail || !detail.textContent.includes("Every week on Tuesday")) return "no detail with the rule";
+											[...detail.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit").click();
+											await new Promise((r) => setTimeout(r, 500));
+											const ask = document.querySelector("[role=dialog]");
+											if (!ask || !ask.textContent.includes("This and following occurrences")) return "no scope question";
+											[...ask.querySelectorAll("button")].find((el) => el.textContent.trim() === "All occurrences").click();
+											await new Promise((r) => setTimeout(r, 500));
+											const form = document.querySelector("[role=dialog]");
+											if (!form || !form.textContent.includes("Edit all occurrences")) return "no series form";
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 300));
+											return document.querySelector("[role=dialog]") ? "form did not close" : "ok";
+										})()`,
+									);
+									if (walked !== "ok") throw new Error(`Smoke: calendar ${walked}`);
+								}
+								if (screen === "Event form") {
+									// Opens the form from a day cell, then switches it to weekly so
+									// the recurrence editor is in the picture.
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const month = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Month");
+											if (month) month.click();
+											await new Promise((r) => setTimeout(r, 400));
+											const add = document.querySelector("button[aria-label^='New event on']");
+											if (!add) return "no add button";
+											add.click();
+											await new Promise((r) => setTimeout(r, 500));
+											const dialog = document.querySelector("[role=dialog]");
+											if (!dialog) return "no dialog";
+											const repeats = [...dialog.querySelectorAll("select")].find((el) => [...el.options].some((o) => o.value === "WEEKLY"));
+											if (!repeats) return "no repeat select";
+											const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+											setter.call(repeats, "WEEKLY");
+											repeats.dispatchEvent(new Event("change", { bubbles: true }));
+											await new Promise((r) => setTimeout(r, 300));
+											return dialog.querySelector("[role=group][aria-label=Weekdays]") ? "ok" : "no weekday picker";
+										})()`,
+									);
+									if (opened !== "ok") throw new Error(`Smoke: event form ${opened}`);
+								}
+								if (screen === "Week") {
+									const switched = await window.webContents.executeJavaScript(
+										`(async () => {
+											const b = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Week");
+											if (!b) return "no week button";
+											b.click();
+											await new Promise((r) => setTimeout(r, 600));
+											return document.querySelector("[role=button][aria-label]") ? "ok" : "no events drawn";
+										})()`,
+									);
+									if (switched !== "ok") throw new Error(`Smoke: calendar week view ${switched}`);
+								}
 								if (screen === "Outbox") {
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {

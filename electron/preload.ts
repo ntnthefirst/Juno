@@ -147,6 +147,17 @@ const api: BureauApi = {
 		openAction: (id) => call("reminders.openAction", id),
 	},
 
+	calendar: {
+		list: (query) => call("calendar.list", query),
+		get: (id) => call("calendar.get", id),
+		create: (input) => call("calendar.create", input),
+		update: (id, patch, target) => call("calendar.update", id, patch, target),
+		remove: (id, target) => call("calendar.remove", id, target),
+		restore: (id) => call("calendar.restore", id),
+		exportIcs: (query) => call("calendar.exportIcs", query),
+		importIcs: () => call("calendar.importIcs"),
+	},
+
 	mail: {
 		accounts: {
 			list: () => call("mail.accounts.list"),

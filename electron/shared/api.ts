@@ -16,6 +16,13 @@
 import type {
 	AppInfo,
 	AppSettings,
+	CalendarEditTarget,
+	CalendarEvent,
+	CalendarEventInput,
+	CalendarEventPatch,
+	CalendarImportResult,
+	CalendarItem,
+	CalendarRangeQuery,
 	DocumentRecord,
 	DocumentSignature,
 	DocumentTemplate,
@@ -247,6 +254,26 @@ export interface BureauApi {
 		accept(suggestion: ReminderSuggestion): Promise<Reminder>;
 		/** Opens a reminder's action link in the real browser. */
 		openAction(id: string): Promise<void>;
+	};
+
+	calendar: {
+		/** Every occurrence between two dates, with reminders and deadlines when asked. */
+		list(query: CalendarRangeQuery): Promise<CalendarItem[]>;
+		get(id: string): Promise<CalendarEvent | null>;
+		create(input: CalendarEventInput): Promise<CalendarEvent>;
+		/**
+		 * A series needs a scope: this occurrence, this and following, or all.
+		 * Returns the event that now holds the edited occurrences, which for
+		 * "following" is a new series.
+		 */
+		update(id: string, patch: CalendarEventPatch, target?: CalendarEditTarget): Promise<CalendarEvent>;
+		/** The same scopes. "all" soft-deletes; the others change the series. */
+		remove(id: string, target?: CalendarEditTarget): Promise<CalendarEvent>;
+		restore(id: string): Promise<CalendarEvent>;
+		/** Asks where to save, writes the file. Null when the person cancels. */
+		exportIcs(query: CalendarRangeQuery): Promise<string | null>;
+		/** Asks for a file, reads it in. Null when the person cancels. */
+		importIcs(): Promise<CalendarImportResult | null>;
 	};
 
 	mail: {

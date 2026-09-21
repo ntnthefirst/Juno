@@ -88,3 +88,11 @@ the message, and a copy into Sent.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.
+- **No other calendar has read a Bureau .ics file yet.** Export a month, open
+  it in Google Calendar or Outlook, and check the moved occurrence of a
+  recurring event after the October change. Then import an Outlook export the
+  other way; its Windows zone names are handled through the file's VTIMEZONE,
+  which is tested against a hand-written one and not yet a real one.
+- **The Today screen does not list the day's events.** The calendar's agenda
+  view does. A "today" line on the Today screen is a small addition once the
+  calendar has been used for a while.

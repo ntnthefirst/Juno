@@ -3,10 +3,10 @@
 **If you are a session picking this up cold, this is the orientation. Read it,
 then read [BUILD-LOG.md](BUILD-LOG.md), then start work.**
 
-Bureau is a working Electron desktop app. Phases 0, 1 and 2 of [PLAN.md](PLAN.md)
-are complete. Phases 3 and 4, reading and sending mail, are built and proven
-against a fake mailbox and a fake transport, but neither has met a real server
-yet. It builds, packages, installs and runs.
+Bureau is a working Electron desktop app. Phases 0, 1, 2 and 5 of
+[PLAN.md](PLAN.md) are complete. Phases 3 and 4, reading and sending mail, are
+built and proven against a fake mailbox and a fake transport, but neither has
+met a real server yet. It builds, packages, installs and runs.
 
 ```bash
 npm install
@@ -24,12 +24,12 @@ npm run dev
 | **Clients** | Clients, contacts and projects, with search and undo |
 | **Documents** | Generated from templates, rendered to PDF, signed with an audit page |
 | **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. An outbox that sends over SMTP behind a confirmation gate, with reply, templates and document attachments |
+| **Calendar** | Events and recurring series with an IANA zone each, month, week and agenda views, reminders and project deadlines overlaid, drag to move and resize with the recurrence question asked, .ics in and out |
 | **Templates** | The contract texts and the mail templates, editable, with a live preview |
 | **Settings** | Theme, lock, reference data, owner details, accounting link, mail accounts, signature, backup |
 
-Not built: calendar (phase 5), the MCP server itself (phase 6).
-The MCP **tool descriptors** exist for every service already, so phase 6 is
-assembly rather than archaeology.
+Not built: the MCP server itself (phase 6). The MCP **tool descriptors** exist
+for every service already, so phase 6 is assembly rather than archaeology.
 
 ## Read these, in this order
 
@@ -44,7 +44,7 @@ assembly rather than archaeology.
 `BUILD-LOG.md` first, because several things in `PLAN.md` and `decisions.md` have
 been amended by what actually happened. The log says which.
 
-## The six things that will bite you
+## The seven things that will bite you
 
 1. **Tests run under Electron's Node, not the host's.** `node:sqlite` before Node
    24 has no `StatementSync.setReturnArrays`, which the storage shim needs, so
@@ -71,6 +71,13 @@ been amended by what actually happened. The log says which.
    has an IPC channel and no tool. Adding a tool that queues, or an adapter that
    says `actor: "user"` for anything but the window, is the one change that
    would make the rule in `.claude/rules/mcp.md` section 4 false.
+7. **A calendar event is a wall clock plus a zone, never an instant.**
+   `start_local` is `2026-09-22T10:00:00` and `timezone` is `Europe/Brussels`;
+   `start_utc` exists only so a range query can be indexed. A series is
+   expanded on the wall-clock values and each occurrence converted afterwards
+   (decision 23). Expanding from the UTC column is the bug that puts every
+   occurrence after the October change an hour off, and the test in
+   `calendar-recurrence.test.ts` named after that change is the one to keep.
 
 ## What to do next
 
@@ -88,8 +95,14 @@ The sync is read-only by construction: `MailboxSource` in
 write, the copy into Sent, lives on a separate appender in `mail-transport.ts`.
 Keep them apart.
 
+**Then open the calendar's export in another calendar.** Phase 5's done-when
+in PLAN.md ends with the moved occurrence sitting on the right hour after the
+October change when the file is opened elsewhere. The round trip is tested
+against Bureau's own reader; Google, Apple and Outlook have not read one of
+these files yet.
+
 After that, the honest move is to install the packaged build and use phases 0
-to 4 on real work for a while before starting phase 5. A phase that is not being
+to 5 on real work for a while before starting phase 6. A phase that is not being
 used is evidence the next phase is the wrong thing to build.
 
 ## The two open decisions

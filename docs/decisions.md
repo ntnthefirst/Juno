@@ -407,3 +407,40 @@ interface rather than on it, so the phase 3 promise stays enforced by the type.
 worker, say) that could not share the SQLite row as its source of truth. Then
 the gate would have to move to wherever the queue lives, and decision 5 would be
 the first thing to reopen.
+
+## 23. A calendar event is a wall clock in a zone, and exceptions are rows
+
+Phase 5 stores `start_local` and `end_local` as `YYYY-MM-DDTHH:MM:SS` with no
+zone suffix, beside an IANA `timezone`, and keeps `start_utc`, `end_utc` and
+`series_end_utc` only as an index for range queries. PLAN.md section 3 had
+sketched `starts_at` and `ends_at` as instants with a zone beside them; that
+shape is wrong for the one case the phase exists for. "10:00 every Tuesday in
+Brussels" is at 08:00Z until the clocks change and 09:00Z after, so a rule
+expanded from an instant lands every later occurrence an hour off. Expansion
+therefore runs in floating time, on the wall-clock values, and each occurrence
+is converted to an instant with the event's zone afterwards. `Intl` does the
+conversion; there is no zone table to bundle and no native module.
+
+Exceptions live in `calendar_event_exceptions`, keyed by the wall-clock start
+the rule produced, rather than in an `exdates` column and self-referencing
+override rows. One row per changed occurrence carries `cancelled` or the
+fields that differ, which is exactly what `EXDATE` and `RECURRENCE-ID` say in
+a file, so import and export are a mapping rather than a translation. Editing a
+series is three shapes and only three: `this` writes an exception, `following`
+splits the series (UNTIL on the old master, a fresh master from the split with
+the exceptions carried across), `all` changes the master and shifts the
+exception keys by the same delta. The question is asked in the interface and
+answered in the arguments; the service never guesses.
+
+`rrule` expands rules and `ical.js` reads and writes files, per decision 11.
+`rrule`'s own `tzid` option is not used: it depends on an optional library and
+misbehaves at the boundaries this decision exists to get right. Exported timed
+events carry a VTIMEZONE built from what `Intl` reports for the zone, sampled
+over the year and reduced to the yearly rule the transitions follow, so a
+reader without its own zone table still lands occurrences on the right hour.
+
+**What would reverse this:** a sync target that owns the recurrence model
+(CalDAV expands on the server; Google's API returns instances). Then Bureau's
+expansion becomes a cache of the server's and the exception rows become the
+server's overrides, and the file boundary in `calendar-ics.ts` becomes the sync
+boundary instead.

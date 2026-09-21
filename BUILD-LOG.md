@@ -13,9 +13,9 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 
 | | |
 | --- | --- |
-| **Phase** | 0 to 2 complete. Phases 3 and 4 built and proven against a fake mailbox and a fake transport; neither has met a real server yet. Auto-update is the only phase 0 item left, blocked on the repository existing |
-| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings, a mail client that reads, and an outbox that sends with a confirmation gate |
-| **Last verified** | lint, typecheck, 174 tests, and a smoke run that creates records, generates a document, syncs a mailbox held in memory, sends a cover mail with the document attached through a transport held in memory, opens a message in the reader and photographs eight screens in both themes |
+| **Phase** | 0 to 2 and 5 complete. Phases 3 and 4 built and proven against a fake mailbox and a fake transport; neither has met a real server yet. Auto-update is the only phase 0 item left, blocked on the repository existing |
+| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings, a mail client that reads, an outbox that sends with a confirmation gate, and a calendar with recurrence, overlays and .ics exchange |
+| **Last verified** | lint, typecheck, 232 tests, and a smoke run that creates records, generates a document, syncs a mailbox held in memory, sends a cover mail with the document attached through a transport held in memory, opens a message in the reader, schedules a recurring call and moves one occurrence, walks the calendar's detail, scope and form dialogs, and photographs eleven screens in both themes |
 
 ### What exists
 
@@ -122,6 +122,21 @@ build one.
 It ran `electron-builder install-app-deps`, which exists to rebuild native
 modules. With no native dependencies it does nothing. Put it back the moment a
 native dependency is added.
+
+### 5. Calendar events store a wall clock and a zone; exceptions are a table
+
+PLAN.md section 3 sketched `calendar_event` with `starts_at` and `ends_at` as
+instants, an `exdates` column and self-referencing override rows. Phase 5
+stores `start_local`, `end_local` and `timezone` instead, keeps the UTC
+columns only as a range index, and puts every cancelled or moved occurrence in
+`calendar_event_exceptions`, keyed by the start the rule produced. The reason
+is the DST case the phase is judged by, and the shape matches what an .ics
+file says. **Recorded as decision 23.**
+
+The tool list in PLAN.md section 4 named `calendar.agenda`, `calendar.freeBusy`
+and `calendar.move`. Agenda is `calendar.list_events` over a range, move is
+`calendar.update_event` with a new start, and free/busy is deferred with the
+rest of the invitation flow, as phase 5's own scope already said.
 
 ---
 
@@ -559,3 +574,78 @@ scheduled send, mail merge, and anything that tracks a recipient. The last one
 is permanent (PLAN.md, phase 4). Sent messages appear in the reader only after
 the Sent folder is synced; the outbox is the record until then.
 
+
+### Session 3: phase 5, the calendar
+
+Events and recurring series with an IANA zone each, month, week and agenda
+views, reminders and project deadlines as read-only overlays, drag to move and
+resize with the recurrence question asked every time, a link to a client or
+project, and .ics import and export. Built in the order the skill mandates:
+schema, three pure modules, the service, both adapters, the screen, tests.
+
+**The shape is decision 23.** An event is `start_local` plus `timezone`; the
+UTC columns index the range query and nothing else. A series is expanded by
+`rrule` in floating time and each occurrence converted afterwards with `Intl`,
+so a 10:00 Tuesday call is at 08:00Z in September and 09:00Z in November. The
+test named after the October change in `calendar-recurrence.test.ts` is the
+phase's done-when in code, and the round trip in `calendar-ics.test.ts` proves
+a moved occurrence comes back on the right hour after export and import.
+
+**What has and has not been proven.** Fifty-eight service tests cover the zone
+maths at both Brussels boundaries and in four other zones, expansion with
+cancelled and moved occurrences including one moved from outside the window
+into it, the three edit scopes, a COUNT counting down across a split, the
+overlays, the range query in a foreign zone, and export followed by import into
+an empty database. The smoke run creates a weekly call through the bridge,
+moves one occurrence, adds an all-day and a timed event, reads the week back,
+and walks the detail, scope and form dialogs before photographing month, week
+and the form in both themes. **No other calendar has read a Bureau .ics file
+yet**, and a real Outlook export has not been imported. That is the next run.
+
+**Traps and findings:**
+
+- **`rrule`'s `tzid` option is not the answer to DST.** It needs an optional
+  library and has open bugs at exactly the boundaries that matter. Driving the
+  library in floating time, where the Date's UTC fields hold wall-clock values,
+  costs one conversion per occurrence and nothing else. The UNTIL a stored
+  rule carries is in that floating form too, and is turned into real UTC only
+  at the file boundary.
+- **A weekly rule pinned to Tuesday and a series dragged to Wednesday
+  disagree.** Keeping `BYDAY=TU` put the first occurrence on the Wednesday and
+  every later one back on a Tuesday. `retargetRule` follows the start when the
+  rule named exactly the start's own weekday or month day, and leaves anything
+  more deliberate alone.
+- **A DTSTART the rule does not generate is undefined by the RFC** and shown
+  on its own day by every calendar people use. Bureau includes it too, or an
+  event created on a Monday with a Tuesday rule would vanish from the day it
+  was made on.
+- **A moved occurrence can be moved outside the window its slot is in.** The
+  first cut expanded the rule and applied exceptions to what came back, so an
+  occurrence moved two months forward disappeared from both months. Exceptions
+  are now walked separately from the rule, by their own dates.
+- **ical.js reports an unregistered IANA TZID as floating**, with the name
+  kept on the property's parameter. That is the right behaviour to lean on: the
+  wall clock is read as written and the zone comes from the parameter, and
+  `Intl` decides whether the name is real. A Windows zone name with a
+  VTIMEZONE in the file is converted through that VTIMEZONE and re-expressed in
+  the default zone, with a warning that says so.
+- **`UtcOffset.fromString("+0530")` yields five hours flat.** The offsets in a
+  generated VTIMEZONE are built from seconds instead, and the Kolkata test is
+  what caught it.
+- **The screenshot caught the toolbar.** The first cut put the New event
+  button 150px past the right edge of a 1900px window, with a horizontal
+  scrollbar as the only symptom. The overlay checkboxes became pressed toggles
+  and the file buttons lost their extension, which is also better copy.
+- **A scrolled grid and its header disagree by a scrollbar.** The week view's
+  day columns sat 16px left of their headings because only the body had a
+  scrollbar. `scrollbar-gutter: stable` on all three rows lines them up.
+- **The clock is impure, again.** Setting the anchor date from an effect that
+  watched `today` tripped `react-hooks/set-state-in-effect`; the first tick of
+  the clock timer sets it instead, which is the shape the rule wants.
+- **A Git Bash heredoc still collapses doubled backslashes.** The probe that
+  checked ical.js was written through the editor after two attempts through
+  the shell produced a real newline where a backslash-n escape was meant.
+
+**What phase 5 does not do, on purpose:** CalDAV, invitations, attendees,
+free/busy and shared calendars, all named as deferred in PLAN.md. The Today
+screen does not list events yet; the calendar's own agenda view does.

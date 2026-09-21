@@ -11,11 +11,11 @@ generates the documents you would otherwise retype, and exposes everything it ca
 do to an AI agent so the boring parts can be asked for instead of clicked
 through.
 
-**Status: phase 0, working.** The app builds, packages, installs and runs.
-Clients, contacts and projects can be created, edited, deleted and restored;
-reference data is seeded and editable; the lock screen works. What is built and
-what is not is tracked in [BUILD-LOG.md](BUILD-LOG.md); what comes next is in
-[PLAN.md](PLAN.md).
+**Status: phases 0 to 5 built.** The app builds, packages, installs and runs.
+Clients, documents, reminders, a mail client with an outbox, and a calendar with
+recurrence and .ics exchange are all in; mail has not yet met a real server.
+What is built and what is not is tracked in [BUILD-LOG.md](BUILD-LOG.md); what
+comes next is in [PLAN.md](PLAN.md).
 
 ---
 

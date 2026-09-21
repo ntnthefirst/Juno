@@ -4,7 +4,7 @@ type FieldProps = {
 	label: string;
 	value: string;
 	onChange: (value: string) => void;
-	type?: "text" | "email" | "tel" | "url" | "date" | "password" | "number";
+	type?: "text" | "email" | "tel" | "url" | "date" | "time" | "password" | "number";
 	placeholder?: string;
 	error?: string | null;
 	required?: boolean;

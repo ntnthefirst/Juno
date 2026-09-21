@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
+import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
@@ -53,6 +54,8 @@ export function App() {
 						<DocumentsScreen />
 					) : screen === "mail" ? (
 						<MailScreen />
+					) : screen === "calendar" ? (
+						<CalendarScreen />
 					) : screen === "templates" ? (
 						<TemplatesScreen />
 					) : screen === "settings" ? (

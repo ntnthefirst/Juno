@@ -56,8 +56,17 @@ import type {
 	AddressCandidate,
 	BackupInfo,
 	Client,
+	ClientAddress,
+	ClientAddressInput,
+	ClientAddressPatch,
+	ClientEmail,
+	ClientEmailInput,
+	ClientEmailPatch,
 	ClientInput,
 	ClientPatch,
+	ClientPhone,
+	ClientPhoneInput,
+	ClientPhonePatch,
 	ClientSummary,
 	Contact,
 	ContactInput,
@@ -147,6 +156,37 @@ export interface JunoApi {
 		restore(id: string): Promise<Contact>;
 		/** Clears the flag on every sibling, so exactly one can hold it. */
 		setPrimary(id: string): Promise<Contact>;
+	};
+
+	/**
+	 * A client's email addresses. The one created first becomes primary on its
+	 * own; after that, `isPrimary` only moves when asked.
+	 */
+	clientEmails: {
+		listForClient(clientId: string): Promise<ClientEmail[]>;
+		create(input: ClientEmailInput): Promise<ClientEmail>;
+		update(id: string, patch: ClientEmailPatch): Promise<ClientEmail>;
+		remove(id: string): Promise<ClientEmail>;
+		restore(id: string): Promise<ClientEmail>;
+		setPrimary(id: string): Promise<ClientEmail>;
+	};
+
+	clientPhones: {
+		listForClient(clientId: string): Promise<ClientPhone[]>;
+		create(input: ClientPhoneInput): Promise<ClientPhone>;
+		update(id: string, patch: ClientPhonePatch): Promise<ClientPhone>;
+		remove(id: string): Promise<ClientPhone>;
+		restore(id: string): Promise<ClientPhone>;
+		setPrimary(id: string): Promise<ClientPhone>;
+	};
+
+	clientAddresses: {
+		listForClient(clientId: string): Promise<ClientAddress[]>;
+		create(input: ClientAddressInput): Promise<ClientAddress>;
+		update(id: string, patch: ClientAddressPatch): Promise<ClientAddress>;
+		remove(id: string): Promise<ClientAddress>;
+		restore(id: string): Promise<ClientAddress>;
+		setPrimary(id: string): Promise<ClientAddress>;
 	};
 
 	projects: {

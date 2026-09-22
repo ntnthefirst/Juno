@@ -50,6 +50,13 @@
       "when": 1790079614021,
       "tag": "0006_agent",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790112154614,
+      "tag": "0007_client_contact_details",
+      "breakpoints": true
     }
   ]
 }

@@ -55,6 +55,33 @@ const api: JunoApi = {
 		setPrimary: (id) => call("contacts.setPrimary", id),
 	},
 
+	clientEmails: {
+		listForClient: (clientId) => call("clientEmails.listForClient", clientId),
+		create: (input) => call("clientEmails.create", input),
+		update: (id, patch) => call("clientEmails.update", id, patch),
+		remove: (id) => call("clientEmails.remove", id),
+		restore: (id) => call("clientEmails.restore", id),
+		setPrimary: (id) => call("clientEmails.setPrimary", id),
+	},
+
+	clientPhones: {
+		listForClient: (clientId) => call("clientPhones.listForClient", clientId),
+		create: (input) => call("clientPhones.create", input),
+		update: (id, patch) => call("clientPhones.update", id, patch),
+		remove: (id) => call("clientPhones.remove", id),
+		restore: (id) => call("clientPhones.restore", id),
+		setPrimary: (id) => call("clientPhones.setPrimary", id),
+	},
+
+	clientAddresses: {
+		listForClient: (clientId) => call("clientAddresses.listForClient", clientId),
+		create: (input) => call("clientAddresses.create", input),
+		update: (id, patch) => call("clientAddresses.update", id, patch),
+		remove: (id) => call("clientAddresses.remove", id),
+		restore: (id) => call("clientAddresses.restore", id),
+		setPrimary: (id) => call("clientAddresses.setPrimary", id),
+	},
+
 	projects: {
 		list: (query) => call("projects.list", query),
 		get: (id) => call("projects.get", id),

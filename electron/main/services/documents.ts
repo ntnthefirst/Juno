@@ -9,10 +9,60 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Client, Contact, Project } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
-import { clients, contacts, documents, projects, referenceItems } from "../db/schema";
+import {
+	clientAddresses,
+	clientEmails,
+	clientPhones,
+	clients,
+	contacts,
+	documents,
+	projects,
+	referenceItems,
+} from "../db/schema";
 import { buildContext, todayIsoDate } from "./document-context";
 import * as templates from "./document-templates";
 import * as settings from "./settings";
+
+/** The primary row of each, or null. A client need not have any of them yet. */
+function primaryDetails(clientId: string, db: Db) {
+	const primaryEmail =
+		db
+			.select()
+			.from(clientEmails)
+			.where(
+				and(
+					eq(clientEmails.clientId, clientId),
+					eq(clientEmails.isPrimary, true),
+					isNull(clientEmails.deletedAt),
+				),
+			)
+			.get() ?? null;
+	const primaryPhone =
+		db
+			.select()
+			.from(clientPhones)
+			.where(
+				and(
+					eq(clientPhones.clientId, clientId),
+					eq(clientPhones.isPrimary, true),
+					isNull(clientPhones.deletedAt),
+				),
+			)
+			.get() ?? null;
+	const primaryAddress =
+		db
+			.select()
+			.from(clientAddresses)
+			.where(
+				and(
+					eq(clientAddresses.clientId, clientId),
+					eq(clientAddresses.isPrimary, true),
+					isNull(clientAddresses.deletedAt),
+				),
+			)
+			.get() ?? null;
+	return { primaryEmail, primaryPhone, primaryAddress };
+}
 
 export interface DocumentRecord {
 	id: string;
@@ -154,6 +204,7 @@ export async function generate(
 	const context = buildContext({
 		owner,
 		client: client as unknown as Client,
+		...primaryDetails(client.id, db),
 		primaryContact: (primaryContact ?? null) as unknown as Contact | null,
 		project: (project ?? null) as unknown as Project | null,
 		extras: input.extras,
@@ -224,6 +275,7 @@ export async function previewContext(
 	return buildContext({
 		owner: await settings.getOwner(),
 		client: (client ?? { name: "" }) as unknown as Client,
+		...(client ? primaryDetails(client.id, db) : {}),
 		primaryContact: (primaryContact ?? null) as unknown as Contact | null,
 		project: (project ?? null) as unknown as Project | null,
 	});

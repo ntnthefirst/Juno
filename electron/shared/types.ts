@@ -31,15 +31,9 @@ export interface Client extends Standard {
 	name: string;
 	sortName: string;
 	statusId: string | null;
-	email: string | null;
-	phone: string | null;
 	website: string | null;
 	vatNumber: string | null;
-	addressLine1: string | null;
-	addressLine2: string | null;
-	postalCode: string | null;
-	city: string | null;
-	country: string | null;
+	/** Free text, Markdown. Rendered the way a calendar event's notes are. */
 	notes: string | null;
 }
 
@@ -48,7 +42,9 @@ export interface ClientSummary {
 	id: string;
 	name: string;
 	status: ReferenceItem | null;
+	/** The primary address's city, if there is one. */
 	city: string | null;
+	/** The primary email, if there is one. */
 	email: string | null;
 	projectCount: number;
 	openProjectCount: number;
@@ -59,6 +55,60 @@ export type ClientInput = Partial<
 > & { name: string };
 
 export type ClientPatch = Partial<Omit<Client, keyof Standard | "sortName">>;
+
+/**
+ * A client can carry several of each of these. `label` is free text rather
+ * than a fixed list ("Facturatie", "Kantoor Leuven", "Magazijn"), because the
+ * set of labels a business actually needs is not one Juno can predict. The
+ * first one added for a client becomes primary automatically; after that,
+ * `isPrimary` is only ever set explicitly.
+ */
+export interface ClientEmail extends Standard {
+	clientId: string;
+	email: string;
+	label: string | null;
+	isPrimary: boolean;
+}
+
+export type ClientEmailInput = Partial<Omit<ClientEmail, keyof Standard>> & {
+	clientId: string;
+	email: string;
+};
+
+export type ClientEmailPatch = Partial<Omit<ClientEmail, keyof Standard | "clientId">>;
+
+export interface ClientPhone extends Standard {
+	clientId: string;
+	phone: string;
+	label: string | null;
+	isPrimary: boolean;
+}
+
+export type ClientPhoneInput = Partial<Omit<ClientPhone, keyof Standard>> & {
+	clientId: string;
+	phone: string;
+};
+
+export type ClientPhonePatch = Partial<Omit<ClientPhone, keyof Standard | "clientId">>;
+
+export interface ClientAddress extends Standard {
+	clientId: string;
+	/** "Kantoor Leuven", "Magazijn". Most clients only need one, so this is optional. */
+	label: string | null;
+	addressLine1: string;
+	addressLine2: string | null;
+	postalCode: string | null;
+	city: string | null;
+	country: string | null;
+	isPrimary: boolean;
+}
+
+export type ClientAddressInput = Partial<Omit<ClientAddress, keyof Standard>> & {
+	clientId: string;
+	addressLine1: string;
+};
+
+export type ClientAddressPatch = Partial<Omit<ClientAddress, keyof Standard | "clientId">>;
 
 /* ----------------------------------------------------------------- contacts */
 

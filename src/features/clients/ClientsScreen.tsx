@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Client, ClientSummary, Contact, Project } from "@shared/types";
+import type {
+	Client,
+	ClientAddress,
+	ClientEmail,
+	ClientPhone,
+	ClientSummary,
+	Contact,
+	Project,
+} from "@shared/types";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
+import { ClientAddressPanel } from "./ClientAddressPanel";
 import { ClientDetail, StatusBadge } from "./ClientDetail";
+import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
+import { ClientPhonePanel } from "./ClientPhonePanel";
 import { ContactForm } from "./ContactForm";
 import { ProjectForm } from "./ProjectForm";
 
@@ -28,6 +39,11 @@ export function ClientsScreen() {
 	// that is too narrow to hold one.
 	const [contactForm, setContactForm] = useState<{ contact: Contact | null } | null>(null);
 	const [projectForm, setProjectForm] = useState<{ project: Project | null } | null>(null);
+	// Unlike contacts and projects, these are small enough to edit in a side
+	// panel next to the detail pane rather than taking over the screen.
+	const [emailPanel, setEmailPanel] = useState<{ email: ClientEmail | null } | null>(null);
+	const [phonePanel, setPhonePanel] = useState<{ phone: ClientPhone | null } | null>(null);
+	const [addressPanel, setAddressPanel] = useState<{ address: ClientAddress | null } | null>(null);
 	const [deleted, setDeleted] = useState<Client | null>(null);
 
 	const fetchRows = useCallback(
@@ -194,8 +210,47 @@ export function ClientsScreen() {
 							onDelete={(client) => void remove(client)}
 							onEditContact={(contact) => setContactForm({ contact })}
 							onEditProject={(project) => setProjectForm({ project })}
+							onEditEmail={(email) => setEmailPanel({ email })}
+							onEditPhone={(phone) => setPhonePanel({ phone })}
+							onEditAddress={(address) => setAddressPanel({ address })}
 						/>
 					</div>
+				) : null}
+
+				{emailPanel && selectedId ? (
+					<ClientEmailPanel
+						clientId={selectedId}
+						email={emailPanel.email}
+						onClose={() => setEmailPanel(null)}
+						onSaved={() => {
+							setEmailPanel(null);
+							bumpDetail();
+						}}
+					/>
+				) : null}
+
+				{phonePanel && selectedId ? (
+					<ClientPhonePanel
+						clientId={selectedId}
+						phone={phonePanel.phone}
+						onClose={() => setPhonePanel(null)}
+						onSaved={() => {
+							setPhonePanel(null);
+							bumpDetail();
+						}}
+					/>
+				) : null}
+
+				{addressPanel && selectedId ? (
+					<ClientAddressPanel
+						clientId={selectedId}
+						address={addressPanel.address}
+						onClose={() => setAddressPanel(null)}
+						onSaved={() => {
+							setAddressPanel(null);
+							bumpDetail();
+						}}
+					/>
 				) : null}
 			</div>
 

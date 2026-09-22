@@ -13,15 +13,9 @@ export const clients = sqliteTable(
 		/** Lowercased name, kept for case-insensitive sort and lookup. */
 		sortName: text("sort_name").notNull(),
 		statusId: text("status_id").references(() => referenceItems.id),
-		email: text("email"),
-		phone: text("phone"),
 		website: text("website"),
 		vatNumber: text("vat_number"),
-		addressLine1: text("address_line1"),
-		addressLine2: text("address_line2"),
-		postalCode: text("postal_code"),
-		city: text("city"),
-		country: text("country"),
+		/** Free text, Markdown. Rendered like a calendar event's notes. */
 		notes: text("notes"),
 	},
 	(t) => [
@@ -29,6 +23,74 @@ export const clients = sqliteTable(
 		index("clients_sort_name_idx").on(t.sortName),
 		index("clients_status_idx").on(t.statusId),
 		index("clients_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
+ * A client can have more than one of these, because a real business does: a
+ * general address, one for invoices, one a contact prefers. `label` is free
+ * text ("Facturatie", "Kantoor Leuven") rather than a fixed set, because the
+ * set a client actually needs is not one Juno can predict. Exactly one row
+ * should carry `isPrimary`, enforced in the service the same way a contact's
+ * primary flag is.
+ */
+export const clientEmails = sqliteTable(
+	"client_emails",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		email: text("email").notNull(),
+		label: text("label"),
+		isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+	},
+	(t) => [
+		index("client_emails_client_idx").on(t.clientId),
+		index("client_emails_owner_idx").on(t.ownerId),
+		index("client_emails_email_idx").on(t.email),
+		index("client_emails_deleted_idx").on(t.deletedAt),
+	],
+);
+
+export const clientPhones = sqliteTable(
+	"client_phones",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		phone: text("phone").notNull(),
+		label: text("label"),
+		isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+	},
+	(t) => [
+		index("client_phones_client_idx").on(t.clientId),
+		index("client_phones_owner_idx").on(t.ownerId),
+		index("client_phones_deleted_idx").on(t.deletedAt),
+	],
+);
+
+export const clientAddresses = sqliteTable(
+	"client_addresses",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		/** "Kantoor Leuven", "Magazijn". Not required: most clients have one address. */
+		label: text("label"),
+		addressLine1: text("address_line1").notNull(),
+		addressLine2: text("address_line2"),
+		postalCode: text("postal_code"),
+		city: text("city"),
+		country: text("country"),
+		isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+	},
+	(t) => [
+		index("client_addresses_client_idx").on(t.clientId),
+		index("client_addresses_owner_idx").on(t.ownerId),
+		index("client_addresses_deleted_idx").on(t.deletedAt),
 	],
 );
 

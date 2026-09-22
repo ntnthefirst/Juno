@@ -212,7 +212,12 @@ if (!app.requestSingleInstanceLock()) {
 									{ name: "bodhi", city: "Brugge", email: "info@bodhi.be", statusId: active.id },
 									{ name: "noir", city: "Antwerpen", statusId: active.id },
 									{ name: "hyge", city: "Leuven", statusId: lead.id },
-								]) made.push(await b.clients.create(c));
+								]) {
+									const client = await b.clients.create({ name: c.name, statusId: c.statusId });
+									if (c.email) await b.clientEmails.create({ clientId: client.id, email: c.email });
+									await b.clientAddresses.create({ clientId: client.id, addressLine1: "Kerkstraat 1", city: c.city });
+									made.push(client);
+								}
 								await b.contacts.create({ clientId: made[0].id, name: "Laura", role: "Zaakvoerder", email: "laura@obet.be", isPrimary: true });
 								const ps = await b.reference.getSet("project_status");
 								const running = ps.items.find((i) => i.key === "active") ?? ps.items[0];

@@ -13,9 +13,9 @@ and an entry per deviation from [PLAN.md](PLAN.md) or [docs/decisions.md](docs/d
 
 | | |
 | --- | --- |
-| **Phase** | 0 to 2 and 5 complete. Phases 3 and 4 built and proven against a fake mailbox and a fake transport; neither has met a real server yet. Auto-update is the only phase 0 item left, blocked on the repository existing |
-| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings, a mail client that reads, an outbox that sends with a confirmation gate, and a calendar with recurrence, overlays and .ics exchange |
-| **Last verified** | lint, typecheck, 232 tests, and a smoke run that creates records, generates a document, syncs a mailbox held in memory, sends a cover mail with the document attached through a transport held in memory, opens a message in the reader, schedules a recurring call and moves one occurrence, walks the calendar's detail, scope and form dialogs, and photographs eleven screens in both themes |
+| **Phase** | 0 to 2, 5 and 6 complete, except phase 6's in-app assistant panel, which waits on a model decision. Phases 3 and 4 built and proven against a fake mailbox and a fake transport; neither has met a real server yet. Auto-update is the only phase 0 item left, blocked on the repository existing |
+| **Runs?** | **Yes, including packaged.** Today, reminders, clients, documents with PDF and signing, templates, reference data, lock, backup, settings, a mail client that reads, an outbox that sends with a confirmation gate, a calendar with recurrence and .ics exchange, and an MCP server serving 99 tools behind an approval gate |
+| **Last verified** | lint, typecheck, 284 tests, and a smoke run that creates records, generates a document, syncs a mailbox held in memory, sends a cover mail through a transport held in memory, schedules a recurring call and moves one occurrence, parks an agent's call at the gate, stops an automation on a step that needs a person, starts the MCP bridge as a child process and speaks MCP to it over stdio, and photographs thirteen screens in both themes |
 
 ### What exists
 
@@ -649,3 +649,84 @@ yet**, and a real Outlook export has not been imported. That is the next run.
 **What phase 5 does not do, on purpose:** CalDAV, invitations, attendees,
 free/busy and shared calendars, all named as deferred in PLAN.md. The Today
 screen does not list events yet; the calendar's own agenda view does.
+
+
+### Session 4: phase 6, the agent surface
+
+The MCP server itself, the confirmation gate, the audit log, automations,
+cross-domain briefings, a wider search, and the Agent screen where requests
+are answered. The tool descriptors written since phase 0 are now served: 99
+tools, and phase 6 really was assembly rather than archaeology.
+
+**The shape is decision 24.** The server cannot be the app, because the
+database is open in one process and an MCP client spawns its server itself.
+So `scripts/mcp-bridge.mjs` is the server an agent starts, and it forwards over
+a named pipe to `electron/main/mcp/socket.ts`. The bridge holds no logic and no
+database handle, which is what makes it replaceable if a client ever learns to
+connect to something already running.
+
+**The gate is `agent_actions`.** A side-effectful call parks with its arguments
+and returns a pending action; approving runs it, and `approve` has an IPC
+channel and no tool. `mail.send` keeps decision 22's own gate rather than being
+wrapped in this one, and says so in its declaration with `gatedInService`, so
+the exception is visible where the rest of the flags are rather than as a
+special case in the host.
+
+**What has and has not been proven.** Fifty-two new tests: the gate parks,
+approves once, refuses an expired request and records every step; automations
+stop on a step that needs a person and pick up from the next one when it is
+answered; the briefings read across every domain. The host test is the one to
+keep: it drives the real registry against a real database and asserts that the
+declared flags are what actually happens, including that exactly one tool is
+gated in its service and that no tool unlocks or approves anything. The smoke
+run makes an agent call through the same host a socket call goes through, then
+starts the bridge as a child process and speaks MCP to it over stdio, listing
+99 tools and calling `briefing.today`. **No third-party MCP client has
+connected yet**: Claude Desktop or Claude Code pointed at the printed config is
+the next run, and it is also how the phase's done-when gets answered.
+
+**Traps and findings:**
+
+- **A daily automation would have run twice every night.** `run()` stamped
+  `lastRunOn` from `now().slice(0, 10)`, which is the UTC date, and `due()`
+  compares it against the local one. Between midnight and the offset those
+  disagree, so the trigger stayed due and fired again. It takes the local date
+  now, the scheduler passes the same one it matched on, and the test that
+  pins it sets the clock to 00:30 Brussels.
+- **The gate cannot import the registry and the registry cannot import the
+  gate.** The registry imports every tool file, which imports every service,
+  which is where the gate lives. The executor is injected at startup instead,
+  the same shape the mailbox source and the PDF renderer already use.
+- **A run that waits has to be woken by something.** An approval fires the
+  action listener, which resumes the run from the step after the one that was
+  approved. A rejection or an expiry ends the run instead, because continuing
+  past a refused step is exactly what "it does not skip" forbids. Cancelling a
+  waiting run rejects the step it was waiting on, or approving it later would
+  restart a run somebody stopped on purpose.
+- **The audit log is a digest plus a sentence, not the arguments.** Storing the
+  arguments would put a second copy of every mail body and client detail in a
+  table nobody thinks about. The digest tells two calls apart; the summary is a
+  bounded line written for a reader. The test asserts a value that was not in
+  the summary cannot be read back out of the log.
+- **A briefing that capitalises its first word renames the client.** The
+  headline for a client starts with their name, and a business called "obet" is
+  not "Obet". Callers supply the case; the joiner does not touch it.
+- **The sidebar label is no longer the whole button.** The Agent entry carries a
+  count, so the smoke's exact-match on `textContent` stopped finding it. It
+  matches the label now.
+- **`\n` written through the shell into a TypeScript string is a real
+  newline**, which the log already warns about for regexes and inner scripts.
+  It happened again in the bridge check in `main.ts`, and the way out was to
+  build the escape from a character code rather than type a backslash.
+- **The SDK costs about 19 MB packaged** through express, hono, jose and the
+  other transports' dependencies, none of which the stdio path loads. Kept,
+  because being wrong about a moving protocol is the more expensive mistake,
+  and recorded so the trade is visible.
+
+**What phase 6 does not do, on purpose:** the in-app assistant panel. Every
+other piece of it is here, and the surface an assistant would drive is exactly
+what an external agent now drives. What it needs and nothing else does is a
+model: a provider, an API key and where that key lives. That is a decision, not
+a task, and PLAN.md already says the app has to work with no key configured.
+Pointing Claude Desktop at the printed configuration answers the phase's
+done-when today without one.

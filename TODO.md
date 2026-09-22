@@ -64,7 +64,25 @@ contract goes out this way.
 The sync writes nothing to the server. The sender writes exactly two things:
 the message, and a copy into Sent.
 
-## 4. Smaller things
+## 4. Decide what the in-app assistant runs on - **you**
+
+Phase 6 is built except its assistant panel. Everything the panel would drive
+is there: 99 tools, the approval gate, briefings and automations. What it needs
+and nothing else does is a model, which means three answers from you.
+
+- **Which provider**, and whether Bureau ever talks to one at all. PLAN.md is
+  binding that the app opens, syncs and works with no key configured, so the
+  panel is additive and absent by default.
+- **Where the key lives.** `safeStorage`, like a mail password, by decision 6.
+  Nothing about a key belongs in `.env` or the build.
+- **What it may do unattended.** Nothing changes about the gate: an assistant
+  is a caller like any other and its side-effectful calls park for approval.
+
+Until then an external agent does the same work. Open Agent, copy the
+configuration, paste it into Claude Desktop or Claude Code. That also answers
+phase 6's done-when in PLAN.md.
+
+## 5. Smaller things
 
 - **Auto-update tests.** Nothing exercises the updater, because there is no feed.
 - **The MCP server itself.** The tool descriptors exist for every service, but
@@ -93,6 +111,14 @@ the message, and a copy into Sent.
   recurring event after the October change. Then import an Outlook export the
   other way; its Windows zone names are handled through the file's VTIMEZONE,
   which is tested against a hand-written one and not yet a real one.
-- **The Today screen does not list the day's events.** The calendar's agenda
-  view does. A "today" line on the Today screen is a small addition once the
-  calendar has been used for a while.
+- **No third-party MCP client has connected yet.** The smoke run starts the
+  real bridge and speaks MCP to it, so the socket, the token and the wire are
+  covered, but Claude Desktop and Claude Code have not. Try both, and check
+  that a tool list cached while Bureau was closed recovers when it opens.
+- **The audit log has no purge.** It grows by one row per write. A year of
+  ordinary use is a few thousand rows, so this is not urgent, but "keep the
+  last N months" belongs next to the backup settings eventually.
+- **An automation cannot pass one step's result to the next.** Steps are
+  independent calls with fixed arguments. Anything that needs the output of a
+  previous step is a job for an agent, which can read and then decide, rather
+  than for a recording.

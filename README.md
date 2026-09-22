@@ -11,11 +11,13 @@ generates the documents you would otherwise retype, and exposes everything it ca
 do to an AI agent so the boring parts can be asked for instead of clicked
 through.
 
-**Status: phases 0 to 5 built.** The app builds, packages, installs and runs.
-Clients, documents, reminders, a mail client with an outbox, and a calendar with
-recurrence and .ics exchange are all in; mail has not yet met a real server.
-What is built and what is not is tracked in [BUILD-LOG.md](BUILD-LOG.md); what
-comes next is in [PLAN.md](PLAN.md).
+**Status: phases 0 to 6 built.** The app builds, packages, installs and runs.
+Clients, documents, reminders, a mail client with an outbox, a calendar with
+recurrence and .ics exchange, and an MCP server that exposes all of it to an
+agent behind an approval gate. Mail has not yet met a real server, and the
+in-app assistant panel waits on a model decision. What is built and what is not
+is tracked in [BUILD-LOG.md](BUILD-LOG.md); what comes next is in
+[PLAN.md](PLAN.md).
 
 ---
 

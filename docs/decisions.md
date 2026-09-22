@@ -444,3 +444,55 @@ reader without its own zone table still lands occurrences on the right hour.
 expansion becomes a cache of the server's and the exception rows become the
 server's overrides, and the file boundary in `calendar-ics.ts` becomes the sync
 boundary instead.
+
+## 24. The agent reaches Bureau through a bridge, and the gate is a table
+
+The MCP server could not be the app. The database is open in the main process
+and only there, the app takes a single-instance lock, and two processes on one
+SQLite file is the corruption this project has avoided since decision 3. An
+MCP client also insists on spawning its server itself and talking to it over
+stdio, which a long-running window cannot provide.
+
+So `scripts/mcp-bridge.mjs` is the server an agent starts: a plain Node script
+with no database handle and no logic, which speaks MCP on stdio and forwards
+every call to the running app over a named pipe on Windows or a socket file
+elsewhere. `electron/main/mcp/socket.ts` listens, `host.ts` routes, and the
+per-domain files declare the tools they always did. The wire is
+newline-delimited JSON, one connection per call, because both ends ship
+together and an agent makes a handful of calls a minute.
+
+Nothing listens on a network port. `mcp.json` in userData carries the address
+and a random token, and a connection without it is dropped. Be honest about
+what that buys: it stops something that guessed the address, not a program
+already running as this user, which can read the file, and could read
+`bureau.sqlite` directly anyway. The lock is the control that matters, and
+every call checks it before anything else.
+
+**The confirmation gate from `.claude/rules/mcp.md` section 4 is the
+`agent_actions` table.** A side-effectful tool call does not execute: it parks
+with its arguments rendered for a person, and the caller gets back a pending
+action rather than a result. Approving runs the handler; rejecting, expiring
+or ignoring it does not. `approve` has an IPC channel and no MCP tool, for the
+same reason there is no `app.unlock`: the thing being gated is what would call
+it. This is decision 22's shape generalised, and `mail.send` keeps its own gate
+rather than being wrapped in this one, because the outbox shows a person the
+real message instead of an argument list. A tool says so in its declaration
+with `gatedInService`, so the exception is visible in the same place as the
+rest.
+
+An automation is a stored list of those same calls. It has no interpreter: a
+step is a tool name and an argument object, replayed through the same host, so
+a step needing approval stops the run and waits for a person, on a schedule as
+much as by hand. That is what keeps "an agent may prepare a send and may never
+fire it" true when the caller is a timer.
+
+`@modelcontextprotocol/sdk` is used in the bridge only, as PLAN.md chose. It
+costs about 19 MB in the installer through dependencies the stdio path never
+loads (express, hono, jose and the rest are pulled in by other transports).
+Hand-rolling the protocol would save that and take on being wrong about a
+protocol that is still moving.
+
+**What would reverse this:** an MCP client that can connect to something
+already running, over a local transport that is not stdio. Then the bridge
+disappears and `socket.ts` becomes the server itself. Nothing else about the
+shape would change, which is why the bridge holds no logic.

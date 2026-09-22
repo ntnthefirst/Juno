@@ -245,7 +245,28 @@ export interface AppSettings {
 	accountingTool: AccountingTool;
 	/** The last day the daily summary was sent, so a restart does not repeat it. */
 	lastNotifiedOn: IsoDate | null;
+	/** What the person has been through once, so it is never shown twice. */
+	onboarding: OnboardingState;
 }
+
+export interface OnboardingState {
+	/**
+	 * Null means setup has not been finished, and a launch shows it. It is set
+	 * when the last step is passed, including when the person skips the optional
+	 * ones, because "I do not want to answer that" is still an answer.
+	 */
+	completedAt: Iso | null;
+	/** Null means the walkthrough has not been seen. It can be replayed. */
+	walkthroughSeenAt: Iso | null;
+	/**
+	 * The setup this person went through. Bumped when a step is added that an
+	 * existing install has never been asked, so it can be asked once.
+	 */
+	version: number;
+}
+
+/** What the setup window writes back as it is filled in. */
+export type OnboardingPatch = Partial<OnboardingState>;
 
 export interface AccountingTool {
 	name: string;
@@ -317,6 +338,114 @@ export interface AppInfo {
 	platform: NodeJS.Platform;
 }
 
+/* ------------------------------------------------- templates: declared inputs */
+
+/**
+ * What kind of answer an input wants. This decides the control shown when a
+ * template is used, and how the value is formatted before it reaches the body.
+ */
+export type TemplateInputKind = "text" | "textarea" | "number" | "money" | "date" | "choice";
+
+/**
+ * A value a template asks for when it is used, because nothing in the records
+ * can answer it: the scope of the work, an amount agreed on the phone, a
+ * deadline. The key is the extras key, so an input keyed `scope` is written
+ * `{{document.scope}}` in the body.
+ */
+export interface TemplateInput {
+	key: string;
+	label: string;
+	kind: TemplateInputKind;
+	required: boolean;
+	/** One sentence under the field. */
+	help?: string | null;
+	/** Offered as the starting value. */
+	defaultValue?: string | null;
+	/** The choices, for `choice`. Ignored for every other kind. */
+	options?: string[];
+}
+
+/* --------------------------------------------- document templates: the page */
+
+/** Millimetres. A page is measured the way a printer measures it. */
+export type Mm = number;
+
+export interface PageMargin {
+	top: Mm;
+	right: Mm;
+	bottom: Mm;
+	left: Mm;
+}
+
+export type LayoutAlign = "left" | "center" | "right" | "justify";
+
+/**
+ * One thing on a page. A block either flows in the column inside the margin or
+ * sits in a box at a position, which is the same two choices a PDF gives.
+ *
+ * `html` on a paragraph or a cell is the small allowed set the editor produces:
+ * `strong`, `em`, `u`, `s`, `br`, `a`, and `{{ }}` placeholders. It is compiled
+ * into the document, so it is sanitised on the way in.
+ */
+export type LayoutBlock =
+	| { id: string; kind: "heading"; level: 1 | 2 | 3; text: string; align: LayoutAlign }
+	| { id: string; kind: "paragraph"; html: string; align: LayoutAlign }
+	| { id: string; kind: "list"; ordered: boolean; items: string[] }
+	| { id: string; kind: "image"; src: string; alt: string; widthMm: Mm; align: LayoutAlign }
+	| { id: string; kind: "spacer"; heightMm: Mm }
+	| { id: string; kind: "divider" }
+	| {
+			id: string;
+			kind: "table";
+			/** Widths are percentages of the column, and should add up to 100. */
+			columns: { header: string; widthPct: number }[];
+			rows: string[][];
+			/** A header row is drawn in bold over a rule. */
+			headerRow: boolean;
+	  }
+	| {
+			id: string;
+			kind: "signature";
+			label: string;
+			/** Where the signature image is stamped when the document is signed. */
+			widthMm: Mm;
+	  };
+
+/**
+ * A block pinned to a page. `xMm` and `yMm` are from the top left corner of the
+ * paper, not of the text column, because that is what a position on a page
+ * means to the person placing it.
+ */
+export interface LayoutBox {
+	id: string;
+	xMm: Mm;
+	yMm: Mm;
+	widthMm: Mm;
+	block: LayoutBlock;
+}
+
+export interface LayoutPage {
+	id: string;
+	/** Flows down the column inside the margin, in this order. */
+	blocks: LayoutBlock[];
+	/** Placed on the paper, over the flow. */
+	boxes: LayoutBox[];
+}
+
+/**
+ * The editable shape of a document template. `bodyHtml` is compiled from this
+ * on every save, so the renderer and the PDF pipeline never learn that a page
+ * model exists.
+ *
+ * `version` is the shape of this object, not the template's own version number.
+ */
+export interface DocumentLayout {
+	version: 1;
+	pageSize: "A4";
+	margin: PageMargin;
+	pages: LayoutPage[];
+}
+
 /* ---------------------------------------------------------------- documents */
 
 export interface DocumentTemplate extends Standard {
@@ -335,6 +464,14 @@ export interface DocumentTemplate extends Standard {
 	customisedAt: Iso | null;
 	/** Every path the body refers to, for showing what a template needs. */
 	placeholders: string[];
+	/**
+	 * The page model the editor works on. Null means this template is HTML only,
+	 * which is true of anything written before the page editor existed, and stays
+	 * true for a template somebody prefers to keep as HTML.
+	 */
+	layout: DocumentLayout | null;
+	/** What the template asks for when it is used. Empty when it asks nothing. */
+	inputs: TemplateInput[];
 }
 
 export type DocumentTemplateInput = {
@@ -343,10 +480,13 @@ export type DocumentTemplateInput = {
 	key?: string;
 	description?: string | null;
 	language?: string;
+	/** Passing a layout compiles the body from it and ignores `bodyHtml`. */
+	layout?: DocumentLayout | null;
+	inputs?: TemplateInput[];
 };
 
 export type DocumentTemplatePatch = Partial<
-	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language">
+	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language" | "layout" | "inputs">
 >;
 
 export interface DocumentRecord extends Standard {
@@ -363,6 +503,23 @@ export interface DocumentRecord extends Standard {
 	pdfPath: string | null;
 	/** Generated from a template that had not been reviewed. */
 	isSpecimen: boolean;
+	/**
+	 * `imported` is a PDF that already existed and was brought in. It has no body
+	 * to render and no template behind it, so anything that re-renders or
+	 * re-generates has to check this before it tries.
+	 */
+	sourceKind: DocumentSourceKind;
+}
+
+export type DocumentSourceKind = "generated" | "imported";
+
+export interface ImportDocumentInput {
+	/** An absolute path to a PDF that exists. Copied in, never referenced. */
+	sourcePath: string;
+	clientId: string;
+	title?: string;
+	projectId?: string | null;
+	issuedOn?: IsoDate;
 }
 
 export interface GenerateDocumentInput {
@@ -711,6 +868,8 @@ export interface MailTemplate extends Standard {
 	isSystem: boolean;
 	customisedAt: Iso | null;
 	placeholders: string[];
+	/** What the template asks for when it is used. Empty when it asks nothing. */
+	inputs: TemplateInput[];
 }
 
 export interface MailTemplateInput {
@@ -720,10 +879,11 @@ export interface MailTemplateInput {
 	key?: string;
 	description?: string | null;
 	register?: MailRegister;
+	inputs?: TemplateInput[];
 }
 
 export type MailTemplatePatch = Partial<
-	Pick<MailTemplateInput, "name" | "subject" | "bodyHtml" | "description" | "register">
+	Pick<MailTemplateInput, "name" | "subject" | "bodyHtml" | "description" | "register" | "inputs">
 >;
 
 /** A template filled against a client and project, ready to put in a draft. */

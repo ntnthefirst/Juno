@@ -8,10 +8,13 @@
  * clearing that flag is a deliberate act, never a side effect of an edit.
  */
 import { and, asc, eq, isNull } from "drizzle-orm";
+import type { DocumentLayout, TemplateInput as TemplateField } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { documentTemplates } from "../db/schema";
 import { DOCUMENT_TEMPLATES, DOCUMENT_TEMPLATE_SEED_VERSION } from "./document-templates-seed";
+import { compileLayout, parseLayout, serialiseLayout } from "./document-layout";
+import { parseInputs, serialiseInputs, validateInputs } from "./template-inputs";
 import { placeholdersIn, render, type RenderResult, type TemplateContext } from "./template-render";
 
 export interface SeedTemplate {
@@ -38,6 +41,14 @@ export interface DocumentTemplate {
 	updatedAt: string;
 	/** Convenience for the interface: every path the body refers to. */
 	placeholders: string[];
+	/**
+	 * The page model the editor works on, or null for a template that is edited
+	 * as HTML. `bodyHtml` is compiled from this whenever it is present, so
+	 * nothing below this layer has to know which of the two it is looking at.
+	 */
+	layout: DocumentLayout | null;
+	/** What this template asks for when it is used. */
+	inputs: TemplateField[];
 }
 
 export interface TemplateInput {
@@ -46,10 +57,13 @@ export interface TemplateInput {
 	description?: string | null;
 	bodyHtml: string;
 	language?: string;
+	/** Supplying a layout compiles the body from it and ignores `bodyHtml`. */
+	layout?: DocumentLayout | null;
+	inputs?: TemplateField[];
 }
 
 export type TemplatePatch = Partial<
-	Pick<TemplateInput, "name" | "description" | "bodyHtml" | "language">
+	Pick<TemplateInput, "name" | "description" | "bodyHtml" | "language" | "layout" | "inputs">
 >;
 
 type Row = typeof documentTemplates.$inferSelect;
@@ -71,7 +85,19 @@ function toTemplate(row: Row): DocumentTemplate {
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 		placeholders: placeholdersIn(row.bodyHtml),
+		layout: parseLayout(row.layoutJson),
+		inputs: parseInputs(row.inputsJson),
 	};
+}
+
+/**
+ * A layout is the source and the HTML is the output, so the two can never
+ * disagree: whenever a layout is written the body is compiled from it in the
+ * same statement. A template with no layout keeps the HTML it was given.
+ */
+function bodyFor(layout: DocumentLayout | null | undefined, bodyHtml: string | undefined): string | undefined {
+	if (layout) return compileLayout(layout);
+	return bodyHtml;
 }
 
 export async function list(db: Db = getDb()): Promise<DocumentTemplate[]> {
@@ -105,7 +131,9 @@ export async function getByKey(key: string, db: Db = getDb()): Promise<DocumentT
 export async function create(input: TemplateInput, db: Db = getDb()): Promise<DocumentTemplate> {
 	const name = input.name.trim();
 	if (!name) throw new Error("A template needs a name.");
-	if (!input.bodyHtml.trim()) throw new Error("A template needs a body.");
+	const body = bodyFor(input.layout, input.bodyHtml) ?? "";
+	if (!input.layout && !body.trim()) throw new Error("A template needs a body.");
+	if (input.inputs) validateInputs(input.inputs);
 
 	const key = (input.key ?? name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
 	if (await getByKey(key, db)) throw new Error(`A template with the key "${key}" already exists.`);
@@ -117,7 +145,9 @@ export async function create(input: TemplateInput, db: Db = getDb()): Promise<Do
 			name,
 			description: input.description ?? null,
 			language: input.language ?? "nl-BE",
-			bodyHtml: input.bodyHtml,
+			bodyHtml: body,
+			layoutJson: input.layout ? serialiseLayout(input.layout) : null,
+			inputsJson: serialiseInputs(input.inputs ?? []),
 			isSystem: false,
 			// A template someone wrote themselves is still unreviewed until they say
 			// otherwise. Assuming it is reviewed because it is theirs is the exact
@@ -137,7 +167,13 @@ export async function update(
 	const existing = await get(id, db);
 	if (!existing) throw new Error("That template no longer exists.");
 
-	const bodyChanged = patch.bodyHtml !== undefined && patch.bodyHtml !== existing.bodyHtml;
+	if (patch.inputs) validateInputs(patch.inputs);
+
+	// A layout edit is a body edit, because the body is compiled from it. Working
+	// that out from the compiled HTML is what keeps the review flag honest when
+	// the person edited the page rather than the markup.
+	const nextBody = bodyFor(patch.layout, patch.bodyHtml);
+	const bodyChanged = nextBody !== undefined && nextBody !== existing.bodyHtml;
 
 	const [row] = db
 		.update(documentTemplates)
@@ -145,7 +181,11 @@ export async function update(
 			...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
 			...(patch.description !== undefined ? { description: patch.description } : {}),
 			...(patch.language !== undefined ? { language: patch.language } : {}),
-			...(patch.bodyHtml !== undefined ? { bodyHtml: patch.bodyHtml } : {}),
+			...(nextBody !== undefined ? { bodyHtml: nextBody } : {}),
+			...(patch.layout !== undefined
+				? { layoutJson: patch.layout ? serialiseLayout(patch.layout) : null }
+				: {}),
+			...(patch.inputs !== undefined ? { inputsJson: serialiseInputs(patch.inputs) } : {}),
 			// Editing the text invalidates any review of it. Keeping the flag would
 			// let a reviewed template quietly become an unreviewed one.
 			...(bodyChanged ? { reviewedAt: null, version: existing.version + 1 } : {}),

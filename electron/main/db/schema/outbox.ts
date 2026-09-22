@@ -22,6 +22,11 @@ export const mailTemplates = sqliteTable(
 		register: text("register").notNull().default("u"),
 		subject: text("subject").notNull(),
 		bodyHtml: text("body_html").notNull(),
+		/**
+		 * The values this template asks for when it is used, beyond what the client
+		 * and the project already answer. JSON array of input declarations.
+		 */
+		inputsJson: text("inputs_json"),
 	},
 	(t) => [
 		index("mail_templates_key_idx").on(t.key),

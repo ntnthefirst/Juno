@@ -38,6 +38,7 @@
 	"dependencies": {
 		"@fontsource/inter": "^5.2.5",
 		"@fontsource/jetbrains-mono": "^5.2.5",
+		"@heroicons/react": "^2.2.0",
 		"@modelcontextprotocol/sdk": "^1.30.0",
 		"drizzle-orm": "^0.44.2",
 		"electron-updater": "^6.8.3",

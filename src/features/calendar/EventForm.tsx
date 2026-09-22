@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type {
 	CalendarEvent,
 	CalendarEventInput,
@@ -9,8 +9,8 @@ import type {
 	ProjectSummary,
 } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
+import { FormPage, type FormStep } from "../../components/FormPage";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { addDays, addLocalMinutes, dateOf, joinLocal, localMinutesBetween, machineTimeZone, timeOf } from "./dates";
@@ -87,8 +87,22 @@ function ruleOf(recurrence: RecurrenceValue, startLocal: string, allDay: boolean
 	return buildRule(recurrence.state, startLocal, allDay);
 }
 
+/**
+ * Three questions rather than one wall of twenty fields. What it is, when it
+ * is, and who it belongs to: the first two are the whole event for most
+ * entries, and the third is the one people skip.
+ */
+const STEPS: FormStep[] = [
+	{ label: "What", hint: "What is this appointment, and where does it happen." },
+	{ label: "When", hint: "When it runs, and whether it comes back." },
+	{ label: "Who", hint: "Who it is for. Everything here is optional." },
+];
+
 export function EventForm({ event, occurrence = null, scope = "all", seed = null, onClose, onSaved }: EventFormProps) {
 	const [initial] = useState<Values>(() => toValues(event, occurrence, scope, seed));
+	const [step, setStep] = useState(0);
+	// The submit button sits in the page footer, outside the form element.
+	const formId = useId();
 	const [values, setValues] = useState<Values>(initial);
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -120,6 +134,27 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 			cancelled = true;
 		};
 	}, []);
+
+	/**
+	 * The client, guessed from what was typed in the title.
+	 *
+	 * People write "Jansen kickoff" and then leave the client empty, so the
+	 * event is not on the client's record and nothing finds it later. The guess
+	 * is offered rather than applied: silently attaching an event to a client
+	 * because their name appeared in a word is worse than not guessing.
+	 */
+	const suggestedClient = useMemo(() => {
+		if (event) return null;
+		if (values.clientId.length > 0) return null;
+		const title = values.title.trim().toLowerCase();
+		if (title.length < 3) return null;
+		return (
+			clients.find((candidate) => {
+				const name = candidate.name.trim().toLowerCase();
+				return name.length >= 3 && title.includes(name);
+			}) ?? null
+		);
+	}, [clients, event, values.clientId, values.title]);
 
 	const clientId = values.clientId;
 	useEffect(() => {
@@ -246,89 +281,154 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 					? "Edit all occurrences"
 					: "Edit event";
 
+	/** What each step insists on before it will hand over to the next one. */
+	function checkStep(index: number): boolean {
+		if (index === 0) {
+			const ok = values.title.trim().length > 0;
+			setTitleError(ok ? null : "Enter a title.");
+			return ok;
+		}
+		if (index === 1) {
+			const startOk = values.startDate.length > 0 && (values.allDay || values.startTime.length > 0);
+			const endOk = values.endDate.length > 0 && (values.allDay || values.endTime.length > 0);
+			setStartError(startOk ? null : "Choose when it starts.");
+			setEndError(endOk ? null : "Choose when it ends.");
+			return startOk && endOk;
+		}
+		return true;
+	}
+
+	const last = step === STEPS.length - 1;
+
 	return (
-		<Dialog title={title} onClose={onClose}>
-			<form onSubmit={submit} noValidate className="mt-5">
-				<div className="grid grid-cols-2 gap-4">
-					<div className="col-span-2">
-						<Field label="Title" required value={values.title} onChange={(v) => set("title", v)} error={titleError} />
-					</div>
-
-					<div className="col-span-2">
-						<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
-							<input
-								type="checkbox"
-								checked={values.allDay}
-								disabled={singleOccurrence}
-								onChange={(e) => set("allDay", e.target.checked)}
-								className="h-4 w-4 accent-[var(--accent)]"
-							/>
-							All day
-						</label>
-					</div>
-
-					<Field label="Starts on" type="date" required value={values.startDate} onChange={(v) => setStart({ startDate: v })} error={startError} tabular />
-					{values.allDay ? (
-						<div />
-					) : (
-						<Field label="At" type="time" required value={values.startTime} onChange={(v) => setStart({ startTime: v })} tabular />
+		<FormPage
+			title={title}
+			onBack={onClose}
+			backLabel="Calendar"
+			steps={STEPS}
+			step={step}
+			onStep={setStep}
+			actions={
+				<>
+					{step > 0 ? <Button onClick={() => setStep(step - 1)}>Previous</Button> : null}
+					{last ? null : (
+						<Button
+							variant={event ? "quiet" : "primary"}
+							onClick={() => checkStep(step) && setStep(step + 1)}
+						>
+							Next
+						</Button>
 					)}
-
-					<Field label="Ends on" type="date" required value={values.endDate} onChange={(v) => set("endDate", v)} error={endError} tabular />
-					{values.allDay ? (
-						<div />
-					) : (
-						<Field label="At" type="time" required value={values.endTime} onChange={(v) => set("endTime", v)} tabular />
-					)}
-
-					{values.allDay ? null : (
+					{last || event ? (
+						<Button type="submit" form={formId} variant="primary" disabled={busy}>
+							{busy ? "Saving" : "Save"}
+						</Button>
+					) : null}
+				</>
+			}
+		>
+			<form id={formId} onSubmit={submit} noValidate>
+				{step === 0 ? (
+					<div className="grid grid-cols-2 gap-4">
 						<div className="col-span-2">
-							<Select label="Time zone" value={values.timezone} onChange={(v) => set("timezone", v)} options={zones} disabled={singleOccurrence} />
+							<Field label="Title" required value={values.title} onChange={(v) => set("title", v)} error={titleError} />
 						</div>
-					)}
+						<div className="col-span-2">
+							<Field label="Location" value={values.location} onChange={(v) => set("location", v)} />
+						</div>
+						<div className="col-span-2">
+							<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
+								<input
+									type="checkbox"
+									checked={values.allDay}
+									disabled={singleOccurrence}
+									onChange={(e) => set("allDay", e.target.checked)}
+									className="h-4 w-4 accent-[var(--accent)]"
+								/>
+								All day
+							</label>
+						</div>
+					</div>
+				) : step === 1 ? (
+					<div className="grid grid-cols-2 gap-4">
+						<Field label="Starts on" type="date" required value={values.startDate} onChange={(v) => setStart({ startDate: v })} error={startError} tabular />
+						{values.allDay ? (
+							<div />
+						) : (
+							<Field label="At" type="time" required value={values.startTime} onChange={(v) => setStart({ startTime: v })} tabular />
+						)}
 
-					<div className="col-span-2 border-t border-[var(--line)] pt-4">
-						<RecurrenceEditor
-							value={values.recurrence}
-							onChange={(v) => set("recurrence", v)}
-							startLocal={startLocal}
-							disabled={singleOccurrence}
-						/>
-						{singleOccurrence ? (
-							<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								The repeat rule, zone and client belong to the whole series.
-							</p>
+						<Field label="Ends on" type="date" required value={values.endDate} onChange={(v) => set("endDate", v)} error={endError} tabular />
+						{values.allDay ? (
+							<div />
+						) : (
+							<Field label="At" type="time" required value={values.endTime} onChange={(v) => set("endTime", v)} tabular />
+						)}
+
+						{values.allDay ? null : (
+							<div className="col-span-2">
+								<Select label="Time zone" value={values.timezone} onChange={(v) => set("timezone", v)} options={zones} disabled={singleOccurrence} />
+							</div>
+						)}
+
+						<div className="col-span-2 border-t border-[var(--line)] pt-4">
+							<RecurrenceEditor
+								value={values.recurrence}
+								onChange={(v) => set("recurrence", v)}
+								startLocal={startLocal}
+								disabled={singleOccurrence}
+							/>
+							{singleOccurrence ? (
+								<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									The repeat rule, zone and client belong to the whole series.
+								</p>
+							) : null}
+						</div>
+					</div>
+				) : (
+					<div className="grid grid-cols-2 gap-4">
+						{suggestedClient ? (
+							<div className="col-span-2 flex items-center gap-3 rounded-[var(--radius-md)] bg-[var(--accent-soft)] px-3 py-2">
+								<p className="min-w-0 flex-1 text-[length:var(--text-dense)]">
+									The title mentions {suggestedClient.name}. Put this event on their record?
+								</p>
+								<Button
+									size="dense"
+									onClick={() => {
+										setProjects([]);
+										setValues((current) => ({ ...current, clientId: suggestedClient.id, projectId: "" }));
+									}}
+								>
+									Link
+								</Button>
+							</div>
 						) : null}
-					</div>
 
-					<div className="col-span-2 border-t border-[var(--line)] pt-4">
-						<Field label="Location" value={values.location} onChange={(v) => set("location", v)} />
-					</div>
+						<Select
+							label="Client"
+							value={values.clientId}
+							onChange={(v) => {
+								setProjects([]);
+								setValues((current) => ({ ...current, clientId: v, projectId: "" }));
+							}}
+							placeholder="No client"
+							disabled={singleOccurrence}
+							options={clients.map((c) => ({ value: c.id, label: c.name }))}
+						/>
+						<Select
+							label="Project"
+							value={values.projectId}
+							onChange={(v) => set("projectId", v)}
+							placeholder={values.clientId ? "No project" : "Choose a client first"}
+							disabled={singleOccurrence || values.clientId.length === 0}
+							options={projects.map((p) => ({ value: p.id, label: p.name }))}
+						/>
 
-					<Select
-						label="Client"
-						value={values.clientId}
-						onChange={(v) => {
-							setProjects([]);
-							setValues((current) => ({ ...current, clientId: v, projectId: "" }));
-						}}
-						placeholder="No client"
-						disabled={singleOccurrence}
-						options={clients.map((c) => ({ value: c.id, label: c.name }))}
-					/>
-					<Select
-						label="Project"
-						value={values.projectId}
-						onChange={(v) => set("projectId", v)}
-						placeholder={values.clientId ? "No project" : "Choose a client first"}
-						disabled={singleOccurrence || values.clientId.length === 0}
-						options={projects.map((p) => ({ value: p.id, label: p.name }))}
-					/>
-
-					<div className="col-span-2">
-						<Field label="Notes" multiline rows={3} value={values.notes} onChange={(v) => set("notes", v)} />
+						<div className="col-span-2">
+							<Field label="Notes" multiline rows={4} value={values.notes} onChange={(v) => set("notes", v)} />
+						</div>
 					</div>
-				</div>
+				)}
 
 				{error ? (
 					<div className="mt-4 border-l-2 border-[var(--risk)] pl-4">
@@ -338,14 +438,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 						</p>
 					</div>
 				) : null}
-
-				<div className="mt-6 flex justify-end gap-2">
-					<Button onClick={onClose}>Cancel</Button>
-					<Button type="submit" variant="primary" disabled={busy}>
-						{busy ? "Saving" : "Save"}
-					</Button>
-				</div>
 			</form>
-		</Dialog>
+		</FormPage>
 	);
 }

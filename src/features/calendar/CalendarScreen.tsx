@@ -298,6 +298,25 @@ export function CalendarScreen() {
 					? weekLabel(anchor)
 					: `${formatDayShort(from)} to ${formatDayShort(to)} ${to.slice(0, 4)}`;
 
+	// The form replaces the calendar rather than covering it. There is nothing
+	// behind it worth reading while filling it in, and a month grid seen through
+	// a dimmed overlay is just a month grid you cannot click.
+	if (form) {
+		return (
+			<EventForm
+				event={form.event}
+				occurrence={form.occurrence}
+				scope={form.scope}
+				seed={form.seed}
+				onClose={() => setForm(null)}
+				onSaved={() => {
+					setForm(null);
+					refresh();
+				}}
+			/>
+		);
+	}
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="flex flex-none items-center gap-3 border-b border-[var(--line)] px-6 py-3">
@@ -350,7 +369,8 @@ export function CalendarScreen() {
 				</div>
 			</div>
 
-			<div className="min-h-0 flex-1">
+			<div className="flex min-h-0 flex-1">
+				<div className="min-w-0 flex-1 overflow-hidden">
 				{load.status === "error" ? (
 					<div className="m-8 border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the calendar.</p>
@@ -386,34 +406,21 @@ export function CalendarScreen() {
 				) : (
 					<AgendaView dates={dates} today={today} placed={placed} onOpen={setDetail} />
 				)}
+				</div>
+
+				{detail ? (
+					<EventDetail
+						item={detail}
+						onClose={() => setDetail(null)}
+						onEdit={() => {
+							if (detail.kind === "event") void edit(detail);
+						}}
+						onDelete={() => {
+							if (detail.kind === "event") remove(detail);
+						}}
+					/>
+				) : null}
 			</div>
-
-			{form ? (
-				<EventForm
-					event={form.event}
-					occurrence={form.occurrence}
-					scope={form.scope}
-					seed={form.seed}
-					onClose={() => setForm(null)}
-					onSaved={() => {
-						setForm(null);
-						refresh();
-					}}
-				/>
-			) : null}
-
-			{detail ? (
-				<EventDetail
-					item={detail}
-					onClose={() => setDetail(null)}
-					onEdit={() => {
-						if (detail.kind === "event") void edit(detail);
-					}}
-					onDelete={() => {
-						if (detail.kind === "event") remove(detail);
-					}}
-				/>
-			) : null}
 
 			{question ? (
 				<ScopeDialog verb={question.verb} title={question.title} onChoose={question.then} onClose={() => setQuestion(null)} />

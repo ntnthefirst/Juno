@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { CalendarItem } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
+import { SidePanel } from "../../components/SidePanel";
 import { addDays, dateOf, formatDate, formatDateLong, formatTime, localDateOfInstant, machineTimeZone, timeOf } from "./dates";
 import { KIND_LABELS, itemTitle } from "./format";
 
@@ -45,10 +45,24 @@ export function EventDetail({ item, onEdit, onDelete, onClose }: EventDetailProp
 	const title = itemTitle(item);
 
 	return (
-		<Dialog title={title} width="narrow" onClose={onClose}>
-			<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{KIND_LABELS[item.kind]}</p>
-
-			<div className="mt-4 border-t border-[var(--line)] pt-3">
+		<SidePanel
+			title={title}
+			subtitle={KIND_LABELS[item.kind]}
+			onClose={onClose}
+			actions={
+				item.kind === "event" ? (
+					<>
+						<Button variant="danger" onClick={onDelete}>
+							Delete
+						</Button>
+						<Button variant="primary" onClick={onEdit}>
+							Edit
+						</Button>
+					</>
+				) : null
+			}
+		>
+			<div>
 				{item.kind === "event" ? (
 					<>
 						<Row label="When">
@@ -96,19 +110,6 @@ export function EventDetail({ item, onEdit, onDelete, onClose }: EventDetailProp
 				)}
 			</div>
 
-			<div className="mt-5 flex justify-end gap-2">
-				{item.kind === "event" ? (
-					<>
-						<Button variant="danger" onClick={onDelete}>
-							Delete
-						</Button>
-						<Button onClick={onEdit}>Edit</Button>
-					</>
-				) : null}
-				<Button variant="primary" onClick={onClose}>
-					Close
-				</Button>
-			</div>
-		</Dialog>
+		</SidePanel>
 	);
 }

@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import { join } from "node:path";
-import { hardenWindow, titleBarOptions, viewUrl } from "./chrome";
+import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
 
 /**
  * The one application window. There is never a second: see windows/index.ts,
@@ -14,6 +14,7 @@ export function createMainWindow(isDev: boolean): BrowserWindow {
 		minWidth: 560,
 		minHeight: 520,
 		show: false,
+		icon: windowIcon(),
 		backgroundColor: "#f6f6fa",
 		...titleBarOptions(),
 		webPreferences: {

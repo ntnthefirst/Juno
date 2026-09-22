@@ -36,7 +36,7 @@ import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
 import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
-import { installSessionPolicy } from "./main/windows/chrome";
+import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
 import { startUpdates } from "./main/updates";
 import { devDataDir } from "./main/dev-data";
@@ -57,6 +57,10 @@ if (!app.requestSingleInstanceLock()) {
 	app.on("second-instance", () => focusMainWindow());
 
 	app.whenReady().then(async () => {
+		// Before the first window, so the splash is the first thing carrying the
+		// right icon rather than the second.
+		applyDevDockIcon();
+
 		// Up before any of the slow work, and down when the window can paint.
 		// A smoke run has nobody watching and an always-on-top window would sit
 		// over the screenshots it takes.

@@ -13,6 +13,7 @@
  * is not a policy problem: there is no input and no remote origin.
  */
 import { BrowserWindow, nativeTheme } from "electron";
+import { windowIcon } from "./chrome";
 
 let splash: BrowserWindow | null = null;
 
@@ -83,6 +84,7 @@ export function showSplash(): BrowserWindow {
 		skipTaskbar: true,
 		alwaysOnTop: true,
 		show: false,
+		icon: windowIcon(),
 		backgroundColor: nativeTheme.shouldUseDarkColors ? "#111117" : "#f6f6fa",
 		webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
 	});

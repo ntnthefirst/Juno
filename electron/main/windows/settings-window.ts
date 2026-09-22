@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import { join } from "node:path";
-import { hardenWindow, titleBarOptions, viewUrl } from "./chrome";
+import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
 
 /**
  * Settings is a window, not a screen.
@@ -28,6 +28,7 @@ export function createSettingsWindow(parent: BrowserWindow, isDev: boolean): Bro
 		maximizable: false,
 		fullscreenable: false,
 		show: false,
+		icon: windowIcon(),
 		backgroundColor: "#f6f6fa",
 		...titleBarOptions(),
 		webPreferences: {

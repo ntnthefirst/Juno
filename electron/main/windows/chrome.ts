@@ -7,7 +7,8 @@
  * replaces the previous registration, so the second window silently un-does the
  * first window's policy. It is called once, before any window exists.
  */
-import { BrowserWindow, nativeTheme, session, shell } from "electron";
+import { app, BrowserWindow, nativeTheme, session, shell } from "electron";
+import { join } from "node:path";
 import { DEV_CSP_NONCE, DEV_URL, DEV_WS_URL } from "../../shared/dev";
 import { MAIL_FRAME_ORIGIN } from "../../shared/types";
 import { APP_ORIGIN } from "../scheme";
@@ -124,6 +125,34 @@ export function titleBarOptions(): Electron.BrowserWindowConstructorOptions {
 		};
 	}
 	return { titleBarStyle: "hidden", titleBarOverlay: overlayColors() };
+}
+
+/**
+ * The window icon, and only in development.
+ *
+ * A packaged build takes its icon from the executable, which electron-builder
+ * stamps from build/icon.png. An unpackaged run has no executable of its own,
+ * so it inherits Electron's default, and every development window and taskbar
+ * entry shows Electron's logo instead of Juno's. Pointing at the same source
+ * file fixes the run nobody packages.
+ *
+ * `build/` is not in the builder's `files`, so the path exists only when it is
+ * used. Returning undefined rather than a missing path keeps a packaged window
+ * on the executable's icon rather than on nothing.
+ */
+export function windowIcon(): string | undefined {
+	if (app.isPackaged) return undefined;
+	return join(app.getAppPath(), "build", "icon.png");
+}
+
+/**
+ * The dock icon on macOS, which ignores a window's `icon` entirely. Same
+ * reasoning as windowIcon: a packaged build carries it in the bundle.
+ */
+export function applyDevDockIcon(): void {
+	if (process.platform !== "darwin" || app.isPackaged || !app.dock) return;
+	const icon = windowIcon();
+	if (icon) app.dock.setIcon(icon);
 }
 
 /**

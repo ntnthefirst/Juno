@@ -1,15 +1,21 @@
 /**
- * One search box over clients, projects and contacts.
+ * One search box over everything: clients, projects, contacts, documents,
+ * calendar events and mail.
  *
- * The queries live here rather than in the three domain services because the
- * ranking has to be decided across all three at once, and a caller that stitched
- * three lists together would be making that decision in the adapter.
+ * The queries live here rather than in the domain services because the ranking
+ * has to be decided across all of them at once, and a caller that stitched six
+ * lists together would be making that decision in the adapter.
+ *
+ * Mail is the exception in how it is matched: it has an FTS5 index kept by
+ * triggers (decision 21), so its own service does that query and this one asks
+ * for it rather than running a LIKE over message bodies.
  */
 import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 import { type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { SearchHit } from "../../shared/types";
+import type { SearchHit, SearchKind, SearchQuery } from "../../shared/types";
 import { getDb, type Db } from "../db";
-import { clients, contacts, projects } from "../db/schema";
+import { calendarEvents, clients, contacts, documents, projects } from "../db/schema";
+import { listThreads } from "./mail-threads";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -28,17 +34,27 @@ function anyOf(...matchers: SQL[]): SQL {
 	return combined;
 }
 
+const ALL_KINDS: SearchKind[] = ["client", "project", "contact", "document", "event", "mail"];
+
 export async function global(
 	term: string,
 	limit = DEFAULT_LIMIT,
 	db: Db = getDb(),
 ): Promise<SearchHit[]> {
-	const needle = term.trim();
+	return query({ term, limit }, db);
+}
+
+export async function query(input: SearchQuery, db: Db = getDb()): Promise<SearchHit[]> {
+	const needle = input.term.trim();
 	if (!needle) return [];
 
-	const cap = Math.min(Math.max(limit, 1), MAX_LIMIT);
+	const cap = Math.min(Math.max(input.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+	const kinds = new Set<SearchKind>(input.kinds && input.kinds.length > 0 ? input.kinds : ALL_KINDS);
+	for (const kind of kinds) {
+		if (!ALL_KINDS.includes(kind)) throw new Error(`"${kind}" is not something Bureau searches.`);
+	}
 
-	const clientRows = db
+	const clientRows = !kinds.has("client") ? [] : db
 		.select({ id: clients.id, name: clients.name, city: clients.city, email: clients.email })
 		.from(clients)
 		.where(
@@ -55,7 +71,7 @@ export async function global(
 		.limit(cap)
 		.all();
 
-	const projectRows = db
+	const projectRows = !kinds.has("project") ? [] : db
 		.select({ id: projects.id, name: projects.name, clientName: clients.name })
 		.from(projects)
 		.innerJoin(clients, eq(projects.clientId, clients.id))
@@ -69,7 +85,7 @@ export async function global(
 		.limit(cap)
 		.all();
 
-	const contactRows = db
+	const contactRows = !kinds.has("contact") ? [] : db
 		.select({
 			id: contacts.id,
 			name: contacts.name,
@@ -93,6 +109,56 @@ export async function global(
 		.limit(cap)
 		.all();
 
+	const documentRows = !kinds.has("document")
+		? []
+		: db
+				.select({
+					id: documents.id,
+					title: documents.title,
+					issuedOn: documents.issuedOn,
+					clientName: clients.name,
+				})
+				.from(documents)
+				.innerJoin(clients, eq(documents.clientId, clients.id))
+				.where(
+					and(
+						isNull(documents.deletedAt),
+						isNull(clients.deletedAt),
+						anyOf(contains(documents.title, needle), contains(clients.name, needle)),
+					),
+				)
+				.limit(cap)
+				.all();
+
+	const eventRows = !kinds.has("event")
+		? []
+		: db
+				.select({
+					id: calendarEvents.id,
+					title: calendarEvents.title,
+					startLocal: calendarEvents.startLocal,
+					location: calendarEvents.location,
+					clientName: clients.name,
+				})
+				.from(calendarEvents)
+				.leftJoin(clients, eq(calendarEvents.clientId, clients.id))
+				.where(
+					and(
+						isNull(calendarEvents.deletedAt),
+						anyOf(
+							contains(calendarEvents.title, needle),
+							contains(calendarEvents.notes, needle),
+							contains(calendarEvents.location, needle),
+						),
+					),
+				)
+				.limit(cap)
+				.all();
+
+	// Mail goes through its own service so the FTS5 index does the matching.
+	// A LIKE over every body would scan the largest table in the database.
+	const mailRows = !kinds.has("mail") ? [] : await listThreads({ search: needle, limit: cap }, db);
+
 	const hits: SearchHit[] = [
 		...clientRows.map((row) => ({
 			kind: "client" as const,
@@ -111,6 +177,29 @@ export async function global(
 			id: row.id,
 			title: row.name,
 			subtitle: row.role ? `${row.role}, ${row.clientName}` : row.clientName,
+		})),
+		...documentRows.map((row) => ({
+			kind: "document" as const,
+			id: row.id,
+			title: row.title,
+			subtitle: row.clientName,
+			on: row.issuedOn,
+		})),
+		...eventRows.map((row) => ({
+			kind: "event" as const,
+			id: row.id,
+			title: row.title,
+			subtitle: [row.clientName, row.location].filter(Boolean).join(", ") || null,
+			on: row.startLocal.slice(0, 10),
+		})),
+		...mailRows.map((row) => ({
+			kind: "mail" as const,
+			id: row.id,
+			title: row.subject || "(no subject)",
+			subtitle: [row.clientName, row.participants[0]?.name ?? row.participants[0]?.address]
+				.filter(Boolean)
+				.join(", ") || null,
+			on: row.lastMessageAt ? row.lastMessageAt.slice(0, 10) : null,
 		})),
 	];
 

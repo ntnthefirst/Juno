@@ -248,11 +248,22 @@ export interface BackupInfo {
 
 /* -------------------------------------------------------------------- misc */
 
+export type SearchKind = "client" | "project" | "contact" | "document" | "event" | "mail";
+
 export interface SearchHit {
-	kind: "client" | "project" | "contact";
+	kind: SearchKind;
 	id: string;
 	title: string;
 	subtitle: string | null;
+	/** `YYYY-MM-DD` for a hit that has a date, so a list can be read in order. */
+	on?: IsoDate | null;
+}
+
+export interface SearchQuery {
+	term: string;
+	/** Which kinds to look in. Left out means all of them. */
+	kinds?: SearchKind[];
+	limit?: number;
 }
 
 export interface AppInfo {
@@ -893,4 +904,191 @@ export interface CalendarImportResult {
 	updated: number;
 	skipped: number;
 	warnings: string[];
+}
+
+/* -------------------------------------------------------------------- agent */
+
+/**
+ * The confirmation gate, as the renderer sees it.
+ *
+ * A side-effectful tool call from an agent does not run. It parks as a pending
+ * action carrying the arguments it would use, and a person approves or rejects
+ * it in the app. See .claude/rules/mcp.md section 4.
+ */
+export type AgentActionState = "pending" | "approved" | "rejected" | "expired" | "executed" | "failed";
+
+/** Where the request came from. Never "user": a person's own click is not a request. */
+export type AgentActionSource = "mcp" | "assistant" | "automation";
+
+export interface AgentAction extends Standard {
+	toolName: string;
+	/** The arguments as given. Shown in full before anybody approves. */
+	args: Record<string, unknown>;
+	/** One line describing what will happen, built when the action was made. */
+	summary: string;
+	state: AgentActionState;
+	source: AgentActionSource;
+	automationRunId: string | null;
+	expiresAt: Iso;
+	decidedAt: Iso | null;
+	executedAt: Iso | null;
+	/** What the service returned once it ran, JSON. */
+	result: unknown;
+	error: string | null;
+}
+
+export interface AgentActionListQuery {
+	states?: AgentActionState[];
+	limit?: number;
+}
+
+export type AuditActor = "user" | "agent" | "automation";
+export type AuditResult = "ok" | "failed" | "pending" | "rejected" | "expired";
+
+export interface AuditEvent extends Standard {
+	actor: AuditActor;
+	toolName: string;
+	/** SHA-256 of the canonical arguments, shortened. No argument value is copied. */
+	argsDigest: string;
+	summary: string;
+	result: AuditResult;
+	entityType: string | null;
+	entityId: string | null;
+	actionId: string | null;
+	error: string | null;
+}
+
+export interface AuditListQuery {
+	actor?: AuditActor;
+	toolName?: string;
+	/** Only events at or after this instant. */
+	since?: Iso;
+	limit?: number;
+}
+
+/** What a tool is, for the screen that lists the surface an agent can drive. */
+export interface ToolSummary {
+	name: string;
+	title: string;
+	description: string;
+	readOnly: boolean;
+	/** True when a person has to approve each call before it runs. */
+	requiresConfirmation: boolean;
+	/**
+	 * True when the service behind it holds its own gate, so the generic one
+	 * would ask twice. `mail.send` is the only one (decision 22).
+	 */
+	gatedInService: boolean;
+}
+
+/* -------------------------------------------------------------- automations */
+
+export type AutomationTrigger =
+	| { kind: "manual" }
+	| { kind: "daily"; time: string }
+	/** `weekday` is 1 for Monday through 7 for Sunday, as ISO-8601 numbers them. */
+	| { kind: "weekly"; weekday: number; time: string };
+
+export interface AutomationStep {
+	tool: string;
+	args: Record<string, unknown>;
+}
+
+export interface Automation extends Standard {
+	name: string;
+	description: string | null;
+	trigger: AutomationTrigger;
+	steps: AutomationStep[];
+	enabled: boolean;
+	lastRunAt: Iso | null;
+	lastRunOn: IsoDate | null;
+	/** Filled by the service: how the last run ended. */
+	lastStatus: AutomationRunStatus | null;
+}
+
+export interface AutomationInput {
+	name: string;
+	description?: string | null;
+	trigger?: AutomationTrigger;
+	steps: AutomationStep[];
+	enabled?: boolean;
+}
+
+export type AutomationPatch = Partial<AutomationInput>;
+
+export type AutomationRunStatus = "running" | "done" | "waiting" | "failed" | "cancelled";
+
+export interface AutomationRunLogEntry {
+	step: number;
+	tool: string;
+	/** ran, waiting, failed or skipped. */
+	outcome: "ran" | "waiting" | "failed" | "skipped";
+	at: Iso;
+	/** The pending action this step is waiting on. */
+	actionId?: string;
+	/** Short, readable. The whole result is not copied into the log. */
+	detail?: string;
+}
+
+export interface AutomationRun extends Standard {
+	automationId: string;
+	automationName: string;
+	startedBy: "manual" | "schedule" | "agent";
+	startedAt: Iso;
+	finishedAt: Iso | null;
+	status: AutomationRunStatus;
+	log: AutomationRunLogEntry[];
+	stoppedAtStep: number | null;
+	error: string | null;
+}
+
+/* ---------------------------------------------------------------- briefings */
+
+/** One thing worth knowing, with enough to click through to it. */
+export interface BriefingItem {
+	kind: "reminder" | "event" | "deadline" | "mail" | "document" | "outbox" | "action";
+	id: string;
+	title: string;
+	detail: string | null;
+	/** `YYYY-MM-DD` for anything with a date, null for a count or a state. */
+	on: IsoDate | null;
+	/** Set when this wants attention rather than simply being true. */
+	urgent: boolean;
+}
+
+export interface BriefingSection {
+	key: string;
+	title: string;
+	items: BriefingItem[];
+	/** Shown when the section is empty, so an empty day still reads as an answer. */
+	emptyText: string;
+}
+
+export interface Briefing {
+	/** The day or range the briefing is about. */
+	title: string;
+	from: IsoDate;
+	to: IsoDate;
+	/** One sentence a person or an agent can read on its own. */
+	headline: string;
+	sections: BriefingSection[];
+}
+
+/* ----------------------------------------------------------- the MCP server */
+
+export interface McpServerStatus {
+	/** False when the server could not start. Everything else is still true. */
+	running: boolean;
+	/** The named pipe or socket the bridge connects to. */
+	address: string;
+	/** How many agents are connected right now. */
+	connections: number;
+	/** The command an agent should be configured with. */
+	command: string;
+	args: string[];
+	/** The whole config block, ready to paste. */
+	configJson: string;
+	/** Why it is not running, when it is not. */
+	error: string | null;
+	toolCount: number;
 }

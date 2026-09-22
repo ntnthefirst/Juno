@@ -29,7 +29,7 @@ export function AgendaView({ dates, today, placed, onOpen }: AgendaViewProps) {
 	}
 	return (
 		<div className="h-full overflow-y-auto px-8 py-4">
-			<div className="max-w-[820px]">
+			<div className="mx-auto w-full max-w-[var(--content-width)]">
 				{days.map((date) => (
 					<section key={date} className="mb-6">
 						<h2

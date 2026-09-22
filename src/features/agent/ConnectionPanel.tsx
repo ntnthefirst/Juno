@@ -64,7 +64,7 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 	const readOnly = tools.filter((tool) => tool.readOnly).length;
 
 	return (
-		<div className="max-w-[820px]">
+		<div className="mx-auto w-full max-w-[var(--content-width)]">
 			<section>
 				<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
 					Connecting an agent

@@ -104,7 +104,7 @@ export function DocumentsScreen() {
 	return (
 		<div className="flex h-full flex-col p-8">
 			<div
-				className={`mb-6 flex items-center justify-between gap-4 ${split ? "" : "max-w-[900px]"}`}
+				className={`mb-6 flex items-center justify-between gap-4 ${split ? "" : "mx-auto w-full max-w-[var(--content-width)]"}`}
 			>
 				<div className="flex items-baseline gap-3">
 					<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
@@ -128,7 +128,7 @@ export function DocumentsScreen() {
 					className={
 						split
 							? "w-[460px] shrink-0 overflow-y-auto border-r border-[var(--line)] pr-6"
-							: "max-w-[900px] flex-1 overflow-y-auto"
+							: "mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto"
 					}
 				>
 					{load.status === "loading" ? (

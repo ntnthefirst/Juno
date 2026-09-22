@@ -61,7 +61,7 @@ export function TemplatesScreen() {
 
 	return (
 		<div className="flex h-full flex-col p-8">
-			<div className={`mb-6 ${split ? "" : "max-w-[900px]"}`}>
+			<div className={`mb-6 ${split ? "" : "mx-auto w-full max-w-[var(--content-width)]"}`}>
 				<div className="flex items-baseline gap-3">
 					<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
 						Templates
@@ -83,7 +83,7 @@ export function TemplatesScreen() {
 					className={
 						split
 							? "w-[420px] shrink-0 overflow-y-auto border-r border-[var(--line)] pr-6"
-							: "max-w-[900px] flex-1 overflow-y-auto"
+							: "mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto"
 					}
 				>
 					{load.status === "loading" ? (

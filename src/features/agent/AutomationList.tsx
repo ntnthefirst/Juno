@@ -71,7 +71,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 	if (load.status === "loading") return <p className="text-[var(--ink-muted)]">Loading.</p>;
 
 	return (
-		<div className="max-w-[820px]">
+		<div className="mx-auto w-full max-w-[var(--content-width)]">
 			<div className="flex items-baseline justify-between gap-4 border-b border-[var(--line)] pb-2">
 				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Automations</h2>
 				<Button variant="primary" size="dense" onClick={() => setForm({ automation: null })}>

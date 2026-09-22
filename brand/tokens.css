@@ -115,6 +115,12 @@
 	--titlebar-height: 40px;
 	--row-height: 36px;
 
+	/* The reading column on a screen that is a single list or form. Centred in
+	 * whatever space is left rather than pinned to the left edge, so a wide
+	 * window does not leave the content in one corner. Screens that are two
+	 * panels beside each other ignore this and use the full width. */
+	--content-width: 900px;
+
 	/* ---- Theme preview swatches ----
 	 * The miniature window drawn on each card in Settings > General. A card has
 	 * to show what light looks like while the application is dark, so these are

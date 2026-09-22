@@ -32,7 +32,7 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 	const answered = actions.filter((action) => action.state !== "pending");
 
 	return (
-		<div className="max-w-[820px]">
+		<div className="mx-auto w-full max-w-[var(--content-width)]">
 			<section>
 				<div className="flex items-baseline gap-3 border-b border-[var(--line)] pb-2">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Waiting for you</h2>

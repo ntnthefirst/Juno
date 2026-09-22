@@ -146,7 +146,7 @@ export function TodayScreen() {
 
 	return (
 		<div className="h-full overflow-y-auto p-8">
-			<div className="max-w-[900px]">
+			<div className="mx-auto w-full max-w-[var(--content-width)]">
 				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
 					Today
 				</h1>

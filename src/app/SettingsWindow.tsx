@@ -14,7 +14,7 @@ import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
 import { useTheme } from "../lib/theme";
 
-type TabId = "general" | "business" | "mail" | "documents" | "security" | "about";
+type TabId = "general" | "business" | "mail" | "documents" | "security";
 
 const TABS: { id: TabId; label: string }[] = [
 	{ id: "general", label: "General" },
@@ -22,7 +22,6 @@ const TABS: { id: TabId; label: string }[] = [
 	{ id: "mail", label: "Mail accounts" },
 	{ id: "documents", label: "Documents" },
 	{ id: "security", label: "Security and data" },
-	{ id: "about", label: "About" },
 ];
 
 /**
@@ -56,9 +55,7 @@ export function SettingsWindow() {
 					paddingRight: overlayGutter.right,
 				}}
 			>
-				<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)]">
-					Settings
-				</span>
+				<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)]">Settings</span>
 			</header>
 
 			<div className="flex min-h-0 flex-1">
@@ -93,7 +90,11 @@ export function SettingsWindow() {
 				<main className="min-w-0 flex-1 overflow-y-auto">
 					{tab === "general" ? (
 						<Pad>
-							<AppearanceSection theme={theme} onChange={setTheme} />
+							<AppearanceSection
+								theme={theme}
+								onChange={setTheme}
+							/>
+							<AboutSection />
 						</Pad>
 					) : tab === "business" ? (
 						<Pad>
@@ -107,20 +108,21 @@ export function SettingsWindow() {
 							<ReferenceSection />
 							<SignatureSection />
 						</Pad>
-					) : tab === "security" ? (
+					) : (
 						<Pad>
 							<LockSection />
 							<BackupSection onDone={setToast} />
-						</Pad>
-					) : (
-						<Pad>
-							<AboutSection />
 						</Pad>
 					)}
 				</main>
 			</div>
 
-			{toast ? <Toast message={toast} onDismiss={() => setToast(null)} /> : null}
+			{toast ? (
+				<Toast
+					message={toast}
+					onDismiss={() => setToast(null)}
+				/>
+			) : null}
 		</div>
 	);
 }
@@ -163,7 +165,10 @@ function AboutSection() {
 					</Row>
 					<Row label="Platform">{info.platform}</Row>
 					<Row label="Database">
-						<span data-selectable className="break-all">
+						<span
+							data-selectable
+							className="break-all"
+						>
 							{info.databasePath}
 						</span>
 					</Row>

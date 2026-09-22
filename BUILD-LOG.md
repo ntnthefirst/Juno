@@ -778,6 +778,33 @@ installer with its own artwork and wording. Decisions 25 to 29 record the why.
   is no `--publish`, so `npm run build --bogus` built silently instead of
   failing. Guard the index before using it.
 
+- **`uuidv7()` was not sortable inside a millisecond, and the schema assumed it
+  was.** CI failed on an audit-log test that expected the newer of two events
+  first. The log ordered on `created_at` alone, which ties at millisecond
+  resolution, so the first fix was to break the tie with the id. That did
+  nothing: this project's own `uuidv7()` fills everything after the 48-bit
+  timestamp with randomness, so ids in the same millisecond sorted at random,
+  measured at 48.8% out of order. The real fix is the RFC 9562 counter method
+  in `db/columns.ts`. Decision 4's claim that v7 sorts by time is now true at
+  the resolution the code relies on, rather than only between milliseconds.
+- **Verifying the wrong implementation is worse than not verifying.** The
+  monotonicity check that justified the first fix was run against the `uuid`
+  package, which is monotonic, and not against the hand-rolled `uuidv7()` the
+  schema actually calls, which was not. It reported exactly what was wanted and
+  meant nothing. Both are now pinned by tests that fail on the old code, checked
+  by reverting it.
+- **A one-line fix applied to six call sites is six changes.** After finding the
+  ordering tie, the same tiebreaker went onto every untied query in the
+  services. One of them, the outbox attachments, writes every row with a single
+  shared `created_at` on purpose, so ordering by id reordered the attachments on
+  a message and broke a test that was encoding the intended order. Reverted to
+  the one query the failure actually pointed at.
+- **Python rewrote 22 files from LF to CRLF.** Text-mode writes on Windows
+  translate newlines, which turned two-line edits into whole-file diffs in
+  commits that were already pushed. Restored in a whitespace-only commit. The
+  repository was already mixed, with 36 files CRLF beforehand, so a
+  `.gitattributes` is still worth a decision.
+
 **What phase 7 does not do, on purpose:** code signing, on either platform.
 Windows installers are unsigned and macOS notarisation is off, so both show a
 warning on first launch. Turning either on is one commit once the certificates

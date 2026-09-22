@@ -28,11 +28,24 @@ Non-negotiable, from the first migration, on every table including join tables
 
 | Column | Type | Why |
 | --- | --- | --- |
-| `id` | text, UUIDv7, primary key | Two machines syncing integer ids is unfixable. v7 is time-sortable, so it indexes and pages well |
+| `id` | text, UUIDv7, primary key | Two machines syncing integer ids is unfixable. v7 is time-sortable, so it indexes and pages well, and it is the tiebreaker whenever two rows share a timestamp |
 | `owner_id` | text, not null | Decides who sees what the day a colleague or a sync server exists. Retrofitting it is a rewrite |
 | `created_at` | text, UTC ISO-8601, not null | Ordering and audit |
 | `updated_at` | text, UTC ISO-8601, not null | Last-write-wins needs it |
 | `deleted_at` | text, UTC ISO-8601, nullable | A sync that hard-deletes cannot tell "deleted" from "not yet received" |
+
+**`uuidv7()` carries a counter, and that is load-bearing.** `created_at` has
+millisecond resolution, so any burst write (a seed, a sync, an audit trail, two
+attachments on one message) produces rows that share a timestamp exactly. With
+randomness straight after the 48-bit timestamp, those ids sort at random and
+"v7 sorts by time" is true only between milliseconds, not inside one. The
+implementation in `db/columns.ts` uses RFC 9562's monotonic counter method so
+ids generated in the same millisecond still sort in creation order, and
+`db/columns.test.ts` holds it there.
+
+So **order by the timestamp and then by `id`** wherever the order is meaningful.
+A query that orders on `created_at` alone is relying on SQLite handing back
+rowid order, which it does not promise.
 
 Put them in a shared `baseColumns` object in `schema.ts` and spread it into every
 table, so a new table cannot forget one. `created_at` and `updated_at` are set in

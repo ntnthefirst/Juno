@@ -10,15 +10,47 @@ import { randomBytes } from "node:crypto";
 import { integer, text } from "drizzle-orm/sqlite-core";
 
 /**
- * UUIDv7: 48 bits of millisecond timestamp, then randomness. Time-sortable, so
- * it clusters in the index instead of scattering writes the way v4 does.
+ * UUIDv7: 48 bits of millisecond timestamp, then a counter, then randomness.
+ * Time-sortable, so it clusters in the index instead of scattering writes the
+ * way v4 does.
  *
- * Implemented here rather than pulled from a package because it is twelve lines
+ * The counter is not decoration. With pure randomness after the timestamp, two
+ * ids generated inside the same millisecond sort at random, which makes "v7
+ * sorts by time" true only at millisecond granularity. Anything that writes a
+ * few rows in a burst, which is every seed, every sync and every audit trail,
+ * then has no stable order at all. This is RFC 9562's monotonic counter method:
+ * the 12 bits after the version hold a counter that increments while the
+ * millisecond does not change.
+ *
+ * Implemented here rather than pulled from a package because it is thirty lines
  * and the main process compiles to CommonJS, where an ESM-only dependency is a
  * problem that costs more than the code does.
  */
+let lastMs = 0;
+let counter = 0;
+
 export function uuidv7(): string {
-	const ms = Date.now();
+	let ms = Date.now();
+
+	if (ms > lastMs) {
+		lastMs = ms;
+		// Not zero: starting mid-range leaves room to increment without rolling
+		// over, and keeps ids from being guessable across milliseconds.
+		counter = randomBytes(2).readUInt16BE(0) & 0x7ff;
+	} else {
+		// Same millisecond, or a clock that went backwards. Either way the last
+		// value seen is the floor, or ids would go backwards with the clock.
+		ms = lastMs;
+		counter += 1;
+		if (counter > 0xfff) {
+			// 4096 ids in one millisecond. Borrow the next one rather than wrap,
+			// which would put this id before the one just handed out.
+			lastMs += 1;
+			ms = lastMs;
+			counter = 0;
+		}
+	}
+
 	const b = randomBytes(16);
 
 	b[0] = Math.floor(ms / 2 ** 40) & 0xff;
@@ -28,7 +60,10 @@ export function uuidv7(): string {
 	b[4] = Math.floor(ms / 2 ** 8) & 0xff;
 	b[5] = ms & 0xff;
 
-	b[6] = (b[6]! & 0x0f) | 0x70; // version 7
+	// Version 7 in the high nibble, then the counter's 12 bits across the rest
+	// of this byte and the next. Everything from b[8] on stays random.
+	b[6] = 0x70 | ((counter >> 8) & 0x0f);
+	b[7] = counter & 0xff;
 	b[8] = (b[8]! & 0x3f) | 0x80; // RFC 4122 variant
 
 	const h = b.toString("hex");

@@ -170,6 +170,29 @@ describe("the audit log", () => {
 		expect(rows[0]!.summary).toContain("bodhi");
 	});
 
+	it("orders two events from the same millisecond by when they happened", async () => {
+		configureAgentActions(async () => ({}));
+
+		// The condition CI hits and this machine usually does not: both rows
+		// written inside one millisecond, so created_at cannot separate them and
+		// the id has to. Frozen rather than hoped for.
+		vi.useFakeTimers();
+		vi.setSystemTime(Date.parse("2026-03-14T09:05:00.000Z"));
+		try {
+			await park("clients.create", { name: "obet" });
+			await park("clients.create", { name: "bodhi" });
+		} finally {
+			vi.useRealTimers();
+		}
+
+		const rows = await auditList({ toolName: "clients.create" }, db);
+		expect(rows).toHaveLength(2);
+		// The premise of the test, asserted rather than assumed.
+		expect(rows[0]!.createdAt).toBe(rows[1]!.createdAt);
+		expect(rows[0]!.summary).toContain("bodhi");
+		expect(rows[1]!.summary).toContain("obet");
+	});
+
 	it("digests the same arguments the same way whatever order they arrived in", () => {
 		expect(digestArgs({ a: 1, b: [2, { c: 3 }] })).toBe(digestArgs({ b: [2, { c: 3 }], a: 1 }));
 		expect(digestArgs({ a: 1 })).not.toBe(digestArgs({ a: 2 }));

@@ -6,7 +6,9 @@
  * especially after the client data it quoted has changed.
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
-import type { Client, Contact, Project } from "../../shared/types";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
+import type { Client, Contact, DocumentSourceKind, ImportDocumentInput, Project } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import {
@@ -81,6 +83,12 @@ export interface DocumentRecord {
 	isSpecimen: boolean;
 	createdAt: string;
 	updatedAt: string;
+	/**
+	 * `imported` is a PDF that already existed and was brought in. It has no body
+	 * to render and no template behind it, so anything that re-renders or
+	 * re-generates has to check this before it tries.
+	 */
+	sourceKind: DocumentSourceKind;
 }
 
 export interface GenerateInput {
@@ -119,7 +127,61 @@ function toRecord(row: Row, clientName: string): DocumentRecord {
 		isSpecimen: row.isSpecimen,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
+		sourceKind: row.sourceKind as DocumentSourceKind,
 	};
+}
+
+/**
+ * A filename that sorts usefully and is legal on every platform.
+ *
+ * The title never reaches the filesystem as typed: everything outside word
+ * characters, spaces and hyphens is stripped, which removes `/`, `\` and `.`
+ * along with anything else a path could be built from. A title of `../../etc`
+ * comes out as `etc`, so joining this onto a directory can never leave it.
+ * Shared with document-actions.ts, which renders and signs PDFs under the same
+ * scheme, so there is exactly one naming rule rather than two that can drift.
+ */
+export function fileNameFor(title: string, suffix: string): string {
+	const safe = title
+		.normalize("NFKD")
+		.replace(/[^\w\s-]/g, "")
+		.trim()
+		.replace(/\s+/g, "-")
+		.slice(0, 60)
+		.toLowerCase();
+	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+	return `${safe || "document"}-${stamp}${suffix}.pdf`;
+}
+
+let importDirectory = "";
+
+/**
+ * Where an imported PDF is copied to. Injected once at startup, from the same
+ * folder a generated document's PDF is written to, so no service here has to
+ * import `electron` and every one stays testable in plain Node.
+ */
+export function configureDocumentStorage(directory: string): void {
+	importDirectory = directory;
+}
+
+function importStorageDir(): string {
+	if (!importDirectory) {
+		throw new Error("configureDocumentStorage() was not called before a document was imported.");
+	}
+	if (!existsSync(importDirectory)) mkdirSync(importDirectory, { recursive: true });
+	return importDirectory;
+}
+
+/** True when the file at `path` starts with the five bytes every PDF starts with. */
+function looksLikePdf(path: string): boolean {
+	const fd = openSync(path, "r");
+	try {
+		const header = Buffer.alloc(5);
+		const read = readSync(fd, header, 0, 5, 0);
+		return read === 5 && header.toString("latin1") === "%PDF-";
+	} finally {
+		closeSync(fd);
+	}
 }
 
 export async function list(
@@ -245,6 +307,71 @@ export async function generate(
 		.all();
 
 	return { document: toRecord(row!, client.name), missing: rendered.missing };
+}
+
+/**
+ * Brings in a PDF that already exists, rather than one Juno generated. The
+ * original file is copied, never moved and never deleted, and the copy is what
+ * the record points at from then on.
+ */
+export async function importPdf(
+	input: ImportDocumentInput,
+	db: Db = getDb(),
+): Promise<DocumentRecord> {
+	const client = db
+		.select()
+		.from(clients)
+		.where(and(eq(clients.id, input.clientId), isNull(clients.deletedAt)))
+		.get();
+	if (!client) throw new Error("That client no longer exists.");
+
+	if (input.projectId) {
+		const project = db
+			.select()
+			.from(projects)
+			.where(and(eq(projects.id, input.projectId), isNull(projects.deletedAt)))
+			.get();
+		if (!project) throw new Error("That project no longer exists.");
+		if (project.clientId !== client.id) {
+			throw new Error("That project belongs to a different client.");
+		}
+	}
+
+	const fileLabel = basename(input.sourcePath);
+	if (!existsSync(input.sourcePath) || !statSync(input.sourcePath).isFile()) {
+		throw new Error(`Could not find "${fileLabel}". Check the file still exists at that location.`);
+	}
+	if (!looksLikePdf(input.sourcePath)) {
+		throw new Error(`"${fileLabel}" is not a PDF. Choose a file that starts with a PDF header.`);
+	}
+
+	const title = input.title?.trim() || basename(input.sourcePath, ".pdf") || "Document";
+	const issuedOn = input.issuedOn ?? todayIsoDate();
+
+	// The destination name comes from the title through fileNameFor, never from
+	// the source path, so a title carrying "../" cannot walk the copy outside
+	// the configured directory.
+	const destination = join(importStorageDir(), fileNameFor(title, "-import"));
+	copyFileSync(input.sourcePath, destination);
+
+	const [row] = db
+		.insert(documents)
+		.values({
+			clientId: client.id,
+			projectId: input.projectId ?? null,
+			templateId: null,
+			templateVersion: null,
+			title,
+			bodyHtml: "",
+			issuedOn,
+			pdfPath: destination,
+			isSpecimen: false,
+			sourceKind: "imported",
+		})
+		.returning()
+		.all();
+
+	return toRecord(row!, client.name);
 }
 
 /**

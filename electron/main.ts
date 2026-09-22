@@ -23,6 +23,7 @@ import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
+import { configureDocumentStorage } from "./main/services/documents";
 import * as notifications from "./main/services/notifications";
 import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
@@ -75,6 +76,7 @@ if (!app.requestSingleInstanceLock()) {
 		settings.configureSettings(userDataDir());
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
 		configureDocuments(documentsDir());
+		configureDocumentStorage(documentsDir());
 		configureMailThreads(mailDir());
 		// Sync never starts while locked and stops at the next step when the lock
 		// comes on, per decision 15.
@@ -450,7 +452,7 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Templates"] : ["Clients"];
+							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(
@@ -469,7 +471,14 @@ if (!app.requestSingleInstanceLock()) {
 								// Matched on data-nav, never on the label. A collapsed sidebar
 								// renders icons only, and a display narrower than 1100px puts it
 								// in exactly that state, which is what a CI runner gives you.
-								const navId = sidebarEntry.toLowerCase();
+								// Two of these do not follow the label: the mail templates entry
+								// is still keyed `templates`, and the document one is hyphenated.
+								const navId =
+									sidebarEntry === "Mail templates"
+										? "templates"
+										: sidebarEntry === "Document templates"
+											? "document-templates"
+											: sidebarEntry.toLowerCase();
 								const click = () =>
 									window.webContents.executeJavaScript(
 										`(() => { const b = document.querySelector("nav button[data-nav=" + JSON.stringify(${JSON.stringify(navId)}) + "]");

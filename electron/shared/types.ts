@@ -16,7 +16,7 @@ export type Iso = string;
 export type IsoDate = string;
 export type Cents = number;
 
-/** Every row Bureau stores carries these. See decision 4. */
+/** Every row Juno stores carries these. See decision 4. */
 export interface Standard {
 	id: string;
 	ownerId: string;
@@ -195,7 +195,7 @@ export interface AppSettings {
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
 	/**
-	 * Where invoicing actually happens. Bureau never raises an invoice; an invoice
+	 * Where invoicing actually happens. Juno never raises an invoice; an invoice
 	 * reminder links here instead. See decision 9.
 	 */
 	accountingTool: AccountingTool;
@@ -383,7 +383,7 @@ export interface Reminder extends Standard {
 	snoozedUntil: IsoDate | null;
 	completedAt: Iso | null;
 	lastCompletedOn: IsoDate | null;
-	/** Where to go to actually do it. Bureau never does it. See decision 9. */
+	/** Where to go to actually do it. Juno never does it. See decision 9. */
 	actionUrl: string | null;
 	actionLabel: string | null;
 	isSystem: boolean;

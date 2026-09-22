@@ -1,6 +1,6 @@
 # Security rules
 
-Bureau holds a business's mail passwords, client records and signed contracts on
+Juno holds a business's mail passwords, client records and signed contracts on
 one machine. These rules are strict because the blast radius is the whole company.
 
 ---
@@ -55,7 +55,7 @@ partitioning and makes every relative fetch a surprise.
 
 - Register a privileged scheme (`app://`) before `app.whenReady()`, mark it
   `standard` and `secure`, and serve the built renderer from it. The window loads
-  `app://bureau/index.html` in production and the Vite dev server in development.
+  `app://juno/index.html` in production and the Vite dev server in development.
 - Ship a real CSP as a response header on that scheme, not only as a meta tag:
   `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
   img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none';
@@ -141,11 +141,11 @@ theatre.
 | Layer | Protects against | Does not protect against |
 | --- | --- | --- |
 | OS account, always on | Another person's login on the same machine | Anyone holding the machine while the owner is signed in |
-| Lock screen, optional, default on | Someone walking up to the running, unlocked laptop | Anything done to `bureau.db` on disk |
-| Database encryption, optional, off by default | A stolen machine or a copied file | A running, unlocked Bureau. The key is in memory while unlocked |
+| Lock screen, optional, default on | Someone walking up to the running, unlocked laptop | Anything done to `juno.db` on disk |
+| Database encryption, optional, off by default | A stolen machine or a copied file | A running, unlocked Juno. The key is in memory while unlocked |
 
 - **Lock state lives in the main process.** It is the only place that knows
-  whether Bureau is locked. Every IPC handler and every MCP tool checks it before
+  whether Juno is locked. Every IPC handler and every MCP tool checks it before
   it does anything, and a renderer claiming to be unlocked proves nothing: a
   renderer that believes it is locked is a renderer that can be told it is not.
 - **A PIN is never the key-derivation input for encryption.** The encryption key
@@ -167,5 +167,5 @@ theatre.
   otherwise is a bug in the same class as claiming an eIDAS signature (section 7).
 - Turning encryption on requires the passphrase twice and states, in those words,
   that a forgotten passphrase means the data is unrecoverable and there is no reset.
-- An MCP tool may lock Bureau and may never unlock it. There is no `app.unlock`
+- An MCP tool may lock Juno and may never unlock it. There is no `app.unlock`
   ([mcp.md](mcp.md), PLAN.md section 4). Unlocking is a person at the keyboard.

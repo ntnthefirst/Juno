@@ -51,7 +51,7 @@ export async function query(input: SearchQuery, db: Db = getDb()): Promise<Searc
 	const cap = Math.min(Math.max(input.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 	const kinds = new Set<SearchKind>(input.kinds && input.kinds.length > 0 ? input.kinds : ALL_KINDS);
 	for (const kind of kinds) {
-		if (!ALL_KINDS.includes(kind)) throw new Error(`"${kind}" is not something Bureau searches.`);
+		if (!ALL_KINDS.includes(kind)) throw new Error(`"${kind}" is not something Juno searches.`);
 	}
 
 	const clientRows = !kinds.has("client") ? [] : db

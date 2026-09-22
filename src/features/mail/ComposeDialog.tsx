@@ -87,9 +87,9 @@ export function ComposeDialog({ seed, onClose, onDone }: ComposeDialogProps) {
 	useEffect(() => {
 		let cancelled = false;
 		Promise.all([
-			window.bureau.mail.accounts.list(),
-			window.bureau.mail.templates.list(),
-			window.bureau.clients.list({ limit: 200 }),
+			window.juno.mail.accounts.list(),
+			window.juno.mail.templates.list(),
+			window.juno.clients.list({ limit: 200 }),
 		])
 			.then(([accountRows, templateRows, clientRows]) => {
 				if (cancelled) return;
@@ -112,7 +112,7 @@ export function ComposeDialog({ seed, onClose, onDone }: ComposeDialogProps) {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.documents
+		window.juno.documents
 			.list(clientId ? { clientId } : undefined)
 			.then((rows) => {
 				if (!cancelled) setDocuments(rows);
@@ -137,7 +137,7 @@ export function ComposeDialog({ seed, onClose, onDone }: ComposeDialogProps) {
 		setBusy("render");
 		setError(null);
 		try {
-			const rendered = await window.bureau.mail.templates.render({
+			const rendered = await window.juno.mail.templates.render({
 				templateId: template.id,
 				clientId: clientId || null,
 				projectId: seed.projectId ?? null,
@@ -182,9 +182,9 @@ export function ComposeDialog({ seed, onClose, onDone }: ComposeDialogProps) {
 				replyToMessageId: seed.draft?.replyToMessageId ?? seed.replyToMessageId ?? null,
 			};
 			let message = seed.draft
-				? await window.bureau.mail.outbox.updateDraft(seed.draft.id, input)
-				: await window.bureau.mail.outbox.createDraft({ accountId, ...input });
-			if (queue) message = await window.bureau.mail.outbox.send(message.id);
+				? await window.juno.mail.outbox.updateDraft(seed.draft.id, input)
+				: await window.juno.mail.outbox.createDraft({ accountId, ...input });
+			if (queue) message = await window.juno.mail.outbox.send(message.id);
 			onDone(message, queue);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

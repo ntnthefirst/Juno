@@ -6,7 +6,7 @@
  * ../ipc/lock-guard.ts enforces it on every channel, and the renderer is merely
  * told what happened.
  *
- * What this protects: someone using the machine while Bureau is running. It does
+ * What this protects: someone using the machine while Juno is running. It does
  * not encrypt the file on disk, and the settings screen has to say so.
  */
 import { BrowserWindow, powerMonitor } from "electron";

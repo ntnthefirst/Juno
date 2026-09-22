@@ -22,7 +22,7 @@ export function RemindersScreen() {
 	const [notice, setNotice] = useState<string | null>(null);
 
 	const fetchRows = useCallback(
-		() => window.bureau.reminders.list({ includeDone }),
+		() => window.juno.reminders.list({ includeDone }),
 		[includeDone],
 	);
 
@@ -54,7 +54,7 @@ export function RemindersScreen() {
 		const id = deleted.id;
 		setDeleted(null);
 		try {
-			await window.bureau.reminders.restore(id);
+			await window.juno.reminders.restore(id);
 			refreshList();
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));

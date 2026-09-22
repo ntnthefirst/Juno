@@ -73,7 +73,7 @@ class FakeMailbox {
 	sourceOf(message: FakeMessage): Buffer {
 		const lines = [
 			`From: ${message.fromName ? `"${message.fromName}" <${message.from}>` : message.from}`,
-			`To: ${(message.to ?? ["me@bureau.test"]).join(", ")}`,
+			`To: ${(message.to ?? ["me@juno.test"]).join(", ")}`,
 			`Subject: ${message.subject}`,
 			`Message-ID: ${message.messageId}`,
 			`Date: ${new Date(message.date).toUTCString()}`,
@@ -138,7 +138,7 @@ function sourceOver(box: FakeMailbox): MailboxSource {
 						inReplyTo: m.inReplyTo ?? null,
 						references: m.references ?? [],
 						from: { name: m.fromName ?? null, address: m.from },
-						to: (m.to ?? ["me@bureau.test"]).map((address) => ({ name: null, address })),
+						to: (m.to ?? ["me@juno.test"]).map((address) => ({ name: null, address })),
 						cc: [],
 						replyTo: [],
 					},
@@ -172,7 +172,7 @@ let accountId: string;
 beforeEach(async () => {
 	db = freshDb();
 	box = new FakeMailbox();
-	mailDir = mkdtempSync(join(tmpdir(), "bureau-mail-"));
+	mailDir = mkdtempSync(join(tmpdir(), "juno-mail-"));
 	configureCredentialStore(new MemoryCredentialStore());
 	configureMailboxSource(async (connection) => {
 		if (box.failConnect) throw box.failConnect;
@@ -186,7 +186,7 @@ beforeEach(async () => {
 	sync.resetForTests();
 
 	const account = await accounts.create(
-		{ email: "me@bureau.test", imapHost: "imap.bureau.test", password: "secret", horizonDays: 30 },
+		{ email: "me@juno.test", imapHost: "imap.juno.test", password: "secret", horizonDays: 30 },
 		db,
 	);
 	accountId = account.id;
@@ -223,9 +223,9 @@ describe("accounts", () => {
 	});
 
 	it("tests a connection without storing anything", async () => {
-		const ok = await accounts.test({ imapHost: "imap.bureau.test", username: "me", password: "secret" }, db);
+		const ok = await accounts.test({ imapHost: "imap.juno.test", username: "me", password: "secret" }, db);
 		expect(ok).toEqual({ ok: true, message: null, folderCount: 1 });
-		const bad = await accounts.test({ imapHost: "imap.bureau.test", username: "me", password: "wrong" }, db);
+		const bad = await accounts.test({ imapHost: "imap.juno.test", username: "me", password: "wrong" }, db);
 		expect(bad.ok).toBe(false);
 		expect(bad.message).toMatch(/password for me was rejected/);
 		expect(box.closed).toBe(1);
@@ -239,7 +239,7 @@ describe("sync", () => {
 			date: recent(3), text: "Hallo, hierbij de offerte.\n> quoted\n-- \nLaura",
 		});
 		box.add("INBOX", {
-			uid: 2, from: "me@bureau.test", subject: "Re: Offerte", messageId: "<b@bureau>",
+			uid: 2, from: "me@juno.test", subject: "Re: Offerte", messageId: "<b@juno>",
 			inReplyTo: "<a@obet>", references: ["<a@obet>"], date: recent(2), text: "Bedankt.", flags: ["\\Seen"],
 		});
 		box.add("INBOX", {
@@ -367,7 +367,7 @@ describe("sync", () => {
 		box.failConnect = Object.assign(new Error("x"), { code: "ENOTFOUND" });
 		const result = await sync.syncAccount(accountId, db);
 		expect(result.phase).toBe("failed");
-		expect(result.error).toMatch(/Could not find imap.bureau.test/);
+		expect(result.error).toMatch(/Could not find imap.juno.test/);
 		expect((await accounts.get(accountId, db))!.lastSyncError).toBe(result.error);
 	});
 
@@ -400,7 +400,7 @@ describe("attachments", () => {
 		const boundary = "b1";
 		const source = [
 			"From: a@x.be",
-			"To: me@bureau.test",
+			"To: me@juno.test",
 			"Subject: Bijlage",
 			"Message-ID: <att@x>",
 			`Date: ${new Date(recent(1)).toUTCString()}`,

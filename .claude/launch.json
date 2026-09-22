@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "bureau-renderer",
+      "name": "juno-renderer",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:renderer"],
       "port": 5173

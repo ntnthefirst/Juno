@@ -1,5 +1,5 @@
 /**
- * The contract the preload bridge exposes on `window.bureau`.
+ * The contract the preload bridge exposes on `window.juno`.
  *
  * This is the single definition of what the renderer can ask for. The main
  * process implements it in `electron/main/ipc/`, the preload forwards it, and
@@ -108,7 +108,7 @@ export interface ListClientsQuery {
 	offset?: number;
 }
 
-export interface BureauApi {
+export interface JunoApi {
 	app: {
 		info(): Promise<AppInfo>;
 	};
@@ -175,7 +175,7 @@ export interface BureauApi {
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
 		getOwner(): Promise<OwnerProfile>;
 		setOwner(patch: Partial<OwnerProfile>): Promise<OwnerProfile>;
-		/** Where invoicing happens. Invoice reminders link here; Bureau never bills. */
+		/** Where invoicing happens. Invoice reminders link here; Juno never bills. */
 		getAccountingTool(): Promise<AccountingTool>;
 		setAccountingTool(patch: Partial<AccountingTool>): Promise<AccountingTool>;
 	};
@@ -213,7 +213,7 @@ export interface BureauApi {
 	};
 
 	agent: {
-		/** Whether an agent can reach Bureau, and the config block to paste. */
+		/** Whether an agent can reach Juno, and the config block to paste. */
 		status(): Promise<McpServerStatus>;
 		/** Every tool, for the screen that lists the surface. No handlers cross. */
 		tools(): Promise<ToolSummary[]>;
@@ -436,6 +436,6 @@ export interface BureauApi {
 
 declare global {
 	interface Window {
-		bureau: BureauApi;
+		juno: JunoApi;
 	}
 }

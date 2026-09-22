@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 32" fill="none" role="img" aria-label="Bureau">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 32" fill="none" role="img" aria-label="Juno">
   <!-- Fixed ink colour, for light backgrounds and any <img> tag. TODO(asset): outline the text. -->
   <g transform="translate(-6,0)" fill="#1A1917">
     <rect x="6" y="6" width="4" height="20" rx="1.5"/>
@@ -7,5 +7,5 @@
   </g>
   <text x="28" y="25" fill="#1A1917"
         font-family="Inter, 'Segoe UI', system-ui, sans-serif"
-        font-size="20" font-weight="600" letter-spacing="-0.4">Bureau</text>
+        font-size="20" font-weight="600" letter-spacing="-0.4">Juno</text>
 </svg>

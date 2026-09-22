@@ -1,6 +1,6 @@
 ---
 name: commit-work
-description: Commit finished Bureau work, split into clean logical commits with plain human messages and no AI attribution. Checks that no database file, mail account, credential or signature image is about to be staged. Use when the user says "commit this", "commit what we did", "split this into commits", or when a working tree has piled up changes from several pieces of work. Also covers writing PR text when asked.
+description: Commit finished Juno work, split into clean logical commits with plain human messages and no AI attribution. Checks that no database file, mail account, credential or signature image is about to be staged. Use when the user says "commit this", "commit what we did", "split this into commits", or when a working tree has piled up changes from several pieces of work. Also covers writing PR text when asked.
 ---
 
 # Workflow: committing finished work
@@ -69,7 +69,7 @@ committed.
 
 ## Step 3 — Group the changes into commits
 
-Group by **logical unit of work**, not by file type and not by folder. Bureau's
+Group by **logical unit of work**, not by file type and not by folder. Juno's
 natural units follow the layer order ([feature-new](../feature-new/SKILL.md)):
 
 - Schema plus migration plus the service change that needs it, one commit.

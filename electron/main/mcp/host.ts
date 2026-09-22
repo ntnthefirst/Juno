@@ -3,7 +3,7 @@
  *
  * It routes; it decides nothing about any domain. In order, a call is:
  *
- * 1. refused while Bureau is locked, whatever it asks for (decision 15: the
+ * 1. refused while Juno is locked, whatever it asks for (decision 15: the
  *    main process owns lock state and every tool checks it);
  * 2. matched to a declared tool, or refused by name;
  * 3. run, if the tool is read-only or a local write that needs no approval;
@@ -86,7 +86,7 @@ function describe(tool: ToolDescriptor): string {
 	if (tool.readOnly) return tool.description;
 	if (tool.gatedInService) return tool.description;
 	if (!tool.requiresConfirmation) return tool.description;
-	return `${tool.description} Requires approval: this call does not run, it asks. A person approves or rejects it in Bureau and the reply says pending.`;
+	return `${tool.description} Requires approval: this call does not run, it asks. A person approves or rejects it in Juno and the reply says pending.`;
 }
 
 const MAX_SUMMARY_VALUE = 60;
@@ -125,8 +125,8 @@ export async function callTool(
 ): Promise<unknown> {
 	if (isLocked()) {
 		throw new ToolError(
-			"BUREAU_LOCKED",
-			"Bureau is locked. Unlock it on the machine; there is no tool that can.",
+			"JUNO_LOCKED",
+			"Juno is locked. Unlock it on the machine; there is no tool that can.",
 		);
 	}
 
@@ -183,7 +183,7 @@ export function pendingResultOf(action: AgentAction): PendingResult {
 		summary: action.summary,
 		expiresAt: action.expiresAt,
 		message:
-			"Nothing has happened yet. This is waiting for a person to approve it in Bureau. " +
+			"Nothing has happened yet. This is waiting for a person to approve it in Juno. " +
 			"Check back with agent.get_action, and do not ask again in the meantime.",
 	};
 }

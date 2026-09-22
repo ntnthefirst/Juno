@@ -86,17 +86,17 @@ everywhere for a reason.
 
 The print stylesheet is in `electron/main/services/document-style.ts` and is
 applied to every document. It is **not** the application's theme tokens: a
-contract is printed in ink on paper and has to look the same whether Bureau is
+contract is printed in ink on paper and has to look the same whether Juno is
 running in dark mode or not.
 
 Classes worth using:
 
 | Class | For |
 | --- | --- |
-| `bureau-clause` | A clause that should not be split across a page break |
-| `bureau-parties` | The `<dl>` holding the two parties |
-| `bureau-doc-meta` | Small grey line under the title |
-| `bureau-signatures`, `bureau-signature` | The signature block at the end |
+| `juno-clause` | A clause that should not be split across a page break |
+| `juno-parties` | The `<dl>` holding the two parties |
+| `juno-doc-meta` | Small grey line under the title |
+| `juno-signatures`, `juno-signature` | The signature block at the end |
 
 `h2` never breaks away from the text under it, so a clause heading cannot be
 orphaned at the foot of a page.

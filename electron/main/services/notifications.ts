@@ -1,5 +1,5 @@
 /**
- * The one notification Bureau sends: what needs attention, once a day.
+ * The one notification Juno sends: what needs attention, once a day.
  *
  * Deliberately quiet, per brand/BRAND.md. One notification, summarising, never
  * one per reminder. An app that fires five notifications on launch gets its
@@ -37,7 +37,7 @@ function summarise(rows: reminders.ReminderRecord[]): { title: string; body: str
 	const body =
 		rest > 0 ? `${first.title}, and ${rest} more.` : first.title;
 
-	return { title: `Bureau: ${parts.join(", ")}`, body };
+	return { title: `Juno: ${parts.join(", ")}`, body };
 }
 
 async function check(): Promise<void> {

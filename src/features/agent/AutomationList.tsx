@@ -27,7 +27,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.bureau.automations.list(), window.bureau.automations.runs(undefined, 30)])
+		Promise.all([window.juno.automations.list(), window.juno.automations.runs(undefined, 30)])
 			.then(([rows, runRows]) => {
 				if (cancelled) return;
 				setLoad({ status: "ready", rows });
@@ -41,7 +41,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 		};
 	}, [version]);
 
-	useEffect(() => window.bureau.automations.onRunChange(() => refresh()), [refresh]);
+	useEffect(() => window.juno.automations.onRunChange(() => refresh()), [refresh]);
 
 	async function act(id: string, work: () => Promise<unknown>, done?: string) {
 		if (busyId) return;
@@ -81,7 +81,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 
 			{load.rows.length === 0 ? (
 				<p className="mt-4 max-w-[68ch] text-[var(--ink-muted)]">
-					No automations yet. An automation is a list of tool calls Bureau replays, by hand or on a
+					No automations yet. An automation is a list of tool calls Juno replays, by hand or on a
 					schedule. A step that needs your approval still needs it, so one cannot be used to send
 					mail while you are away.
 				</p>
@@ -115,7 +115,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 										size="dense"
 										disabled={busyId !== null}
 										onClick={() =>
-											void act(automation.id, () => window.bureau.automations.run(automation.id))
+											void act(automation.id, () => window.juno.automations.run(automation.id))
 										}
 									>
 										Run now
@@ -125,7 +125,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 										disabled={busyId !== null}
 										onClick={() =>
 											void act(automation.id, () =>
-												window.bureau.automations.update(automation.id, { enabled: !automation.enabled }),
+												window.juno.automations.update(automation.id, { enabled: !automation.enabled }),
 											)
 										}
 									>
@@ -141,7 +141,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 										onClick={() =>
 											void act(
 												automation.id,
-												() => window.bureau.automations.remove(automation.id),
+												() => window.juno.automations.remove(automation.id),
 												`${automation.name} deleted.`,
 											)
 										}
@@ -195,7 +195,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 											size="dense"
 											disabled={busyId !== null}
 											onClick={() =>
-												void act(run.id, () => window.bureau.automations.cancelRun(run.id), "Run cancelled.")
+												void act(run.id, () => window.juno.automations.cancelRun(run.id), "Run cancelled.")
 											}
 										>
 											Cancel this run

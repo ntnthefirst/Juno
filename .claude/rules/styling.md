@@ -69,7 +69,7 @@ same edit. All four or none.
 
 ## 4. This is a dense data application
 
-Bureau is a back office, not a marketing page. The type scale in the tokens is
+Juno is a back office, not a marketing page. The type scale in the tokens is
 already dense; don't reach past it.
 
 - **Default UI text is `--text-base` (14px).** Table cells and list rows are

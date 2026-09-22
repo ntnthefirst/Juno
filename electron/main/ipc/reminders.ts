@@ -51,7 +51,7 @@ export function registerRemindersIpc(): void {
 		// Only http and https. A reminder's link is data, and a file: or a custom
 		// scheme handed to the shell is a way to run something.
 		if (!/^https?:\/\//i.test(reminder.actionUrl)) {
-			throw new Error("That link is not a web address, so Bureau will not open it.");
+			throw new Error("That link is not a web address, so Juno will not open it.");
 		}
 		await shell.openExternal(reminder.actionUrl);
 	});

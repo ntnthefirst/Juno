@@ -1,6 +1,6 @@
 ---
 name: migration-new
-description: Change the Bureau database schema - a new table, a new column, an index, a rename, a backfill. Generates the Drizzle migration, checks the five mandatory columns, plans the backfill, and verifies forward on a copy of the real database with a backup taken first. Use when the user says "add a field to clients", "we need a table for X", "the schema is wrong". Not for a whole new domain end to end - use feature-new, which starts here.
+description: Change the Juno database schema - a new table, a new column, an index, a rename, a backfill. Generates the Drizzle migration, checks the five mandatory columns, plans the backfill, and verifies forward on a copy of the real database with a backup taken first. Use when the user says "add a field to clients", "we need a table for X", "the schema is wrong". Not for a whole new domain end to end - use feature-new, which starts here.
 ---
 
 # Workflow: a schema change
@@ -112,8 +112,8 @@ is what a fresh install does, and it is the check people skip.
 Then verify on **real-shaped data**, against a copy, never the original:
 
 ```bash
-cp "<userData>/bureau.db" ".tmp/bureau-copy.db"
-npm run db:migrate -- --db .tmp/bureau-copy.db
+cp "<userData>/juno.db" ".tmp/juno-copy.db"
+npm run db:migrate -- --db .tmp/juno-copy.db
 ```
 
 - [ ] Row counts before and after match on every table you did not intend to
@@ -128,7 +128,7 @@ npm run db:migrate -- --db .tmp/bureau-copy.db
 Before the migration ever runs on the owner's real database:
 
 ```bash
-cp "<userData>/bureau.db" "<userData>/bureau.db.bak-<yyyy-mm-dd-hhmm>"
+cp "<userData>/juno.db" "<userData>/juno.db.bak-<yyyy-mm-dd-hhmm>"
 ```
 
 - Take it with the app **closed**. A copy taken mid-write is a copy of a

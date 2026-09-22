@@ -27,8 +27,8 @@ export function LockSection() {
 	const refresh = useCallback(async () => {
 		try {
 			const [nextState, nextSettings] = await Promise.all([
-				window.bureau.lock.state(),
-				window.bureau.lock.getSettings(),
+				window.juno.lock.state(),
+				window.juno.lock.getSettings(),
 			]);
 			setState(nextState);
 			setSettings(nextSettings);
@@ -39,7 +39,7 @@ export function LockSection() {
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.bureau.lock.state(), window.bureau.lock.getSettings()])
+		Promise.all([window.juno.lock.state(), window.juno.lock.getSettings()])
 			.then(([nextState, nextSettings]) => {
 				if (cancelled) return;
 				setState(nextState);
@@ -48,7 +48,7 @@ export function LockSection() {
 			.catch((cause: unknown) => {
 				if (!cancelled) setError(messageOf(cause));
 			});
-		const unsubscribe = window.bureau.lock.onChange(setState);
+		const unsubscribe = window.juno.lock.onChange(setState);
 		return () => {
 			cancelled = true;
 			unsubscribe();
@@ -58,7 +58,7 @@ export function LockSection() {
 	async function patchSettings(patch: Partial<LockSettings>) {
 		setError(null);
 		try {
-			setSettings(await window.bureau.lock.setSettings(patch));
+			setSettings(await window.juno.lock.setSettings(patch));
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		}
@@ -87,16 +87,16 @@ export function LockSection() {
 			}
 			description={
 				<>
-					The lock screen protects against someone using this machine while Bureau is running. It
+					The lock screen protects against someone using this machine while Juno is running. It
 					does not encrypt the database on disk, so anyone who can copy the file can still read
-					it. Encryption at rest is a separate thing and Bureau does not do it yet.
+					it. Encryption at rest is a separate thing and Juno does not do it yet.
 				</>
 			}
 		>
 			<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 				{configured
 					? `A ${state?.method === "pin" ? "PIN" : "passphrase"} is set.`
-					: "No lock is set. Bureau opens straight to your records."}
+					: "No lock is set. Juno opens straight to your records."}
 			</p>
 
 			{configured && settings ? (
@@ -195,9 +195,9 @@ function LockDialog({
 		setBusy(true);
 		try {
 			if (mode === "disable") {
-				await window.bureau.lock.disable(current);
+				await window.juno.lock.disable(current);
 			} else {
-				await window.bureau.lock.configure({
+				await window.juno.lock.configure({
 					method: kind,
 					secret: next,
 					currentSecret: needsCurrent ? current : undefined,
@@ -221,7 +221,7 @@ function LockDialog({
 			<form onSubmit={submit} className="flex flex-col gap-4">
 				{mode === "disable" ? (
 					<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						Bureau will open straight to your records after this.
+						Juno will open straight to your records after this.
 					</p>
 				) : null}
 
@@ -274,7 +274,7 @@ function LockDialog({
 
 				{needsNew ? (
 					<p className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-						Bureau stores a one-way check of this, never the value itself. There is no way to
+						Juno stores a one-way check of this, never the value itself. There is no way to
 						recover it, and no way to reset it from inside the app.
 					</p>
 				) : null}

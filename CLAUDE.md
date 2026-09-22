@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Working notes for Bureau, loaded automatically each session. Keep it current:
+Working notes for Juno, loaded automatically each session. Keep it current:
 when you discover a convention that is not written down here, add it.
 
 Unlike the client website kit this project borrows its shape from, `.claude/` is
@@ -118,7 +118,7 @@ on by default; database encryption, optional and off, and out of scope for now.
 the settings screen has to say so. Lock state lives in the main process, never in
 the renderer. A PIN is never the key-derivation input for encryption: the key is
 random and wrapped by `safeStorage`, and the PIN unwraps it. An MCP tool may lock
-Bureau and may never unlock it. Details in
+Juno and may never unlock it. Details in
 [.claude/rules/security.md](.claude/rules/security.md).
 
 ## Seeded reference data

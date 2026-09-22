@@ -7,7 +7,7 @@ import { documents } from "./documents";
  * A reminder is a date and a sentence. It may hang off a client, a project or a
  * document, or off nothing at all.
  *
- * Bureau tells you; it never acts. Decision 9: no invoice is generated, numbered
+ * Juno tells you; it never acts. Decision 9: no invoice is generated, numbered
  * or sent, and no money moves. A reminder that says "time to invoice obet" points
  * at the accounting tool and stops there.
  */
@@ -53,7 +53,7 @@ export const reminders = sqliteTable(
 		completedAt: text("completed_at"),
 		lastCompletedOn: text("last_completed_on"),
 
-		/** Where to go to actually do it, for the ones Bureau will not do itself. */
+		/** Where to go to actually do it, for the ones Juno will not do itself. */
 		actionUrl: text("action_url"),
 		actionLabel: text("action_label"),
 	},

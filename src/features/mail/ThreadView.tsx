@@ -25,7 +25,7 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.mail.threads
+		window.juno.mail.threads
 			.get(threadId)
 			.then((thread) => {
 				if (cancelled) return;
@@ -41,7 +41,7 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 
 	async function unlink() {
 		try {
-			await window.bureau.mail.threads.unlinkClient(threadId);
+			await window.juno.mail.threads.unlinkClient(threadId);
 			setVersion((v) => v + 1);
 			onChanged();
 		} catch (cause: unknown) {

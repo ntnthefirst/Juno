@@ -1,5 +1,5 @@
-appId: be.digistra.bureau
-productName: Bureau
+appId: be.digistra.juno
+productName: Juno
 copyright: Nathan Perron
 
 directories:
@@ -30,7 +30,7 @@ files:
 
 win:
   icon: build/icon.png
-  artifactName: Bureau-Setup-${version}-${arch}.${ext}
+  artifactName: Juno-Setup-${version}-${arch}.${ext}
   target:
     - target: nsis
       arch:
@@ -42,19 +42,19 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Bureau
+  shortcutName: Juno
 
 mac:
   icon: build/icon.png
   category: public.app-category.productivity
-  artifactName: Bureau-${version}-${arch}.${ext}
+  artifactName: Juno-${version}-${arch}.${ext}
   target:
     - dmg
     - zip
 
 linux:
   icon: build/icon.png
-  artifactName: Bureau-${version}-${arch}.${ext}
+  artifactName: Juno-${version}-${arch}.${ext}
   category: Office
   target:
     - AppImage

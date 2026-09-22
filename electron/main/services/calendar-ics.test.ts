@@ -5,7 +5,7 @@ import { expandSeries } from "./calendar-recurrence";
 const BRU = "Europe/Brussels";
 
 const tuesdayCall: IcsEvent = {
-	icalUid: "call@bureau",
+	icalUid: "call@juno",
 	title: "Weekly call, obet",
 	notes: "Agenda:\nlast week; this week",
 	location: null,
@@ -43,7 +43,7 @@ describe("buildIcs", () => {
 	it("writes wall-clock times with the zone, a UTC UNTIL, EXDATE and an override", () => {
 		const out = buildIcs([tuesdayCall], "2026-09-21T12:00:00.000Z");
 		expect(out).toContain("BEGIN:VCALENDAR\r\n");
-		expect(out).toContain("PRODID:-//Bureau//Calendar//EN");
+		expect(out).toContain("PRODID:-//Juno//Calendar//EN");
 		expect(out).toContain("TZID:Europe/Brussels");
 		expect(out).toContain("DTSTART;TZID=Europe/Brussels:20260922T100000");
 		expect(out).toContain("DTEND;TZID=Europe/Brussels:20260922T103000");
@@ -101,7 +101,7 @@ describe("round trip", () => {
 		expect(warnings).toEqual([]);
 		expect(events).toHaveLength(1);
 		const back = events[0]!;
-		expect(back.icalUid).toBe("call@bureau");
+		expect(back.icalUid).toBe("call@juno");
 		expect(back.title).toBe("Weekly call, obet");
 		expect(back.notes).toBe("Agenda:\nlast week; this week");
 		expect(back.timezone).toBe(BRU);

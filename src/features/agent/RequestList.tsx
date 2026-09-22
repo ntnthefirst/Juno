@@ -84,8 +84,8 @@ function RequestCard({ action, onChanged, onNotice }: CardProps) {
 		if (busy) return;
 		setBusy(true);
 		try {
-			if (approve) await window.bureau.agent.actions.approve(action.id);
-			else await window.bureau.agent.actions.reject(action.id);
+			if (approve) await window.juno.agent.actions.approve(action.id);
+			else await window.juno.agent.actions.reject(action.id);
 			onChanged();
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
@@ -141,7 +141,7 @@ function AnsweredRow({ action, onChanged, onNotice }: CardProps) {
 		if (busy) return;
 		setBusy(true);
 		try {
-			await window.bureau.agent.actions.remove(action.id);
+			await window.juno.agent.actions.remove(action.id);
 			onChanged();
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));

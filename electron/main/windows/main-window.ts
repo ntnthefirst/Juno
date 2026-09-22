@@ -9,7 +9,7 @@ const DEV_URL = "http://localhost:5173";
  * The CSP the renderer runs under.
  *
  * `connect-src` allows the Vite dev server's websocket in development only.
- * There is no `unsafe-eval` and no remote origin: Bureau is offline-first and
+ * There is no `unsafe-eval` and no remote origin: Juno is offline-first and
  * the renderer has no business reaching the network. Mail HTML will be rendered
  * in a separate sandboxed frame with its own, stricter policy, never here.
  */
@@ -73,7 +73,7 @@ export function createMainWindow(isDev: boolean): BrowserWindow {
 		});
 	});
 
-	// Nothing in Bureau should ever open a second window, and a link in a note or
+	// Nothing in Juno should ever open a second window, and a link in a note or
 	// a client record must not be able to. External links go to the real browser.
 	window.webContents.setWindowOpenHandler(({ url }) => {
 		if (url.startsWith("https://") || url.startsWith("mailto:")) void shell.openExternal(url);

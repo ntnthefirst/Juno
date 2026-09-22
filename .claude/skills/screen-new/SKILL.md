@@ -1,6 +1,6 @@
 ---
 name: screen-new
-description: Build a new renderer screen or panel in Bureau - a client list, a document detail view, an inbox pane, a dashboard card. Use when the user asks for a view over data that a service already exposes ("show me the mailbox", "add a screen for reminders"). Not for adding a whole domain including its service and tools - use feature-new. Not for a change to a screen that already exists.
+description: Build a new renderer screen or panel in Juno - a client list, a document detail view, an inbox pane, a dashboard card. Use when the user asks for a view over data that a service already exposes ("show me the mailbox", "add a screen for reminders"). Not for adding a whole domain including its service and tools - use feature-new. Not for a change to a screen that already exists.
 ---
 
 # Workflow: a new renderer screen
@@ -52,7 +52,7 @@ imports, never an inline signature type.
 ## Step 2 — Data access, only through the bridge
 
 ```ts
-const clients = await window.bureau.clients.list({ includeArchived: false });
+const clients = await window.juno.clients.list({ includeArchived: false });
 ```
 
 - **Only the preload bridge.** No `better-sqlite3` import, no Drizzle import, no
@@ -85,7 +85,7 @@ any of them:
 
 ## Step 4 — Density and tokens
 
-Bureau is a dense application, not a marketing page. From
+Juno is a dense application, not a marketing page. From
 `src/styles/tokens.css` ([styling.md](../../rules/styling.md)):
 
 - **Text**: `--text-base` (14px) is default UI text. Table cells and list rows

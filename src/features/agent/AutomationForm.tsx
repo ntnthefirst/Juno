@@ -54,7 +54,7 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.agent
+		window.juno.agent
 			.tools()
 			.then((rows) => {
 				if (!cancelled) setTools(rows);
@@ -114,8 +114,8 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 				trigger,
 				steps,
 			};
-			if (automation) await window.bureau.automations.update(automation.id, input);
-			else await window.bureau.automations.create(input);
+			if (automation) await window.juno.automations.update(automation.id, input);
+			else await window.juno.automations.create(input);
 			onSaved();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

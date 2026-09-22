@@ -1,5 +1,5 @@
 /**
- * Where an agent reaches Bureau.
+ * Where an agent reaches Juno.
  *
  * The database is open in this process and only this process: two processes on
  * one SQLite file is corruption waiting, which is why the app takes a single
@@ -17,7 +17,7 @@
  * and a random token, and a connection that does not present it is dropped.
  * That stops something that guessed the pipe name. It does not stop a program
  * already running as this user, which can read the file: on a single-user
- * desktop that program could read `bureau.sqlite` anyway. The lock is the
+ * desktop that program could read `juno.sqlite` anyway. The lock is the
  * control that matters here, and it is checked on every call.
  */
 import { chmodSync, existsSync, rmSync, writeFileSync } from "node:fs";
@@ -50,7 +50,7 @@ const live = new Set<Socket>();
 export function addressFor(config: SocketConfig): string {
 	if (process.platform === "win32") {
 		const key = createHash("sha256").update(config.instanceKey).digest("hex").slice(0, 12);
-		return `\\\\.\\pipe\\bureau-mcp-${key}`;
+		return `\\\\.\\pipe\\juno-mcp-${key}`;
 	}
 	return join(config.userDataDir, "mcp.sock");
 }
@@ -70,8 +70,8 @@ export function status(): { running: boolean; address: string; connections: numb
 /**
  * Starts listening, and writes the file the bridge reads.
  *
- * A failure here is reported and does not stop the app: Bureau without an
- * agent surface is still Bureau, and a window that refuses to open because a
+ * A failure here is reported and does not stop the app: Juno without an
+ * agent surface is still Juno, and a window that refuses to open because a
  * pipe was busy would be the worse failure.
  */
 export function startSocketServer(config: SocketConfig): void {
@@ -144,7 +144,7 @@ function writeConnectionFile(config: SocketConfig): void {
  * The tool list, on disk.
  *
  * An MCP client asks for the tools once, at startup, and caches them. If
- * Bureau happens to be closed at that moment the agent would see no tools for
+ * Juno happens to be closed at that moment the agent would see no tools for
  * the rest of its session, so the bridge falls back to this file and reports a
  * clear error only when something is actually called.
  */

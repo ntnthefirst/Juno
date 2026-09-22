@@ -30,7 +30,7 @@ export default tseslint.config(
 				"error",
 				{
 					paths: [
-						{ name: "electron", message: "The renderer talks to the main process through window.bureau." },
+						{ name: "electron", message: "The renderer talks to the main process through window.juno." },
 						{ name: "node:fs", message: "The renderer has no filesystem." },
 						{ name: "node:path", message: "The renderer has no filesystem." },
 						{ name: "node:sqlite", message: "The renderer never sees the database." },

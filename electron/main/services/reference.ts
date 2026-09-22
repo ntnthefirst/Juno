@@ -359,7 +359,7 @@ function add(a: ResetResult, b: ResetResult): ResetResult {
 export async function resetSet(key: ReferenceSetKey, userItems: ResetUserItems): Promise<ResetResult> {
 	const db = database();
 	const seed = seedSet(key);
-	if (!seed) throw new ReferenceDataError("not-seeded", `The set "${key}" does not ship with Bureau.`);
+	if (!seed) throw new ReferenceDataError("not-seeded", `The set "${key}" does not ship with Juno.`);
 
 	return db.transaction((tx): ResetResult => {
 		const result = emptyResult();

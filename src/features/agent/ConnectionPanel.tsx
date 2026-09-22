@@ -8,7 +8,7 @@ type ConnectionPanelProps = {
 };
 
 /**
- * How an agent reaches Bureau, and what it can do when it does.
+ * How an agent reaches Juno, and what it can do when it does.
  *
  * The config block is printed with this machine's real paths, because the one
  * thing that makes this feature unusable is guessing at them.
@@ -21,7 +21,7 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.bureau.agent.status(), window.bureau.agent.tools()])
+		Promise.all([window.juno.agent.status(), window.juno.agent.tools()])
 			.then(([current, toolRows]) => {
 				if (cancelled) return;
 				setStatus(current);
@@ -88,8 +88,8 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 				) : null}
 
 				<p className="mt-4 max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-					An agent talks to Bureau through a bridge it starts itself. Paste this into the agent's
-					MCP configuration. Bureau has to be running, and it will refuse everything while locked.
+					An agent talks to Juno through a bridge it starts itself. Paste this into the agent's
+					MCP configuration. Juno has to be running, and it will refuse everything while locked.
 				</p>
 
 				<pre
@@ -101,7 +101,7 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 
 				<div className="mt-3 flex items-center gap-2">
 					<Button onClick={() => void copy()}>Copy configuration</Button>
-					<Button onClick={() => void window.bureau.agent.revealConnectionFile()}>
+					<Button onClick={() => void window.juno.agent.revealConnectionFile()}>
 						Show the connection file
 					</Button>
 				</div>

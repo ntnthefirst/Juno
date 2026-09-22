@@ -116,7 +116,7 @@ export const reminderTools: ToolDescriptor[] = [
 				project_id: { type: ["string", "null"] },
 				action_url: {
 					type: ["string", "null"],
-					description: "Where to go to do it. Bureau never does it itself.",
+					description: "Where to go to do it. Juno never does it itself.",
 				},
 				action_label: { type: ["string", "null"] },
 			},

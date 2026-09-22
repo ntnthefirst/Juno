@@ -1,6 +1,6 @@
 ---
 name: ship-check
-description: Pre-release check before a Bureau build is installed or handed over. Runs full verification, migrates from empty, boots the app with no network, proves no credential is reachable from the renderer, sweeps TODO markers and AI tells, checks dark mode, and reports what is still missing. Use when the user says "is it ready", "I want to install this", "cut a build", "we're shipping".
+description: Pre-release check before a Juno build is installed or handed over. Runs full verification, migrates from empty, boots the app with no network, proves no credential is reachable from the renderer, sweeps TODO markers and AI tells, checks dark mode, and reports what is still missing. Use when the user says "is it ready", "I want to install this", "cut a build", "we're shipping".
 ---
 
 # Workflow: pre-release check

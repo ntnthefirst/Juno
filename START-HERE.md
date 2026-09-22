@@ -3,7 +3,7 @@
 **If you are a session picking this up cold, this is the orientation. Read it,
 then read [BUILD-LOG.md](BUILD-LOG.md), then start work.**
 
-Bureau is a working Electron desktop app. Phases 0, 1, 2, 5 and 6 of
+Juno is a working Electron desktop app. Phases 0, 1, 2, 5 and 6 of
 [PLAN.md](PLAN.md) are complete, bar phase 6's in-app assistant panel. Phases 3
 and 4, reading and sending mail, are built and proven against a fake mailbox and
 a fake transport, but neither has met a real server yet. It builds, packages,
@@ -54,7 +54,7 @@ been amended by what actually happened. The log says which.
    every query throws on an older host Node. `npm run test` handles it.
 2. **`npm run smoke` is the only check that proves the app runs.** A clean
    typecheck says nothing about the custom scheme, the preload bridge or the
-   database. `BUREAU_SMOKE_DEMO=1 node scripts/smoke.mjs` creates real records
+   database. `JUNO_SMOKE_DEMO=1 node scripts/smoke.mjs` creates real records
    through the bridge, syncs a mailbox held in memory, sends through a transport
    held in memory, and photographs eight screens in both themes into `.smoke/`.
    Several real bugs were found only by looking at those images.
@@ -105,7 +105,7 @@ The sync is read-only by construction: `MailboxSource` in
 write, the copy into Sent, lives on a separate appender in `mail-transport.ts`.
 Keep them apart.
 
-**Then point an agent at Bureau.** Settings is not where it lives: open Agent,
+**Then point an agent at Juno.** Settings is not where it lives: open Agent,
 copy the configuration, and paste it into Claude Desktop or Claude Code. Ask it
 what needs attention this month, and then ask it to create something so a
 request appears on the Requests tab. That is phase 6's done-when, and no MCP
@@ -114,7 +114,7 @@ client other than the one in the smoke run has connected yet.
 **Then open the calendar's export in another calendar.** Phase 5's done-when
 in PLAN.md ends with the moved occurrence sitting on the right hour after the
 October change when the file is opened elsewhere. The round trip is tested
-against Bureau's own reader; Google, Apple and Outlook have not read one of
+against Juno's own reader; Google, Apple and Outlook have not read one of
 these files yet.
 
 After that, the honest move is to install the packaged build and use it on real
@@ -131,7 +131,7 @@ are in [TODO.md](TODO.md) with the detail.
   the wrong feed is worse than one that never checks.
 - **The licence.** All rights reserved by default, which is the right holding
   position. The question that settles it: should a company be able to take
-  Bureau, host it, and sell it back?
+  Juno, host it, and sell it back?
 
 ## The rules, when writing code
 

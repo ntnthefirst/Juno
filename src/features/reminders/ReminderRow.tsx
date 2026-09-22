@@ -56,7 +56,7 @@ export function ReminderRow({
 		if (busy) return;
 		setBusy(true);
 		try {
-			const removed = await window.bureau.reminders.remove(reminder.id);
+			const removed = await window.juno.reminders.remove(reminder.id);
 			onDeleted(removed);
 			onChanged();
 		} catch (cause: unknown) {
@@ -90,7 +90,7 @@ export function ReminderRow({
 					<Button
 						size="dense"
 						disabled={busy}
-						onClick={() => void run(() => window.bureau.reminders.openAction(reminder.id))}
+						onClick={() => void run(() => window.juno.reminders.openAction(reminder.id))}
 					>
 						<span className="text-[var(--accent)]">{reminder.actionLabel}</span>
 					</Button>
@@ -100,7 +100,7 @@ export function ReminderRow({
 					<Button
 						size="dense"
 						disabled={busy}
-						onClick={() => void run(() => window.bureau.reminders.reopen(reminder.id))}
+						onClick={() => void run(() => window.juno.reminders.reopen(reminder.id))}
 					>
 						Reopen
 					</Button>
@@ -109,7 +109,7 @@ export function ReminderRow({
 						<Button
 							size="dense"
 							disabled={busy}
-							onClick={() => void run(() => window.bureau.reminders.complete(reminder.id))}
+							onClick={() => void run(() => window.juno.reminders.complete(reminder.id))}
 						>
 							Done
 						</Button>

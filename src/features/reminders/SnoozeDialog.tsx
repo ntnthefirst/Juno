@@ -48,7 +48,7 @@ export function SnoozeDialog({ reminder, onClose, onSnoozed }: SnoozeDialogProps
 		setDateError(null);
 		setBusy(true);
 		try {
-			await window.bureau.reminders.snooze(reminder.id, until);
+			await window.juno.reminders.snooze(reminder.id, until);
 			onSnoozed();
 		} catch (cause: unknown) {
 			// The service refuses a date that is not in the future, and says so in

@@ -25,7 +25,7 @@ export function SignDialog({ record, onClose, onSigned }: SignDialogProps) {
 	useEffect(() => {
 		if (specimen) return;
 		let cancelled = false;
-		Promise.all([window.bureau.settings.getOwner(), window.bureau.settings.getSignaturePath()])
+		Promise.all([window.juno.settings.getOwner(), window.juno.settings.getSignaturePath()])
 			.then(([owner, path]) => {
 				if (cancelled) return;
 				setSignerName(owner.contactName.trim() || owner.businessName.trim());
@@ -49,7 +49,7 @@ export function SignDialog({ record, onClose, onSigned }: SignDialogProps) {
 		setError(null);
 		setBusy(true);
 		try {
-			await window.bureau.documents.sign({
+			await window.juno.documents.sign({
 				documentId: record.id,
 				signerName: name,
 				signerRole: signerRole.trim() || null,

@@ -12,7 +12,7 @@ export function AccountingSection({ onSaved }: { onSaved: (message: string) => v
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.settings
+		window.juno.settings
 			.getAccountingTool()
 			.then((value) => {
 				if (!cancelled) setTool(value);
@@ -30,7 +30,7 @@ export function AccountingSection({ onSaved }: { onSaved: (message: string) => v
 		setBusy(true);
 		setError(null);
 		try {
-			setTool(await window.bureau.settings.setAccountingTool(tool));
+			setTool(await window.juno.settings.setAccountingTool(tool));
 			onSaved("Your accounting tool was saved.");
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -42,7 +42,7 @@ export function AccountingSection({ onSaved }: { onSaved: (message: string) => v
 	return (
 		<Section
 			title="Accounting"
-			description="Bureau never raises an invoice or moves money. It tells you when one is due and links to wherever invoicing actually happens, which is what you put here."
+			description="Juno never raises an invoice or moves money. It tells you when one is due and links to wherever invoicing actually happens, which is what you put here."
 			action={
 				<Button size="dense" variant="primary" disabled={!tool || busy} onClick={() => void save()}>
 					Save

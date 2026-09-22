@@ -26,7 +26,7 @@ These rules are strict and they override any default behaviour.
 ## 2. `.claude/` is committed here
 
 Unlike the client website kit, where it is gitignored to keep an assistant out of
-a client's repo, in Bureau the rules are part of the project and worth versioning.
+a client's repo, in Juno the rules are part of the project and worth versioning.
 That is decision 12 in [../../docs/decisions.md](../../docs/decisions.md).
 
 This changes nothing about section 1. The rules files may say what they say; the
@@ -65,7 +65,7 @@ A commit is one coherent, self-contained change. Finish a unit, commit it, move 
 - Read `git status --short` before every commit and confirm every staged path
   belongs to this unit.
 - Never stage, and keep all of it in `.gitignore`:
-  - `bureau.db`, `*.db`, `*.db-wal`, `*.db-shm`, `*.sqlite`, and anything from
+  - `juno.db`, `*.db`, `*.db-wal`, `*.db-shm`, `*.sqlite`, and anything from
     `userData`.
   - A real mail account in any form: an address plus password in a fixture, a seed
     script, a test config, a screenshot of a settings screen, a `.env`.

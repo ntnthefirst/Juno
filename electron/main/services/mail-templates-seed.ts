@@ -46,7 +46,7 @@ ${SIGNOFF_JE}
 	{
 		key: "invoice_due",
 		name: "Herinnering openstaande factuur",
-		description: "Een vriendelijke herinnering. Bureau maakt de factuur niet, het herinnert er alleen aan.",
+		description: "Een vriendelijke herinnering. Juno maakt de factuur niet, het herinnert er alleen aan.",
 		register: "u",
 		subject: "Herinnering: {{ document.title }}",
 		bodyHtml: `

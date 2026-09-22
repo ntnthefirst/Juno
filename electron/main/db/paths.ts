@@ -20,7 +20,7 @@ export function userDataDir(): string {
  * have "lost" its data.
  */
 export function databasePath(): string {
-	return join(userDataDir(), process.env.BUREAU_DEV ? "bureau.dev.sqlite" : "bureau.sqlite");
+	return join(userDataDir(), process.env.JUNO_DEV ? "juno.dev.sqlite" : "juno.sqlite");
 }
 
 export function backupsDir(): string {

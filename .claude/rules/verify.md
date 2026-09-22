@@ -43,7 +43,7 @@ suppression in a service is a business rule that stopped being checked.
 A clean typecheck is not proof a screen works.
 
 1. `preview_list` first. If a dev server is already running, reuse it.
-2. Otherwise `preview_start` with the `bureau-renderer` config in
+2. Otherwise `preview_start` with the `juno-renderer` config in
    `.claude/launch.json`. That serves the renderer alone; main-process behaviour
    still has to be checked in the real app.
 3. Check the screen in **both themes**. Toggle `data-theme` on `<html>`; don't

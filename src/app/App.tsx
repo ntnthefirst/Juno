@@ -21,10 +21,10 @@ export function App() {
 	const [pendingActions, setPendingActions] = useState(0);
 
 	useEffect(() => {
-		void window.bureau.lock.state().then(setLock);
+		void window.juno.lock.state().then(setLock);
 		// The main process locks on idle, sleep and minimise without being asked,
 		// so the interface has to be told rather than poll.
-		return window.bureau.lock.onChange(setLock);
+		return window.juno.lock.onChange(setLock);
 	}, []);
 
 	// A request from an agent can arrive at any moment, on any screen. The
@@ -34,7 +34,7 @@ export function App() {
 		if (!unlocked) return;
 		let cancelled = false;
 		const read = () => {
-			window.bureau.agent.actions
+			window.juno.agent.actions
 				.pendingCount()
 				.then((count) => {
 					if (!cancelled) setPendingActions(count);
@@ -42,7 +42,7 @@ export function App() {
 				.catch(() => undefined);
 		};
 		read();
-		const off = window.bureau.agent.actions.onChange(() => read());
+		const off = window.juno.agent.actions.onChange(() => read());
 		return () => {
 			cancelled = true;
 			off();
@@ -57,7 +57,7 @@ export function App() {
 		return (
 			<LockScreen
 				state={lock}
-				onUnlocked={() => void window.bureau.lock.state().then(setLock)}
+				onUnlocked={() => void window.juno.lock.state().then(setLock)}
 			/>
 		);
 	}

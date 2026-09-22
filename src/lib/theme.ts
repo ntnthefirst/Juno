@@ -22,7 +22,7 @@ export function useTheme(): [ThemeSetting, (next: ThemeSetting) => void] {
 
 	useEffect(() => {
 		let cancelled = false;
-		void window.bureau.settings.getTheme().then((stored) => {
+		void window.juno.settings.getTheme().then((stored) => {
 			if (cancelled) return;
 			setTheme(stored);
 			applyTheme(stored);
@@ -35,7 +35,7 @@ export function useTheme(): [ThemeSetting, (next: ThemeSetting) => void] {
 	const update = (next: ThemeSetting) => {
 		setTheme(next);
 		applyTheme(next);
-		void window.bureau.settings.setTheme(next);
+		void window.juno.settings.setTheme(next);
 	};
 
 	return [theme, update];

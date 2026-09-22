@@ -66,7 +66,7 @@ export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) 
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.clients
+		window.juno.clients
 			.list()
 			.then((rows) => {
 				if (!cancelled) setClients(rows);
@@ -85,7 +85,7 @@ export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) 
 	useEffect(() => {
 		if (clientId.length === 0) return;
 		let cancelled = false;
-		window.bureau.projects
+		window.juno.projects
 			.list({ clientId })
 			.then((rows) => {
 				if (!cancelled) setProjects(rows);
@@ -143,8 +143,8 @@ export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) 
 		};
 
 		try {
-			if (reminder) await window.bureau.reminders.update(reminder.id, input);
-			else await window.bureau.reminders.create(input);
+			if (reminder) await window.juno.reminders.update(reminder.id, input);
+			else await window.juno.reminders.create(input);
 			onSaved();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

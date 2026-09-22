@@ -25,7 +25,7 @@ beforeEach(() => {
 	runMigrations(connection, resolve(process.cwd(), "electron/main/db/migrations"));
 	db = createDrizzle(connection);
 	reference.useDatabase(db);
-	settingsDir = mkdtempSync(join(tmpdir(), "bureau-reference-"));
+	settingsDir = mkdtempSync(join(tmpdir(), "juno-reference-"));
 	settings.configureSettings(settingsDir);
 });
 

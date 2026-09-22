@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import electron from "electron";
 
-const userData = mkdtempSync(join(tmpdir(), "bureau-smoke-"));
+const userData = mkdtempSync(join(tmpdir(), "juno-smoke-"));
 // The demo run now walks eleven screens in two themes, drives the calendar and
 // agent dialogs, and starts the MCP bridge as a real child process. Ninety
 // seconds is the headroom that leaves; a run that takes longer than this is
@@ -25,8 +25,8 @@ const child = spawn(
 	{
 		env: {
 			...process.env,
-			BUREAU_SMOKE: "1",
-			BUREAU_SMOKE_SHOT: process.env.BUREAU_SMOKE_SHOT ?? join(process.cwd(), ".smoke"),
+			JUNO_SMOKE: "1",
+			JUNO_SMOKE_SHOT: process.env.JUNO_SMOKE_SHOT ?? join(process.cwd(), ".smoke"),
 			ELECTRON_ENABLE_LOGGING: "1",
 		},
 		stdio: ["ignore", "pipe", "pipe"],

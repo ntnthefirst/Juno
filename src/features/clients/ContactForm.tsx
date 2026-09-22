@@ -72,8 +72,8 @@ export function ContactForm({ clientId, contact, onClose, onSaved }: ContactForm
 		};
 
 		try {
-			if (contact) await window.bureau.contacts.update(contact.id, patch);
-			else await window.bureau.contacts.create({ ...patch, clientId, name });
+			if (contact) await window.juno.contacts.update(contact.id, patch);
+			else await window.juno.contacts.create({ ...patch, clientId, name });
 			onSaved();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

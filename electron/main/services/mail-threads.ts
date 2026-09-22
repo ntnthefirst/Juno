@@ -332,7 +332,7 @@ export function attachmentPath(id: string, db: Db = getDb()): { path: string; fi
 	const root = resolve(mailDir());
 	const target = resolve(root, row.filePath);
 	if (target !== root && !target.startsWith(root + sep)) {
-		throw new Error("That attachment's path is outside the mail folder, so Bureau will not open it.");
+		throw new Error("That attachment's path is outside the mail folder, so Juno will not open it.");
 	}
 	return { path: target, filename: row.filename };
 }

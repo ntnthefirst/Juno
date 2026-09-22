@@ -23,7 +23,7 @@ export function ClientsScreen() {
 	const [deleted, setDeleted] = useState<Client | null>(null);
 
 	const fetchRows = useCallback(
-		() => window.bureau.clients.list({ search: search.trim() || undefined }),
+		() => window.juno.clients.list({ search: search.trim() || undefined }),
 		[search],
 	);
 
@@ -63,7 +63,7 @@ export function ClientsScreen() {
 
 	async function remove(client: Client) {
 		try {
-			const removed = await window.bureau.clients.remove(client.id);
+			const removed = await window.juno.clients.remove(client.id);
 			setSelectedId(null);
 			setDeleted(removed);
 			refreshList();
@@ -77,7 +77,7 @@ export function ClientsScreen() {
 		const id = deleted.id;
 		setDeleted(null);
 		try {
-			await window.bureau.clients.restore(id);
+			await window.juno.clients.restore(id);
 			setSelectedId(id);
 			setDetailVersion((version) => version + 1);
 			refreshList();

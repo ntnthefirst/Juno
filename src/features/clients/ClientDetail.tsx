@@ -77,10 +77,10 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 
 	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
 		const [client, contacts, projects, statusSet] = await Promise.all([
-			window.bureau.clients.get(clientId),
-			window.bureau.contacts.listForClient(clientId),
-			window.bureau.projects.list({ clientId }),
-			window.bureau.reference.getSet("client_status"),
+			window.juno.clients.get(clientId),
+			window.juno.contacts.listForClient(clientId),
+			window.juno.projects.list({ clientId }),
+			window.juno.reference.getSet("client_status"),
 		]);
 		if (!client) return null;
 		const status = client.statusId
@@ -97,7 +97,7 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 				setLoad(
 					detail
 						? { status: "ready", detail }
-						: { status: "error", message: "This client is no longer in your bureau." },
+						: { status: "error", message: "This client is no longer in your juno." },
 				);
 			})
 			.catch((cause: unknown) => {
@@ -124,8 +124,8 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 		if (!pending || busy) return;
 		setBusy(true);
 		try {
-			if (pending.kind === "contact") await window.bureau.contacts.remove(pending.id);
-			else await window.bureau.projects.remove(pending.id);
+			if (pending.kind === "contact") await window.juno.contacts.remove(pending.id);
+			else await window.juno.projects.remove(pending.id);
 			setPending(null);
 			refresh();
 		} catch (cause: unknown) {
@@ -138,7 +138,7 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 
 	async function makePrimary(id: string) {
 		try {
-			await window.bureau.contacts.setPrimary(id);
+			await window.juno.contacts.setPrimary(id);
 			refresh();
 		} catch (cause: unknown) {
 			setLoad({ status: "error", message: messageOf(cause) });
@@ -147,7 +147,7 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 
 	async function editProject(id: string) {
 		try {
-			const project = await window.bureau.projects.get(id);
+			const project = await window.juno.projects.get(id);
 			if (project) setProjectDialog({ project });
 		} catch (cause: unknown) {
 			setLoad({ status: "error", message: messageOf(cause) });

@@ -90,7 +90,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 		setBusy("smtp");
 		setError(null);
 		try {
-			const result = await window.bureau.mail.accounts.testSmtp({
+			const result = await window.juno.mail.accounts.testSmtp({
 				...(account ? { id: account.id } : {}),
 				smtpHost: values.smtpHost,
 				smtpPort: numbers().smtpPort,
@@ -114,7 +114,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 		setBusy("test");
 		setError(null);
 		try {
-			const result = await window.bureau.mail.accounts.test({
+			const result = await window.juno.mail.accounts.test({
 				...(account ? { id: account.id } : {}),
 				imapHost: values.imapHost,
 				imapPort: numbers().imapPort,
@@ -159,10 +159,10 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 					...base,
 					...(values.password ? { password: values.password } : {}),
 				};
-				saved = await window.bureau.mail.accounts.update(account.id, patch);
+				saved = await window.juno.mail.accounts.update(account.id, patch);
 			} else {
 				const input: MailAccountInput = { ...base, password: values.password };
-				saved = await window.bureau.mail.accounts.create(input);
+				saved = await window.juno.mail.accounts.create(input);
 			}
 			set("password", "");
 			onSaved(saved);

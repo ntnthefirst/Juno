@@ -106,7 +106,7 @@ function horizonDate(days: number): string {
 
 class SyncStopped extends Error {
 	constructor() {
-		super("Sync stopped because Bureau was locked.");
+		super("Sync stopped because Juno was locked.");
 		this.name = "SyncStopped";
 	}
 }

@@ -108,7 +108,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.clients
+		window.juno.clients
 			.list()
 			.then((rows) => {
 				if (!cancelled) setClients(rows);
@@ -125,7 +125,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 	useEffect(() => {
 		if (clientId.length === 0) return;
 		let cancelled = false;
-		window.bureau.projects
+		window.juno.projects
 			.list({ clientId })
 			.then((rows) => {
 				if (!cancelled) setProjects(rows);
@@ -196,7 +196,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 					clientId: values.clientId || null,
 					projectId: values.projectId || null,
 				};
-				saved = await window.bureau.calendar.create(input);
+				saved = await window.juno.calendar.create(input);
 			} else if (singleOccurrence) {
 				const patch: CalendarEventPatch = {
 					title,
@@ -205,7 +205,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 					location: values.location.trim() || null,
 					notes: values.notes.trim() || null,
 				};
-				saved = await window.bureau.calendar.update(event.id, patch, {
+				saved = await window.juno.calendar.update(event.id, patch, {
 					scope: "this",
 					occurrenceStartLocal: occurrence?.occurrenceStartLocal,
 				});
@@ -224,7 +224,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 					// counting down across a split and follow a moved start.
 					...(ruleChanged ? { rrule } : {}),
 				};
-				saved = await window.bureau.calendar.update(event.id, patch, {
+				saved = await window.juno.calendar.update(event.id, patch, {
 					scope: event.rrule ? scope : "all",
 					...(scope === "following" ? { occurrenceStartLocal: occurrence?.occurrenceStartLocal } : {}),
 				});

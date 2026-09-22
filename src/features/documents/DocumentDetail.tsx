@@ -75,13 +75,13 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 
 	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
 		const [record, statusSet, signatures] = await Promise.all([
-			window.bureau.documents.get(documentId),
-			window.bureau.reference.getSet("document_status"),
-			window.bureau.documents.signatures(documentId),
+			window.juno.documents.get(documentId),
+			window.juno.reference.getSet("document_status"),
+			window.juno.documents.signatures(documentId),
 		]);
 		if (!record) return null;
 		const template = record.templateId
-			? await window.bureau.templates.get(record.templateId)
+			? await window.juno.templates.get(record.templateId)
 			: null;
 		return {
 			record,
@@ -99,7 +99,7 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 				setLoad(
 					detail
 						? { status: "ready", detail }
-						: { status: "error", message: "This document is no longer in your bureau." },
+						: { status: "error", message: "This document is no longer in your juno." },
 				);
 			})
 			.catch((cause: unknown) => {
@@ -123,7 +123,7 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 	async function setStatus(statusId: string) {
 		setAction(null);
 		try {
-			await window.bureau.documents.setStatus(documentId, statusId.length > 0 ? statusId : null);
+			await window.juno.documents.setStatus(documentId, statusId.length > 0 ? statusId : null);
 			refresh();
 			onChanged();
 		} catch (cause: unknown) {
@@ -136,7 +136,7 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 		setBusy(true);
 		setAction(null);
 		try {
-			await window.bureau.documents.renderPdf(documentId);
+			await window.juno.documents.renderPdf(documentId);
 			refresh();
 			onChanged();
 		} catch (cause: unknown) {
@@ -158,7 +158,7 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 	async function remove() {
 		setConfirmingDelete(false);
 		try {
-			onDeleted(await window.bureau.documents.remove(documentId));
+			onDeleted(await window.juno.documents.remove(documentId));
 		} catch (cause: unknown) {
 			setAction(messageOf(cause));
 		}
@@ -214,13 +214,13 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 				</Button>
 				<Button
 					disabled={!hasPdf}
-					onClick={() => void run(() => window.bureau.documents.openPdf(documentId))}
+					onClick={() => void run(() => window.juno.documents.openPdf(documentId))}
 				>
 					Open PDF
 				</Button>
 				<Button
 					disabled={!hasPdf}
-					onClick={() => void run(() => window.bureau.documents.revealPdf(documentId))}
+					onClick={() => void run(() => window.juno.documents.revealPdf(documentId))}
 				>
 					Show in folder
 				</Button>

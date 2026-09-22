@@ -81,7 +81,7 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.reference
+		window.juno.reference
 			.getSet("project_status")
 			.then((set) => {
 				if (cancelled) return;
@@ -125,8 +125,8 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 		};
 
 		try {
-			if (project) await window.bureau.projects.update(project.id, patch);
-			else await window.bureau.projects.create({ ...patch, clientId, name });
+			if (project) await window.juno.projects.update(project.id, patch);
+			else await window.juno.projects.create({ ...patch, clientId, name });
 			onSaved();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

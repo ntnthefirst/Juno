@@ -1,5 +1,5 @@
 /**
- * The reference data Bureau ships with, as plain data. Decision 16.
+ * The reference data Juno ships with, as plain data. Decision 16.
  *
  * This file is the shipped truth. It is read by seed.ts on launch and by
  * reference.ts when a set is reset, so a row can always be put back the way it

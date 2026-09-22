@@ -1,5 +1,5 @@
 /**
- * A mailbox in memory for `npm run smoke` with BUREAU_SMOKE_DEMO set.
+ * A mailbox in memory for `npm run smoke` with JUNO_SMOKE_DEMO set.
  *
  * The smoke run has no server, and a run that never syncs proves nothing about
  * the scheme host, the frame policy or the reader. Three messages are enough
@@ -43,7 +43,7 @@ const SAMPLES: Sample[] = [
 		source: rfc822(
 			[
 				"From: Laura <laura@obet.be>",
-				"To: hallo@bureau.test",
+				"To: hallo@juno.test",
 				"Subject: Offerte website",
 				"Message-ID: <offerte-1@obet.be>",
 				`Date: ${new Date(ago(50)).toUTCString()}`,
@@ -62,19 +62,19 @@ const SAMPLES: Sample[] = [
 	},
 	{
 		uid: 2,
-		from: { name: "Nathan", address: "hallo@bureau.test" },
+		from: { name: "Nathan", address: "hallo@juno.test" },
 		subject: "Re: Offerte website",
-		messageId: "<offerte-2@bureau.test>",
+		messageId: "<offerte-2@juno.test>",
 		inReplyTo: "<offerte-1@obet.be>",
 		date: ago(30),
 		flags: ["\\Seen", "\\Answered"],
 		hasAttachments: true,
 		source: rfc822(
 			[
-				"From: Nathan <hallo@bureau.test>",
+				"From: Nathan <hallo@juno.test>",
 				"To: Laura <laura@obet.be>",
 				"Subject: Re: Offerte website",
-				"Message-ID: <offerte-2@bureau.test>",
+				"Message-ID: <offerte-2@juno.test>",
 				"In-Reply-To: <offerte-1@obet.be>",
 				"References: <offerte-1@obet.be>",
 				`Date: ${new Date(ago(30)).toUTCString()}`,
@@ -108,7 +108,7 @@ const SAMPLES: Sample[] = [
 		source: rfc822(
 			[
 				"From: Hyge nieuwsbrief <news@hyge.be>",
-				"To: hallo@bureau.test",
+				"To: hallo@juno.test",
 				"Subject: Nieuw dit najaar",
 				"Message-ID: <news-3@hyge.be>",
 				`Date: ${new Date(ago(2)).toUTCString()}`,
@@ -139,7 +139,7 @@ function header(sample: Sample): RemoteHeader {
 			inReplyTo: sample.inReplyTo,
 			references: sample.inReplyTo ? [sample.inReplyTo] : [],
 			from: sample.from,
-			to: [{ name: null, address: "hallo@bureau.test" }],
+			to: [{ name: null, address: "hallo@juno.test" }],
 			cc: [],
 			replyTo: [],
 		},

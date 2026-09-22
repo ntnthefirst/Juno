@@ -41,7 +41,7 @@ export function TodayScreen() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.reminders
+		window.juno.reminders
 			.list({ actionableOnly: true })
 			.then((rows) => {
 				if (!cancelled) setAttention({ status: "ready", value: rows });
@@ -56,7 +56,7 @@ export function TodayScreen() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.reminders
+		window.juno.reminders
 			.suggestions()
 			.then((rows) => {
 				if (!cancelled) setSuggestions(rows);
@@ -72,9 +72,9 @@ export function TodayScreen() {
 	useEffect(() => {
 		let cancelled = false;
 		Promise.all([
-			window.bureau.documents.list(),
-			window.bureau.clients.list(),
-			window.bureau.projects.list(),
+			window.juno.documents.list(),
+			window.juno.clients.list(),
+			window.juno.projects.list(),
 		])
 			.then(([documents, clients, projects]) => {
 				if (cancelled) return;
@@ -97,7 +97,7 @@ export function TodayScreen() {
 	// the answer an agent gives cannot disagree.
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.briefing
+		window.juno.briefing
 			.today()
 			.then((value) => {
 				if (!cancelled) setBriefing(value);
@@ -111,14 +111,14 @@ export function TodayScreen() {
 	}, []);
 
 	const refreshAttention = useCallback(() => {
-		window.bureau.reminders
+		window.juno.reminders
 			.list({ actionableOnly: true })
 			.then((rows) => setAttention({ status: "ready", value: rows }))
 			.catch((cause: unknown) => setAttention({ status: "error", message: messageOf(cause) }));
 	}, []);
 
 	const refreshSuggestions = useCallback(() => {
-		window.bureau.reminders
+		window.juno.reminders
 			.suggestions()
 			.then(setSuggestions)
 			.catch((cause: unknown) => setNotice(messageOf(cause)));
@@ -137,7 +137,7 @@ export function TodayScreen() {
 		const id = deleted.id;
 		setDeleted(null);
 		try {
-			await window.bureau.reminders.restore(id);
+			await window.juno.reminders.restore(id);
 			refreshAttention();
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));

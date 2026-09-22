@@ -96,7 +96,7 @@ describe("parse helpers", () => {
 	it("normalises subjects across the prefixes a Belgian mailbox sees", () => {
 		expect(normaliseSubject("Re: Fwd: AW: Offerte")).toBe("offerte");
 		expect(normaliseSubject("RE[2]: Offerte")).toBe("offerte");
-		expect(normaliseSubject("[bureau-dev] Antw: Offerte")).toBe("offerte");
+		expect(normaliseSubject("[juno-dev] Antw: Offerte")).toBe("offerte");
 		expect(normaliseSubject("  Offerte  hosting ")).toBe("offerte hosting");
 	});
 

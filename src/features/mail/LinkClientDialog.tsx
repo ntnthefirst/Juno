@@ -20,7 +20,7 @@ export function LinkClientDialog({ threadId, currentClientId, onClose, onLinked 
 	useEffect(() => {
 		let cancelled = false;
 		const id = setTimeout(() => {
-			window.bureau.clients
+			window.juno.clients
 				.list({ search: search.trim() || undefined, limit: 50 })
 				.then((rows) => {
 					if (!cancelled) setClients(rows);
@@ -38,7 +38,7 @@ export function LinkClientDialog({ threadId, currentClientId, onClose, onLinked 
 	async function link(clientId: string) {
 		setBusy(true);
 		try {
-			await window.bureau.mail.threads.linkClient(threadId, clientId);
+			await window.juno.mail.threads.linkClient(threadId, clientId);
 			onLinked();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

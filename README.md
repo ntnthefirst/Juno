@@ -1,12 +1,12 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="brand/logo/bureau-wordmark-paper.svg">
-  <img src="brand/logo/bureau-wordmark-ink.svg" alt="Bureau" width="150">
+  <source media="(prefers-color-scheme: dark)" srcset="brand/logo/juno-wordmark-paper.svg">
+  <img src="brand/logo/juno-wordmark-ink.svg" alt="Juno" width="150">
 </picture>
 
 Where the paperwork of running a small business happens, on your own machine,
 without a subscription.
 
-Bureau keeps clients, contracts, mail, dates and reminders in one place,
+Juno keeps clients, contracts, mail, dates and reminders in one place,
 generates the documents you would otherwise retype, and exposes everything it can
 do to an AI agent so the boring parts can be asked for instead of clicked
 through.
@@ -29,7 +29,7 @@ remembering on the 12th that an invoice was due on the 1st. None of that is work
 It is friction around the work.
 
 Existing tools solve it by putting everything in someone else's cloud, per seat,
-per month, with your client data as the hostage. Bureau solves it locally
+per month, with your client data as the hostage. Juno solves it locally
 instead. The database is a file on your disk. The app opens and works with the
 network off. There is no server to pay for, which is what makes free actually
 sustainable rather than a trial period.
@@ -42,13 +42,13 @@ sustainable rather than a trial period.
 | **Documents** | Fill your own `.docx` contract templates from a client record, output PDF, stamp a signature image with a timestamp and an audit trail |
 | **Mail** | Pull several IMAP accounts into local storage, read and search them offline, link any thread to the client it belongs to, send from designed HTML templates |
 | **Calendar** | Deadlines and appointments tied to projects, with `.ics` import and export |
-| **Reminders** | Paperwork that is due, invoices that need writing, payments that need making. Bureau tells you; it does not act on its own |
+| **Reminders** | Paperwork that is due, invoices that need writing, payments that need making. Juno tells you; it does not act on its own |
 | **Automations** | A recorded sequence of the same operations the interface uses, behind a button |
 | **MCP** | Every capability is a local MCP tool, so Claude or any other agent can run the same operations you can |
 
 ## What it deliberately does not do
 
-- **No invoicing and no payments.** Bureau reminds you to invoice and tracks what
+- **No invoicing and no payments.** Juno reminds you to invoice and tracks what
   is owed. It never generates, numbers or sends an invoice, and it never moves
   money. Those carry legal requirements that differ by country and change; a
   reminder pointing at your real accounting tool carries none of them.
@@ -108,7 +108,7 @@ npm run dev
 
 `npm run dev` compiles the main process, starts Vite on 5173 and launches
 Electron against it. The development build keeps its own database
-(`bureau.dev.sqlite`) so it cannot damage real records.
+(`juno.dev.sqlite`) so it cannot damage real records.
 
 | Command | What it does |
 | --- | --- |
@@ -128,7 +128,7 @@ Two things that will otherwise waste an afternoon:
   so every query throws on an older host Node. The `test` script handles this.
 - **`npm run smoke` is the only check that proves the app runs.** A clean
   typecheck says nothing about the custom scheme, the preload bridge or the
-  database. Add `BUREAU_SMOKE_DEMO=1` to have it create real records through the
+  database. Add `JUNO_SMOKE_DEMO=1` to have it create real records through the
   bridge and photograph both themes into `.smoke/`.
 
 ## Licence
@@ -136,4 +136,4 @@ Two things that will otherwise waste an afternoon:
 None yet, which means all rights reserved. That is the deliberate default while
 the question is open, because adding a permissive licence later is easy and
 withdrawing one is not. The decision to make before this repository goes public
-is whether a company should be able to take Bureau, host it, and sell it back.
+is whether a company should be able to take Juno, host it, and sell it back.

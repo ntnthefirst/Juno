@@ -42,8 +42,8 @@ export function TemplateEditor({ templateId, onSaved }: TemplateEditorProps) {
 
 	const fetchAll = useCallback(async (): Promise<Loaded | null> => {
 		const [template, clients] = await Promise.all([
-			window.bureau.templates.get(templateId),
-			window.bureau.clients.list(),
+			window.juno.templates.get(templateId),
+			window.juno.clients.list(),
 		]);
 		return template ? { template, clients } : null;
 	}, [templateId]);
@@ -54,7 +54,7 @@ export function TemplateEditor({ templateId, onSaved }: TemplateEditorProps) {
 			.then((loaded) => {
 				if (cancelled) return;
 				if (!loaded) {
-					setLoad({ status: "error", message: "This template is no longer in your bureau." });
+					setLoad({ status: "error", message: "This template is no longer in your juno." });
 					return;
 				}
 				setLoad({ status: "ready", loaded });
@@ -84,7 +84,7 @@ export function TemplateEditor({ templateId, onSaved }: TemplateEditorProps) {
 		setError(null);
 		setBusy(true);
 		try {
-			const saved = await window.bureau.templates.update(template.id, {
+			const saved = await window.juno.templates.update(template.id, {
 				name: trimmed,
 				description: description.trim() || null,
 				bodyHtml,
@@ -117,7 +117,7 @@ export function TemplateEditor({ templateId, onSaved }: TemplateEditorProps) {
 		setError(null);
 		setBusy(true);
 		try {
-			const saved = await window.bureau.templates.setReviewed(template.id, !reviewed);
+			const saved = await window.juno.templates.setReviewed(template.id, !reviewed);
 			setLoad((current) =>
 				current.status === "ready"
 					? { status: "ready", loaded: { ...current.loaded, template: saved } }
@@ -135,7 +135,7 @@ export function TemplateEditor({ templateId, onSaved }: TemplateEditorProps) {
 		if (!template) return;
 		setPreview({ status: "running" });
 		try {
-			const result = await window.bureau.templates.preview({
+			const result = await window.juno.templates.preview({
 				bodyHtml,
 				clientId: previewClientId.length > 0 ? previewClientId : null,
 				isSpecimen: !reviewed,

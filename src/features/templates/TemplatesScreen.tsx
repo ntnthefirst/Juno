@@ -17,7 +17,7 @@ export function TemplatesScreen() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.mail.templates
+		window.juno.mail.templates
 			.list()
 			.then((rows) => {
 				if (!cancelled) setMailTemplates(rows);
@@ -29,7 +29,7 @@ export function TemplatesScreen() {
 	}, []);
 
 	const refreshMail = useCallback(() => {
-		window.bureau.mail.templates
+		window.juno.mail.templates
 			.list()
 			.then(setMailTemplates)
 			.catch(() => undefined);
@@ -37,7 +37,7 @@ export function TemplatesScreen() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.templates
+		window.juno.templates
 			.list()
 			.then((rows) => {
 				if (!cancelled) setLoad({ status: "ready", rows });
@@ -51,7 +51,7 @@ export function TemplatesScreen() {
 	}, []);
 
 	const refreshList = useCallback(() => {
-		window.bureau.templates
+		window.juno.templates
 			.list()
 			.then((rows) => setLoad({ status: "ready", rows }))
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
@@ -122,7 +122,7 @@ export function TemplatesScreen() {
 						Mail templates
 					</h2>
 					<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						The subject and body of the emails Bureau composes for you. Dutch, one register each.
+						The subject and body of the emails Juno composes for you. Dutch, one register each.
 					</p>
 					{mailTemplates.length === 0 ? (
 						<p className="mt-4 text-[var(--ink-muted)]">No mail templates yet.</p>

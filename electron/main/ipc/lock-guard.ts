@@ -30,9 +30,9 @@ const ALLOWED_WHILE_LOCKED = new Set([
 ]);
 
 export class LockedError extends Error {
-	readonly code = "BUREAU_LOCKED";
+	readonly code = "JUNO_LOCKED";
 	constructor(channel: string) {
-		super(`Bureau is locked, so ${channel} was refused.`);
+		super(`Juno is locked, so ${channel} was refused.`);
 		this.name = "LockedError";
 	}
 }

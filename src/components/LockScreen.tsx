@@ -50,7 +50,7 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 		setBusy(true);
 		setError(null);
 		try {
-			const result = await window.bureau.lock.unlock(secret);
+			const result = await window.juno.lock.unlock(secret);
 			if (result.ok) {
 				setSecret("");
 				onUnlocked();
@@ -94,7 +94,7 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 				</svg>
 
 				<h1 className="mt-4 text-[length:var(--text-lg)] font-[var(--weight-medium)]">
-					Bureau is locked
+					Juno is locked
 				</h1>
 
 				<form onSubmit={submit} className="mt-5">

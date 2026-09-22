@@ -99,7 +99,7 @@ export function CalendarScreen() {
 
 	const fetchItems = useCallback(() => {
 		if (!from || !to) return Promise.resolve<CalendarItem[]>([]);
-		return window.bureau.calendar.list({
+		return window.juno.calendar.list({
 			from,
 			to,
 			includeReminders: showReminders,
@@ -171,7 +171,7 @@ export function CalendarScreen() {
 		setDetail(null);
 		let event: CalendarEvent | null;
 		try {
-			event = await window.bureau.calendar.get(item.eventId);
+			event = await window.juno.calendar.get(item.eventId);
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 			return;
@@ -192,7 +192,7 @@ export function CalendarScreen() {
 		withScope(item, "delete", (scope) => {
 			setQuestion(null);
 			void run(async () => {
-				const result = await window.bureau.calendar.remove(item.eventId, {
+				const result = await window.juno.calendar.remove(item.eventId, {
 					scope,
 					occurrenceStartLocal: item.occurrenceStartLocal,
 				});
@@ -206,7 +206,7 @@ export function CalendarScreen() {
 		if (!deleted) return;
 		const id = deleted.id;
 		setDeleted(null);
-		await run(() => window.bureau.calendar.restore(id));
+		await run(() => window.juno.calendar.restore(id));
 	}
 
 	/** A drag, turned into a wall-clock edit on the event's own zone. */
@@ -219,12 +219,12 @@ export function CalendarScreen() {
 				if (scope === "all") {
 					// The whole series shifts by the same amount, so the master moves
 					// by the delta rather than to where this occurrence was dropped.
-					const event = await window.bureau.calendar.get(item.eventId);
+					const event = await window.juno.calendar.get(item.eventId);
 					if (!event) throw new Error("That event no longer exists.");
-					await window.bureau.calendar.update(event.id, { startLocal: shift(event.startLocal) }, { scope: "all" });
+					await window.juno.calendar.update(event.id, { startLocal: shift(event.startLocal) }, { scope: "all" });
 					return;
 				}
-				await window.bureau.calendar.update(
+				await window.juno.calendar.update(
 					item.eventId,
 					{ startLocal: shift(item.startLocal) },
 					{ scope, occurrenceStartLocal: item.occurrenceStartLocal },
@@ -241,16 +241,16 @@ export function CalendarScreen() {
 			setQuestion(null);
 			void run(async () => {
 				if (scope === "all") {
-					const event = await window.bureau.calendar.get(item.eventId);
+					const event = await window.juno.calendar.get(item.eventId);
 					if (!event) throw new Error("That event no longer exists.");
-					await window.bureau.calendar.update(
+					await window.juno.calendar.update(
 						event.id,
 						{ endLocal: addLocalMinutes(event.endLocal, minuteDelta) },
 						{ scope: "all" },
 					);
 					return;
 				}
-				await window.bureau.calendar.update(
+				await window.juno.calendar.update(
 					item.eventId,
 					{ endLocal },
 					{ scope, occurrenceStartLocal: item.occurrenceStartLocal },
@@ -261,7 +261,7 @@ export function CalendarScreen() {
 
 	async function importIcs() {
 		try {
-			const result = await window.bureau.calendar.importIcs();
+			const result = await window.juno.calendar.importIcs();
 			if (!result) return;
 			refresh();
 			const parts = [
@@ -279,7 +279,7 @@ export function CalendarScreen() {
 	async function exportIcs() {
 		if (!from || !to) return;
 		try {
-			const path = await window.bureau.calendar.exportIcs({ from, to });
+			const path = await window.juno.calendar.exportIcs({ from, to });
 			if (path) setNotice(`Saved ${path}.`);
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));

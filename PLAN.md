@@ -1,4 +1,4 @@
-# Bureau: build plan
+# Juno: build plan
 
 The order the thing gets built in, and why that order. Read
 [docs/decisions.md](docs/decisions.md) first: this plan assumes every decision in
@@ -6,7 +6,7 @@ it and never overrides one.
 
 ---
 
-## 1. What Bureau is
+## 1. What Juno is
 
 A local-first Electron desktop app holding the back office of a one-person
 business. Clients and projects, contracts generated from the Word templates that
@@ -19,7 +19,7 @@ an AI agent get it on the same day.
 
 | Not | Because |
 | --- | --- |
-| An invoicing tool | Decision 9. Bureau reminds and tracks what is owed; the accounting tool invoices. Requirements vary by country and change yearly, for no gain. |
+| An invoicing tool | Decision 9. Juno reminds and tracks what is owed; the accounting tool invoices. Requirements vary by country and change yearly, for no gain. |
 | A payments tool | It never moves money and never holds a payment credential. |
 | A cloud app | No server, no account, no subscription. Anything remote syncs into local state, never a read the UI blocks on. |
 | A qualified eIDAS signature | Signature image plus timestamp plus audit trail (decision 8). High-stakes contracts keep going through a provider. |
@@ -69,7 +69,7 @@ cannot contain last client's name.
 - **Ships:** `reminder`, one-off and recurring, attached to a client, project, document or nothing. Seeded rules for the paperwork that actually recurs: VAT quarter, social contributions, hosting renewals, contract end dates. "Time to invoice" reminders derived from project state, pointing at the accounting tool by name and URL and generating nothing. A Today view, snooze and complete, and an OS notification on launch and daily.
 - **Deferred:** calendar rendering (phase 5 reads these), email notification, full dashboard, amount tracking.
 - **Size:** 5 to 8 sessions, 2 to 3 weeks. Driven by recurrence: keep to a small fixed pattern set (every N days/weeks/months, nth weekday, quarter end) and refuse anything wider. The general case is phase 5's problem, and phase 5 has `rrule` for it.
-- **Done when:** Nathan opens Bureau on a Monday and it tells him something he had forgotten, before he had to remember it. A month later he has missed no deadline and checked no separate list.
+- **Done when:** Nathan opens Juno on a Monday and it tells him something he had forgotten, before he had to remember it. A month later he has missed no deadline and checked no separate list.
 
 ### Phase 3: email, read-only
 
@@ -79,7 +79,7 @@ thread belongs to.
 - **Ships:** `mail_account` with credentials in `safeStorage`, never in the database or the renderer (decision 6). imapflow sync in the main process: folder list, UID-based incremental fetch, headers then bodies, mailparser into `mail_message`, threading by `Message-ID` / `In-Reply-To` / `References`. Attachments to disk. Three-pane reader with sanitised HTML in a locked-down view. FTS5 search. Client linking by sender address with manual override. A sync status UI honest about what failed.
 - **Deferred:** sending, drafts, flags and moves written back, folder management, invites. Any IMAP write at all.
 - **Size:** 25 to 40 sessions, 10 to 16 weeks. Largest phase by a wide margin, and the range is wide because IMAP servers disagree with each other and with the RFCs. Drivers: a full first sync of a large mailbox without freezing the app or exhausting memory, resuming an interrupted sync, `UIDVALIDITY` changing and invalidating local state, Gmail versus a normal Dovecot host, encoding and MIME edge cases, HTML sanitisation done properly.
-- **Done when:** Nathan pulls the wifi, opens Bureau, searches a phrase he knows is in an old hyge thread, finds it and reads it. He then stops opening the webmail tab to look things up.
+- **Done when:** Nathan pulls the wifi, opens Juno, searches a phrase he knows is in an old hyge thread, finds it and reads it. He then stops opening the webmail tab to look things up.
 
 This is where the project dies if it dies. It gets sub-shipped rather than
 attempted whole; see section 5.
@@ -92,7 +92,7 @@ style.
 - **Ships:** nodemailer SMTP per account with a real outbox (queued, sending, sent, failed, retry). Compose in plain text and HTML, reply and reply-all that thread correctly, attach a `document` row in two clicks. `mail_template` with variables filled from client and project, rendered against the brand tokens: contract cover, project kickoff, invoice-due nudge, hosting renewal. Append to the IMAP Sent folder so the phone shows it. Send always requires explicit confirmation, human or agent.
 - **Deferred:** rich text beyond a small fixed toolbar, scheduled send, mail merge. Read receipts and tracking pixels, permanently.
 - **Size:** 10 to 16 sessions, 4 to 7 weeks. Drivers: deliverability (SPF, DKIM and DMARC alignment on his own domains), HTML email surviving Outlook, and reconciling sent messages with what phase 3 later pulls back down so nothing appears twice.
-- **Done when:** Nathan generates an ontwikkelovereenkomst, attaches it, sends it to a real client from inside Bureau, and it looks right on his phone and in the client's Outlook.
+- **Done when:** Nathan generates an ontwikkelovereenkomst, attaches it, sends it to a real client from inside Juno, and it looks right on his phone and in the client's Outlook.
 
 ### Phase 5: calendar
 
@@ -208,7 +208,7 @@ delegates, nothing more (decision 2).
 worth being paranoid about. An agent may prepare them completely and may never
 fire them.
 
-**There is no `app.unlock`, and there will not be.** A tool that can unlock Bureau
+**There is no `app.unlock`, and there will not be.** A tool that can unlock Juno
 makes the lock screen decorative, because anything that can talk to the MCP server
 can then open the app. Locking is exposed, unlocking is a person at the keyboard.
 
@@ -237,7 +237,7 @@ can then open the app. Locking is exposed, unlocking is a person at the keyboard
 | Thing | Reason |
 | --- | --- |
 | Invoice generation, numbering, sending | Decision 9. Requirements vary by country and change; a reminder pointing at the accounting tool carries none of them. |
-| Any movement of money | Same. Bureau never holds a payment credential. |
+| Any movement of money | Same. Juno never holds a payment credential. |
 | Time tracking, accounting, ledgers, VAT returns | A tool exists for the first and is used; the rest is regulated, audited and the accountant's job. |
 | A web or mobile version | The promise is a local file and no server. A different product with a different threat model. |
 | Multi-user, roles, permissions | One owner. `owner_id` exists so this stays possible, not so it gets built. |
@@ -247,6 +247,6 @@ can then open the app. Locking is exposed, unlocking is a person at the keyboard
 | Read receipts, open and link tracking | Will not be built. |
 | Calendar invitations and attendee replies | The iTIP flow is a phase of its own and the pain is small: send an `.ics`. |
 | Writing flags, moves or deletes back to IMAP | Phase 3 is read-only on purpose. A read bug costs a redownload; a write bug costs mail. |
-| In-app editing of the `.docx` templates | Legal text, editable in Word by decision 8. A worse editor inside Bureau is a downgrade. |
-| Publishing, licensing, a website, other users | Decision 13: the licence is deliberately undecided. Nothing ships publicly until Bureau has been the daily tool for months and that question has an answer. |
+| In-app editing of the `.docx` templates | Legal text, editable in Word by decision 8. A worse editor inside Juno is a downgrade. |
+| Publishing, licensing, a website, other users | Decision 13: the licence is deliberately undecided. Nothing ships publicly until Juno has been the daily tool for months and that question has an answer. |
 | A required cloud AI model | The app opens, syncs and works with no API key configured. The assistant is additive. |

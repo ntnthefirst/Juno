@@ -300,8 +300,8 @@ from the interface. `src/components/` gained Dialog, Button, Field, Select and
 Toast; `src/features/clients/` gained ClientForm, ContactForm, ProjectForm and
 ClientDetail.
 
-**The smoke script now drives the real bridge.** With `BUREAU_SMOKE_DEMO=1` it
-calls `window.bureau.*` to create four clients, a primary contact and two
+**The smoke script now drives the real bridge.** With `JUNO_SMOKE_DEMO=1` it
+calls `window.juno.*` to create four clients, a primary contact and two
 projects, reloads, clicks a row, and screenshots both themes. This exercises
 IPC, the services and SQLite exactly as a person clicking would. Verifying the
 interface against a mock would prove nothing about any of them.
@@ -335,7 +335,7 @@ later. The accepted shape is a promise chain whose callback sets the state:
 ```ts
 useEffect(() => {
 	let cancelled = false;
-	window.bureau.thing.list()
+	window.juno.thing.list()
 		.then((v) => { if (!cancelled) setThing(v); })
 		.catch((e: unknown) => { if (!cancelled) setError(messageOf(e)); });
 	return () => { cancelled = true; };
@@ -435,7 +435,7 @@ rather than landing on the oldest occurrence, and the completion log records the
 date that was *due*, not the day it was ticked. That is the difference between
 "did I file Q1" and "did I touch this recently".
 
-**The seeded Belgian paperwork leans early and says so.** Bureau does not know
+**The seeded Belgian paperwork leans early and says so.** Juno does not know
 anyone's filing deadlines; every seeded reminder carries a note saying to confirm
 the date once. A wrong date asserted confidently is worse than a prompt to check.
 Seeding also moves the first occurrence forward past today, so a fresh install in
@@ -599,7 +599,7 @@ overlays, the range query in a foreign zone, and export followed by import into
 an empty database. The smoke run creates a weekly call through the bridge,
 moves one occurrence, adds an all-day and a timed event, reads the week back,
 and walks the detail, scope and form dialogs before photographing month, week
-and the form in both themes. **No other calendar has read a Bureau .ics file
+and the form in both themes. **No other calendar has read a Juno .ics file
 yet**, and a real Outlook export has not been imported. That is the next run.
 
 **Traps and findings:**
@@ -616,7 +616,7 @@ yet**, and a real Outlook export has not been imported. That is the next run.
   rule named exactly the start's own weekday or month day, and leaves anything
   more deliberate alone.
 - **A DTSTART the rule does not generate is undefined by the RFC** and shown
-  on its own day by every calendar people use. Bureau includes it too, or an
+  on its own day by every calendar people use. Juno includes it too, or an
   event created on a Monday with a Tuesday rule would vanish from the day it
   was made on.
 - **A moved occurrence can be moved outside the window its slot is in.** The

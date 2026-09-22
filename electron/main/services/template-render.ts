@@ -80,7 +80,7 @@ function stringify(value: unknown): string {
 
 /** The marker left where a value is missing. Styled by the document stylesheet. */
 export function missingMarker(path: string): string {
-	return `<span class="bureau-missing" data-field="${escapeHtml(path)}">[ontbreekt: ${escapeHtml(
+	return `<span class="juno-missing" data-field="${escapeHtml(path)}">[ontbreekt: ${escapeHtml(
 		path,
 	)}]</span>`;
 }

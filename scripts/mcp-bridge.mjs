@@ -1,5 +1,5 @@
 /**
- * The MCP server an agent spawns, and the only thing that talks to Bureau
+ * The MCP server an agent spawns, and the only thing that talks to Juno
  * from outside it.
  *
  * It holds no logic and no database handle. It speaks MCP over stdio, forwards
@@ -10,7 +10,7 @@
  * Run it with Node, or with the packaged app's own binary:
  *
  *   node scripts/mcp-bridge.mjs
- *   ELECTRON_RUN_AS_NODE=1 "C:\\Program Files\\Bureau\\Bureau.exe" resources/app.asar/scripts/mcp-bridge.mjs
+ *   ELECTRON_RUN_AS_NODE=1 "C:\\Program Files\\Juno\\Juno.exe" resources/app.asar/scripts/mcp-bridge.mjs
  *
  * Settings > Agent prints the exact block for this machine.
  *
@@ -34,7 +34,7 @@ const CALL_TIMEOUT_MS = 120_000;
 
 /** Where Electron puts userData, for the case where nothing told us. */
 function defaultUserDataDir() {
-	const product = "Bureau";
+	const product = "Juno";
 	if (process.platform === "win32") {
 		return join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), product);
 	}
@@ -47,7 +47,7 @@ function defaultUserDataDir() {
 function userDataDir() {
 	const flagIndex = process.argv.indexOf("--user-data-dir");
 	if (flagIndex !== -1 && process.argv[flagIndex + 1]) return process.argv[flagIndex + 1];
-	return process.env.BUREAU_USER_DATA ?? defaultUserDataDir();
+	return process.env.JUNO_USER_DATA ?? defaultUserDataDir();
 }
 
 const dir = userDataDir();
@@ -68,7 +68,7 @@ function cachedTools() {
 }
 
 const NOT_RUNNING =
-	"Bureau is not running, so nothing can be read or changed. Start Bureau on this machine and try again.";
+	"Juno is not running, so nothing can be read or changed. Start Juno on this machine and try again.";
 
 /**
  * One request, one connection.
@@ -102,7 +102,7 @@ function ask(method, params) {
 		};
 
 		const timer = setTimeout(
-			() => finish(new Error("Bureau did not answer in time.")),
+			() => finish(new Error("Juno did not answer in time.")),
 			method === "hello" ? CONNECT_TIMEOUT_MS : CALL_TIMEOUT_MS,
 		);
 
@@ -127,7 +127,7 @@ function ask(method, params) {
 				try {
 					message = JSON.parse(line);
 				} catch {
-					finish(new Error("Bureau sent something unreadable."));
+					finish(new Error("Juno sent something unreadable."));
 					return;
 				}
 				if (message.id === 1) {
@@ -145,7 +145,7 @@ function ask(method, params) {
 }
 
 const server = new Server(
-	{ name: "bureau", version: "0.1.0" },
+	{ name: "juno", version: "0.1.0" },
 	{ capabilities: { tools: {} } },
 );
 
@@ -154,9 +154,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 	try {
 		tools = await ask("list_tools", {});
 	} catch (cause) {
-		// Bureau is closed right now. Offer the tools it had last time rather
+		// Juno is closed right now. Offer the tools it had last time rather
 		// than an empty surface the client will cache for its whole session.
-		process.stderr.write(`bureau: ${cause.message} Using the tool list from the last run.\n`);
+		process.stderr.write(`juno: ${cause.message} Using the tool list from the last run.\n`);
 		tools = cachedTools();
 	}
 	return {
@@ -202,4 +202,4 @@ function wrap(result) {
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-process.stderr.write(`bureau: ready, reading ${dir}\n`);
+process.stderr.write(`juno: ready, reading ${dir}\n`);

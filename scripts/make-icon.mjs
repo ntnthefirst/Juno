@@ -1,5 +1,5 @@
 /**
- * Rasterises brand/logo/bureau-icon.svg into build/icon.png at 1024x1024.
+ * Rasterises brand/logo/juno-icon.svg into build/icon.png at 1024x1024.
  *
  * electron-builder generates the .ico and .icns it needs from a single square
  * PNG of at least 512px, so one file covers every platform.
@@ -21,7 +21,7 @@ const SIZE = 1024;
 app.disableHardwareAcceleration();
 
 app.whenReady().then(async () => {
-	const svg = readFileSync(join(root, "brand", "logo", "bureau-icon.svg"), "utf8");
+	const svg = readFileSync(join(root, "brand", "logo", "juno-icon.svg"), "utf8");
 
 	// capturePage() returns device pixels, so a window sized in CSS pixels on a
 	// 1.5x display produces a 1536px image. Dividing by the scale factor makes the

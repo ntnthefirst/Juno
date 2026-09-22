@@ -48,7 +48,7 @@ describe("create", () => {
 		expect(made.seriesEndUtc).toBeNull();
 		expect(made.rrule).toBe("FREQ=WEEKLY;BYDAY=TU");
 		expect(made.recurrenceLabel).toBe("Every week on Tuesday");
-		expect(made.icalUid).toBe(`${made.id}@bureau`);
+		expect(made.icalUid).toBe(`${made.id}@juno`);
 	});
 
 	it("defaults the end to an hour, or a day for all-day, and the zone to the machine's", async () => {

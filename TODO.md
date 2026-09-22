@@ -58,7 +58,7 @@ answer are at the end of the two session entries in `BUILD-LOG.md`.
 
 Deliverability is the other half: SPF, DKIM and DMARC on the real domains have
 to align with the SMTP server the account uses, or the first client mail lands
-in spam. That is DNS, not Bureau, and it is worth checking before a real
+in spam. That is DNS, not Juno, and it is worth checking before a real
 contract goes out this way.
 
 The sync writes nothing to the server. The sender writes exactly two things:
@@ -70,7 +70,7 @@ Phase 6 is built except its assistant panel. Everything the panel would drive
 is there: 99 tools, the approval gate, briefings and automations. What it needs
 and nothing else does is a model, which means three answers from you.
 
-- **Which provider**, and whether Bureau ever talks to one at all. PLAN.md is
+- **Which provider**, and whether Juno ever talks to one at all. PLAN.md is
   binding that the app opens, syncs and works with no key configured, so the
   panel is additive and absent by default.
 - **Where the key lives.** `safeStorage`, like a mail password, by decision 6.
@@ -102,11 +102,11 @@ phase 6's done-when in PLAN.md.
   would be nicer.
 - **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
   is the phase 4 promise not yet kept. Templates carry their own layout, so it
-  matters least for the messages Bureau writes on its own.
+  matters least for the messages Juno writes on its own.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.
-- **No other calendar has read a Bureau .ics file yet.** Export a month, open
+- **No other calendar has read a Juno .ics file yet.** Export a month, open
   it in Google Calendar or Outlook, and check the moved occurrence of a
   recurring event after the October change. Then import an Outlook export the
   other way; its Windows zone names are handled through the file's VTIMEZONE,
@@ -114,7 +114,7 @@ phase 6's done-when in PLAN.md.
 - **No third-party MCP client has connected yet.** The smoke run starts the
   real bridge and speaks MCP to it, so the socket, the token and the wire are
   covered, but Claude Desktop and Claude Code have not. Try both, and check
-  that a tool list cached while Bureau was closed recovers when it opens.
+  that a tool list cached while Juno was closed recovers when it opens.
 - **The audit log has no purge.** It grows by one row per write. A year of
   ordinary use is a few thousand rows, so this is not urgent, but "keep the
   last N months" belongs next to the backup settings eventually.

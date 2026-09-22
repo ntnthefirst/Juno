@@ -50,7 +50,7 @@ function AboutSection() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.app
+		window.juno.app
 			.info()
 			.then((value) => {
 				if (!cancelled) setInfo(value);

@@ -86,7 +86,7 @@ export function registerMailIpc(): void {
 		// The same rule as reminders.openAction: only a web address or a mailto
 		// reaches the shell. Anything else from a message is data.
 		if (!/^(https?:\/\/|mailto:)/i.test(url)) {
-			throw new Error("That link is not a web address, so Bureau will not open it.");
+			throw new Error("That link is not a web address, so Juno will not open it.");
 		}
 		await shell.openExternal(url);
 	});

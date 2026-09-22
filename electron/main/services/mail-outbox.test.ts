@@ -43,7 +43,7 @@ let failNext: unknown;
 
 beforeEach(async () => {
 	db = freshDb();
-	dir = mkdtempSync(join(tmpdir(), "bureau-outbox-"));
+	dir = mkdtempSync(join(tmpdir(), "juno-outbox-"));
 	configureSettings(dir);
 	configureCredentialStore(new MemoryCredentialStore());
 	sentMessages = [];
@@ -73,9 +73,9 @@ beforeEach(async () => {
 
 	const account = await accounts.create(
 		{
-			email: "hallo@bureau.test",
-			imapHost: "imap.bureau.test",
-			smtpHost: "smtp.bureau.test",
+			email: "hallo@juno.test",
+			imapHost: "imap.juno.test",
+			smtpHost: "smtp.juno.test",
 			password: "secret",
 			fromName: "Nathan",
 		},
@@ -104,7 +104,7 @@ describe("drafts", () => {
 		);
 		expect(draft.state).toBe("draft");
 		expect(draft.to).toEqual([{ name: "Laura", address: "laura@obet.be" }]);
-		expect(draft.messageId).toMatch(/^<[0-9a-f-]+@bureau\.test>$/);
+		expect(draft.messageId).toMatch(/^<[0-9a-f-]+@juno\.test>$/);
 		expect(draft.bodyHtml).toContain("<p style=");
 		expect(draft.bodyHtml).toContain("Hierbij de offerte.");
 		expect(draft.bodyHtml).toContain("<blockquote");
@@ -144,8 +144,8 @@ describe("the gate", () => {
 		expect(sent.attempts).toBe(1);
 		expect(sent.appendedToSentAt).not.toBeNull();
 		expect(sentMessages).toHaveLength(1);
-		expect(sentMessages[0]!.message.from).toEqual({ name: "Nathan", address: "hallo@bureau.test" });
-		expect(sentMessages[0]!.connection.host).toBe("smtp.bureau.test");
+		expect(sentMessages[0]!.message.from).toEqual({ name: "Nathan", address: "hallo@juno.test" });
+		expect(sentMessages[0]!.connection.host).toBe("smtp.juno.test");
 		expect(sentMessages[0]!.connection.password).toBe("secret");
 		expect(appended).toHaveLength(1);
 		expect(appended[0]!.folder).toBe("Sent");
@@ -274,7 +274,7 @@ describe("replies", () => {
 				referencesJson: JSON.stringify(["<root@obet.be>"]),
 				fromName: "Laura",
 				fromAddress: "laura@obet.be",
-				toJson: JSON.stringify([{ name: null, address: "hallo@bureau.test" }, { name: "Tom", address: "tom@obet.be" }]),
+				toJson: JSON.stringify([{ name: null, address: "hallo@juno.test" }, { name: "Tom", address: "tom@obet.be" }]),
 				ccJson: JSON.stringify([{ name: null, address: "cc@elders.be" }]),
 				subject: "Offerte",
 				snippet: "Kunnen we",

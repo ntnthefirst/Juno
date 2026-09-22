@@ -1,4 +1,4 @@
-# Bureau brand
+# Juno brand
 
 What the product is called, what it sounds like, and how it looks. The tokens
 themselves live in [tokens.css](tokens.css); this file is the reasoning behind
@@ -13,7 +13,7 @@ as the check after changing any value.
 
 ## 1. The name
 
-**Bureau.** A writing desk and an office, in English, Dutch and French at once.
+**Juno.** A writing desk and an office, in English, Dutch and French at once.
 That trilingual overlap is the point: the people this is for are small business
 owners in Belgium and around it, and the word needs no translation for any of
 them.
@@ -21,14 +21,14 @@ them.
 It is a plain, real word. That is deliberate. A calm name is the honest signal
 for a calm tool, and invented startup names age badly.
 
-- Always capitalised as **Bureau**. Never BUREAU, never bureau mid-sentence.
+- Always capitalised as **Juno**. Never JUNO, never juno mid-sentence.
 - No tagline locked to the logo. If a line is needed, write one for the context.
-- The app is Bureau. A user's own database is "your bureau", lowercase, only if
+- The app is Juno. A user's own database is "your juno", lowercase, only if
   it reads naturally. Do not force it.
 
-## 2. What Bureau is for
+## 2. What Juno is for
 
-One sentence: **Bureau is where the paperwork of running a small business
+One sentence: **Juno is where the paperwork of running a small business
 happens, on your own machine, without a subscription.**
 
 It holds clients, contracts, mail, dates and reminders in one place, generates
@@ -185,11 +185,11 @@ down to 16px, which is the only size test that matters for an app icon.
 
 | File | Use |
 | --- | --- |
-| `bureau-mark.svg` | The mark alone, `currentColor`. Inline in the app |
-| `bureau-wordmark.svg` | Mark plus name, `currentColor`. Inline in the app |
-| `bureau-wordmark-ink.svg` | Fixed dark. For light backgrounds and any `<img>` |
-| `bureau-wordmark-paper.svg` | Fixed light. For dark backgrounds and any `<img>` |
-| `bureau-icon.svg` | The rounded accent tile. Application and installer icon |
+| `juno-mark.svg` | The mark alone, `currentColor`. Inline in the app |
+| `juno-wordmark.svg` | Mark plus name, `currentColor`. Inline in the app |
+| `juno-wordmark-ink.svg` | Fixed dark. For light backgrounds and any `<img>` |
+| `juno-wordmark-paper.svg` | Fixed light. For dark backgrounds and any `<img>` |
+| `juno-icon.svg` | The rounded accent tile. Application and installer icon |
 | `favicon.svg` | The tile at 32px, with tightened proportions |
 
 **The trap, which has already been hit once:** an SVG loaded through an `<img>`
@@ -203,13 +203,13 @@ Other rules:
 - Clear space around the mark is the width of its spine on every side.
 - Never recolour the mark outside the palette, never add a gradient, never add a
   shadow, never stretch it, never outline it.
-- On a photograph or a busy background, use the `bureau-icon.svg` tile rather
+- On a photograph or a busy background, use the `juno-icon.svg` tile rather
   than the bare mark.
 - The wordmark files still carry live text. Outline it before the wordmark is
   used anywhere outside the app, or it will render in a fallback face on a
   machine without Inter. Marked `TODO(asset)` in those files.
 
-## 9. What Bureau does not look like
+## 9. What Juno does not look like
 
 Worth naming, because these are the defaults that creep in:
 

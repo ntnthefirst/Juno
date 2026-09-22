@@ -24,7 +24,7 @@ import type { BackupInfo } from "../../shared/types";
 /** Older copies past this are pruned, oldest first, after every new backup. */
 const KEEP = 10;
 
-const PREFIX = "bureau-";
+const PREFIX = "juno-";
 const SUFFIX = ".sqlite";
 
 let directory: string | null = null;
@@ -155,7 +155,7 @@ export function validate(path: string): void {
 	}
 
 	if (!hasJournal) {
-		throw new Error("That database has no _migrations table, so it is not a Bureau backup.");
+		throw new Error("That database has no _migrations table, so it is not a Juno backup.");
 	}
 }
 

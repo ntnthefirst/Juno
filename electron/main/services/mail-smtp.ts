@@ -35,7 +35,7 @@ function transportFor(connection: SmtpConnection): Transporter<SMTPTransport.Sen
 		connectionTimeout: CONNECT_TIMEOUT_MS,
 		greetingTimeout: CONNECT_TIMEOUT_MS,
 		logger: false,
-		name: "bureau.local",
+		name: "juno.local",
 	});
 }
 
@@ -59,8 +59,8 @@ export async function composeMessage(
 			path: a.path,
 			contentType: a.contentType,
 		})),
-		// Bureau never asks for a receipt, and never will. See PLAN.md phase 4.
-		headers: { "X-Mailer": "Bureau" },
+		// Juno never asks for a receipt, and never will. See PLAN.md phase 4.
+		headers: { "X-Mailer": "Juno" },
 	});
 	const node = composer.compile();
 	const envelope = node.getEnvelope();
@@ -112,7 +112,7 @@ export const imapSentAppender: SentAppender = async (connection, folderPath, raw
 		logger: false,
 		disableAutoIdle: true,
 		connectionTimeout: CONNECT_TIMEOUT_MS,
-		clientInfo: { name: "Bureau" },
+		clientInfo: { name: "Juno" },
 	});
 	try {
 		await client.connect();

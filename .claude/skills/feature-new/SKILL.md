@@ -1,6 +1,6 @@
 ---
 name: feature-new
-description: Add a whole domain to Bureau end to end - clients, documents, mail, calendar, reminders, templates. Walks the mandated order: Drizzle schema and migration, service module, IPC adapter, MCP tool(s), renderer screen, tests. Use when the user asks for a new feature area ("add reminders", "I want contracts in here"), not for changing one that exists and not for a single screen (use screen-new) or a single tool (use mcp-tool-new).
+description: Add a whole domain to Juno end to end - clients, documents, mail, calendar, reminders, templates. Walks the mandated order: Drizzle schema and migration, service module, IPC adapter, MCP tool(s), renderer screen, tests. Use when the user asks for a new feature area ("add reminders", "I want contracts in here"), not for changing one that exists and not for a single screen (use screen-new) or a single tool (use mcp-tool-new).
 ---
 
 # Workflow: a new domain, end to end
@@ -30,7 +30,7 @@ Write down, in the chat, in three lines:
 - The **nouns**: one table each, singular concept, plural table name.
 - The **verbs**: every operation the owner will do. These become service
   functions and, one for one, MCP tools.
-- What it is **not**. Bureau does no invoicing and no payments
+- What it is **not**. Juno does no invoicing and no payments
   ([decisions.md](../../../docs/decisions.md), 9). A reminder that says "invoice
   this" is in scope. Generating an invoice is not.
 

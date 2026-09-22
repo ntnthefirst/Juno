@@ -30,7 +30,7 @@ export const mailTemplates = sqliteTable(
 );
 
 /**
- * The outbox: every message Bureau composes, from draft to sent, with the
+ * The outbox: every message Juno composes, from draft to sent, with the
  * confirmation gate as a state rather than a flag.
  *
  *   draft     being written; nothing will happen to it

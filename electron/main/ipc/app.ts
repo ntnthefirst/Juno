@@ -8,7 +8,7 @@ export function registerAppIpc(): void {
 		(): AppInfo => ({
 			version: app.getVersion(),
 			databasePath: databasePath(),
-			isDev: Boolean(process.env.BUREAU_DEV),
+			isDev: Boolean(process.env.JUNO_DEV),
 			platform: process.platform,
 		}),
 	);

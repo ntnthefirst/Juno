@@ -1,5 +1,5 @@
 /**
- * Reminders. Bureau tells you; it never acts.
+ * Reminders. Juno tells you; it never acts.
  *
  * Decision 9 is binding: no invoice is generated, numbered or sent, and no money
  * moves. A reminder that says "time to invoice obet" carries a link to wherever

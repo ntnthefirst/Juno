@@ -19,7 +19,7 @@ beforeEach(() => {
 	const connection = openDatabase(":memory:");
 	runMigrations(connection, migrations);
 	db = createDrizzle(connection);
-	configureSettings(mkdtempSync(join(tmpdir(), "bureau-rem-")));
+	configureSettings(mkdtempSync(join(tmpdir(), "juno-rem-")));
 });
 
 /** A client with a project in the given status, which is what the rules read. */
@@ -83,7 +83,7 @@ describe("ensureRemindersSeeded", () => {
 	it("gives every seeded reminder a note saying to confirm the date", async () => {
 		await ensureRemindersSeeded(db, "2026-01-01");
 		const rows = db.select().from(reminders).all();
-		// Bureau does not know anyone's filing deadlines. Saying so is the point.
+		// Juno does not know anyone's filing deadlines. Saying so is the point.
 		expect(rows.every((row) => (row.notes ?? "").length > 0)).toBe(true);
 	});
 });
@@ -119,7 +119,7 @@ describe("invoiceSuggestions", () => {
 		expect(await invoiceSuggestions(db, "2026-05-10")).toHaveLength(0);
 	});
 
-	it("carries the accounting tool link, since Bureau never invoices itself", async () => {
+	it("carries the accounting tool link, since Juno never invoices itself", async () => {
 		makeProject("delivered", 210000);
 		await setAccountingTool({ name: "Accountable", url: "https://example.invalid" });
 

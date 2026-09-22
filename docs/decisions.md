@@ -96,7 +96,7 @@ High-stakes contracts keep going through a provider.
 
 ## 9. No invoicing, no payments, ever
 
-Bureau reminds you to invoice and tracks what is owed. It does not generate,
+Juno reminds you to invoice and tracks what is owed. It does not generate,
 number, or send invoices, and it never moves money. Invoicing carries legal
 requirements that vary by country and change; a reminder that points at the real
 accounting tool carries none of them.
@@ -131,7 +131,7 @@ meaning all rights reserved. That is the right default while the answer is unkno
 because adding a permissive licence later is easy and retracting one is not.
 
 Decide before the repo goes public. The question to answer first is whether a
-company should be able to take Bureau, host it, and sell it back.
+company should be able to take Juno, host it, and sell it back.
 
 ## 14. Theme is a three-state setting, not a toggle
 
@@ -150,7 +150,7 @@ light, the `prefers-color-scheme` block follows the OS, and an explicit
 
 ## 15. The lock has three layers, and only one of them is a lock screen
 
-The user chooses how Bureau locks. Be precise about what each choice protects
+The user chooses how Juno locks. Be precise about what each choice protects
 against, because a lock screen over an unencrypted database is theatre.
 
 | Layer | Protects against | Cost |
@@ -197,7 +197,7 @@ Every row in a seeded set carries:
 
 | Column | Why |
 | --- | --- |
-| `is_system` | It shipped with Bureau, rather than being user-created |
+| `is_system` | It shipped with Juno, rather than being user-created |
 | `hidden_at` | The user "removed" it. See below |
 | `sort_order` | The user's ordering, not the shipped one |
 | `seed_key` | Stable identifier, so an upgrade can update the right row |
@@ -248,7 +248,7 @@ every Electron bump, which is already listed as a trap in
 `node:sqlite` is in the Node standard library. It is synchronous, which is the
 property decision 3 actually wanted, needs no compilation, has no ABI to
 mismatch, and keeps `.node` files out of the packaging problem entirely. It also
-means the project builds on a machine with no compiler, which matters if Bureau
+means the project builds on a machine with no compiler, which matters if Juno
 is ever handed to another small business owner.
 
 Verified before adopting: Electron 41.10.7 bundles Node 24.18.0 with `node:sqlite`
@@ -284,7 +284,7 @@ contracts and `printToPDF` rendering HTML templates, without saying how a filled
 It cannot, without an external converter. Turning `.docx` into PDF means
 LibreOffice, a print service, or a paid API. LibreOffice is a several hundred
 megabyte dependency that has to be installed separately and driven by spawning a
-process, which breaks the promise that Bureau is one installer that works
+process, which breaks the promise that Juno is one installer that works
 offline. There is no pure-JavaScript `.docx` to PDF renderer worth trusting with
 a contract's layout.
 
@@ -440,12 +440,12 @@ over the year and reduced to the yearly rule the transitions follow, so a
 reader without its own zone table still lands occurrences on the right hour.
 
 **What would reverse this:** a sync target that owns the recurrence model
-(CalDAV expands on the server; Google's API returns instances). Then Bureau's
+(CalDAV expands on the server; Google's API returns instances). Then Juno's
 expansion becomes a cache of the server's and the exception rows become the
 server's overrides, and the file boundary in `calendar-ics.ts` becomes the sync
 boundary instead.
 
-## 24. The agent reaches Bureau through a bridge, and the gate is a table
+## 24. The agent reaches Juno through a bridge, and the gate is a table
 
 The MCP server could not be the app. The database is open in the main process
 and only there, the app takes a single-instance lock, and two processes on one
@@ -465,7 +465,7 @@ Nothing listens on a network port. `mcp.json` in userData carries the address
 and a random token, and a connection without it is dropped. Be honest about
 what that buys: it stops something that guessed the address, not a program
 already running as this user, which can read the file, and could read
-`bureau.sqlite` directly anyway. The lock is the control that matters, and
+`juno.sqlite` directly anyway. The lock is the control that matters, and
 every call checks it before anything else.
 
 **The confirmation gate from `.claude/rules/mcp.md` section 4 is the

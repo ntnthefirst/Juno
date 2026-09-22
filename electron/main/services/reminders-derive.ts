@@ -1,5 +1,5 @@
 /**
- * Reminders Bureau works out for itself from the state of the records, and the
+ * Reminders Juno works out for itself from the state of the records, and the
  * seeding of the recurring paperwork.
  *
  * Suggestions are **not stored**. They are computed on every read and offered;
@@ -8,7 +8,7 @@
  * that has to be cleaned up.
  *
  * Decision 9 again: a "time to invoice" suggestion links to wherever invoicing
- * actually happens. Bureau never generates, numbers or sends one.
+ * actually happens. Juno never generates, numbers or sends one.
  */
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb, type Db } from "../db";
@@ -76,7 +76,7 @@ export async function invoiceSuggestions(
 			title: `Invoice ${row.client.name} for ${row.project.name}`,
 			notes:
 				`Marked ${row.status!.label.toLowerCase()}, agreed value ` +
-				`${formatEuros(row.project.agreedValueCents)}. Bureau does not raise invoices.`,
+				`${formatEuros(row.project.agreedValueCents)}. Juno does not raise invoices.`,
 			category: "invoice" as const,
 			dueOn: today,
 			clientId: row.client.id,

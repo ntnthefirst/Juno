@@ -37,7 +37,7 @@ import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
 import { createMainWindow } from "./main/windows/main-window";
 
-const isDev = Boolean(process.env.BUREAU_DEV);
+const isDev = Boolean(process.env.JUNO_DEV);
 
 registerAppSchemePrivileges();
 
@@ -132,7 +132,7 @@ if (!app.requestSingleInstanceLock()) {
 		lock.watchWindow(window);
 
 		// One summary a day, never one per reminder. See services/notifications.ts.
-		if (!process.env.BUREAU_SMOKE) {
+		if (!process.env.JUNO_SMOKE) {
 			notifications.start();
 			mailSync.startScheduler();
 			mailSend.startScheduler();
@@ -143,7 +143,7 @@ if (!app.requestSingleInstanceLock()) {
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
 		// its database, rather than proving only that it compiles.
-		if (process.env.BUREAU_SMOKE) {
+		if (process.env.JUNO_SMOKE) {
 			// Electron 41 passes a single event object here. The old positional
 			// signature still fires but logs a deprecation warning on every message.
 			window.webContents.on("console-message", (event) => {
@@ -157,14 +157,14 @@ if (!app.requestSingleInstanceLock()) {
 						// Drives the real preload bridge, so this exercises IPC, the services
 						// and the database exactly as a person clicking would. Verifying the
 						// interface against a mock would prove nothing about any of them.
-						if (process.env.BUREAU_SMOKE_DEMO) {
+						if (process.env.JUNO_SMOKE_DEMO) {
 							// No server in a smoke run: the sync reads from a mailbox in memory.
 							const { openSmokeMailbox, smokeTransport, smokeAppender } = await import("./main/smoke-mailbox");
 							configureMailboxSource(openSmokeMailbox);
 							configureMailTransport(smokeTransport, smokeAppender);
 
 							const created = await window.webContents.executeJavaScript(`(async () => {
-								const b = window.bureau;
+								const b = window.juno;
 								const statuses = await b.reference.getSet("client_status");
 								const active = statuses.items.find((i) => i.key === "active") ?? statuses.items[0];
 								const lead = statuses.items.find((i) => i.key === "lead") ?? statuses.items[0];
@@ -210,8 +210,8 @@ if (!app.requestSingleInstanceLock()) {
 								// in-memory mailbox the main process swapped in above. This is
 								// what exercises the credential store, the scheme host and the
 								// reader's frame policy.
-								await b.settings.setOwner({ businessName: "Bureau", contactName: "Nathan", email: "hallo@bureau.test", city: "Gent" });
-								const mailAccount = await b.mail.accounts.create({ email: "hallo@bureau.test", label: "Bureau", imapHost: "imap.bureau.test", smtpHost: "smtp.bureau.test", password: "smoke" });
+								await b.settings.setOwner({ businessName: "Juno", contactName: "Nathan", email: "hallo@juno.test", city: "Gent" });
+								const mailAccount = await b.mail.accounts.create({ email: "hallo@juno.test", label: "Juno", imapHost: "imap.juno.test", smtpHost: "smtp.juno.test", password: "smoke" });
 								const synced = await b.mail.sync.run();
 								if (synced.some((s) => s.phase !== "done")) throw new Error("Smoke: mail sync did not finish: " + JSON.stringify(synced));
 
@@ -402,12 +402,12 @@ if (!app.requestSingleInstanceLock()) {
 
 						// A screenshot is the only part of this that can catch a window that
 						// loads without error and still renders nothing.
-						const shotDir = process.env.BUREAU_SMOKE_SHOT;
+						const shotDir = process.env.JUNO_SMOKE_SHOT;
 						if (shotDir) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Templates", "Settings"] : ["Clients"];
+							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Templates", "Settings"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(

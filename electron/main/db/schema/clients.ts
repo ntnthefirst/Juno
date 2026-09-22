@@ -2,7 +2,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { seededColumns, standardColumns } from "../columns";
 
 /**
- * A client is an organisation Bureau does work for. Everything else that matters
+ * A client is an organisation Juno does work for. Everything else that matters
  * hangs off it: contacts, projects, documents and eventually mail threads.
  */
 export const clients = sqliteTable(

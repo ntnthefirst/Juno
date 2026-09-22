@@ -15,7 +15,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 	const [foldersFor, setFoldersFor] = useState<string | null>(null);
 
 	const refresh = useCallback(() => {
-		window.bureau.mail.accounts
+		window.juno.mail.accounts
 			.list()
 			.then(setAccounts)
 			.catch((cause: unknown) => setError(messageOf(cause)));
@@ -23,7 +23,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.mail.accounts
+		window.juno.mail.accounts
 			.list()
 			.then((rows) => {
 				if (!cancelled) setAccounts(rows);
@@ -41,7 +41,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 		const account = removing;
 		setRemoving(null);
 		try {
-			await window.bureau.mail.accounts.remove(account.id);
+			await window.juno.mail.accounts.remove(account.id);
 			onSaved(`${account.label} removed.`);
 			refresh();
 		} catch (cause: unknown) {
@@ -51,7 +51,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 
 	async function toggleSync(account: MailAccount) {
 		try {
-			await window.bureau.mail.accounts.update(account.id, { syncEnabled: !account.syncEnabled });
+			await window.juno.mail.accounts.update(account.id, { syncEnabled: !account.syncEnabled });
 			refresh();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -61,7 +61,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 	return (
 		<Section
 			title="Mail accounts"
-			description="IMAP accounts Bureau reads from. Nothing is ever written back to the server: no flags, no moves, no deletes. Passwords go into the operating system keychain and are never shown again."
+			description="IMAP accounts Juno reads from. Nothing is ever written back to the server: no flags, no moves, no deletes. Passwords go into the operating system keychain and are never shown again."
 			action={
 				<Button size="dense" variant="primary" onClick={() => setForm({ account: null })}>
 					Add account
@@ -163,7 +163,7 @@ function FoldersDialog({ accountId, onClose }: { accountId: string; onClose: () 
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.mail.folders
+		window.juno.mail.folders
 			.list(accountId)
 			.then((rows) => {
 				if (!cancelled) setFolders(rows);
@@ -178,7 +178,7 @@ function FoldersDialog({ accountId, onClose }: { accountId: string; onClose: () 
 
 	async function toggle(folder: MailFolder) {
 		try {
-			const updated = await window.bureau.mail.folders.setSyncEnabled(folder.id, !folder.syncEnabled);
+			const updated = await window.juno.mail.folders.setSyncEnabled(folder.id, !folder.syncEnabled);
 			setFolders((current) => current?.map((f) => (f.id === updated.id ? updated : f)) ?? null);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

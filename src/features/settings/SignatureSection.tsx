@@ -14,8 +14,8 @@ type Load =
  */
 async function readSignature(): Promise<{ path: string | null; image: string | null }> {
 	const [path, image] = await Promise.all([
-		window.bureau.settings.getSignaturePath(),
-		window.bureau.settings.getSignatureImage(),
+		window.juno.settings.getSignaturePath(),
+		window.juno.settings.getSignatureImage(),
 	]);
 	return { path, image };
 }
@@ -48,7 +48,7 @@ export function SignatureSection() {
 		setBusy(true);
 		setError(null);
 		try {
-			await window.bureau.settings.chooseSignature();
+			await window.juno.settings.chooseSignature();
 			await refresh();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -62,7 +62,7 @@ export function SignatureSection() {
 		setBusy(true);
 		setError(null);
 		try {
-			await window.bureau.settings.clearSignature();
+			await window.juno.settings.clearSignature();
 			await refresh();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

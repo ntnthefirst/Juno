@@ -272,7 +272,7 @@ export async function client(
 				on: message.sentAt ? message.sentAt.slice(0, 10) : null,
 				urgent: false,
 			})),
-			threadCount > 0 ? `${plural(threadCount, "thread", "threads")} linked, nothing sent from Bureau.` : "No mail linked yet.",
+			threadCount > 0 ? `${plural(threadCount, "thread", "threads")} linked, nothing sent from Juno.` : "No mail linked yet.",
 		),
 	];
 

@@ -24,7 +24,7 @@ export function SuggestionList({ suggestions, onAccepted }: SuggestionListProps)
 		setBusyKey(suggestion.key);
 		setError(null);
 		try {
-			await window.bureau.reminders.accept(suggestion);
+			await window.juno.reminders.accept(suggestion);
 			onAccepted();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

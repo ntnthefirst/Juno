@@ -35,7 +35,7 @@ export const referenceTools: ToolDescriptor[] = [
 		name: "reference.list_sets",
 		title: "List reference sets",
 		description:
-			"Every editable list in Bureau (client statuses, project statuses, document statuses, labels) with its items. Hidden items are included and carry a hiddenAt timestamp; do not offer those when setting a value on a record.",
+			"Every editable list in Juno (client statuses, project statuses, document statuses, labels) with its items. Hidden items are included and carry a hiddenAt timestamp; do not offer those when setting a value on a record.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: { type: "object", properties: {}, additionalProperties: false },

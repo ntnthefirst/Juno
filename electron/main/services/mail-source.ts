@@ -111,7 +111,7 @@ export function describeMailError(error: unknown, connection: { host: string; us
 		case "DEPTH_ZERO_SELF_SIGNED_CERT":
 		case "SELF_SIGNED_CERT_IN_CHAIN":
 		case "UNABLE_TO_VERIFY_LEAF_SIGNATURE":
-			return `The certificate ${connection.host} presented is not trusted. Bureau will not connect to it.`;
+			return `The certificate ${connection.host} presented is not trusted. Juno will not connect to it.`;
 		case "NoConnection":
 			return `The connection to ${connection.host} was lost. Sync will try again.`;
 		default:

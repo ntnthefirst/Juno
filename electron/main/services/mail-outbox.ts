@@ -9,7 +9,7 @@
  * reads `queued` and nothing else.
  *
  * Decision 9 still holds here: an invoice nudge carries a title and an amount
- * typed by the owner, and Bureau never numbers or issues one.
+ * typed by the owner, and Juno never numbers or issues one.
  */
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type {
@@ -237,7 +237,7 @@ async function bodies(input: { bodyText: string; bodyHtml?: string | null }): Pr
 }
 
 function messageIdFor(fromAddress: string): string {
-	const domain = fromAddress.split("@")[1] || "bureau.local";
+	const domain = fromAddress.split("@")[1] || "juno.local";
 	return `<${uuidv7()}@${domain}>`;
 }
 

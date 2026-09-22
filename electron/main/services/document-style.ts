@@ -3,7 +3,7 @@
  *
  * Deliberately NOT the application tokens. A contract is printed on paper, in
  * ink, and has to look the same regardless of whether the person who generated
- * it runs Bureau in dark mode. Fixed values are correct here and a theme token
+ * it runs Juno in dark mode. Fixed values are correct here and a theme token
  * would be a bug.
  *
  * Sizes are in mm and pt because that is what a printer works in.
@@ -46,26 +46,26 @@ p { margin: 0 0 2.5mm; }
 ol, ul { margin: 0 0 2.5mm; padding-left: 6mm; }
 li { margin: 0 0 1mm; }
 
-.bureau-doc-meta {
+.juno-doc-meta {
 	font-size: 9pt;
 	color: #555555;
 	margin: 0 0 6mm;
 }
 
-.bureau-parties {
+.juno-parties {
 	margin: 0 0 6mm;
 }
-.bureau-parties dt {
+.juno-parties dt {
 	font-weight: 600;
 	margin-top: 2.5mm;
 }
-.bureau-parties dd {
+.juno-parties dd {
 	margin: 0;
 }
 
 /* A missing value has to be impossible to miss on a printed page, because a
    blank space gets signed and a marked gap gets questioned. */
-.bureau-missing {
+.juno-missing {
 	background: #ffe8e8;
 	border: 0.4mm solid #b03030;
 	color: #8f2020;
@@ -76,7 +76,7 @@ li { margin: 0 0 1mm; }
 
 /* The specimen banner. Printed on every page of an unreviewed template, because
    the whole risk is a made-up contract being treated as a real one. */
-.bureau-specimen {
+.juno-specimen {
 	border: 0.6mm solid #b03030;
 	background: #fff4f4;
 	color: #8f2020;
@@ -86,22 +86,22 @@ li { margin: 0 0 1mm; }
 	font-weight: 600;
 }
 
-.bureau-signatures {
+.juno-signatures {
 	margin-top: 10mm;
 	display: flex;
 	gap: 12mm;
 	break-inside: avoid;
 	page-break-inside: avoid;
 }
-.bureau-signature {
+.juno-signature {
 	flex: 1;
 	border-top: 0.3mm solid #111111;
 	padding-top: 2mm;
 	font-size: 9.5pt;
 }
-.bureau-signature .role { color: #555555; }
+.juno-signature .role { color: #555555; }
 
-.bureau-clause { break-inside: avoid; page-break-inside: avoid; }
+.juno-clause { break-inside: avoid; page-break-inside: avoid; }
 `;
 
 /**
@@ -118,7 +118,7 @@ export function documentShell(options: {
 	language?: string;
 }): string {
 	const banner = options.isSpecimen
-		? `<div class="bureau-specimen">VOORBEELDDOCUMENT. Deze tekst is niet juridisch nagekeken en
+		? `<div class="juno-specimen">VOORBEELDDOCUMENT. Deze tekst is niet juridisch nagekeken en
 			mag niet als overeenkomst gebruikt of ondertekend worden.</div>`
 		: "";
 

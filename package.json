@@ -1,6 +1,6 @@
 {
-	"name": "bureau",
-	"productName": "Bureau",
+	"name": "juno",
+	"productName": "Juno",
 	"description": "A local-first back office for a small business",
 	"version": "0.1.0",
 	"private": true,
@@ -10,7 +10,7 @@
 		"dev": "npm run build:main && concurrently -k -n vite,main,electron -c cyan,yellow,magenta \"npm:dev:renderer\" \"npm:dev:main\" \"npm:dev:electron\"",
 		"dev:renderer": "vite",
 		"dev:main": "tsc -p tsconfig.main.json --watch --preserveWatchOutput",
-		"dev:electron": "wait-on tcp:5173 dist-electron/main.js && cross-env BUREAU_DEV=1 electron .",
+		"dev:electron": "wait-on tcp:5173 dist-electron/main.js && cross-env JUNO_DEV=1 electron .",
 		"build:main": "tsc -p tsconfig.main.json && node scripts/after-main.mjs",
 		"build": "npm run typecheck && npm run build:main && vite build",
 		"start": "npm run build && electron .",

@@ -70,7 +70,7 @@ the service, not by a DB default, so the value is the same on every platform.
 
 ## 5. Money is integer cents
 
-Bureau does not invoice or move money (decision 9), but it does track amounts
+Juno does not invoice or move money (decision 9), but it does track amounts
 owed and contract values. Those are integers.
 
 ```ts
@@ -114,13 +114,13 @@ from the dead in one screen and not another.
 
 ## 8. Where the file lives, and the backup story
 
-- The database is a single file at `app.getPath("userData")/bureau.db`, plus the
+- The database is a single file at `app.getPath("userData")/juno.db`, plus the
   WAL and shm files next to it. Never in the install directory, never in the repo.
 - Attachments and generated documents are files on disk under the same userData
   root, with the DB storing a relative path. Blobs in SQLite make backups slow and
   the file fragile.
 - Backup is a copy of the whole folder while the app is closed, or the
-  `VACUUM INTO` a service exposes as an explicit export. Copying `bureau.db` alone
+  `VACUUM INTO` a service exposes as an explicit export. Copying `juno.db` alone
   while the app is running loses whatever is in the WAL.
 - The DB file, the WAL, any `.sqlite` fixture and any real mail account are
   gitignored and never committed ([git.md](git.md)).
@@ -137,7 +137,7 @@ They still carry the five mandatory columns from section 2, including
 
 | Column | Type | Why |
 | --- | --- | --- |
-| `is_system` | integer boolean, not null | It shipped with Bureau rather than being user-created. Decides what a reset restores |
+| `is_system` | integer boolean, not null | It shipped with Juno rather than being user-created. Decides what a reset restores |
 | `hidden_at` | text, UTC ISO-8601, nullable | The user removed it from the pickers. See below |
 | `sort_order` | integer, not null | The user's ordering, not the shipped one |
 | `seed_key` | text, not null for system rows | Stable identifier, so an upgrade updates the right row after a rename |

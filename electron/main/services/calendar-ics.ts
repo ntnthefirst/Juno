@@ -6,11 +6,11 @@
  * calendar wrote the file:
  *
  * - A DTSTART with an IANA TZID keeps its wall clock and its zone. This is
- *   what Bureau writes, and what Google and Apple write.
+ *   what Juno writes, and what Google and Apple write.
  * - A DTSTART with some other TZID (Outlook writes Windows names) and a
  *   VTIMEZONE in the file is converted to an instant using that VTIMEZONE and
  *   then expressed in the default zone, with a warning, because the wall clock
- *   in a zone Bureau cannot name is not something it can keep.
+ *   in a zone Juno cannot name is not something it can keep.
  * - A UTC DTSTART is expressed in the default zone.
  * - A floating DTSTART is taken to be the default zone's wall clock.
  * - A DATE DTSTART is an all-day event, and stays a date.
@@ -63,7 +63,7 @@ export interface IcsParseResult {
 	warnings: string[];
 }
 
-const PRODUCT = "-//Bureau//Calendar//EN";
+const PRODUCT = "-//Juno//Calendar//EN";
 
 /* --------------------------------------------------------------- export */
 
@@ -274,7 +274,7 @@ export function parseIcs(source: string, defaultZone: string): IcsParseResult {
 		root = new ICAL.Component(ICAL.parse(source.replace(/\r?\n/g, "\r\n")));
 	} catch (cause: unknown) {
 		const detail = cause instanceof Error ? cause.message : String(cause);
-		throw new Error(`That file is not a calendar Bureau can read: ${detail}`);
+		throw new Error(`That file is not a calendar Juno can read: ${detail}`);
 	}
 
 	// A file may wrap one VCALENDAR or be one. Both happen.
@@ -301,7 +301,7 @@ export function parseIcs(source: string, defaultZone: string): IcsParseResult {
 				let uid = text(component, "uid");
 				if (!uid) {
 					anonymous += 1;
-					uid = `imported-${anonymous}@bureau`;
+					uid = `imported-${anonymous}@juno`;
 					warnings.push(`An event had no UID and was given ${uid}.`);
 				}
 				if (component.getFirstProperty("recurrence-id")) {

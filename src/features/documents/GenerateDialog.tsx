@@ -53,7 +53,7 @@ export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.bureau.clients.list(), window.bureau.templates.list()])
+		Promise.all([window.juno.clients.list(), window.juno.templates.list()])
 			.then(([clientRows, templateRows]) => {
 				if (cancelled) return;
 				setClients(clientRows);
@@ -72,7 +72,7 @@ export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
 	useEffect(() => {
 		if (clientId.length === 0) return;
 		let cancelled = false;
-		window.bureau.projects
+		window.juno.projects
 			.list({ clientId })
 			.then((rows) => {
 				if (!cancelled) setProjects(rows);
@@ -115,7 +115,7 @@ export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
 		try {
 			// issuedOn stays a YYYY-MM-DD string. A Date round trip shifts it by the
 			// timezone offset, which dates a contract to the day before.
-			const result = await window.bureau.documents.generate({
+			const result = await window.juno.documents.generate({
 				clientId,
 				templateId,
 				projectId: projectId.length > 0 ? projectId : null,

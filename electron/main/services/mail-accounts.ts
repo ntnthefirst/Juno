@@ -63,7 +63,7 @@ function validate(input: MailAccountInput | MailAccountPatch): void {
 		throw new Error("The port has to be between 1 and 65535.");
 	}
 	if (input.imapSecurity !== undefined && !SECURITIES.includes(input.imapSecurity)) {
-		throw new Error("Security has to be tls or starttls. Bureau never connects in the clear.");
+		throw new Error("Security has to be tls or starttls. Juno never connects in the clear.");
 	}
 	if (input.horizonDays !== undefined && (!Number.isInteger(input.horizonDays) || input.horizonDays < 1 || input.horizonDays > 3650)) {
 		throw new Error("The sync horizon has to be between 1 and 3650 days.");
@@ -81,7 +81,7 @@ function validate(input: MailAccountInput | MailAccountPatch): void {
 		throw new Error("The SMTP port has to be between 1 and 65535.");
 	}
 	if (input.smtpSecurity !== undefined && !SECURITIES.includes(input.smtpSecurity)) {
-		throw new Error("SMTP security has to be tls or starttls. Bureau never sends in the clear.");
+		throw new Error("SMTP security has to be tls or starttls. Juno never sends in the clear.");
 	}
 }
 
@@ -125,7 +125,7 @@ export async function create(input: MailAccountInput, db: Db = getDb()): Promise
 	const store = credentialStore();
 	if (!store.isAvailable()) {
 		throw new Error(
-			"The operating system keychain is unavailable, so the password cannot be stored. Bureau will not keep it anywhere else.",
+			"The operating system keychain is unavailable, so the password cannot be stored. Juno will not keep it anywhere else.",
 		);
 	}
 

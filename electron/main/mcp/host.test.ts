@@ -99,7 +99,7 @@ describe("calling a tool", () => {
 		expect(rows).toHaveLength(1);
 	});
 
-	it("refuses everything while Bureau is locked", async () => {
+	it("refuses everything while Juno is locked", async () => {
 		locked = true;
 		await expect(callTool("clients.list", {})).rejects.toThrow(/locked/);
 		await expect(callTool("clients.create", { name: "obet" })).rejects.toThrow(/locked/);
@@ -157,7 +157,7 @@ describe("what the declarations promise", () => {
 		expect(unguarded).toEqual(["mail.draft"]);
 	});
 
-	it("has no tool that unlocks Bureau or approves an action", () => {
+	it("has no tool that unlocks Juno or approves an action", () => {
 		const names = listTools().map((tool) => tool.name);
 		expect(names.filter((name) => /unlock|approve/i.test(name))).toEqual([]);
 	});

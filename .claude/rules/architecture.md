@@ -1,6 +1,6 @@
 # Architecture rules
 
-How Bureau is organised, and the shape every file follows. The point of this
+How Juno is organised, and the shape every file follows. The point of this
 layout is that a capability is written once and both the UI and an agent get it.
 
 ---
@@ -119,7 +119,7 @@ sequenced into a transaction. A two-step operation is one service function.
 - A feature folder owns its screens and the components only it uses. Something
   used by two features moves to `src/components/`.
 - Data access goes through one typed client wrapper over the preload bridge in
-  `src/lib/`, not scattered `window.bureau.*` calls in components.
+  `src/lib/`, not scattered `window.juno.*` calls in components.
 - No state-management library. React state plus the query cache is the toolchain.
 
 ## 6. Where business logic may and may not live

@@ -186,7 +186,7 @@ function normalise(base: Normalised | null, input: CalendarEventInput | Calendar
 	const allDay = input.allDay ?? base?.allDay ?? false;
 	const timezone = input.timezone ?? base?.timezone ?? systemTimeZone();
 	if (!isValidTimeZone(timezone)) {
-		throw new Error(`"${timezone}" is not a time zone Bureau knows. Use an IANA name like Europe/Brussels.`);
+		throw new Error(`"${timezone}" is not a time zone Juno knows. Use an IANA name like Europe/Brussels.`);
 	}
 
 	const rawStart = input.startLocal ?? base?.startLocal;
@@ -331,7 +331,7 @@ function mastersInRange(
 
 function rangeBounds(query: CalendarRangeQuery): { zone: string; fromUtc: string; toUtc: string } {
 	const zone = query.timezone ?? systemTimeZone();
-	if (!isValidTimeZone(zone)) throw new Error(`"${zone}" is not a time zone Bureau knows.`);
+	if (!isValidTimeZone(zone)) throw new Error(`"${zone}" is not a time zone Juno knows.`);
 	if (!isLocalDate(query.from) || !isLocalDate(query.to)) {
 		throw new Error("A range needs from and to as calendar dates like 2026-03-01.");
 	}
@@ -486,7 +486,7 @@ export async function create(input: CalendarEventInput, db: Db = getDb()): Promi
 			id,
 			...values,
 			...derived(values),
-			icalUid: `${id}@bureau`,
+			icalUid: `${id}@juno`,
 		})
 		.returning()
 		.all();
@@ -714,7 +714,7 @@ function updateFollowing(master: EventRow, patch: CalendarEventPatch, target: Ca
 			.run();
 
 		db.insert(calendarEvents)
-			.values({ id: newId, ...values, ...derived(values), icalUid: `${newId}@bureau` })
+			.values({ id: newId, ...values, ...derived(values), icalUid: `${newId}@juno` })
 			.run();
 
 		// Exceptions from the split onwards belong to the new series, shifted

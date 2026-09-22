@@ -16,7 +16,7 @@ export function DocumentPreview({ documentId, title, isSpecimen, onClose }: Docu
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.documents
+		window.juno.documents
 			.previewHtml(documentId)
 			.then((value) => {
 				if (!cancelled) setHtml(value);

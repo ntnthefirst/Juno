@@ -27,7 +27,7 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 	useEffect(() => {
 		if (!open || !message.bodyFetched) return;
 		let cancelled = false;
-		window.bureau.mail.messages
+		window.juno.mail.messages
 			.body(message.id)
 			.then((value) => {
 				if (!cancelled) setBody(value);
@@ -42,7 +42,7 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 
 	async function openLink(href: string) {
 		try {
-			await window.bureau.mail.openLink(href);
+			await window.juno.mail.openLink(href);
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
 		}
@@ -50,7 +50,7 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 
 	async function reveal(id: string) {
 		try {
-			await window.bureau.mail.attachments.reveal(id);
+			await window.juno.mail.attachments.reveal(id);
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
 		}
@@ -58,7 +58,7 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 
 	async function save(id: string) {
 		try {
-			const path = await window.bureau.mail.attachments.save(id);
+			const path = await window.juno.mail.attachments.save(id);
 			if (path) onNotice(`Saved to ${path}`);
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));

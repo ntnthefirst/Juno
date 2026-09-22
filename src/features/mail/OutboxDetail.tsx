@@ -56,13 +56,13 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 						Read it below. Nothing goes out until you press Send. Reject it and it stays here as cancelled.
 					</p>
 					<div className="mt-3 flex gap-2">
-						<Button variant="primary" disabled={busy} onClick={() => void run(() => window.bureau.mail.outbox.approve(message.id), "Message queued.")}>
+						<Button variant="primary" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.approve(message.id), "Message queued.")}>
 							Send
 						</Button>
 						<Button disabled={busy} onClick={() => onEdit(message)}>
 							Edit first
 						</Button>
-						<Button variant="danger" disabled={busy} onClick={() => void run(() => window.bureau.mail.outbox.cancel(message.id), "Message rejected.")}>
+						<Button variant="danger" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.cancel(message.id), "Message rejected.")}>
 							Reject
 						</Button>
 					</div>
@@ -113,12 +113,12 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 
 			<div className="mt-6 flex flex-wrap gap-2">
 				{message.state === "draft" ? (
-					<Button variant="primary" disabled={busy} onClick={() => void run(() => window.bureau.mail.outbox.send(message.id), "Message queued.")}>
+					<Button variant="primary" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.send(message.id), "Message queued.")}>
 						Send
 					</Button>
 				) : null}
 				{message.state === "failed" ? (
-					<Button variant="primary" disabled={busy} onClick={() => void run(() => window.bureau.mail.outbox.retry(message.id), "Trying again.")}>
+					<Button variant="primary" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.retry(message.id), "Trying again.")}>
 						Retry
 					</Button>
 				) : null}
@@ -133,7 +133,7 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 					</Button>
 				) : null}
 				{message.state === "cancelled" || message.state === "draft" ? (
-					<Button variant="danger" disabled={busy} onClick={() => void run(() => window.bureau.mail.outbox.remove(message.id), "Removed.")}>
+					<Button variant="danger" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.remove(message.id), "Removed.")}>
 						Delete
 					</Button>
 				) : null}
@@ -166,7 +166,7 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 							variant="danger"
 							onClick={() => {
 								setConfirmingCancel(false);
-								void run(() => window.bureau.mail.outbox.cancel(message.id), "Message cancelled.");
+								void run(() => window.juno.mail.outbox.cancel(message.id), "Message cancelled.");
 							}}
 						>
 							Cancel message

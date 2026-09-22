@@ -32,7 +32,7 @@ export function registerCalendarIpc(): void {
 		const text = await calendar.exportIcs(query);
 		const owner = BrowserWindow.fromWebContents(event.sender);
 		const options = {
-			defaultPath: `bureau-${query.from}-${query.to}.ics`,
+			defaultPath: `juno-${query.from}-${query.to}.ics`,
 			filters: [{ name: "Calendar", extensions: ["ics"] }],
 		};
 		const result = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);

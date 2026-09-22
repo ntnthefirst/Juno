@@ -62,7 +62,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.reference
+		window.juno.reference
 			.getSet("client_status")
 			.then((set) => {
 				if (cancelled) return;
@@ -111,8 +111,8 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 
 		try {
 			const saved = client
-				? await window.bureau.clients.update(client.id, patch)
-				: await window.bureau.clients.create({ ...patch, name });
+				? await window.juno.clients.update(client.id, patch)
+				: await window.juno.clients.create({ ...patch, name });
 			onSaved(saved);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

@@ -33,7 +33,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 
 	const refresh = useCallback(async () => {
 		try {
-			setBackups(await window.bureau.backup.list());
+			setBackups(await window.juno.backup.list());
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		}
@@ -41,7 +41,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.backup
+		window.juno.backup
 			.list()
 			.then((value) => {
 				if (!cancelled) setBackups(value);
@@ -58,7 +58,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 		setBusy(true);
 		setError(null);
 		try {
-			await window.bureau.backup.create();
+			await window.juno.backup.create();
 			await refresh();
 			onDone("Backup created.");
 		} catch (cause: unknown) {
@@ -72,7 +72,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 		setConfirming(null);
 		setError(null);
 		try {
-			await window.bureau.backup.restore(backup.path);
+			await window.juno.backup.restore(backup.path);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		}
@@ -84,7 +84,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 			description="The database is a single file on this machine, so nothing is backed up anywhere else unless you do it. A backup is a copy of that file."
 			action={
 				<div className="flex gap-1">
-					<Button size="dense" onClick={() => void window.bureau.backup.revealFolder()}>
+					<Button size="dense" onClick={() => void window.juno.backup.revealFolder()}>
 						Show folder
 					</Button>
 					<Button size="dense" variant="primary" disabled={busy} onClick={() => void create()}>
@@ -126,8 +126,8 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 			{confirming ? (
 				<Dialog title="Restore this backup" onClose={() => setConfirming(null)} width="narrow">
 					<p className="text-[length:var(--text-base)]">
-						Everything currently in Bureau is replaced by the copy from{" "}
-						{formatWhen(confirming.createdAt)}. Anything added since then is lost, and Bureau
+						Everything currently in Juno is replaced by the copy from{" "}
+						{formatWhen(confirming.createdAt)}. Anything added since then is lost, and Juno
 						closes once it is done.
 					</p>
 					<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">

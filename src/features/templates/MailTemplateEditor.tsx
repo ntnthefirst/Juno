@@ -34,7 +34,7 @@ export function MailTemplateEditor({ templateId, onSaved }: MailTemplateEditorPr
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.bureau.mail.templates.get(templateId), window.bureau.clients.list({ limit: 200 })])
+		Promise.all([window.juno.mail.templates.get(templateId), window.juno.clients.list({ limit: 200 })])
 			.then(([row, clientRows]) => {
 				if (cancelled) return;
 				if (!row) {
@@ -62,7 +62,7 @@ export function MailTemplateEditor({ templateId, onSaved }: MailTemplateEditorPr
 		setBusy("save");
 		setError(null);
 		try {
-			const updated = await window.bureau.mail.templates.update(templateId, { name, subject, register, bodyHtml });
+			const updated = await window.juno.mail.templates.update(templateId, { name, subject, register, bodyHtml });
 			setTemplate(updated);
 			setSaved(true);
 			onSaved();
@@ -80,7 +80,7 @@ export function MailTemplateEditor({ templateId, onSaved }: MailTemplateEditorPr
 		try {
 			// The preview uses the saved body, so unsaved edits are saved first.
 			if (template && (bodyHtml !== template.bodyHtml || subject !== template.subject)) await save();
-			const rendered = await window.bureau.mail.templates.render({ templateId, clientId: clientId || null });
+			const rendered = await window.juno.mail.templates.render({ templateId, clientId: clientId || null });
 			setPreview({ subject: rendered.subject, html: rendered.bodyHtml, missing: rendered.missing });
 		} catch (cause: unknown) {
 			setError(messageOf(cause));

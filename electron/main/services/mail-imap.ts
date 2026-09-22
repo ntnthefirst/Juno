@@ -125,7 +125,7 @@ export async function openImapSource(connection: MailConnection): Promise<Mailbo
 		// two of them is two wasted round trips, and there is nothing to wait for.
 		disableAutoIdle: true,
 		connectionTimeout: CONNECT_TIMEOUT_MS,
-		clientInfo: { name: "Bureau" },
+		clientInfo: { name: "Juno" },
 	});
 
 	try {
@@ -140,7 +140,7 @@ export async function openImapSource(connection: MailConnection): Promise<Mailbo
 	if (!client.secureConnection) {
 		await client.logout().catch(() => undefined);
 		throw new Error(
-			`${connection.host} did not offer an encrypted connection. Bureau will not send a password in the clear.`,
+			`${connection.host} did not offer an encrypted connection. Juno will not send a password in the clear.`,
 		);
 	}
 

@@ -26,7 +26,7 @@ export function OwnerSection({ onSaved }: { onSaved: (message: string) => void }
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.settings
+		window.juno.settings
 			.getOwner()
 			.then((value) => {
 				if (!cancelled) setProfile(value);
@@ -44,7 +44,7 @@ export function OwnerSection({ onSaved }: { onSaved: (message: string) => void }
 		setBusy(true);
 		setError(null);
 		try {
-			setProfile(await window.bureau.settings.setOwner(profile));
+			setProfile(await window.juno.settings.setOwner(profile));
 			onSaved("Your details were saved.");
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -56,7 +56,7 @@ export function OwnerSection({ onSaved }: { onSaved: (message: string) => void }
 	return (
 		<Section
 			title="Your details"
-			description="These fill the contracts and emails Bureau generates later, so what you put here ends up in front of clients."
+			description="These fill the contracts and emails Juno generates later, so what you put here ends up in front of clients."
 			action={
 				<Button size="dense" variant="primary" disabled={!profile || busy} onClick={() => void save()}>
 					Save

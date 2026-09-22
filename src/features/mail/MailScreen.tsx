@@ -42,12 +42,12 @@ export function MailScreen() {
 	const [outboxVersion, setOutboxVersion] = useState(0);
 
 	const loadAccounts = useCallback(async () => {
-		const list = await window.bureau.mail.accounts.list();
+		const list = await window.juno.mail.accounts.list();
 		const byAccount: Record<string, MailFolder[]> = {};
 		const counts: Record<string, MailOutboxCounts> = {};
 		for (const account of list) {
-			byAccount[account.id] = await window.bureau.mail.folders.list(account.id);
-			counts[account.id] = await window.bureau.mail.outbox.counts(account.id);
+			byAccount[account.id] = await window.juno.mail.folders.list(account.id);
+			counts[account.id] = await window.juno.mail.outbox.counts(account.id);
 		}
 		return { list, byAccount, counts };
 	}, []);
@@ -78,14 +78,14 @@ export function MailScreen() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.mail.sync
+		window.juno.mail.sync
 			.status()
 			.then((list) => {
 				if (cancelled) return;
 				setSync(Object.fromEntries(list.map((s) => [s.accountId, s])));
 			})
 			.catch(() => undefined);
-		const offSync = window.bureau.mail.sync.onChange((status) => {
+		const offSync = window.juno.mail.sync.onChange((status) => {
 			setSync((current) => ({ ...current, [status.accountId]: status }));
 			// A finished run means new rows: refresh the counts and the list.
 			if (status.phase === "done" || status.phase === "failed") {
@@ -93,7 +93,7 @@ export function MailScreen() {
 			}
 		});
 		// The sender reports as it works, so the outbox moves without a reload.
-		const offOutbox = window.bureau.mail.outbox.onChange(() => setOutboxVersion((v) => v + 1));
+		const offOutbox = window.juno.mail.outbox.onChange(() => setOutboxVersion((v) => v + 1));
 		return () => {
 			cancelled = true;
 			offSync();
@@ -106,7 +106,7 @@ export function MailScreen() {
 
 	const fetchThreads = useCallback(() => {
 		if (!selection || selection.outbox) return Promise.resolve<MailThreadSummary[]>([]);
-		return window.bureau.mail.threads.list({
+		return window.juno.mail.threads.list({
 			accountId: selection.accountId,
 			...(term ? { search: term } : selection.folderId ? { folderId: selection.folderId } : {}),
 			unreadOnly,
@@ -140,7 +140,7 @@ export function MailScreen() {
 	useEffect(() => {
 		if (!showingOutbox || !selection) return;
 		let cancelled = false;
-		window.bureau.mail.outbox
+		window.juno.mail.outbox
 			.list({ accountId: selection.accountId, limit: 200 })
 			.then((rows) => {
 				if (cancelled) return;
@@ -157,7 +157,7 @@ export function MailScreen() {
 
 	async function syncNow(accountId?: string) {
 		try {
-			await window.bureau.mail.sync.run(accountId);
+			await window.juno.mail.sync.run(accountId);
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 		}
@@ -165,7 +165,7 @@ export function MailScreen() {
 
 	async function reply(messageId: string, all: boolean) {
 		try {
-			const seed = await window.bureau.mail.outbox.replySeed(messageId, all);
+			const seed = await window.juno.mail.outbox.replySeed(messageId, all);
 			setCompose({
 				accountId: seed.accountId,
 				to: seed.to,
@@ -197,7 +197,7 @@ export function MailScreen() {
 				<div className="mt-12 max-w-[52ch]">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">No accounts yet</h2>
 					<p className="mt-2 text-[var(--ink-muted)]">
-						Add an IMAP account under Settings, then come back here. Bureau pulls mail onto this
+						Add an IMAP account under Settings, then come back here. Juno pulls mail onto this
 						machine and sends only what you press Send on.
 					</p>
 				</div>

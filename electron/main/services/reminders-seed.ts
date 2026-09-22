@@ -1,5 +1,5 @@
 /**
- * The recurring paperwork Bureau starts you off with.
+ * The recurring paperwork Juno starts you off with.
  *
  * **These dates are starting points, not advice.** Belgian filing and payment
  * deadlines shift, depend on the regime you are in, and are the accountant's to
@@ -29,7 +29,7 @@ export interface SeedReminder {
 }
 
 const CONFIRM =
-	"Bureau does not know your exact deadline. Check this date with your accountant once, " +
+	"Juno does not know your exact deadline. Check this date with your accountant once, " +
 	"then correct it here and it will be right every time after.";
 
 export const SEED_REMINDERS: SeedReminder[] = [
@@ -86,7 +86,7 @@ export const SEED_REMINDERS: SeedReminder[] = [
 		seedKey: "backup_check",
 		title: "Check that a recent backup exists",
 		notes:
-			"Bureau keeps its data in one file on this machine. Open Settings, make a backup, " +
+			"Juno keeps its data in one file on this machine. Open Settings, make a backup, " +
 			"and put a copy somewhere that is not this computer.",
 		category: "other",
 		pattern: "months",

@@ -1,6 +1,6 @@
 ---
 name: template-new
-description: Add a document or email template to Bureau - a .docx contract with docxtemplater placeholders, or an HTML email template. Covers placeholder naming, which client fields are actually available, the Dutch-language requirement for anything a client sees, and rendering a preview before a template is ever used on a real document or sent. Use when the user says "add a contract template", "I need an email template for X", "the offer letter should be a template".
+description: Add a document or email template to Juno - a .docx contract with docxtemplater placeholders, or an HTML email template. Covers placeholder naming, which client fields are actually available, the Dutch-language requirement for anything a client sees, and rendering a preview before a template is ever used on a real document or sent. Use when the user says "add a contract template", "I need an email template for X", "the offer letter should be a template".
 ---
 
 # Workflow: a new template
@@ -28,12 +28,12 @@ A document is a file the owner keeps, sends and possibly signs. An email is a
 message body. If the answer is "both", it is two templates, and the email one
 attaches the document.
 
-Scope check before writing a word: Bureau does **no invoicing**
+Scope check before writing a word: Juno does **no invoicing**
 ([decisions.md](../../../docs/decisions.md), 9). A payment reminder that points
 at an invoice made elsewhere is fine. A template that numbers or issues an
 invoice is not, and the answer is the accounting tool.
 
-Legal text check: the signing Bureau does is a signature image plus a timestamp
+Legal text check: the signing Juno does is a signature image plus a timestamp
 plus an audit trail. That is **not a qualified electronic signature under
 eIDAS**, and no template may say or imply it is
 ([decisions.md](../../../docs/decisions.md), 8). No "rechtsgeldig gekwalificeerde

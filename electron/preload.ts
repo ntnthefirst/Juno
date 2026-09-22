@@ -9,11 +9,11 @@
  * - Nothing here returns a credential. `lock.unlock` offers a secret and gets a
  *   yes or no back. There is no method that reads one.
  *
- * The shape is checked against BureauApi at the bottom, so a channel that drifts
+ * The shape is checked against JunoApi at the bottom, so a channel that drifts
  * from the contract fails the typecheck rather than at runtime.
  */
 import { contextBridge, ipcRenderer } from "electron";
-import type { BureauApi } from "./shared/api";
+import type { JunoApi } from "./shared/api";
 import type {
 	AgentAction,
 	AutomationRun,
@@ -25,7 +25,7 @@ import type {
 const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
 	ipcRenderer.invoke(channel, ...args) as Promise<T>;
 
-const api: BureauApi = {
+const api: JunoApi = {
 	app: {
 		info: () => call("app.info"),
 	},
@@ -287,4 +287,4 @@ const api: BureauApi = {
 	},
 };
 
-contextBridge.exposeInMainWorld("bureau", api);
+contextBridge.exposeInMainWorld("juno", api);

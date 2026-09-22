@@ -33,7 +33,7 @@ export function AgentScreen() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.agent.actions
+		window.juno.agent.actions
 			.list({ limit: 100 })
 			.then((rows) => {
 				if (cancelled) return;
@@ -50,7 +50,7 @@ export function AgentScreen() {
 
 	// A request can arrive while this screen is open, from an agent nobody is
 	// watching, so the list is pushed rather than polled.
-	useEffect(() => window.bureau.agent.actions.onChange(() => refresh()), [refresh]);
+	useEffect(() => window.juno.agent.actions.onChange(() => refresh()), [refresh]);
 
 	const pending = actions?.filter((action) => action.state === "pending").length ?? 0;
 	const dismissNotice = useCallback(() => setNotice(null), []);
@@ -62,7 +62,7 @@ export function AgentScreen() {
 					Agent
 				</h1>
 				<p className="mt-2 max-w-[68ch] text-[var(--ink-muted)]">
-					Bureau exposes everything it can do to an agent on this machine. Reading happens freely;
+					Juno exposes everything it can do to an agent on this machine. Reading happens freely;
 					anything that changes a record waits here for you.
 				</p>
 
@@ -124,7 +124,7 @@ function AuditLog() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.agent.audit
+		window.juno.agent.audit
 			.list({ limit: 200 })
 			.then((value) => {
 				if (!cancelled) setRows(value);

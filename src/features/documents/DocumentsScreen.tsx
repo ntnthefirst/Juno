@@ -42,8 +42,8 @@ export function DocumentsScreen() {
 
 	const fetchRows = useCallback(async (): Promise<Rows> => {
 		const [records, statusSet] = await Promise.all([
-			window.bureau.documents.list(),
-			window.bureau.reference.getSet("document_status"),
+			window.juno.documents.list(),
+			window.juno.reference.getSet("document_status"),
 		]);
 		return { records, statuses: statusSet ? statusSet.items : [] };
 	}, []);
@@ -90,7 +90,7 @@ export function DocumentsScreen() {
 		const id = deleted.id;
 		setDeleted(null);
 		try {
-			await window.bureau.documents.restore(id);
+			await window.juno.documents.restore(id);
 			setSelectedId(id);
 			setDetailVersion((version) => version + 1);
 			refreshList();

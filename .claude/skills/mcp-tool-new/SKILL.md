@@ -98,7 +98,7 @@ Careful with the ones that look read-only:
 
 **A tool that sends, signs, deletes or files requires explicit confirmation
 before it acts.** These are the actions the owner cannot take back from inside
-Bureau:
+Juno:
 
 - **Sends**: any mail leaving the machine, any reply, any attachment going out.
 - **Signs**: stamping the signature PNG onto a document, and the audit page that
@@ -127,7 +127,7 @@ wired into the server's tool list. Then write the description the agent reads:
 one sentence saying what it does, one saying when to use it, and, for a
 side-effectful tool, one saying what it changes.
 
-Say what is out of scope where it matters. Bureau does not invoice and does not
+Say what is out of scope where it matters. Juno does not invoice and does not
 move money ([decisions.md](../../../docs/decisions.md), 9), so a reminders tool
 description says it reminds and tracks, not that it bills.
 

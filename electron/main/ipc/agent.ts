@@ -44,7 +44,7 @@ function mcpStatus(userDataDir: string): McpServerStatus {
 	const args = [bridgePath(), "--user-data-dir", userDataDir];
 	const config = {
 		mcpServers: {
-			bureau: {
+			juno: {
 				command,
 				args,
 				...(packaged ? { env: { ELECTRON_RUN_AS_NODE: "1" } } : {}),

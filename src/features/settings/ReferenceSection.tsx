@@ -25,7 +25,7 @@ export function ReferenceSection() {
 
 	const refresh = useCallback(async () => {
 		try {
-			setSets(await window.bureau.reference.listSets());
+			setSets(await window.juno.reference.listSets());
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		}
@@ -33,7 +33,7 @@ export function ReferenceSection() {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.bureau.reference
+		window.juno.reference
 			.listSets()
 			.then((value) => {
 				if (!cancelled) setSets(value);
@@ -59,7 +59,7 @@ export function ReferenceSection() {
 	async function askToHide(item: ReferenceItem) {
 		setError(null);
 		try {
-			const usage = await window.bureau.reference.usage(item.id);
+			const usage = await window.juno.reference.usage(item.id);
 			setPending({ kind: "hide", item, inUse: usage.inUseBy });
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -78,7 +78,7 @@ export function ReferenceSection() {
 					Reset all
 				</Button>
 			}
-			description="Bureau ships with sensible defaults so it works before it is configured. Removing a value that ships hides it rather than deleting it, because records already point at it. Hidden values stay listed here so you can bring them back."
+			description="Juno ships with sensible defaults so it works before it is configured. Removing a value that ships hides it rather than deleting it, because records already point at it. Hidden values stay listed here so you can bring them back."
 		>
 			{sets === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
@@ -89,13 +89,13 @@ export function ReferenceSection() {
 							key={entry.set.id}
 							entry={entry}
 							onHide={(item) => void askToHide(item)}
-							onUnhide={(item) => void run(() => window.bureau.reference.unhideItem(item.id))}
+							onUnhide={(item) => void run(() => window.juno.reference.unhideItem(item.id))}
 							onRename={(item) => setPending({ kind: "rename", item })}
 							onAdd={() =>
 								setPending({ kind: "add", setId: entry.set.id, label: entry.set.label })
 							}
 							onReorder={(ordered) =>
-								void run(() => window.bureau.reference.reorder(entry.set.id, ordered))
+								void run(() => window.juno.reference.reorder(entry.set.id, ordered))
 							}
 							onReset={() =>
 								setPending({ kind: "reset", setKey: entry.set.key, label: entry.set.label })
@@ -114,7 +114,7 @@ export function ReferenceSection() {
 					onConfirm={() => {
 						const id = pending.item.id;
 						setPending(null);
-						void run(() => window.bureau.reference.hideItem(id));
+						void run(() => window.juno.reference.hideItem(id));
 					}}
 				/>
 			) : null}
@@ -128,8 +128,8 @@ export function ReferenceSection() {
 						setPending(null);
 						void run(() =>
 							key === null
-								? window.bureau.reference.resetAll(userItems)
-								: window.bureau.reference.resetSet(key, userItems),
+								? window.juno.reference.resetAll(userItems)
+								: window.juno.reference.resetSet(key, userItems),
 						);
 					}}
 				/>
@@ -143,7 +143,7 @@ export function ReferenceSection() {
 					onSubmit={(label) => {
 						const id = pending.item.id;
 						setPending(null);
-						void run(() => window.bureau.reference.updateItem(id, { label }));
+						void run(() => window.juno.reference.updateItem(id, { label }));
 					}}
 				/>
 			) : null}
@@ -156,7 +156,7 @@ export function ReferenceSection() {
 					onSubmit={(label) => {
 						const setId = pending.setId;
 						setPending(null);
-						void run(() => window.bureau.reference.createItem({ setId, label }));
+						void run(() => window.juno.reference.createItem({ setId, label }));
 					}}
 				/>
 			) : null}
@@ -314,7 +314,7 @@ function ResetDialog({
 	return (
 		<Dialog title={`Reset ${label}`} onClose={onClose} width="narrow">
 			<p className="text-[length:var(--text-base)]">
-				Values that ship with Bureau go back to their original names and order, and any you
+				Values that ship with Juno go back to their original names and order, and any you
 				removed come back.
 			</p>
 

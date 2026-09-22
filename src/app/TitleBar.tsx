@@ -25,7 +25,7 @@ export function TitleBar({
 				<rect x="11.5" y="6" width="12" height="9" rx="2.5" fill="currentColor" />
 				<rect x="11.5" y="17" width="13.5" height="9" rx="2.5" fill="currentColor" />
 			</svg>
-			<span className="text-[length:var(--text-sm)] font-[var(--weight-medium)]">Bureau</span>
+			<span className="text-[length:var(--text-sm)] font-[var(--weight-medium)]">Juno</span>
 
 			<div className="flex-1" />
 
@@ -55,7 +55,7 @@ export function TitleBar({
 			{lockConfigured ? (
 				<button
 					type="button"
-					onClick={() => void window.bureau.lock.lock()}
+					onClick={() => void window.juno.lock.lock()}
 					className="no-drag rounded-[var(--radius-md)] px-3 py-1 text-[length:var(--text-sm)] text-[var(--ink-muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 				>
 					Lock

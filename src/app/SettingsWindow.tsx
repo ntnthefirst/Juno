@@ -14,10 +14,10 @@ import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
 import { useTheme } from "../lib/theme";
 
-type TabId = "appearance" | "business" | "mail" | "documents" | "security" | "about";
+type TabId = "general" | "business" | "mail" | "documents" | "security" | "about";
 
 const TABS: { id: TabId; label: string }[] = [
-	{ id: "appearance", label: "Appearance" },
+	{ id: "general", label: "General" },
 	{ id: "business", label: "Your business" },
 	{ id: "mail", label: "Mail accounts" },
 	{ id: "documents", label: "Documents" },
@@ -34,7 +34,7 @@ const TABS: { id: TabId; label: string }[] = [
  */
 export function SettingsWindow() {
 	const [theme, setTheme] = useTheme();
-	const [tab, setTab] = useState<TabId>("appearance");
+	const [tab, setTab] = useState<TabId>("general");
 	const [toast, setToast] = useState<string | null>(null);
 
 	// Escape closes a modal dialog, and this window is one.
@@ -86,7 +86,7 @@ export function SettingsWindow() {
 				</nav>
 
 				<main className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-					{tab === "appearance" ? (
+					{tab === "general" ? (
 						<AppearanceSection theme={theme} onChange={setTheme} />
 					) : tab === "business" ? (
 						<>

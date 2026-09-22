@@ -114,6 +114,21 @@
 	 * Changing one without the other puts the buttons off the bar. */
 	--titlebar-height: 40px;
 	--row-height: 36px;
+
+	/* ---- Theme preview swatches ----
+	 * The miniature window drawn on each card in Settings > General. A card has
+	 * to show what light looks like while the application is dark, so these are
+	 * fixed literals and are deliberately NOT redefined in either dark block.
+	 * They are the only colours in this file that do not follow the theme, and
+	 * they mirror --paper, --surface, --line and --line-strong in each mode. */
+	--swatch-light-paper: #f6f6fa;
+	--swatch-light-surface: #ffffff;
+	--swatch-light-line: #e3e2ec;
+	--swatch-light-mark: #cbcad8;
+	--swatch-dark-paper: #111117;
+	--swatch-dark-surface: #1a1a22;
+	--swatch-dark-line: #2a2a35;
+	--swatch-dark-mark: #3c3c4b;
 }
 
 :root:not([data-theme="light"]) {
@@ -201,6 +216,14 @@
 	--color-ink-faint: var(--ink-faint);
 	--color-line: var(--line);
 	--color-line-strong: var(--line-strong);
+	--color-swatch-light-paper: var(--swatch-light-paper);
+	--color-swatch-light-surface: var(--swatch-light-surface);
+	--color-swatch-light-line: var(--swatch-light-line);
+	--color-swatch-light-mark: var(--swatch-light-mark);
+	--color-swatch-dark-paper: var(--swatch-dark-paper);
+	--color-swatch-dark-surface: var(--swatch-dark-surface);
+	--color-swatch-dark-line: var(--swatch-dark-line);
+	--color-swatch-dark-mark: var(--swatch-dark-mark);
 	--color-accent: var(--accent);
 	--color-accent-hover: var(--accent-hover);
 	--color-accent-ink: var(--accent-ink);

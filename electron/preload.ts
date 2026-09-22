@@ -129,6 +129,10 @@ const api: JunoApi = {
 
 	agent: {
 		status: () => call("agent.status"),
+		install: {
+			targets: () => call("agent.install.targets"),
+			write: (clientId) => call("agent.install.write", clientId),
+		},
 		tools: () => call("agent.tools"),
 		revealConnectionFile: () => call("agent.revealConnectionFile"),
 		actions: {

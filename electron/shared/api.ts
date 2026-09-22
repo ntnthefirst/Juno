@@ -14,6 +14,8 @@
  * service behind it is synchronous.
  */
 import type {
+	AgentClientTarget,
+	AgentInstallResult,
 	AgentAction,
 	AgentActionListQuery,
 	AppInfo,
@@ -229,6 +231,15 @@ export interface JunoApi {
 	agent: {
 		/** Whether an agent can reach Juno, and the config block to paste. */
 		status(): Promise<McpServerStatus>;
+		/**
+		 * Writing Juno into the agent clients on this machine, rather than
+		 * leaving a person to find five config files and merge JSON by hand.
+		 */
+		install: {
+			targets(): Promise<AgentClientTarget[]>;
+			/** Edits that one client's file. Backs it up and keeps every other server. */
+			write(clientId: string): Promise<AgentInstallResult>;
+		};
 		/** Every tool, for the screen that lists the surface. No handlers cross. */
 		tools(): Promise<ToolSummary[]>;
 		revealConnectionFile(): Promise<void>;

@@ -9,12 +9,15 @@
  * 6. Window last, so it never paints against a half-built backend.
  */
 import { app, nativeTheme } from "electron";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
 import { backupsDir, databasePath, documentsDir, mailDir, userDataDir } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
+import { mcpStatus } from "./main/ipc/agent";
+import { configureAgentInstall } from "./main/services/agent-install";
 import { startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
@@ -141,6 +144,15 @@ if (!app.requestSingleInstanceLock()) {
 		// The agent surface comes up after IPC, because the gate it enforces is
 		// answered over IPC, and after the lock, because every tool checks it.
 		startAgentSurface({ userDataDir: userDataDir(), instanceKey: databasePath() });
+
+		// Writing Juno into the agent clients on this machine needs the same
+		// connection details the settings screen prints, so it is given the same
+		// builder rather than working them out a second time.
+		configureAgentInstall({
+			status: () => mcpStatus(userDataDir()),
+			home: homedir(),
+			platform: process.platform,
+		});
 
 		// In development only the mail host is served; the window comes from Vite.
 		registerAppScheme(isDev ? null : join(app.getAppPath(), "dist"));

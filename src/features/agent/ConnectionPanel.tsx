@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { McpServerStatus, ToolSummary } from "@shared/types";
 import { Button } from "../../components/Button";
 import { messageOf } from "../../lib/errors";
+import { ClientInstaller } from "./ClientInstaller";
 
 type ConnectionPanelProps = {
 	onNotice: (message: string) => void;
@@ -88,8 +89,26 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 				) : null}
 
 				<p className="mt-4 max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-					An agent talks to Juno through a bridge it starts itself. Paste this into the agent's
-					MCP configuration. Juno has to be running, and it will refuse everything while locked.
+					An agent talks to Juno through a bridge it starts itself. Juno has to be running,
+					and it will refuse everything while locked.
+				</p>
+			</section>
+
+			<section className="mt-8">
+				<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+					Connect an agent client
+				</h2>
+				<div className="mt-4">
+					<ClientInstaller onNotice={onNotice} />
+				</div>
+			</section>
+
+			<section className="mt-8">
+				<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+					Or paste it yourself
+				</h2>
+				<p className="mt-4 max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+					For a client that is not in the list above. This is the same entry Juno writes.
 				</p>
 
 				<pre

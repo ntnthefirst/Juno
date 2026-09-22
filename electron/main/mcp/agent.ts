@@ -3,6 +3,7 @@ import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
 import * as automations from "../services/automations";
 import * as briefing from "../services/briefing";
+import * as clientInstall from "../services/agent-install";
 import type { ToolDescriptor } from "./types";
 
 /**
@@ -95,6 +96,39 @@ export const agentTools: ToolDescriptor[] = [
 				undefined,
 				args.timezone ? String(args.timezone) : undefined,
 			),
+	},
+	{
+		name: "agent.list_clients",
+		title: "List the agent clients on this machine",
+		description:
+			"Which agent clients Juno knows how to configure, where each keeps its MCP settings, and " +
+			"whether Juno is already in that file and pointing at the right place. Reads the files and " +
+			"changes nothing.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: { type: "object", properties: {}, additionalProperties: false },
+		handler: async () => clientInstall.targets(),
+	},
+	{
+		name: "agent.connect_client",
+		title: "Write Juno into an agent client",
+		description:
+			"Adds Juno to one client's MCP configuration, by the id agent.list_clients returns. The " +
+			"previous file is copied beside it and every other server in it is kept. This edits a file " +
+			"belonging to another program, so a person approves it before it runs.",
+		readOnly: false,
+		// Filing something into another application's configuration is exactly
+		// the class of action .claude/rules/mcp.md section 4 puts behind a person.
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				client_id: { type: "string", description: "An id from agent.list_clients, e.g. cursor" },
+			},
+			required: ["client_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => clientInstall.install(String(args.client_id)),
 	},
 	{
 		name: "agent.list_actions",

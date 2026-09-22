@@ -21,6 +21,7 @@ import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
 import * as automations from "../services/automations";
 import * as briefing from "../services/briefing";
+import * as clientInstall from "../services/agent-install";
 import { socketStatus, summaries, toolCount } from "../mcp";
 
 /** Where the bridge lives, packaged or in the repo. */
@@ -37,17 +38,18 @@ function bridgePath(): string {
  * plain Node, which is what ELECTRON_RUN_AS_NODE does. In development the host
  * Node is there and is simpler to read.
  */
-function mcpStatus(userDataDir: string): McpServerStatus {
+export function mcpStatus(userDataDir: string): McpServerStatus {
 	const socket = socketStatus();
 	const packaged = app.isPackaged;
 	const command = packaged ? process.execPath : "node";
 	const args = [bridgePath(), "--user-data-dir", userDataDir];
+	const env: Record<string, string> = packaged ? { ELECTRON_RUN_AS_NODE: "1" } : {};
 	const config = {
 		mcpServers: {
 			juno: {
 				command,
 				args,
-				...(packaged ? { env: { ELECTRON_RUN_AS_NODE: "1" } } : {}),
+				...(packaged ? { env } : {}),
 			},
 		},
 	};
@@ -57,6 +59,7 @@ function mcpStatus(userDataDir: string): McpServerStatus {
 		connections: socket.connections,
 		command,
 		args,
+		env,
 		configJson: JSON.stringify(config, null, "\t"),
 		error: socket.error,
 		toolCount: toolCount(),
@@ -65,6 +68,10 @@ function mcpStatus(userDataDir: string): McpServerStatus {
 
 export function registerAgentIpc(userDataDir: string): void {
 	ipcMain.handle("agent.status", () => mcpStatus(userDataDir));
+	ipcMain.handle("agent.install.targets", () => clientInstall.targets());
+	ipcMain.handle("agent.install.write", (_event, clientId: string) =>
+		clientInstall.install(clientId),
+	);
 	ipcMain.handle("agent.tools", () => summaries());
 	ipcMain.handle("agent.revealConnectionFile", () =>
 		shell.showItemInFolder(join(userDataDir, "mcp.json")),

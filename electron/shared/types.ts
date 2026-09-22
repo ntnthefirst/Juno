@@ -1096,6 +1096,38 @@ export interface Briefing {
 
 /* ----------------------------------------------------------- the MCP server */
 
+/**
+ * An agent client on this machine, and where Juno stands with its MCP config.
+ *
+ * `found` is whether the file exists, which is as far as honest detection goes
+ * without hunting for executables. A client that has never been opened has no
+ * file yet and is still offered: writing it is what makes the client pick Juno
+ * up the first time it starts.
+ */
+export interface AgentClientTarget {
+	id: string;
+	name: string;
+	/** Null when this client does not exist on this platform. */
+	path: string | null;
+	found: boolean;
+	/** Juno is in the file, under some settings. */
+	configured: boolean;
+	/** Juno is in the file with exactly the settings this install would write. */
+	upToDate: boolean;
+	/** What the person has to do after the file changes, in one sentence. */
+	after: string;
+}
+
+/** What a write to one agent client's configuration did. */
+export interface AgentInstallResult {
+	name: string;
+	path: string;
+	/** Where the previous file was copied, when there was one. */
+	backupPath: string | null;
+	created: boolean;
+	after: string;
+}
+
 export interface McpServerStatus {
 	/** False when the server could not start. Everything else is still true. */
 	running: boolean;
@@ -1106,6 +1138,13 @@ export interface McpServerStatus {
 	/** The command an agent should be configured with. */
 	command: string;
 	args: string[];
+	/**
+	 * Environment the bridge needs. Empty in development; a packaged build has
+	 * no Node beside it and runs the bridge through its own binary, which is
+	 * what ELECTRON_RUN_AS_NODE does. Writing the entry without this produces a
+	 * client that starts Juno's window instead of the bridge.
+	 */
+	env: Record<string, string>;
 	/** The whole config block, ready to paste. */
 	configJson: string;
 	/** Why it is not running, when it is not. */

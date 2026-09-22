@@ -93,7 +93,7 @@ const BASE_CSS = `
 html, body { margin: 0; padding: 0; }
 body { font: 14px/1.5 Inter, -apple-system, "Segoe UI", sans-serif; color: #1c1b19; background: #ffffff; padding: 16px; word-wrap: break-word; overflow-wrap: anywhere; }
 img { max-width: 100%; height: auto; }
-a[data-href] { color: #28456c; text-decoration: underline; cursor: default; }
+a[data-href] { color: #4a3fa0; text-decoration: underline; cursor: default; }
 blockquote { margin: 8px 0 8px 8px; padding-left: 12px; border-left: 2px solid #d9d6cf; color: #5c5a55; }
 pre { white-space: pre-wrap; }
 table { max-width: 100%; }

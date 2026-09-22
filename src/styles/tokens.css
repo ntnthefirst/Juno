@@ -11,58 +11,62 @@
  *
  * The `:root:not([data-theme="light"])` guard on the media query is what lets an
  * explicit light choice survive a dark OS.
+ *
+ * The palette is cool porcelain with a deep iris accent and a brass second
+ * note. Iris carries every interactive state. Brass is reserved for signed and
+ * sealed, and should appear about twice on a screen.
  */
 
 :root {
-	/* ---- Surfaces: warm paper, not clinical white ---- */
-	--paper: #faf9f7; /* window background */
+	/* ---- Surfaces: cool porcelain, not clinical white ---- */
+	--paper: #f6f6fa; /* window background */
 	--surface: #ffffff; /* cards, rows, panels sitting on paper */
-	--sunken: #f2f0ec; /* wells, inset areas, the rare filled input */
-	--hover: #f1efea; /* row and control hover. Not a selected state */
+	--sunken: #edecf3; /* wells, inset areas, table headers */
+	--hover: #ecebf4; /* row and control hover. Not a selected state */
 
 	/* ---- Ink ---- */
-	--ink: #1a1917; /* primary text */
-	--ink-muted: #6b6862; /* secondary text, labels — passes AA */
-	--ink-faint: #88847c; /* meta and large text only, NOT body copy. Clears 3:1 on every light surface including --hover */
+	--ink: #16161d; /* primary text */
+	--ink-muted: #5d5e70; /* secondary text, labels, passes AA */
+	--ink-faint: #8b8b9c; /* meta and large text only, NOT body copy. Clears 3:1 on every light surface including --hover */
 
 	/* ---- Lines ---- */
-	--line: #e5e2dc; /* default border, dividers */
-	--line-strong: #d2cec6; /* input borders, emphasised dividers */
+	--line: #e3e2ec; /* default border, dividers */
+	--line-strong: #cbcad8; /* input borders, emphasised dividers */
 
-	/* ---- Accent: document ink blue ---- */
-	--accent: #28456c;
-	--accent-hover: #1e3555;
-	--accent-ink: #faf9f7; /* text on an accent fill */
-	--accent-soft: #eaeff6; /* tinted background, selected rows */
+	/* ---- Accent: iris ---- */
+	--accent: #4a3fa0;
+	--accent-hover: #3a3082;
+	--accent-ink: #f8f8fc; /* text on an accent fill */
+	--accent-soft: #ecebf8; /* tinted background, selected rows */
 
-	/* ---- Seal: the one warm note. Sparingly — signed, sealed, done. ---- */
-	--seal: #8d612a;
-	--seal-soft: #f6efe4;
+	/* ---- Seal: brass, the one warm note. Sparingly: signed, sealed, done. ---- */
+	--seal: #8a6730;
+	--seal-soft: #f5eddf;
 
 	/* ---- Status. Text-safe on paper; -soft is the background tint. ---- */
-	--ok: #2f6446;
-	--ok-soft: #e6f0ea;
-	--warn: #7a5610;
-	--warn-soft: #f7efdc;
-	--risk: #8f3030;
-	--risk-soft: #f6e7e7;
+	--ok: #1f6a4d;
+	--ok-soft: #e2f0e9;
+	--warn: #7b5510;
+	--warn-soft: #f8efda;
+	--risk: #9c2f43;
+	--risk-soft: #f9e7ea;
 
 	/* ---- Focus ring. Never remove it; restyle it. ---- */
-	--focus: #4a7ab8;
+	--focus: #6b5cd6;
 
 	/* ---- Type ---- */
 	--font-ui: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
 	--font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
 	/* A dense application scale, not a marketing-page scale. */
-	--text-micro: 0.6875rem; /* 11px — badges, table meta */
-	--text-sm: 0.75rem; /* 12px — secondary labels */
-	--text-dense: 0.8125rem; /* 13px — table cells, list rows */
-	--text-base: 0.875rem; /* 14px — default UI text */
-	--text-lg: 1rem; /* 16px — emphasised body, doc preview */
+	--text-micro: 0.6875rem; /* 11px, badges, table meta */
+	--text-sm: 0.75rem; /* 12px, secondary labels */
+	--text-dense: 0.8125rem; /* 13px, table cells, list rows */
+	--text-base: 0.875rem; /* 14px, default UI text */
+	--text-lg: 1rem; /* 16px, emphasised body, doc preview */
 	--text-h3: 1.25rem; /* 20px */
 	--text-h2: 1.5rem; /* 24px */
-	--text-h1: 2rem; /* 32px — one per screen, at most */
+	--text-h1: 2rem; /* 32px, one per screen at most */
 
 	--leading-tight: 1.25;
 	--leading-normal: 1.5;
@@ -92,8 +96,10 @@
 	--radius-full: 9999px; /* avatars and nothing else */
 
 	/* ---- Elevation: borders do the work. Shadow only for things that float. ---- */
-	--shadow-popover: 0 4px 16px -2px rgb(26 25 23 / 0.1), 0 2px 4px -2px rgb(26 25 23 / 0.06);
-	--shadow-modal: 0 16px 48px -8px rgb(26 25 23 / 0.18);
+	--shadow-popover: 0 4px 16px -2px rgb(22 22 29 / 0.1), 0 2px 4px -2px rgb(22 22 29 / 0.06);
+	--shadow-modal: 0 16px 48px -8px rgb(22 22 29 / 0.18);
+	/* The sidebar drawer floating over the content on a narrow window. */
+	--shadow-drawer: 0 0 0 1px rgb(22 22 29 / 0.06), 8px 0 32px -8px rgb(22 22 29 / 0.22);
 
 	/* ---- Motion: quick and unshowy. ---- */
 	--ease: cubic-bezier(0.2, 0, 0.13, 1);
@@ -101,79 +107,85 @@
 	--duration-base: 180ms;
 
 	/* ---- Layout ---- */
-	--sidebar-width: 240px;
-	--titlebar-height: 38px;
+	--sidebar-width: 248px;
+	/* Collapsed to icons only. Wide enough to keep a 32px hit target centred. */
+	--sidebar-rail-width: 56px;
+	/* Matches the native window-control overlay height set in main-window.ts.
+	 * Changing one without the other puts the buttons off the bar. */
+	--titlebar-height: 40px;
 	--row-height: 36px;
 }
 
 :root:not([data-theme="light"]) {
 	@media (prefers-color-scheme: dark) {
-		--paper: #141311;
-		--surface: #1c1b19;
-		--sunken: #0e0d0c;
-		--hover: #232220;
+		--paper: #111117;
+		--surface: #1a1a22;
+		--sunken: #0b0b10;
+		--hover: #23232d;
 
-		--ink: #f0eee9;
-		--ink-muted: #a8a399;
-		--ink-faint: #7a756e;
+		--ink: #eeeef5;
+		--ink-muted: #a3a4b5;
+		--ink-faint: #757589;
 
-		--line: #2e2c28;
-		--line-strong: #403d38;
+		--line: #2a2a35;
+		--line-strong: #3c3c4b;
 
-		--accent: #8faed6;
-		--accent-hover: #a9c2e2;
-		--accent-ink: #141311;
-		--accent-soft: #1e2b3b;
+		--accent: #a79df0;
+		--accent-hover: #c0b9f8;
+		--accent-ink: #111117;
+		--accent-soft: #262247;
 
-		--seal: #d0a063;
-		--seal-soft: #2a2117;
+		--seal: #d9af6d;
+		--seal-soft: #2b2418;
 
-		--ok: #7fb795;
-		--ok-soft: #1a2a21;
-		--warn: #dcb56a;
+		--ok: #7ac5a2;
+		--ok-soft: #14291f;
+		--warn: #e0ba6f;
 		--warn-soft: #2a2317;
-		--risk: #db8c8c;
-		--risk-soft: #2b1a1a;
+		--risk: #e9919f;
+		--risk-soft: #2d1a20;
 
-		--focus: #7fa3d4;
+		--focus: #9a8bf2;
 
 		--shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
 		--shadow-modal: 0 16px 48px -8px rgb(0 0 0 / 0.6);
+		--shadow-drawer: 0 0 0 1px rgb(255 255 255 / 0.05), 8px 0 32px -8px rgb(0 0 0 / 0.65);
 	}
 }
 
 :root[data-theme="dark"] {
-	--paper: #141311;
-	--surface: #1c1b19;
-	--sunken: #0e0d0c;
-	--hover: #232220;
+	--paper: #111117;
+	--surface: #1a1a22;
+	--sunken: #0b0b10;
+	--hover: #23232d;
 
-	--ink: #f0eee9;
-	--ink-muted: #a8a399;
-	--ink-faint: #7a756e;
+	--ink: #eeeef5;
+	--ink-muted: #a3a4b5;
+	--ink-faint: #757589;
 
-	--line: #2e2c28;
-	--line-strong: #403d38;
+	--line: #2a2a35;
+	--line-strong: #3c3c4b;
 
-	--accent: #8faed6;
-	--accent-hover: #a9c2e2;
-	--accent-ink: #141311;
-	--accent-soft: #1e2b3b;
+	--accent: #a79df0;
+	--accent-hover: #c0b9f8;
+	--accent-ink: #111117;
+	--accent-soft: #262247;
 
-	--seal: #d0a063;
-	--seal-soft: #2a2117;
+	--seal: #d9af6d;
+	--seal-soft: #2b2418;
 
-	--ok: #7fb795;
-	--ok-soft: #1a2a21;
-	--warn: #dcb56a;
+	--ok: #7ac5a2;
+	--ok-soft: #14291f;
+	--warn: #e0ba6f;
 	--warn-soft: #2a2317;
-	--risk: #db8c8c;
-	--risk-soft: #2b1a1a;
+	--risk: #e9919f;
+	--risk-soft: #2d1a20;
 
-	--focus: #7fa3d4;
+	--focus: #9a8bf2;
 
 	--shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
 	--shadow-modal: 0 16px 48px -8px rgb(0 0 0 / 0.6);
+	--shadow-drawer: 0 0 0 1px rgb(255 255 255 / 0.05), 8px 0 32px -8px rgb(0 0 0 / 0.65);
 }
 
 /* Tailwind v4 reads this block to generate utilities: bg-paper, text-ink-muted,
@@ -206,12 +218,36 @@
 	--font-sans: var(--font-ui);
 	--font-mono: var(--font-mono);
 
+	--text-micro: var(--text-micro);
+	--text-sm: var(--text-sm);
+	--text-dense: var(--text-dense);
+	--text-base: var(--text-base);
+	--text-lg: var(--text-lg);
+	--text-h3: var(--text-h3);
+	--text-h2: var(--text-h2);
+	--text-h1: var(--text-h1);
+
+	--font-weight-normal: var(--weight-normal);
+	--font-weight-medium: var(--weight-medium);
+	--font-weight-semibold: var(--weight-semibold);
+
 	--radius-sm: var(--radius-sm);
 	--radius-md: var(--radius-md);
 	--radius-lg: var(--radius-lg);
 	--radius-xl: var(--radius-xl);
 
+	--shadow-popover: var(--shadow-popover);
+	--shadow-modal: var(--shadow-modal);
+	--shadow-drawer: var(--shadow-drawer);
+
+	--spacing-sidebar: var(--sidebar-width);
+	--spacing-rail: var(--sidebar-rail-width);
+	--spacing-titlebar: var(--titlebar-height);
+	--spacing-row: var(--row-height);
+
 	--ease-brand: var(--ease);
+	--duration-fast: var(--duration-fast);
+	--duration-base: var(--duration-base);
 }
 
 /* Numbers that line up in a column: every amount, date, count and id.

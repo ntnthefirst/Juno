@@ -13,11 +13,15 @@
 import { convert } from "html-to-text";
 import { escapeHtml } from "./template-render";
 
-const INK = "#1a1917";
-const INK_MUTED = "#6b6862";
-const LINE = "#e5e2dc";
-const ACCENT = "#28456c";
-const PAPER = "#faf9f7";
+// The light values from brand/tokens.css, written out rather than referenced.
+// This stylesheet is inlined into a message that leaves the machine, so it
+// cannot use a CSS variable the recipient's client has never heard of. Keep
+// these in step with the tokens by hand; there is no build step that can.
+const INK = "#16161d";
+const INK_MUTED = "#5d5e70";
+const LINE = "#e3e2ec";
+const ACCENT = "#4a3fa0";
+const PAPER = "#f6f6fa";
 const SURFACE = "#ffffff";
 
 const FONT = "Inter, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";

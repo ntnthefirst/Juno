@@ -1,5 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="Juno">
-  <rect x="6" y="6" width="4" height="20" rx="1.5" fill="currentColor"/>
-  <rect x="11.5" y="6" width="12" height="9" rx="2.5" fill="currentColor"/>
-  <rect x="11.5" y="17" width="13.5" height="9" rx="2.5" fill="currentColor"/>
+  <!-- The crescent of Juno Moneta over the roofline of her temple on the
+       Capitoline. Two strokes, so it stays legible down to 16px. -->
+  <path d="M22.4 6.2a9.2 9.2 0 1 0 3.4 15.8A10.8 10.8 0 0 1 22.4 6.2Z"
+        stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M5.5 27.2h21" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
 </svg>

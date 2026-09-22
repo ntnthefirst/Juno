@@ -52,6 +52,9 @@ export function App() {
 				title={SCREEN_LABELS[screen]}
 				sidebarCollapsed={sidebar.collapsed}
 				onToggleSidebar={sidebar.toggle}
+				onOpenReminders={() => setScreen("reminders")}
+				lockConfigured={lock.configured}
+				onLock={() => void window.juno.lock.lock()}
 			/>
 			<div className="relative flex min-h-0 flex-1">
 				{sidebar.visible ? (
@@ -61,7 +64,6 @@ export function App() {
 						collapsed={sidebar.collapsed}
 						floating={sidebar.floating}
 						onOpenSettings={() => void window.juno.window.openSettings()}
-						lockConfigured={lock.configured}
 					/>
 				) : null}
 
@@ -91,6 +93,8 @@ export function App() {
 					) : screen === "calendar" ? (
 						<CalendarScreen />
 					) : screen === "templates" ? (
+						<TemplatesScreen />
+					) : screen === "document-templates" ? (
 						<TemplatesScreen />
 					) : (
 						<Placeholder title={SCREEN_LABELS[screen]} />

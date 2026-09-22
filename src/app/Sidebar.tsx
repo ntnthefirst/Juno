@@ -9,10 +9,9 @@ type SidebarProps = {
 	/** Floating over the content on a narrow window, rather than beside it. */
 	floating: boolean;
 	onOpenSettings: () => void;
-	lockConfigured: boolean;
 };
 
-export function Sidebar({ current, onNavigate, collapsed, floating, onOpenSettings, lockConfigured }: SidebarProps) {
+export function Sidebar({ current, onNavigate, collapsed, floating, onOpenSettings }: SidebarProps) {
 	const width = collapsed ? "var(--sidebar-rail-width)" : "var(--sidebar-width)";
 
 	return (
@@ -57,16 +56,6 @@ export function Sidebar({ current, onNavigate, collapsed, floating, onOpenSettin
 			</div>
 
 			<div className="flex flex-none flex-col gap-px border-t border-[var(--line)] py-2">
-				{lockConfigured ? (
-					<NavButton
-						navId="lock"
-						icon="lock"
-						label="Lock"
-						active={false}
-						collapsed={collapsed}
-						onClick={() => void window.juno.lock.lock()}
-					/>
-				) : null}
 				<NavButton
 					navId="settings"
 					icon="settings"

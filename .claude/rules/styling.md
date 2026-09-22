@@ -24,6 +24,10 @@ Real token names, so use these and not something that sounds right:
 | Status | `--ok`/`--ok-soft`, `--warn`/`--warn-soft`, `--risk`/`--risk-soft` | `text-ok`, `bg-risk-soft` |
 | Focus | `--focus` | `outline-focus` |
 
+The palette is cool porcelain with a deep **iris** accent and a **brass** second
+note. Iris carries every interactive state. Brass is signed and sealed only, and
+should appear about twice on a screen.
+
 - `--paper` is the window background, `--surface` sits on it (cards, rows, panels),
   `--sunken` is for wells and table headers. Don't use `--surface` as a page
   background because it looks close enough in light mode; it is wrong in dark.
@@ -81,8 +85,11 @@ already dense; don't reach past it.
   it at all. A section heading is `--text-h3`.
 - `--leading-tight` for headings and table rows, `--leading-normal` for UI text,
   `--leading-relaxed` only for long-form: document body and email text.
-- Sidebar is `--sidebar-width` (240px), titlebar `--titlebar-height` (38px). Both
-  are tokens because other things are measured against them.
+- Sidebar is `--sidebar-width` (248px), collapsed to `--sidebar-rail-width`
+  (56px), titlebar `--titlebar-height` (40px). All three are tokens because other
+  things are measured against them, and because the title bar height is also the
+  height of the native caption-button overlay
+  ([architecture.md](architecture.md) section 4b).
 - Padding inside a dense row is `--space-2` / `--space-3`. Marketing-page
   breathing room (`--space-12` and up) belongs to empty states and onboarding,
   nowhere else.
@@ -115,6 +122,24 @@ not resolving the OS preference yourself.
 - Shadows are redefined in dark (heavier, blacker). Don't write your own.
 - Images, logo variants and any generated PDF preview need checking too. There is
   a paper wordmark and an ink wordmark in `brand/logo/` for exactly this.
+
+## 5b. The sidebar has three states, and the window picks two of them
+
+`src/app/use-sidebar-layout.ts` owns this, and a screen never second-guesses it.
+
+| Window width | Behaviour |
+| --- | --- |
+| >= 1100px | Beside the content, expanded. The toggle collapses it to a rail |
+| 760 to 1100px | The same, but a rail by default. A 248px sidebar is a third of the screen here |
+| < 760px | Out of the layout. The toggle floats it over the content as a drawer |
+
+The drawer closes on Escape, on a click outside, and when something in it is
+chosen. Widening the window past 760px puts the sidebar back and closes the
+drawer, so a panel is never left hanging over the content.
+
+Collapsed means icons only: the label moves into `aria-label` and `title`, and a
+group heading becomes a hairline rather than an abbreviation. Every entry keeps
+its 36px row height in both states, so nothing jumps when it toggles.
 
 ## 6. Numbers line up
 

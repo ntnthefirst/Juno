@@ -496,3 +496,103 @@ protocol that is still moving.
 already running, over a local transport that is not stdio. Then the bridge
 disappears and `socket.ts` becomes the server itself. Nothing else about the
 shape would change, which is why the bridge holds no logic.
+
+## 25. The product is called Juno, and the palette is iris on porcelain
+
+Juno Moneta was the aspect of the goddess who warned, and whose temple on the
+Capitoline housed Rome's mint. It is where the word "money" comes from. A back
+office that watches the books and warns you in time is the same job, which is
+the whole reason the name was chosen over a word that merely described the
+software.
+
+The rename is complete rather than cosmetic: `appId`, `productName`, the
+`window.juno` bridge, the `JUNO_*` environment variables, the database
+filename, the named pipe, the backup prefix and the iCalendar UID domain all
+moved together. Leaving any of them on the old name would have produced two
+identities for one application, and the one that decides
+`app.getPath("userData")` is the one that decides whether a user's data still
+exists after an update.
+
+The palette moved with it: cool porcelain surfaces, a deep iris accent, and
+brass kept for signed and sealed. The previous warm paper and document-ink blue
+were fine and generic. Iris is neither warm nor corporate, it survives the dark
+palette without inverting into something else, and it is far enough from every
+status colour that a selected row is never mistaken for a successful one.
+
+**What would reverse this:** a trademark conflict on the name, which is the
+only reason to pay the cost of moving `userData` a second time.
+
+## 26. Settings is a modal window, not a screen
+
+Settings edits the things every other screen is made of: mail accounts,
+reference data, the owner profile, the lock. A settings *screen* lets someone
+remove a document status in one tab while another tab is showing twelve
+documents that point at it, and both views are right until one of them
+refreshes.
+
+So it is a separate window, a modal child of the main one. The operating system
+refuses input to the application behind it, which is a stronger guarantee than
+any disabled state drawn in the renderer, and it costs one `modal: true`. It is
+a fixed size because every section is a single column of fields: there is
+nothing a wider window would show.
+
+Both windows load the same bundle and pick their shell from the URL rather than
+asking over IPC, so the right one paints on the first frame and a locked
+application still knows what it is drawing.
+
+**What would reverse this:** settings growing a view that has to be read
+alongside the work, like a live sync log. That is an argument for moving that
+one view into the app, not for dissolving the window.
+
+## 27. One main window, and the registry owns that rule
+
+Two windows over one SQLite file means two caches of the same rows and no way
+to tell which is stale. `requestSingleInstanceLock` already stopped a second
+process; `main/windows/index.ts` stops a second window in the one process, and
+is the only file allowed to construct one. A second launch, a dock click and a
+tray click all focus what exists.
+
+It also holds the consequences that are easy to miss: the session's
+content-policy hook is installed once rather than per window, because a second
+registration silently replaces the first; locking closes the settings window,
+because it holds mail accounts; and focusing the main window focuses its modal
+child instead, because a disabled parent with focus looks like a frozen app.
+
+**What would reverse this:** a genuine second document window, like a message
+composed in its own window. That is a new kind of window in the registry, not a
+second main window.
+
+## 28. Updates come from public GitHub releases, and never interrupt
+
+The repository is public, so `electron-updater` against its releases needs no
+feed to host and no secret beyond the token Actions already provides. A tag
+builds installers on Windows and macOS and uploads them to a **draft** release:
+publishing that release is the deliberate act that starts a rollout, so a tag
+alone can never push a build to every installed copy.
+
+The updater is quiet by design. It checks thirty seconds after launch and daily
+after that, it downloads in the background, and it installs on the next quit.
+It never checks while Juno is locked, because locked means nobody is at the
+keyboard and nothing unattended runs then (decision 15). It is also the only
+outbound request Juno makes that the user did not configure themselves, which
+is why it lives in one small file that says so.
+
+**What would reverse this:** shipping to clients who cannot reach GitHub, or a
+signing certificate arriving with its own distribution channel.
+
+## 29. A splash window, because the first few seconds are honestly slow
+
+Opening the database, running migrations and seeding reference data all happen
+before a window can paint anything truthful. On a cold start that is a few
+seconds of nothing, and Electron's own answer, a window that exists but has not
+painted, is a grey rectangle.
+
+So a small frameless window says the name and the step it is on, and closes on
+the main window's `ready-to-show` rather than on its creation. It is built from
+a data URL rather than a file because it has to appear before the `app://`
+scheme is registered. The progress bar is indeterminate: the work behind it has
+no percentage to report, and a fake one that jumps to ninety and waits is worse
+than none.
+
+**What would reverse this:** startup getting fast enough that the splash is a
+flash, which would make it noise rather than an answer.

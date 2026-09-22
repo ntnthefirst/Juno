@@ -25,6 +25,8 @@ all of it. No invoicing, no payments, no cloud requirement.
 | Mail | `imapflow`, `mailparser`, `nodemailer` |
 | Documents | `docxtemplater`, Electron `printToPDF`, `pdf-lib` |
 | Agent surface | `@modelcontextprotocol/sdk`, local stdio server |
+| Updates | `electron-updater`, against the public GitHub releases |
+| CI | GitHub Actions: checks on every push, installers on a tag |
 
 Read [docs/decisions.md](docs/decisions.md) before proposing an alternative to
 any of these. It records what would have to stop being true for each to change.
@@ -131,6 +133,30 @@ mandatory columns. Reset is per set and global; an upgrade never overwrites an
 edited row and never resurrects a hidden one.
 [.claude/rules/data.md](.claude/rules/data.md).
 
+## Windows
+
+One main window, ever. `electron/main/windows/index.ts` is the only file that
+makes one, and a second launch focuses the window that exists.
+
+**Settings is a separate, fixed-size window, and it is modal.** While it is open
+the operating system refuses input to the application behind it, so it has to be
+closed before work continues. That is the point: settings changes the shape of
+what the rest of the app is showing, and editing a client on one side while
+removing its status on the other is a race with no good outcome.
+
+Both windows draw their own title bar and let the OS draw the caption buttons
+over it. `TITLEBAR_HEIGHT`, `--titlebar-height` and the gutters in
+`src/lib/platform.ts` are one number in three places, and they move together.
+
+A splash window covers the database open, the migrations and the seed, and
+closes when the main window is ready to paint, not when it is created.
+
+## Development data
+
+`npm run dev` writes to a development directory of its own, never to the
+installed application's. `npm run dev:clean` deletes it first, which is the only
+honest way to test a first run or a migration from empty.
+
 ## Styling
 
 Theme is a three-state setting: `system`, `light`, `dark`, defaulting to `system`
@@ -138,6 +164,7 @@ Theme is a three-state setting: `system`, `light`, `dark`, defaulting to `system
 `nativeTheme.themeSource` in the main process. Doing only one leaves a light title
 bar over a dark window.
 
+The palette is cool porcelain with a deep iris accent and a brass second note.
 Colours, type, spacing, radius and motion come from the tokens in
 [brand/tokens.css](brand/tokens.css). **Never a raw hex in a component.** A
 colour the design needs and the theme lacks is a token to add, not a value to
@@ -174,9 +201,11 @@ unless asked. Full rules in [.claude/rules/git.md](.claude/rules/git.md).
 
 ## Before saying something works
 
-Once phase 0 lands, the commands are `npm run lint`, `npm run typecheck`,
-`npm run test` and `npm run smoke`, and a change is not done until all of them
-are clean and anything visual has been looked at in both themes. The stack's traps
+The commands are `npm run check` (lint, typecheck and test together) and
+`npm run smoke`, and a change is not done until both are clean and anything
+visual has been looked at in both themes. `JUNO_SMOKE_DEMO=1 npm run smoke`
+writes a screenshot of every screen and every settings tab, in both themes, to
+`.smoke/`. The stack's traps
 and the definition of done are in
 [.claude/rules/verify.md](.claude/rules/verify.md).
 

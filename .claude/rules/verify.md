@@ -10,17 +10,26 @@ Run from the repo root. The project uses npm.
 
 | Command | Checks | Run it |
 | --- | --- | --- |
+| `npm run dev` | Vite, a main-process watch and Electron, against a separate development data directory | To actually look at the change |
+| `npm run dev:clean` | The same, after deleting that directory: empty database, no accounts, no seeds | To test a first run or a migration from empty. `npm run dev -- --clean` is the same thing |
 | `npm run lint` | ESLint: unused imports, bad hook use, missing `key`, a node import reaching `src/` | After every change |
 | `npm run typecheck` | `tsc --noEmit` across renderer, preload and main | After every change touching types, props, schema or a service signature |
-| `npm run test` | Vitest (the obvious default for a Vite project; decisions.md does not name one). Service functions and migrations | After every change to a service, a query or the schema |
-| `npm run smoke` | Launches the packaged-mode app, waits for the window, asserts the DB opened and migrations ran, exits | Before any commit touching main, preload, the schema or a native module |
-| `npm run build` | Vite build plus electron-builder package | Before claiming the app ships, and after touching a native dependency |
-| `npm run dev` | Vite dev server plus Electron | To actually look at the change |
+| `npm run test` | Vitest. Service functions and migrations | After every change to a service, a query or the schema |
+| `npm run check` | lint, typecheck and test in one go | Before a commit |
+| `npm run smoke` | Compiles, launches the packaged-mode app, asserts the DB opened, migrations ran and both windows painted, exits | Before any commit touching main, preload, the schema, the windows or a native module |
+| `npm run compile` | Main process plus renderer, no installer | When you only need built output, not a package |
+| `npm run build` | Everything, then an installer for the current platform, into `release/` | Before claiming the app ships, and after touching a native dependency |
+| `npm run build:win` / `build:mac` / `build:linux` | The same for one named platform | CI. Each runner builds the platform it is |
+| `npm run icons` | Redraws `build/icon.png` and the NSIS installer artwork from `brand/logo/` | After a brand change |
 | `npm run db:generate` | Drizzle turns a schema change into a migration file | After editing anything under `electron/main/db/schema/` |
 | `npm run db:migrate` | Applies pending migrations forward | After generating one, and on a copy of the real database before the real one |
 
+Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
+screen and the settings window, and write a screenshot of each in both themes
+to `.smoke/`. That is the fastest honest look at a visual change.
+
 These names are the canonical set. A skill or a script that invents a different
-one (`npm run package`, `npm test`) is wrong and should be corrected to match.
+one (`npm run package`, `npm run dist`) is wrong and should be corrected to match.
 
 Fix forward between steps and re-run the step that failed plus everything after
 it. Don't reorder: a type error makes the build fail with a worse message.

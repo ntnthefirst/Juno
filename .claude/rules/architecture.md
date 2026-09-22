@@ -45,6 +45,14 @@ electron/
       index.ts            starts the server, registers every tool
     vault/
       index.ts            safeStorage get/set/delete, keyed by account id
+    windows/
+      index.ts            the registry: one main window, one modal settings child
+      chrome.ts           CSP, navigation rules, the native title-bar overlay
+      main-window.ts      the application window
+      settings-window.ts  fixed size, modal child of the main window
+      splash.ts           the window shown while the database opens
+    updates.ts            electron-updater against the public GitHub releases
+    dev-data.ts           where a development run keeps its data
   preload/
     index.ts              contextBridge only
 src/
@@ -97,6 +105,26 @@ ipcMain.handle("clients:create", (_event, input: CreateClientInput) =>
 Banned in an adapter: an `if` that decides a business outcome, a DB import, a
 default value the other adapter does not also apply, a second service call
 sequenced into a transaction. A two-step operation is one service function.
+
+## 4b. Windows
+
+There is **one** main window, and `main/windows/index.ts` is the only file
+allowed to make one. A second launch focuses the window that exists.
+
+**Settings is a window, not a screen.** It is a modal child of the main window,
+which is what makes the operating system refuse input to the application behind
+it until it is closed. It is a fixed size, it is reached from the sidebar
+footer, and it is not a `ScreenId`. Its renderer entry is the same bundle: the
+URL carries `#/settings` and `src/main.tsx` picks the shell from that, so the
+right one paints on the first frame.
+
+Both windows draw their own title bar and let the operating system draw the
+caption buttons on top (`chrome.ts`). Three things have to move together when
+the title bar height changes: `TITLEBAR_HEIGHT`, `--titlebar-height`, and the
+gutters in `src/lib/platform.ts`. Change one and the close button sits off the
+bar or over a control.
+
+A renderer never asks which window it is over IPC. It reads its own URL.
 
 ## 5. Renderer rules
 

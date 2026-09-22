@@ -730,3 +730,56 @@ model: a provider, an API key and where that key lives. That is a decision, not
 a task, and PLAN.md already says the app has to work with no key configured.
 Pointing Claude Desktop at the printed configuration answers the phase's
 done-when today without one.
+
+---
+
+### Phase 7. The rebrand, the shell, and shipping
+
+The app became Juno, grew a proper window layer, and got a way to reach a
+machine that is not this one.
+
+**Done:** a complete rename, not a cosmetic one; a cool porcelain and iris
+palette with new marks; one main window with a registry that enforces it;
+settings as a fixed-size modal child window; a title bar the renderer draws with
+the operating system's caption buttons over it; a sidebar that groups, collapses
+to a rail and becomes a drawer below 760px; an animated splash over the slow
+part of startup; a development data directory separate from the installed app's,
+with a `--clean` that empties it; one command per thing (`dev`, `check`,
+`build`, `build:win`, `build:mac`); GitHub Actions for checks and for tagged
+releases; `electron-updater` against the public releases; and a Windows
+installer with its own artwork and wording. Decisions 25 to 29 record the why.
+
+**What went wrong, and what it cost:**
+
+- **A rename and a rework in one working tree cannot be split into commits
+  afterwards.** Both touch the same files, and the rename changes the global
+  `window.juno` contract, so every renderer file has to move at once. The way
+  out was to capture the finished tree on a tag, roll back, redo the rename
+  alone on a clean tree, and then restore the tag over it. Doing the rename
+  first, on its own, would have cost nothing.
+- **`electron-updater`'s default export is undefined once compiled to
+  CommonJS.** The main process compiles to CJS, so `import electronUpdater from`
+  gives `.default === undefined` and the app threw on load. The named import
+  works. The smoke run caught it; a typecheck never would have.
+- **A second offscreen `BrowserWindow` never fires `did-finish-load`** after the
+  first one is destroyed, so the installer-artwork script silently produced two
+  of three files. One window, resized per panel, fixes it. A data URL loaded
+  twice in one process also reports `ERR_ABORTED` while rendering correctly, so
+  the load event is what to wait on, not the promise.
+- **Sizing a capture window by device pixels crops the layout.** Dividing the
+  target size by the display scale factor made the window smaller than the CSS
+  the panel was laid out in, so half the sidebar fell off the bottom. Lay out at
+  true size, capture large, resize down.
+- **Moving settings to its own window broke the smoke's screenshot walk** in a
+  way that still passed: it kept clicking a sidebar entry and photographing
+  whatever was already open. The walk now opens the real settings window and
+  captures each tab, which is also what proves the modal child opens at all.
+- **A flag parser that skips `argv[publishAt + 1]` skips `argv[0]`** when there
+  is no `--publish`, so `npm run build --bogus` built silently instead of
+  failing. Guard the index before using it.
+
+**What phase 7 does not do, on purpose:** code signing, on either platform.
+Windows installers are unsigned and macOS notarisation is off, so both show a
+warning on first launch. Turning either on is one commit once the certificates
+exist, and turning them on halfway produces a build that fails to launch in a
+way that reads as a corrupt download.

@@ -107,19 +107,40 @@ npm run dev
 ```
 
 `npm run dev` compiles the main process, starts Vite on 5173 and launches
-Electron against it. The development build keeps its own database
-(`juno.dev.sqlite`) so it cannot damage real records.
+Electron against it. A development run keeps its data in a directory of its own
+(`Juno (dev)` beside the installed app's), so it cannot damage real records.
+`npm run dev:clean` deletes that directory first, for testing a first run or a
+migration from empty.
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Vite plus Electron, watching |
+| `npm run dev` | Vite, a main-process watch and Electron, on separate dev data |
+| `npm run dev:clean` | The same, starting from an empty database |
+| `npm run check` | lint, typecheck and test together |
 | `npm run lint` | ESLint across renderer, main and scripts |
 | `npm run typecheck` | Three project references: renderer, main, build scripts |
 | `npm run test` | Vitest, under Electron's Node (see below) |
-| `npm run smoke` | Builds, launches the real app, and fails on any renderer error |
-| `npm run build` | Typecheck, compile main, build renderer |
-| `npm run dist` | The above plus an installer into `release/` |
+| `npm run smoke` | Compiles, launches the real app, fails on any renderer error |
+| `npm run compile` | Main process plus renderer, no installer |
+| `npm run build` | Everything, plus an installer for this platform, into `release/` |
+| `npm run build:win` / `build:mac` | The same for one platform. What CI runs |
+| `npm run icons` | Redraws the app icon and installer artwork from `brand/logo/` |
 | `npm run db:generate` | Turns a schema change into a migration file |
+
+`JUNO_SMOKE_DEMO=1 npm run smoke` seeds a demo business, walks every screen and
+every settings tab, and writes a screenshot of each in both themes to `.smoke/`.
+
+## Releases and updates
+
+Tagging a version builds installers for Windows and macOS in GitHub Actions and
+uploads them to a **draft** release. Publishing that release is what starts the
+rollout: installed copies check once on launch and daily after, download in the
+background, and install on the next quit.
+
+```bash
+npm version patch
+git push --follow-tags
+```
 
 Two things that will otherwise waste an afternoon:
 

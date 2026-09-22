@@ -13,6 +13,11 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - package.json
+  # The MCP bridge is a plain Node script an agent starts as its own process.
+  # Settings > Agent prints its packaged path, so it has to be in the asar at
+  # exactly that path. Leaving it out makes the agent surface unreachable from
+  # an installed build while everything still builds and runs.
+  - scripts/mcp-bridge.mjs
 
 # There is no `publish` block yet, deliberately. The repository does not exist
 # online, and an installed build that points at the wrong feed is worse than one

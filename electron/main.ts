@@ -15,6 +15,7 @@ import { runMigrations } from "./main/db/migrate";
 import { backupsDir, databasePath, documentsDir, mailDir, userDataDir } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
+import { startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
@@ -118,7 +119,11 @@ if (!app.requestSingleInstanceLock()) {
 
 		lock.start(await settings.getLock());
 
-		registerAllIpc();
+		registerAllIpc(userDataDir());
+
+		// The agent surface comes up after IPC, because the gate it enforces is
+		// answered over IPC, and after the lock, because every tool checks it.
+		startAgentSurface({ userDataDir: userDataDir(), instanceKey: databasePath() });
 
 		// In development only the mail host is served; the window comes from Vite.
 		registerAppScheme(isDev ? null : join(app.getAppPath(), "dist"));
@@ -131,6 +136,9 @@ if (!app.requestSingleInstanceLock()) {
 			notifications.start();
 			mailSync.startScheduler();
 			mailSend.startScheduler();
+			// An automation is exactly the unattended case the lock pauses, so
+			// the scheduler asks before every tick.
+			startAutomationScheduler(() => lock.isLocked());
 		}
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
@@ -154,6 +162,7 @@ if (!app.requestSingleInstanceLock()) {
 							const { openSmokeMailbox, smokeTransport, smokeAppender } = await import("./main/smoke-mailbox");
 							configureMailboxSource(openSmokeMailbox);
 							configureMailTransport(smokeTransport, smokeAppender);
+
 							const created = await window.webContents.executeJavaScript(`(async () => {
 								const b = window.bureau;
 								const statuses = await b.reference.getSet("client_status");
@@ -243,9 +252,131 @@ if (!app.requestSingleInstanceLock()) {
 								const onGrid = await b.calendar.list({ from: ymd(monday), to: ymd(sunday), includeReminders: true, includeDeadlines: true });
 								if (onGrid.filter((i) => i.kind === "event").length !== 3) throw new Error("Smoke: expected three events this week, got " + JSON.stringify(onGrid));
 
+								// Phase 6: an automation whose second step needs approval. The
+								// agent's own call is made from the main process below, because
+								// that is where a real one arrives.
+								await b.automations.create({
+									name: "Morning check",
+									description: "The day, then something that needs a person.",
+									steps: [
+										{ tool: "briefing.today", args: {} },
+										{ tool: "reminders.create", args: { title: "Ask the accountant about the quarter", due_on: iso(3) } },
+									],
+								});
+
 								return (await b.clients.list()).length;
 							})()`);
 							console.log(`SMOKE_DEMO clients=${created}`);
+
+							// An agent call goes through the same host the socket calls, so the
+							// smoke exercises the real gate rather than a stand-in. Nothing may
+							// happen until a person approves it.
+							const { callTool } = await import("./main/mcp");
+							const agentActions = await import("./main/services/agent-actions");
+							const automationService = await import("./main/services/automations");
+							const clientService = await import("./main/services/clients");
+
+							const before = (await clientService.list()).length;
+							const parked = (await callTool("clients.create", { name: "parked-by-agent" }, { source: "mcp" })) as {
+								status?: string;
+							};
+							if (parked.status !== "pending") {
+								throw new Error(`Smoke: clients.create did not park: ${JSON.stringify(parked)}`);
+							}
+							if ((await clientService.list()).length !== before) {
+								throw new Error("Smoke: a parked call created a client anyway");
+							}
+
+							// The automation stops on the step that needs a person, and the
+							// step after it never runs.
+							const [automation] = await automationService.list();
+							const runResult = await automationService.run(automation!.id, "manual");
+							if (runResult.status !== "waiting") {
+								throw new Error(`Smoke: the run did not wait: ${JSON.stringify(runResult)}`);
+							}
+
+							const waiting = await agentActions.list({ states: ["pending"] });
+							if (waiting.length !== 2) {
+								throw new Error(`Smoke: expected two requests waiting, got ${waiting.length}`);
+							}
+							console.log(`SMOKE_DEMO agent pending=${waiting.length}`);
+
+							// The bridge, for real: a child process speaking MCP over stdio,
+							// exactly as an agent's client would start it. This is the only
+							// check that covers the socket, the token and the wire.
+							await new Promise<void>((resolve, reject) => {
+								void (async () => {
+									const { spawn } = await import("node:child_process");
+									const bridge = spawn(
+										process.execPath,
+										[join(app.getAppPath(), "scripts", "mcp-bridge.mjs"), "--user-data-dir", userDataDir()],
+										{ env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["pipe", "pipe", "pipe"] },
+									);
+									let out = "";
+									let stderr = "";
+									const timer = setTimeout(() => {
+										bridge.kill();
+										reject(new Error(`Smoke: the bridge did not answer. ${stderr}`));
+									}, 20_000);
+									const send = (message: unknown) => bridge.stdin.write(`${JSON.stringify(message)}\n`);
+
+									bridge.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+									bridge.stdout.on("data", (chunk: Buffer) => {
+										out += chunk.toString();
+										let index = out.indexOf("\n");
+										while (index !== -1) {
+											const line = out.slice(0, index);
+											out = out.slice(index + 1);
+											index = out.indexOf("\n");
+											if (!line.trim()) continue;
+											const message = JSON.parse(line) as {
+												id?: number;
+												result?: { tools?: unknown[]; content?: { text: string }[]; isError?: boolean };
+											};
+											if (message.id === 1) {
+												send({ jsonrpc: "2.0", method: "notifications/initialized" });
+												send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+											} else if (message.id === 2) {
+												const tools = message.result?.tools ?? [];
+												if (tools.length < 90) {
+													clearTimeout(timer);
+													bridge.kill();
+													reject(new Error(`Smoke: the bridge listed ${tools.length} tools`));
+													return;
+												}
+												console.log(`SMOKE_DEMO bridge tools=${tools.length}`);
+												send({
+													jsonrpc: "2.0",
+													id: 3,
+													method: "tools/call",
+													params: { name: "briefing.today", arguments: {} },
+												});
+											} else if (message.id === 3) {
+												clearTimeout(timer);
+												bridge.kill();
+												const text = message.result?.content?.[0]?.text ?? "";
+												if (message.result?.isError || !text.includes("headline")) {
+													reject(new Error(`Smoke: the bridge call failed: ${text}`));
+													return;
+												}
+												console.log(`SMOKE_DEMO bridge briefing=ok`);
+												resolve();
+											}
+										}
+									});
+
+									send({
+										jsonrpc: "2.0",
+										id: 1,
+										method: "initialize",
+										params: {
+											protocolVersion: "2024-11-05",
+											capabilities: {},
+											clientInfo: { name: "smoke", version: "1" },
+										},
+									});
+								})();
+							});
 							// The sender is not scheduled in a smoke run, so it is asked directly,
 							// and the row has to come out the other side as sent.
 							const sentCount = await mailSend.processQueue();
@@ -276,7 +407,7 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Templates", "Settings"] : ["Clients"];
+							const screens = process.env.BUREAU_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Templates", "Settings"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(
@@ -284,14 +415,51 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								// Outbox is a view inside Mail; Week and the event form live inside
 								// Calendar. None of the three is a sidebar entry.
-								const sidebarEntry = screen === "Outbox" ? "Mail" : screen === "Week" || screen === "Event form" ? "Calendar" : screen;
+								const sidebarEntry =
+									screen === "Outbox"
+										? "Mail"
+										: screen === "Week" || screen === "Event form"
+											? "Calendar"
+											: screen === "Connection"
+												? "Agent"
+												: screen;
+								// A sidebar entry may carry a count beside its label, so the match
+								// is on the label rather than the whole button.
 								const clicked = await window.webContents.executeJavaScript(
 									`(() => { const b = [...document.querySelectorAll("nav button")]
-										.find((el) => el.textContent.trim() === ${JSON.stringify(sidebarEntry)});
+										.find((el) => el.textContent.trim().startsWith(${JSON.stringify(sidebarEntry)}));
 										if (b) b.click(); return Boolean(b); })()`,
 								);
 								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
 								await new Promise((r) => setTimeout(r, 800));
+								if (screen === "Agent") {
+									// The requests tab is the default, and the pending request from
+									// the agent call above has to be on it with its arguments.
+									const shown = await window.webContents.executeJavaScript(
+										`(() => {
+											const text = document.querySelector("main").textContent;
+											if (!text.includes("Waiting for you")) return "no waiting section";
+											if (!text.includes("parked-by-agent")) return "the request is not shown";
+											const approve = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Approve");
+											return approve ? "ok" : "no approve button";
+										})()`,
+									);
+									if (shown !== "ok") throw new Error(`Smoke: agent requests ${shown}`);
+								}
+								if (screen === "Connection") {
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const tab = [...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim() === "Connection");
+											if (!tab) return "no connection tab";
+											tab.click();
+											await new Promise((r) => setTimeout(r, 700));
+											const text = document.querySelector("main").textContent;
+											if (!text.includes("mcpServers")) return "no configuration block";
+											return text.includes("Listening") ? "ok" : "not listening";
+										})()`,
+									);
+									if (opened !== "ok") throw new Error(`Smoke: agent connection ${opened}`);
+								}
 								if (screen === "Calendar") {
 									// Opens a recurring occurrence, asks to edit it, answers the
 									// recurrence question, and checks the form came up for the whole
@@ -452,6 +620,7 @@ if (!app.requestSingleInstanceLock()) {
 		notifications.stop();
 		mailSync.stopScheduler();
 		mailSend.stopScheduler();
+		stopAgentSurface({ userDataDir: userDataDir(), instanceKey: databasePath() });
 		closeDb();
 	});
 }

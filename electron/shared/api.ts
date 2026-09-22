@@ -14,8 +14,20 @@
  * service behind it is synchronous.
  */
 import type {
+	AgentAction,
+	AgentActionListQuery,
 	AppInfo,
 	AppSettings,
+	AuditEvent,
+	AuditListQuery,
+	Automation,
+	AutomationInput,
+	AutomationPatch,
+	AutomationRun,
+	Briefing,
+	McpServerStatus,
+	SearchQuery,
+	ToolSummary,
 	CalendarEditTarget,
 	CalendarEvent,
 	CalendarEventInput,
@@ -196,6 +208,54 @@ export interface BureauApi {
 
 	search: {
 		global(term: string, limit?: number): Promise<SearchHit[]>;
+		/** The same search, narrowed to some kinds of record. */
+		query(input: SearchQuery): Promise<SearchHit[]>;
+	};
+
+	agent: {
+		/** Whether an agent can reach Bureau, and the config block to paste. */
+		status(): Promise<McpServerStatus>;
+		/** Every tool, for the screen that lists the surface. No handlers cross. */
+		tools(): Promise<ToolSummary[]>;
+		revealConnectionFile(): Promise<void>;
+		actions: {
+			list(query?: AgentActionListQuery): Promise<AgentAction[]>;
+			get(id: string): Promise<AgentAction | null>;
+			pendingCount(): Promise<number>;
+			/**
+			 * Runs what an agent asked for. There is no MCP equivalent and there
+			 * will not be: the thing being gated is what would call it.
+			 */
+			approve(id: string): Promise<AgentAction>;
+			reject(id: string): Promise<AgentAction>;
+			/** Clears an answered request from the list. The audit row stays. */
+			remove(id: string): Promise<AgentAction>;
+			/** Fires when a request appears or is answered. */
+			onChange(listener: (action: AgentAction) => void): () => void;
+		};
+		audit: {
+			list(query?: AuditListQuery): Promise<AuditEvent[]>;
+		};
+	};
+
+	automations: {
+		list(): Promise<Automation[]>;
+		get(id: string): Promise<Automation | null>;
+		create(input: AutomationInput): Promise<Automation>;
+		update(id: string, patch: AutomationPatch): Promise<Automation>;
+		remove(id: string): Promise<Automation>;
+		/** Runs it now. A step needing approval stops the run and waits. */
+		run(id: string): Promise<AutomationRun>;
+		runs(automationId?: string, limit?: number): Promise<AutomationRun[]>;
+		cancelRun(runId: string): Promise<AutomationRun>;
+		onRunChange(listener: (run: AutomationRun) => void): () => void;
+	};
+
+	briefing: {
+		today(): Promise<Briefing>;
+		client(clientId: string): Promise<Briefing>;
+		/** `YYYY-MM`. */
+		month(month: string): Promise<Briefing>;
 	};
 
 	templates: {

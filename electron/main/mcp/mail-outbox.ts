@@ -187,6 +187,10 @@ export const mailOutboxTools: ToolDescriptor[] = [
 			"pending state. A rejected or edited message is not retried.",
 		readOnly: false,
 		requiresConfirmation: true,
+		// The outbox is the gate for this one, and it shows the real message
+		// rather than an argument list (decision 22). Parking it in the generic
+		// gate as well would ask a person twice about one send.
+		gatedInService: true,
 		inputSchema: {
 			type: "object",
 			properties: { id: { type: "string" } },

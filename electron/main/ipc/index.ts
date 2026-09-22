@@ -7,6 +7,7 @@
  * above that line silently opens a hole.
  */
 import { installLockGuard } from "./lock-guard";
+import { registerAgentIpc } from "./agent";
 import { registerAppIpc } from "./app";
 import { registerBackupIpc } from "./backup";
 import { registerCalendarIpc } from "./calendar";
@@ -22,7 +23,7 @@ import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
 import { registerTemplatesIpc } from "./templates";
 
-export function registerAllIpc(): void {
+export function registerAllIpc(userDataDir: string): void {
 	installLockGuard();
 
 	registerAppIpc();
@@ -40,4 +41,5 @@ export function registerAllIpc(): void {
 	registerRemindersIpc();
 	registerMailIpc();
 	registerCalendarIpc();
+	registerAgentIpc(userDataDir);
 }

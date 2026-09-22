@@ -14,7 +14,13 @@
  */
 import { contextBridge, ipcRenderer } from "electron";
 import type { BureauApi } from "./shared/api";
-import type { LockState, MailOutboxMessage, MailSyncStatus } from "./shared/types";
+import type {
+	AgentAction,
+	AutomationRun,
+	LockState,
+	MailOutboxMessage,
+	MailSyncStatus,
+} from "./shared/types";
 
 const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
 	ipcRenderer.invoke(channel, ...args) as Promise<T>;
@@ -104,6 +110,55 @@ const api: BureauApi = {
 
 	search: {
 		global: (term, limit) => call("search.global", term, limit),
+		query: (input) => call("search.query", input),
+	},
+
+	agent: {
+		status: () => call("agent.status"),
+		tools: () => call("agent.tools"),
+		revealConnectionFile: () => call("agent.revealConnectionFile"),
+		actions: {
+			list: (query) => call("agent.actions.list", query),
+			get: (id) => call("agent.actions.get", id),
+			pendingCount: () => call("agent.actions.pendingCount"),
+			approve: (id) => call("agent.actions.approve", id),
+			reject: (id) => call("agent.actions.reject", id),
+			remove: (id) => call("agent.actions.remove", id),
+			onChange: (listener) => {
+				const handler = (_event: Electron.IpcRendererEvent, action: AgentAction) => listener(action);
+				ipcRenderer.on("agent.actionChanged", handler);
+				return () => {
+					ipcRenderer.off("agent.actionChanged", handler);
+				};
+			},
+		},
+		audit: {
+			list: (query) => call("agent.audit.list", query),
+		},
+	},
+
+	automations: {
+		list: () => call("automations.list"),
+		get: (id) => call("automations.get", id),
+		create: (input) => call("automations.create", input),
+		update: (id, patch) => call("automations.update", id, patch),
+		remove: (id) => call("automations.remove", id),
+		run: (id) => call("automations.run", id),
+		runs: (automationId, limit) => call("automations.runs", automationId, limit),
+		cancelRun: (runId) => call("automations.cancelRun", runId),
+		onRunChange: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, run: AutomationRun) => listener(run);
+			ipcRenderer.on("agent.runChanged", handler);
+			return () => {
+				ipcRenderer.off("agent.runChanged", handler);
+			};
+		},
+	},
+
+	briefing: {
+		today: () => call("briefing.today"),
+		client: (clientId) => call("briefing.client", clientId),
+		month: (month) => call("briefing.month", month),
 	},
 
 	templates: {

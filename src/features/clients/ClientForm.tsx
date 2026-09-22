@@ -3,6 +3,7 @@ import type { Client, ClientPatch, ReferenceItem } from "@shared/types";
 import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
+import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 
@@ -39,6 +40,7 @@ function textOrNull(value: string): string | null {
 export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
+	const notesId = useId();
 	const [values, setValues] = useState<Values>(() => toValues(client));
 	// Notes stay out of the way until there is something in them, or the user
 	// asks for the field. Filling in a client should not open on a blank essay.
@@ -155,13 +157,15 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 
 				<div className="mt-6 border-t border-[var(--line)] pt-6">
 					{notesOpen ? (
-						<Field
-							label="Notes"
-							multiline
-							rows={4}
-							value={values.notes}
-							onChange={(value) => set("notes", value)}
-						/>
+						<div>
+							<label
+								htmlFor={notesId}
+								className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							>
+								Notes
+							</label>
+							<MarkdownEditor id={notesId} value={values.notes} onChange={(value) => set("notes", value)} rows={4} />
+						</div>
 					) : (
 						<Button onClick={() => setNotesOpen(true)}>Add notes</Button>
 					)}

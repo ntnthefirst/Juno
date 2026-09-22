@@ -11,6 +11,7 @@ import type {
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { FormPage, type FormStep } from "../../components/FormPage";
+import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { addDays, addLocalMinutes, dateOf, joinLocal, localMinutesBetween, machineTimeZone, timeOf } from "./dates";
@@ -104,6 +105,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 	const [step, setStep] = useState(0);
 	// The submit button sits in the page footer, outside the form element.
 	const formId = useId();
+	const notesId = useId();
 	const [values, setValues] = useState<Values>(initial);
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -426,7 +428,13 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 						/>
 
 						<div className="col-span-2">
-							<Field label="Notes" multiline rows={4} value={values.notes} onChange={(v) => set("notes", v)} />
+							<label
+								htmlFor={notesId}
+								className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							>
+								Notes
+							</label>
+							<MarkdownEditor id={notesId} value={values.notes} onChange={(v) => set("notes", v)} rows={4} />
 							<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 								Markdown is supported: **bold**, _italic_, a [link](https://example.com), a list.
 							</p>

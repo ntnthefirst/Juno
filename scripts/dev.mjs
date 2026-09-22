@@ -24,7 +24,7 @@
  */
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { devDataDir } from "./dev-data.mjs";
@@ -38,6 +38,51 @@ const require = createRequire(import.meta.url);
 const clean = process.argv.includes("--clean") || process.env.npm_config_clean === "true";
 
 const dataDir = devDataDir();
+
+/**
+ * Where a run remembers the pids it started, so the next one can find them.
+ *
+ * `stopAll` frees a normal exit's vite, tsc and Electron. Nothing frees them
+ * when this script itself dies harder than that: the terminal closes, the host
+ * kills the session, the machine sleeps mid-shutdown. Each of those leaves a
+ * process holding the port the next `npm run dev` needs, and that run fails
+ * with "Port 5173 is already in use" against a window from a session that is
+ * long gone.
+ */
+const pidFile = join(dataDir, "dev.pids.json");
+
+/** Stops whatever the last run left behind, before this run starts anything of its own. */
+function killStale() {
+	if (!existsSync(pidFile)) return;
+	let pids;
+	try {
+		pids = JSON.parse(readFileSync(pidFile, "utf8"));
+	} catch {
+		pids = [];
+	}
+	for (const pid of pids) {
+		if (typeof pid !== "number") continue;
+		try {
+			// Signal 0 checks whether the pid is still alive without killing it,
+			// so a number the OS has since handed to an unrelated process is left
+			// alone rather than killed on a guess.
+			process.kill(pid, 0);
+		} catch {
+			continue;
+		}
+		try {
+			process.kill(pid);
+			console.log(`[dev] Stopped a leftover process from an earlier run (pid ${pid}).`);
+		} catch {
+			// Gone between the check above and this line. Nothing to report.
+		}
+	}
+	rmSync(pidFile, { force: true });
+}
+
+// Ahead of --clean, which would otherwise delete the record of what to stop
+// along with the rest of the directory.
+killStale();
 
 if (clean) {
 	if (existsSync(dataDir)) {
@@ -54,10 +99,25 @@ const env = { ...process.env, JUNO_DEV: "1", JUNO_DEV_DATA: dataDir };
 const children = new Set();
 let shuttingDown = false;
 
+function savePids() {
+	const pids = [...children].map((child) => child.pid).filter((pid) => typeof pid === "number");
+	try {
+		mkdirSync(dataDir, { recursive: true });
+		writeFileSync(pidFile, JSON.stringify(pids));
+	} catch {
+		// Best effort: a failed write here only means the next run cannot clean
+		// up automatically, not that this one fails to start.
+	}
+}
+
 function run(command, args, options = {}) {
 	const child = spawn(command, args, { cwd: root, env, ...options });
 	children.add(child);
-	child.on("exit", () => children.delete(child));
+	savePids();
+	child.on("exit", () => {
+		children.delete(child);
+		savePids();
+	});
 	return child;
 }
 
@@ -84,6 +144,8 @@ function runNode(script, args = [], options = {}) {
 function stopAll() {
 	shuttingDown = true;
 	for (const child of children) child.kill();
+	// A clean stop needs no cleanup on the next run's part.
+	rmSync(pidFile, { force: true });
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

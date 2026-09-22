@@ -123,6 +123,9 @@ const api: JunoApi = {
 		setAccountingTool: (patch) => call("settings.setAccountingTool", patch),
 		getOwner: () => call("settings.getOwner"),
 		setOwner: (patch) => call("settings.setOwner", patch),
+		getOnboarding: () => call("settings.getOnboarding"),
+		setOnboarding: (patch) => call("settings.setOnboarding", patch),
+		needsOnboarding: () => call("settings.needsOnboarding"),
 	},
 
 	lock: {
@@ -220,6 +223,8 @@ const api: JunoApi = {
 		list: (query) => call("documents.list", query),
 		get: (id) => call("documents.get", id),
 		generate: (input) => call("documents.generate", input),
+		import: (input) => call("documents.import", input),
+		chooseImport: (clientId) => call("documents.chooseImport", clientId),
 		setStatus: (id, statusId) => call("documents.setStatus", id, statusId),
 		remove: (id) => call("documents.remove", id),
 		restore: (id) => call("documents.restore", id),

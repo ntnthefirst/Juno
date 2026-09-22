@@ -44,6 +44,7 @@ import type {
 	DocumentTemplatePatch,
 	GenerateDocumentInput,
 	GenerateDocumentResult,
+	ImportDocumentInput,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -112,6 +113,8 @@ import type {
 	SearchHit,
 	ThemeSetting,
 	OwnerProfile,
+	OnboardingPatch,
+	OnboardingState,
 } from "./types";
 
 export interface ListClientsQuery {
@@ -236,6 +239,10 @@ export interface JunoApi {
 		/** Where invoicing happens. Invoice reminders link here; Juno never bills. */
 		getAccountingTool(): Promise<AccountingTool>;
 		setAccountingTool(patch: Partial<AccountingTool>): Promise<AccountingTool>;
+		getOnboarding(): Promise<OnboardingState>;
+		setOnboarding(patch: OnboardingPatch): Promise<OnboardingState>;
+		/** True on a genuinely first launch, and after a step is added an install has not seen. */
+		needsOnboarding(): Promise<boolean>;
 	};
 
 	lock: {
@@ -349,6 +356,10 @@ export interface JunoApi {
 		list(query?: { clientId?: string }): Promise<DocumentRecord[]>;
 		get(id: string): Promise<DocumentRecord | null>;
 		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
+		/** Copies an existing PDF in and records it as an imported document. */
+		import(input: ImportDocumentInput): Promise<DocumentRecord>;
+		/** Opens a file picker filtered to PDF and imports the choice for a client. Null when cancelled. */
+		chooseImport(clientId: string): Promise<DocumentRecord | null>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;
 		remove(id: string): Promise<DocumentRecord>;
 		restore(id: string): Promise<DocumentRecord>;

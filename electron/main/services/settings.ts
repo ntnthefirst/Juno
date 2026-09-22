@@ -25,6 +25,8 @@ import type {
 	AccountingTool,
 	AppSettings,
 	LockSettings,
+	OnboardingPatch,
+	OnboardingState,
 	OwnerProfile,
 	ThemeSetting,
 } from "../../shared/types";
@@ -52,6 +54,18 @@ const DEFAULT_OWNER: OwnerProfile = {
 
 const DEFAULT_ACCOUNTING: AccountingTool = { name: "", url: "" };
 
+/**
+ * The shape of the setup as it stands today. Adding a step that an existing
+ * install has never been asked means bumping this, and nothing else.
+ */
+export const ONBOARDING_VERSION = 1;
+
+const DEFAULT_ONBOARDING: OnboardingState = {
+	completedAt: null,
+	walkthroughSeenAt: null,
+	version: 0,
+};
+
 const DEFAULTS: AppSettings = {
 	theme: "system",
 	lock: DEFAULT_LOCK,
@@ -60,6 +74,7 @@ const DEFAULTS: AppSettings = {
 	signaturePath: null,
 	accountingTool: DEFAULT_ACCOUNTING,
 	lastNotifiedOn: null,
+	onboarding: DEFAULT_ONBOARDING,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -102,6 +117,11 @@ function int(value: unknown, fallback: number): number {
 	return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : fallback;
 }
 
+/** A timestamp that is either a non-empty string or absent. */
+function iso(value: unknown): string | null {
+	return typeof value === "string" && value ? value : null;
+}
+
 /**
  * Field by field, so an unknown key, a wrong type or a half-written file cannot
  * produce a settings object the rest of the app then has to guard against.
@@ -137,6 +157,14 @@ function normalise(raw: unknown): AppSettings {
 		accountingTool: {
 			name: str(isRecord(raw.accountingTool) ? raw.accountingTool.name : undefined, ""),
 			url: str(isRecord(raw.accountingTool) ? raw.accountingTool.url : undefined, ""),
+		},
+		onboarding: {
+			completedAt: iso(isRecord(raw.onboarding) ? raw.onboarding.completedAt : undefined),
+			walkthroughSeenAt: iso(isRecord(raw.onboarding) ? raw.onboarding.walkthroughSeenAt : undefined),
+			version: Math.max(
+				0,
+				int(isRecord(raw.onboarding) ? raw.onboarding.version : undefined, DEFAULT_ONBOARDING.version),
+			),
 		},
 	};
 }
@@ -248,4 +276,28 @@ export async function getSeedVersion(): Promise<number> {
 
 export async function setSeedVersion(version: number): Promise<number> {
 	return write({ ...read(), seedVersion: Math.max(0, Math.trunc(version)) }).seedVersion;
+}
+
+export async function getOnboarding(): Promise<OnboardingState> {
+	return { ...read().onboarding };
+}
+
+/**
+ * Patched rather than replaced, because the setup window and the walkthrough
+ * write different fields at different times and neither knows about the other.
+ */
+export async function setOnboarding(patch: OnboardingPatch): Promise<OnboardingState> {
+	const current = read();
+	const next = { ...current.onboarding, ...patch };
+	write({ ...current, onboarding: next });
+	return { ...next };
+}
+
+/**
+ * True on a genuinely first launch, and after a reset. The version check is what
+ * makes a new step reach an install that finished an older setup.
+ */
+export async function needsOnboarding(): Promise<boolean> {
+	const state = read().onboarding;
+	return state.completedAt === null || state.version < ONBOARDING_VERSION;
 }

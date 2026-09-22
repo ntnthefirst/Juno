@@ -7,7 +7,7 @@
  * setting leaves a light title bar over a dark window (decision 14).
  */
 import { BrowserWindow, ipcMain, nativeTheme } from "electron";
-import type { OwnerProfile, ThemeSetting } from "../../shared/types";
+import type { OnboardingPatch, OwnerProfile, ThemeSetting } from "../../shared/types";
 import * as settings from "../services/settings";
 import * as signature from "../services/signature";
 import { refreshOverlayTheme } from "../windows/chrome";
@@ -51,4 +51,10 @@ export function registerSettingsIpc(): void {
 	ipcMain.handle("settings.setOwner", (_event, patch: Partial<OwnerProfile>) =>
 		settings.setOwner(patch),
 	);
+
+	ipcMain.handle("settings.getOnboarding", () => settings.getOnboarding());
+	ipcMain.handle("settings.setOnboarding", (_event, patch: OnboardingPatch) =>
+		settings.setOnboarding(patch),
+	);
+	ipcMain.handle("settings.needsOnboarding", () => settings.needsOnboarding());
 }

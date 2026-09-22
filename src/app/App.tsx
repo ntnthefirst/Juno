@@ -7,18 +7,20 @@ import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
-import { SettingsScreen } from "../features/settings/SettingsScreen";
 import { TemplatesScreen } from "../features/templates/TemplatesScreen";
 import { TodayScreen } from "../features/today/TodayScreen";
 import { useTheme } from "../lib/theme";
-import { Sidebar, type ScreenId } from "./Sidebar";
+import { SCREEN_LABELS, type ScreenId } from "./screens";
+import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
+import { useSidebarLayout } from "./use-sidebar-layout";
 
 export function App() {
-	const [theme, setTheme] = useTheme();
+	useTheme();
 	const [screen, setScreen] = useState<ScreenId>("today");
 	const [lock, setLock] = useState<LockState | null>(null);
 	const [pendingActions, setPendingActions] = useState(0);
+	const sidebar = useSidebarLayout();
 
 	useEffect(() => {
 		void window.juno.lock.state().then(setLock);
@@ -62,11 +64,44 @@ export function App() {
 		);
 	}
 
+	const navigate = (id: ScreenId) => {
+		setScreen(id);
+		// On a narrow window the sidebar is covering the thing just chosen.
+		if (sidebar.floating) sidebar.close();
+	};
+
 	return (
 		<div className="flex h-full flex-col bg-[var(--paper)]">
-			<TitleBar theme={theme} onThemeChange={setTheme} lockConfigured={lock.configured} />
-			<div className="flex min-h-0 flex-1">
-				<Sidebar current={screen} onNavigate={setScreen} pendingActions={pendingActions} />
+			<TitleBar
+				title={SCREEN_LABELS[screen]}
+				sidebarCollapsed={sidebar.collapsed}
+				onToggleSidebar={sidebar.toggle}
+			/>
+			<div className="relative flex min-h-0 flex-1">
+				{sidebar.visible ? (
+					<Sidebar
+						current={screen}
+						onNavigate={navigate}
+						pendingActions={pendingActions}
+						collapsed={sidebar.collapsed}
+						floating={sidebar.floating}
+						onOpenSettings={() => void window.juno.window.openSettings()}
+						lockConfigured={lock.configured}
+					/>
+				) : null}
+
+				{sidebar.floating ? (
+					// Dismisses the drawer, and stops a click landing on whatever is
+					// underneath it. Not focusable: Escape already closes it.
+					<button
+						type="button"
+						tabIndex={-1}
+						aria-label="Close the sidebar"
+						onClick={sidebar.close}
+						className="absolute inset-0 z-10 bg-[var(--ink)]/20"
+					/>
+				) : null}
+
 				<main className="min-w-0 flex-1 overflow-auto">
 					{screen === "today" ? (
 						<TodayScreen />
@@ -84,29 +119,14 @@ export function App() {
 						<AgentScreen />
 					) : screen === "templates" ? (
 						<TemplatesScreen />
-					) : screen === "settings" ? (
-						<SettingsScreen theme={theme} onThemeChange={setTheme} />
 					) : (
-						<Placeholder title={LABELS[screen]} />
+						<Placeholder title={SCREEN_LABELS[screen]} />
 					)}
 				</main>
 			</div>
 		</div>
 	);
 }
-
-const LABELS: Record<ScreenId, string> = {
-	today: "Today",
-	clients: "Clients",
-	projects: "Projects",
-	documents: "Documents",
-	mail: "Mail",
-	calendar: "Calendar",
-	reminders: "Reminders",
-	agent: "Agent",
-	templates: "Templates",
-	settings: "Settings",
-};
 
 function Placeholder({ title }: { title: string }) {
 	return (

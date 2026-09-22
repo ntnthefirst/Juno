@@ -14,13 +14,17 @@ export function userDataDir(): string {
 }
 
 /**
- * Dev uses a separate file so development cannot damage real business records.
+ * One filename, because a development run already has a whole userData
+ * directory of its own: main.ts points `userData` at `dev-data.ts` before
+ * anything reads a path. A second dev-only filename on top of that would mean
+ * two ways to be in development and only one of them being right.
+ *
  * Note that `userData` also differs between a dev run and a packaged run unless
  * the product name matches, which is the usual cause of an app that appears to
  * have "lost" its data.
  */
 export function databasePath(): string {
-	return join(userDataDir(), process.env.JUNO_DEV ? "juno.dev.sqlite" : "juno.sqlite");
+	return join(userDataDir(), "juno.sqlite");
 }
 
 export function backupsDir(): string {

@@ -113,6 +113,17 @@ export interface JunoApi {
 		info(): Promise<AppInfo>;
 	};
 
+	/**
+	 * Opening and closing windows. Settings is a modal child of the main window,
+	 * so `openSettings` disables the application behind it until it is closed.
+	 * There is no method to open a second main window: there is only ever one.
+	 */
+	window: {
+		openSettings(): Promise<void>;
+		closeSettings(): Promise<void>;
+		isSettingsOpen(): Promise<boolean>;
+	};
+
 	clients: {
 		list(query?: ListClientsQuery): Promise<ClientSummary[]>;
 		get(id: string): Promise<Client | null>;
@@ -173,6 +184,8 @@ export interface JunoApi {
 		getTheme(): Promise<ThemeSetting>;
 		/** Also sets nativeTheme.themeSource, or the title bar disagrees with the window. */
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
+		/** Fires in every window, so a change made in settings reaches the app. */
+		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
 		getOwner(): Promise<OwnerProfile>;
 		setOwner(patch: Partial<OwnerProfile>): Promise<OwnerProfile>;
 		/** Where invoicing happens. Invoice reminders link here; Juno never bills. */

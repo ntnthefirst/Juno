@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, BrowserWindow, nativeTheme } from "electron";
+import { app, nativeTheme } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -35,24 +35,33 @@ import { configureMailTransport } from "./main/services/mail-transport";
 import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
-import { createMainWindow } from "./main/windows/main-window";
+import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
+import { installSessionPolicy } from "./main/windows/chrome";
+import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
+import { startUpdates } from "./main/updates";
+import { devDataDir } from "./main/dev-data";
 
 const isDev = Boolean(process.env.JUNO_DEV);
+
+// A development run never touches installed data. Set before anything reads a
+// path, because app.getPath("userData") is resolved on first use and cached.
+if (isDev) app.setPath("userData", devDataDir());
 
 registerAppSchemePrivileges();
 
 if (!app.requestSingleInstanceLock()) {
 	app.quit();
 } else {
-	app.on("second-instance", () => {
-		const [existing] = BrowserWindow.getAllWindows();
-		if (existing) {
-			if (existing.isMinimized()) existing.restore();
-			existing.focus();
-		}
-	});
+	// One main window, and a second launch focuses it rather than opening one.
+	// windows/index.ts is what actually holds that rule.
+	app.on("second-instance", () => focusMainWindow());
 
 	app.whenReady().then(async () => {
+		// Up before any of the slow work, and down when the window can paint.
+		// A smoke run has nobody watching and an always-on-top window would sit
+		// over the screenshots it takes.
+		if (!process.env.JUNO_SMOKE) showSplash();
+
 		// Paths are injected here rather than read inside each service, so no
 		// service has to import `electron` and every one stays testable in plain
 		// Node.
@@ -74,8 +83,10 @@ if (!app.requestSingleInstanceLock()) {
 		// safeStorage is usable now that the app is ready, and not before.
 		configureCredentialStore(safeStorageCredentialStore);
 
+		splashStep("Opening the database");
 		const db = openDb(databasePath());
 
+		splashStep("Applying migrations");
 		const migrations = runMigrations(getConnection());
 		if (migrations.applied.length > 0) {
 			console.log(`Applied ${migrations.applied.length} migration(s):`, migrations.applied);
@@ -84,6 +95,7 @@ if (!app.requestSingleInstanceLock()) {
 		// Reference data is seeded before the window exists, so the first screen is
 		// never a set of empty dropdowns. Idempotent, so this is cheap on every
 		// launch after the first.
+		splashStep("Preparing reference data");
 		const seeded = await ensureSeeded(db);
 		if (seeded.setsCreated || seeded.itemsCreated || seeded.itemsUpdated) {
 			console.log(
@@ -119,6 +131,7 @@ if (!app.requestSingleInstanceLock()) {
 
 		lock.start(await settings.getLock());
 
+		splashStep("Starting services");
 		registerAllIpc(userDataDir());
 
 		// The agent surface comes up after IPC, because the gate it enforces is
@@ -128,8 +141,14 @@ if (!app.requestSingleInstanceLock()) {
 		// In development only the mail host is served; the window comes from Vite.
 		registerAppScheme(isDev ? null : join(app.getAppPath(), "dist"));
 
-		const window = createMainWindow(isDev);
-		lock.watchWindow(window);
+		// Installed on the session, so it covers the settings window too. It has
+		// to happen before the first window loads anything.
+		installSessionPolicy(isDev);
+
+		const window = openMainWindow(isDev);
+		// Not on create: a window that exists but has not painted is a grey
+		// rectangle, which is the exact gap the splash is covering.
+		window.once("ready-to-show", () => closeSplash());
 
 		// One summary a day, never one per reminder. See services/notifications.ts.
 		if (!process.env.JUNO_SMOKE) {
@@ -139,6 +158,9 @@ if (!app.requestSingleInstanceLock()) {
 			// An automation is exactly the unattended case the lock pauses, so
 			// the scheduler asks before every tick.
 			startAutomationScheduler(() => lock.isLocked());
+			// Updates come from the public GitHub releases the workflow publishes.
+			// Never in development, where the version is always behind.
+			if (!isDev) startUpdates();
 		}
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
@@ -407,7 +429,7 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
-							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Templates", "Settings"] : ["Clients"];
+							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Templates"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(
@@ -575,27 +597,67 @@ if (!app.requestSingleInstanceLock()) {
 									console.log(`SMOKE_DEMO mail frame=${mailFrame.url}`);
 									await new Promise((r) => setTimeout(r, 400));
 								}
-								// Settings is taller than the window, so the lower sections are
-								// photographed too rather than assumed to render.
-								const offsets = screen === "Settings" ? [0, 1, 2, 3, 4, 5] : [0];
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;
 									await window.webContents.executeJavaScript(
 										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 									);
-									for (const page of offsets) {
-										await window.webContents.executeJavaScript(
-											`document.querySelector("main").scrollTop = ${page} * (window.innerHeight - 120)`,
+									await new Promise((r) => setTimeout(r, 400));
+									const image = await window.webContents.capturePage();
+									writeFileSync(
+										joinPath(shotDir, `${screen.toLowerCase()}-${theme}.png`),
+										image.toPNG(),
+									);
+								}
+							}
+
+							// Settings is a window of its own, so it is photographed as one.
+							// Opened through the same function the sidebar button calls, which
+							// is also what proves the modal child actually opens.
+							if (process.env.JUNO_SMOKE_DEMO) {
+								const { closeSettingsWindow, getSettingsWindow, openSettingsWindow } =
+									await import("./main/windows");
+
+								openSettingsWindow();
+								const settingsWindow = getSettingsWindow();
+								if (!settingsWindow) throw new Error("Smoke: the settings window did not open");
+
+								await new Promise<void>((resolve) => {
+									if (!settingsWindow.webContents.isLoading()) {
+										setTimeout(resolve, 900);
+										return;
+									}
+									settingsWindow.webContents.once("did-finish-load", () =>
+										setTimeout(resolve, 900),
+									);
+								});
+
+								const TABS = `document.querySelectorAll("nav[aria-label='Settings sections'] button")`;
+								const tabs = (await settingsWindow.webContents.executeJavaScript(
+									`[...${TABS}].map((b) => b.textContent.trim())`,
+								)) as string[];
+								if (tabs.length < 5) {
+									throw new Error(`Smoke: the settings window showed ${tabs.length} sections`);
+								}
+
+								for (const [index, tab] of tabs.entries()) {
+									await settingsWindow.webContents.executeJavaScript(`${TABS}[${index}].click()`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await settingsWindow.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
-										await new Promise((r) => setTimeout(r, 400));
-										const image = await window.webContents.capturePage();
-										const suffix = offsets.length > 1 ? `-${page + 1}` : "";
+										await new Promise((r) => setTimeout(r, 350));
+										const image = await settingsWindow.webContents.capturePage();
+										const name = tab.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 										writeFileSync(
-											joinPath(shotDir, `${screen.toLowerCase()}-${theme}${suffix}.png`),
+											joinPath(shotDir, `settings-${name}-${theme}.png`),
 											image.toPNG(),
 										);
 									}
 								}
+								console.log(`SMOKE_DEMO settings tabs=${tabs.length}`);
+								closeSettingsWindow();
 							}
 						}
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);
@@ -606,9 +668,8 @@ if (!app.requestSingleInstanceLock()) {
 		}
 
 		app.on("activate", () => {
-			if (BrowserWindow.getAllWindows().length === 0) {
-				lock.watchWindow(createMainWindow(isDev));
-			}
+			if (getMainWindow()) focusMainWindow();
+			else openMainWindow(isDev);
 		});
 	});
 

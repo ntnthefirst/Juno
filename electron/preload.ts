@@ -20,6 +20,7 @@ import type {
 	LockState,
 	MailOutboxMessage,
 	MailSyncStatus,
+	ThemeSetting,
 } from "./shared/types";
 
 const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
@@ -28,6 +29,12 @@ const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
 const api: JunoApi = {
 	app: {
 		info: () => call("app.info"),
+	},
+
+	window: {
+		openSettings: () => call("window.openSettings"),
+		closeSettings: () => call("window.closeSettings"),
+		isSettingsOpen: () => call("window.isSettingsOpen"),
 	},
 
 	clients: {
@@ -78,6 +85,13 @@ const api: JunoApi = {
 		clearSignature: () => call("settings.clearSignature"),
 		getTheme: () => call("settings.getTheme"),
 		setTheme: (theme) => call("settings.setTheme", theme),
+		onThemeChange: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, theme: ThemeSetting) => listener(theme);
+			ipcRenderer.on("settings.themeChanged", handler);
+			return () => {
+				ipcRenderer.off("settings.themeChanged", handler);
+			};
+		},
 		getAccountingTool: () => call("settings.getAccountingTool"),
 		setAccountingTool: (patch) => call("settings.setAccountingTool", patch),
 		getOwner: () => call("settings.getOwner"),

@@ -6,10 +6,11 @@
  * and settings.ts has to stay loadable in a plain Node process. Writing only the
  * setting leaves a light title bar over a dark window (decision 14).
  */
-import { ipcMain, nativeTheme } from "electron";
+import { BrowserWindow, ipcMain, nativeTheme } from "electron";
 import type { OwnerProfile, ThemeSetting } from "../../shared/types";
 import * as settings from "../services/settings";
 import * as signature from "../services/signature";
+import { refreshOverlayTheme } from "../windows/chrome";
 
 /**
  * Stores the theme and tells Electron about it, in that order. Both adapters
@@ -19,6 +20,14 @@ import * as signature from "../services/signature";
 export async function applyTheme(theme: ThemeSetting): Promise<ThemeSetting> {
 	const saved = await settings.setTheme(theme);
 	nativeTheme.themeSource = saved;
+	// Three writes, not two, now that the caption buttons are drawn by the OS.
+	// Leaving this out gives a dark close button on a light bar until restart.
+	refreshOverlayTheme();
+	// The change is usually made in the settings window, so the main window
+	// behind it has to be told rather than left on the old theme until reload.
+	for (const window of BrowserWindow.getAllWindows()) {
+		if (!window.isDestroyed()) window.webContents.send("settings.themeChanged", saved);
+	}
 	return saved;
 }
 

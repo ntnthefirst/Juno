@@ -22,11 +22,13 @@ import { registerRemindersIpc } from "./reminders";
 import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
 import { registerTemplatesIpc } from "./templates";
+import { registerWindowIpc } from "./window";
 
 export function registerAllIpc(userDataDir: string): void {
 	installLockGuard();
 
 	registerAppIpc();
+	registerWindowIpc();
 	registerLockIpc();
 	registerSettingsIpc();
 

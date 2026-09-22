@@ -596,3 +596,94 @@ than none.
 
 **What would reverse this:** startup getting fast enough that the splash is a
 flash, which would make it noise rather than an answer.
+
+## 30. A form is a page, a question is a modal, a row is a side panel
+
+Three shapes, and picking the wrong one is the bug this decision prevents.
+
+**A modal answers a question with two answers.** "Delete these 14 messages?"
+is a modal. It is small, it interrupts on purpose, and the only thing to do is
+answer it.
+
+**A form is a page** (`components/FormPage.tsx`). It replaces the content and
+offers a way back. A modal is narrower than the screen it covers, it traps
+focus away from the record being described, and a long form inside one grows a
+scrollbar inside a scrollbar. It also cannot show a sequence, which is what
+made this decision necessary: adding a mail account is three questions, and
+they do not fit in a dialog.
+
+**A row you are still browsing is a side panel** (`components/SidePanel.tsx`),
+along the right edge, non-modal. Clicking an appointment used to put a modal
+over the month it was clicked in, hiding the context that made it mean
+anything and forcing a close before the next one could be opened.
+
+The settings window stays modal, and the difference is worth holding onto:
+settings changes the shape of what the rest of the application is showing, so
+work behind it has to stop (decision 26). Reading an appointment changes
+nothing.
+
+Consequences:
+
+- A screen renders a form page *instead of* its list, not on top of it, so the
+  state lives at the screen. Contacts and projects moved up from the client
+  detail pane for this reason: that pane is 420px of a split view.
+- A form page's submit button sits in the page footer, outside the `<form>`,
+  and reaches it with `form={id}`.
+- Sections in the settings window own their padding, because a section that
+  turns into a form page draws its header and footer against the window edges.
+
+## 31. Server settings are guessed, and the MX record is the second guess
+
+Adding a mail account was fourteen fields, most of which the address already
+answers. `services/mail-autoconfig.ts` answers them.
+
+Two steps, deliberately separate:
+
+- `guess(email)` is a table of providers plus the `imap.`/`smtp.` convention.
+  No network at all. It covers an address at a provider's own domain.
+- `resolveByMx(email)` asks DNS who handles mail for the domain. This is the
+  one that gets a business onto the right servers, because a business has its
+  own domain and the domain says nothing about who runs its mail. Testing
+  against a real account is what found this: `info@digistra.be` fell through
+  to `imap.digistra.be`, which does not answer, while the mail lives on
+  `imap.mail.ovh.net`.
+
+The lookup is not folded into the guess because it is the only part of adding
+an account that leaves the machine. It is offered when the guess had to fall
+back, and a person asks for it.
+
+**No autoconfig endpoint is fetched.** A provider's autoconfig URL is a request
+to a third party announcing which mail provider this person uses, sent before
+they have agreed to anything. A DNS query for a domain's MX is what sending
+mail to that domain does anyway.
+
+Nothing a guess produces is saved on its own. It fills the form in, the hosts
+stay visible and editable, and the connection test settles it.
+
+## 32. Juno writes itself into agent clients, carefully
+
+Connecting an agent meant copying JSON into a file whose path differs per
+client and per platform, and merging it by hand without breaking the servers
+already there. `services/agent-install.ts` does it instead, for Claude Desktop,
+Claude Code, Cursor, Windsurf and VS Code.
+
+It edits files other programs own, so the rules are strict and they are tested:
+
+- Nothing is written until one client is asked for by name.
+- The existing file is copied to `<name>.juno-backup.json` first.
+- Only the entry named `juno` is added or replaced. Every other key and every
+  other server is read, kept and written back.
+- **A file that does not parse is refused, never replaced.** A parse error
+  almost always means a format Juno has not seen, and overwriting it would
+  destroy somebody's configuration.
+- The entry carries the environment a packaged bridge needs. Without it, the
+  client starts Juno's window instead of the bridge.
+
+Detection is "does the config file exist", which is as far as honest detection
+goes without hunting for executables. A client that has never been opened has
+no file and is still offered: writing it is what makes the client find Juno on
+first launch.
+
+The agent gets both tools. Listing reads. Connecting files something into
+another application, so it waits for a person, like everything else in that
+class (.claude/rules/mcp.md section 4).

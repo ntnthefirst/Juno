@@ -151,6 +151,18 @@ over it. `TITLEBAR_HEIGHT`, `--titlebar-height` and the gutters in
 A splash window covers the database open, the migrations and the seed, and
 closes when the main window is ready to paint, not when it is created.
 
+## Three shapes, not one
+
+A modal answers a question with two answers. **Anything with fields in it is a
+page** (`components/FormPage.tsx`) that replaces the content and offers a way
+back, and it takes `steps` when the form is a sequence. **A row of something
+still being browsed is a side panel** (`components/SidePanel.tsx`) on the right
+edge, non-modal, so the list behind it stays usable. Decision 30, and
+[.claude/rules/styling.md](.claude/rules/styling.md) section 5c.
+
+The settings window stays modal for the reason in decision 26, and that is not
+the same thing.
+
 ## Development data
 
 `npm run dev` writes to a development directory of its own, never to the

@@ -141,6 +141,31 @@ Collapsed means icons only: the label moves into `aria-label` and `title`, and a
 group heading becomes a hairline rather than an abbreviation. Every entry keeps
 its 36px row height in both states, so nothing jumps when it toggles.
 
+## 5c. Three shapes, and picking the wrong one is the bug
+
+Decision 30. A surface is one of three things, and the choice is not a matter
+of taste.
+
+| Shape | Component | For |
+| --- | --- | --- |
+| Modal | `components/Dialog.tsx` | A question with two answers. Delete, discard, which occurrence |
+| Page | `components/FormPage.tsx` | Anything with fields in it. Replaces the content, offers a way back |
+| Side panel | `components/SidePanel.tsx` | One row of something still being browsed. Right edge, non-modal |
+
+- **A form is never a modal.** A dialog is narrower than the screen it covers,
+  it traps focus away from the record being described, and a sequence does not
+  fit in one. `FormPage` takes `steps` for that, and a step rail offers the
+  steps already passed, never the ones ahead.
+- **A screen renders a form page instead of its list**, not on top of it, so the
+  state belongs to the screen. If the pane you are in is too narrow to hold a
+  page, the state is in the wrong component.
+- The submit button lives in the page footer, outside the `<form>`, and reaches
+  it with `form={id}` from `useId()`.
+- A side panel does not trap focus and does not block a click behind it. That is
+  the point: the grid it opened from stays usable.
+- The settings **window** is still modal, for the reason in decision 26. Reading
+  a row changes nothing; changing a setting changes what every screen shows.
+
 ## 6. Numbers line up
 
 `font-variant-numeric: tabular-nums` on **every column of numbers**: amounts,

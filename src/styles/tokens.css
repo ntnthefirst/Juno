@@ -112,7 +112,7 @@
 	--sidebar-rail-width: 56px;
 	/* Matches the native window-control overlay height set in main-window.ts.
 	 * Changing one without the other puts the buttons off the bar. */
-	--titlebar-height: 40px;
+	--titlebar-height: 41px;
 	--row-height: 36px;
 
 	/* The reading column on a screen that is a single list or form. Centred in

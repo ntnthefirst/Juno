@@ -50,9 +50,7 @@ export interface ClientSummary {
 	openProjectCount: number;
 }
 
-export type ClientInput = Partial<
-	Omit<Client, keyof Standard | "sortName">
-> & { name: string };
+export type ClientInput = Partial<Omit<Client, keyof Standard | "sortName">> & { name: string };
 
 export type ClientPatch = Partial<Omit<Client, keyof Standard | "sortName">>;
 
@@ -162,11 +160,7 @@ export type ProjectPatch = Partial<Omit<Project, keyof Standard | "clientId">>;
 /* ------------------------------------------------------- reference data (16) */
 
 /** The sets that ship. A set key is stable; its items are editable. */
-export type ReferenceSetKey =
-	| "client_status"
-	| "project_status"
-	| "document_status"
-	| "label";
+export type ReferenceSetKey = "client_status" | "project_status" | "document_status" | "label";
 
 export interface ReferenceSet extends Standard {
 	key: ReferenceSetKey;
@@ -675,6 +669,7 @@ export interface MailThread {
 export interface MailThreadListQuery {
 	accountId?: string;
 	folderId?: string;
+	folderSpecialUse?: MailSpecialUse;
 	clientId?: string;
 	/** Full-text over subject, body and sender. */
 	search?: string;
@@ -684,14 +679,7 @@ export interface MailThreadListQuery {
 	before?: Iso;
 }
 
-export type MailSyncPhase =
-	| "idle"
-	| "connecting"
-	| "folders"
-	| "headers"
-	| "bodies"
-	| "done"
-	| "failed";
+export type MailSyncPhase = "idle" | "connecting" | "folders" | "headers" | "bodies" | "done" | "failed";
 
 export interface MailSyncStatus {
 	accountId: string;
@@ -746,14 +734,7 @@ export interface MailTemplateRender {
 	missing: string[];
 }
 
-export type MailOutboxState =
-	| "draft"
-	| "pending"
-	| "queued"
-	| "sending"
-	| "sent"
-	| "failed"
-	| "cancelled";
+export type MailOutboxState = "draft" | "pending" | "queued" | "sending" | "sent" | "failed" | "cancelled";
 
 export interface MailOutboxAttachment {
 	id: string;
@@ -834,7 +815,6 @@ export interface MailOutboxCounts {
 	failed: number;
 	drafts: number;
 }
-
 
 /* ----------------------------------------------------------------- calendar */
 

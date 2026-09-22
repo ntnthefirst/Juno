@@ -20,7 +20,7 @@ export { DEV_URL };
  * the operating system draws the buttons on top of it, so a mismatch puts the
  * close button off the edge of the bar the user can see.
  */
-export const TITLEBAR_HEIGHT = 40;
+export const TITLEBAR_HEIGHT = 41;
 
 /**
  * The CSP the renderer runs under.

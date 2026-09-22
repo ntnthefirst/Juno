@@ -19,7 +19,7 @@ import type {
 } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
-import { clients, mailAccounts, mailAttachments, mailMessages, mailThreads } from "../db/schema";
+import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
 import { sanitiseHtml, textDocument } from "./mail-sanitise";
 
 const DEFAULT_LIMIT = 50;
@@ -47,7 +47,10 @@ function parseAddresses(json: string): MailAddress[] {
 		const value: unknown = JSON.parse(json);
 		if (!Array.isArray(value)) return [];
 		return value
-			.filter((v): v is MailAddress => typeof v === "object" && v !== null && typeof (v as MailAddress).address === "string")
+			.filter(
+				(v): v is MailAddress =>
+					typeof v === "object" && v !== null && typeof (v as MailAddress).address === "string",
+			)
 			.map((v) => ({ name: v.name ?? null, address: v.address }));
 	} catch {
 		return [];
@@ -118,7 +121,10 @@ interface Summarised {
 	participants: MailAddress[];
 }
 
-function summarise(db: Db, threads: { thread: ThreadRow; clientName: string | null; snippet?: string }[]): MailThreadSummary[] {
+function summarise(
+	db: Db,
+	threads: { thread: ThreadRow; clientName: string | null; snippet?: string }[],
+): MailThreadSummary[] {
 	if (threads.length === 0) return [];
 	const ids = threads.map((t) => t.thread.id);
 	const messages = db
@@ -208,6 +214,11 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 			sql`exists (select 1 from ${mailMessages} where ${mailMessages.threadId} = ${mailThreads.id} and ${mailMessages.folderId} = ${query.folderId} and ${mailMessages.deletedAt} is null)`,
 		);
 	}
+	if (query.folderSpecialUse) {
+		conditions.push(
+			sql`exists (select 1 from ${mailMessages} join ${mailFolders} on ${mailFolders.id} = ${mailMessages.folderId} where ${mailMessages.threadId} = ${mailThreads.id} and ${mailFolders.specialUse} = ${query.folderSpecialUse} and ${mailMessages.deletedAt} is null and ${mailFolders.deletedAt} is null)`,
+		);
+	}
 	if (query.unreadOnly) {
 		conditions.push(
 			sql`exists (select 1 from ${mailMessages} where ${mailMessages.threadId} = ${mailThreads.id} and ${mailMessages.isSeen} = 0 and ${mailMessages.deletedAt} is null)`,
@@ -243,7 +254,15 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 			.select({ thread: mailThreads, clientName: clients.name })
 			.from(mailThreads)
 			.leftJoin(clients, eq(mailThreads.clientId, clients.id))
-			.where(and(...conditions, inArray(mailThreads.id, hits.map((h) => h.thread_id))))
+			.where(
+				and(
+					...conditions,
+					inArray(
+						mailThreads.id,
+						hits.map((h) => h.thread_id),
+					),
+				),
+			)
 			.all();
 		const byId = new Map(rows.map((r) => [r.thread.id, r]));
 		const ordered = hits
@@ -298,7 +317,10 @@ export async function getThread(id: string, db: Db = getDb()): Promise<MailThrea
 		.where(and(eq(mailMessages.threadId, id), isNull(mailMessages.deletedAt)))
 		.orderBy(mailMessages.internalDate)
 		.all();
-	const attachments = attachmentsFor(db, messages.map((m) => m.id));
+	const attachments = attachmentsFor(
+		db,
+		messages.map((m) => m.id),
+	);
 
 	const [summary] = summarise(db, [row]);
 	return {

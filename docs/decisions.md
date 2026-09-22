@@ -687,3 +687,25 @@ first launch.
 The agent gets both tools. Listing reads. Connecting files something into
 another application, so it waits for a person, like everything else in that
 class (.claude/rules/mcp.md section 4).
+
+## 33. An event location is suggested locally, and looked up only when asked
+
+The same shape as decision 31, applied to `services/geocoding.ts`. Two steps,
+deliberately separate:
+
+- `suggestLocations(query)` matches against a client's stored address and
+  against locations typed on past events, both already in this database. No
+  network at all, so it runs on every keystroke while the field is open.
+- `lookupAddress(query)` sends the typed text to OpenStreetMap's Nominatim
+  search, and only when the person presses the button for it. It is never
+  called as the field is typed into.
+
+**No live geocoding while typing.** Every keystroke reaching a third party
+would mean every draft of an address, including the ones never saved, leaving
+the machine. That is the same reasoning as decision 31's autoconfig endpoint,
+applied to a different domain.
+
+The field stays free text regardless of which suggestion, if any, gets used.
+"Online", "at the client's" or a location that resolves to nothing are all
+valid: a suggestion is offered, never required, and nothing here validates
+what gets saved.

@@ -11,6 +11,7 @@ import { calendarTools } from "./calendar";
 import { clientTools } from "./clients";
 import { contactTools } from "./contacts";
 import { documentTools, templateTools } from "./documents";
+import { geocodingTools } from "./geocoding";
 import { mailTools } from "./mail";
 import { mailOutboxTools } from "./mail-outbox";
 import { projectTools } from "./projects";
@@ -33,6 +34,7 @@ const lists: ToolDescriptor[][] = [
 	mailTools,
 	mailOutboxTools,
 	calendarTools,
+	geocodingTools,
 	agentTools,
 ];
 

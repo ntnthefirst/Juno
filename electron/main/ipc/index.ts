@@ -14,6 +14,7 @@ import { registerCalendarIpc } from "./calendar";
 import { registerClientsIpc } from "./clients";
 import { registerDocumentsIpc } from "./documents";
 import { registerContactsIpc } from "./contacts";
+import { registerGeocodingIpc } from "./geocoding";
 import { registerLockIpc } from "./lock";
 import { registerMailIpc } from "./mail";
 import { registerProjectsIpc } from "./projects";
@@ -43,5 +44,6 @@ export function registerAllIpc(userDataDir: string): void {
 	registerRemindersIpc();
 	registerMailIpc();
 	registerCalendarIpc();
+	registerGeocodingIpc();
 	registerAgentIpc(userDataDir);
 }

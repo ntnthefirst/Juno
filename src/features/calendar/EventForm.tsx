@@ -14,6 +14,7 @@ import { FormPage, type FormStep } from "../../components/FormPage";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { addDays, addLocalMinutes, dateOf, joinLocal, localMinutesBetween, machineTimeZone, timeOf } from "./dates";
+import { LocationField } from "./LocationField";
 import { RecurrenceEditor, type RecurrenceValue } from "./RecurrenceEditor";
 import { buildRule, parseRule } from "./recurrence";
 
@@ -334,7 +335,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 							<Field label="Title" required value={values.title} onChange={(v) => set("title", v)} error={titleError} />
 						</div>
 						<div className="col-span-2">
-							<Field label="Location" value={values.location} onChange={(v) => set("location", v)} />
+							<LocationField value={values.location} onChange={(v) => set("location", v)} />
 						</div>
 						<div className="col-span-2">
 							<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">

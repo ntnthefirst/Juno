@@ -231,6 +231,11 @@ const api: JunoApi = {
 		importIcs: () => call("calendar.importIcs"),
 	},
 
+	geocoding: {
+		suggestLocal: (query) => call("geocoding.suggestLocal", query),
+		lookupAddress: (query) => call("geocoding.lookupAddress", query),
+	},
+
 	mail: {
 		accounts: {
 			guess: (email) => call("mail.accounts.guess", email),

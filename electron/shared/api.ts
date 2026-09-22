@@ -53,6 +53,7 @@ import type {
 	ReminderPatch,
 	ReminderSuggestion,
 	SignDocumentInput,
+	AddressCandidate,
 	BackupInfo,
 	Client,
 	ClientInput,
@@ -61,6 +62,7 @@ import type {
 	Contact,
 	ContactInput,
 	ContactPatch,
+	LocationSuggestion,
 	LockSettings,
 	LockState,
 	MailAccount,
@@ -359,6 +361,20 @@ export interface JunoApi {
 		exportIcs(query: CalendarRangeQuery): Promise<string | null>;
 		/** Asks for a file, reads it in. Null when the person cancels. */
 		importIcs(): Promise<CalendarImportResult | null>;
+	};
+
+	geocoding: {
+		/**
+		 * Matches from Juno's own data: a client's stored address, or a location
+		 * typed on a past event. No network, so this is safe to call on every
+		 * keystroke.
+		 */
+		suggestLocal(query: string): Promise<LocationSuggestion[]>;
+		/**
+		 * One request to OpenStreetMap's address search, sent only when the person
+		 * asks for it. Never called automatically.
+		 */
+		lookupAddress(query: string): Promise<AddressCandidate[]>;
 	};
 
 	mail: {

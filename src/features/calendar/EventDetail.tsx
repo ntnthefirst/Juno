@@ -77,7 +77,19 @@ export function EventDetail({ item, onEdit, onDelete, onClose }: EventDetailProp
 								{item.isException ? <span className="text-[var(--ink-muted)]"> (this one was changed)</span> : null}
 							</Row>
 						) : null}
-						{item.location ? <Row label="Where">{item.location}</Row> : null}
+						{item.location ? (
+							<Row label="Where">
+								<span className="block">{item.location}</span>
+								<a
+									href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(item.location)}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="mt-0.5 inline-block text-[length:var(--text-sm)] text-[var(--accent)] hover:text-[var(--accent-hover)]"
+								>
+									Open in Maps
+								</a>
+							</Row>
+						) : null}
 						{item.clientName ? (
 							<Row label="Client">{[item.clientName, item.projectName].filter(Boolean).join(" / ")}</Row>
 						) : null}

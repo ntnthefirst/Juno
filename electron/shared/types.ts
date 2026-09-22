@@ -929,6 +929,26 @@ export interface CalendarImportResult {
 	warnings: string[];
 }
 
+/**
+ * A location match drawn from Juno's own data: a client's stored address, or a
+ * location typed on a past event. No network involved, so this is safe to ask
+ * for on every keystroke.
+ */
+export interface LocationSuggestion {
+	source: "client" | "recent";
+	/** What the list shows: a client's name, or the location text itself. */
+	label: string;
+	/** The full text that fills the field when this suggestion is picked. */
+	address: string;
+}
+
+/** One match from an explicit, user-triggered lookup against OpenStreetMap. */
+export interface AddressCandidate {
+	label: string;
+	lat: number;
+	lon: number;
+}
+
 /* -------------------------------------------------------------------- agent */
 
 /**

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Reminder, ReminderSuggestion } from "@shared/types";
+import type { Briefing, Reminder, ReminderSuggestion } from "@shared/types";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { formatDate, plural, todayIso } from "../reminders/format";
@@ -7,6 +7,7 @@ import { ReminderForm } from "../reminders/ReminderForm";
 import { ReminderRow } from "../reminders/ReminderRow";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
 import { SuggestionList } from "../reminders/SuggestionList";
+import { BriefingPanel } from "./BriefingPanel";
 
 type Counts = { documents: number; specimens: number; clients: number; projects: number };
 
@@ -20,6 +21,8 @@ export function TodayScreen() {
 	const [attention, setAttention] = useState<Load<Reminder[]>>({ status: "loading" });
 	const [suggestions, setSuggestions] = useState<ReminderSuggestion[]>([]);
 	const [counts, setCounts] = useState<Counts | null>(null);
+	const [briefing, setBriefing] = useState<Briefing | null>(null);
+	const [briefingError, setBriefingError] = useState<string | null>(null);
 	const [editing, setEditing] = useState<Reminder | null>(null);
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [deleted, setDeleted] = useState<Reminder | null>(null);
@@ -90,6 +93,23 @@ export function TodayScreen() {
 		};
 	}, []);
 
+	// The day, worked out by the same service an agent calls, so the screen and
+	// the answer an agent gives cannot disagree.
+	useEffect(() => {
+		let cancelled = false;
+		window.bureau.briefing
+			.today()
+			.then((value) => {
+				if (!cancelled) setBriefing(value);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setBriefingError(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
 	const refreshAttention = useCallback(() => {
 		window.bureau.reminders
 			.list({ actionableOnly: true })
@@ -133,6 +153,14 @@ export function TodayScreen() {
 				<p className="tabular mt-2 text-[var(--ink-muted)]">
 					{today ? `Today is ${formatDate(today)}.` : "Checking the date."}
 				</p>
+
+				<div className="mt-8">
+					<BriefingPanel
+						briefing={briefing}
+						error={briefingError}
+						sectionKeys={["today", "upcoming", "waiting"]}
+					/>
+				</div>
 
 				<section className="mt-10">
 					<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">

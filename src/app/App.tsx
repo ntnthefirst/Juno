@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
+import { AgentScreen } from "../features/agent/AgentScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
@@ -17,6 +18,7 @@ export function App() {
 	const [theme, setTheme] = useTheme();
 	const [screen, setScreen] = useState<ScreenId>("today");
 	const [lock, setLock] = useState<LockState | null>(null);
+	const [pendingActions, setPendingActions] = useState(0);
 
 	useEffect(() => {
 		void window.bureau.lock.state().then(setLock);
@@ -24,6 +26,28 @@ export function App() {
 		// so the interface has to be told rather than poll.
 		return window.bureau.lock.onChange(setLock);
 	}, []);
+
+	// A request from an agent can arrive at any moment, on any screen. The
+	// badge is how it gets noticed, so it is pushed rather than polled.
+	const unlocked = lock !== null && !lock.locked;
+	useEffect(() => {
+		if (!unlocked) return;
+		let cancelled = false;
+		const read = () => {
+			window.bureau.agent.actions
+				.pendingCount()
+				.then((count) => {
+					if (!cancelled) setPendingActions(count);
+				})
+				.catch(() => undefined);
+		};
+		read();
+		const off = window.bureau.agent.actions.onChange(() => read());
+		return () => {
+			cancelled = true;
+			off();
+		};
+	}, [unlocked]);
 
 	// Until the first state arrives, render nothing rather than a flash of the
 	// application behind a lock screen that is about to appear.
@@ -42,7 +66,7 @@ export function App() {
 		<div className="flex h-full flex-col bg-[var(--paper)]">
 			<TitleBar theme={theme} onThemeChange={setTheme} lockConfigured={lock.configured} />
 			<div className="flex min-h-0 flex-1">
-				<Sidebar current={screen} onNavigate={setScreen} />
+				<Sidebar current={screen} onNavigate={setScreen} pendingActions={pendingActions} />
 				<main className="min-w-0 flex-1 overflow-auto">
 					{screen === "today" ? (
 						<TodayScreen />
@@ -56,6 +80,8 @@ export function App() {
 						<MailScreen />
 					) : screen === "calendar" ? (
 						<CalendarScreen />
+					) : screen === "agent" ? (
+						<AgentScreen />
 					) : screen === "templates" ? (
 						<TemplatesScreen />
 					) : screen === "settings" ? (
@@ -77,6 +103,7 @@ const LABELS: Record<ScreenId, string> = {
 	mail: "Mail",
 	calendar: "Calendar",
 	reminders: "Reminders",
+	agent: "Agent",
 	templates: "Templates",
 	settings: "Settings",
 };

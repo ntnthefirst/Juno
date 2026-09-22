@@ -6,6 +6,7 @@ export type ScreenId =
 	| "mail"
 	| "calendar"
 	| "reminders"
+	| "agent"
 	| "templates"
 	| "settings";
 
@@ -19,6 +20,7 @@ const PRIMARY: Item[] = [
 	{ id: "mail", label: "Mail" },
 	{ id: "calendar", label: "Calendar" },
 	{ id: "reminders", label: "Reminders" },
+	{ id: "agent", label: "Agent" },
 ];
 
 const SECONDARY: Item[] = [
@@ -30,13 +32,14 @@ const SECONDARY: Item[] = [
  * No panel fill and no card, per brand/BRAND.md section 7: a container has to be
  * earned, and a list of links has not earned one. Space and a single divider.
  */
-export function Sidebar({
-	current,
-	onNavigate,
-}: {
+type SidebarProps = {
 	current: ScreenId;
 	onNavigate: (id: ScreenId) => void;
-}) {
+	/** How many agent requests are waiting, for the badge. */
+	pendingActions: number;
+};
+
+export function Sidebar({ current, onNavigate, pendingActions }: SidebarProps) {
 	return (
 		<nav
 			className="flex flex-none flex-col gap-px border-r border-[var(--line)] px-3 py-5"
@@ -44,7 +47,13 @@ export function Sidebar({
 			aria-label="Sections"
 		>
 			{PRIMARY.map((item) => (
-				<NavButton key={item.id} item={item} current={current} onNavigate={onNavigate} />
+				<NavButton
+					key={item.id}
+					item={item}
+					current={current}
+					onNavigate={onNavigate}
+					badge={item.id === "agent" ? pendingActions : 0}
+				/>
 			))}
 
 			<div className="px-3 pt-4 pb-2 text-[length:var(--text-micro)] uppercase tracking-[0.08em] text-[var(--ink-faint)]">
@@ -58,15 +67,15 @@ export function Sidebar({
 	);
 }
 
-function NavButton({
-	item,
-	current,
-	onNavigate,
-}: {
+type NavButtonProps = {
 	item: Item;
 	current: ScreenId;
 	onNavigate: (id: ScreenId) => void;
-}) {
+	/** Shown when more than zero. Nothing else in the sidebar counts. */
+	badge?: number;
+};
+
+function NavButton({ item, current, onNavigate, badge = 0 }: NavButtonProps) {
 	const active = item.id === current;
 	return (
 		<button
@@ -82,7 +91,15 @@ function NavButton({
 			].join(" ")}
 		>
 			<span className="h-1.5 w-1.5 flex-none rounded-full bg-current opacity-55" aria-hidden />
-			{item.label}
+			<span className="min-w-0 flex-1 truncate">{item.label}</span>
+			{badge > 0 ? (
+				<span
+					className="tabular flex-none rounded-[var(--radius-full)] bg-[var(--warn-soft)] px-1.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--warn)]"
+					aria-label={`${badge} waiting for you`}
+				>
+					{badge}
+				</span>
+			) : null}
 		</button>
 	);
 }

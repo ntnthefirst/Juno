@@ -108,7 +108,12 @@ export async function list(query: AuditListQuery = {}, db: Db = getDb()): Promis
 		.select()
 		.from(auditEvents)
 		.where(and(...conditions))
-		.orderBy(desc(auditEvents.createdAt))
+		// The id breaks the tie, and it has to. createdAt is an ISO string with
+		// millisecond resolution, so two events written in the same millisecond
+		// sort arbitrarily, and this is the log whose entire job is saying what
+		// happened in what order. The id is UUIDv7 and monotonic inside a
+		// millisecond, so it continues the same ordering rather than inventing one.
+		.orderBy(desc(auditEvents.createdAt), desc(auditEvents.id))
 		.limit(limit)
 		.all()
 		.map(toRecord);
@@ -130,7 +135,7 @@ export async function listForEntity(
 				eq(auditEvents.entityId, entityId),
 			),
 		)
-		.orderBy(desc(auditEvents.createdAt))
+		.orderBy(desc(auditEvents.createdAt), desc(auditEvents.id))
 		.limit(MAX_LIMIT)
 		.all()
 		.map(toRecord);

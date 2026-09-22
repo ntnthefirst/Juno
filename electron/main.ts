@@ -445,13 +445,26 @@ if (!app.requestSingleInstanceLock()) {
 											: screen === "Connection"
 												? "Agent"
 												: screen;
-								// A sidebar entry may carry a count beside its label, so the match
-								// is on the label rather than the whole button.
-								const clicked = await window.webContents.executeJavaScript(
-									`(() => { const b = [...document.querySelectorAll("nav button")]
-										.find((el) => el.textContent.trim().startsWith(${JSON.stringify(sidebarEntry)}));
-										if (b) b.click(); return Boolean(b); })()`,
-								);
+								// Matched on data-nav, never on the label. A collapsed sidebar
+								// renders icons only, and a display narrower than 1100px puts it
+								// in exactly that state, which is what a CI runner gives you.
+								const navId = sidebarEntry.toLowerCase();
+								const click = () =>
+									window.webContents.executeJavaScript(
+										`(() => { const b = document.querySelector("nav button[data-nav=" + JSON.stringify(${JSON.stringify(navId)}) + "]");
+											if (b) b.click(); return Boolean(b); })()`,
+									) as Promise<boolean>;
+
+								let clicked = await click();
+								if (!clicked) {
+									// Below 760px the sidebar is a drawer and is not in the document
+									// at all. The toggle in the title bar is what puts it there.
+									await window.webContents.executeJavaScript(
+										`(() => { const t = document.querySelector("[data-sidebar-toggle]"); if (t) t.click(); })()`,
+									);
+									await new Promise((r) => setTimeout(r, 300));
+									clicked = await click();
+								}
 								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
 								await new Promise((r) => setTimeout(r, 800));
 								if (screen === "Agent") {

@@ -28,6 +28,7 @@ export function TitleBar({ title, sidebarCollapsed, onToggleSidebar }: TitleBarP
 		>
 			<button
 				type="button"
+				data-sidebar-toggle
 				onClick={onToggleSidebar}
 				aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
 				aria-pressed={!sidebarCollapsed}

@@ -48,6 +48,7 @@ export function Sidebar({
 						{group.items.map((item) => (
 							<NavButton
 								key={item.id}
+								navId={item.id}
 								icon={item.icon}
 								label={item.label}
 								active={item.id === current}
@@ -63,6 +64,7 @@ export function Sidebar({
 			<div className="flex flex-none flex-col gap-px border-t border-[var(--line)] py-2">
 				{lockConfigured ? (
 					<NavButton
+						navId="lock"
 						icon="lock"
 						label="Lock"
 						active={false}
@@ -71,6 +73,7 @@ export function Sidebar({
 					/>
 				) : null}
 				<NavButton
+					navId="settings"
 					icon="settings"
 					label="Settings"
 					active={false}
@@ -107,6 +110,12 @@ function GroupHeading({ collapsed, first, children }: GroupHeadingProps) {
 }
 
 type NavButtonProps = {
+	/**
+	 * A stable hook for the smoke run, which cannot match on the label: a
+	 * collapsed sidebar renders no text, and that is exactly the state a narrow
+	 * CI display puts it in.
+	 */
+	navId: string;
 	icon: IconName;
 	label: string;
 	active: boolean;
@@ -116,10 +125,11 @@ type NavButtonProps = {
 	onClick: () => void;
 };
 
-function NavButton({ icon, label, active, collapsed, badge = 0, onClick }: NavButtonProps) {
+function NavButton({ navId, icon, label, active, collapsed, badge = 0, onClick }: NavButtonProps) {
 	return (
 		<button
 			type="button"
+			data-nav={navId}
 			aria-current={active ? "page" : undefined}
 			aria-label={collapsed ? label : undefined}
 			title={collapsed ? label : undefined}

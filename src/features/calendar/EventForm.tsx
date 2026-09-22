@@ -427,6 +427,9 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 
 						<div className="col-span-2">
 							<Field label="Notes" multiline rows={4} value={values.notes} onChange={(v) => set("notes", v)} />
+							<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								Markdown is supported: **bold**, _italic_, a [link](https://example.com), a list.
+							</p>
 						</div>
 					</div>
 				)}

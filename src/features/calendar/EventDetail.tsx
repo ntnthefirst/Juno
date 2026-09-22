@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { SidePanel } from "../../components/SidePanel";
 import { addDays, dateOf, formatDate, formatDateLong, formatTime, localDateOfInstant, machineTimeZone, timeOf } from "./dates";
 import { KIND_LABELS, itemTitle } from "./format";
+import { MarkdownNotes } from "./MarkdownNotes";
 
 type EventDetailProps = {
 	item: CalendarItem;
@@ -95,7 +96,7 @@ export function EventDetail({ item, onEdit, onDelete, onClose }: EventDetailProp
 						) : null}
 						{item.notes ? (
 							<Row label="Notes">
-								<span className="whitespace-pre-wrap">{item.notes}</span>
+								<MarkdownNotes text={item.notes} />
 							</Row>
 						) : null}
 					</>

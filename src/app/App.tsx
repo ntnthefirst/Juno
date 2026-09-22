@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
-import { AgentScreen } from "../features/agent/AgentScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
@@ -19,7 +18,6 @@ export function App() {
 	useTheme();
 	const [screen, setScreen] = useState<ScreenId>("today");
 	const [lock, setLock] = useState<LockState | null>(null);
-	const [pendingActions, setPendingActions] = useState(0);
 	const sidebar = useSidebarLayout();
 
 	useEffect(() => {
@@ -28,28 +26,6 @@ export function App() {
 		// so the interface has to be told rather than poll.
 		return window.juno.lock.onChange(setLock);
 	}, []);
-
-	// A request from an agent can arrive at any moment, on any screen. The
-	// badge is how it gets noticed, so it is pushed rather than polled.
-	const unlocked = lock !== null && !lock.locked;
-	useEffect(() => {
-		if (!unlocked) return;
-		let cancelled = false;
-		const read = () => {
-			window.juno.agent.actions
-				.pendingCount()
-				.then((count) => {
-					if (!cancelled) setPendingActions(count);
-				})
-				.catch(() => undefined);
-		};
-		read();
-		const off = window.juno.agent.actions.onChange(() => read());
-		return () => {
-			cancelled = true;
-			off();
-		};
-	}, [unlocked]);
 
 	// Until the first state arrives, render nothing rather than a flash of the
 	// application behind a lock screen that is about to appear.
@@ -82,7 +58,6 @@ export function App() {
 					<Sidebar
 						current={screen}
 						onNavigate={navigate}
-						pendingActions={pendingActions}
 						collapsed={sidebar.collapsed}
 						floating={sidebar.floating}
 						onOpenSettings={() => void window.juno.window.openSettings()}
@@ -115,8 +90,6 @@ export function App() {
 						<MailScreen />
 					) : screen === "calendar" ? (
 						<CalendarScreen />
-					) : screen === "agent" ? (
-						<AgentScreen />
 					) : screen === "templates" ? (
 						<TemplatesScreen />
 					) : (
@@ -131,9 +104,7 @@ export function App() {
 function Placeholder({ title }: { title: string }) {
 	return (
 		<div className="p-8">
-			<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-				{title}
-			</h1>
+			<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">{title}</h1>
 			<p className="mt-3 max-w-[60ch] text-[var(--ink-muted)]">
 				Not built yet. See PLAN.md for which phase this arrives in.
 			</p>

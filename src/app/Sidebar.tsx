@@ -4,8 +4,6 @@ import { SCREEN_GROUPS, type ScreenId } from "./screens";
 type SidebarProps = {
 	current: ScreenId;
 	onNavigate: (id: ScreenId) => void;
-	/** How many agent requests are waiting, for the badge. */
-	pendingActions: number;
 	/** Icons only. Labels move into the tooltip and the accessible name. */
 	collapsed: boolean;
 	/** Floating over the content on a narrow window, rather than beside it. */
@@ -14,15 +12,7 @@ type SidebarProps = {
 	lockConfigured: boolean;
 };
 
-export function Sidebar({
-	current,
-	onNavigate,
-	pendingActions,
-	collapsed,
-	floating,
-	onOpenSettings,
-	lockConfigured,
-}: SidebarProps) {
+export function Sidebar({ current, onNavigate, collapsed, floating, onOpenSettings, lockConfigured }: SidebarProps) {
 	const width = collapsed ? "var(--sidebar-rail-width)" : "var(--sidebar-width)";
 
 	return (
@@ -39,9 +29,15 @@ export function Sidebar({
 		>
 			<div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto py-3">
 				{SCREEN_GROUPS.map((group, index) => (
-					<div key={group.heading ?? "start"} className="flex flex-col gap-px">
+					<div
+						key={group.heading ?? "start"}
+						className="flex flex-col gap-px"
+					>
 						{group.heading ? (
-							<GroupHeading collapsed={collapsed} first={index === 0}>
+							<GroupHeading
+								collapsed={collapsed}
+								first={index === 0}
+							>
 								{group.heading}
 							</GroupHeading>
 						) : null}
@@ -53,7 +49,6 @@ export function Sidebar({
 								label={item.label}
 								active={item.id === current}
 								collapsed={collapsed}
-								badge={item.id === "agent" ? pendingActions : 0}
 								onClick={() => onNavigate(item.id)}
 							/>
 						))}
@@ -95,7 +90,12 @@ function GroupHeading({ collapsed, first, children }: GroupHeadingProps) {
 	// Collapsed, a word does not fit and an abbreviation reads worse than
 	// nothing. A hairline keeps the grouping visible without the label.
 	if (collapsed) {
-		return <div className="mx-2 my-2 border-t border-[var(--line)]" aria-hidden />;
+		return (
+			<div
+				className="mx-2 my-2 border-t border-[var(--line)]"
+				aria-hidden
+			/>
+		);
 	}
 	return (
 		<div
@@ -143,15 +143,16 @@ function NavButton({ navId, icon, label, active, collapsed, badge = 0, onClick }
 					: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 			].join(" ")}
 		>
-			<Icon name={icon} className="flex-none" />
+			<Icon
+				name={icon}
+				className="flex-none"
+			/>
 			{collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
 			{badge > 0 ? (
 				<span
 					className={[
 						"tabular flex-none rounded-[var(--radius-full)] bg-[var(--warn-soft)] text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--warn)]",
-						collapsed
-							? "absolute right-1 top-1 min-w-[15px] px-1 text-center leading-[15px]"
-							: "px-1.5",
+						collapsed ? "absolute right-1 top-1 min-w-[15px] px-1 text-center leading-[15px]" : "px-1.5",
 					].join(" ")}
 					aria-label={`${badge} waiting for you`}
 				>

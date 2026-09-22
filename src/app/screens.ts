@@ -1,15 +1,6 @@
 import type { IconName } from "../components/Icon";
 
-export type ScreenId =
-	| "today"
-	| "clients"
-	| "projects"
-	| "documents"
-	| "mail"
-	| "calendar"
-	| "reminders"
-	| "agent"
-	| "templates";
+export type ScreenId = "today" | "clients" | "projects" | "documents" | "mail" | "calendar" | "reminders" | "templates";
 
 export type ScreenItem = { id: ScreenId; label: string; icon: IconName };
 export type ScreenGroup = { heading: string | null; items: ScreenItem[] };
@@ -47,10 +38,6 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
 			{ id: "documents", label: "Documents", icon: "documents" },
 			{ id: "templates", label: "Templates", icon: "templates" },
 		],
-	},
-	{
-		heading: "Automation",
-		items: [{ id: "agent", label: "Agent", icon: "agent" }],
 	},
 ];
 

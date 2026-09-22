@@ -10,11 +10,12 @@ import { OwnerSection } from "../features/settings/OwnerSection";
 import { ReferenceSection } from "../features/settings/ReferenceSection";
 import { Section } from "../features/settings/Section";
 import { SignatureSection } from "../features/settings/SignatureSection";
+import { ConnectionPanel } from "../features/agent/ConnectionPanel";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
 import { useTheme } from "../lib/theme";
 
-type TabId = "general" | "business" | "mail" | "documents" | "security";
+type TabId = "general" | "business" | "mail" | "documents" | "security" | "mcp";
 
 const TABS: { id: TabId; label: string }[] = [
 	{ id: "general", label: "General" },
@@ -22,6 +23,7 @@ const TABS: { id: TabId; label: string }[] = [
 	{ id: "mail", label: "Mail accounts" },
 	{ id: "documents", label: "Documents" },
 	{ id: "security", label: "Security and data" },
+	{ id: "mcp", label: "MCP" },
 ];
 
 /**
@@ -107,6 +109,10 @@ export function SettingsWindow() {
 						<Pad>
 							<ReferenceSection />
 							<SignatureSection />
+						</Pad>
+					) : tab === "mcp" ? (
+						<Pad>
+							<ConnectionPanel onNotice={setToast} />
 						</Pad>
 					) : (
 						<Pad>

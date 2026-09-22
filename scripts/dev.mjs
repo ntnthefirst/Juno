@@ -9,10 +9,28 @@
  * `npm run dev -- --clean` (or `npm run dev --clean`, or `npm run dev:clean`)
  * deletes that directory first: a fresh database, no accounts, no seeded rows,
  * which is the only honest way to test a first run or a migration from empty.
+ *
+ * Two things used to make this slow to reach a window, and both are gone:
+ *
+ * 1. The main process was compiled twice, once up front to have something on
+ *    disk and once more as the watch started. Each pass is the whole program.
+ *    The watch is now the only compiler, and this waits for its first pass.
+ * 2. Every process went through `npm` or `npx`, which on Windows is a shell, a
+ *    package manager and a resolver before the real work starts. The binaries
+ *    are resolved from node_modules and spawned directly.
+ *
+ * Nothing here waits on a port either. Vite says when it is listening and tsc
+ * says when it has emitted, so the two are read rather than polled.
  */
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { existsSync, rmSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { devDataDir } from "./dev-data.mjs";
+
+const root = fileURLToPath(new URL("..", import.meta.url));
+const require = createRequire(import.meta.url);
 
 // npm turns an unknown flag on `npm run dev --clean` into this env var, and
 // passes `-- --clean` through as a real argument. Both spellings are natural to
@@ -33,35 +51,156 @@ if (clean) {
 console.log(`Development data: ${dataDir}`);
 
 const env = { ...process.env, JUNO_DEV: "1", JUNO_DEV_DATA: dataDir };
+const children = new Set();
+let shuttingDown = false;
 
 function run(command, args, options = {}) {
-	return spawn(command, args, {
-		stdio: "inherit",
-		shell: process.platform === "win32",
-		env,
-		...options,
+	const child = spawn(command, args, { cwd: root, env, ...options });
+	children.add(child);
+	child.on("exit", () => children.delete(child));
+	return child;
+}
+
+/**
+ * The entry script of a dev dependency, by path.
+ *
+ * Not require.resolve: both packages declare "exports", which deliberately
+ * hides their bin scripts from resolution even though running them is exactly
+ * what a launcher does.
+ */
+function binScript(...parts) {
+	const path = join(root, "node_modules", ...parts);
+	if (!existsSync(path)) {
+		throw new Error(`Missing ${parts.join("/")}. Run npm install.`);
+	}
+	return path;
+}
+
+/** Runs a script of our own in this same Node, which is already warm. */
+function runNode(script, args = [], options = {}) {
+	return run(process.execPath, [join(root, "scripts", script), ...args], options);
+}
+
+function stopAll() {
+	shuttingDown = true;
+	for (const child of children) child.kill();
+}
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+	process.on(signal, () => {
+		stopAll();
+		process.exit(0);
 	});
 }
 
-// The main process has to exist on disk before Electron is told to start, and
-// before the watch takes over. A failure here is a compile error worth stopping
-// for rather than a window that opens against stale output.
-const build = run("npm", ["run", "build:main"]);
+/** Prefixes a child's output the way `concurrently` did, without the wrapper. */
+function label(child, name) {
+	const write = (chunk) => {
+		for (const line of chunk.toString().split(/\r?\n/)) {
+			if (line.trim()) process.stdout.write(`[${name}] ${line}\n`);
+		}
+	};
+	child.stdout?.on("data", write);
+	child.stderr?.on("data", write);
+}
 
-build.on("exit", (code) => {
-	if (code !== 0) process.exit(code ?? 1);
+const piped = { stdio: ["inherit", "pipe", "pipe"] };
 
-	const child = run("npx", [
-		"concurrently",
-		"-k",
-		"-n",
-		"vite,main,app",
-		"-c",
-		"cyan,yellow,magenta",
-		"npm:dev:renderer",
-		"npm:dev:main",
-		"npm:dev:electron",
-	]);
+// Vite colours its output, and the escape codes land in the middle of the URL
+// it prints, so anything reading that line has to strip them first.
+// Built from a char code rather than written as a literal: an escape
+// character inside a regex literal is invisible in a diff, which is what
+// no-control-regex exists to catch.
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
-	child.on("exit", (childCode) => process.exit(childCode ?? 0));
+// ------------------------------------------------------------------ renderer
+
+// Vite compiles on demand, so there is nothing to build, only a port to come
+// up. It prints the URL when it has, which is the signal Electron waits for.
+const vite = run(process.execPath, [binScript("vite", "bin", "vite.js")], piped);
+label(vite, "vite");
+
+let viteReady = false;
+let resolveVite;
+const viteListening = new Promise((resolve) => (resolveVite = resolve));
+
+vite.stdout.on("data", (chunk) => {
+	if (viteReady) return;
+	const found = /(http:\/\/localhost:\d+)\//.exec(chunk.toString().replace(ANSI, ""));
+	if (!found) return;
+	viteReady = true;
+	resolveVite(found[1]);
 });
+
+// --------------------------------------------------------------- main process
+
+// The watch is the only thing that compiles the main process. tsc ends every
+// pass with a summary line, which is what says dist-electron is complete.
+const tsc = run(
+	process.execPath,
+	[
+		binScript("typescript", "bin", "tsc"),
+		"-p",
+		"tsconfig.main.json",
+		"--watch",
+		"--preserveWatchOutput",
+		"--pretty",
+		"false",
+	],
+	piped,
+);
+
+let launched = false;
+
+tsc.stdout.on("data", (chunk) => {
+	const text = chunk.toString();
+	for (const line of text.split(/\r?\n/)) {
+		if (line.trim()) process.stdout.write(`[main] ${line}\n`);
+	}
+
+	const pass = /Found (\d+) error/.exec(text);
+	if (!pass) return;
+
+	// A window opened against half-emitted output crashes in a way that reads as
+	// a bug in the code rather than a compile error scrolled off the top.
+	if (pass[1] !== "0") {
+		if (!launched) console.log("[dev] Main process has errors. Fix them and this continues.");
+		return;
+	}
+
+	if (launched) return;
+	launched = true;
+	launch().catch((error) => {
+		console.error(`[dev] ${error.message}`);
+		stopAll();
+		process.exit(1);
+	});
+});
+
+tsc.stderr.on("data", (chunk) => process.stderr.write(`[main] ${chunk}`));
+
+// --------------------------------------------------------------------- launch
+
+async function launch() {
+	// tsc emits .ts and nothing else. The migrations, the document fonts and the
+	// package.json that marks dist-electron CommonJS are copied by this, and
+	// Electron does not boot without them.
+	await new Promise((resolve, reject) => {
+		const after = runNode("after-main.mjs", [], piped);
+		label(after, "main");
+		after.on("exit", (code) =>
+			code === 0 ? resolve() : reject(new Error(`after-main exited ${code}`)),
+		);
+	});
+
+	const url = await viteListening;
+	console.log(`[dev] Renderer on ${url}`);
+
+	const electron = run(require("electron"), ["."], piped);
+	label(electron, "app");
+	electron.on("exit", (code) => {
+		if (shuttingDown) return;
+		stopAll();
+		process.exit(code ?? 0);
+	});
+}

@@ -105,6 +105,9 @@ A clean typecheck is not proof a screen works.
   renderer console, which a frameless window with no menu does not open on its
   own. The development policy carries a nonce for exactly this
   ([security.md](security.md)).
+- **`tsBuildInfoFile` without `"incremental": true` does nothing at all.** tsc
+  writes no build info and recompiles the whole program on every run, including
+  the first pass of a `--watch`. It looks configured and is not.
 - **A Tailwind token that does not exist renders nothing and reports nothing.**
   `bg-accent-strong` when only `--accent-hover` exists produces no class, no lint
   error, no build error. If a colour is not applying, check the name in

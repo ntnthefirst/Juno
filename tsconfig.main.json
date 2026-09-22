@@ -25,6 +25,10 @@
 		"noImplicitOverride": true,
 
 		"types": ["node"],
+		// tsBuildInfoFile on its own does nothing: without "incremental" tsc
+		// writes no build info and recompiles the whole program every time,
+		// which is most of what `npm run dev` spends its startup on.
+		"incremental": true,
 		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.main.tsbuildinfo"
 	},
 	"include": ["electron"],

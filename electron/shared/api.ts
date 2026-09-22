@@ -368,6 +368,12 @@ export interface JunoApi {
 			 * rather than six fields. Nothing is saved and nothing is fetched.
 			 */
 			guess(email: string): Promise<MailAutoconfig>;
+			/**
+			 * Asks DNS who handles mail for the domain, which names the provider
+			 * when the domain does not. A network request, so it is a separate
+			 * call a person asks for. Null means the host is not one Juno knows.
+			 */
+			lookUp(email: string): Promise<MailAutoconfig | null>;
 			list(): Promise<MailAccount[]>;
 			get(id: string): Promise<MailAccount | null>;
 			/** The password goes in here and is never readable again. */

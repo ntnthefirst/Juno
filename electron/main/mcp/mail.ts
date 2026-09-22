@@ -1,6 +1,6 @@
 import type { MailAccountPatch, MailSecurity, MailThreadListQuery } from "../../shared/types";
 import * as accounts from "../services/mail-accounts";
-import { guess as guessAutoconfig } from "../services/mail-autoconfig";
+import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
 import * as sync from "../services/mail-sync";
 import * as threads from "../services/mail-threads";
@@ -156,6 +156,26 @@ export const mailTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => guessAutoconfig(String(args.email)),
+	},
+	{
+		name: "mail.accounts.look_up",
+		title: "Find the mail host behind a domain",
+		description:
+			"Asks DNS which servers handle mail for the address's domain, and maps the answer to IMAP " +
+			"and SMTP settings. This is what finds a business whose own domain is hosted elsewhere, " +
+			"which mail.accounts.guess cannot see. Null means the host is not one Juno recognises. " +
+			"Makes a DNS query; stores nothing.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				email: { type: "string", description: "A full address, for example info@example.be" },
+			},
+			required: ["email"],
+			additionalProperties: false,
+		},
+		handler: async (args) => resolveByMx(String(args.email)),
 	},
 	{
 		name: "mail.accounts.test",

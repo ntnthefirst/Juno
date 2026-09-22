@@ -478,8 +478,11 @@ export interface MailAccount extends Standard {
  * connection test is what settles it.
  */
 export interface MailAutoconfig {
-	/** "known" came from the provider table, "convention" is imap./smtp. */
-	source: "known" | "convention";
+	/**
+	 * "known" came from the provider table, "mx" from the domain's mail host,
+	 * "convention" is the imap./smtp. fallback and is the one worth checking.
+	 */
+	source: "known" | "mx" | "convention";
 	domain: string;
 	imapHost: string;
 	imapPort: number;

@@ -82,6 +82,8 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 	// An account being edited already has its servers, so it opens on them.
 	const [step, setStep] = useState(account ? 1 : 0);
 	const [guessed, setGuessed] = useState<MailAutoconfig | null>(null);
+	const [lookingUp, setLookingUp] = useState(false);
+	const [lookupNote, setLookupNote] = useState<string | null>(null);
 	const [emailError, setEmailError] = useState<string | null>(null);
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
@@ -225,6 +227,43 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 		}
 	}
 
+	/**
+	 * Asks DNS who actually handles mail for the domain.
+	 *
+	 * Offered rather than automatic: it is the one part of adding an account
+	 * that leaves this machine, and the convention guess is right often enough
+	 * that making every person pay for a lookup would be rude.
+	 */
+	async function lookUp() {
+		setLookingUp(true);
+		setLookupNote(null);
+		try {
+			const found = await window.juno.mail.accounts.lookUp(values.email.trim());
+			if (!found) {
+				setLookupNote(
+					"That domain's mail host is not one Juno recognises, so the settings below are still the best guess. Test them.",
+				);
+				return;
+			}
+			setGuessed(found);
+			setValues((current) => ({
+				...current,
+				imapHost: found.imapHost,
+				imapPort: String(found.imapPort),
+				imapSecurity: found.imapSecurity,
+				smtpHost: found.smtpHost,
+				smtpPort: String(found.smtpPort),
+				smtpSecurity: found.smtpSecurity,
+			}));
+			setTestResult(null);
+			setSmtpResult(null);
+		} catch (cause: unknown) {
+			setLookupNote(messageOf(cause));
+		} finally {
+			setLookingUp(false);
+		}
+	}
+
 	async function goNext() {
 		if (step === 0 && !(await fillFromAddress())) return;
 		setStep(step + 1);
@@ -307,11 +346,32 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 								<p className="text-[length:var(--text-sm)]">
 									{guessed.source === "known"
 										? `Filled in from the known settings for ${guessed.domain}.`
-										: `Nothing on file for ${guessed.domain}, so these follow the usual naming. Test them before you save.`}
+										: guessed.source === "mx"
+											? `${guessed.domain} has its mail at ${guessed.imapHost.replace(/^imap\./, "")}, so these come from there.`
+											: `Nothing on file for ${guessed.domain}, so these follow the usual naming. Test them before you save.`}
 								</p>
 								{guessed.note ? (
 									<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 										{guessed.note}
+									</p>
+								) : null}
+								{guessed.source === "convention" ? (
+									<div className="mt-2 flex items-center gap-3">
+										<Button size="dense" disabled={lookingUp} onClick={() => void lookUp()}>
+											{lookingUp ? "Looking up" : "Look up the real host"}
+										</Button>
+										<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											Asks DNS who handles mail for {guessed.domain}. The only step that
+											leaves this machine.
+										</span>
+									</div>
+								) : null}
+								{lookupNote ? (
+									<p
+										data-selectable
+										className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+									>
+										{lookupNote}
 									</p>
 								) : null}
 							</div>

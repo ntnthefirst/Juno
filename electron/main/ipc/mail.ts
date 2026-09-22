@@ -18,7 +18,7 @@ import type {
 	MailThreadListQuery,
 } from "../../shared/types";
 import * as accounts from "../services/mail-accounts";
-import { guess as guessAutoconfig } from "../services/mail-autoconfig";
+import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
 import * as outbox from "../services/mail-outbox";
 import * as sender from "../services/mail-send";
@@ -28,6 +28,7 @@ import * as threads from "../services/mail-threads";
 
 export function registerMailIpc(): void {
 	ipcMain.handle("mail.accounts.guess", (_event, email: string) => guessAutoconfig(email));
+	ipcMain.handle("mail.accounts.lookUp", (_event, email: string) => resolveByMx(email));
 	ipcMain.handle("mail.accounts.list", () => accounts.list());
 	ipcMain.handle("mail.accounts.get", (_event, id: string) => accounts.get(id));
 	ipcMain.handle("mail.accounts.create", (_event, input: MailAccountInput) => accounts.create(input));

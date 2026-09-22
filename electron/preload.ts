@@ -234,6 +234,7 @@ const api: JunoApi = {
 	mail: {
 		accounts: {
 			guess: (email) => call("mail.accounts.guess", email),
+			lookUp: (email) => call("mail.accounts.lookUp", email),
 			list: () => call("mail.accounts.list"),
 			get: (id) => call("mail.accounts.get", id),
 			create: (input) => call("mail.accounts.create", input),

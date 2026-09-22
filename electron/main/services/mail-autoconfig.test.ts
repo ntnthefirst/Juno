@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { domainOf, guess } from "./mail-autoconfig";
+import { domainOf, guess, resolveByMx } from "./mail-autoconfig";
 
 describe("mail autoconfig", () => {
 	it("knows the providers a Belgian business is likely to be on", () => {
@@ -40,5 +40,65 @@ describe("mail autoconfig", () => {
 	it("refuses an address it cannot split", () => {
 		expect(() => guess("not-an-address")).toThrow(/full email address/);
 		expect(() => guess("two@at@signs.be")).toThrow(/full email address/);
+	});
+});
+
+describe("mail autoconfig by MX", () => {
+	const ovh = async () => [
+		{ exchange: "mx1.mail.ovh.net", priority: 1 },
+		{ exchange: "mx2.mail.ovh.net", priority: 5 },
+	];
+
+	/**
+	 * The case that made this exist. A business has its own domain, the domain
+	 * says nothing about who runs its mail, and imap.<domain> does not answer.
+	 * The MX host names the provider.
+	 */
+	it("finds the host behind a business domain", async () => {
+		expect(await resolveByMx("info@digistra.be", ovh)).toMatchObject({
+			source: "mx",
+			domain: "digistra.be",
+			imapHost: "imap.mail.ovh.net",
+			imapPort: 993,
+			smtpHost: "smtp.mail.ovh.net",
+			smtpPort: 465,
+			username: "info@digistra.be",
+		});
+	});
+
+	it("reads the primary record first", async () => {
+		const mixed = async () => [
+			{ exchange: "backup.unknown-host.example", priority: 50 },
+			{ exchange: "mx1.mail.ovh.net", priority: 1 },
+		];
+		expect(await resolveByMx("info@example.be", mixed)).toMatchObject({
+			imapHost: "imap.mail.ovh.net",
+		});
+	});
+
+	it("matches on a dot boundary, so a lookalike domain does not count", async () => {
+		const lookalike = async () => [{ exchange: "mx.notovh.net", priority: 1 }];
+		expect(await resolveByMx("info@example.be", lookalike)).toBeNull();
+	});
+
+	/**
+	 * Null is an answer, not a failure: it means the convention guess is still
+	 * the best available, which is worth saying differently from "DNS broke".
+	 */
+	it("returns null for a host it does not recognise", async () => {
+		const unknown = async () => [{ exchange: "mail.some-small-host.be", priority: 10 }];
+		expect(await resolveByMx("info@example.be", unknown)).toBeNull();
+	});
+
+	it("says what to do when the lookup itself fails", async () => {
+		const broken = async () => {
+			throw new Error("ENOTFOUND");
+		};
+		await expect(resolveByMx("info@example.be", broken)).rejects.toThrow(/by hand/);
+	});
+
+	it("carries the app-password warning through an MX match", async () => {
+		const google = async () => [{ exchange: "aspmx.l.google.com", priority: 1 }];
+		expect((await resolveByMx("info@example.be", google))?.note).toContain("app password");
 	});
 });

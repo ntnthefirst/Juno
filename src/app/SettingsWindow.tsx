@@ -85,28 +85,37 @@ export function SettingsWindow() {
 					))}
 				</nav>
 
-				<main className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+				{/*
+					Unpadded on purpose. A section that turns into a form page draws its
+					own header and footer against the window edges, so the padding
+					belongs to the sections rather than to the frame.
+				*/}
+				<main className="min-w-0 flex-1 overflow-y-auto">
 					{tab === "general" ? (
-						<AppearanceSection theme={theme} onChange={setTheme} />
+						<Pad>
+							<AppearanceSection theme={theme} onChange={setTheme} />
+						</Pad>
 					) : tab === "business" ? (
-						<>
+						<Pad>
 							<OwnerSection onSaved={setToast} />
 							<AccountingSection onSaved={setToast} />
-						</>
+						</Pad>
 					) : tab === "mail" ? (
 						<MailSection onSaved={setToast} />
 					) : tab === "documents" ? (
-						<>
+						<Pad>
 							<ReferenceSection />
 							<SignatureSection />
-						</>
+						</Pad>
 					) : tab === "security" ? (
-						<>
+						<Pad>
 							<LockSection />
 							<BackupSection onDone={setToast} />
-						</>
+						</Pad>
 					) : (
-						<AboutSection />
+						<Pad>
+							<AboutSection />
+						</Pad>
 					)}
 				</main>
 			</div>
@@ -114,6 +123,11 @@ export function SettingsWindow() {
 			{toast ? <Toast message={toast} onDismiss={() => setToast(null)} /> : null}
 		</div>
 	);
+}
+
+/** The breathing room around a settings section that is not a form page. */
+function Pad({ children }: { children: React.ReactNode }) {
+	return <div className="px-6 py-5">{children}</div>;
 }
 
 function AboutSection() {

@@ -1,7 +1,13 @@
-import { useState, type FormEvent } from "react";
-import type { MailAccount, MailAccountInput, MailAccountPatch, MailSecurity } from "@shared/types";
+import { useId, useState, type FormEvent } from "react";
+import type {
+	MailAccount,
+	MailAccountInput,
+	MailAccountPatch,
+	MailAutoconfig,
+	MailSecurity,
+} from "@shared/types";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
+import { FormPage, type FormStep } from "../../components/FormPage";
 import { Field } from "../../components/Field";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
@@ -65,8 +71,20 @@ const SECURITY_OPTIONS: { value: MailSecurity; label: string }[] = [
  * the form clears it; editing an existing account shows "set" and an empty
  * field that only replaces the stored password when something is typed.
  */
+const STEPS: FormStep[] = [
+	{ label: "Address", hint: "Your address and its password. Juno works the servers out from there." },
+	{ label: "Servers", hint: "Check these, then test them before saving." },
+	{ label: "Sync", hint: "How much mail to pull, and how often." },
+];
+
 export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormProps) {
 	const [values, setValues] = useState<Values>(() => toValues(account));
+	// An account being edited already has its servers, so it opens on them.
+	const [step, setStep] = useState(account ? 1 : 0);
+	const [guessed, setGuessed] = useState<MailAutoconfig | null>(null);
+	const [emailError, setEmailError] = useState<string | null>(null);
+	// The submit button lives in the page footer, outside the form element.
+	const formId = useId();
 	const [error, setError] = useState<string | null>(null);
 	const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 	const [smtpResult, setSmtpResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -172,186 +190,306 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 		}
 	}
 
+
+	/**
+	 * Fills the server fields in from the address.
+	 *
+	 * Only ever on the way forward out of the first step, and only over fields
+	 * nobody has filled in by hand: re-guessing on top of a host someone typed
+	 * is how a form argues with the person using it.
+	 */
+	async function fillFromAddress(): Promise<boolean> {
+		const email = values.email.trim();
+		if (email.length === 0) {
+			setEmailError("Enter your email address.");
+			return false;
+		}
+		setEmailError(null);
+
+		try {
+			const result = await window.juno.mail.accounts.guess(email);
+			setGuessed(result);
+			setValues((current) => ({
+				...current,
+				imapHost: current.imapHost.trim() || result.imapHost,
+				imapPort: current.imapHost.trim() ? current.imapPort : String(result.imapPort),
+				imapSecurity: current.imapHost.trim() ? current.imapSecurity : result.imapSecurity,
+				smtpHost: current.smtpHost.trim() || result.smtpHost,
+				smtpPort: current.smtpHost.trim() ? current.smtpPort : String(result.smtpPort),
+				smtpSecurity: current.smtpHost.trim() ? current.smtpSecurity : result.smtpSecurity,
+			}));
+			return true;
+		} catch (cause: unknown) {
+			setEmailError(messageOf(cause));
+			return false;
+		}
+	}
+
+	async function goNext() {
+		if (step === 0 && !(await fillFromAddress())) return;
+		setStep(step + 1);
+	}
+
+	const last = step === STEPS.length - 1;
+
 	return (
-		<Dialog title={account ? "Edit mail account" : "Add mail account"} onClose={onClose}>
-			<form onSubmit={(event) => void submit(event)} className="mt-4 flex flex-col gap-4">
-				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<Field
-						label="Address"
-						type="email"
-						value={values.email}
-						onChange={(v) => set("email", v)}
-						required
-						placeholder="hallo@example.be"
-					/>
-					<Field
-						label="Label"
-						value={values.label}
-						onChange={(v) => set("label", v)}
-						placeholder="Defaults to the address"
-					/>
-					<Field
-						label="IMAP server"
-						value={values.imapHost}
-						onChange={(v) => set("imapHost", v)}
-						required
-						placeholder="imap.example.be"
-					/>
-					<Select
-						label="Security"
-						value={values.imapSecurity}
-						onChange={(v) => {
-							const security = v as MailSecurity;
-							setValues((current) => ({
-								...current,
-								imapSecurity: security,
-								imapPort:
-									current.imapPort === "993" || current.imapPort === "143"
-										? security === "tls"
-											? "993"
-											: "143"
-										: current.imapPort,
-							}));
-							setTestResult(null);
-						}}
-						options={SECURITY_OPTIONS}
-					/>
-					<Field
-						label="Port"
-						type="number"
-						value={values.imapPort}
-						onChange={(v) => set("imapPort", v)}
-						tabular
-					/>
-					<Field
-						label="Username"
-						value={values.username}
-						onChange={(v) => set("username", v)}
-						placeholder="Defaults to the address"
-					/>
-					<Field
-						label={account?.hasCredential ? "Password (set, type to replace)" : "Password"}
-						type="password"
-						value={values.password}
-						onChange={(v) => set("password", v)}
-						required={!account}
-					/>
-					<div />
-					<Field
-						label="Sync horizon (days)"
-						type="number"
-						value={values.horizonDays}
-						onChange={(v) => set("horizonDays", v)}
-						tabular
-					/>
-					<Field
-						label="Sync every (minutes)"
-						type="number"
-						value={values.syncIntervalMinutes}
-						onChange={(v) => set("syncIntervalMinutes", v)}
-						tabular
-					/>
-				</div>
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					The horizon bounds the first sync of each folder. Raise it later to pull older mail.
-					The password is stored in the operating system keychain and never shown again.
-				</p>
-
-				<div className="border-t border-[var(--line)] pt-4">
-					<h3 className="text-[length:var(--text-base)] font-[var(--weight-medium)]">Sending</h3>
-					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						Leave the server empty for an account you only read. The same password is used;
-						fill in a username only if the provider wants a different one for sending.
-					</p>
-					<div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<Field
-							label="SMTP server"
-							value={values.smtpHost}
-							onChange={(v) => set("smtpHost", v)}
-							placeholder="smtp.example.be"
-						/>
-						<Select
-							label="Security"
-							value={values.smtpSecurity}
-							onChange={(v) => {
-								const security = v as MailSecurity;
-								setValues((current) => ({
-									...current,
-									smtpSecurity: security,
-									smtpPort:
-										current.smtpPort === "465" || current.smtpPort === "587"
-											? security === "tls"
-												? "465"
-												: "587"
-											: current.smtpPort,
-								}));
-								setSmtpResult(null);
-							}}
-							options={SMTP_SECURITY_OPTIONS}
-						/>
-						<Field label="Port" type="number" value={values.smtpPort} onChange={(v) => set("smtpPort", v)} tabular />
-						<Field
-							label="Username for sending"
-							value={values.smtpUsername}
-							onChange={(v) => set("smtpUsername", v)}
-							placeholder="Same as above"
-						/>
-						<Field
-							label="Sender name"
-							value={values.fromName}
-							onChange={(v) => set("fromName", v)}
-							placeholder="Defaults to your name in Settings"
-						/>
-					</div>
-					{smtpResult ? (
-						<p
-							role="status"
-							data-selectable
-							className={`mt-3 border-l-2 pl-3 text-[length:var(--text-sm)] ${
-								smtpResult.ok ? "border-[var(--ok)] text-[var(--ok)]" : "border-[var(--risk)] text-[var(--risk)]"
-							}`}
+		<FormPage
+			title={account ? "Edit mail account" : "Add mail account"}
+			onBack={onClose}
+			backLabel="Mail accounts"
+			steps={STEPS}
+			step={step}
+			onStep={setStep}
+			actions={
+				<>
+					{step > 0 ? <Button onClick={() => setStep(step - 1)}>Previous</Button> : null}
+					{last ? null : (
+						<Button
+							variant={account ? "quiet" : "primary"}
+							disabled={busy !== null}
+							onClick={() => void goNext()}
 						>
-							{smtpResult.message}
-						</p>
+							Next
+						</Button>
+					)}
+					{last || account ? (
+						<Button type="submit" form={formId} variant="primary" disabled={busy !== null}>
+							{busy === "save" ? "Saving" : account ? "Save" : "Add account"}
+						</Button>
 					) : null}
-				</div>
+				</>
+			}
+		>
+			<form id={formId} onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
+				{step === 0 ? (
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<div className="sm:col-span-2">
+							<Field
+								label="Address"
+								type="email"
+								value={values.email}
+								onChange={(v) => {
+									set("email", v);
+									setEmailError(null);
+								}}
+								error={emailError}
+								required
+								placeholder="hallo@example.be"
+							/>
+						</div>
+						<div className="sm:col-span-2">
+							<Field
+								label={account?.hasCredential ? "Password (set, type to replace)" : "Password"}
+								type="password"
+								value={values.password}
+								onChange={(v) => set("password", v)}
+								required={!account}
+							/>
+						</div>
+						<div className="sm:col-span-2">
+							<Field
+								label="Label"
+								value={values.label}
+								onChange={(v) => set("label", v)}
+								placeholder="Defaults to the address"
+							/>
+						</div>
+						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)] sm:col-span-2">
+							The password is stored in the operating system keychain and never shown again.
+							Working out the servers happens on this machine, so the address is not sent
+							anywhere to do it.
+						</p>
+					</div>
+				) : step === 1 ? (
+					<>
+						{guessed ? (
+							<div className="border-l-2 border-[var(--accent)] pl-3">
+								<p className="text-[length:var(--text-sm)]">
+									{guessed.source === "known"
+										? `Filled in from the known settings for ${guessed.domain}.`
+										: `Nothing on file for ${guessed.domain}, so these follow the usual naming. Test them before you save.`}
+								</p>
+								{guessed.note ? (
+									<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										{guessed.note}
+									</p>
+								) : null}
+							</div>
+						) : null}
 
-				{testResult ? (
-					<p
-						role="status"
-						data-selectable
-						className={`border-l-2 pl-3 text-[length:var(--text-sm)] ${
-							testResult.ok
-								? "border-[var(--ok)] text-[var(--ok)]"
-								: "border-[var(--risk)] text-[var(--risk)]"
-						}`}
-					>
-						{testResult.message}
-					</p>
-				) : null}
+						<div>
+							<h3 className="text-[length:var(--text-base)] font-[var(--weight-medium)]">Receiving</h3>
+							<div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+								<Field
+									label="IMAP server"
+									value={values.imapHost}
+									onChange={(v) => set("imapHost", v)}
+									required
+									placeholder="imap.example.be"
+								/>
+								<Select
+									label="Security"
+									value={values.imapSecurity}
+									onChange={(v) => {
+										const security = v as MailSecurity;
+										setValues((current) => ({
+											...current,
+											imapSecurity: security,
+											imapPort:
+												current.imapPort === "993" || current.imapPort === "143"
+													? security === "tls"
+														? "993"
+														: "143"
+													: current.imapPort,
+										}));
+										setTestResult(null);
+									}}
+									options={SECURITY_OPTIONS}
+								/>
+								<Field
+									label="Port"
+									type="number"
+									value={values.imapPort}
+									onChange={(v) => set("imapPort", v)}
+									tabular
+								/>
+								<Field
+									label="Username"
+									value={values.username}
+									onChange={(v) => set("username", v)}
+									placeholder="Defaults to the address"
+								/>
+							</div>
+							{testResult ? (
+								<p
+									role="status"
+									data-selectable
+									className={`mt-3 border-l-2 pl-3 text-[length:var(--text-sm)] ${
+										testResult.ok
+											? "border-[var(--ok)] text-[var(--ok)]"
+											: "border-[var(--risk)] text-[var(--risk)]"
+									}`}
+								>
+									{testResult.message}
+								</p>
+							) : null}
+						</div>
+
+						<div className="border-t border-[var(--line)] pt-4">
+							<h3 className="text-[length:var(--text-base)] font-[var(--weight-medium)]">Sending</h3>
+							<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								Leave the server empty for an account you only read. The same password is
+								used; fill in a username only if the provider wants a different one for
+								sending.
+							</p>
+							<div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+								<Field
+									label="SMTP server"
+									value={values.smtpHost}
+									onChange={(v) => set("smtpHost", v)}
+									placeholder="smtp.example.be"
+								/>
+								<Select
+									label="Security"
+									value={values.smtpSecurity}
+									onChange={(v) => {
+										const security = v as MailSecurity;
+										setValues((current) => ({
+											...current,
+											smtpSecurity: security,
+											smtpPort:
+												current.smtpPort === "465" || current.smtpPort === "587"
+													? security === "tls"
+														? "465"
+														: "587"
+													: current.smtpPort,
+										}));
+										setSmtpResult(null);
+									}}
+									options={SMTP_SECURITY_OPTIONS}
+								/>
+								<Field
+									label="Port"
+									type="number"
+									value={values.smtpPort}
+									onChange={(v) => set("smtpPort", v)}
+									tabular
+								/>
+								<Field
+									label="Username for sending"
+									value={values.smtpUsername}
+									onChange={(v) => set("smtpUsername", v)}
+									placeholder="Same as above"
+								/>
+							</div>
+							{smtpResult ? (
+								<p
+									role="status"
+									data-selectable
+									className={`mt-3 border-l-2 pl-3 text-[length:var(--text-sm)] ${
+										smtpResult.ok
+											? "border-[var(--ok)] text-[var(--ok)]"
+											: "border-[var(--risk)] text-[var(--risk)]"
+									}`}
+								>
+									{smtpResult.message}
+								</p>
+							) : null}
+						</div>
+
+						<div className="flex gap-2">
+							<Button disabled={busy !== null} onClick={() => void test()}>
+								{busy === "test" ? "Testing" : "Test incoming"}
+							</Button>
+							<Button
+								disabled={busy !== null || !values.smtpHost.trim()}
+								onClick={() => void testSmtp()}
+							>
+								{busy === "smtp" ? "Testing" : "Test outgoing"}
+							</Button>
+						</div>
+					</>
+				) : (
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Field
+							label="Sync horizon (days)"
+							type="number"
+							value={values.horizonDays}
+							onChange={(v) => set("horizonDays", v)}
+							tabular
+						/>
+						<Field
+							label="Sync every (minutes)"
+							type="number"
+							value={values.syncIntervalMinutes}
+							onChange={(v) => set("syncIntervalMinutes", v)}
+							tabular
+						/>
+						<div className="sm:col-span-2">
+							<Field
+								label="Sender name"
+								value={values.fromName}
+								onChange={(v) => set("fromName", v)}
+								placeholder="Defaults to your name in Settings"
+							/>
+						</div>
+						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)] sm:col-span-2">
+							The horizon bounds the first sync of each folder. Raise it later to pull older
+							mail.
+						</p>
+					</div>
+				)}
+
 				{error ? (
-					<p role="alert" data-selectable className="border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p
+						role="alert"
+						data-selectable
+						className="border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					>
 						{error}
 					</p>
 				) : null}
-
-				<div className="flex items-center justify-between gap-3">
-					<div className="flex gap-2">
-						<Button disabled={busy !== null} onClick={() => void test()}>
-							{busy === "test" ? "Testing" : "Test incoming"}
-						</Button>
-						<Button disabled={busy !== null || !values.smtpHost.trim()} onClick={() => void testSmtp()}>
-							{busy === "smtp" ? "Testing" : "Test outgoing"}
-						</Button>
-					</div>
-					<div className="flex gap-2">
-						<Button onClick={onClose}>Cancel</Button>
-						<Button type="submit" variant="primary" disabled={busy !== null}>
-							{busy === "save" ? "Saving" : account ? "Save" : "Add account"}
-						</Button>
-					</div>
-				</div>
 			</form>
-		</Dialog>
+		</FormPage>
 	);
 }

@@ -121,14 +121,11 @@ After that, the honest move is to install the packaged build and use it on real
 work for a while before building anything else. A phase that is not being
 used is evidence the next one is the wrong thing to build.
 
-## The two open decisions
+## The one open decision
 
-Neither blocks any code, and both get more expensive the longer they wait. Both
-are in [TODO.md](TODO.md) with the detail.
+It blocks no code, and gets more expensive the longer it waits. In
+[TODO.md](TODO.md) with the detail.
 
-- **The repository.** None exists online yet, which is why `electron-builder.yml`
-  has no `publish` block and auto-update is off. An installed build pointing at
-  the wrong feed is worse than one that never checks.
 - **The licence.** All rights reserved by default, which is the right holding
   position. The question that settles it: should a company be able to take
   Juno, host it, and sell it back?

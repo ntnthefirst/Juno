@@ -307,6 +307,26 @@ describe("sync", () => {
 		expect(await threads.listThreads({ accountId }, db)).toHaveLength(2);
 	});
 
+	it("pulls the newest mail anyway when everything predates the horizon", async () => {
+		// horizonDays is 30 from beforeEach. A mailbox whose only mail is older
+		// than that must not come back looking empty on the first sync.
+		box.add("INBOX", { uid: 1, from: "a@x.be", subject: "ancient", messageId: "<1@x>", date: recent(400), text: "1" });
+		box.add("INBOX", { uid: 2, from: "a@x.be", subject: "older", messageId: "<2@x>", date: recent(200), text: "2" });
+
+		const result = await sync.syncAccount(accountId, db);
+		expect(result.newMessages).toBe(2);
+		expect(await threads.listThreads({ accountId }, db)).toHaveLength(2);
+
+		// A folder that is genuinely empty stays empty: the fallback only fires
+		// when the server says there is mail and the horizon search missed it.
+		box.remove("INBOX", 1);
+		box.remove("INBOX", 2);
+		box.uidValidity.set("INBOX", "2");
+		const second = await sync.syncAccount(accountId, db);
+		expect(second.newMessages).toBe(0);
+		expect(await threads.listThreads({ accountId }, db)).toHaveLength(0);
+	});
+
 	it("soft-deletes what the server no longer has", async () => {
 		box.add("INBOX", { uid: 1, from: "a@x.be", subject: "one", messageId: "<1@x>", date: recent(2), text: "1" });
 		box.add("INBOX", { uid: 2, from: "a@x.be", subject: "two", messageId: "<2@x>", date: recent(1), text: "2" });

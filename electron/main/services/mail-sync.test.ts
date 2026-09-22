@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
+import * as clientEmailsService from "./client-emails";
 import * as clientsService from "./clients";
 import * as contactsService from "./contacts";
 import * as accounts from "./mail-accounts";
@@ -460,7 +461,8 @@ describe("attachments", () => {
 describe("client linking", () => {
 	it("links a thread to the client whose contact wrote it, and leaves a manual choice alone", async () => {
 		const obet = await clientsService.create({ name: "obet" }, db);
-		await clientsService.create({ name: "noir", email: "info@noir.be" }, db);
+		const noir = await clientsService.create({ name: "noir" }, db);
+		await clientEmailsService.create({ clientId: noir.id, email: "info@noir.be" }, db);
 		await contactsService.create({ clientId: obet.id, name: "Laura", email: "laura@obet.be" }, db);
 
 		box.add("INBOX", { uid: 1, from: "laura@obet.be", subject: "Van Laura", messageId: "<l@obet>", date: recent(3), text: "x" });

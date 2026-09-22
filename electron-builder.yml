@@ -7,7 +7,7 @@ directories:
   output: release
 
 # dist-electron holds the compiled main process, dist the renderer. Both are
-# built by `npm run build` before this runs. dist-electron/package.json is what
+# built by `npm run compile` before this runs. dist-electron/package.json is what
 # declares the main process CommonJS, so it has to ship.
 files:
   - dist/**/*
@@ -19,14 +19,21 @@ files:
   # an installed build while everything still builds and runs.
   - scripts/mcp-bridge.mjs
 
-# There is no `publish` block yet, deliberately. The repository does not exist
-# online, and an installed build that points at the wrong feed is worse than one
-# that does not check for updates at all. Add it, and turn on the updater, once
-# the repository is created.
+# Updates come from the repository's public releases. electron-builder writes
+# the latest.yml / latest-mac.yml that electron-updater reads, and main/updates.ts
+# checks it once on launch and daily after that.
+publish:
+  provider: github
+  owner: ntnthefirst
+  repo: Juno
+  # A draft, so a tag never starts an automatic rollout on its own. Publishing
+  # the release in GitHub is the deliberate step that does.
+  releaseType: draft
 
 # The product name decides app.getPath("userData"). Changing it moves the
 # database out from under an existing installation, which looks exactly like
-# data loss. Do not rename this casually.
+# data loss. Do not rename this casually. A development run writes to
+# "Juno (dev)" instead, which main/dev-data.ts owns.
 
 win:
   icon: build/icon.png
@@ -43,14 +50,48 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Juno
+  # Drawn by scripts/make-installer-art.mjs, which is what `npm run icons`
+  # regenerates after a brand change. NSIS will not scale these, so the sizes
+  # are exact: 164x314 for the sidebars, 150x57 for the header.
+  installerSidebar: build/installerSidebar.bmp
+  uninstallerSidebar: build/uninstallerSidebar.bmp
+  installerHeader: build/installerHeader.bmp
+  include: build/installer.nsh
+  # The installer finishes on a page offering to start Juno, rather than
+  # launching it out from under whoever is still reading.
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
 
 mac:
   icon: build/icon.png
   category: public.app-category.productivity
   artifactName: Juno-${version}-${arch}.${ext}
+  # No Developer ID certificate yet, so builds are unsigned and notarisation is
+  # off. Turn both on in the same commit as the certificate, never before: a
+  # half-signed build fails to launch in a way that reads as a corrupt download.
+  identity: null
+  notarize: false
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+
+dmg:
+  # Two icons, the app and a link to Applications, and nothing else on the
+  # background. A drag target that needs an arrow drawn on it is the wrong size.
+  contents:
+    - x: 150
+      y: 180
+      type: file
+    - x: 420
+      y: 180
+      type: link
+      path: /Applications
 
 linux:
   icon: build/icon.png

@@ -1,0 +1,54 @@
+name: Release
+
+# Tag a version and this builds it on each platform and publishes the installers
+# to a GitHub release. electron-builder writes latest.yml and latest-mac.yml
+# alongside them, which is what the updater in main/updates.ts reads.
+#
+#   npm version patch      # or minor / major
+#   git push --follow-tags
+#
+# The release is created as a draft. Look at it, then publish it: publishing is
+# what makes every installed copy start downloading, and that is not something
+# to do by accident.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      # One platform failing should not throw away a good build of the other.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: build:win
+          - os: macos-latest
+            script: build:mac
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build and publish
+        run: npm run ${{ matrix.script }} -- --publish always
+        env:
+          # Provided by Actions. No secret needs to be created for this.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS builds are unsigned until there is a Developer ID certificate.
+          # Without this, electron-builder looks for one and fails the job.
+          CSC_IDENTITY_AUTO_DISCOVERY: false

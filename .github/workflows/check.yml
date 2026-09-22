@@ -1,0 +1,41 @@
+name: Check
+
+# Every push and every pull request. This is the gate: lint, types, tests, and
+# a real packaged launch. A clean typecheck proves nothing about a native
+# module or the custom scheme, which is what the smoke run is for.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # Launches the packaged-mode app against a throwaway data directory and
+      # fails on any renderer error or main-process throw. Needs a display, so
+      # it runs on Windows rather than headless Linux.
+      - name: Smoke
+        run: npm run smoke

@@ -63,6 +63,7 @@ import type {
 	LockState,
 	MailAccount,
 	MailAccountInput,
+	MailAutoconfig,
 	MailAccountPatch,
 	MailConnectionTest,
 	MailDraftInput,
@@ -351,6 +352,11 @@ export interface JunoApi {
 
 	mail: {
 		accounts: {
+			/**
+			 * Server settings for an address, so adding an account is a password
+			 * rather than six fields. Nothing is saved and nothing is fetched.
+			 */
+			guess(email: string): Promise<MailAutoconfig>;
 			list(): Promise<MailAccount[]>;
 			get(id: string): Promise<MailAccount | null>;
 			/** The password goes in here and is never readable again. */

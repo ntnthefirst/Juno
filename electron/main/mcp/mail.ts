@@ -1,5 +1,6 @@
 import type { MailAccountPatch, MailSecurity, MailThreadListQuery } from "../../shared/types";
 import * as accounts from "../services/mail-accounts";
+import { guess as guessAutoconfig } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
 import * as sync from "../services/mail-sync";
 import * as threads from "../services/mail-threads";
@@ -136,6 +137,25 @@ export const mailTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => accounts.remove(String(args.id)),
+	},
+	{
+		name: "mail.accounts.guess",
+		title: "Guess mail server settings",
+		description:
+			"Server settings for an email address, from a table of known providers and otherwise from " +
+			"the imap./smtp. convention. Nothing is stored and nothing is fetched over the network, so " +
+			"this is a suggestion to check with mail.accounts.test, not an answer.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				email: { type: "string", description: "A full address, for example hallo@example.be" },
+			},
+			required: ["email"],
+			additionalProperties: false,
+		},
+		handler: async (args) => guessAutoconfig(String(args.email)),
 	},
 	{
 		name: "mail.accounts.test",

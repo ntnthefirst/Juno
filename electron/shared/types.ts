@@ -472,6 +472,26 @@ export interface MailAccount extends Standard {
 	fromName: string | null;
 }
 
+/**
+ * Server settings guessed from an address. Filled into the form for a person to
+ * look at, never saved on its own: `source` says how much to trust it, and the
+ * connection test is what settles it.
+ */
+export interface MailAutoconfig {
+	/** "known" came from the provider table, "convention" is imap./smtp. */
+	source: "known" | "convention";
+	domain: string;
+	imapHost: string;
+	imapPort: number;
+	imapSecurity: MailSecurity;
+	smtpHost: string;
+	smtpPort: number;
+	smtpSecurity: MailSecurity;
+	username: string;
+	/** What this provider needs that a password alone does not cover. */
+	note: string | null;
+}
+
 export interface MailAccountInput {
 	label?: string;
 	email: string;

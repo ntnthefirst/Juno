@@ -70,6 +70,19 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 	}
 	if (load.status === "loading") return <p className="text-[var(--ink-muted)]">Loading.</p>;
 
+	if (form) {
+		return (
+			<AutomationForm
+				automation={form.automation}
+				onClose={() => setForm(null)}
+				onSaved={() => {
+					setForm(null);
+					refresh();
+				}}
+			/>
+		);
+	}
+
 	return (
 		<div className="mx-auto w-full max-w-[var(--content-width)]">
 			<div className="flex items-baseline justify-between gap-4 border-b border-[var(--line)] pb-2">
@@ -208,16 +221,6 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 				</section>
 			) : null}
 
-			{form ? (
-				<AutomationForm
-					automation={form.automation}
-					onClose={() => setForm(null)}
-					onSaved={() => {
-						setForm(null);
-						refresh();
-					}}
-				/>
-			) : null}
 		</div>
 	);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import type {
 	ClientSummary,
 	ProjectSummary,
@@ -8,7 +8,7 @@ import type {
 	RecurrencePattern,
 } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
+import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
@@ -54,6 +54,8 @@ function parseCount(raw: string): number | null {
 }
 
 export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) {
+	// The submit button lives in the page footer, outside the form element.
+	const formId = useId();
 	const [values, setValues] = useState<Values>(() => toValues(reminder));
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -156,8 +158,20 @@ export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) 
 	const intervalNumber = parseCount(values.interval) ?? 1;
 
 	return (
-		<Dialog title={reminder ? "Edit reminder" : "New reminder"} onClose={onClose}>
-			<form onSubmit={submit} noValidate className="mt-5">
+		<FormPage
+			title={reminder ? "Edit reminder" : "New reminder"}
+			onBack={onClose}
+			backLabel="Reminders"
+			actions={
+				<>
+					<Button onClick={onClose}>Cancel</Button>
+					<Button type="submit" form={formId} variant="primary" disabled={busy}>
+						{busy ? "Saving" : "Save"}
+					</Button>
+				</>
+			}
+		>
+			<form id={formId} onSubmit={submit} noValidate>
 				<div className="grid grid-cols-2 gap-4">
 					<div className="col-span-2">
 						<Field
@@ -267,13 +281,7 @@ export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) 
 					</div>
 				) : null}
 
-				<div className="mt-6 flex justify-end gap-2">
-					<Button onClick={onClose}>Cancel</Button>
-					<Button type="submit" variant="primary" disabled={busy}>
-						{busy ? "Saving" : "Save"}
-					</Button>
-				</div>
 			</form>
-		</Dialog>
+		</FormPage>
 	);
 }

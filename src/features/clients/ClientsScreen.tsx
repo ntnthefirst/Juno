@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Client, ClientSummary } from "@shared/types";
+import type { Client, ClientSummary, Contact, Project } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
 import { ClientDetail, StatusBadge } from "./ClientDetail";
 import { ClientForm } from "./ClientForm";
+import { ContactForm } from "./ContactForm";
+import { ProjectForm } from "./ProjectForm";
 
 type Load =
 	| { status: "loading" }
@@ -19,7 +21,13 @@ export function ClientsScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [detailVersion, setDetailVersion] = useState(0);
+	const bumpDetail = () => setDetailVersion((current) => current + 1);
 	const [form, setForm] = useState<{ client: Client | null } | null>(null);
+	// Contacts and projects belong to the open client, and they are filled in on
+	// a page of their own, so the state sits here rather than in the detail pane
+	// that is too narrow to hold one.
+	const [contactForm, setContactForm] = useState<{ contact: Contact | null } | null>(null);
+	const [projectForm, setProjectForm] = useState<{ project: Project | null } | null>(null);
 	const [deleted, setDeleted] = useState<Client | null>(null);
 
 	const fetchRows = useCallback(
@@ -88,6 +96,40 @@ export function ClientsScreen() {
 
 	const split = selectedId !== null;
 
+	// The form takes the screen rather than covering it. Nothing in the list
+	// behind it is worth reading while a client is being filled in.
+	if (form) {
+		return <ClientForm client={form.client} onClose={() => setForm(null)} onSaved={saved} />;
+	}
+
+	if (contactForm && selectedId) {
+		return (
+			<ContactForm
+				clientId={selectedId}
+				contact={contactForm.contact}
+				onClose={() => setContactForm(null)}
+				onSaved={() => {
+					setContactForm(null);
+					bumpDetail();
+				}}
+			/>
+		);
+	}
+
+	if (projectForm && selectedId) {
+		return (
+			<ProjectForm
+				clientId={selectedId}
+				project={projectForm.project}
+				onClose={() => setProjectForm(null)}
+				onSaved={() => {
+					setProjectForm(null);
+					bumpDetail();
+				}}
+			/>
+		);
+	}
+
 	return (
 		<div className="flex h-full flex-col p-8">
 			<div
@@ -150,14 +192,13 @@ export function ClientsScreen() {
 							clientId={selectedId}
 							onEdit={(client) => setForm({ client })}
 							onDelete={(client) => void remove(client)}
+							onEditContact={(contact) => setContactForm({ contact })}
+							onEditProject={(project) => setProjectForm({ project })}
 						/>
 					</div>
 				) : null}
 			</div>
 
-			{form ? (
-				<ClientForm client={form.client} onClose={() => setForm(null)} onSaved={saved} />
-			) : null}
 
 			{deleted ? (
 				<Toast

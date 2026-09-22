@@ -64,6 +64,19 @@ export function RemindersScreen() {
 	const order: ReminderBucket[] = includeDone ? [...BUCKET_ORDER, "done"] : BUCKET_ORDER;
 	const rows = load.status === "ready" ? load.rows : [];
 
+	if (form) {
+		return (
+			<ReminderForm
+				reminder={form.reminder}
+				onClose={() => setForm(null)}
+				onSaved={() => {
+					setForm(null);
+					refreshList();
+				}}
+			/>
+		);
+	}
+
 	return (
 		<div className="h-full overflow-y-auto p-8">
 			<div className="mx-auto w-full max-w-[var(--content-width)]">
@@ -140,17 +153,6 @@ export function RemindersScreen() {
 					})
 				)}
 			</div>
-
-			{form ? (
-				<ReminderForm
-					reminder={form.reminder}
-					onClose={() => setForm(null)}
-					onSaved={() => {
-						setForm(null);
-						refreshList();
-					}}
-				/>
-			) : null}
 
 			{snoozing ? (
 				<SnoozeDialog

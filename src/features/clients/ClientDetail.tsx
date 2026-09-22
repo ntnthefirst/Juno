@@ -2,8 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { Client, Contact, Project, ProjectSummary, ReferenceItem } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
-import { ContactForm } from "./ContactForm";
-import { ProjectForm } from "./ProjectForm";
 
 /** Tone is a token name, never a hex. See brand/BRAND.md section 5. */
 const TONES: Record<string, string> = {
@@ -66,12 +64,23 @@ type ClientDetailProps = {
 	clientId: string;
 	onEdit: (client: Client) => void;
 	onDelete: (client: Client) => void;
+	/**
+	 * Contacts and projects are filled in on a page of their own, which needs
+	 * the whole screen rather than this pane, so the screen owns that state and
+	 * this only asks for it. Null means a new one.
+	 */
+	onEditContact: (contact: Contact | null) => void;
+	onEditProject: (project: Project | null) => void;
 };
 
-export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) {
+export function ClientDetail({
+	clientId,
+	onEdit,
+	onDelete,
+	onEditContact,
+	onEditProject,
+}: ClientDetailProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
-	const [contactDialog, setContactDialog] = useState<{ contact: Contact | null } | null>(null);
-	const [projectDialog, setProjectDialog] = useState<{ project: Project | null } | null>(null);
 	const [pending, setPending] = useState<Pending | null>(null);
 	const [busy, setBusy] = useState(false);
 
@@ -148,7 +157,7 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 	async function editProject(id: string) {
 		try {
 			const project = await window.juno.projects.get(id);
-			if (project) setProjectDialog({ project });
+			if (project) onEditProject(project);
 		} catch (cause: unknown) {
 			setLoad({ status: "error", message: messageOf(cause) });
 		}
@@ -200,7 +209,7 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 			<section className="mt-10">
 				<div className="mb-4 flex items-center justify-between gap-4">
 					<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Contacts</h3>
-					<Button size="dense" onClick={() => setContactDialog({ contact: null })}>
+					<Button size="dense" onClick={() => onEditContact(null)}>
 						Add contact
 					</Button>
 				</div>
@@ -243,7 +252,7 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 											Make primary
 										</Button>
 									)}
-									<Button size="dense" onClick={() => setContactDialog({ contact })}>
+									<Button size="dense" onClick={() => onEditContact(contact)}>
 										Edit
 									</Button>
 									<Button
@@ -265,7 +274,7 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 			<section className="mt-10">
 				<div className="mb-4 flex items-center justify-between gap-4">
 					<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Projects</h3>
-					<Button size="dense" onClick={() => setProjectDialog({ project: null })}>
+					<Button size="dense" onClick={() => onEditProject(null)}>
 						Add project
 					</Button>
 				</div>
@@ -320,30 +329,6 @@ export function ClientDetail({ clientId, onEdit, onDelete }: ClientDetailProps) 
 					</ul>
 				)}
 			</section>
-
-			{contactDialog ? (
-				<ContactForm
-					clientId={client.id}
-					contact={contactDialog.contact}
-					onClose={() => setContactDialog(null)}
-					onSaved={() => {
-						setContactDialog(null);
-						refresh();
-					}}
-				/>
-			) : null}
-
-			{projectDialog ? (
-				<ProjectForm
-					clientId={client.id}
-					project={projectDialog.project}
-					onClose={() => setProjectDialog(null)}
-					onSaved={() => {
-						setProjectDialog(null);
-						refresh();
-					}}
-				/>
-			) : null}
 
 			{pending ? (
 				<Dialog

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import type {
 	ClientSummary,
 	DocumentTemplate,
@@ -6,7 +6,7 @@ import type {
 	ProjectSummary,
 } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
+import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
@@ -35,6 +35,8 @@ function labelFor(path: string): string {
 }
 
 export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
+	// The submit button lives in the page footer, outside the form element.
+	const formId = useId();
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -131,8 +133,21 @@ export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
 	}
 
 	return (
-		<Dialog title="New document" onClose={onClose}>
-			<form onSubmit={submit} noValidate className="mt-5">
+		<FormPage
+			title="New document"
+			onBack={onClose}
+			backLabel="Documents"
+			width="wide"
+			actions={
+				<>
+					<Button onClick={onClose}>Cancel</Button>
+					<Button type="submit" form={formId} variant="primary" disabled={busy}>
+						{busy ? "Generating" : "Generate"}
+					</Button>
+				</>
+			}
+		>
+			<form id={formId} onSubmit={submit} noValidate>
 				<div className="flex flex-col gap-4">
 					<Select
 						label="Client"
@@ -224,13 +239,7 @@ export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
 					</div>
 				) : null}
 
-				<div className="mt-6 flex justify-end gap-2">
-					<Button onClick={onClose}>Cancel</Button>
-					<Button type="submit" variant="primary" disabled={busy}>
-						{busy ? "Generating" : "Generate"}
-					</Button>
-				</div>
 			</form>
-		</Dialog>
+		</FormPage>
 	);
 }

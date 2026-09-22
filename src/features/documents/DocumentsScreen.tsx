@@ -101,6 +101,11 @@ export function DocumentsScreen() {
 
 	const split = selectedId !== null;
 
+	// The form takes the screen rather than covering the list it came from.
+	if (generating) {
+		return <GenerateDialog onClose={() => setGenerating(false)} onGenerated={generated} />;
+	}
+
 	return (
 		<div className="flex h-full flex-col p-8">
 			<div
@@ -165,10 +170,6 @@ export function DocumentsScreen() {
 					</div>
 				) : null}
 			</div>
-
-			{generating ? (
-				<GenerateDialog onClose={() => setGenerating(false)} onGenerated={generated} />
-			) : null}
 
 			{deleted ? (
 				<Toast

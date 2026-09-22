@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import type { Automation, AutomationStep, AutomationTrigger, ToolSummary } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
+import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
@@ -34,6 +34,8 @@ const WEEKDAYS = [
  * with a message that says which step.
  */
 export function AutomationForm({ automation, onClose, onSaved }: AutomationFormProps) {
+	// The submit button lives in the page footer, outside the form element.
+	const formId = useId();
 	const [name, setName] = useState(automation?.name ?? "");
 	const [description, setDescription] = useState(automation?.description ?? "");
 	const [kind, setKind] = useState<TriggerKind>(automation?.trigger.kind ?? "manual");
@@ -135,8 +137,21 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 	const willWait = stepTools.some((tool) => gated.some((entry) => entry.name === tool));
 
 	return (
-		<Dialog title={automation ? "Edit automation" : "New automation"} onClose={onClose} width="wide">
-			<form onSubmit={submit} noValidate className="mt-5">
+		<FormPage
+			title={automation ? "Edit automation" : "New automation"}
+			onBack={onClose}
+			backLabel="Agent"
+			width="wide"
+			actions={
+				<>
+					<Button onClick={onClose}>Cancel</Button>
+					<Button type="submit" form={formId} variant="primary" disabled={busy}>
+						{busy ? "Saving" : "Save"}
+					</Button>
+				</>
+			}
+		>
+			<form id={formId} onSubmit={submit} noValidate>
 				<div className="grid grid-cols-2 gap-4">
 					<div className="col-span-2">
 						<Field label="Name" required value={name} onChange={setName} error={nameError} />
@@ -199,13 +214,7 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 					</div>
 				) : null}
 
-				<div className="mt-6 flex justify-end gap-2">
-					<Button onClick={onClose}>Cancel</Button>
-					<Button type="submit" variant="primary" disabled={busy}>
-						{busy ? "Saving" : "Save"}
-					</Button>
-				</div>
 			</form>
-		</Dialog>
+		</FormPage>
 	);
 }

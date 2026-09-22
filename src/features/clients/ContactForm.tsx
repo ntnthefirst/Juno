@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { type FormEvent, useId, useState } from "react";
 import type { Contact, ContactPatch } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
+import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
 
 type ContactFormProps = {
@@ -40,6 +40,8 @@ function messageOf(error: unknown): string {
 }
 
 export function ContactForm({ clientId, contact, onClose, onSaved }: ContactFormProps) {
+	// The submit button lives in the page footer, outside the form element.
+	const formId = useId();
 	const [values, setValues] = useState<Values>(() => toValues(contact));
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -82,8 +84,20 @@ export function ContactForm({ clientId, contact, onClose, onSaved }: ContactForm
 	}
 
 	return (
-		<Dialog title={contact ? "Edit contact" : "New contact"} onClose={onClose}>
-			<form onSubmit={submit} noValidate className="mt-5">
+		<FormPage
+			title={contact ? "Edit contact" : "New contact"}
+			onBack={onClose}
+			backLabel="Client"
+			actions={
+				<>
+					<Button onClick={onClose}>Cancel</Button>
+					<Button type="submit" form={formId} variant="primary" disabled={busy}>
+						{busy ? "Saving" : "Save"}
+					</Button>
+				</>
+			}
+		>
+			<form id={formId} onSubmit={submit} noValidate>
 				<div className="grid grid-cols-2 gap-4">
 					<div className="col-span-2">
 						<Field
@@ -137,13 +151,7 @@ export function ContactForm({ clientId, contact, onClose, onSaved }: ContactForm
 					</div>
 				) : null}
 
-				<div className="mt-6 flex justify-end gap-2">
-					<Button onClick={onClose}>Cancel</Button>
-					<Button type="submit" variant="primary" disabled={busy}>
-						{busy ? "Saving" : "Save"}
-					</Button>
-				</div>
 			</form>
-		</Dialog>
+		</FormPage>
 	);
 }

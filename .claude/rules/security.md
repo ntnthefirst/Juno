@@ -61,6 +61,16 @@ partitioning and makes every relative fetch a surprise.
   img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none';
   base-uri 'none'`.
 - No `'unsafe-eval'`. If a dependency needs it, replace the dependency.
+- **`script-src` gains one thing in development and nothing else: a nonce.**
+  Vite's React plugin injects its refresh preamble as an inline script, so a
+  bare `'self'` blocks it, the preamble never runs, and every module it
+  transformed throws on `$RefreshReg$`. The window paints white and says why
+  only in the renderer console, which is not where anyone looks first. The
+  nonce is in `electron/shared/dev.ts`, it is fixed rather than per-request
+  because two processes have to agree on it, and it never reaches a packaged
+  build. Do not reach for `'unsafe-inline'` instead: that would leave the one
+  build a developer actually looks at running a policy the shipped app does
+  not have.
 - Fonts are bundled and loaded from `'self'` (decision 10). No Google Fonts link,
   no CDN, no remote stylesheet.
 - `setWindowOpenHandler` denies everything by default and opens genuine external

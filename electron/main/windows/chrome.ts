@@ -8,10 +8,11 @@
  * first window's policy. It is called once, before any window exists.
  */
 import { BrowserWindow, nativeTheme, session, shell } from "electron";
+import { DEV_CSP_NONCE, DEV_URL, DEV_WS_URL } from "../../shared/dev";
 import { MAIL_FRAME_ORIGIN } from "../../shared/types";
 import { APP_ORIGIN } from "../scheme";
 
-export const DEV_URL = "http://localhost:5173";
+export { DEV_URL };
 
 /**
  * Must match --titlebar-height in tokens.css. The renderer draws the bar and
@@ -27,15 +28,21 @@ export const TITLEBAR_HEIGHT = 40;
  * There is no `unsafe-eval` and no remote origin: Juno is offline-first and the
  * renderer has no business reaching the network. Mail HTML is rendered in a
  * separate sandboxed frame with its own, stricter policy, never here.
+ *
+ * `script-src` gains a nonce in development and nothing else. Vite's React
+ * plugin injects its refresh preamble inline, and a bare `'self'` blocks it,
+ * which paints a white window and says so only in the renderer console. See
+ * shared/dev.ts for why a nonce rather than `'unsafe-inline'`.
  */
 function contentSecurityPolicy(isDev: boolean): string {
-	const connect = isDev ? `'self' ${DEV_URL} ws://localhost:5173` : "'self'";
+	const connect = isDev ? `'self' ${DEV_URL} ${DEV_WS_URL}` : "'self'";
+	const script = isDev ? `'self' 'nonce-${DEV_CSP_NONCE}'` : "'self'";
 	return [
 		"default-src 'self'",
 		// Vite injects styles as <style> tags in development, and Tailwind's
 		// runtime does the same in the build.
 		"style-src 'self' 'unsafe-inline'",
-		"script-src 'self'",
+		`script-src ${script}`,
 		"img-src 'self' data: blob:",
 		"font-src 'self' data:",
 		`connect-src ${connect}`,

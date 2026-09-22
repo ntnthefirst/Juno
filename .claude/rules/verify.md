@@ -98,6 +98,13 @@ A clean typecheck is not proof a screen works.
   fonts (`document.fonts.ready`) and any image, before calling it. An offscreen
   window that is never shown still needs this. A blank PDF in the output folder is
   this trap every time.
+- **A white window in `npm run dev` is the content policy, not React.**
+  Vite's React plugin injects its refresh preamble inline, so `script-src
+  'self'` blocks it and every module the plugin touched then throws on
+  `$RefreshReg$`. Nothing appears in the terminal: the only evidence is in the
+  renderer console, which a frameless window with no menu does not open on its
+  own. The development policy carries a nonce for exactly this
+  ([security.md](security.md)).
 - **A Tailwind token that does not exist renders nothing and reports nothing.**
   `bg-accent-strong` when only `--accent-hover` exists produces no class, no lint
   error, no build error. If a colour is not applying, check the name in

@@ -537,3 +537,37 @@ describe("search", () => {
 		expect(await threads.listThreads({ accountId, search: 'factuur" OR (' }, db)).toHaveLength(1);
 	});
 });
+
+describe("a mailbox bigger than one run", () => {
+	it("keeps listing from the horizon until it has walked all of it", async () => {
+		// Three messages and a batch of one, so the run is capped twice. The
+		// version this covers marked the horizon as walked after the first run
+		// and then only ever searched from the oldest uid it held, which is the
+		// newest message: the two older ones were never asked for again and the
+		// folder sat permanently half synced.
+		sync.configureMailSync({ mailDir, headerBatch: 1 });
+		for (const uid of [1, 2, 3]) {
+			box.add("INBOX", {
+				uid,
+				from: "jansen@example.be",
+				subject: `Message ${uid}`,
+				messageId: `<m${uid}@example.be>`,
+				date: new Date().toISOString(),
+			});
+		}
+
+		await sync.syncAccount(accountId, db);
+		expect(await threads.listThreads({ accountId }, db)).toHaveLength(1);
+
+		await sync.syncAccount(accountId, db);
+		expect(await threads.listThreads({ accountId }, db)).toHaveLength(2);
+
+		await sync.syncAccount(accountId, db);
+		const all = await threads.listThreads({ accountId }, db);
+		expect(all).toHaveLength(3);
+
+		// Walked in full, so the next run stops re-listing the whole horizon.
+		const folder = await folders.list(accountId, db);
+		expect(folder.find((f) => f.specialUse === "inbox")?.syncEnabled).toBe(true);
+	});
+});

@@ -22,6 +22,9 @@ import { ThreadView } from "./ThreadView";
 
 type LinkTarget = { threadId: string; currentClientId: string | null; senderAddress: string | null };
 
+/** The widest horizon mail-accounts.ts accepts, which is ten years of mail. */
+const EVERYTHING_DAYS = 3650;
+
 /**
  * Three panes: where (accounts, folders and the outbox), what (threads or
  * composed messages), and the thing itself. Search replaces the folder with a
@@ -163,6 +166,27 @@ export function MailScreen() {
 			cancelled = true;
 		};
 	}, [showingOutbox, selection, outboxVersion]);
+
+	/**
+	 * Widens the horizon and pulls again.
+	 *
+	 * The horizon is what bounds a first sync, and at its default of ninety days
+	 * an account whose mail is older than that looks almost empty with nothing
+	 * on screen saying why. Raising it makes the next run list the folder from
+	 * the new date, because the folder records the horizon it was walked with.
+	 */
+	async function pullEverything(ids: string[]) {
+		try {
+			for (const id of ids) {
+				await window.juno.mail.accounts.update(id, { horizonDays: EVERYTHING_DAYS });
+			}
+			setAccountsVersion((v) => v + 1);
+			setNotice("Pulling everything. A large mailbox takes several runs.");
+			await Promise.all(ids.map((id) => window.juno.mail.sync.run(id)));
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
 
 	async function syncNow(accountId?: string) {
 		try {
@@ -505,6 +529,16 @@ export function MailScreen() {
 									onRowAction={handleRowAction}
 								/>
 							)}
+							{!showingOutbox && term.length === 0 ? (
+								<HorizonNote
+									accounts={
+										selection?.accountId
+											? accounts.filter((account) => account.id === selection.accountId)
+											: accounts
+									}
+									onPullEverything={(ids) => void pullEverything(ids)}
+								/>
+							) : null}
 						</div>
 					</div>
 				)}
@@ -570,6 +604,37 @@ export function MailScreen() {
 					onDismiss={() => setNotice(null)}
 				/>
 			) : null}
+		</div>
+	);
+}
+
+type HorizonNoteProps = {
+	accounts: MailAccount[];
+	onPullEverything: (accountIds: string[]) => void;
+};
+
+/**
+ * Why the list stops where it does.
+ *
+ * A first sync reaches back as far as the account's horizon and no further, so
+ * an address whose mail is older than that shows a handful of messages and
+ * looks broken. Nothing said so anywhere, and the setting is in a different
+ * window. This says it under the last row, where the question gets asked.
+ */
+function HorizonNote({ accounts, onPullEverything }: HorizonNoteProps) {
+	const bounded = accounts.filter((account) => account.horizonDays < EVERYTHING_DAYS);
+	if (bounded.length === 0) return null;
+	const days = Math.min(...bounded.map((account) => account.horizonDays));
+
+	return (
+		<div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+			<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				Juno pulled the last <span className="tabular">{days}</span> days. Anything older is still
+				on the server and is not on this machine yet.
+			</p>
+			<Button size="dense" onClick={() => onPullEverything(bounded.map((account) => account.id))}>
+				Pull everything
+			</Button>
 		</div>
 	);
 }

@@ -379,13 +379,22 @@ export function CalendarScreen() {
 							key={option.kind}
 							type="button"
 							aria-pressed={view === option.kind}
+							// Both labels are in the DOM and CSS picks one, so the button
+							// needs a name of its own: without it a screen reader reads the
+							// long one and the short one together, as "Week W".
+							aria-label={option.label}
+							title={option.label}
 							onClick={() => setView(option.kind)}
 							className={`h-[30px] rounded-[var(--radius-md)] px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 								view === option.kind ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
 							}`}
 						>
-							<span className="hidden sm:inline">{option.label}</span>
-							<span className="sm:hidden">{option.short}</span>
+							<span aria-hidden className="hidden sm:inline">
+								{option.label}
+							</span>
+							<span aria-hidden className="sm:hidden">
+								{option.short}
+							</span>
 						</button>
 					))}
 				</div>

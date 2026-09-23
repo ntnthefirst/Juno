@@ -77,6 +77,9 @@ export function CalendarScreen() {
 	const [deleted, setDeleted] = useState<CalendarEvent | null>(null);
 	const [warnings, setWarnings] = useState<string[] | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	// Which way the range last moved, for the agenda's entrance. Held here
+	// because nothing below can tell a step forward from a jump to today.
+	const [direction, setDirection] = useState<-1 | 1>(1);
 
 	// The clock is impure, so it is read here and kept current by the minute.
 	useEffect(() => {
@@ -137,11 +140,12 @@ export function CalendarScreen() {
 		[load, from, to],
 	);
 
-	function step(direction: -1 | 1) {
+	function step(towards: -1 | 1) {
 		if (!anchor) return;
-		if (view === "month") setAnchor(addMonths(anchor, direction));
-		else if (view === "week") setAnchor(addDays(anchor, 7 * direction));
-		else setAnchor(addDays(anchor, AGENDA_DAYS * direction));
+		setDirection(towards);
+		if (view === "month") setAnchor(addMonths(anchor, towards));
+		else if (view === "week") setAnchor(addDays(anchor, 7 * towards));
+		else setAnchor(addDays(anchor, AGENDA_DAYS * towards));
 	}
 
 	async function run(work: () => Promise<unknown>, done?: string) {
@@ -361,7 +365,14 @@ export function CalendarScreen() {
 					<Button size="dense" onClick={() => step(-1)} aria-label="Previous">
 						{"<"}
 					</Button>
-					<Button size="dense" onClick={() => today && setAnchor(today)}>
+					<Button
+						size="dense"
+						onClick={() => {
+							if (!today) return;
+							if (anchor) setDirection(today >= anchor ? 1 : -1);
+							setAnchor(today);
+						}}
+					>
 						Today
 					</Button>
 					<Button size="dense" onClick={() => step(1)} aria-label="Next">
@@ -455,6 +466,7 @@ export function CalendarScreen() {
 					/>
 				) : (
 					<AgendaView
+						direction={direction}
 						dates={dates}
 						today={today}
 						placed={placed}

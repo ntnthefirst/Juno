@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { CalendarItem, CalendarOccurrence } from "@shared/types";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
@@ -16,6 +22,13 @@ type AgendaViewProps = {
 	onDelete: (item: CalendarOccurrence) => void;
 	/** A wheel gesture past the top or bottom of the list: page the range. */
 	onStep: (direction: -1 | 1) => void;
+	/**
+	 * Which way the range last moved. It comes from the screen rather than
+	 * being worked out here, because only the screen can tell a step forward
+	 * from a jump to today, and because a value derived on every render would
+	 * flip back the next time anything else re-rendered this view.
+	 */
+	direction: -1 | 1;
 };
 
 function subtitle(item: CalendarItem): string {
@@ -30,12 +43,31 @@ function subtitle(item: CalendarItem): string {
 }
 
 /** A list, one hairline per row, for reading a stretch of days rather than placing them. */
-export function AgendaView({ dates, today, placed, onOpen, onEdit, onDelete, onStep }: AgendaViewProps) {
+export function AgendaView({
+	dates,
+	today,
+	placed,
+	onOpen,
+	onEdit,
+	onDelete,
+	onStep,
+	direction,
+}: AgendaViewProps) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const menu = useContextMenu();
 	const [menuItem, setMenuItem] = useState<CalendarItem | null>(null);
 	const page = useWheelPaging(onStep);
 	const days = dates.filter((date) => (placed.get(date) ?? []).length > 0);
+	const range = dates[0] ?? "";
+
+	// Where the new range starts, once it has laid out. Forward lands at its
+	// top; back lands at its bottom, so scrolling up out of one range continues
+	// where the eye already was rather than jumping to a page break.
+	useLayoutEffect(() => {
+		const node = scroller.current;
+		if (!node) return;
+		node.scrollTop = direction === 1 ? 0 : node.scrollHeight;
+	}, [range, direction]);
 
 	// The list scrolls on its own first. Only once a wheel would go past its
 	// top or bottom does it page the range, the same rule the week view's hour
@@ -66,7 +98,15 @@ export function AgendaView({ dates, today, placed, onOpen, onEdit, onDelete, onS
 			{days.length === 0 ? (
 				<p className="p-8 text-[var(--ink-muted)]">Nothing scheduled in these {dates.length} days.</p>
 			) : (
-				<div className="mx-auto w-full max-w-[var(--content-width)] px-8 py-4">
+				<div
+					// Keyed on the range so the entrance replays on every page. A
+					// class on its own would not: an animation restarts only when the
+					// element is new or the animation name itself changes.
+					key={range}
+					className={`mx-auto w-full max-w-[var(--content-width)] px-8 py-4 ${
+						direction === 1 ? "animate-page-forward" : "animate-page-back"
+					}`}
+				>
 					{days.map((date) => (
 						<section key={date} className="mb-6">
 							<h2

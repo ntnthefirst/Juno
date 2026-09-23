@@ -39,11 +39,17 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 		};
 	}, [threadId, version]);
 
+	// A file action on one message (read, flag) or a client link change both
+	// mean the thread and the list behind it are out of date.
+	function refresh() {
+		setVersion((v) => v + 1);
+		onChanged();
+	}
+
 	async function unlink() {
 		try {
 			await window.juno.mail.threads.unlinkClient(threadId);
-			setVersion((v) => v + 1);
-			onChanged();
+			refresh();
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
 		}
@@ -68,6 +74,7 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 	const openByDefault = new Set(
 		messages.filter((m, index) => !m.isSeen || index === messages.length - 1).map((m) => m.id),
 	);
+	const senderAddress = summary.participants[0]?.address ?? null;
 
 	return (
 		<div className="px-8 py-6">
@@ -102,7 +109,7 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 				{messages.length} {messages.length === 1 ? "message" : "messages"}
 			</p>
 
-			<div className="mt-6 flex flex-col gap-4">
+			<div className="mt-6 flex flex-col">
 				{messages.map((message) => (
 					<MessageView
 						key={message.id}
@@ -110,6 +117,7 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 						initiallyOpen={openByDefault.has(message.id)}
 						onNotice={onNotice}
 						onReply={onReply}
+						onChanged={refresh}
 					/>
 				))}
 			</div>
@@ -118,11 +126,11 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 				<LinkClientDialog
 					threadId={threadId}
 					currentClientId={summary.clientId}
+					senderAddress={senderAddress}
 					onClose={() => setLinking(false)}
 					onLinked={() => {
 						setLinking(false);
-						setVersion((v) => v + 1);
-						onChanged();
+						refresh();
 					}}
 				/>
 			) : null}

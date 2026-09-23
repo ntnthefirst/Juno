@@ -13,54 +13,41 @@ type FolderNavProps = {
 	onSyncAccount: (accountId: string) => void;
 };
 
-const STANDARD_VIEWS: { id: MailView; label: string }[] = [
-	{ id: "inbox", label: "Inbox" },
-	{ id: "sent", label: "Sent" },
-	{ id: "drafts", label: "Drafts" },
-	{ id: "archive", label: "Archive" },
-	{ id: "junk", label: "Junk" },
-	{ id: "trash", label: "Trash" },
-	{ id: "outbox", label: "Outbox" },
-];
+const SPECIAL_ORDER: MailSpecialUse[] = ["inbox", "drafts", "sent", "archive", "junk", "trash"];
+const SPECIAL_LABELS: Record<MailSpecialUse, string> = {
+	inbox: "Inbox",
+	drafts: "Drafts",
+	sent: "Sent",
+	archive: "Archive",
+	junk: "Junk",
+	trash: "Trash",
+};
 
 /**
- * Accounts as headings, synced folders under each, unsynced ones dimmed. The
- * status line under an account says what the sync is doing or what failed,
- * in the same words the settings screen uses.
+ * Every folder listed here is one the account actually has, with the count
+ * that folder really carries. Picking a folder nobody has synced used to land
+ * on a silent empty list; now that folder is not offered until a sync makes
+ * it real, which is also why there is no unified "Inbox" spanning accounts
+ * that have not all synced one.
  */
 export function FolderNav({ accounts, folders, sync, selection, onSelect, onSyncAccount }: FolderNavProps) {
 	return (
 		<div className="flex flex-col gap-4">
-			<div className="flex flex-col gap-px">
-				{STANDARD_VIEWS.map((view) => {
-					const active = selection?.view === view.id && selection.folderId === null;
-					return (
-						<button
-							key={view.id}
-							type="button"
-							onClick={() =>
-								onSelect({ accountId: selection?.accountId ?? null, folderId: null, view: view.id })
-							}
-							aria-current={active ? "true" : undefined}
-							style={{ height: "var(--row-height)" }}
-							className={[
-								"flex w-full items-center rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)]",
-								active
-									? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
-									: "text-[var(--ink)] hover:bg-[var(--hover)]",
-							].join(" ")}
-						>
-							{view.label}
-						</button>
-					);
-				})}
-			</div>
+			<button
+				type="button"
+				onClick={() => onSelect({ accountId: null, folderId: null, view: "outbox" })}
+				aria-current={selection?.view === "outbox" ? "true" : undefined}
+				style={{ height: "var(--row-height)" }}
+				className={[
+					"flex w-full items-center rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)]",
+					selection?.view === "outbox"
+						? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
+						: "text-[var(--ink)] hover:bg-[var(--hover)]",
+				].join(" ")}
+			>
+				Outbox
+			</button>
 
-			<div className="border-t border-[var(--line)] pt-3">
-				<h2 className="px-3 text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
-					Other folders
-				</h2>
-			</div>
 			{accounts.map((account) => {
 				const status = sync[account.id] ?? null;
 				const failed = status?.phase === "failed" || (!isSyncing(status) && account.lastSyncError);
@@ -68,63 +55,61 @@ export function FolderNav({ accounts, folders, sync, selection, onSelect, onSync
 					? (status?.error ?? account.lastSyncError ?? "Sync failed.")
 					: describeSync(status, account.lastSyncAt);
 				const list = folders[account.id] ?? [];
-				const customFolders = list.filter((folder) => folder.specialUse === null);
+				const special = SPECIAL_ORDER.flatMap((use) => {
+					const folder = list.find((f) => f.specialUse === use);
+					return folder ? [{ folder, label: SPECIAL_LABELS[use] }] : [];
+				});
+				const custom = list.filter((folder) => folder.specialUse === null).map((folder) => ({ folder, label: folder.name }));
+
+				function folderRow({ folder, label }: { folder: MailFolder; label: string }) {
+					const active = selection?.accountId === account.id && selection.folderId === folder.id;
+					return (
+						<button
+							key={folder.id}
+							type="button"
+							onClick={() =>
+								onSelect({ accountId: account.id, folderId: folder.id, view: folder.specialUse ?? "inbox" })
+							}
+							aria-current={active ? "true" : undefined}
+							style={{ height: "var(--row-height)" }}
+							className={[
+								"flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)]",
+								active
+									? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
+									: folder.syncEnabled
+										? "text-[var(--ink)] hover:bg-[var(--hover)]"
+										: "text-[var(--ink-muted)] opacity-60 hover:bg-[var(--hover)] hover:opacity-100",
+							].join(" ")}
+							title={folder.syncEnabled ? folder.path : `${folder.path} (not synced)`}
+						>
+							<span className="min-w-0 flex-1 truncate">{label}</span>
+							{folder.unreadCount > 0 ? (
+								<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+									{folder.unreadCount}
+								</span>
+							) : null}
+						</button>
+					);
+				}
+
 				return (
 					<div key={account.id}>
-						<button
-							type="button"
-							onClick={() => onSelect({ accountId: account.id, folderId: null, view: "inbox" })}
-							className={[
-								"flex w-full items-center rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-sm)] font-[var(--weight-medium)] uppercase tracking-[0.06em]",
-								selection?.accountId === account.id &&
-								selection.folderId === null &&
-								selection.view === "inbox"
-									? "bg-[var(--accent-soft)] text-[var(--accent)]"
-									: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
-							].join(" ")}
-							style={{ height: "var(--row-height)" }}
+						<p
+							className="truncate px-3 text-[length:var(--text-sm)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]"
+							style={{ height: "var(--row-height)", lineHeight: "var(--row-height)" }}
 							title={account.email}
 						>
-							<span className="truncate">{account.label}</span>
-						</button>
+							{account.label}
+						</p>
 
-						{customFolders.length === 0 ? (
+						{list.length === 0 ? (
 							<p className="px-3 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 								No folders yet. Sync to list them.
 							</p>
 						) : (
-							<div className="mt-px flex flex-col gap-px">
-								{customFolders.map((folder) => {
-									const active =
-										selection?.accountId === account.id && selection.folderId === folder.id;
-									return (
-										<button
-											key={folder.id}
-											type="button"
-											onClick={() =>
-												onSelect({ accountId: account.id, folderId: folder.id, view: "inbox" })
-											}
-											aria-current={active ? "true" : undefined}
-											style={{ height: "var(--row-height)" }}
-											className={[
-												"flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)]",
-												active
-													? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
-													: folder.syncEnabled
-														? "text-[var(--ink)] hover:bg-[var(--hover)]"
-														: "text-[var(--ink-muted)] hover:bg-[var(--hover)]",
-											].join(" ")}
-											title={folder.syncEnabled ? folder.path : `${folder.path} (not synced)`}
-										>
-											<span className="min-w-0 flex-1 truncate">{folder.name}</span>
-											{folder.unreadCount > 0 ? (
-												<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-													{folder.unreadCount}
-												</span>
-											) : null}
-										</button>
-									);
-								})}
+							<div className="flex flex-col gap-px">
+								{special.map(folderRow)}
+								{custom.map(folderRow)}
 							</div>
 						)}
 

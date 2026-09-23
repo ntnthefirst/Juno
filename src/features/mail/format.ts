@@ -1,4 +1,4 @@
-import type { MailAddress, MailSyncStatus } from "@shared/types";
+import type { MailAddress, MailFileResult, MailSyncStatus } from "@shared/types";
 
 /**
  * A message time the way a list shows it: the clock for today, the weekday
@@ -92,4 +92,20 @@ export function isSyncing(status: MailSyncStatus | null): boolean {
 		status.phase !== "done" &&
 		status.phase !== "failed"
 	);
+}
+
+/**
+ * What a filing action actually did, honestly. A server without UIDPLUS
+ * cannot say where a message landed, so the row disappears until the next
+ * sync brings it back in its new folder. That is worth saying out loud
+ * rather than letting the count alone imply it is already sitting there.
+ */
+export function describeMailFileResult(verb: string, count: number, result: MailFileResult): string {
+	const noun = count === 1 ? "thread" : "threads";
+	const base = `${count} ${noun} ${verb}.`;
+	if (result.moved > 0 && result.remembered === 0) {
+		const pronoun = count === 1 ? "It" : "They";
+		return `${base} ${pronoun} will reappear in ${result.folderName} after the next sync.`;
+	}
+	return base;
 }

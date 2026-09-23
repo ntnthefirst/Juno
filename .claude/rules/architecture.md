@@ -50,6 +50,7 @@ electron/
       chrome.ts           CSP, navigation rules, the native title-bar overlay
       main-window.ts      the application window
       settings-window.ts  fixed size, modal child of the main window
+      setup-window.ts     smaller, the same shape, the first run
       splash.ts           the window shown while the database opens
     updates.ts            electron-updater against the public GitHub releases
     dev-data.ts           where a development run keeps its data
@@ -116,9 +117,18 @@ which is what makes the operating system refuse input to the application behind
 it until it is closed. It is a fixed size, it is reached from the sidebar
 footer, and it is not a `ScreenId`. Its renderer entry is the same bundle: the
 URL carries `#/settings` and `src/main.tsx` picks the shell from that, so the
-right one paints on the first frame.
+right one paints on the first frame. A section may ride along
+(`#/settings/mail`), which is how a screen sends someone to the page that does
+the job; when the window is already open the main process sends
+`settings.showSection` instead, because reloading would throw away a
+half-typed field.
 
-Both windows draw their own title bar and let the operating system draw the
+**The first run is the second modal child** (`#/setup`, decision 34), and there
+is only ever **one modal child at a time**: opening either closes the other.
+When one closes, the main process focuses the parent and sends
+`window.childClosed`, which is the only channel back from either.
+
+Every window draws its own title bar and lets the operating system draw the
 caption buttons on top (`chrome.ts`). Three things have to move together when
 the title bar height changes: `TITLEBAR_HEIGHT`, `--titlebar-height`, and the
 gutters in `src/lib/platform.ts`. Change one and the close button sits off the

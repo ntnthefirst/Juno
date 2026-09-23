@@ -1,0 +1,141 @@
+/*
+ * Keyframes for the setup illustrations.
+ *
+ * Durations here are deliberately outside the interface's --duration-fast and
+ * --duration-base tokens. Those two are for hover and focus transitions; a
+ * once-off reveal that plays while someone reads a paragraph wants closer to a
+ * second, still under 1.2s, and never longer. The colours and easing curve
+ * still come from tokens.css: only the timing is illustration-specific.
+ *
+ * Every rule here is paired with a `prefers-reduced-motion: reduce` override
+ * that lands directly on the settled, final state. Nothing loops.
+ */
+
+@keyframes onb-draw {
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+@keyframes onb-fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes onb-fade-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes onb-settle {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes onb-slide-in {
+	from {
+		opacity: 0;
+		transform: translateX(14px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+@keyframes onb-close {
+	from {
+		transform: rotate(-22deg);
+	}
+	to {
+		transform: rotate(0deg);
+	}
+}
+
+/* Paired with an SVG `pathLength={100}` on the element, so the dash length is
+ * always 100 regardless of the path's real geometry. */
+.onb-draw {
+	stroke-dasharray: 100;
+	stroke-dashoffset: 100;
+	animation: onb-draw 1s var(--ease) forwards;
+}
+
+.onb-fade-in {
+	opacity: 0;
+	animation: onb-fade-in 0.6s var(--ease) forwards;
+}
+
+.onb-fade-out {
+	opacity: 1;
+	animation: onb-fade-out 0.6s var(--ease) forwards;
+}
+
+.onb-settle {
+	opacity: 0;
+	animation: onb-settle 0.5s var(--ease) forwards;
+}
+
+.onb-slide-in {
+	opacity: 0;
+	animation: onb-slide-in 0.7s var(--ease) forwards;
+}
+
+.onb-close {
+	animation: onb-close 0.6s var(--ease) forwards;
+}
+
+.onb-delay-1 {
+	animation-delay: 150ms;
+}
+
+.onb-delay-2 {
+	animation-delay: 300ms;
+}
+
+.onb-delay-3 {
+	animation-delay: 450ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.onb-draw,
+	.onb-fade-in,
+	.onb-fade-out,
+	.onb-settle,
+	.onb-slide-in,
+	.onb-close {
+		animation: none;
+	}
+
+	.onb-draw {
+		stroke-dashoffset: 0;
+	}
+
+	.onb-fade-in,
+	.onb-settle,
+	.onb-slide-in {
+		opacity: 1;
+		transform: none;
+	}
+
+	.onb-fade-out {
+		opacity: 0;
+	}
+
+	.onb-close {
+		transform: rotate(0deg);
+	}
+}

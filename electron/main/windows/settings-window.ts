@@ -17,7 +17,11 @@ import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
 const WIDTH = 920;
 const HEIGHT = 680;
 
-export function createSettingsWindow(parent: BrowserWindow, isDev: boolean): BrowserWindow {
+export function createSettingsWindow(
+	parent: BrowserWindow,
+	isDev: boolean,
+	section?: string,
+): BrowserWindow {
 	const window = new BrowserWindow({
 		parent,
 		modal: true,
@@ -50,7 +54,7 @@ export function createSettingsWindow(parent: BrowserWindow, isDev: boolean): Bro
 
 	window.once("ready-to-show", () => window.show());
 
-	void window.loadURL(viewUrl(isDev, "settings"));
+	void window.loadURL(viewUrl(isDev, "settings", section));
 
 	return window;
 }

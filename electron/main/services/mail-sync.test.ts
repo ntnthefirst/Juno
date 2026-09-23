@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
+import * as clientEmailsService from "./client-emails";
 import * as clientsService from "./clients";
 import * as contactsService from "./contacts";
 import * as accounts from "./mail-accounts";
@@ -22,6 +23,7 @@ import {
 	type RemoteHeader,
 } from "./mail-source";
 import * as sync from "./mail-sync";
+import { configureSettings } from "./settings";
 import * as threads from "./mail-threads";
 
 const MIGRATIONS = resolve(process.cwd(), "electron/main/db/migrations");
@@ -174,6 +176,9 @@ beforeEach(async () => {
 	box = new FakeMailbox();
 	mailDir = mkdtempSync(join(tmpdir(), "juno-mail-"));
 	configureCredentialStore(new MemoryCredentialStore());
+	// Adding an account records its address on the owner profile, which lives in
+	// settings.json, so this test needs a settings file of its own.
+	configureSettings(mkdtempSync(join(tmpdir(), "juno-mail-settings-")));
 	configureMailboxSource(async (connection) => {
 		if (box.failConnect) throw box.failConnect;
 		if (connection.password !== "secret") {
@@ -305,6 +310,26 @@ describe("sync", () => {
 		await accounts.update(accountId, { horizonDays: 90 }, db);
 		await sync.syncAccount(accountId, db);
 		expect(await threads.listThreads({ accountId }, db)).toHaveLength(2);
+	});
+
+	it("pulls the newest mail anyway when everything predates the horizon", async () => {
+		// horizonDays is 30 from beforeEach. A mailbox whose only mail is older
+		// than that must not come back looking empty on the first sync.
+		box.add("INBOX", { uid: 1, from: "a@x.be", subject: "ancient", messageId: "<1@x>", date: recent(400), text: "1" });
+		box.add("INBOX", { uid: 2, from: "a@x.be", subject: "older", messageId: "<2@x>", date: recent(200), text: "2" });
+
+		const result = await sync.syncAccount(accountId, db);
+		expect(result.newMessages).toBe(2);
+		expect(await threads.listThreads({ accountId }, db)).toHaveLength(2);
+
+		// A folder that is genuinely empty stays empty: the fallback only fires
+		// when the server says there is mail and the horizon search missed it.
+		box.remove("INBOX", 1);
+		box.remove("INBOX", 2);
+		box.uidValidity.set("INBOX", "2");
+		const second = await sync.syncAccount(accountId, db);
+		expect(second.newMessages).toBe(0);
+		expect(await threads.listThreads({ accountId }, db)).toHaveLength(0);
 	});
 
 	it("soft-deletes what the server no longer has", async () => {
@@ -440,7 +465,8 @@ describe("attachments", () => {
 describe("client linking", () => {
 	it("links a thread to the client whose contact wrote it, and leaves a manual choice alone", async () => {
 		const obet = await clientsService.create({ name: "obet" }, db);
-		await clientsService.create({ name: "noir", email: "info@noir.be" }, db);
+		const noir = await clientsService.create({ name: "noir" }, db);
+		await clientEmailsService.create({ clientId: noir.id, email: "info@noir.be" }, db);
 		await contactsService.create({ clientId: obet.id, name: "Laura", email: "laura@obet.be" }, db);
 
 		box.add("INBOX", { uid: 1, from: "laura@obet.be", subject: "Van Laura", messageId: "<l@obet>", date: recent(3), text: "x" });

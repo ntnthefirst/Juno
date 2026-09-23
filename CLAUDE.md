@@ -144,7 +144,15 @@ closed before work continues. That is the point: settings changes the shape of
 what the rest of the app is showing, and editing a client on one side while
 removing its status on the other is a race with no good outcome.
 
-Both windows draw their own title bar and let the OS draw the caption buttons
+**The first run is the other one** (decision 34): a smaller fixed window, also a
+modal child, so the app paints behind the questions it is answering. There is
+**one modal child at a time**, and opening either closes the other, because two
+modals on one parent fight over focus. When either closes, the main process
+focuses the parent and sends `window.childClosed`; that event is how setup
+finishing, and a replay asked for in settings, reach the main window. Neither
+child has a channel back, and neither needs one.
+
+Every window draws its own title bar and lets the OS draw the caption buttons
 over it. `TITLEBAR_HEIGHT`, `--titlebar-height` and the gutters in
 `src/lib/platform.ts` are one number in three places, and they move together.
 

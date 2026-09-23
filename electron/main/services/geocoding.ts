@@ -19,7 +19,7 @@ import { and, asc, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { AddressCandidate, LocationSuggestion } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { LOCAL_OWNER_ID } from "../db/columns";
-import { calendarEvents, clients } from "../db/schema";
+import { calendarEvents, clientAddresses, clients } from "../db/schema";
 
 const MIN_QUERY_LENGTH = 2;
 const CLIENT_LIMIT = 5;
@@ -68,21 +68,29 @@ export function suggestLocations(
 	const clientRows = db
 		.select({
 			name: clients.name,
-			addressLine1: clients.addressLine1,
-			addressLine2: clients.addressLine2,
-			postalCode: clients.postalCode,
-			city: clients.city,
-			country: clients.country,
+			addressLine1: clientAddresses.addressLine1,
+			addressLine2: clientAddresses.addressLine2,
+			postalCode: clientAddresses.postalCode,
+			city: clientAddresses.city,
+			country: clientAddresses.country,
 		})
 		.from(clients)
+		.innerJoin(
+			clientAddresses,
+			and(
+				eq(clientAddresses.clientId, clients.id),
+				eq(clientAddresses.isPrimary, true),
+				isNull(clientAddresses.deletedAt),
+			),
+		)
 		.where(
 			and(
 				eq(clients.ownerId, ownerId),
 				isNull(clients.deletedAt),
 				or(
 					sql`lower(${clients.name}) like ${needle} escape '\\'`,
-					sql`lower(${clients.city}) like ${needle} escape '\\'`,
-					sql`lower(${clients.addressLine1}) like ${needle} escape '\\'`,
+					sql`lower(${clientAddresses.city}) like ${needle} escape '\\'`,
+					sql`lower(${clientAddresses.addressLine1}) like ${needle} escape '\\'`,
 				),
 			),
 		)

@@ -13,6 +13,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
+import * as clientAddresses from "./client-addresses";
+import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
 import * as contacts from "./contacts";
 import * as projects from "./projects";
@@ -70,7 +72,7 @@ describe("clients", () => {
 			expect(created.updatedAt).toBe("2026-03-14T09:00:00.000Z");
 
 			vi.setSystemTime(new Date("2026-03-14T11:30:00.000Z"));
-			const updated = await clients.update(created.id, { city: "Gent" }, db);
+			const updated = await clients.update(created.id, { vatNumber: "BE0123456789" }, db);
 			expect(updated.updatedAt).toBe("2026-03-14T11:30:00.000Z");
 			expect(updated.createdAt).toBe(created.createdAt);
 		} finally {
@@ -92,15 +94,28 @@ describe("clients", () => {
 		expect(rows[1]?.projectCount).toBe(0);
 	});
 
-	it("searches case-insensitively", async () => {
+	it("searches case-insensitively, including a client's city", async () => {
 		const db = freshDb();
-		await clients.create({ name: "Van Acker NV", city: "Gent" }, db);
-		await clients.create({ name: "Bravo BV", city: "Brugge" }, db);
+		const acker = await clients.create({ name: "Van Acker NV" }, db);
+		await clientAddresses.create({ clientId: acker.id, addressLine1: "Kerkstraat 1", city: "Gent" }, db);
+		const bravo = await clients.create({ name: "Bravo BV" }, db);
+		await clientAddresses.create({ clientId: bravo.id, addressLine1: "Marktplein 2", city: "Brugge" }, db);
 
 		expect(await clients.list({ search: "ACKER" }, db)).toHaveLength(1);
 		expect(await clients.list({ search: "acker" }, db)).toHaveLength(1);
 		expect(await clients.list({ search: "gENT" }, db)).toHaveLength(1);
 		expect(await clients.list({ search: "zzz" }, db)).toHaveLength(0);
+	});
+
+	it("resolves the primary email and the primary address's city on the list row", async () => {
+		const db = freshDb();
+		const acme = await clients.create({ name: "Acme" }, db);
+		await clientAddresses.create({ clientId: acme.id, addressLine1: "Kerkstraat 1", city: "Gent" }, db);
+		await clientEmails.create({ clientId: acme.id, email: "hallo@acme.example" }, db);
+
+		const rows = await clients.list({}, db);
+		expect(rows[0]?.city).toBe("Gent");
+		expect(rows[0]?.email).toBe("hallo@acme.example");
 	});
 });
 

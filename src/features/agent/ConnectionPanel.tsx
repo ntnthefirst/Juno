@@ -8,16 +8,30 @@ type ConnectionPanelProps = {
 	onNotice: (message: string) => void;
 };
 
+/** Let Juno write the file, or write it yourself. There is no third way in. */
+type Route = "install" | "manual";
+
+const ROUTES: { id: Route; label: string; hint: string }[] = [
+	{ id: "install", label: "Let Juno do it", hint: "Pick a client and Juno writes its configuration file" },
+	{ id: "manual", label: "Do it myself", hint: "Copy the entry and paste it wherever it goes" },
+];
+
 /**
  * How an agent reaches Juno, and what it can do when it does.
  *
- * The config block is printed with this machine's real paths, because the one
- * thing that makes this feature unusable is guessing at them.
+ * Two routes to the same entry, and one of them is showing at a time: the
+ * installers, or the block of configuration to paste. Printing both at once
+ * was the old shape, and it read as two jobs rather than one choice, with the
+ * paste-it-yourself block sitting under a list that had already done the job.
+ *
+ * The block is printed with this machine's real paths, because the one thing
+ * that makes this feature unusable is guessing at them.
  */
 export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 	const [status, setStatus] = useState<McpServerStatus | null>(null);
 	const [tools, setTools] = useState<ToolSummary[]>([]);
 	const [error, setError] = useState<string | null>(null);
+	const [route, setRoute] = useState<Route>("install");
 	const [filter, setFilter] = useState("");
 
 	useEffect(() => {
@@ -95,37 +109,40 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 			</section>
 
 			<section className="mt-8">
-				<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
-					Connect an agent client
-				</h2>
+				<div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-[var(--line)] pb-2">
+					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Connect a client</h2>
+					<RouteSwitch route={route} onChange={setRoute} />
+				</div>
+
 				<div className="mt-4">
-					<ClientInstaller onNotice={onNotice} />
+					{route === "install" ? (
+						<ClientInstaller onNotice={onNotice} />
+					) : (
+						<div>
+							<p className="max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								The entry Juno writes, with this machine's paths in it. Paste it into the
+								mcpServers block of whichever client you are using. Codex takes TOML rather
+								than this, and the list on the other side writes that one itself.
+							</p>
+
+							<pre
+								data-selectable
+								className="mt-3 overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-[length:var(--text-sm)]"
+							>
+								{status.configJson}
+							</pre>
+
+							<div className="mt-3 flex flex-wrap items-center gap-2">
+								<Button onClick={() => void copy()}>Copy configuration</Button>
+								<Button onClick={() => void window.juno.agent.revealConnectionFile()}>
+									Show the connection file
+								</Button>
+							</div>
+						</div>
+					)}
 				</div>
-			</section>
 
-			<section className="mt-8">
-				<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
-					Or paste it yourself
-				</h2>
-				<p className="mt-4 max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-					For a client that is not in the list above. This is the same entry Juno writes.
-				</p>
-
-				<pre
-					data-selectable
-					className="mt-3 overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-[length:var(--text-sm)]"
-				>
-					{status.configJson}
-				</pre>
-
-				<div className="mt-3 flex items-center gap-2">
-					<Button onClick={() => void copy()}>Copy configuration</Button>
-					<Button onClick={() => void window.juno.agent.revealConnectionFile()}>
-						Show the connection file
-					</Button>
-				</div>
-
-				<p className="mt-4 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="mt-6 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 					The connection file holds a token, and an agent that does not present it is refused. That
 					stops something that guessed the address. It does not stop a program already running as
 					you, which can read the file: on a machine you are signed in to, that program could read
@@ -190,6 +207,44 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 					) : null}
 				</div>
 			</section>
+		</div>
+	);
+}
+
+type RouteSwitchProps = {
+	route: Route;
+	onChange: (next: Route) => void;
+};
+
+/** Two buttons in one well: the same choice a radio pair makes, in one row. */
+function RouteSwitch({ route, onChange }: RouteSwitchProps) {
+	return (
+		<div
+			role="radiogroup"
+			aria-label="How to connect a client"
+			className="flex gap-0.5 rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5"
+		>
+			{ROUTES.map((option) => {
+				const selected = option.id === route;
+				return (
+					<button
+						key={option.id}
+						type="button"
+						role="radio"
+						aria-checked={selected}
+						title={option.hint}
+						onClick={() => onChange(option.id)}
+						className={[
+							"flex h-8 items-center rounded-[var(--radius-sm)] px-3 text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]",
+							selected
+								? "bg-[var(--surface)] font-[var(--weight-medium)] text-[var(--ink)] shadow-[0_0_0_1px_var(--line)]"
+								: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
+						].join(" ")}
+					>
+						{option.label}
+					</button>
+				);
+			})}
 		</div>
 	);
 }

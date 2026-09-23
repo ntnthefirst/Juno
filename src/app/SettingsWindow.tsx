@@ -1,28 +1,36 @@
 import { useEffect, useState } from "react";
-import type { AppInfo } from "@shared/types";
+import type { AppInfo, SettingsSection } from "@shared/types";
 import { Toast } from "../components/Toast";
 import { AccountingSection } from "../features/settings/AccountingSection";
 import { AppearanceSection } from "../features/settings/AppearanceSection";
 import { BackupSection } from "../features/settings/BackupSection";
 import { LockSection } from "../features/settings/LockSection";
 import { MailSection } from "../features/settings/MailSection";
+import { OnboardingSection } from "../features/settings/OnboardingSection";
 import { OwnerSection } from "../features/settings/OwnerSection";
 import { ReferenceSection } from "../features/settings/ReferenceSection";
 import { Section } from "../features/settings/Section";
 import { SignatureSection } from "../features/settings/SignatureSection";
+import { ConnectionPanel } from "../features/agent/ConnectionPanel";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
 import { useTheme } from "../lib/theme";
 
-type TabId = "general" | "business" | "mail" | "documents" | "security" | "about";
+type SettingsWindowProps = {
+	/**
+	 * The tab to open on, from the window's own URL. Null is the ordinary case:
+	 * somebody opened settings rather than being sent to one page of it.
+	 */
+	initialSection: SettingsSection | null;
+};
 
-const TABS: { id: TabId; label: string }[] = [
+const TABS: { id: SettingsSection; label: string }[] = [
 	{ id: "general", label: "General" },
 	{ id: "business", label: "Your business" },
 	{ id: "mail", label: "Mail accounts" },
 	{ id: "documents", label: "Documents" },
 	{ id: "security", label: "Security and data" },
-	{ id: "about", label: "About" },
+	{ id: "mcp", label: "MCP" },
 ];
 
 /**
@@ -32,9 +40,9 @@ const TABS: { id: TabId; label: string }[] = [
  * split across tabs rather than stacked in one long scroll. One column of
  * fields, one subject at a time, nothing that needs a wider window.
  */
-export function SettingsWindow() {
+export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	const [theme, setTheme] = useTheme();
-	const [tab, setTab] = useState<TabId>("general");
+	const [tab, setTab] = useState<SettingsSection>(initialSection ?? "general");
 	const [toast, setToast] = useState<string | null>(null);
 
 	// Escape closes a modal dialog, and this window is one.
@@ -46,6 +54,10 @@ export function SettingsWindow() {
 		return () => window.removeEventListener("keydown", onKey);
 	}, []);
 
+	// Asked for a tab while this window was already open, so it could not ride
+	// in the URL. Reloading instead would throw away a half-typed field.
+	useEffect(() => window.juno.window.onShowSection(setTab), []);
+
 	return (
 		<div className="flex h-full flex-col bg-[var(--paper)]">
 			<header
@@ -56,9 +68,7 @@ export function SettingsWindow() {
 					paddingRight: overlayGutter.right,
 				}}
 			>
-				<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)]">
-					Settings
-				</span>
+				<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)]">Settings</span>
 			</header>
 
 			<div className="flex min-h-0 flex-1">
@@ -93,7 +103,12 @@ export function SettingsWindow() {
 				<main className="min-w-0 flex-1 overflow-y-auto">
 					{tab === "general" ? (
 						<Pad>
-							<AppearanceSection theme={theme} onChange={setTheme} />
+							<AppearanceSection
+								theme={theme}
+								onChange={setTheme}
+							/>
+							<OnboardingSection onNotice={setToast} />
+							<AboutSection />
 						</Pad>
 					) : tab === "business" ? (
 						<Pad>
@@ -107,20 +122,25 @@ export function SettingsWindow() {
 							<ReferenceSection />
 							<SignatureSection />
 						</Pad>
-					) : tab === "security" ? (
+					) : tab === "mcp" ? (
 						<Pad>
-							<LockSection />
-							<BackupSection onDone={setToast} />
+							<ConnectionPanel onNotice={setToast} />
 						</Pad>
 					) : (
 						<Pad>
-							<AboutSection />
+							<LockSection />
+							<BackupSection onDone={setToast} />
 						</Pad>
 					)}
 				</main>
 			</div>
 
-			{toast ? <Toast message={toast} onDismiss={() => setToast(null)} /> : null}
+			{toast ? (
+				<Toast
+					message={toast}
+					onDismiss={() => setToast(null)}
+				/>
+			) : null}
 		</div>
 	);
 }
@@ -163,7 +183,10 @@ function AboutSection() {
 					</Row>
 					<Row label="Platform">{info.platform}</Row>
 					<Row label="Database">
-						<span data-selectable className="break-all">
+						<span
+							data-selectable
+							className="break-all"
+						>
 							{info.databasePath}
 						</span>
 					</Row>

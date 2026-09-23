@@ -14,6 +14,7 @@ import type { MailAddress } from "../../shared/types";
 import { type Db } from "../db";
 import { now, uuidv7 } from "../db/columns";
 import {
+	clientEmails,
 	clients,
 	contacts,
 	mailAttachments,
@@ -341,9 +342,16 @@ export function autoLinkThread(
 	const viaClient = viaContact
 		? null
 		: db
-				.select({ clientId: clients.id })
-				.from(clients)
-				.where(and(isNull(clients.deletedAt), inArray(sql`lower(${clients.email})`, candidates)))
+				.select({ clientId: clientEmails.clientId })
+				.from(clientEmails)
+				.innerJoin(clients, eq(clients.id, clientEmails.clientId))
+				.where(
+					and(
+						isNull(clientEmails.deletedAt),
+						isNull(clients.deletedAt),
+						inArray(sql`lower(${clientEmails.email})`, candidates),
+					),
+				)
 				.get();
 
 	const clientId = viaContact?.clientId ?? viaClient?.clientId ?? null;

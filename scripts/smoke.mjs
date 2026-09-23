@@ -13,11 +13,12 @@ import { join } from "node:path";
 import electron from "electron";
 
 const userData = mkdtempSync(join(tmpdir(), "juno-smoke-"));
-// The demo run now walks eleven screens in two themes, drives the calendar and
-// agent dialogs, and starts the MCP bridge as a real child process. Ninety
-// seconds is the headroom that leaves; a run that takes longer than this is
-// stuck rather than slow.
-const TIMEOUT_MS = 90_000;
+// The demo run walks thirteen screens in two themes, the setup window and the
+// walkthrough after it, both template editors, every settings tab and both
+// sides of the MCP switch, and it starts the bridge as a real child process.
+// Two minutes is the headroom that leaves; a run that takes longer than this
+// is stuck rather than slow.
+const TIMEOUT_MS = 120_000;
 
 const child = spawn(
 	electron,

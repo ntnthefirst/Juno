@@ -6,15 +6,8 @@ import type { ToolDescriptor } from "./types";
 const FIELDS = {
 	name: "name",
 	status_id: "statusId",
-	email: "email",
-	phone: "phone",
 	website: "website",
 	vat_number: "vatNumber",
-	address_line1: "addressLine1",
-	address_line2: "addressLine2",
-	postal_code: "postalCode",
-	city: "city",
-	country: "country",
 	notes: "notes",
 } as const;
 
@@ -31,16 +24,12 @@ const writableProperties: Record<string, unknown> = {
 		type: ["string", "null"],
 		description: "Id of an item in the client_status reference set.",
 	},
-	email: { type: ["string", "null"], description: "General email address for the client." },
-	phone: { type: ["string", "null"], description: "Telephone number, as the client writes it." },
 	website: { type: ["string", "null"], description: "Full URL including the scheme." },
 	vat_number: { type: ["string", "null"], description: "VAT number in BE0123456789 format." },
-	address_line1: { type: ["string", "null"], description: "Street and number." },
-	address_line2: { type: ["string", "null"], description: "Extra address line, if any." },
-	postal_code: { type: ["string", "null"], description: "Postal code." },
-	city: { type: ["string", "null"], description: "City." },
-	country: { type: ["string", "null"], description: "Country name or ISO code." },
-	notes: { type: ["string", "null"], description: "Free text notes about the client." },
+	notes: {
+		type: ["string", "null"],
+		description: "Free text notes about the client, rendered as Markdown.",
+	},
 };
 
 export const clientTools: ToolDescriptor[] = [
@@ -97,7 +86,8 @@ export const clientTools: ToolDescriptor[] = [
 	{
 		name: "clients.create",
 		title: "Create a client",
-		description: "Create a client. Only the name is required; everything else can be filled in later.",
+		description:
+			"Create a client. Only the name is required; everything else can be filled in later. Add an email, phone number or address with client_emails.create, client_phones.create or client_addresses.create once the client exists.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {

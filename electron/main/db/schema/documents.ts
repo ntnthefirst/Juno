@@ -20,6 +20,20 @@ export const documentTemplates = sqliteTable(
 		language: text("language").notNull().default("nl-BE"),
 		bodyHtml: text("body_html").notNull(),
 		/**
+		 * The page model the editor works on: pages, a margin, and the blocks
+		 * inside them. `bodyHtml` is compiled from this on every save, so the
+		 * render and PDF path below this never has to know the editor exists.
+		 *
+		 * Null means the template predates the page editor, or was written as HTML
+		 * on purpose. Those are edited as HTML and still render.
+		 */
+		layoutJson: text("layout_json"),
+		/**
+		 * The values this template asks for when it is used, beyond what the client
+		 * and the project already answer. JSON array of input declarations.
+		 */
+		inputsJson: text("inputs_json"),
+		/**
 		 * Null means nobody has checked this text is legally sound. The templates
 		 * that ship are invented, so every one of them starts null and the app says
 		 * so wherever it matters. Set when the owner has rewritten and checked it.
@@ -66,6 +80,12 @@ export const documents = sqliteTable(
 		 * must not silently reclassify a document that already went out.
 		 */
 		isSpecimen: integer("is_specimen", { mode: "boolean" }).notNull().default(true),
+		/**
+		 * `generated` came from a template, `imported` was a PDF that already
+		 * existed. An imported document has no body to render and no template
+		 * version, so anything that re-renders has to check this first.
+		 */
+		sourceKind: text("source_kind").notNull().default("generated"),
 	},
 	(t) => [
 		index("documents_client_idx").on(t.clientId),

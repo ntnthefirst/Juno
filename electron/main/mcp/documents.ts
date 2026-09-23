@@ -1,4 +1,4 @@
-import type { GenerateDocumentInput } from "../../shared/types";
+import type { GenerateDocumentInput, ImportDocumentInput } from "../../shared/types";
 import * as actions from "../services/document-actions";
 import * as templates from "../services/document-templates";
 import * as documents from "../services/documents";
@@ -192,7 +192,41 @@ export const documentTools: ToolDescriptor[] = [
 					? { extras: args.extras as Record<string, string> }
 					: {}),
 			};
-			return documents.generate(input);
+			// Generating writes the PDF, the same way it does for the window. An
+			// agent that could produce a document without its file would be making
+			// a record the interface then has to explain.
+			return actions.generate(input);
+		},
+	},
+	{
+		name: "documents.import",
+		title: "Import a PDF as a document",
+		description:
+			"Copies an existing PDF on this machine into Juno and records it for a client. It has no body " +
+			"and cannot be rendered again, because it did not come from a template, but it can still be signed.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				source_path: { type: "string", description: "Absolute path to the PDF on this machine." },
+				client_id: { type: "string" },
+				title: { type: "string", description: "Defaults to the file's own name." },
+				project_id: { type: ["string", "null"], description: "Must belong to the same client." },
+				issued_on: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
+			},
+			required: ["source_path", "client_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => {
+			const input: ImportDocumentInput = {
+				sourcePath: String(args.source_path),
+				clientId: String(args.client_id),
+				...(args.title !== undefined ? { title: String(args.title) } : {}),
+				...(args.project_id !== undefined ? { projectId: args.project_id as string | null } : {}),
+				...(args.issued_on !== undefined ? { issuedOn: String(args.issued_on) } : {}),
+			};
+			return documents.importPdf(input);
 		},
 	},
 	{

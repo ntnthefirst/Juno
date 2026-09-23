@@ -4,7 +4,7 @@ import { Button } from "../../components/Button";
 import { SidePanel } from "../../components/SidePanel";
 import { addDays, dateOf, formatDate, formatDateLong, formatTime, localDateOfInstant, machineTimeZone, timeOf } from "./dates";
 import { KIND_LABELS, itemTitle } from "./format";
-import { MarkdownNotes } from "./MarkdownNotes";
+import { MarkdownNotes } from "../../components/MarkdownNotes";
 
 type EventDetailProps = {
 	item: CalendarItem;

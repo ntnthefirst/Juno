@@ -31,15 +31,9 @@ export interface Client extends Standard {
 	name: string;
 	sortName: string;
 	statusId: string | null;
-	email: string | null;
-	phone: string | null;
 	website: string | null;
 	vatNumber: string | null;
-	addressLine1: string | null;
-	addressLine2: string | null;
-	postalCode: string | null;
-	city: string | null;
-	country: string | null;
+	/** Free text, Markdown. Rendered the way a calendar event's notes are. */
 	notes: string | null;
 }
 
@@ -48,17 +42,71 @@ export interface ClientSummary {
 	id: string;
 	name: string;
 	status: ReferenceItem | null;
+	/** The primary address's city, if there is one. */
 	city: string | null;
+	/** The primary email, if there is one. */
 	email: string | null;
 	projectCount: number;
 	openProjectCount: number;
 }
 
-export type ClientInput = Partial<
-	Omit<Client, keyof Standard | "sortName">
-> & { name: string };
+export type ClientInput = Partial<Omit<Client, keyof Standard | "sortName">> & { name: string };
 
 export type ClientPatch = Partial<Omit<Client, keyof Standard | "sortName">>;
+
+/**
+ * A client can carry several of each of these. `label` is free text rather
+ * than a fixed list ("Facturatie", "Kantoor Leuven", "Magazijn"), because the
+ * set of labels a business actually needs is not one Juno can predict. The
+ * first one added for a client becomes primary automatically; after that,
+ * `isPrimary` is only ever set explicitly.
+ */
+export interface ClientEmail extends Standard {
+	clientId: string;
+	email: string;
+	label: string | null;
+	isPrimary: boolean;
+}
+
+export type ClientEmailInput = Partial<Omit<ClientEmail, keyof Standard>> & {
+	clientId: string;
+	email: string;
+};
+
+export type ClientEmailPatch = Partial<Omit<ClientEmail, keyof Standard | "clientId">>;
+
+export interface ClientPhone extends Standard {
+	clientId: string;
+	phone: string;
+	label: string | null;
+	isPrimary: boolean;
+}
+
+export type ClientPhoneInput = Partial<Omit<ClientPhone, keyof Standard>> & {
+	clientId: string;
+	phone: string;
+};
+
+export type ClientPhonePatch = Partial<Omit<ClientPhone, keyof Standard | "clientId">>;
+
+export interface ClientAddress extends Standard {
+	clientId: string;
+	/** "Kantoor Leuven", "Magazijn". Most clients only need one, so this is optional. */
+	label: string | null;
+	addressLine1: string;
+	addressLine2: string | null;
+	postalCode: string | null;
+	city: string | null;
+	country: string | null;
+	isPrimary: boolean;
+}
+
+export type ClientAddressInput = Partial<Omit<ClientAddress, keyof Standard>> & {
+	clientId: string;
+	addressLine1: string;
+};
+
+export type ClientAddressPatch = Partial<Omit<ClientAddress, keyof Standard | "clientId">>;
 
 /* ----------------------------------------------------------------- contacts */
 
@@ -112,11 +160,7 @@ export type ProjectPatch = Partial<Omit<Project, keyof Standard | "clientId">>;
 /* ------------------------------------------------------- reference data (16) */
 
 /** The sets that ship. A set key is stable; its items are editable. */
-export type ReferenceSetKey =
-	| "client_status"
-	| "project_status"
-	| "document_status"
-	| "label";
+export type ReferenceSetKey = "client_status" | "project_status" | "document_status" | "label";
 
 export interface ReferenceSet extends Standard {
 	key: ReferenceSetKey;
@@ -173,19 +217,78 @@ export interface ReferenceUsage {
 
 export type ThemeSetting = "system" | "light" | "dark";
 
+/**
+ * The tabs of the settings window, and what a deep link into it may name. The
+ * main window uses this to send someone straight to mail accounts from the
+ * screen that needs one.
+ */
+export type SettingsSection = "general" | "business" | "mail" | "documents" | "security" | "mcp";
+
+/**
+ * One of the owner's email addresses. Several are normal, at most one is
+ * primary, and an address nobody reads is still worth recording: the one on an
+ * old domain, the one a client insists on using, the one that only forwards.
+ * The primary is what a generated document prints.
+ */
+export interface OwnerEmail {
+	id: string;
+	email: string;
+	/** What it is for, in the owner's own words. "Invoices", "old domain". */
+	label: string | null;
+	isPrimary: boolean;
+}
+
+/** One of the owner's phone numbers. Same rules as OwnerEmail. */
+export interface OwnerPhone {
+	id: string;
+	phone: string;
+	label: string | null;
+	isPrimary: boolean;
+}
+
 export interface OwnerProfile {
 	businessName: string;
-	contactName: string;
-	email: string;
-	phone: string;
+	firstName: string;
+	lastName: string;
 	vatNumber: string;
+	/**
+	 * The establishment unit number of the registered office, the Belgian
+	 * vestigingsnummer that starts with a 2. Not the enterprise number, which is
+	 * the VAT number without its country prefix.
+	 */
+	establishmentNumber: string;
 	addressLine1: string;
 	addressLine2: string;
 	postalCode: string;
 	city: string;
 	country: string;
 	iban: string;
+	emails: OwnerEmail[];
+	phones: OwnerPhone[];
 }
+
+/**
+ * The scalar half of the profile. The two lists are edited one entry at a time,
+ * so a patch that carried them would let a stale form wipe an address added
+ * somewhere else.
+ */
+export type OwnerProfilePatch = Partial<Omit<OwnerProfile, "emails" | "phones">>;
+
+export type OwnerEmailInput = {
+	email: string;
+	label?: string | null;
+	isPrimary?: boolean;
+};
+
+export type OwnerEmailPatch = Partial<OwnerEmailInput>;
+
+export type OwnerPhoneInput = {
+	phone: string;
+	label?: string | null;
+	isPrimary?: boolean;
+};
+
+export type OwnerPhonePatch = Partial<OwnerPhoneInput>;
 
 export interface AppSettings {
 	theme: ThemeSetting;
@@ -201,7 +304,28 @@ export interface AppSettings {
 	accountingTool: AccountingTool;
 	/** The last day the daily summary was sent, so a restart does not repeat it. */
 	lastNotifiedOn: IsoDate | null;
+	/** What the person has been through once, so it is never shown twice. */
+	onboarding: OnboardingState;
 }
+
+export interface OnboardingState {
+	/**
+	 * Null means setup has not been finished, and a launch shows it. It is set
+	 * when the last step is passed, including when the person skips the optional
+	 * ones, because "I do not want to answer that" is still an answer.
+	 */
+	completedAt: Iso | null;
+	/** Null means the walkthrough has not been seen. It can be replayed. */
+	walkthroughSeenAt: Iso | null;
+	/**
+	 * The setup this person went through. Bumped when a step is added that an
+	 * existing install has never been asked, so it can be asked once.
+	 */
+	version: number;
+}
+
+/** What the setup window writes back as it is filled in. */
+export type OnboardingPatch = Partial<OnboardingState>;
 
 export interface AccountingTool {
 	name: string;
@@ -273,6 +397,114 @@ export interface AppInfo {
 	platform: NodeJS.Platform;
 }
 
+/* ------------------------------------------------- templates: declared inputs */
+
+/**
+ * What kind of answer an input wants. This decides the control shown when a
+ * template is used, and how the value is formatted before it reaches the body.
+ */
+export type TemplateInputKind = "text" | "textarea" | "number" | "money" | "date" | "choice";
+
+/**
+ * A value a template asks for when it is used, because nothing in the records
+ * can answer it: the scope of the work, an amount agreed on the phone, a
+ * deadline. The key is the extras key, so an input keyed `scope` is written
+ * `{{document.scope}}` in the body.
+ */
+export interface TemplateInput {
+	key: string;
+	label: string;
+	kind: TemplateInputKind;
+	required: boolean;
+	/** One sentence under the field. */
+	help?: string | null;
+	/** Offered as the starting value. */
+	defaultValue?: string | null;
+	/** The choices, for `choice`. Ignored for every other kind. */
+	options?: string[];
+}
+
+/* --------------------------------------------- document templates: the page */
+
+/** Millimetres. A page is measured the way a printer measures it. */
+export type Mm = number;
+
+export interface PageMargin {
+	top: Mm;
+	right: Mm;
+	bottom: Mm;
+	left: Mm;
+}
+
+export type LayoutAlign = "left" | "center" | "right" | "justify";
+
+/**
+ * One thing on a page. A block either flows in the column inside the margin or
+ * sits in a box at a position, which is the same two choices a PDF gives.
+ *
+ * `html` on a paragraph or a cell is the small allowed set the editor produces:
+ * `strong`, `em`, `u`, `s`, `br`, `a`, and `{{ }}` placeholders. It is compiled
+ * into the document, so it is sanitised on the way in.
+ */
+export type LayoutBlock =
+	| { id: string; kind: "heading"; level: 1 | 2 | 3; text: string; align: LayoutAlign }
+	| { id: string; kind: "paragraph"; html: string; align: LayoutAlign }
+	| { id: string; kind: "list"; ordered: boolean; items: string[] }
+	| { id: string; kind: "image"; src: string; alt: string; widthMm: Mm; align: LayoutAlign }
+	| { id: string; kind: "spacer"; heightMm: Mm }
+	| { id: string; kind: "divider" }
+	| {
+			id: string;
+			kind: "table";
+			/** Widths are percentages of the column, and should add up to 100. */
+			columns: { header: string; widthPct: number }[];
+			rows: string[][];
+			/** A header row is drawn in bold over a rule. */
+			headerRow: boolean;
+	  }
+	| {
+			id: string;
+			kind: "signature";
+			label: string;
+			/** Where the signature image is stamped when the document is signed. */
+			widthMm: Mm;
+	  };
+
+/**
+ * A block pinned to a page. `xMm` and `yMm` are from the top left corner of the
+ * paper, not of the text column, because that is what a position on a page
+ * means to the person placing it.
+ */
+export interface LayoutBox {
+	id: string;
+	xMm: Mm;
+	yMm: Mm;
+	widthMm: Mm;
+	block: LayoutBlock;
+}
+
+export interface LayoutPage {
+	id: string;
+	/** Flows down the column inside the margin, in this order. */
+	blocks: LayoutBlock[];
+	/** Placed on the paper, over the flow. */
+	boxes: LayoutBox[];
+}
+
+/**
+ * The editable shape of a document template. `bodyHtml` is compiled from this
+ * on every save, so the renderer and the PDF pipeline never learn that a page
+ * model exists.
+ *
+ * `version` is the shape of this object, not the template's own version number.
+ */
+export interface DocumentLayout {
+	version: 1;
+	pageSize: "A4";
+	margin: PageMargin;
+	pages: LayoutPage[];
+}
+
 /* ---------------------------------------------------------------- documents */
 
 export interface DocumentTemplate extends Standard {
@@ -291,6 +523,14 @@ export interface DocumentTemplate extends Standard {
 	customisedAt: Iso | null;
 	/** Every path the body refers to, for showing what a template needs. */
 	placeholders: string[];
+	/**
+	 * The page model the editor works on. Null means this template is HTML only,
+	 * which is true of anything written before the page editor existed, and stays
+	 * true for a template somebody prefers to keep as HTML.
+	 */
+	layout: DocumentLayout | null;
+	/** What the template asks for when it is used. Empty when it asks nothing. */
+	inputs: TemplateInput[];
 }
 
 export type DocumentTemplateInput = {
@@ -299,10 +539,13 @@ export type DocumentTemplateInput = {
 	key?: string;
 	description?: string | null;
 	language?: string;
+	/** Passing a layout compiles the body from it and ignores `bodyHtml`. */
+	layout?: DocumentLayout | null;
+	inputs?: TemplateInput[];
 };
 
 export type DocumentTemplatePatch = Partial<
-	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language">
+	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language" | "layout" | "inputs">
 >;
 
 export interface DocumentRecord extends Standard {
@@ -319,6 +562,23 @@ export interface DocumentRecord extends Standard {
 	pdfPath: string | null;
 	/** Generated from a template that had not been reviewed. */
 	isSpecimen: boolean;
+	/**
+	 * `imported` is a PDF that already existed and was brought in. It has no body
+	 * to render and no template behind it, so anything that re-renders or
+	 * re-generates has to check this before it tries.
+	 */
+	sourceKind: DocumentSourceKind;
+}
+
+export type DocumentSourceKind = "generated" | "imported";
+
+export interface ImportDocumentInput {
+	/** An absolute path to a PDF that exists. Copied in, never referenced. */
+	sourcePath: string;
+	clientId: string;
+	title?: string;
+	projectId?: string | null;
+	issuedOn?: IsoDate;
 }
 
 export interface GenerateDocumentInput {
@@ -335,6 +595,13 @@ export interface GenerateDocumentResult {
 	document: DocumentRecord;
 	/** Placeholders the template wanted and the records could not fill. */
 	missing: string[];
+	/**
+	 * Generating writes the PDF, because a document is a PDF. This is the reason
+	 * it did not, when it did not. The document itself is still saved, so the
+	 * answer is to try the PDF again from the record rather than to fill the
+	 * form in a second time.
+	 */
+	pdfError: string | null;
 }
 
 export interface DocumentSignature extends Standard {
@@ -625,6 +892,7 @@ export interface MailThread {
 export interface MailThreadListQuery {
 	accountId?: string;
 	folderId?: string;
+	folderSpecialUse?: MailSpecialUse;
 	clientId?: string;
 	/** Full-text over subject, body and sender. */
 	search?: string;
@@ -634,14 +902,7 @@ export interface MailThreadListQuery {
 	before?: Iso;
 }
 
-export type MailSyncPhase =
-	| "idle"
-	| "connecting"
-	| "folders"
-	| "headers"
-	| "bodies"
-	| "done"
-	| "failed";
+export type MailSyncPhase = "idle" | "connecting" | "folders" | "headers" | "bodies" | "done" | "failed";
 
 export interface MailSyncStatus {
 	accountId: string;
@@ -673,6 +934,8 @@ export interface MailTemplate extends Standard {
 	isSystem: boolean;
 	customisedAt: Iso | null;
 	placeholders: string[];
+	/** What the template asks for when it is used. Empty when it asks nothing. */
+	inputs: TemplateInput[];
 }
 
 export interface MailTemplateInput {
@@ -682,10 +945,11 @@ export interface MailTemplateInput {
 	key?: string;
 	description?: string | null;
 	register?: MailRegister;
+	inputs?: TemplateInput[];
 }
 
 export type MailTemplatePatch = Partial<
-	Pick<MailTemplateInput, "name" | "subject" | "bodyHtml" | "description" | "register">
+	Pick<MailTemplateInput, "name" | "subject" | "bodyHtml" | "description" | "register" | "inputs">
 >;
 
 /** A template filled against a client and project, ready to put in a draft. */
@@ -696,14 +960,7 @@ export interface MailTemplateRender {
 	missing: string[];
 }
 
-export type MailOutboxState =
-	| "draft"
-	| "pending"
-	| "queued"
-	| "sending"
-	| "sent"
-	| "failed"
-	| "cancelled";
+export type MailOutboxState = "draft" | "pending" | "queued" | "sending" | "sent" | "failed" | "cancelled";
 
 export interface MailOutboxAttachment {
 	id: string;
@@ -784,7 +1041,6 @@ export interface MailOutboxCounts {
 	failed: number;
 	drafts: number;
 }
-
 
 /* ----------------------------------------------------------------- calendar */
 
@@ -1119,24 +1375,31 @@ export interface Briefing {
 
 /* ----------------------------------------------------------- the MCP server */
 
+/** What an agent client keeps its servers in. Codex is the one that is not JSON. */
+export type AgentConfigFormat = "json" | "toml";
+
 /**
  * An agent client on this machine, and where Juno stands with its MCP config.
  *
- * `found` is whether the file exists, which is as far as honest detection goes
- * without hunting for executables. A client that has never been opened has no
- * file yet and is still offered: writing it is what makes the client pick Juno
- * up the first time it starts.
+ * Two separate questions, because one answer used to stand for both and read
+ * as the wrong one: `installed` is whether the client is on this machine, from
+ * its own data folder or install directory, and `hasConfigFile` is whether the
+ * file Juno would write already exists. A client that is installed but has
+ * never had an MCP server added has no file yet, and writing it is exactly what
+ * makes the client pick Juno up the next time it starts.
  */
 export interface AgentClientTarget {
 	id: string;
 	name: string;
 	/** Null when this client does not exist on this platform. */
 	path: string | null;
-	found: boolean;
+	installed: boolean;
+	hasConfigFile: boolean;
 	/** Juno is in the file, under some settings. */
 	configured: boolean;
 	/** Juno is in the file with exactly the settings this install would write. */
 	upToDate: boolean;
+	format: AgentConfigFormat;
 	/** What the person has to do after the file changes, in one sentence. */
 	after: string;
 }

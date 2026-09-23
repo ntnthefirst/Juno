@@ -5,39 +5,54 @@
  * Kept apart from documents.ts so that the record logic stays testable in plain
  * Node. This module is the seam where the database meets the printer.
  */
-import { shell } from "electron";
+import { dialog, shell } from "electron";
 import { eq } from "drizzle-orm";
 import type { DocumentSignature, SignDocumentInput } from "../../shared/types";
+import type { DocumentRecord } from "./documents";
 import { getDb, type Db } from "../db";
 import { documentSignatures } from "../db/schema";
 import * as pdf from "./document-pdf";
 import { documentShell } from "./document-style";
 import * as templates from "./document-templates";
 import * as documents from "./documents";
+import { fileNameFor } from "./documents";
 import * as signature from "./signature";
 import { render } from "./template-render";
-
-/** A filename that sorts usefully and is legal on every platform. */
-function fileNameFor(title: string, suffix: string): string {
-	const safe = title
-		.normalize("NFKD")
-		.replace(/[^\w\s-]/g, "")
-		.trim()
-		.replace(/\s+/g, "-")
-		.slice(0, 60)
-		.toLowerCase();
-	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-	return `${safe || "document"}-${stamp}${suffix}.pdf`;
-}
 
 export async function previewHtml(id: string, db: Db = getDb()): Promise<string> {
 	const record = await documents.get(id, db);
 	if (!record) throw new Error("That document no longer exists.");
+	if (record.sourceKind === "imported") {
+		throw new Error("This document was imported as a PDF and has no body to preview. Open the PDF instead.");
+	}
 	return documentShell({
 		title: record.title,
 		bodyHtml: record.bodyHtml,
 		isSpecimen: record.isSpecimen,
 	});
+}
+
+/**
+ * Asks for a PDF and imports it for a client. Returns null when the picker is
+ * cancelled, which is not an error and writes nothing.
+ *
+ * The dialog lives here rather than in the IPC adapter or in documents.ts:
+ * documents.ts stays free of Electron so its record logic is testable in plain
+ * Node, and the adapter stays a one-line call, the same shape as
+ * settings.chooseSignature in ipc/settings.ts.
+ */
+export async function chooseImportPdf(
+	clientId: string,
+	db: Db = getDb(),
+): Promise<DocumentRecord | null> {
+	const result = await dialog.showOpenDialog({
+		title: "Kies een PDF",
+		properties: ["openFile"],
+		filters: [{ name: "PDF", extensions: ["pdf"] }],
+	});
+	if (result.canceled || result.filePaths.length === 0) return null;
+
+	return documents.importPdf({ sourcePath: result.filePaths[0]!, clientId }, db);
 }
 
 /**
@@ -70,9 +85,46 @@ export async function previewTemplate(
 	};
 }
 
+/**
+ * Generates a document and writes its PDF in one step.
+ *
+ * A document is a PDF (docs/editors.md section 5), so a record whose file does
+ * not exist yet is a half-made thing that every screen then has to describe:
+ * "generated, no PDF" is a state nobody asked for. Both adapters call this
+ * rather than generating and rendering in sequence themselves, because a
+ * two-step operation sequenced in an adapter is a step the other adapter
+ * forgets.
+ *
+ * The PDF failing does not lose the document. The record is already written and
+ * is returned with `pdfPath` still null, so the person can try again from the
+ * detail view rather than losing what they filled in.
+ */
+export async function generate(
+	input: documents.GenerateInput,
+	db: Db = getDb(),
+): Promise<documents.GenerateResult & { pdfError: string | null }> {
+	const result = await documents.generate(input, db);
+
+	try {
+		const withPdf = await renderPdf(result.document.id, db);
+		return { document: withPdf, missing: result.missing, pdfError: null };
+	} catch (cause) {
+		return {
+			document: result.document,
+			missing: result.missing,
+			pdfError: cause instanceof Error ? cause.message : "The PDF could not be written.",
+		};
+	}
+}
+
 export async function renderPdf(id: string, db: Db = getDb()) {
 	const record = await documents.get(id, db);
 	if (!record) throw new Error("That document no longer exists.");
+	if (record.sourceKind === "imported") {
+		throw new Error(
+			"This document was imported as a PDF and has no body to render. It already has the PDF it was imported with.",
+		);
+	}
 
 	const path = await pdf.renderPdf({
 		title: record.title,

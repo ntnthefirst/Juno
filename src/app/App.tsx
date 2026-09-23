@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
 import { AgentScreen } from "../features/agent/AgentScreen";
@@ -6,21 +6,45 @@ import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
+import { Walkthrough } from "../features/onboarding/Walkthrough";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
-import { TemplatesScreen } from "../features/templates/TemplatesScreen";
+import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
+import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { TodayScreen } from "../features/today/TodayScreen";
 import { useTheme } from "../lib/theme";
+import { BreadcrumbProvider } from "./breadcrumb";
+import { useBreadcrumbTrail } from "./breadcrumb-context";
 import { SCREEN_LABELS, type ScreenId } from "./screens";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 import { useSidebarLayout } from "./use-sidebar-layout";
 
 export function App() {
+	return (
+		<BreadcrumbProvider>
+			<Shell />
+		</BreadcrumbProvider>
+	);
+}
+
+/**
+ * Gates what the window shows: nothing until the lock answer is in, then the
+ * lock screen if locked, then the shell itself.
+ *
+ * Setup is not one of those branches any more. It is its own small modal
+ * window in front of this one (decision 34), asked for here and drawn by the
+ * main process, so this window paints the application it is about to
+ * configure rather than replacing it.
+ */
+function Shell() {
 	useTheme();
-	const [screen, setScreen] = useState<ScreenId>("today");
 	const [lock, setLock] = useState<LockState | null>(null);
-	const [pendingActions, setPendingActions] = useState(0);
-	const sidebar = useSidebarLayout();
+	const [walkthroughOpen, setWalkthroughOpen] = useState(false);
+
+	// Setup is offered once per unanswered state. Without this, closing the
+	// setup window without answering it would reopen it on the focus that
+	// closing it causes, which is a window with no way out.
+	const setupOfferedRef = useRef(false);
 
 	useEffect(() => {
 		void window.juno.lock.state().then(setLock);
@@ -29,30 +53,39 @@ export function App() {
 		return window.juno.lock.onChange(setLock);
 	}, []);
 
-	// A request from an agent can arrive at any moment, on any screen. The
-	// badge is how it gets noticed, so it is pushed rather than polled.
-	const unlocked = lock !== null && !lock.locked;
+	// Both the setup window and the settings window are separate and modal
+	// (decisions 26 and 34), so there is no channel back from either. The main
+	// process says when one of them closed, which is when setup finishing, and
+	// a replay asked for in Settings > General, become true here.
 	useEffect(() => {
-		if (!unlocked) return;
 		let cancelled = false;
-		const read = () => {
-			window.juno.agent.actions
-				.pendingCount()
-				.then((count) => {
-					if (!cancelled) setPendingActions(count);
-				})
-				.catch(() => undefined);
-		};
-		read();
-		const off = window.juno.agent.actions.onChange(() => read());
+
+		async function check() {
+			const needed = await window.juno.settings.needsOnboarding();
+			if (cancelled) return;
+			if (needed) {
+				if (!setupOfferedRef.current) {
+					setupOfferedRef.current = true;
+					void window.juno.window.openSetup();
+				}
+				return;
+			}
+			// Answered, so a later reset is a new state worth offering again.
+			setupOfferedRef.current = false;
+			const state = await window.juno.settings.getOnboarding();
+			if (!cancelled && state.walkthroughSeenAt === null) setWalkthroughOpen(true);
+		}
+
+		void check();
+		const stop = window.juno.window.onChildClosed(() => void check());
 		return () => {
 			cancelled = true;
-			off();
+			stop();
 		};
-	}, [unlocked]);
+	}, []);
 
-	// Until the first state arrives, render nothing rather than a flash of the
-	// application behind a lock screen that is about to appear.
+	// Until the lock answer arrives, render nothing rather than a flash of a
+	// screen that is about to be replaced.
 	if (lock === null) return <div className="h-full bg-[var(--paper)]" />;
 
 	if (lock.locked) {
@@ -64,6 +97,27 @@ export function App() {
 		);
 	}
 
+	return (
+		<MainShell
+			lock={lock}
+			walkthroughOpen={walkthroughOpen}
+			onWalkthroughClosed={() => setWalkthroughOpen(false)}
+		/>
+	);
+}
+
+type MainShellProps = {
+	lock: LockState;
+	walkthroughOpen: boolean;
+	onWalkthroughClosed: () => void;
+};
+
+/** The application proper: title bar, sidebar and the current screen. */
+function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProps) {
+	const [screen, setScreen] = useState<ScreenId>("today");
+	const sidebar = useSidebarLayout();
+	const trail = useBreadcrumbTrail();
+
 	const navigate = (id: ScreenId) => {
 		setScreen(id);
 		// On a narrow window the sidebar is covering the thing just chosen.
@@ -74,19 +128,21 @@ export function App() {
 		<div className="flex h-full flex-col bg-[var(--paper)]">
 			<TitleBar
 				title={SCREEN_LABELS[screen]}
+				trail={trail}
 				sidebarCollapsed={sidebar.collapsed}
 				onToggleSidebar={sidebar.toggle}
+				onOpenReminders={() => setScreen("reminders")}
+				lockConfigured={lock.configured}
+				onLock={() => void window.juno.lock.lock()}
 			/>
 			<div className="relative flex min-h-0 flex-1">
 				{sidebar.visible ? (
 					<Sidebar
 						current={screen}
 						onNavigate={navigate}
-						pendingActions={pendingActions}
 						collapsed={sidebar.collapsed}
 						floating={sidebar.floating}
 						onOpenSettings={() => void window.juno.window.openSettings()}
-						lockConfigured={lock.configured}
 					/>
 				) : null}
 
@@ -115,15 +171,19 @@ export function App() {
 						<MailScreen />
 					) : screen === "calendar" ? (
 						<CalendarScreen />
+					) : screen === "templates" ? (
+						<MailTemplatesScreen />
+					) : screen === "document-templates" ? (
+						<DocumentTemplatesScreen />
 					) : screen === "agent" ? (
 						<AgentScreen />
-					) : screen === "templates" ? (
-						<TemplatesScreen />
 					) : (
 						<Placeholder title={SCREEN_LABELS[screen]} />
 					)}
 				</main>
 			</div>
+
+			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 		</div>
 	);
 }
@@ -131,9 +191,7 @@ export function App() {
 function Placeholder({ title }: { title: string }) {
 	return (
 		<div className="p-8">
-			<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-				{title}
-			</h1>
+			<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">{title}</h1>
 			<p className="mt-3 max-w-[60ch] text-[var(--ink-muted)]">
 				Not built yet. See PLAN.md for which phase this arrives in.
 			</p>

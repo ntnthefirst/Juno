@@ -500,21 +500,68 @@ if (!app.requestSingleInstanceLock()) {
 								const done = await window.webContents.capturePage();
 								writeFileSync(joinPath(shotDir, `setup-done.png`), done.toPNG());
 
-								const finished = await window.webContents.executeJavaScript(
+								// Takes the tour rather than skipping straight in, so the
+								// walkthrough is proven live at least once per run: it is the one
+								// screen this file otherwise has no way to reach, since it only ever
+								// offers itself on a first run or an unseen upgrade.
+								const startedTour = await window.webContents.executeJavaScript(
 									`(() => {
-										const start = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start using Juno");
-										if (!start) return false;
-										start.click();
+										const tour = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Take the walkthrough");
+										if (!tour) return false;
+										tour.click();
 										return true;
 									})()`,
 								) as boolean;
-								if (!finished) throw new Error("Smoke: the last setup step had no way into the app");
+								if (!startedTour) throw new Error("Smoke: the last setup step had no way into the walkthrough");
 
-								await new Promise((r) => setTimeout(r, 900));
+								await new Promise((r) => setTimeout(r, 700));
+								const cardTitle = () =>
+									window.webContents.executeJavaScript(
+										`(() => { const c = document.querySelector("[role=dialog][aria-modal=true]"); return c ? (c.querySelector("h2")?.textContent.trim() ?? "") : ""; })()`,
+									) as Promise<string>;
+
+								const firstStop = await cardTitle();
+								if (firstStop !== "Today") {
+									throw new Error(`Smoke: the walkthrough opened on "${firstStop}", not Today`);
+								}
+
+								// Two stops forward, checking the card actually changed each time
+								// rather than only that a click landed: a tour stuck on the first
+								// card would still answer every one of these clicks.
+								for (const expected of ["Clients", "Documents"]) {
+									const advanced = await window.webContents.executeJavaScript(
+										`(() => {
+											const card = document.querySelector("[role=dialog][aria-modal=true]");
+											const next = card ? [...card.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next") : null;
+											if (!next) return false;
+											next.click();
+											return true;
+										})()`,
+									) as boolean;
+									if (!advanced) throw new Error("Smoke: the walkthrough had no way to step forward");
+									await new Promise((r) => setTimeout(r, 500));
+									const title = await cardTitle();
+									if (title !== expected) {
+										throw new Error(`Smoke: the walkthrough showed "${title}" where "${expected}" was expected`);
+									}
+								}
+
+								const walkthroughImage = await window.webContents.capturePage();
+								writeFileSync(joinPath(shotDir, `walkthrough.png`), walkthroughImage.toPNG());
+
+								await window.webContents.executeJavaScript(
+									`(() => {
+										const card = document.querySelector("[role=dialog][aria-modal=true]");
+										const close = card ? [...card.querySelectorAll("button")].find((el) => el.textContent.trim() === "Close the walkthrough") : null;
+										if (close) close.click();
+									})()`,
+								);
+								await new Promise((r) => setTimeout(r, 500));
+
 								const shellUp = await window.webContents.executeJavaScript(
 									`Boolean(document.querySelector("nav button[data-nav]"))`,
 								) as boolean;
-								if (!shellUp) throw new Error("Smoke: finishing setup did not reveal the application");
+								if (!shellUp) throw new Error("Smoke: closing the walkthrough did not reveal the application");
 							}
 
 							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
@@ -610,6 +657,62 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (opened !== "ok") throw new Error(`Smoke: agent connection ${opened}`);
 								}
+								if (screen === "Clients") {
+									// A notes field is CodeMirror now, not a textarea, and the only
+									// way to know typing into one still reaches the document is to
+									// type into one. The client form is the simplest place that has it.
+									const noted = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const newClient = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "New client");
+											if (!newClient) return "no new client action";
+											newClient.click();
+											await wait(500);
+											const addNotes = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add notes");
+											if (!addNotes) return "no add notes action";
+											addNotes.click();
+											await wait(300);
+											const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Notes");
+											if (!label) return "no notes label";
+											const content = document.getElementById(label.htmlFor);
+											if (!content) return "no notes editor";
+											content.focus();
+											document.execCommand("insertText", false, "# Smoke run heading with **bold** text");
+											await wait(300);
+											if (!content.closest(".cm-editor") || !content.classList.contains("cm-content")) {
+												return "the notes field is not a CodeMirror editor";
+											}
+											if (!content.textContent.includes("Smoke run heading") || !content.textContent.includes("bold")) {
+												return "the typed text did not land";
+											}
+											// The whole point of the editor: the markup is visible on the
+											// line the cursor is on and hidden everywhere else. Typing a
+											// second line moves the cursor off the first, so the hash and
+											// the asterisks should stop being in the document at all,
+											// because hiding them is a replace decoration rather than a
+											// colour. Asserting it here is the only place that would
+											// notice the decorations silently stopping.
+											document.execCommand("insertText", false, String.fromCharCode(10) + "plain second line");
+											await wait(400);
+											const shown = content.textContent;
+											if (shown.includes("**")) return "the emphasis markers stayed visible off the cursor line";
+											if (shown.includes("# Smoke")) return "the heading hash stayed visible off the cursor line";
+											if (!shown.includes("Smoke run heading")) return "hiding the markup took the heading text with it";
+											return "ok";
+										})()`,
+									) as string;
+									if (noted !== "ok") throw new Error(`Smoke: notes editor ${noted}`);
+
+									const notesImage = await window.webContents.capturePage();
+									writeFileSync(joinPath(shotDir, `notes-editor.png`), notesImage.toPNG());
+
+									// Leaves without saving: the client list this screen is about to
+									// be photographed against has to stay exactly the seeded four.
+									await window.webContents.executeJavaScript(
+										`(() => { const cancel = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel"); if (cancel) cancel.click(); })()`,
+									);
+									await new Promise((r) => setTimeout(r, 400));
+								}
 								if (screen === "Mail templates" || screen === "Document templates") {
 									// Opens the first template so the preview path runs for real: the
 									// list renders, the row opens a preview, and the preview asks the
@@ -631,6 +734,205 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									) as string;
 									if (opened !== "ok") throw new Error(`Smoke: ${screen} ${opened}`);
+								}
+								if (screen === "Document templates") {
+									// The seeded templates carry no page layout, so the editor opens
+									// in its plain-HTML mode first. Starting a layout, dropping a block
+									// on the canvas and reading it back is the only thing in this app
+									// that proves the page compiler's editor half, rather than only the
+									// renderer that turns a finished layout into a PDF.
+									const edited = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											await wait(600);
+											const start = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Start a page layout");
+											if (!start) return "no start-a-page-layout action";
+											start.click();
+											await wait(400);
+											const dialog = document.querySelector("[role=dialog]");
+											if (!dialog) return "no confirmation dialog";
+											const confirm = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start a page layout");
+											if (!confirm) return "the confirmation has no way to continue";
+											confirm.click();
+											await wait(700);
+											if (!document.querySelector("button[aria-label^='Page 1']")) return "no page canvas";
+											const addParagraph = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add paragraph");
+											if (!addParagraph) return "no insert control";
+											addParagraph.click();
+											await wait(300);
+											if (!document.querySelector("button[aria-label='Paragraph block']")) return "the block did not appear on the canvas";
+											return "ok";
+										})()`,
+									) as string;
+									if (edited !== "ok") throw new Error(`Smoke: document template editor ${edited}`);
+
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 400));
+										const image = await window.webContents.capturePage();
+										writeFileSync(joinPath(shotDir, `document-template-editor-${theme}.png`), image.toPNG());
+									}
+
+									// Leaves the block unsaved: the back arrow raises its own discard
+									// dialog because the draft now differs from what "Start a page
+									// layout" already wrote, and this is that path exercised for real.
+									const leftEditor = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
+											if (!back) return "no back action";
+											back.click();
+											await wait(400);
+											const dialog = document.querySelector("[role=dialog]");
+											if (dialog) {
+												const discard = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
+												if (!discard) return "no discard action";
+												discard.click();
+												await wait(500);
+											}
+											return document.querySelector("main button") ? "ok" : "did not return to the preview";
+										})()`,
+									) as string;
+									if (leftEditor !== "ok") throw new Error(`Smoke: leaving the document template editor ${leftEditor}`);
+
+									// Walks Fill (skipped, the seeded templates ask for nothing extra),
+									// Link and Review, stopping short of the generate button.
+									const usedDocument = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
+											if (!use) return "no use action";
+											use.click();
+											await wait(600);
+											const clientLabel = [...document.querySelectorAll("label")].find((el) => el.textContent.trim().startsWith("Client"));
+											if (!clientLabel) return "no client field";
+											const select = document.getElementById(clientLabel.htmlFor);
+											if (!select) return "no client select";
+											const options = [...select.options].map((o) => o.value).filter(Boolean);
+											if (options.length === 0) return "no client to link";
+											const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+											setter.call(select, options[0]);
+											select.dispatchEvent(new Event("change", { bubbles: true }));
+											await wait(200);
+											const next = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
+											if (!next) return "no next action";
+											next.click();
+											await wait(900);
+											if (!document.querySelector('main iframe[title="Document preview"]')) return "no rendered review";
+											return "ok";
+										})()`,
+									) as string;
+									if (usedDocument !== "ok") throw new Error(`Smoke: using a document template ${usedDocument}`);
+
+									const useDocumentImage = await window.webContents.capturePage();
+									writeFileSync(joinPath(shotDir, `use-document-template.png`), useDocumentImage.toPNG());
+
+									// One click undoes Review, landing back on Link; the same control,
+									// now reading "Cancel", is what actually leaves the sequence.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const leave = () => {
+												const b = [...document.querySelectorAll("button")].find((el) => ["Previous", "Cancel"].includes(el.textContent.trim()));
+												if (b) b.click();
+												return Boolean(b);
+											};
+											leave();
+											await wait(400);
+											leave();
+											await wait(400);
+										})()`,
+									);
+								}
+								if (screen === "Mail templates") {
+									// One document underneath both tabs (docs/editors.md section 2):
+									// switching to Code has to show the very text the Visual tab was
+									// rendering, not a blank editor or a stale one.
+									const edited = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											await wait(700);
+											const visual = document.querySelector('[aria-label="Message body"]');
+											if (!visual) return "no visual editor";
+											const visualText = visual.textContent.trim();
+											if (!visualText) return "the visual editor is empty";
+											const codeTab = [...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim() === "Code");
+											if (!codeTab) return "no code tab";
+											codeTab.click();
+											await wait(400);
+											const code = document.querySelector('[aria-label="Body HTML"]');
+											if (!code) return "no code editor";
+											if (!code.textContent.includes(visualText.slice(0, 20))) return "the code view does not show the same body";
+											const visualTab = [...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim() === "Visual");
+											if (!visualTab) return "no visual tab";
+											visualTab.click();
+											await wait(400);
+											return "ok";
+										})()`,
+									) as string;
+									if (edited !== "ok") throw new Error(`Smoke: mail template editor ${edited}`);
+
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 400));
+										const image = await window.webContents.capturePage();
+										writeFileSync(joinPath(shotDir, `mail-template-editor-${theme}.png`), image.toPNG());
+									}
+
+									// No content was actually typed, so there is nothing this editor
+									// guards against losing: Escape leaves straight away, the same way
+									// it does everywhere else in this file.
+									await window.webContents.executeJavaScript(
+										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									);
+									await new Promise((r) => setTimeout(r, 500));
+
+									// No Fill step either: the seeded mail templates ask for nothing
+									// beyond a client and a project, so one Next reaches Review.
+									const usedMail = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
+											if (!use) return "no use action";
+											use.click();
+											await wait(600);
+											const next = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
+											if (!next) return "no next action";
+											next.click();
+											await wait(900);
+											const main = document.querySelector("main");
+											if (!main) return "no main";
+											const subjectLabel = [...main.querySelectorAll("p")].find((el) => el.textContent.trim() === "Subject");
+											if (!subjectLabel) return "no rendered subject";
+											const subjectText = subjectLabel.nextElementSibling ? subjectLabel.nextElementSibling.textContent.trim() : "";
+											if (!subjectText) return "the subject did not render";
+											if (!main.querySelector('iframe[title="Message preview"]')) return "no rendered body";
+											return "ok";
+										})()`,
+									) as string;
+									if (usedMail !== "ok") throw new Error(`Smoke: using a mail template ${usedMail}`);
+
+									const useMailImage = await window.webContents.capturePage();
+									writeFileSync(joinPath(shotDir, `use-mail-template.png`), useMailImage.toPNG());
+
+									// Nothing was created yet at this point, so Escape is enough: it
+									// exits the sequence rather than stepping back through it.
+									await window.webContents.executeJavaScript(
+										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									);
+									await new Promise((r) => setTimeout(r, 500));
 								}
 								if (screen === "Calendar") {
 									// Opens a recurring occurrence, asks to edit it, answers the

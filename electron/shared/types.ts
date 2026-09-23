@@ -1375,24 +1375,31 @@ export interface Briefing {
 
 /* ----------------------------------------------------------- the MCP server */
 
+/** What an agent client keeps its servers in. Codex is the one that is not JSON. */
+export type AgentConfigFormat = "json" | "toml";
+
 /**
  * An agent client on this machine, and where Juno stands with its MCP config.
  *
- * `found` is whether the file exists, which is as far as honest detection goes
- * without hunting for executables. A client that has never been opened has no
- * file yet and is still offered: writing it is what makes the client pick Juno
- * up the first time it starts.
+ * Two separate questions, because one answer used to stand for both and read
+ * as the wrong one: `installed` is whether the client is on this machine, from
+ * its own data folder or install directory, and `hasConfigFile` is whether the
+ * file Juno would write already exists. A client that is installed but has
+ * never had an MCP server added has no file yet, and writing it is exactly what
+ * makes the client pick Juno up the next time it starts.
  */
 export interface AgentClientTarget {
 	id: string;
 	name: string;
 	/** Null when this client does not exist on this platform. */
 	path: string | null;
-	found: boolean;
+	installed: boolean;
+	hasConfigFile: boolean;
 	/** Juno is in the file, under some settings. */
 	configured: boolean;
 	/** Juno is in the file with exactly the settings this install would write. */
 	upToDate: boolean;
+	format: AgentConfigFormat;
 	/** What the person has to do after the file changes, in one sentence. */
 	after: string;
 }

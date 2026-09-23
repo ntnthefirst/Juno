@@ -3,6 +3,7 @@ import type { AgentClientTarget, AgentInstallResult } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
+import { ClientLogo } from "./client-logos";
 
 type ClientInstallerProps = {
 	onNotice: (message: string) => void;
@@ -10,17 +11,29 @@ type ClientInstallerProps = {
 
 type Done = { target: AgentClientTarget; result: AgentInstallResult };
 
+/** Where a row stands, in the order the states are worth telling apart. */
+type Standing = "connected" | "elsewhere" | "ready" | "no-file" | "absent";
+
+function standingOf(target: AgentClientTarget): Standing {
+	if (target.upToDate) return "connected";
+	if (target.configured) return "elsewhere";
+	if (target.hasConfigFile) return "ready";
+	if (target.installed) return "no-file";
+	return "absent";
+}
+
 /**
  * Connecting Juno to the agent clients on this machine, one button each.
- *
- * The alternative, which this sits above, is copying a block of JSON into a
- * file whose path differs per client and per platform and merging it by hand
- * without breaking the servers already there. That block is still printed,
- * because a client Juno has not heard of still needs it.
  *
  * Each row writes one file and says what it did afterwards: where it wrote,
  * where the backup went, and what has to be restarted. None of it happens
  * until a named client is asked for.
+ *
+ * The row says two separate things, because one sentence used to stand for
+ * both and read as the wrong one: whether the client is on this machine, and
+ * whether it has an MCP file yet. "No configuration file yet" against an
+ * installed Claude Desktop reads as "Juno cannot find Claude", which was never
+ * what it meant.
  */
 export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 	const [targets, setTargets] = useState<AgentClientTarget[] | null>(null);
@@ -56,6 +69,14 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 		return <p className="text-[var(--ink-muted)]">Loading.</p>;
 	}
 
+	// What is on the machine first. A client that is not installed is still
+	// offered, at the bottom, because writing the file is what makes it pick
+	// Juno up the first time it starts.
+	const rows = [...(targets ?? [])].sort(
+		(a, b) => Number(b.installed) - Number(a.installed),
+	);
+	const absent = rows.filter((target) => !target.installed).length;
+
 	return (
 		<div>
 			<p className="max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
@@ -64,32 +85,30 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 			</p>
 
 			<ul className="mt-4">
-				{(targets ?? []).map((target) => (
+				{rows.map((target) => (
 					<li
 						key={target.id}
 						className="flex items-center gap-3 border-b border-[var(--line)] py-2"
 					>
+						<span
+							className={
+								target.installed
+									? "flex h-8 w-8 flex-none items-center justify-center text-[var(--ink)]"
+									: "flex h-8 w-8 flex-none items-center justify-center text-[var(--ink-faint)]"
+							}
+						>
+							<ClientLogo clientId={target.id} />
+						</span>
+
 						<span className="min-w-0 flex-1">
-							<span className="flex items-center gap-2">
+							<span className="flex flex-wrap items-center gap-2">
 								<span className="font-[var(--weight-medium)]">{target.name}</span>
-								{target.upToDate ? (
-									<span className="flex items-center gap-1 text-[length:var(--text-sm)] text-[var(--ok)]">
-										<Icon name="check" size={13} />
-										Connected
+								<Standing standing={standingOf(target)} />
+								{target.format === "toml" ? (
+									<span className="text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+										toml
 									</span>
-								) : target.configured ? (
-									<span className="text-[length:var(--text-sm)] text-[var(--warn)]">
-										Configured, but pointing somewhere else
-									</span>
-								) : target.found ? (
-									<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-										Found, not connected
-									</span>
-								) : (
-									<span className="text-[length:var(--text-sm)] text-[var(--ink-faint)]">
-										No configuration file yet
-									</span>
-								)}
+								) : null}
 							</span>
 							{target.path ? (
 								<span
@@ -104,7 +123,7 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 
 						<Button
 							size="dense"
-							variant={target.upToDate ? "quiet" : "primary"}
+							variant={target.upToDate || !target.installed ? "quiet" : "primary"}
 							disabled={busy !== null || target.path === null}
 							onClick={() => void write(target)}
 						>
@@ -119,6 +138,13 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 					</li>
 				))}
 			</ul>
+
+			{absent > 0 ? (
+				<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					The greyed ones are not on this machine. Connecting one anyway writes the file it
+					would read, which it picks up the first time it starts.
+				</p>
+			) : null}
 
 			{done ? (
 				<div className="mt-4 border-l-2 border-[var(--ok)] pl-3">
@@ -151,5 +177,42 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 				</p>
 			) : null}
 		</div>
+	);
+}
+
+type StandingProps = {
+	standing: Standing;
+};
+
+function Standing({ standing }: StandingProps) {
+	if (standing === "connected") {
+		return (
+			<span className="flex items-center gap-1 text-[length:var(--text-sm)] text-[var(--ok)]">
+				<Icon name="check" size={13} />
+				Connected
+			</span>
+		);
+	}
+	if (standing === "elsewhere") {
+		return (
+			<span className="text-[length:var(--text-sm)] text-[var(--warn)]">
+				Configured, but pointing somewhere else
+			</span>
+		);
+	}
+	if (standing === "ready") {
+		return (
+			<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Not connected yet</span>
+		);
+	}
+	if (standing === "no-file") {
+		return (
+			<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				Installed, with no MCP servers of its own yet
+			</span>
+		);
+	}
+	return (
+		<span className="text-[length:var(--text-sm)] text-[var(--ink-faint)]">Not on this machine</span>
 	);
 }

@@ -703,9 +703,21 @@ if (!app.requestSingleInstanceLock()) {
 											if (!tab) return "no connection tab";
 											tab.click();
 											await new Promise((r) => setTimeout(r, 700));
-											const text = document.querySelector("main").textContent;
-											if (!text.includes("mcpServers")) return "no configuration block";
-											return text.includes("Listening") ? "ok" : "not listening";
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Listening")) return "not listening";
+											// The installers are one of two routes and the block of
+											// configuration is the other, so both sides of the switch
+											// are checked here rather than assuming which one is up.
+											if (!main.textContent.includes("Claude Desktop")) return "no client list";
+											const manual = [...main.querySelectorAll("button[role=radio]")].find((el) => el.textContent.trim() === "Do it myself");
+											if (!manual) return "no manual route";
+											manual.click();
+											await new Promise((r) => setTimeout(r, 400));
+											if (!main.textContent.includes("mcpServers")) return "no configuration block";
+											const installers = [...main.querySelectorAll("button[role=radio]")].find((el) => el.textContent.trim() === "Let Juno do it");
+											if (installers) installers.click();
+											await new Promise((r) => setTimeout(r, 400));
+											return "ok";
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: agent connection ${opened}`);
@@ -1216,6 +1228,39 @@ if (!app.requestSingleInstanceLock()) {
 									}
 								}
 
+								// The MCP tab hides half of itself behind a two-way switch, so the
+								// loop above only ever photographs the installers. The other side
+								// is the block someone pastes by hand, and it has broken before.
+								{
+									const mcp = tabs.findIndex((tab) => tab === "MCP");
+									if (mcp === -1) throw new Error("Smoke: the settings window has no MCP section");
+									await settingsWindow.webContents.executeJavaScript(`${TABS}[${mcp}].click()`);
+									await new Promise((r) => setTimeout(r, 250));
+									const switched = (await settingsWindow.webContents.executeJavaScript(
+										`(() => {
+											const b = [...document.querySelectorAll("button[role=radio]")]
+												.find((el) => el.textContent.trim() === "Do it myself");
+											if (!b) return false;
+											b.click();
+											return true;
+										})()`,
+									)) as boolean;
+									if (!switched) throw new Error("Smoke: the MCP section had no way to the manual route");
+									await new Promise((r) => setTimeout(r, 350));
+									const pasted = (await settingsWindow.webContents.executeJavaScript(
+										`(document.querySelector("pre")?.textContent ?? "").includes("mcpServers")`,
+									)) as boolean;
+									if (!pasted) throw new Error("Smoke: the manual route printed no configuration");
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await settingsWindow.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										const image = await settingsWindow.webContents.capturePage();
+										writeFileSync(joinPath(shotDir, `settings-mcp-manual-${theme}.png`), image.toPNG());
+									}
+								}
 								console.log(`SMOKE_DEMO settings tabs=${tabs.length}`);
 								closeSettingsWindow();
 							}

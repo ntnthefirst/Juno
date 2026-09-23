@@ -31,37 +31,6 @@ const STANDARD_VIEWS: { id: MailView; label: string }[] = [
 export function FolderNav({ accounts, folders, sync, selection, onSelect, onSyncAccount }: FolderNavProps) {
 	return (
 		<div className="flex flex-col gap-4">
-			<div>
-				<label
-					htmlFor="mail-account-filter"
-					className="mb-1 block px-3 text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-faint)]"
-				>
-					Account
-				</label>
-				<select
-					id="mail-account-filter"
-					value={selection?.accountId ?? "all"}
-					onChange={(event) =>
-						onSelect({
-							accountId: event.target.value === "all" ? null : event.target.value,
-							folderId: null,
-							view: selection?.view ?? "inbox",
-						})
-					}
-					className="mx-3 w-[calc(100%-1.5rem)] rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 text-[length:var(--text-sm)] text-[var(--ink)]"
-				>
-					<option value="all">All accounts</option>
-					{accounts.map((account) => (
-						<option
-							key={account.id}
-							value={account.id}
-						>
-							{account.label}
-						</option>
-					))}
-				</select>
-			</div>
-
 			<div className="flex flex-col gap-px">
 				{STANDARD_VIEWS.map((view) => {
 					const active = selection?.view === view.id && selection.folderId === null;

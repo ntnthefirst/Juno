@@ -53,17 +53,20 @@ export function Sidebar({ current, onNavigate, collapsed, floating, onOpenSettin
 								{group.heading}
 							</GroupHeading>
 						) : null}
-						{group.items.map((item) => (
-							<NavButton
-								key={item.id}
-								navId={item.id}
-								icon={item.icon}
-								label={item.label}
-								active={item.id === current}
-								collapsed={collapsed}
-								onClick={() => onNavigate(item.id)}
-							/>
-						))}
+						{group.items.map((item) => {
+							return (
+								<NavButton
+									key={item.id}
+									navId={item.id}
+									icon={item.icon}
+									label={item.label}
+									active={item.id === current}
+									collapsed={collapsed}
+									badge={0}
+									onClick={() => onNavigate(item.id)}
+								/>
+							);
+						})}
 					</div>
 				))}
 			</div>

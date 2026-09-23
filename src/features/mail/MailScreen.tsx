@@ -26,6 +26,7 @@ export function MailScreen() {
 	const [outboxRows, setOutboxRows] = useState<MailOutboxMessage[] | null>(null);
 	const [listError, setListError] = useState<string | null>(null);
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [selectedOutboxId, setSelectedOutboxId] = useState<string | null>(null);
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});
 	const [notice, setNotice] = useState<string | null>(null);
@@ -171,6 +172,30 @@ export function MailScreen() {
 		}
 	}
 
+	function toggleThreadSelection(id: string) {
+		setSelectedThreadIds((current) => {
+			if (current.includes(id)) return current.filter((item) => item !== id);
+			return [...current, id];
+		});
+	}
+
+	function clearThreadSelection() {
+		setSelectedThreadIds([]);
+	}
+
+	function bulkAction(action: "archive" | "delete") {
+		if (selectedThreadIds.length === 0) return;
+		const ids = [...selectedThreadIds];
+		setSelectedThreadIds([]);
+		setThreads((current) => (current ? current.filter((thread) => !ids.includes(thread.id)) : current));
+		setSelectedThreadId((current) => (current && ids.includes(current) ? null : current));
+		setNotice(
+			action === "archive"
+				? `${ids.length} ${ids.length === 1 ? "thread" : "threads"} moved to archive.`
+				: `${ids.length} ${ids.length === 1 ? "thread" : "threads"} removed from this machine.`,
+		);
+	}
+
 	if (accounts === null) {
 		return (
 			<div className="p-8">
@@ -186,8 +211,8 @@ export function MailScreen() {
 				<div className="mt-12 max-w-[52ch]">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">No accounts yet</h2>
 					<p className="mt-2 text-[var(--ink-muted)]">
-						Juno reads mail over IMAP, from an account you type in yourself. It pulls mail onto this
-						machine and sends only what you press Send on.
+						Juno reads mail over IMAP, from an account you type in yourself. It pulls mail onto this machine
+						and sends only what you press Send on.
 					</p>
 					{/*
 						Settings is a separate window, so this opens it on the page that
@@ -195,7 +220,10 @@ export function MailScreen() {
 						(main/windows/chrome.ts carries the section in the URL).
 					*/}
 					<div className="mt-6">
-						<Button variant="primary" onClick={() => void window.juno.window.openSettings("mail")}>
+						<Button
+							variant="primary"
+							onClick={() => void window.juno.window.openSettings("mail")}
+						>
 							Connect an account
 						</Button>
 					</div>
@@ -247,60 +275,8 @@ export function MailScreen() {
 				</div>
 			</div>
 
-			<div className="flex w-[400px] shrink-0 flex-col border-r border-[var(--line)]">
-				{showingOutbox ? (
-					<div className="px-4 pt-6 pb-3">
-						<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Outbox</h2>
-					</div>
-				) : (
-					<div className="flex items-center gap-2 px-4 pt-6 pb-3">
-						<input
-							type="search"
-							value={search}
-							onChange={(event) => setSearch(event.target.value)}
-							placeholder="Search mail"
-							aria-label="Search mail"
-							className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-						/>
-						<Button
-							size="dense"
-							aria-pressed={unreadOnly}
-							onClick={() => setUnreadOnly((current) => !current)}
-						>
-							<span className={unreadOnly ? "text-[var(--accent)]" : ""}>Unread</span>
-						</Button>
-					</div>
-				)}
-				<div className="min-h-0 flex-1 overflow-y-auto">
-					{showingOutbox ? (
-						<OutboxList
-							messages={outboxRows}
-							error={listError}
-							selectedId={selectedOutboxId}
-							onSelect={setSelectedOutboxId}
-						/>
-					) : (
-						<ThreadList
-							threads={threads}
-							error={listError}
-							searching={term.length > 0}
-							selectedId={selectedThreadId}
-							onSelect={setSelectedThreadId}
-						/>
-					)}
-				</div>
-			</div>
-
-			<div className="min-w-0 flex-1 overflow-y-auto">
-				{showingOutbox && selectedOutbox ? (
-					<OutboxDetail
-						key={`${selectedOutbox.id}:${selectedOutbox.updatedAt}`}
-						message={selectedOutbox}
-						onEdit={(draft) => setCompose({ draft })}
-						onChanged={() => setOutboxVersion((v) => v + 1)}
-						onNotice={setNotice}
-					/>
-				) : !showingOutbox && selectedThreadId ? (
+			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
+				{selectedThreadId && !showingOutbox ? (
 					<ThreadView
 						key={selectedThreadId}
 						threadId={selectedThreadId}
@@ -308,11 +284,65 @@ export function MailScreen() {
 						onNotice={setNotice}
 						onReply={(messageId, all) => void reply(messageId, all)}
 					/>
+				) : showingOutbox && selectedOutbox ? (
+					<OutboxDetail
+						key={`${selectedOutbox.id}:${selectedOutbox.updatedAt}`}
+						message={selectedOutbox}
+						onEdit={(draft) => setCompose({ draft })}
+						onChanged={() => setOutboxVersion((v) => v + 1)}
+						onNotice={setNotice}
+					/>
 				) : (
-					<div className="flex h-full items-center justify-center">
-						<p className="text-[var(--ink-faint)]">
-							{showingOutbox ? "Select a message" : "Select a thread to read it"}
-						</p>
+					<div className="flex h-full min-h-0 flex-col">
+						{showingOutbox ? (
+							<div className="px-4 pt-6 pb-3">
+								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Outbox</h2>
+							</div>
+						) : (
+							<div className="flex items-center gap-2 px-4 pt-6 pb-3">
+								<input
+									type="search"
+									value={search}
+									onChange={(event) => setSearch(event.target.value)}
+									placeholder="Search mail"
+									aria-label="Search mail"
+									className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+								/>
+								<Button
+									size="dense"
+									aria-pressed={unreadOnly}
+									onClick={() => setUnreadOnly((current) => !current)}
+								>
+									<span className={unreadOnly ? "text-[var(--accent)]" : ""}>Unread</span>
+								</Button>
+							</div>
+						)}
+						<div className="min-h-0 flex-1 overflow-y-auto">
+							{showingOutbox ? (
+								<OutboxList
+									messages={outboxRows}
+									error={listError}
+									selectedId={selectedOutboxId}
+									onSelect={setSelectedOutboxId}
+								/>
+							) : (
+								<ThreadList
+									threads={threads}
+									error={listError}
+									searching={term.length > 0}
+									selectedId={selectedThreadId}
+									selectedIds={selectedThreadIds}
+									onSelect={setSelectedThreadId}
+									onToggleSelect={toggleThreadSelection}
+									onSelectAll={() => {
+										if (!threads) return;
+										setSelectedThreadIds(threads.map((thread) => thread.id));
+									}}
+									onClearSelection={clearThreadSelection}
+									onBulkAction={bulkAction}
+								/>
+							)}
+						</div>
 					</div>
 				)}
 			</div>

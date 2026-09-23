@@ -1,11 +1,4 @@
-import {
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useRef,
-	useState,
-	type MouseEvent as ReactMouseEvent,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 
@@ -319,34 +312,6 @@ export function MenuButton({
 			) : null}
 		</>
 	);
-}
-
-/**
- * The right-click menu state for one surface.
- *
- * Electron draws no menu of its own on right click, so without this a right
- * click anywhere in Juno does nothing at all, which reads as a broken window
- * rather than as a deliberate omission.
- */
-export function useContextMenu() {
-	const [at, setAt] = useState<Point | null>(null);
-
-	const open = useCallback((event: ReactMouseEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		// The keyboard menu key fires this with no coordinates. Hanging the menu
-		// off the focused element is what a platform menu does in that case.
-		if (event.clientX === 0 && event.clientY === 0 && event.currentTarget instanceof HTMLElement) {
-			const box = event.currentTarget.getBoundingClientRect();
-			setAt({ x: box.left + 8, y: box.top + box.height });
-			return;
-		}
-		setAt({ x: event.clientX, y: event.clientY });
-	}, []);
-
-	const close = useCallback(() => setAt(null), []);
-
-	return { at, open, close };
 }
 
 type ContextMenuProps = {

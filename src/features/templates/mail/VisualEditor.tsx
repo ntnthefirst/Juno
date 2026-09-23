@@ -311,7 +311,12 @@ export function VisualEditor({ value, onChange, active, disabled = false, placeh
 				aria-multiline="true"
 				aria-label="Message body"
 				style={{ display: active ? undefined : "none" }}
-				className={`min-h-[320px] max-h-[480px] overflow-y-auto bg-[var(--surface)] px-4 py-3 text-[length:var(--text-base)] leading-[var(--leading-relaxed)] text-[var(--ink)] focus:outline-none${
+				// Tailwind's preflight zeroes margin and list style on every element, so
+				// without this a sent message's spaced paragraphs, headings and lists
+				// collapse into one dense block here. The values mirror what mailShell
+				// (electron/main/services/mail-html.ts) actually sends: 12px between
+				// paragraphs, the same as textToHtml's own paragraph margin.
+				className={`min-h-[320px] max-h-[480px] overflow-y-auto bg-[var(--surface)] px-4 py-3 text-[length:var(--text-base)] leading-[var(--leading-relaxed)] text-[var(--ink)] focus:outline-none [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h2]:mt-4 [&_h2]:mb-2 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mb-1${
 					disabled ? " opacity-60" : ""
 				}`}
 			/>

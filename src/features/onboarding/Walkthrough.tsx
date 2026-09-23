@@ -385,8 +385,8 @@ export function Walkthrough({ onNavigate, onClose }: WalkthroughProps) {
 				<p className="mt-2 text-[length:var(--text-sm)] leading-[var(--leading-normal)] text-[var(--ink-muted)]">
 					{stop.body}
 				</p>
-				<div className="mt-4 flex items-center justify-between gap-3">
-					<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+				<div className="mt-4 flex flex-col gap-2">
+					<span className="tabular whitespace-nowrap text-[length:var(--text-micro)] text-[var(--ink-faint)]">
 						Step {index + 1} of {STOPS.length}
 					</span>
 					<div className="flex items-center gap-2">

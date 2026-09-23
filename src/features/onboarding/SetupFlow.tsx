@@ -88,10 +88,17 @@ export function SetupFlow({ onFinished }: SetupFlowProps) {
 			<div className="drag-region flex-none" style={{ height: "var(--titlebar-height)" }} aria-hidden />
 
 			<div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-8 py-10">
-				<div className="w-full max-w-[560px]">
-					<StepRail step={index} onSelect={goTo} />
+				<StepRail step={index} onSelect={goTo} />
 
-					<div ref={panelRef} tabIndex={-1} key={step} className="outline-none">
+				{/*
+					min-h-0 plus justify-center on this flex column, inside the scrolling
+					container above, is what lets a short step (welcome) sit centred in
+					the space below the rail while a long one (business, eleven fields)
+					still overflows into the outer scroll rather than being clipped: the
+					browser falls back to top alignment once content no longer fits.
+				*/}
+				<div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center">
+					<div ref={panelRef} tabIndex={-1} key={step} className="w-full max-w-[560px] outline-none">
 						{step === "welcome" ? (
 							// "Skip setup" means skip, not "jump to one more screen with a
 							// button on it": it completes on its own, the same way the last

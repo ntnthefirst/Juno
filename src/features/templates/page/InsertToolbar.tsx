@@ -54,7 +54,7 @@ export function InsertToolbar({
 							placement === "box" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
 						}`}
 					>
-						Placed on the page
+						On the page
 					</button>
 				</div>
 			</div>
@@ -63,9 +63,18 @@ export function InsertToolbar({
 				<p className="mb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Add a block</p>
 				<div className="flex flex-col gap-1.5">
 					{BLOCK_KINDS.map((kind) => (
-						<Button key={kind} size="dense" onClick={() => onInsertBlock(kind)}>
+						// A plain button rather than the shared Button component: this is a
+						// row in a list, not a call to action, and Button always centres
+						// its label, which is exactly what makes an eight-item rail of
+						// full-width buttons read as banners rather than rows.
+						<button
+							key={kind}
+							type="button"
+							onClick={() => onInsertBlock(kind)}
+							className="flex h-[32px] w-full shrink-0 items-center justify-start gap-2 rounded-[var(--radius-md)] px-2 text-left text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+						>
 							Add {BLOCK_KIND_LABELS[kind].toLowerCase()}
-						</Button>
+						</button>
 					))}
 				</div>
 			</div>

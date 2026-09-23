@@ -1,24 +1,52 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
+import { AgentScreen } from "../features/agent/AgentScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
+import { SetupFlow } from "../features/onboarding/SetupFlow";
+import { Walkthrough } from "../features/onboarding/Walkthrough";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
-import { TemplatesScreen } from "../features/templates/TemplatesScreen";
+import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
+import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { TodayScreen } from "../features/today/TodayScreen";
 import { useTheme } from "../lib/theme";
+import { BreadcrumbProvider } from "./breadcrumb";
+import { useBreadcrumbTrail } from "./breadcrumb-context";
 import { SCREEN_LABELS, type ScreenId } from "./screens";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 import { useSidebarLayout } from "./use-sidebar-layout";
 
 export function App() {
+	return (
+		<BreadcrumbProvider>
+			<Shell />
+		</BreadcrumbProvider>
+	);
+}
+
+/**
+ * Gates what the window shows: nothing until both the lock and the onboarding
+ * answer are in, then the lock screen if locked (it wins over everything,
+ * including an unfinished setup), then setup if it has never been finished,
+ * then the shell itself.
+ */
+function Shell() {
 	useTheme();
-	const [screen, setScreen] = useState<ScreenId>("today");
 	const [lock, setLock] = useState<LockState | null>(null);
-	const sidebar = useSidebarLayout();
+	const [onboardingNeeded, setOnboardingNeeded] = useState<boolean | null>(null);
+	const [walkthroughOpen, setWalkthroughOpen] = useState(false);
+
+	// Settings is a separate, modal window (decision 26): there is no channel
+	// back from it, so a replay requested there (features/settings/
+	// OnboardingSection.tsx) is picked up here the moment this window gets
+	// focus again, which in practice is as soon as that one closes. The ref
+	// only arms the check after Settings was actually opened from here, so an
+	// ordinary alt-tab back into Juno does not re-run it for no reason.
+	const settingsOpenedRef = useRef(false);
 
 	useEffect(() => {
 		void window.juno.lock.state().then(setLock);
@@ -27,9 +55,32 @@ export function App() {
 		return window.juno.lock.onChange(setLock);
 	}, []);
 
-	// Until the first state arrives, render nothing rather than a flash of the
-	// application behind a lock screen that is about to appear.
-	if (lock === null) return <div className="h-full bg-[var(--paper)]" />;
+	useEffect(() => {
+		void window.juno.settings.needsOnboarding().then(setOnboardingNeeded);
+	}, []);
+
+	useEffect(() => {
+		function onFocus() {
+			if (!settingsOpenedRef.current) return;
+			settingsOpenedRef.current = false;
+			void window.juno.settings.needsOnboarding().then((needed) => {
+				if (needed) {
+					setOnboardingNeeded(true);
+					return;
+				}
+				void window.juno.settings.getOnboarding().then((state) => {
+					if (state.walkthroughSeenAt === null) setWalkthroughOpen(true);
+				});
+			});
+		}
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, []);
+
+	// Until both answers arrive, render nothing rather than a flash of a screen
+	// that is about to be replaced by whichever of lock, setup or the shell
+	// actually applies.
+	if (lock === null || onboardingNeeded === null) return <div className="h-full bg-[var(--paper)]" />;
 
 	if (lock.locked) {
 		return (
@@ -39,6 +90,42 @@ export function App() {
 			/>
 		);
 	}
+
+	if (onboardingNeeded) {
+		return (
+			<SetupFlow
+				onFinished={(startWalkthrough) => {
+					setOnboardingNeeded(false);
+					if (startWalkthrough) setWalkthroughOpen(true);
+				}}
+			/>
+		);
+	}
+
+	return (
+		<MainShell
+			lock={lock}
+			walkthroughOpen={walkthroughOpen}
+			onWalkthroughClosed={() => setWalkthroughOpen(false)}
+			onSettingsOpened={() => {
+				settingsOpenedRef.current = true;
+			}}
+		/>
+	);
+}
+
+type MainShellProps = {
+	lock: LockState;
+	walkthroughOpen: boolean;
+	onWalkthroughClosed: () => void;
+	onSettingsOpened: () => void;
+};
+
+/** The application proper: title bar, sidebar and the current screen. */
+function MainShell({ lock, walkthroughOpen, onWalkthroughClosed, onSettingsOpened }: MainShellProps) {
+	const [screen, setScreen] = useState<ScreenId>("today");
+	const sidebar = useSidebarLayout();
+	const trail = useBreadcrumbTrail();
 
 	const navigate = (id: ScreenId) => {
 		setScreen(id);
@@ -50,6 +137,7 @@ export function App() {
 		<div className="flex h-full flex-col bg-[var(--paper)]">
 			<TitleBar
 				title={SCREEN_LABELS[screen]}
+				trail={trail}
 				sidebarCollapsed={sidebar.collapsed}
 				onToggleSidebar={sidebar.toggle}
 				onOpenReminders={() => setScreen("reminders")}
@@ -63,7 +151,10 @@ export function App() {
 						onNavigate={navigate}
 						collapsed={sidebar.collapsed}
 						floating={sidebar.floating}
-						onOpenSettings={() => void window.juno.window.openSettings()}
+						onOpenSettings={() => {
+							onSettingsOpened();
+							void window.juno.window.openSettings();
+						}}
 					/>
 				) : null}
 
@@ -93,14 +184,18 @@ export function App() {
 					) : screen === "calendar" ? (
 						<CalendarScreen />
 					) : screen === "templates" ? (
-						<TemplatesScreen />
+						<MailTemplatesScreen />
 					) : screen === "document-templates" ? (
-						<TemplatesScreen />
+						<DocumentTemplatesScreen />
+					) : screen === "agent" ? (
+						<AgentScreen />
 					) : (
 						<Placeholder title={SCREEN_LABELS[screen]} />
 					)}
 				</main>
 			</div>
+
+			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 		</div>
 	);
 }

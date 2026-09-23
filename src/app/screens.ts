@@ -9,7 +9,8 @@ export type ScreenId =
 	| "document-templates"
 	| "clients"
 	| "projects"
-	| "reminders";
+	| "reminders"
+	| "agent";
 
 export type ScreenItem = { id: ScreenId; label: string; icon: IconName };
 export type ScreenGroup = { heading: string | null; items: ScreenItem[] };
@@ -50,6 +51,10 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
 			{ id: "document-templates", label: "Document templates", icon: "templates" },
 		],
 	},
+	{
+		heading: null,
+		items: [{ id: "agent", label: "Agent", icon: "agent" }],
+	},
 ];
 
 export const SCREEN_LABELS: Record<ScreenId, string> = {
@@ -62,4 +67,5 @@ export const SCREEN_LABELS: Record<ScreenId, string> = {
 	clients: "Clients",
 	projects: "Projects",
 	reminders: "Reminders",
+	agent: "Agent",
 };

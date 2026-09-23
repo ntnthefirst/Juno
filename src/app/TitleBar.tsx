@@ -2,10 +2,17 @@ import { useState } from "react";
 import type { Reminder } from "@shared/types";
 import { Icon } from "../components/Icon";
 import { overlayGutter } from "../lib/platform";
+import type { Crumb } from "./breadcrumb-context";
 
 type TitleBarProps = {
-	/** The screen currently open, shown after the wordmark. */
+	/** The screen currently open, shown after the wordmark when nothing deeper is. */
 	title: string;
+	/**
+	 * Where you are inside that screen, when a record is open full screen. The
+	 * screen publishes it through `usePublishBreadcrumb`, starting with its own
+	 * name, and every step but the last goes back to what it names.
+	 */
+	trail: Crumb[];
 	sidebarCollapsed: boolean;
 	onToggleSidebar: () => void;
 	onOpenReminders: () => void;
@@ -23,6 +30,7 @@ type TitleBarProps = {
  */
 export function TitleBar({
 	title,
+	trail,
 	sidebarCollapsed,
 	onToggleSidebar,
 	onOpenReminders,
@@ -52,13 +60,10 @@ export function TitleBar({
 
 			<Wordmark />
 
-			<span
-				className="flex-none text-[var(--ink-faint)]"
-				aria-hidden
-			>
-				/
-			</span>
-			<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">{title}</span>
+			<Trail
+				title={title}
+				trail={trail}
+			/>
 
 			<div className="min-w-0 flex-1" />
 
@@ -75,6 +80,66 @@ export function TitleBar({
 				</button>
 			) : null}
 		</header>
+	);
+}
+
+type TrailProps = {
+	title: string;
+	trail: Crumb[];
+};
+
+/**
+ * `Juno / Clients / Jansen BV`. A record opens over the whole working area, so
+ * this line is the only thing saying which record it is, and the only way back
+ * that is not the sidebar.
+ *
+ * The steps shrink before the last one does: on a narrow window the client's
+ * name stays readable and `Clients` truncates instead.
+ */
+function Trail({ title, trail }: TrailProps) {
+	const steps: Crumb[] = trail.length === 0 ? [{ label: title }] : trail;
+
+	return (
+		<nav
+			aria-label="Location"
+			className="flex min-w-0 items-center"
+		>
+			{steps.map((step, index) => {
+				const last = index === steps.length - 1;
+
+				return (
+					<span
+						key={`${index}:${step.label}`}
+						className={`flex items-center ${last ? "min-w-0 shrink-[1]" : "min-w-0 shrink-[4]"}`}
+					>
+						<span
+							className="flex-none px-2 text-[var(--ink-faint)]"
+							aria-hidden
+						>
+							/
+						</span>
+						{step.onSelect && !last ? (
+							<button
+								type="button"
+								onClick={step.onSelect}
+								className="no-drag min-w-0 truncate rounded-[var(--radius-sm)] text-[length:var(--text-sm)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+							>
+								{step.label}
+							</button>
+						) : (
+							<span
+								aria-current={last ? "page" : undefined}
+								className={`min-w-0 truncate text-[length:var(--text-sm)] ${
+									last ? "text-[var(--ink)]" : "text-[var(--ink-muted)]"
+								}`}
+							>
+								{step.label}
+							</span>
+						)}
+					</span>
+				);
+			})}
+		</nav>
 	);
 }
 

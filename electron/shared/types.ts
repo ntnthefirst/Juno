@@ -80,7 +80,10 @@ export interface ClientTimelineEntry {
 	detail: string | null;
 	/** The row this came from, so the interface can open it. */
 	entityId: string;
-	/** A note's own kind, or null. Drives the icon and nothing else. */
+	/**
+	 * A note's own kind, or a reminder's category, or null. It picks an icon
+	 * and nothing else, so a value nothing recognises is safe to ignore.
+	 */
 	variant: string | null;
 }
 
@@ -1486,6 +1489,17 @@ export interface AgentClientTarget {
 	/** Juno is in the file with exactly the settings this install would write. */
 	upToDate: boolean;
 	format: AgentConfigFormat;
+	/**
+	 * The object or table the servers live under inside that client's file.
+	 * VS Code calls it "servers", Codex calls it "mcp_servers", everyone else
+	 * copied Claude Desktop and calls it "mcpServers".
+	 *
+	 * It is on the target rather than looked up by id in the renderer, because a
+	 * second copy of this mapping is one that drifts the day a client renames
+	 * its key, and the screen that would be wrong is the one telling a person
+	 * where to paste something by hand.
+	 */
+	configKey: string;
 	/** What the person has to do after the file changes, in one sentence. */
 	after: string;
 }

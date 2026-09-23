@@ -3,15 +3,25 @@ import type { AgentAction, AuditEvent } from "@shared/types";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { AutomationList } from "./AutomationList";
+import { ConnectionPanel } from "./ConnectionPanel";
 import { formatWhen, RESULT_TONES } from "./format";
 import { RequestList } from "./RequestList";
 
-type Tab = "requests" | "automations" | "log";
+type Tab = "requests" | "automations" | "log" | "connection";
 
+/**
+ * Connection is on this screen and not only in settings, which is where it
+ * ended up for a while. Settings is a modal window somebody opens to change
+ * how Juno behaves; connecting an agent is a job with steps, done once, with
+ * the tool list and the pending requests beside it as the thing being
+ * connected to. START-HERE.md sends a reader here for it, and it has to be
+ * here for that to be true.
+ */
 const TABS: { id: Tab; label: string }[] = [
 	{ id: "requests", label: "Requests" },
 	{ id: "automations", label: "Automations" },
 	{ id: "log", label: "Log" },
+	{ id: "connection", label: "Connection" },
 ];
 
 /**
@@ -105,7 +115,9 @@ export function AgentScreen() {
 						/>
 					) : tab === "log" ? (
 						<AuditLog />
-					) : null}
+					) : (
+						<ConnectionPanel onNotice={setNotice} />
+					)}
 				</div>
 			</div>
 

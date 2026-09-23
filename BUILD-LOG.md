@@ -810,3 +810,69 @@ Windows installers are unsigned and macOS notarisation is off, so both show a
 warning on first launch. Turning either on is one commit once the certificates
 exist, and turning them on halfway produces a build that fails to launch in a
 way that reads as a corrupt download.
+
+---
+
+# Rework, September 2026: the editors, navigation and a first run
+
+The list Nathan asked for after looking at the built app. Tracked in
+[docs/rework-2026-09.md](docs/rework-2026-09.md), with the editor contract in
+[docs/editors.md](docs/editors.md).
+
+**What changed.** A record opens over the whole working area instead of beside
+its own list, and the title bar carries `Juno / Clients / Jansen BV` with every
+step but the last clickable. Mail templates and document templates are two
+screens instead of one screen serving both sidebar entries. Notes are edited in
+a live Markdown editor that hides the markup off the cursor's line. A mail
+template has a visual editor and a code view over one HTML document, and a
+document template is edited as pages, margins, flowing blocks and boxes placed
+on the paper. Both kinds declare the inputs they need, and using one is its own
+screen that ends in a draft or a PDF. A PDF that already exists can be imported
+and signed. An empty install is met by a setup flow and a walkthrough.
+
+## What the work found
+
+- **The Agent screen had been unreachable since the sidebar was reshaped.**
+  Nothing imported `AgentScreen`, so there was no way to approve an action an
+  agent had parked, which decision 24 requires a person to do. Two earlier
+  commits reshaped `screens.ts` and dropped the entry; the icon for it was still
+  in `Icon.tsx`, which is what gave it away. Put back in its own group.
+- **`JUNO_SMOKE_DEMO=1` had been failing since decision 30 landed**, and nobody
+  had run it. The calendar walk asserted `[role=dialog]` for three different
+  shapes, and two of them stopped being modal when the detail became a side
+  panel and the form became a page. A check that is not run is not a check, and
+  a check that asserts the old shape fails for the right reason far too late.
+- **A first run now owns the window, which broke the walk in a way worth
+  keeping.** The throwaway user-data directory is a genuinely first install, so
+  there was no sidebar to click. The walk drives the setup flow and photographs
+  it, so if setup ever stops completing, the run fails instead of every new
+  install being trapped behind it.
+- **Generating a document wrote a row and no file.** The use-a-template screen
+  already said the document "was written to disk as a PDF", which was untrue
+  until a second button was pressed. Generating writes the file now, in one
+  service function both adapters call. The smoke run checks the bytes and the
+  `%PDF-` header rather than the path, because `printToPDF` on a window that has
+  not finished loading writes a blank page and does not error. The seeded
+  contract comes out at twenty kilobytes; a blank A4 is about one.
+- **React 19's `react-hooks/set-state-in-effect` rejects the fetch-then-set
+  pattern this codebase used**, when the reset is synchronous at the top of the
+  effect. Five sites were fixed by deriving instead: hold what an async call
+  returned together with the key it was fetched for, and during render use it
+  only when the key still matches. Stale data is then simply not used, so there
+  is nothing to clear.
+- **Escaping an injected script twice does not work by guessing.** A `\n` written
+  into a TypeScript template literal that is then evaluated as JavaScript became
+  a real newline inside a string literal and broke the whole script with
+  "Script failed to execute". `String.fromCharCode(10)` has no escape to get
+  wrong.
+- **The live Markdown editor needed an assertion about what it hides, not that
+  it mounted.** Hiding markup is a replace decoration, so the characters leave
+  the document: the smoke run types a heading, moves the cursor to a second
+  line, and checks the hash and the asterisks are gone while the heading text is
+  still there. A decoration that silently stopped working would otherwise look
+  like nothing at all.
+- **Delegating to several agents in one working tree needs file ownership
+  written down.** Three ran out of quota mid-edit and left the tree part built;
+  because each had been given an exclusive list of files, the finished work was
+  still coherent and the unfinished work was obvious. The typecheck was the
+  thing that said where the edge was.

@@ -9,7 +9,7 @@
 		"type": "git",
 		"url": "git+https://github.com/ntnthefirst/Juno.git"
 	},
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"private": true,
 	"type": "module",
 	"main": "dist-electron/main.js",

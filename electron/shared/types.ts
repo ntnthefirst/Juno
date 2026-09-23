@@ -536,6 +536,13 @@ export interface GenerateDocumentResult {
 	document: DocumentRecord;
 	/** Placeholders the template wanted and the records could not fill. */
 	missing: string[];
+	/**
+	 * Generating writes the PDF, because a document is a PDF. This is the reason
+	 * it did not, when it did not. The document itself is still saved, so the
+	 * answer is to try the PDF again from the record rather than to fill the
+	 * form in a second time.
+	 */
+	pdfError: string | null;
 }
 
 export interface DocumentSignature extends Standard {

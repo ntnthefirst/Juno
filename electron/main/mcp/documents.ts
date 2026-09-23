@@ -192,7 +192,10 @@ export const documentTools: ToolDescriptor[] = [
 					? { extras: args.extras as Record<string, string> }
 					: {}),
 			};
-			return documents.generate(input);
+			// Generating writes the PDF, the same way it does for the window. An
+			// agent that could produce a document without its file would be making
+			// a record the interface then has to explain.
+			return actions.generate(input);
 		},
 	},
 	{

@@ -92,7 +92,13 @@ export function DocumentsScreen() {
 		setSelectedId(result.document.id);
 		setSelectedTitle(result.document.title);
 		setDetailVersion((version) => version + 1);
-		setNotice(missingNotice(result.missing));
+		// A failed PDF is the more important of the two, because the record now
+		// says it is a document and the file behind it is not there yet.
+		setNotice(
+			result.pdfError === null
+				? missingNotice(result.missing)
+				: "The document was saved, but its PDF was not written. Create it from the record.",
+		);
 		refreshList();
 	}
 

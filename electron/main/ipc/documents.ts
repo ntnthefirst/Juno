@@ -14,7 +14,7 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.get", (_event, id: string) => documents.get(id));
 
 	ipcMain.handle("documents.generate", (_event, input: GenerateDocumentInput) =>
-		documents.generate(input),
+		actions.generate(input),
 	);
 
 	ipcMain.handle("documents.import", (_event, input: ImportDocumentInput) => documents.importPdf(input));

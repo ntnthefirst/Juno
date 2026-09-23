@@ -85,6 +85,38 @@ export async function previewTemplate(
 	};
 }
 
+/**
+ * Generates a document and writes its PDF in one step.
+ *
+ * A document is a PDF (docs/editors.md section 5), so a record whose file does
+ * not exist yet is a half-made thing that every screen then has to describe:
+ * "generated, no PDF" is a state nobody asked for. Both adapters call this
+ * rather than generating and rendering in sequence themselves, because a
+ * two-step operation sequenced in an adapter is a step the other adapter
+ * forgets.
+ *
+ * The PDF failing does not lose the document. The record is already written and
+ * is returned with `pdfPath` still null, so the person can try again from the
+ * detail view rather than losing what they filled in.
+ */
+export async function generate(
+	input: documents.GenerateInput,
+	db: Db = getDb(),
+): Promise<documents.GenerateResult & { pdfError: string | null }> {
+	const result = await documents.generate(input, db);
+
+	try {
+		const withPdf = await renderPdf(result.document.id, db);
+		return { document: withPdf, missing: result.missing, pdfError: null };
+	} catch (cause) {
+		return {
+			document: result.document,
+			missing: result.missing,
+			pdfError: cause instanceof Error ? cause.message : "The PDF could not be written.",
+		};
+	}
+}
+
 export async function renderPdf(id: string, db: Db = getDb()) {
 	const record = await documents.get(id, db);
 	if (!record) throw new Error("That document no longer exists.");

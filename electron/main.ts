@@ -231,6 +231,11 @@ if (!app.requestSingleInstanceLock()) {
 								const gen = await b.documents.generate({
 									clientId: made[0].id, templateId: tpl.id, projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
 								});
+								// Generating writes the PDF now, so this call is only here to
+								// prove the explicit path still works. What generating produced is
+								// checked from the main process below, where the file is reachable.
+								if (gen.pdfError !== null) throw new Error("Smoke: generating did not write a PDF, " + gen.pdfError);
+								if (!gen.document.pdfPath) throw new Error("Smoke: the generated document has no PDF path");
 								await b.documents.renderPdf(gen.document.id);
 
 								// Phase 2: a few reminders across the buckets, plus a delivered
@@ -430,6 +435,27 @@ if (!app.requestSingleInstanceLock()) {
 								throw new Error(`Smoke: the outbox did not send the cover mail: ${JSON.stringify(outboxRows)}`);
 							}
 							console.log(`SMOKE_DEMO outbox sent=${outboxRows[0]!.messageId}`);
+
+							// printToPDF on a window that has not finished loading produces a
+							// blank page and does not error, so the bytes are what has to be
+							// checked, not the path. A blank A4 is about a kilobyte; a rendered
+							// contract is several.
+							{
+								const { statSync, readFileSync: readPdfBytes } = await import("node:fs");
+								const generated = (await (await import("./main/services/documents")).list({})).find(
+									(row) => row.sourceKind === "generated" && row.pdfPath !== null,
+								);
+								if (!generated?.pdfPath) throw new Error("Smoke: no generated document has a PDF");
+								const size = statSync(generated.pdfPath).size;
+								if (size < 2000) {
+									throw new Error(`Smoke: the generated PDF is ${size} bytes, which is a blank page`);
+								}
+								const head = readPdfBytes(generated.pdfPath).subarray(0, 5).toString("latin1");
+								if (head !== "%PDF-") {
+									throw new Error(`Smoke: the generated file starts with ${head}, not a PDF header`);
+								}
+								console.log(`SMOKE_DEMO generated pdf=${size}`);
+							}
 							window.webContents.reload();
 							await new Promise((r) => {
 								window.webContents.once("did-finish-load", () => setTimeout(r, 900));

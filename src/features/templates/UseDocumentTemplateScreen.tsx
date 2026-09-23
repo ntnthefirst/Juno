@@ -44,7 +44,12 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 	const [projectIdChoice, setProjectIdChoice] = useState("");
 	const [linkError, setLinkError] = useState<string | null>(null);
 	const [preview, setPreview] = useState<Preview>({ status: "idle" });
-	const [created, setCreated] = useState<{ title: string; isSpecimen: boolean; missing: string[] } | null>(null);
+	const [created, setCreated] = useState<{
+		title: string;
+		isSpecimen: boolean;
+		missing: string[];
+		pdfError: string | null;
+	} | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
@@ -174,6 +179,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 				title: result.document.title,
 				isSpecimen: result.document.isSpecimen,
 				missing: result.missing,
+				pdfError: result.pdfError,
 			});
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -187,9 +193,16 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 			<FormPage title={`Use: ${template.name}`} onBack={onDone} backLabel="Done" width="form">
 				<p className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">Document created</p>
 				<p className="mt-3 text-[length:var(--text-base)]">
-					{created.title} was written to disk as a PDF.
+					{created.pdfError === null
+						? `${created.title} was written to disk as a PDF.`
+						: `${created.title} was saved, but its PDF was not written.`}
 					{created.isSpecimen ? " It is marked as a specimen, because the template has not been reviewed." : ""}
 				</p>
+				{created.pdfError !== null ? (
+					<p className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+						{created.pdfError} The document is in the list, so create its PDF from there.
+					</p>
+				) : null}
 				{created.missing.length > 0 ? (
 					<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 						No value for: {created.missing.join(", ")}. The document shows a marked gap for each.

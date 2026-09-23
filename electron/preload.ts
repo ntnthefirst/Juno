@@ -334,6 +334,16 @@ const api: JunoApi = {
 			unlinkClient: (id) => call("mail.threads.unlinkClient", id),
 			countForClient: (clientId) => call("mail.threads.countForClient", clientId),
 		},
+		file: {
+			archive: (threadIds) => call("mail.file.archive", threadIds),
+			trash: (threadIds) => call("mail.file.trash", threadIds),
+			junk: (threadIds) => call("mail.file.junk", threadIds),
+			moveToFolder: (threadIds, folderId) => call("mail.file.moveToFolder", threadIds, folderId),
+			deleteForever: (threadIds) => call("mail.file.deleteForever", threadIds),
+			setSeen: (messageIds, seen) => call("mail.file.setSeen", messageIds, seen),
+			setThreadsSeen: (threadIds, seen) => call("mail.file.setThreadsSeen", threadIds, seen),
+			setFlagged: (messageIds, flagged) => call("mail.file.setFlagged", messageIds, flagged),
+		},
 		messages: {
 			get: (id) => call("mail.messages.get", id),
 			body: (id) => call("mail.messages.body", id),

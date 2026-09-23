@@ -29,8 +29,10 @@ import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
 import * as documentActions from "./main/services/document-actions";
 import { configureCredentialStore } from "./main/services/mail-credentials";
+import { openImapWriter } from "./main/services/mail-imap-write";
 import { openImapSource } from "./main/services/mail-imap";
 import { configureMailboxSource } from "./main/services/mail-source";
+import { configureMailboxWriter } from "./main/services/mail-writer";
 import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
 import * as mailSync from "./main/services/mail-sync";
@@ -82,6 +84,7 @@ if (!app.requestSingleInstanceLock()) {
 		// comes on, per decision 15.
 		mailSync.configureMailSync({ mailDir: mailDir(), isPaused: () => lock.isLocked() });
 		configureMailboxSource(openImapSource);
+		configureMailboxWriter(openImapWriter);
 		configureMailTransport(smtpTransport, imapSentAppender);
 		// The sender pauses with the lock too, and renders a PDF for an attached
 		// document through the same path the documents screen uses.

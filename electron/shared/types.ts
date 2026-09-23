@@ -902,6 +902,24 @@ export interface MailThreadListQuery {
 	before?: Iso;
 }
 
+/**
+ * What a move actually did.
+ *
+ * `remembered` is how many of them Juno can still point at. A server with
+ * UIDPLUS says where each message landed, so the row follows it and shows up in
+ * the destination immediately. A server without it says nothing, so the row is
+ * forgotten and the message reappears when that folder is next synced. The
+ * number is in the result rather than hidden, because it is the difference
+ * between "it is in Archive" and "it is in Archive and Juno will see it again
+ * after a sync", and the interface has to be able to say which happened.
+ */
+export interface MailFileResult {
+	moved: number;
+	/** The destination, by the name the folder list shows. */
+	folderName: string;
+	remembered: number;
+}
+
 export type MailSyncPhase = "idle" | "connecting" | "folders" | "headers" | "bodies" | "done" | "failed";
 
 export interface MailSyncStatus {

@@ -76,6 +76,7 @@ import type {
 	LockSettings,
 	LockState,
 	MailAccount,
+	MailFileResult,
 	MailAccountInput,
 	MailAutoconfig,
 	MailAccountPatch,
@@ -539,6 +540,22 @@ export interface JunoApi {
 			linkClient(id: string, clientId: string): Promise<MailThreadSummary>;
 			unlinkClient(id: string): Promise<MailThreadSummary>;
 			countForClient(clientId: string): Promise<number>;
+		};
+		/**
+		 * Filing mail. Each of these changes the mailbox on the server first and
+		 * the local rows second, so nothing here is undone by the next sync.
+		 * Deleting for good is exactly that, on the server too, and the window
+		 * confirms it with a count before calling.
+		 */
+		file: {
+			archive(threadIds: string[]): Promise<MailFileResult>;
+			trash(threadIds: string[]): Promise<MailFileResult>;
+			junk(threadIds: string[]): Promise<MailFileResult>;
+			moveToFolder(threadIds: string[], folderId: string): Promise<MailFileResult>;
+			deleteForever(threadIds: string[]): Promise<number>;
+			setSeen(messageIds: string[], seen: boolean): Promise<number>;
+			setThreadsSeen(threadIds: string[], seen: boolean): Promise<number>;
+			setFlagged(messageIds: string[], flagged: boolean): Promise<number>;
 		};
 		messages: {
 			get(id: string): Promise<MailMessage | null>;

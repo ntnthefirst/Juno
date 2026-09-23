@@ -17,6 +17,7 @@ import type {
 	MailTemplatePatch,
 	MailThreadListQuery,
 } from "../../shared/types";
+import * as actions from "../services/mail-actions";
 import * as accounts from "../services/mail-accounts";
 import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
@@ -63,6 +64,29 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.threads.unlinkClient", (_event, id: string) => threads.unlinkClient(id));
 	ipcMain.handle("mail.threads.countForClient", (_event, clientId: string) =>
 		threads.countForClient(clientId),
+	);
+
+	// Filing. Each of these reaches the server before it touches a local row,
+	// so nothing here is quietly undone by the next sync. The window confirms
+	// deleteForever with a count first; the agent's route to the same service
+	// is parked for approval by the generic gate.
+	ipcMain.handle("mail.file.archive", (_event, threadIds: string[]) => actions.archiveThreads(threadIds));
+	ipcMain.handle("mail.file.trash", (_event, threadIds: string[]) => actions.trashThreads(threadIds));
+	ipcMain.handle("mail.file.junk", (_event, threadIds: string[]) => actions.junkThreads(threadIds));
+	ipcMain.handle("mail.file.moveToFolder", (_event, threadIds: string[], folderId: string) =>
+		actions.moveThreads(threadIds, { folderId }),
+	);
+	ipcMain.handle("mail.file.deleteForever", (_event, threadIds: string[]) =>
+		actions.deleteThreadsForever(threadIds),
+	);
+	ipcMain.handle("mail.file.setSeen", (_event, messageIds: string[], seen: boolean) =>
+		actions.setSeen(messageIds, seen),
+	);
+	ipcMain.handle("mail.file.setThreadsSeen", (_event, threadIds: string[], seen: boolean) =>
+		actions.setThreadsSeen(threadIds, seen),
+	);
+	ipcMain.handle("mail.file.setFlagged", (_event, messageIds: string[], flagged: boolean) =>
+		actions.setFlagged(messageIds, flagged),
 	);
 
 	ipcMain.handle("mail.messages.get", (_event, id: string) => threads.getMessage(id));

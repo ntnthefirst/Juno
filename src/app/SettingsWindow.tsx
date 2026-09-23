@@ -6,6 +6,7 @@ import { AppearanceSection } from "../features/settings/AppearanceSection";
 import { BackupSection } from "../features/settings/BackupSection";
 import { LockSection } from "../features/settings/LockSection";
 import { MailSection } from "../features/settings/MailSection";
+import { OnboardingSection } from "../features/settings/OnboardingSection";
 import { OwnerSection } from "../features/settings/OwnerSection";
 import { ReferenceSection } from "../features/settings/ReferenceSection";
 import { Section } from "../features/settings/Section";
@@ -96,6 +97,7 @@ export function SettingsWindow() {
 								theme={theme}
 								onChange={setTheme}
 							/>
+							<OnboardingSection onNotice={setToast} />
 							<AboutSection />
 						</Pad>
 					) : tab === "business" ? (

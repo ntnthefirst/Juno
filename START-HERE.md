@@ -23,11 +23,12 @@ npm run dev
 | **Today** | What needs attention, suggestions worked out from the records, a counts line |
 | **Reminders** | Grouped by bucket, recurring, snooze and complete, one daily notification |
 | **Clients** | Clients, contacts and projects, with search and undo |
-| **Documents** | Generated from templates, rendered to PDF, signed with an audit page |
+| **Documents** | Generated from a template or imported as a PDF, written to disk at generation, signed with an audit page |
 | **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. An outbox that sends over SMTP behind a confirmation gate, with reply, templates and document attachments |
 | **Calendar** | Events and recurring series with an IANA zone each, month, week and agenda views, reminders and project deadlines overlaid, drag to move and resize with the recurrence question asked, .ics in and out |
-| **Agent** | An MCP server over a local pipe, 99 tools, every side-effectful one parked for approval. Automations, an audit log, briefings across every domain, and the config block to paste into an agent |
-| **Templates** | The contract texts and the mail templates, editable, with a live preview |
+| **Agent** | An MCP server over a local pipe, 124 tools, every side-effectful one parked for approval. Automations, an audit log, briefings across every domain, and the config block to paste into an agent |
+| **Mail templates** | The subject and body of the emails Juno composes. A visual editor and a code view over the same HTML, declared inputs, and a preview through the shell that sends it |
+| **Document templates** | The contract texts, edited as pages: a margin, blocks that flow, and boxes placed on the paper. Compiled to the HTML the PDF pipeline already took |
 | **Settings** | Theme, lock, reference data, owner details, accounting link, mail accounts, signature, backup |
 
 Not built: the in-app assistant panel, the one part of phase 6 that needs a
@@ -47,6 +48,16 @@ external agent pointed at Settings > Agent drives the same surface today.
 `BUILD-LOG.md` first, because several things in `PLAN.md` and `decisions.md` have
 been amended by what actually happened. The log says which.
 
+## The first run
+
+An empty install is met by a setup flow that owns the window: welcome, your
+business, appearance, the lock, mail, done. It is asked once, and skipping a
+step still counts as answering it. A walkthrough over the real app follows, and
+both can be replayed from Settings > General.
+
+`onboarding` lives in `settings.json`, not the database, so replacing the
+database does not replay setup and `npm run dev:clean` does.
+
 ## The eight things that will bite you
 
 1. **Tests run under Electron's Node, not the host's.** `node:sqlite` before Node
@@ -56,8 +67,11 @@ been amended by what actually happened. The log says which.
    typecheck says nothing about the custom scheme, the preload bridge or the
    database. `JUNO_SMOKE_DEMO=1 node scripts/smoke.mjs` creates real records
    through the bridge, syncs a mailbox held in memory, sends through a transport
-   held in memory, and photographs eight screens in both themes into `.smoke/`.
-   Several real bugs were found only by looking at those images.
+   held in memory, walks the setup flow, both template editors, both
+   use-a-template screens and the walkthrough, and photographs every screen and
+   every settings tab in both themes into `.smoke/`. Several real bugs, and
+   every one of the four layout faults fixed in the September rework, were found
+   only by looking at those images.
 3. **Storage is `node:sqlite` behind a shim**, not `better-sqlite3`, because this
    machine has no C++ compiler. Decision 18. Drizzle is assembled by hand in
    `electron/main/db/index.ts` because its own entry point requires
@@ -88,6 +102,17 @@ been amended by what actually happened. The log says which.
    host test in `electron/main/mcp/host.test.ts` will tell you whether its
    flags match what the rules require, and it is meant to fail when they do
    not.
+
+## What the September rework changed
+
+A record opens over the whole working area rather than beside its own list, and
+the title bar carries the trail (`Juno / Clients / Jansen BV`). Notes are edited
+in a live Markdown editor. The rest is in
+[docs/rework-2026-09.md](docs/rework-2026-09.md), the editors are specified in
+[docs/editors.md](docs/editors.md), and what it found the hard way is at the end
+of [BUILD-LOG.md](BUILD-LOG.md). Two of those findings are worth knowing now:
+the Agent screen had been unreachable, and `JUNO_SMOKE_DEMO=1` had been failing
+since forms stopped being modals, because nobody had run it.
 
 ## What to do next
 

@@ -217,7 +217,7 @@ export function ClientsScreen() {
 	// and how to get back.
 	if (selectedId !== null) {
 		return (
-			<div className="flex h-full min-h-0">
+			<div className="relative flex h-full min-h-0">
 				<div className="min-h-0 flex-1 overflow-y-auto p-8">
 					<div className="mx-auto w-full max-w-[var(--content-width)]">
 						<ClientDetail

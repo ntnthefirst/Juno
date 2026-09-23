@@ -369,7 +369,7 @@ export function CalendarScreen() {
 				</div>
 			</div>
 
-			<div className="flex min-h-0 flex-1">
+			<div className="relative flex min-h-0 flex-1">
 				<div className="min-w-0 flex-1 overflow-hidden">
 				{load.status === "error" ? (
 					<div className="m-8 border-l-2 border-[var(--risk)] pl-4">

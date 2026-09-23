@@ -186,9 +186,19 @@ export function MailScreen() {
 				<div className="mt-12 max-w-[52ch]">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">No accounts yet</h2>
 					<p className="mt-2 text-[var(--ink-muted)]">
-						Add an IMAP account under Settings, then come back here. Juno pulls mail onto this machine and
-						sends only what you press Send on.
+						Juno reads mail over IMAP, from an account you type in yourself. It pulls mail onto this
+						machine and sends only what you press Send on.
 					</p>
+					{/*
+						Settings is a separate window, so this opens it on the page that
+						does the job rather than leaving someone to find the tab
+						(main/windows/chrome.ts carries the section in the URL).
+					*/}
+					<div className="mt-6">
+						<Button variant="primary" onClick={() => void window.juno.window.openSettings("mail")}>
+							Connect an account
+						</Button>
+					</div>
 				</div>
 			</div>
 		);

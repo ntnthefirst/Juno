@@ -217,19 +217,78 @@ export interface ReferenceUsage {
 
 export type ThemeSetting = "system" | "light" | "dark";
 
+/**
+ * The tabs of the settings window, and what a deep link into it may name. The
+ * main window uses this to send someone straight to mail accounts from the
+ * screen that needs one.
+ */
+export type SettingsSection = "general" | "business" | "mail" | "documents" | "security" | "mcp";
+
+/**
+ * One of the owner's email addresses. Several are normal, at most one is
+ * primary, and an address nobody reads is still worth recording: the one on an
+ * old domain, the one a client insists on using, the one that only forwards.
+ * The primary is what a generated document prints.
+ */
+export interface OwnerEmail {
+	id: string;
+	email: string;
+	/** What it is for, in the owner's own words. "Invoices", "old domain". */
+	label: string | null;
+	isPrimary: boolean;
+}
+
+/** One of the owner's phone numbers. Same rules as OwnerEmail. */
+export interface OwnerPhone {
+	id: string;
+	phone: string;
+	label: string | null;
+	isPrimary: boolean;
+}
+
 export interface OwnerProfile {
 	businessName: string;
-	contactName: string;
-	email: string;
-	phone: string;
+	firstName: string;
+	lastName: string;
 	vatNumber: string;
+	/**
+	 * The establishment unit number of the registered office, the Belgian
+	 * vestigingsnummer that starts with a 2. Not the enterprise number, which is
+	 * the VAT number without its country prefix.
+	 */
+	establishmentNumber: string;
 	addressLine1: string;
 	addressLine2: string;
 	postalCode: string;
 	city: string;
 	country: string;
 	iban: string;
+	emails: OwnerEmail[];
+	phones: OwnerPhone[];
 }
+
+/**
+ * The scalar half of the profile. The two lists are edited one entry at a time,
+ * so a patch that carried them would let a stale form wipe an address added
+ * somewhere else.
+ */
+export type OwnerProfilePatch = Partial<Omit<OwnerProfile, "emails" | "phones">>;
+
+export type OwnerEmailInput = {
+	email: string;
+	label?: string | null;
+	isPrimary?: boolean;
+};
+
+export type OwnerEmailPatch = Partial<OwnerEmailInput>;
+
+export type OwnerPhoneInput = {
+	phone: string;
+	label?: string | null;
+	isPrimary?: boolean;
+};
+
+export type OwnerPhonePatch = Partial<OwnerPhoneInput>;
 
 export interface AppSettings {
 	theme: ThemeSetting;

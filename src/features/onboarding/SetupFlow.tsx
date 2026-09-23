@@ -12,6 +12,7 @@ import {
 	DoneIllustration,
 	LockIllustration,
 	MailIllustration,
+	PersonIllustration,
 	WelcomeIllustration,
 } from "./OnboardingIllustrations";
 
@@ -20,36 +21,42 @@ import {
  * renderer has no channel that reads the constant itself, only setOnboarding to
  * write the state it gates, so the two are kept in step by hand. A step added to
  * this flow that an existing install has never seen should bump both.
+ *
+ * Version 2 split the one long business step into a name and a business step,
+ * and stopped asking for an email address and a phone number here: those are
+ * lists now, kept under settings, and a first run is the wrong moment to ask
+ * for four of each.
  */
-const SETUP_VERSION = 1;
+const SETUP_VERSION = 2;
 
-type StepId = "welcome" | "business" | "appearance" | "lock" | "mail" | "done";
+type StepId = "welcome" | "you" | "business" | "appearance" | "lock" | "mail" | "done";
 
 const STEPS: { id: StepId; label: string }[] = [
 	{ id: "welcome", label: "Welcome" },
-	{ id: "business", label: "Business" },
+	{ id: "you", label: "Your name" },
+	{ id: "business", label: "Your business" },
 	{ id: "appearance", label: "Appearance" },
 	{ id: "lock", label: "Lock" },
 	{ id: "mail", label: "Mail" },
-	{ id: "done", label: "Done" },
+	{ id: "done", label: "Ready" },
 ];
 
 type SetupFlowProps = {
 	/**
-	 * Called once the last step is answered, whether or not anything was
-	 * skipped: choosing not to answer is still an answer. `startWalkthrough` is
-	 * true when the person asked for the tour next, so the shell can start it as
-	 * soon as it mounts.
+	 * Called once setup is answered, whether or not anything was skipped:
+	 * choosing not to answer is still an answer. The window closes on it.
 	 */
-	onFinished: (startWalkthrough: boolean) => void;
+	onFinished: () => void;
 };
 
 /**
- * The first-run flow. It replaces the shell entirely rather than sitting inside
- * it: there is nothing behind it to go back to until it is answered, which is
- * also why it never draws its own title bar and never treats Escape as a way
- * out (see the reserved strip below and App.tsx, which renders this instead of
- * the shell while setup is unfinished).
+ * The first-run flow, inside its own small window (app/SetupWindow.tsx).
+ *
+ * Whether the walkthrough follows is not a flag passed back here. It is
+ * `walkthroughSeenAt` in the stored onboarding state: the main window starts
+ * the tour when setup is finished and that timestamp is still null, which is
+ * also how Settings > General replays it. So "Start using Juno" writes the
+ * timestamp and "Take the walkthrough" leaves it alone.
  */
 export function SetupFlow({ onFinished }: SetupFlowProps) {
 	const [index, setIndex] = useState(0);
@@ -64,46 +71,47 @@ export function SetupFlow({ onFinished }: SetupFlowProps) {
 		setIndex(Math.max(0, Math.min(STEPS.length - 1, next)));
 	}
 
-	async function finish(startWalkthrough: boolean) {
+	async function finish(options: { walkthrough: boolean; openMailSettings?: boolean }) {
+		const stamp = new Date().toISOString();
 		try {
 			await window.juno.settings.setOnboarding({
-				completedAt: new Date().toISOString(),
+				completedAt: stamp,
 				version: SETUP_VERSION,
+				// Only the tour that is being taken leaves this null. Everything
+				// else, including skipping setup outright, counts as answered.
+				...(options.walkthrough ? {} : { walkthroughSeenAt: stamp }),
 			});
 		} finally {
-			onFinished(startWalkthrough);
+			if (options.openMailSettings) {
+				// The main process closes this window as it opens that one: two modal
+				// children of one parent fight over focus.
+				void window.juno.window.openSettings("mail");
+			} else {
+				onFinished();
+			}
 		}
 	}
 
 	return (
-		<div className="flex h-full flex-col bg-[var(--paper)]">
+		<div className="flex h-full min-h-0 flex-col px-8 pb-6 pt-5">
+			<StepRail step={index} onSelect={goTo} />
+
 			{/*
-				The shell draws the window's title bar; this flow replaces the shell
-				and so draws none. What it still owes the window is the empty strip
-				the operating system's own caption buttons sit over: skipping this
-				and putting content up there means a click meant for this flow lands
-				on a native button instead, and the reverse too, so the window ends up
-				with no way to close it from here.
+				min-h-0 plus justify-center on the inner column, inside the scrolling
+				one, is what lets a short step sit centred in the space below the rail
+				while a long one still overflows into the scroll rather than being
+				clipped: the browser falls back to top alignment once it no longer fits.
 			*/}
-			<div className="drag-region flex-none" style={{ height: "var(--titlebar-height)" }} aria-hidden />
-
-			<div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-8 py-10">
-				<StepRail step={index} onSelect={goTo} />
-
-				{/*
-					min-h-0 plus justify-center on this flex column, inside the scrolling
-					container above, is what lets a short step (welcome) sit centred in
-					the space below the rail while a long one (business, eleven fields)
-					still overflows into the outer scroll rather than being clipped: the
-					browser falls back to top alignment once content no longer fits.
-				*/}
-				<div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center">
-					<div ref={panelRef} tabIndex={-1} key={step} className="w-full max-w-[560px] outline-none">
+			<div className="mt-5 flex min-h-0 flex-1 flex-col overflow-y-auto">
+				<div className="flex min-h-0 flex-1 flex-col justify-center">
+					<div ref={panelRef} tabIndex={-1} key={step} className="w-full outline-none">
 						{step === "welcome" ? (
 							// "Skip setup" means skip, not "jump to one more screen with a
 							// button on it": it completes on its own, the same way the last
 							// step's buttons do.
-							<WelcomeStep onStart={() => goTo(1)} onSkip={() => void finish(false)} />
+							<WelcomeStep onStart={() => goTo(1)} onSkip={() => void finish({ walkthrough: false })} />
+						) : step === "you" ? (
+							<NameStep onContinue={() => goTo(index + 1)} />
 						) : step === "business" ? (
 							<BusinessStep onContinue={() => goTo(index + 1)} />
 						) : step === "appearance" ? (
@@ -111,9 +119,15 @@ export function SetupFlow({ onFinished }: SetupFlowProps) {
 						) : step === "lock" ? (
 							<LockStep onContinue={() => goTo(index + 1)} />
 						) : step === "mail" ? (
-							<MailStep onContinue={() => goTo(index + 1)} />
+							<MailStep
+								onContinue={() => goTo(index + 1)}
+								onAddAccount={() => void finish({ walkthrough: false, openMailSettings: true })}
+							/>
 						) : (
-							<DoneStep onTakeWalkthrough={() => void finish(true)} onStart={() => void finish(false)} />
+							<DoneStep
+								onTakeWalkthrough={() => void finish({ walkthrough: true })}
+								onStart={() => void finish({ walkthrough: false })}
+							/>
 						)}
 					</div>
 				</div>
@@ -127,44 +141,50 @@ type StepRailProps = {
 	onSelect: (index: number) => void;
 };
 
-/** A step already passed is reachable; a step ahead is not, because it has not been filled in yet. */
+/**
+ * Dots rather than seven labels in a row: the window is 760px wide, and seven
+ * words with connectors between them wraps to two lines and reads like a menu.
+ * A step already passed is reachable; a step ahead is not, because it has not
+ * been filled in yet.
+ */
 function StepRail({ step, onSelect }: StepRailProps) {
 	return (
-		<ol className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-			{STEPS.map((entry, index) => {
-				const state = index === step ? "current" : index < step ? "done" : "ahead";
-				const reachable = state === "done";
-				return (
-					<li key={entry.id} className="flex items-center gap-2">
-						{index > 0 ? <span aria-hidden className="h-px w-6 bg-[var(--line-strong)]" /> : null}
-						<button
-							type="button"
-							disabled={!reachable}
-							aria-current={state === "current" ? "step" : undefined}
-							onClick={reachable ? () => onSelect(index) : undefined}
-							className={[
-								"flex h-[28px] items-center gap-2 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-								state === "current" ? "font-[var(--weight-medium)] text-[var(--ink)]" : "text-[var(--ink-muted)]",
-								reachable ? "hover:bg-[var(--hover)] hover:text-[var(--ink)]" : "",
-							].join(" ")}
-						>
-							<span
-								aria-hidden
-								className={[
-									"tabular flex h-[20px] w-[20px] flex-none items-center justify-center rounded-full text-[length:var(--text-micro)] font-[var(--weight-medium)]",
-									state === "ahead"
-										? "border border-[var(--line-strong)] text-[var(--ink-faint)]"
-										: "bg-[var(--accent)] text-[var(--accent-ink)]",
-								].join(" ")}
+		<div className="flex flex-none items-center justify-between gap-4">
+			<ol className="flex items-center gap-1.5">
+				{STEPS.map((entry, index) => {
+					const state = index === step ? "current" : index < step ? "done" : "ahead";
+					const reachable = state === "done";
+					return (
+						<li key={entry.id} className="flex">
+							<button
+								type="button"
+								disabled={!reachable}
+								aria-label={entry.label}
+								aria-current={state === "current" ? "step" : undefined}
+								onClick={reachable ? () => onSelect(index) : undefined}
+								className="flex h-8 w-5 items-center justify-center rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 							>
-								{index + 1}
-							</span>
-							{entry.label}
-						</button>
-					</li>
-				);
-			})}
-		</ol>
+								<span
+									aria-hidden
+									className={[
+										"block rounded-[var(--radius-full)] transition-all duration-[var(--duration-base)] ease-[var(--ease)]",
+										state === "current"
+											? "h-2 w-5 bg-[var(--accent)]"
+											: state === "done"
+												? "h-2 w-2 bg-[var(--accent)]"
+												: "h-2 w-2 bg-[var(--line-strong)]",
+									].join(" ")}
+								/>
+							</button>
+						</li>
+					);
+				})}
+			</ol>
+
+			<p className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				Step {step + 1} of {STEPS.length}
+			</p>
+		</div>
 	);
 }
 
@@ -177,21 +197,24 @@ function WelcomeStep({ onStart, onSkip }: WelcomeStepProps) {
 	return (
 		<div className="flex flex-col items-center text-center">
 			<WelcomeIllustration />
-			<h1 className="mt-6 text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+			<h1 className="mt-5 text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">
 				Welcome to Juno
 			</h1>
 			<p className="mt-3 max-w-[46ch] text-[var(--ink-muted)]">
 				Juno keeps your clients, documents, mail, calendar and reminders on this machine. Nothing
 				leaves it unless you send it yourself, and there is no account to sign in to.
 			</p>
-			<div className="mt-8 flex flex-col items-center gap-3">
+			<p className="mt-2 max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				Five short questions. Every one of them can be answered later instead.
+			</p>
+			<div className="mt-7 flex flex-col items-center gap-2">
 				<Button variant="primary" onClick={onStart}>
 					Set up Juno
 				</Button>
 				<button
 					type="button"
 					onClick={onSkip}
-					className="inline-flex h-10 items-center px-2 text-[length:var(--text-sm)] text-[var(--ink-muted)] underline-offset-4 hover:text-[var(--ink)] hover:underline"
+					className="inline-flex h-10 items-center px-2 text-[length:var(--text-sm)] text-[var(--ink-muted)] underline-offset-4 hover:text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 				>
 					Skip setup
 				</button>
@@ -200,28 +223,14 @@ function WelcomeStep({ onStart, onSkip }: WelcomeStepProps) {
 	);
 }
 
-const OWNER_FIELDS: { key: keyof OwnerProfile; label: string; type?: "email" | "tel" }[] = [
-	{ key: "businessName", label: "Business name" },
-	{ key: "contactName", label: "Your name" },
-	{ key: "email", label: "Email", type: "email" },
-	{ key: "phone", label: "Phone", type: "tel" },
-	{ key: "vatNumber", label: "VAT number" },
-	{ key: "iban", label: "IBAN" },
-	{ key: "addressLine1", label: "Address" },
-	{ key: "addressLine2", label: "Address, second line" },
-	{ key: "postalCode", label: "Postal code" },
-	{ key: "city", label: "City" },
-	{ key: "country", label: "Country" },
-];
-
-type BusinessStepProps = {
-	onContinue: () => void;
-};
-
-function BusinessStep({ onContinue }: BusinessStepProps) {
+/** Loads the profile once, so a step can edit it and hand it back. */
+function useOwnerProfile(): {
+	profile: OwnerProfile | null;
+	setProfile: (next: OwnerProfile) => void;
+	loadError: string | null;
+} {
 	const [profile, setProfile] = useState<OwnerProfile | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
+	const [loadError, setLoadError] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -231,19 +240,91 @@ function BusinessStep({ onContinue }: BusinessStepProps) {
 				if (!cancelled) setProfile(value);
 			})
 			.catch((cause: unknown) => {
-				if (!cancelled) setError(messageOf(cause));
+				if (!cancelled) setLoadError(messageOf(cause));
 			});
 		return () => {
 			cancelled = true;
 		};
 	}, []);
 
+	return { profile, setProfile, loadError };
+}
+
+type StepProps = {
+	onContinue: () => void;
+};
+
+function NameStep({ onContinue }: StepProps) {
+	const { profile, setProfile, loadError } = useOwnerProfile();
+	const [error, setError] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+
 	async function save() {
 		if (!profile || busy) return;
 		setBusy(true);
 		setError(null);
 		try {
-			await window.juno.settings.setOwner(profile);
+			await window.juno.settings.setOwner({
+				firstName: profile.firstName,
+				lastName: profile.lastName,
+			});
+			onContinue();
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	return (
+		<div>
+			<Heading illustration={<PersonIllustration />} title="Your name" />
+			<p className="mt-3 text-[var(--ink-muted)]">
+				This is the name that signs a contract and goes out under an email. Your email addresses
+				and phone numbers come later, in settings, where they can be a list.
+			</p>
+
+			{profile === null ? (
+				<p className="mt-6 text-[var(--ink-muted)]">{loadError ?? "Loading."}</p>
+			) : (
+				<div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<Field
+						label="First name"
+						value={profile.firstName}
+						onChange={(value) => setProfile({ ...profile, firstName: value })}
+					/>
+					<Field
+						label="Last name"
+						value={profile.lastName}
+						onChange={(value) => setProfile({ ...profile, lastName: value })}
+					/>
+				</div>
+			)}
+
+			<StepFooter error={error}>
+				<Button variant="primary" disabled={!profile || busy} onClick={() => void save()}>
+					Continue
+				</Button>
+			</StepFooter>
+		</div>
+	);
+}
+
+function BusinessStep({ onContinue }: StepProps) {
+	const { profile, setProfile, loadError } = useOwnerProfile();
+	const [error, setError] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+
+	async function save() {
+		if (!profile || busy) return;
+		setBusy(true);
+		setError(null);
+		try {
+			await window.juno.settings.setOwner({
+				businessName: profile.businessName,
+				vatNumber: profile.vatNumber,
+				establishmentNumber: profile.establishmentNumber,
+			});
 			onContinue();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -256,104 +337,105 @@ function BusinessStep({ onContinue }: BusinessStepProps) {
 		<div>
 			<Heading illustration={<BusinessIllustration />} title="Your business" />
 			<p className="mt-3 text-[var(--ink-muted)]">
-				These details end up in front of clients: in the contracts and emails Juno generates.
-				Nothing here is required. Leave anything blank and it simply shows as missing later, from
-				settings.
+				These end up in front of clients, in the contracts and emails Juno generates. Nothing here
+				is required, and your address and IBAN wait in settings, under Your business.
 			</p>
 
 			{profile === null ? (
-				<p className="mt-6 text-[var(--ink-muted)]">Loading.</p>
+				<p className="mt-6 text-[var(--ink-muted)]">{loadError ?? "Loading."}</p>
 			) : (
-				<div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-					{OWNER_FIELDS.map((field) => (
+				<div className="mt-6 flex flex-col gap-4">
+					<Field
+						label="Business name"
+						value={profile.businessName}
+						onChange={(value) => setProfile({ ...profile, businessName: value })}
+					/>
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<Field
-							key={field.key}
-							label={field.label}
-							type={field.type}
-							value={profile[field.key]}
-							onChange={(value) => setProfile({ ...profile, [field.key]: value })}
+							label="VAT number"
+							placeholder="BE0123456789"
+							value={profile.vatNumber}
+							onChange={(value) => setProfile({ ...profile, vatNumber: value })}
 						/>
-					))}
+						<Field
+							label="Establishment number"
+							placeholder="2123456789"
+							help="The vestigingsnummer of your registered office, if you have one. Not the same as the VAT number."
+							value={profile.establishmentNumber}
+							onChange={(value) => setProfile({ ...profile, establishmentNumber: value })}
+						/>
+					</div>
 				</div>
 			)}
 
-			{error ? (
-				<p role="alert" className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
-					{error}
-				</p>
-			) : null}
-
-			<div className="mt-8 flex justify-end">
+			<StepFooter error={error}>
 				<Button variant="primary" disabled={!profile || busy} onClick={() => void save()}>
 					Continue
 				</Button>
-			</div>
+			</StepFooter>
 		</div>
 	);
 }
 
-type AppearanceStepProps = {
-	onContinue: () => void;
-};
-
-function AppearanceStep({ onContinue }: AppearanceStepProps) {
+function AppearanceStep({ onContinue }: StepProps) {
 	const [theme, setTheme] = useTheme();
 
 	return (
 		<div>
-			<Heading illustration={<AppearanceIllustration />} title="Appearance" />
-			<p className="mt-3 text-[var(--ink-muted)]">
-				Applied straight away, so you see the choice while you make it. This can be changed at any
-				time from settings.
-			</p>
-			<div className="mt-6">
+			{/*
+				No title of its own: the section below brings its own heading and its
+				own description, and a step that says "Appearance" twice in 80px reads
+				as a mistake. The same goes for the lock step under this one.
+			*/}
+			<Heading illustration={<AppearanceIllustration />} />
+			<div className="mt-5">
 				<AppearanceSection theme={theme} onChange={setTheme} />
 			</div>
-			<div className="mt-8 flex justify-end">
+			<p className="mt-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				Applied straight away, so you see the choice while you make it, and changeable at any time
+				from settings.
+			</p>
+			<StepFooter error={null}>
 				<Button variant="primary" onClick={onContinue}>
 					Continue
 				</Button>
-			</div>
+			</StepFooter>
 		</div>
 	);
 }
 
-type LockStepProps = {
-	onContinue: () => void;
-};
-
-function LockStep({ onContinue }: LockStepProps) {
+function LockStep({ onContinue }: StepProps) {
 	return (
 		<div>
-			<Heading illustration={<LockIllustration />} title="Lock" />
+			<Heading illustration={<LockIllustration />} />
 			{/*
-				Required, plainly, by .claude/rules/security.md section 8: the lock
-				screen protects against someone walking up to this laptop while Juno
-				is open. It does not protect the database file itself, which is why
-				LockSection's own description below says so again in its own words.
+				The section below carries the sentence .claude/rules/security.md
+				section 8 requires, in its own words: the lock screen protects against
+				someone walking up to this laptop, and not the database file on disk.
+				Saying it twice on one 620px step is what the second copy that used to
+				live here did.
 			*/}
-			<p className="mt-3 text-[var(--ink-muted)]">
-				A lock screen protects against someone walking up to this laptop while Juno is open. It
-				does not protect the database file itself: anyone who can copy it off this machine can
-				still read it. Setting one up is optional, and "not now" is a fine answer.
-			</p>
-			<div className="mt-6">
+			<div className="mt-5">
 				<LockSection />
 			</div>
-			<div className="mt-8 flex justify-end">
+			<p className="mt-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				Setting one up is optional, and "not now" is a fine answer.
+			</p>
+			<StepFooter error={null}>
 				<Button variant="primary" onClick={onContinue}>
 					Continue
 				</Button>
-			</div>
+			</StepFooter>
 		</div>
 	);
 }
 
 type MailStepProps = {
 	onContinue: () => void;
+	onAddAccount: () => void;
 };
 
-function MailStep({ onContinue }: MailStepProps) {
+function MailStep({ onContinue, onAddAccount }: MailStepProps) {
 	return (
 		<div>
 			<Heading illustration={<MailIllustration />} title="Mail" />
@@ -362,12 +444,15 @@ function MailStep({ onContinue }: MailStepProps) {
 				operating system's own keychain, never in the database, and nothing is ever written back to
 				the server. This can wait.
 			</p>
-			<div className="mt-8 flex flex-wrap justify-end gap-2">
+			<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				Adding one now finishes setup and opens settings on mail accounts.
+			</p>
+			<StepFooter error={null}>
 				<Button onClick={onContinue}>Skip for now</Button>
-				<Button variant="primary" onClick={() => void window.juno.window.openSettings()}>
+				<Button variant="primary" onClick={onAddAccount}>
 					Add a mail account
 				</Button>
-			</div>
+			</StepFooter>
 		</div>
 	);
 }
@@ -389,9 +474,11 @@ function DoneStep({ onTakeWalkthrough, onStart }: DoneStepProps) {
 				window.juno.mail.accounts.list(),
 			]);
 			if (cancelled) return;
-			const filledIn = Object.values(owner).some((value) => value.trim().length > 0);
+			const named = [owner.firstName, owner.lastName, owner.businessName].some(
+				(value) => value.trim().length > 0,
+			);
 			setSummary([
-				filledIn ? "Your business details are filled in." : "Your business details are still empty.",
+				named ? "Your name and business are filled in." : "Your name and business are still empty.",
 				lock.configured ? "A lock screen is set." : "No lock screen is set.",
 				accounts.length > 0
 					? `${accounts.length} mail account${accounts.length === 1 ? "" : "s"} added.`
@@ -426,28 +513,54 @@ function DoneStep({ onTakeWalkthrough, onStart }: DoneStepProps) {
 				</ul>
 			)}
 
-			<div className="mt-8 flex flex-wrap justify-end gap-2">
+			<StepFooter error={null}>
 				<Button onClick={onTakeWalkthrough}>Take the walkthrough</Button>
 				<Button variant="primary" onClick={onStart}>
 					Start using Juno
 				</Button>
-			</div>
+			</StepFooter>
 		</div>
+	);
+}
+
+type StepFooterProps = {
+	error: string | null;
+	children: React.ReactNode;
+};
+
+/** The buttons of one step, and anything that went wrong on the way out. */
+function StepFooter({ error, children }: StepFooterProps) {
+	return (
+		<>
+			{error ? (
+				<p
+					role="alert"
+					data-selectable
+					className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+				>
+					{error}
+				</p>
+			) : null}
+			<div className="mt-7 flex flex-wrap justify-end gap-2">{children}</div>
+		</>
 	);
 }
 
 type HeadingProps = {
 	illustration: React.ReactNode;
-	title: string;
+	/** Left out by a step whose content brings a heading of its own. */
+	title?: string;
 };
 
 function Heading({ illustration, title }: HeadingProps) {
 	return (
 		<div className="flex flex-col items-center text-center">
 			{illustration}
-			<h1 className="mt-4 text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">
-				{title}
-			</h1>
+			{title ? (
+				<h1 className="mt-4 text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+					{title}
+				</h1>
+			) : null}
 		</div>
 	);
 }

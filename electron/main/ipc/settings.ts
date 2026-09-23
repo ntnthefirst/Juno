@@ -7,7 +7,15 @@
  * setting leaves a light title bar over a dark window (decision 14).
  */
 import { BrowserWindow, ipcMain, nativeTheme } from "electron";
-import type { OnboardingPatch, OwnerProfile, ThemeSetting } from "../../shared/types";
+import type {
+	OnboardingPatch,
+	OwnerEmailInput,
+	OwnerEmailPatch,
+	OwnerPhoneInput,
+	OwnerPhonePatch,
+	OwnerProfilePatch,
+	ThemeSetting,
+} from "../../shared/types";
 import * as settings from "../services/settings";
 import * as signature from "../services/signature";
 import { refreshOverlayTheme } from "../windows/chrome";
@@ -48,9 +56,23 @@ export function registerSettingsIpc(): void {
 	ipcMain.handle("settings.getTheme", () => settings.getTheme());
 	ipcMain.handle("settings.setTheme", (_event, theme: ThemeSetting) => applyTheme(theme));
 	ipcMain.handle("settings.getOwner", () => settings.getOwner());
-	ipcMain.handle("settings.setOwner", (_event, patch: Partial<OwnerProfile>) =>
+	ipcMain.handle("settings.setOwner", (_event, patch: OwnerProfilePatch) =>
 		settings.setOwner(patch),
 	);
+	ipcMain.handle("settings.addOwnerEmail", (_event, input: OwnerEmailInput) =>
+		settings.addOwnerEmail(input),
+	);
+	ipcMain.handle("settings.updateOwnerEmail", (_event, id: string, patch: OwnerEmailPatch) =>
+		settings.updateOwnerEmail(id, patch),
+	);
+	ipcMain.handle("settings.removeOwnerEmail", (_event, id: string) => settings.removeOwnerEmail(id));
+	ipcMain.handle("settings.addOwnerPhone", (_event, input: OwnerPhoneInput) =>
+		settings.addOwnerPhone(input),
+	);
+	ipcMain.handle("settings.updateOwnerPhone", (_event, id: string, patch: OwnerPhonePatch) =>
+		settings.updateOwnerPhone(id, patch),
+	);
+	ipcMain.handle("settings.removeOwnerPhone", (_event, id: string) => settings.removeOwnerPhone(id));
 
 	ipcMain.handle("settings.getOnboarding", () => settings.getOnboarding());
 	ipcMain.handle("settings.setOnboarding", (_event, patch: OnboardingPatch) =>

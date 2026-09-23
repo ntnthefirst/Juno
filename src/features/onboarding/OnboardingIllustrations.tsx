@@ -34,6 +34,31 @@ export function WelcomeIllustration() {
 	);
 }
 
+/** A signature, drawn the way a hand draws one, over its line. */
+export function PersonIllustration() {
+	return (
+		<svg
+			viewBox="0 0 120 120"
+			width={SIZE}
+			height={SIZE}
+			fill="none"
+			stroke="currentColor"
+			strokeWidth={3}
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			className="mx-auto text-[var(--accent)]"
+			aria-hidden
+		>
+			<path
+				d="M28 74c10-4 14-16 18-28 3-9 7-8 7 2 0 12-6 26-6 26s10-18 18-18 4 14 11 14c5 0 8-4 8-4"
+				pathLength={100}
+				className="onb-draw"
+			/>
+			<path d="M24 92h72" pathLength={100} className="onb-draw onb-delay-3 text-[var(--ink-muted)]" />
+		</svg>
+	);
+}
+
 /** A document outline, with its lines settling into place a beat after. */
 export function BusinessIllustration() {
 	return (

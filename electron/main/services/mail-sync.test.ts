@@ -23,6 +23,7 @@ import {
 	type RemoteHeader,
 } from "./mail-source";
 import * as sync from "./mail-sync";
+import { configureSettings } from "./settings";
 import * as threads from "./mail-threads";
 
 const MIGRATIONS = resolve(process.cwd(), "electron/main/db/migrations");
@@ -175,6 +176,9 @@ beforeEach(async () => {
 	box = new FakeMailbox();
 	mailDir = mkdtempSync(join(tmpdir(), "juno-mail-"));
 	configureCredentialStore(new MemoryCredentialStore());
+	// Adding an account records its address on the owner profile, which lives in
+	// settings.json, so this test needs a settings file of its own.
+	configureSettings(mkdtempSync(join(tmpdir(), "juno-mail-settings-")));
 	configureMailboxSource(async (connection) => {
 		if (box.failConnect) throw box.failConnect;
 		if (connection.password !== "secret") {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ownerDisplayName } from "@shared/owner";
 import type { DocumentRecord } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
@@ -29,7 +30,7 @@ export function SignDialog({ record, onClose, onSigned }: SignDialogProps) {
 		Promise.all([window.juno.settings.getOwner(), window.juno.settings.getSignaturePath()])
 			.then(([owner, path]) => {
 				if (cancelled) return;
-				setSignerName(owner.contactName.trim() || owner.businessName.trim());
+				setSignerName(ownerDisplayName(owner));
 				setSignaturePath(path);
 				setUseImage(path !== null);
 			})

@@ -20,6 +20,7 @@ import type {
 	LockState,
 	MailOutboxMessage,
 	MailSyncStatus,
+	SettingsSection,
 	ThemeSetting,
 } from "./shared/types";
 
@@ -32,9 +33,27 @@ const api: JunoApi = {
 	},
 
 	window: {
-		openSettings: () => call("window.openSettings"),
+		openSettings: (section) => call("window.openSettings", section),
 		closeSettings: () => call("window.closeSettings"),
 		isSettingsOpen: () => call("window.isSettingsOpen"),
+		onShowSection: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, section: SettingsSection) =>
+				listener(section);
+			ipcRenderer.on("settings.showSection", handler);
+			return () => {
+				ipcRenderer.off("settings.showSection", handler);
+			};
+		},
+		onChildClosed: (listener) => {
+			const handler = () => listener();
+			ipcRenderer.on("window.childClosed", handler);
+			return () => {
+				ipcRenderer.off("window.childClosed", handler);
+			};
+		},
+		openSetup: () => call("window.openSetup"),
+		closeSetup: () => call("window.closeSetup"),
+		isSetupOpen: () => call("window.isSetupOpen"),
 	},
 
 	clients: {
@@ -123,6 +142,12 @@ const api: JunoApi = {
 		setAccountingTool: (patch) => call("settings.setAccountingTool", patch),
 		getOwner: () => call("settings.getOwner"),
 		setOwner: (patch) => call("settings.setOwner", patch),
+		addOwnerEmail: (input) => call("settings.addOwnerEmail", input),
+		updateOwnerEmail: (id, patch) => call("settings.updateOwnerEmail", id, patch),
+		removeOwnerEmail: (id) => call("settings.removeOwnerEmail", id),
+		addOwnerPhone: (input) => call("settings.addOwnerPhone", input),
+		updateOwnerPhone: (id, patch) => call("settings.updateOwnerPhone", id, patch),
+		removeOwnerPhone: (id) => call("settings.removeOwnerPhone", id),
 		getOnboarding: () => call("settings.getOnboarding"),
 		setOnboarding: (patch) => call("settings.setOnboarding", patch),
 		needsOnboarding: () => call("settings.needsOnboarding"),

@@ -19,6 +19,7 @@ import { now, uuidv7 } from "../db/columns";
 import { mailAccounts } from "../db/schema";
 import { credentialStore } from "./mail-credentials";
 import { describeMailError, openMailbox, type MailConnection } from "./mail-source";
+import * as settings from "./settings";
 import { verifyTransport, type SmtpConnection } from "./mail-transport";
 
 type Row = typeof mailAccounts.$inferSelect;
@@ -157,6 +158,16 @@ export async function create(input: MailAccountInput, db: Db = getDb()): Promise
 	// the wrong error.
 	store.set(credentialKey, input.password);
 	const inserted = db.insert(mailAccounts).values(row).returning().get();
+
+	// An address Juno now reads mail at is one of the owner's own addresses, so
+	// it joins the list the profile keeps and the documents print from. Adding
+	// one already on the list changes nothing, and this never moves the primary:
+	// which address a contract carries is the owner's choice, not a side effect
+	// of setting up a mailbox.
+	// No label: the settings screen marks an address that has an account of its
+	// own, so writing one here would print the same fact twice.
+	await settings.addOwnerEmail({ email: inserted.email });
+
 	return toRecord(inserted);
 }
 

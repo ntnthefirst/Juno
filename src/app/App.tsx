@@ -6,7 +6,6 @@ import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
-import { SetupFlow } from "../features/onboarding/SetupFlow";
 import { Walkthrough } from "../features/onboarding/Walkthrough";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
@@ -29,24 +28,23 @@ export function App() {
 }
 
 /**
- * Gates what the window shows: nothing until both the lock and the onboarding
- * answer are in, then the lock screen if locked (it wins over everything,
- * including an unfinished setup), then setup if it has never been finished,
- * then the shell itself.
+ * Gates what the window shows: nothing until the lock answer is in, then the
+ * lock screen if locked, then the shell itself.
+ *
+ * Setup is not one of those branches any more. It is its own small modal
+ * window in front of this one (decision 34), asked for here and drawn by the
+ * main process, so this window paints the application it is about to
+ * configure rather than replacing it.
  */
 function Shell() {
 	useTheme();
 	const [lock, setLock] = useState<LockState | null>(null);
-	const [onboardingNeeded, setOnboardingNeeded] = useState<boolean | null>(null);
 	const [walkthroughOpen, setWalkthroughOpen] = useState(false);
 
-	// Settings is a separate, modal window (decision 26): there is no channel
-	// back from it, so a replay requested there (features/settings/
-	// OnboardingSection.tsx) is picked up here the moment this window gets
-	// focus again, which in practice is as soon as that one closes. The ref
-	// only arms the check after Settings was actually opened from here, so an
-	// ordinary alt-tab back into Juno does not re-run it for no reason.
-	const settingsOpenedRef = useRef(false);
+	// Setup is offered once per unanswered state. Without this, closing the
+	// setup window without answering it would reopen it on the focus that
+	// closing it causes, which is a window with no way out.
+	const setupOfferedRef = useRef(false);
 
 	useEffect(() => {
 		void window.juno.lock.state().then(setLock);
@@ -55,32 +53,40 @@ function Shell() {
 		return window.juno.lock.onChange(setLock);
 	}, []);
 
+	// Both the setup window and the settings window are separate and modal
+	// (decisions 26 and 34), so there is no channel back from either. The main
+	// process says when one of them closed, which is when setup finishing, and
+	// a replay asked for in Settings > General, become true here.
 	useEffect(() => {
-		void window.juno.settings.needsOnboarding().then(setOnboardingNeeded);
-	}, []);
+		let cancelled = false;
 
-	useEffect(() => {
-		function onFocus() {
-			if (!settingsOpenedRef.current) return;
-			settingsOpenedRef.current = false;
-			void window.juno.settings.needsOnboarding().then((needed) => {
-				if (needed) {
-					setOnboardingNeeded(true);
-					return;
+		async function check() {
+			const needed = await window.juno.settings.needsOnboarding();
+			if (cancelled) return;
+			if (needed) {
+				if (!setupOfferedRef.current) {
+					setupOfferedRef.current = true;
+					void window.juno.window.openSetup();
 				}
-				void window.juno.settings.getOnboarding().then((state) => {
-					if (state.walkthroughSeenAt === null) setWalkthroughOpen(true);
-				});
-			});
+				return;
+			}
+			// Answered, so a later reset is a new state worth offering again.
+			setupOfferedRef.current = false;
+			const state = await window.juno.settings.getOnboarding();
+			if (!cancelled && state.walkthroughSeenAt === null) setWalkthroughOpen(true);
 		}
-		window.addEventListener("focus", onFocus);
-		return () => window.removeEventListener("focus", onFocus);
+
+		void check();
+		const stop = window.juno.window.onChildClosed(() => void check());
+		return () => {
+			cancelled = true;
+			stop();
+		};
 	}, []);
 
-	// Until both answers arrive, render nothing rather than a flash of a screen
-	// that is about to be replaced by whichever of lock, setup or the shell
-	// actually applies.
-	if (lock === null || onboardingNeeded === null) return <div className="h-full bg-[var(--paper)]" />;
+	// Until the lock answer arrives, render nothing rather than a flash of a
+	// screen that is about to be replaced.
+	if (lock === null) return <div className="h-full bg-[var(--paper)]" />;
 
 	if (lock.locked) {
 		return (
@@ -91,25 +97,11 @@ function Shell() {
 		);
 	}
 
-	if (onboardingNeeded) {
-		return (
-			<SetupFlow
-				onFinished={(startWalkthrough) => {
-					setOnboardingNeeded(false);
-					if (startWalkthrough) setWalkthroughOpen(true);
-				}}
-			/>
-		);
-	}
-
 	return (
 		<MainShell
 			lock={lock}
 			walkthroughOpen={walkthroughOpen}
 			onWalkthroughClosed={() => setWalkthroughOpen(false)}
-			onSettingsOpened={() => {
-				settingsOpenedRef.current = true;
-			}}
 		/>
 	);
 }
@@ -118,11 +110,10 @@ type MainShellProps = {
 	lock: LockState;
 	walkthroughOpen: boolean;
 	onWalkthroughClosed: () => void;
-	onSettingsOpened: () => void;
 };
 
 /** The application proper: title bar, sidebar and the current screen. */
-function MainShell({ lock, walkthroughOpen, onWalkthroughClosed, onSettingsOpened }: MainShellProps) {
+function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProps) {
 	const [screen, setScreen] = useState<ScreenId>("today");
 	const sidebar = useSidebarLayout();
 	const trail = useBreadcrumbTrail();
@@ -151,10 +142,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed, onSettingsOpene
 						onNavigate={navigate}
 						collapsed={sidebar.collapsed}
 						floating={sidebar.floating}
-						onOpenSettings={() => {
-							onSettingsOpened();
-							void window.juno.window.openSettings();
-						}}
+						onOpenSettings={() => void window.juno.window.openSettings()}
 					/>
 				) : null}
 

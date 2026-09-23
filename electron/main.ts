@@ -260,7 +260,13 @@ if (!app.requestSingleInstanceLock()) {
 								// in-memory mailbox the main process swapped in above. This is
 								// what exercises the credential store, the scheme host and the
 								// reader's frame policy.
-								await b.settings.setOwner({ businessName: "Juno", contactName: "Nathan", email: "hallo@juno.test", city: "Gent" });
+								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
+								// Two addresses and a number, so the lists under Your business are
+								// photographed with something in them. The second one is the case
+								// the lists exist for: an address that is kept and never read.
+								await b.settings.addOwnerEmail({ email: "hallo@juno.test", label: "general" });
+								await b.settings.addOwnerEmail({ email: "nathan@vorigedomein.be", label: "old domain, forwards nowhere" });
+								await b.settings.addOwnerPhone({ phone: "+32 470 00 00 00", label: "gsm" });
 								const mailAccount = await b.mail.accounts.create({ email: "hallo@juno.test", label: "Juno", imapHost: "imap.juno.test", smtpHost: "smtp.juno.test", password: "smoke" });
 								const synced = await b.mail.sync.run();
 								if (synced.some((s) => s.phase !== "done")) throw new Error("Smoke: mail sync did not finish: " + JSON.stringify(synced));
@@ -479,38 +485,51 @@ if (!app.requestSingleInstanceLock()) {
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
 							// A throwaway user-data directory is a genuinely first install, so
-							// the setup flow owns the window and there is no sidebar to click
-							// yet. Photograph it, then finish it the way a person would: if the
-							// flow ever stops completing, the walk below fails rather than the
-							// app silently trapping every new install behind it.
+							// the setup window opens in front of the application (decision 34).
+							// Photograph it, then finish it the way a person would: if the flow
+							// ever stops completing, the walk below fails rather than the app
+							// silently trapping every new install behind a modal with no way out.
 							{
-								const setupPresent = await window.webContents.executeJavaScript(
+								const { getSetupWindow } = await import("./main/windows");
+								let setup = getSetupWindow();
+								for (let wait = 0; wait < 40 && !setup; wait++) {
+									await new Promise((r) => setTimeout(r, 250));
+									setup = getSetupWindow();
+								}
+								if (!setup) throw new Error("Smoke: a first run did not open the setup window");
+								const flow = setup.webContents;
+
+								const setupPresent = await flow.executeJavaScript(
 									`Boolean([...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Skip setup"))`,
 								) as boolean;
 
-								if (!setupPresent) throw new Error("Smoke: a first run did not show the setup flow");
+								if (!setupPresent) throw new Error("Smoke: the setup window did not paint its first step");
 
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;
-									await window.webContents.executeJavaScript(
+									await flow.executeJavaScript(
 										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 									);
 									await new Promise((r) => setTimeout(r, 400));
-									const image = await window.webContents.capturePage();
+									const image = await flow.capturePage();
 									writeFileSync(joinPath(shotDir, `setup-welcome-${theme}.png`), image.toPNG());
 								}
+								// Back to light, so the screens photographed after this start from
+								// the same place the loop below expects.
+								nativeTheme.themeSource = "light";
+								await flow.executeJavaScript(`document.documentElement.setAttribute("data-theme", "light")`);
 
 								// Walks the steps rather than skipping them, so each one is
 								// photographed and each one's own controls are proven to advance.
-								const steps = ["business", "appearance", "lock", "mail"];
-								await window.webContents.executeJavaScript(
+								const steps = ["you", "business", "appearance", "lock", "mail"];
+								await flow.executeJavaScript(
 									`(() => { [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Set up Juno").click(); })()`,
 								);
 								for (const step of steps) {
 									await new Promise((r) => setTimeout(r, 500));
-									const image = await window.webContents.capturePage();
+									const image = await flow.capturePage();
 									writeFileSync(joinPath(shotDir, `setup-${step}.png`), image.toPNG());
-									const advanced = await window.webContents.executeJavaScript(
+									const advanced = await flow.executeJavaScript(
 										`(() => {
 											const next = [...document.querySelectorAll("button")]
 												.find((el) => ["Continue", "Skip for now", "Not now"].includes(el.textContent.trim()));
@@ -523,14 +542,14 @@ if (!app.requestSingleInstanceLock()) {
 								}
 
 								await new Promise((r) => setTimeout(r, 500));
-								const done = await window.webContents.capturePage();
+								const done = await flow.capturePage();
 								writeFileSync(joinPath(shotDir, `setup-done.png`), done.toPNG());
 
 								// Takes the tour rather than skipping straight in, so the
 								// walkthrough is proven live at least once per run: it is the one
 								// screen this file otherwise has no way to reach, since it only ever
 								// offers itself on a first run or an unseen upgrade.
-								const startedTour = await window.webContents.executeJavaScript(
+								const startedTour = await flow.executeJavaScript(
 									`(() => {
 										const tour = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Take the walkthrough");
 										if (!tour) return false;
@@ -539,6 +558,14 @@ if (!app.requestSingleInstanceLock()) {
 									})()`,
 								) as boolean;
 								if (!startedTour) throw new Error("Smoke: the last setup step had no way into the walkthrough");
+
+								// The window closes itself on the way out, and the main window is
+								// told so it can start the tour. Both have to happen, so wait for
+								// the first before asking about the second.
+								for (let wait = 0; wait < 40 && getSetupWindow(); wait++) {
+									await new Promise((r) => setTimeout(r, 250));
+								}
+								if (getSetupWindow()) throw new Error("Smoke: the setup window stayed open after it finished");
 
 								await new Promise((r) => setTimeout(r, 700));
 								const cardTitle = () =>
@@ -1160,6 +1187,35 @@ if (!app.requestSingleInstanceLock()) {
 										);
 									}
 								}
+								// Your business is taller than the window, so the loop above
+								// photographs the fields and never the two contact lists under
+								// them, which is where the primary and the mail-account mark are.
+								{
+									const business = tabs.findIndex((tab) => tab === "Your business");
+									if (business === -1) throw new Error("Smoke: the settings window has no business section");
+									await settingsWindow.webContents.executeJavaScript(`${TABS}[${business}].click()`);
+									await new Promise((r) => setTimeout(r, 300));
+									const listed = (await settingsWindow.webContents.executeJavaScript(
+										`(() => {
+											const main = document.querySelector("main");
+											main.scrollTop = main.scrollHeight;
+											return main.textContent.includes("Email addresses") && main.textContent.includes("Mail account");
+										})()`,
+									)) as boolean;
+									if (!listed) {
+										throw new Error("Smoke: the business section did not list the owner's addresses");
+									}
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await settingsWindow.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										const image = await settingsWindow.webContents.capturePage();
+										writeFileSync(joinPath(shotDir, `settings-your-contacts-${theme}.png`), image.toPNG());
+									}
+								}
+
 								console.log(`SMOKE_DEMO settings tabs=${tabs.length}`);
 								closeSettingsWindow();
 							}

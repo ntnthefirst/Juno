@@ -7,6 +7,7 @@
  * only while unedited, and a removed one is soft-deleted rather than purged.
  */
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { primaryOwnerEmail, primaryOwnerPhone } from "../../shared/owner";
 import type {
 	MailRegister,
 	MailTemplate,
@@ -174,7 +175,7 @@ export async function footerLines(): Promise<string[]> {
 		owner.businessName,
 		address,
 		owner.vatNumber ? `Ondernemingsnummer ${owner.vatNumber}` : "",
-		[owner.email, owner.phone].filter(Boolean).join(" | "),
+		[primaryOwnerEmail(owner)?.email, primaryOwnerPhone(owner)?.phone].filter(Boolean).join(" | "),
 	];
 }
 

@@ -8,10 +8,10 @@ type OnboardingSectionProps = {
 };
 
 /**
- * Replays for the first-run flow. Both run in the main window, which this
- * window sits in front of as a modal, so neither can start here: they write
- * the state the main window checks when it next gets focus, which in
- * practice is as soon as this window closes. See App.tsx.
+ * Replays for the first-run flow. Neither can start here: the walkthrough
+ * runs over the main window and setup has a window of its own, and this one
+ * sits in front of both as a modal. So both write the state the main window
+ * checks, and it checks as soon as this window closes. See App.tsx.
  */
 export function OnboardingSection({ onNotice }: OnboardingSectionProps) {
 	const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function OnboardingSection({ onNotice }: OnboardingSectionProps) {
 		setError(null);
 		try {
 			await window.juno.settings.setOnboarding({ completedAt: null });
-			onNotice("Setup starts once this window is closed.");
+			onNotice("Setup opens once this window is closed.");
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		} finally {
@@ -46,7 +46,7 @@ export function OnboardingSection({ onNotice }: OnboardingSectionProps) {
 	return (
 		<Section
 			title="Getting started"
-			description="Both of these run in the main window behind this one, so close this window to see them."
+			description="Both of these start as soon as this window is closed."
 		>
 			<div className="flex flex-col gap-5">
 				<Row
@@ -56,7 +56,7 @@ export function OnboardingSection({ onNotice }: OnboardingSectionProps) {
 					onClick={() => void replayWalkthrough()}
 				/>
 				<Row
-					description="Asks the setup questions again. It deletes nothing and only asks what a first run asks."
+					description="Asks the setup questions again, in its own small window. It deletes nothing and only asks what a first run asks."
 					button="Run setup again"
 					disabled={busy !== null}
 					onClick={() => void replaySetup()}

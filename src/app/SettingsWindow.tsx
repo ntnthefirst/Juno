@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AppInfo } from "@shared/types";
+import type { AppInfo, SettingsSection } from "@shared/types";
 import { Toast } from "../components/Toast";
 import { AccountingSection } from "../features/settings/AccountingSection";
 import { AppearanceSection } from "../features/settings/AppearanceSection";
@@ -16,9 +16,15 @@ import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
 import { useTheme } from "../lib/theme";
 
-type TabId = "general" | "business" | "mail" | "documents" | "security" | "mcp";
+type SettingsWindowProps = {
+	/**
+	 * The tab to open on, from the window's own URL. Null is the ordinary case:
+	 * somebody opened settings rather than being sent to one page of it.
+	 */
+	initialSection: SettingsSection | null;
+};
 
-const TABS: { id: TabId; label: string }[] = [
+const TABS: { id: SettingsSection; label: string }[] = [
 	{ id: "general", label: "General" },
 	{ id: "business", label: "Your business" },
 	{ id: "mail", label: "Mail accounts" },
@@ -34,9 +40,9 @@ const TABS: { id: TabId; label: string }[] = [
  * split across tabs rather than stacked in one long scroll. One column of
  * fields, one subject at a time, nothing that needs a wider window.
  */
-export function SettingsWindow() {
+export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	const [theme, setTheme] = useTheme();
-	const [tab, setTab] = useState<TabId>("general");
+	const [tab, setTab] = useState<SettingsSection>(initialSection ?? "general");
 	const [toast, setToast] = useState<string | null>(null);
 
 	// Escape closes a modal dialog, and this window is one.
@@ -47,6 +53,10 @@ export function SettingsWindow() {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, []);
+
+	// Asked for a tab while this window was already open, so it could not ride
+	// in the URL. Reloading instead would throw away a half-typed field.
+	useEffect(() => window.juno.window.onShowSection(setTab), []);
 
 	return (
 		<div className="flex h-full flex-col bg-[var(--paper)]">

@@ -112,9 +112,15 @@ import type {
 	ResetUserItems,
 	SearchHit,
 	ThemeSetting,
+	OwnerEmailInput,
+	OwnerEmailPatch,
+	OwnerPhoneInput,
+	OwnerPhonePatch,
 	OwnerProfile,
+	OwnerProfilePatch,
 	OnboardingPatch,
 	OnboardingState,
+	SettingsSection,
 } from "./types";
 
 export interface ListClientsQuery {
@@ -136,9 +142,26 @@ export interface JunoApi {
 	 * There is no method to open a second main window: there is only ever one.
 	 */
 	window: {
-		openSettings(): Promise<void>;
+		/** A section opens that tab, which is how a screen sends you where it needs you. */
+		openSettings(section?: SettingsSection): Promise<void>;
 		closeSettings(): Promise<void>;
 		isSettingsOpen(): Promise<boolean>;
+		/**
+		 * Fires in the settings window when it is already open and something asks
+		 * for a different tab. The tab cannot ride in the URL at that point, and
+		 * reloading would throw away whatever was half-typed.
+		 */
+		onShowSection(listener: (section: SettingsSection) => void): () => void;
+		/**
+		 * Fires in the main window when either modal child closes. Neither child
+		 * has a channel back, so this is how a setting changed in one of them, and
+		 * setup finishing, reach the application behind it.
+		 */
+		onChildClosed(listener: () => void): () => void;
+		/** The first-run window. It is asked for by the main window, and by settings. */
+		openSetup(): Promise<void>;
+		closeSetup(): Promise<void>;
+		isSetupOpen(): Promise<boolean>;
 	};
 
 	clients: {
@@ -235,7 +258,18 @@ export interface JunoApi {
 		/** Fires in every window, so a change made in settings reaches the app. */
 		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
 		getOwner(): Promise<OwnerProfile>;
-		setOwner(patch: Partial<OwnerProfile>): Promise<OwnerProfile>;
+		/**
+		 * The scalar fields only. The two contact lists are edited one entry at a
+		 * time, below, so a stale form cannot drop an address added elsewhere.
+		 */
+		setOwner(patch: OwnerProfilePatch): Promise<OwnerProfile>;
+		/** Each of these returns the whole profile, because a primary moves. */
+		addOwnerEmail(input: OwnerEmailInput): Promise<OwnerProfile>;
+		updateOwnerEmail(id: string, patch: OwnerEmailPatch): Promise<OwnerProfile>;
+		removeOwnerEmail(id: string): Promise<OwnerProfile>;
+		addOwnerPhone(input: OwnerPhoneInput): Promise<OwnerProfile>;
+		updateOwnerPhone(id: string, patch: OwnerPhonePatch): Promise<OwnerProfile>;
+		removeOwnerPhone(id: string): Promise<OwnerProfile>;
 		/** Where invoicing happens. Invoice reminders link here; Juno never bills. */
 		getAccountingTool(): Promise<AccountingTool>;
 		setAccountingTool(patch: Partial<AccountingTool>): Promise<AccountingTool>;

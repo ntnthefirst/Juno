@@ -10,6 +10,7 @@
  */
 import { and, eq, isNull } from "drizzle-orm";
 import { existsSync } from "node:fs";
+import { ownerDisplayName } from "../../shared/owner";
 import type { MailAddress, MailOutboxMessage } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { documentSignatures, documents, mailFolders } from "../db/schema";
@@ -109,7 +110,7 @@ async function sendOne(message: outbox.QueuedMessage, db: Db): Promise<void> {
 		connection = smtp;
 		const owner = await settings.getOwner();
 		const from: MailAddress = {
-			name: smtp.fromName || owner.contactName || owner.businessName || null,
+			name: smtp.fromName || ownerDisplayName(owner) || null,
 			address: smtp.fromAddress,
 		};
 		const attachments: OutgoingAttachment[] = [];

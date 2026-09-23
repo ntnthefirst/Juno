@@ -6,6 +6,7 @@
  * Dutch (Belgium): dates as 14/11/2026 and money as 2 100,00 with a non-breaking
  * thousands space.
  */
+import { ownerContact } from "../../shared/owner";
 import type {
 	Client,
 	ClientAddress,
@@ -85,16 +86,24 @@ export interface ContextSources {
 	title?: string;
 }
 
+/**
+ * The owner as a template sees it: the scalar fields, plus one name, one
+ * address and one number worked out from the profile's two lists. The lists
+ * themselves are dropped, because a template asks for an address and
+ * `{{ owner.emails }}` would print an object.
+ */
+function ownerFields(owner: OwnerProfile): Record<string, unknown> {
+	const fields: Record<string, unknown> = { ...owner, ...ownerContact(owner) };
+	delete fields.emails;
+	delete fields.phones;
+	return fields;
+}
+
 export function buildContext(sources: ContextSources): Record<string, unknown> {
 	const issuedOn = sources.issuedOn ?? todayIsoDate();
 
 	return {
-		owner: {
-			...sources.owner,
-			// The template addresses a person, and the profile may only name a
-			// business. Falling back keeps the sentence grammatical.
-			contactName: sources.owner.contactName || sources.owner.businessName,
-		},
+		owner: ownerFields(sources.owner),
 		client: {
 			name: sources.client.name,
 			email: sources.primaryEmail?.email ?? "",

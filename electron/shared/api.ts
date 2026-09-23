@@ -134,6 +134,23 @@ export interface ListClientsQuery {
 export interface JunoApi {
 	app: {
 		info(): Promise<AppInfo>;
+
+		/**
+		 * The clipboard commands, run against whatever has focus in this window.
+		 *
+		 * Electron draws no context menu of its own, so cut, copy and paste have
+		 * to come from somewhere for the app's own menu to offer them. They are
+		 * routed through the main process rather than the renderer reading the
+		 * clipboard itself, which means no clipboard content ever crosses the
+		 * bridge: the renderer asks for the edit, the main process performs it on
+		 * the focused element, and nothing comes back.
+		 */
+		edit: {
+			cut(): Promise<void>;
+			copy(): Promise<void>;
+			paste(): Promise<void>;
+			selectAll(): Promise<void>;
+		};
 	};
 
 	/**

@@ -30,6 +30,12 @@ const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
 const api: JunoApi = {
 	app: {
 		info: () => call("app.info"),
+		edit: {
+			cut: () => call("app.edit.cut"),
+			copy: () => call("app.edit.copy"),
+			paste: () => call("app.edit.paste"),
+			selectAll: () => call("app.edit.selectAll"),
+		},
 	},
 
 	window: {

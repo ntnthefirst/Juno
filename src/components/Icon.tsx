@@ -1,20 +1,51 @@
 import {
+	ArchiveBoxIcon,
+	ArrowDownTrayIcon,
+	ArrowPathIcon,
+	ArrowTopRightOnSquareIcon,
+	ArrowUpTrayIcon,
+	ArrowUturnLeftIcon,
+	ArrowUturnRightIcon,
 	Bars3BottomLeftIcon,
 	BellIcon,
+	BuildingOffice2Icon,
 	CalendarDaysIcon,
 	CheckIcon,
+	ChevronDownIcon,
+	ChevronLeftIcon,
+	ChevronRightIcon,
+	ClipboardDocumentIcon,
+	ClipboardIcon,
 	ClockIcon,
 	Cog6ToothIcon,
 	ComputerDesktopIcon,
 	DocumentDuplicateIcon,
 	DocumentTextIcon,
+	EllipsisHorizontalIcon,
 	EnvelopeIcon,
+	EnvelopeOpenIcon,
+	ExclamationTriangleIcon,
+	EyeIcon,
+	FlagIcon,
 	FolderIcon,
+	InboxIcon,
+	InformationCircleIcon,
+	LinkIcon,
 	LockClosedIcon,
 	MagnifyingGlassIcon,
+	MapPinIcon,
 	MoonIcon,
-	SunIcon,
+	NoSymbolIcon,
+	PaperAirplaneIcon,
+	PaperClipIcon,
+	PencilIcon,
+	PencilSquareIcon,
+	PhoneIcon,
+	PlusIcon,
+	ScissorsIcon,
 	SparklesIcon,
+	SunIcon,
+	TrashIcon,
 	UsersIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -32,6 +63,7 @@ import {
 export type IconName =
 	| "today"
 	| "clients"
+	| "client"
 	| "projects"
 	| "documents"
 	| "mail"
@@ -47,13 +79,45 @@ export type IconName =
 	| "check"
 	| "light"
 	| "dark"
-	| "system";
+	| "system"
+	| "more"
+	| "add"
+	| "edit"
+	| "note"
+	| "remove"
+	| "archive"
+	| "link"
+	| "flag"
+	| "read"
+	| "unread"
+	| "reply"
+	| "forward"
+	| "attachment"
+	| "inbox"
+	| "sent"
+	| "drafts"
+	| "junk"
+	| "sync"
+	| "import"
+	| "export"
+	| "phone"
+	| "address"
+	| "chevron-down"
+	| "chevron-left"
+	| "chevron-right"
+	| "external"
+	| "copy"
+	| "cut"
+	| "paste"
+	| "warning"
+	| "info";
 
 type HeroIcon = typeof ClockIcon;
 
 const ICONS: Record<IconName, HeroIcon> = {
 	today: ClockIcon,
 	clients: UsersIcon,
+	client: BuildingOffice2Icon,
 	projects: FolderIcon,
 	documents: DocumentTextIcon,
 	mail: EnvelopeIcon,
@@ -72,6 +136,40 @@ const ICONS: Record<IconName, HeroIcon> = {
 	light: SunIcon,
 	dark: MoonIcon,
 	system: ComputerDesktopIcon,
+	// Horizontal rather than vertical: the button it sits in is wider than it is
+	// tall everywhere it is used, and three dots across read as "a menu" where
+	// three dots down read as a drag handle.
+	more: EllipsisHorizontalIcon,
+	add: PlusIcon,
+	edit: PencilIcon,
+	note: PencilSquareIcon,
+	remove: TrashIcon,
+	archive: ArchiveBoxIcon,
+	link: LinkIcon,
+	flag: FlagIcon,
+	read: EnvelopeOpenIcon,
+	unread: EyeIcon,
+	reply: ArrowUturnLeftIcon,
+	forward: ArrowUturnRightIcon,
+	attachment: PaperClipIcon,
+	inbox: InboxIcon,
+	sent: PaperAirplaneIcon,
+	drafts: PencilSquareIcon,
+	junk: NoSymbolIcon,
+	sync: ArrowPathIcon,
+	import: ArrowUpTrayIcon,
+	export: ArrowDownTrayIcon,
+	phone: PhoneIcon,
+	address: MapPinIcon,
+	"chevron-down": ChevronDownIcon,
+	"chevron-left": ChevronLeftIcon,
+	"chevron-right": ChevronRightIcon,
+	external: ArrowTopRightOnSquareIcon,
+	copy: ClipboardDocumentIcon,
+	cut: ScissorsIcon,
+	paste: ClipboardIcon,
+	warning: ExclamationTriangleIcon,
+	info: InformationCircleIcon,
 };
 
 type IconProps = {

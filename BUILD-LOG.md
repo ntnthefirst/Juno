@@ -876,3 +876,36 @@ and signed. An empty install is met by a setup flow and a walkthrough.
   because each had been given an exclusive list of files, the finished work was
   still coherent and the unfinished work was obvious. The typecheck was the
   thing that said where the edge was.
+
+---
+
+## Second pass on the rework, September 2026
+
+The first pass was looked at in the app, and seven things came back. All of them
+are in [docs/rework-2026-09.md](docs/rework-2026-09.md) under "Second pass, the
+same month", with what each one found. The shape of it:
+
+- The first run moved out of the shell and into its own small modal window
+  (decision 34), and lost the eleven-field step: a name step, then a business
+  step of three fields. Onboarding version 2, so an install that finished
+  version 1 is asked the two questions it never saw.
+- `OwnerProfile` is a name, a business and two lists. Email addresses and phone
+  numbers have an id, a label and a primary, and the one thing the lists exist
+  for is the address that is kept and never read. Every read that wants one
+  string derives it in `electron/shared/owner.ts`.
+- The MCP tab is one choice with two routes, Codex and Antigravity are in the
+  list, each row carries the product's mark, and detection says whether the
+  client is installed separately from whether its config file exists.
+
+Three things worth carrying forward:
+
+- **`AgentClientTarget.found` was one flag doing two jobs**, and the interface
+  read it as the wrong one. Any boolean that a screen has to explain in a
+  sentence is two booleans.
+- **The demo smoke run's ninety-second limit was marginal, not generous.** It
+  was killed mid-screenshot with nothing printed, which looks exactly like a
+  hang. Two minutes now, and the comment says what the run does.
+- **A service that writes settings.json makes every test of it need a settings
+  directory.** Adding an owner email on `mail.accounts.create` broke nineteen
+  tests in `mail-sync.test.ts` that had never needed one, and the fix is one
+  `configureSettings` call in the setup, not a swallowed error in the service.

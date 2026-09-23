@@ -665,7 +665,7 @@ stay visible and editable, and the connection test settles it.
 Connecting an agent meant copying JSON into a file whose path differs per
 client and per platform, and merging it by hand without breaking the servers
 already there. `services/agent-install.ts` does it instead, for Claude Desktop,
-Claude Code, Cursor, Windsurf and VS Code.
+Claude Code, Cursor, Windsurf, VS Code, Codex and Antigravity.
 
 It edits files other programs own, so the rules are strict and they are tested:
 
@@ -679,10 +679,25 @@ It edits files other programs own, so the rules are strict and they are tested:
 - The entry carries the environment a packaged bridge needs. Without it, the
   client starts Juno's window instead of the bridge.
 
-Detection is "does the config file exist", which is as far as honest detection
-goes without hunting for executables. A client that has never been opened has
-no file and is still offered: writing it is what makes the client find Juno on
-first launch.
+**Detection answers two questions, not one.** `installed` looks for the
+client's own data folder or install directory; `hasConfigFile` looks for the
+file Juno would write. One flag used to stand for both, and the row said "no
+configuration file yet" against an installed Claude Desktop, which reads as
+"Juno cannot find Claude". A client with no MCP servers of its own yet has no
+file, and is still offered: writing it is what makes the client find Juno the
+next time it starts. A client that is not on the machine is offered too, at the
+bottom of the list and greyed.
+
+**Codex is TOML, so it is edited as text.** `[mcp_servers.juno]` and its `env`
+table are replaced in place or appended, every other line kept byte for byte,
+and a file that declares `mcp_servers` on one line is refused with the entry to
+paste, because a writer that cannot read a shape must not rewrite it. No TOML
+dependency: one section of one format, read and written by hand, is smaller
+than the dependency and cannot surprise us on a minor version.
+
+Each row carries the product's own mark, in `currentColor` from a single path
+(`src/features/agent/client-logos.tsx`), because seven names in a column are
+harder to scan than seven marks. No hex in a component, so no brand colours.
 
 The agent gets both tools. Listing reads. Connecting files something into
 another application, so it waits for a person, like everything else in that
@@ -709,3 +724,58 @@ The field stays free text regardless of which suggestion, if any, gets used.
 "Online", "at the client's" or a location that resolves to nothing are all
 valid: a suggestion is offered, never required, and nothing here validates
 what gets saved.
+
+## 34. The first run is a window, and the profile it fills is two lists
+
+Setup used to replace the shell: the whole window, six steps, one of them
+eleven fields long. On any monitor wider than a laptop that read as an
+application of its own rather than a few questions, and the step with the
+fields in it was a form nobody would fill in twice.
+
+It is a window now, and a small one: 760 by 620, fixed, a modal child of the
+main window, the same shape settings has had since decision 26. What that buys:
+
+- The application paints behind it. Setup is configuring something you can
+  already see, rather than standing in front of an empty screen.
+- The operating system refuses input to the window behind, so setup cannot be
+  half-answered and forgotten.
+- There is one way out without answering, "Skip setup" on the first step, and
+  it records that it was asked. Closing the window without answering leaves the
+  app usable and asks again on the next launch, once, rather than reopening on
+  the focus that closing it caused.
+
+`main/windows/index.ts` is still the only file that constructs a window, and it
+still allows one main window (decision 27). It now allows **one modal child at
+a time**: opening setup closes settings and the other way round, because two
+modal children of one parent fight over focus and on Windows the loser is not
+reliably the one being looked at. When either closes, the main process focuses
+the parent and sends `window.childClosed`, which is how setup finishing and a
+replay asked for in settings both reach the main window. Neither child has a
+channel back, and neither needs one.
+
+The questions changed with the shape. A first run asks for a name, then a
+business (name, VAT number, establishment number), then appearance, the lock
+and mail. **It no longer asks for an email address or a phone number**, because
+those stopped being fields:
+
+- `OwnerProfile` carries `emails` and `phones`, each entry an id, the value, a
+  label and `isPrimary`, with exactly one primary while the list is not empty.
+  The service settles that invariant on every change, so no read has to guess.
+- The primary is what a generated document prints. `owner.email`,
+  `owner.phone` and `owner.contactName` are still what a template asks for,
+  derived in `shared/owner.ts` rather than stored three times.
+- An address nobody reads is worth recording. The one on the old domain, the
+  one a client insists on using, the one that only forwards: the list exists
+  for those, and nothing validates whether mail arrives.
+- Adding a mail account records its address on the profile. It never moves the
+  primary: which address a contract carries is a decision, not a side effect of
+  setting up a mailbox.
+
+`contactName`, `email` and `phone` from the old shape are carried forward on
+first read, so an install that answered version 1 keeps its answers. The
+version is 2, which is what asks an existing install the two questions it has
+never seen.
+
+**What would reverse this:** nothing short of setup growing into something with
+its own navigation, which would make it a screen again. If it ever needs more
+than one field per line, the questions are wrong rather than the window.

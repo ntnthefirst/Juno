@@ -18,8 +18,35 @@ on:
 permissions:
   contents: write
 
+# A re-run of the same tag, or a workflow_dispatch on top of a tag push,
+# should not race the earlier run for the same draft release.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
+  # electron-builder creates the GitHub release for a tag if none exists yet.
+  # Two platform jobs publishing in parallel both find nothing there at the
+  # same moment and each creates its own draft, so half the assets land on a
+  # release nobody looks at. Creating the release once, up front, means both
+  # platform jobs find it already there and upload into it instead.
+  create-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --draft \
+            --notes "" \
+            || echo "Release for ${{ github.ref_name }} already exists, reusing it."
+
   build:
+    needs: create-release
     strategy:
       # One platform failing should not throw away a good build of the other.
       fail-fast: false

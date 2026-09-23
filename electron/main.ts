@@ -452,6 +452,71 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
+							// A throwaway user-data directory is a genuinely first install, so
+							// the setup flow owns the window and there is no sidebar to click
+							// yet. Photograph it, then finish it the way a person would: if the
+							// flow ever stops completing, the walk below fails rather than the
+							// app silently trapping every new install behind it.
+							{
+								const setupPresent = await window.webContents.executeJavaScript(
+									`Boolean([...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Skip setup"))`,
+								) as boolean;
+
+								if (!setupPresent) throw new Error("Smoke: a first run did not show the setup flow");
+
+								for (const theme of ["light", "dark"] as const) {
+									nativeTheme.themeSource = theme;
+									await window.webContents.executeJavaScript(
+										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+									);
+									await new Promise((r) => setTimeout(r, 400));
+									const image = await window.webContents.capturePage();
+									writeFileSync(joinPath(shotDir, `setup-welcome-${theme}.png`), image.toPNG());
+								}
+
+								// Walks the steps rather than skipping them, so each one is
+								// photographed and each one's own controls are proven to advance.
+								const steps = ["business", "appearance", "lock", "mail"];
+								await window.webContents.executeJavaScript(
+									`(() => { [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Set up Juno").click(); })()`,
+								);
+								for (const step of steps) {
+									await new Promise((r) => setTimeout(r, 500));
+									const image = await window.webContents.capturePage();
+									writeFileSync(joinPath(shotDir, `setup-${step}.png`), image.toPNG());
+									const advanced = await window.webContents.executeJavaScript(
+										`(() => {
+											const next = [...document.querySelectorAll("button")]
+												.find((el) => ["Continue", "Skip for now", "Not now"].includes(el.textContent.trim()));
+											if (!next) return false;
+											next.click();
+											return true;
+										})()`,
+									) as boolean;
+									if (!advanced) throw new Error(`Smoke: setup step ${step} had nothing to continue with`);
+								}
+
+								await new Promise((r) => setTimeout(r, 500));
+								const done = await window.webContents.capturePage();
+								writeFileSync(joinPath(shotDir, `setup-done.png`), done.toPNG());
+
+								const finished = await window.webContents.executeJavaScript(
+									`(() => {
+										const start = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start using Juno");
+										if (!start) return false;
+										start.click();
+										return true;
+									})()`,
+								) as boolean;
+								if (!finished) throw new Error("Smoke: the last setup step had no way into the app");
+
+								await new Promise((r) => setTimeout(r, 900));
+								const shellUp = await window.webContents.executeJavaScript(
+									`Boolean(document.querySelector("nav button[data-nav]"))`,
+								) as boolean;
+								if (!shellUp) throw new Error("Smoke: finishing setup did not reveal the application");
+							}
+
 							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
@@ -485,7 +550,27 @@ if (!app.requestSingleInstanceLock()) {
 											if (b) b.click(); return Boolean(b); })()`,
 									) as Promise<boolean>;
 
-								let clicked = await click();
+								// Reminders has no sidebar row: it is reached from the bell in
+								// the title bar, which is also the only place that shows the count.
+								// Walking it the way a person does is what proves that path works.
+								if (screen === "Reminders") {
+									const reached = await window.webContents.executeJavaScript(
+										`(async () => {
+											const bell = document.querySelector("button[aria-label='Show reminders']");
+											if (!bell) return "no reminders button";
+											bell.click();
+											await new Promise((r) => setTimeout(r, 400));
+											const all = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "View all");
+											if (!all) return "no view all";
+											all.click();
+											await new Promise((r) => setTimeout(r, 600));
+											return "ok";
+										})()`,
+									) as string;
+									if (reached !== "ok") throw new Error(`Smoke: reminders ${reached}`);
+								}
+
+								let clicked = screen === "Reminders" ? true : await click();
 								if (!clicked) {
 									// Below 760px the sidebar is a drawer and is not in the document
 									// at all. The toggle in the title bar is what puts it there.
@@ -525,30 +610,63 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (opened !== "ok") throw new Error(`Smoke: agent connection ${opened}`);
 								}
+								if (screen === "Mail templates" || screen === "Document templates") {
+									// Opens the first template so the preview path runs for real: the
+									// list renders, the row opens a preview, and the preview asks the
+									// service to fill the template. A typecheck proves none of that,
+									// and the preview is where a template screen would throw.
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const row = document.querySelector("main ul li button");
+											if (!row) return "no template row";
+											row.click();
+											await new Promise((r) => setTimeout(r, 900));
+											const main = document.querySelector("main");
+											if (!main) return "no main";
+											const use = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Use");
+											const edit = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
+											if (!use || !edit) return "the preview has no use and edit actions";
+											if (!main.querySelector("iframe")) return "the preview has no frame";
+											return "ok";
+										})()`,
+									) as string;
+									if (opened !== "ok") throw new Error(`Smoke: ${screen} ${opened}`);
+								}
 								if (screen === "Calendar") {
 									// Opens a recurring occurrence, asks to edit it, answers the
 									// recurrence question, and checks the form came up for the whole
 									// series. Proves the detail, the scope dialog and the form chain
 									// through the real bridge before the grid is photographed.
+									//
+									// Three different shapes, and the assertions name each one
+									// (decision 30): the detail is a side panel, the recurrence
+									// question is the one genuine modal, and the form is a page that
+									// replaces the screen. Asserting a dialog for all three is what
+									// this check used to do, and it went stale the moment the panel
+									// stopped being modal.
 									const walked = await window.webContents.executeJavaScript(
 										`(async () => {
 											const chip = [...document.querySelectorAll("button[draggable=true]")].find((el) => el.textContent.includes("Weekly call"));
 											if (!chip) return "no recurring chip";
 											chip.click();
 											await new Promise((r) => setTimeout(r, 400));
-											const detail = document.querySelector("[role=dialog]");
-											if (!detail || !detail.textContent.includes("Every week on Tuesday")) return "no detail with the rule";
-											[...detail.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit").click();
+											const detail = document.querySelector("aside[aria-label]");
+											if (!detail) return "no side panel";
+											if (!detail.textContent.includes("Every week on Tuesday")) return "the side panel does not show the rule";
+											const edit = [...detail.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "the side panel has no edit";
+											edit.click();
 											await new Promise((r) => setTimeout(r, 500));
 											const ask = document.querySelector("[role=dialog]");
 											if (!ask || !ask.textContent.includes("This and following occurrences")) return "no scope question";
 											[...ask.querySelectorAll("button")].find((el) => el.textContent.trim() === "All occurrences").click();
-											await new Promise((r) => setTimeout(r, 500));
-											const form = document.querySelector("[role=dialog]");
-											if (!form || !form.textContent.includes("Edit all occurrences")) return "no series form";
+											await new Promise((r) => setTimeout(r, 600));
+											const main = document.querySelector("main");
+											if (!main || !main.textContent.includes("Edit all occurrences")) return "no series form";
 											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await new Promise((r) => setTimeout(r, 300));
-											return document.querySelector("[role=dialog]") ? "form did not close" : "ok";
+											await new Promise((r) => setTimeout(r, 400));
+											const stillOpen = document.querySelector("main").textContent.includes("Edit all occurrences");
+											return stillOpen ? "the form did not close" : "ok";
 										})()`,
 									);
 									if (walked !== "ok") throw new Error(`Smoke: calendar ${walked}`);
@@ -564,16 +682,31 @@ if (!app.requestSingleInstanceLock()) {
 											const add = document.querySelector("button[aria-label^='New event on']");
 											if (!add) return "no add button";
 											add.click();
+											await new Promise((r) => setTimeout(r, 600));
+											// A form is a page, not a modal (decision 30), so it lives
+											// in main rather than behind a dialog role.
+											const form = document.querySelector("main");
+											if (!form || !form.textContent.includes("New event")) return "no event form";
+											// The form is a sequence, and repetition is on the second
+											// step ("When"), so the title has to be filled in before
+											// the step rail will hand over to it.
+											const title = form.querySelector("input[type=text]");
+											if (!title) return "no title field";
+											const input = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											input.call(title, "Smoke run");
+											title.dispatchEvent(new Event("input", { bubbles: true }));
+											await new Promise((r) => setTimeout(r, 200));
+											const next = [...form.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
+											if (!next) return "no next";
+											next.click();
 											await new Promise((r) => setTimeout(r, 500));
-											const dialog = document.querySelector("[role=dialog]");
-											if (!dialog) return "no dialog";
-											const repeats = [...dialog.querySelectorAll("select")].find((el) => [...el.options].some((o) => o.value === "WEEKLY"));
+											const repeats = [...form.querySelectorAll("select")].find((el) => [...el.options].some((o) => o.value === "WEEKLY"));
 											if (!repeats) return "no repeat select";
 											const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
 											setter.call(repeats, "WEEKLY");
 											repeats.dispatchEvent(new Event("change", { bubbles: true }));
-											await new Promise((r) => setTimeout(r, 300));
-											return dialog.querySelector("[role=group][aria-label=Weekdays]") ? "ok" : "no weekday picker";
+											await new Promise((r) => setTimeout(r, 400));
+											return form.querySelector("[role=group][aria-label=Weekdays]") ? "ok" : "no weekday picker";
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: event form ${opened}`);

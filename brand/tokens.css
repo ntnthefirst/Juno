@@ -135,6 +135,13 @@
 	--swatch-dark-surface: #1a1a22;
 	--swatch-dark-line: #2a2a35;
 	--swatch-dark-mark: #3c3c4b;
+
+	/* ---- Canvas paper ----
+	 * The document page editor draws a sheet of A4 on screen, and paper is
+	 * white in both themes: a dark page would misrepresent what prints. Fixed
+	 * on purpose, like the swatches above, and not redefined in either dark
+	 * block. */
+	--canvas-paper: #ffffff;
 }
 
 :root:not([data-theme="light"]) {
@@ -230,6 +237,7 @@
 	--color-swatch-dark-surface: var(--swatch-dark-surface);
 	--color-swatch-dark-line: var(--swatch-dark-line);
 	--color-swatch-dark-mark: var(--swatch-dark-mark);
+	--color-canvas-paper: var(--canvas-paper);
 	--color-accent: var(--accent);
 	--color-accent-hover: var(--accent-hover);
 	--color-accent-ink: var(--accent-ink);

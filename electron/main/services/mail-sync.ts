@@ -139,10 +139,23 @@ async function syncFolder(
 	// Everything the server has from the horizon on, plus everything at or above
 	// the oldest local UID, which is what makes deletions detectable: any local
 	// message the server no longer lists in that range is gone.
-	const serverUids = await source.searchUids({
+	let serverUids = await source.searchUids({
 		...(needsListing ? { since: horizonDate(account.horizonDays) } : {}),
 		...(minLocal !== undefined ? { uidFrom: minLocal } : {}),
 	});
+
+	// A first sync that finds nothing inside the horizon and a mailbox that is
+	// not empty means the horizon missed the account's mail, not that there is
+	// none: a business address that goes quiet for a while has its most recent
+	// message older than a 30 or 90 day window on the very first sync. Falling
+	// back to the newest messages by UID, bounded the same as any other run,
+	// is what a person actually wants instead of an account that looks synced
+	// and empty. A later run with real local data goes back to the horizon-only
+	// listing above; this only fires once, before there is anything local yet.
+	if (local.length === 0 && serverUids.length === 0 && mailbox.exists > 0) {
+		serverUids = await source.searchUids({ uidFrom: Math.max(1, mailbox.uidNext - HEADER_BATCH) });
+	}
+
 	const present = new Set(serverUids);
 	const have = new Set(local);
 

@@ -44,6 +44,7 @@ import type {
 	DocumentTemplatePatch,
 	GenerateDocumentInput,
 	GenerateDocumentResult,
+	ImportDocumentInput,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -56,8 +57,17 @@ import type {
 	AddressCandidate,
 	BackupInfo,
 	Client,
+	ClientAddress,
+	ClientAddressInput,
+	ClientAddressPatch,
+	ClientEmail,
+	ClientEmailInput,
+	ClientEmailPatch,
 	ClientInput,
 	ClientPatch,
+	ClientPhone,
+	ClientPhoneInput,
+	ClientPhonePatch,
 	ClientSummary,
 	Contact,
 	ContactInput,
@@ -102,7 +112,15 @@ import type {
 	ResetUserItems,
 	SearchHit,
 	ThemeSetting,
+	OwnerEmailInput,
+	OwnerEmailPatch,
+	OwnerPhoneInput,
+	OwnerPhonePatch,
 	OwnerProfile,
+	OwnerProfilePatch,
+	OnboardingPatch,
+	OnboardingState,
+	SettingsSection,
 } from "./types";
 
 export interface ListClientsQuery {
@@ -124,9 +142,26 @@ export interface JunoApi {
 	 * There is no method to open a second main window: there is only ever one.
 	 */
 	window: {
-		openSettings(): Promise<void>;
+		/** A section opens that tab, which is how a screen sends you where it needs you. */
+		openSettings(section?: SettingsSection): Promise<void>;
 		closeSettings(): Promise<void>;
 		isSettingsOpen(): Promise<boolean>;
+		/**
+		 * Fires in the settings window when it is already open and something asks
+		 * for a different tab. The tab cannot ride in the URL at that point, and
+		 * reloading would throw away whatever was half-typed.
+		 */
+		onShowSection(listener: (section: SettingsSection) => void): () => void;
+		/**
+		 * Fires in the main window when either modal child closes. Neither child
+		 * has a channel back, so this is how a setting changed in one of them, and
+		 * setup finishing, reach the application behind it.
+		 */
+		onChildClosed(listener: () => void): () => void;
+		/** The first-run window. It is asked for by the main window, and by settings. */
+		openSetup(): Promise<void>;
+		closeSetup(): Promise<void>;
+		isSetupOpen(): Promise<boolean>;
 	};
 
 	clients: {
@@ -147,6 +182,37 @@ export interface JunoApi {
 		restore(id: string): Promise<Contact>;
 		/** Clears the flag on every sibling, so exactly one can hold it. */
 		setPrimary(id: string): Promise<Contact>;
+	};
+
+	/**
+	 * A client's email addresses. The one created first becomes primary on its
+	 * own; after that, `isPrimary` only moves when asked.
+	 */
+	clientEmails: {
+		listForClient(clientId: string): Promise<ClientEmail[]>;
+		create(input: ClientEmailInput): Promise<ClientEmail>;
+		update(id: string, patch: ClientEmailPatch): Promise<ClientEmail>;
+		remove(id: string): Promise<ClientEmail>;
+		restore(id: string): Promise<ClientEmail>;
+		setPrimary(id: string): Promise<ClientEmail>;
+	};
+
+	clientPhones: {
+		listForClient(clientId: string): Promise<ClientPhone[]>;
+		create(input: ClientPhoneInput): Promise<ClientPhone>;
+		update(id: string, patch: ClientPhonePatch): Promise<ClientPhone>;
+		remove(id: string): Promise<ClientPhone>;
+		restore(id: string): Promise<ClientPhone>;
+		setPrimary(id: string): Promise<ClientPhone>;
+	};
+
+	clientAddresses: {
+		listForClient(clientId: string): Promise<ClientAddress[]>;
+		create(input: ClientAddressInput): Promise<ClientAddress>;
+		update(id: string, patch: ClientAddressPatch): Promise<ClientAddress>;
+		remove(id: string): Promise<ClientAddress>;
+		restore(id: string): Promise<ClientAddress>;
+		setPrimary(id: string): Promise<ClientAddress>;
 	};
 
 	projects: {
@@ -192,10 +258,25 @@ export interface JunoApi {
 		/** Fires in every window, so a change made in settings reaches the app. */
 		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
 		getOwner(): Promise<OwnerProfile>;
-		setOwner(patch: Partial<OwnerProfile>): Promise<OwnerProfile>;
+		/**
+		 * The scalar fields only. The two contact lists are edited one entry at a
+		 * time, below, so a stale form cannot drop an address added elsewhere.
+		 */
+		setOwner(patch: OwnerProfilePatch): Promise<OwnerProfile>;
+		/** Each of these returns the whole profile, because a primary moves. */
+		addOwnerEmail(input: OwnerEmailInput): Promise<OwnerProfile>;
+		updateOwnerEmail(id: string, patch: OwnerEmailPatch): Promise<OwnerProfile>;
+		removeOwnerEmail(id: string): Promise<OwnerProfile>;
+		addOwnerPhone(input: OwnerPhoneInput): Promise<OwnerProfile>;
+		updateOwnerPhone(id: string, patch: OwnerPhonePatch): Promise<OwnerProfile>;
+		removeOwnerPhone(id: string): Promise<OwnerProfile>;
 		/** Where invoicing happens. Invoice reminders link here; Juno never bills. */
 		getAccountingTool(): Promise<AccountingTool>;
 		setAccountingTool(patch: Partial<AccountingTool>): Promise<AccountingTool>;
+		getOnboarding(): Promise<OnboardingState>;
+		setOnboarding(patch: OnboardingPatch): Promise<OnboardingState>;
+		/** True on a genuinely first launch, and after a step is added an install has not seen. */
+		needsOnboarding(): Promise<boolean>;
 	};
 
 	lock: {
@@ -309,6 +390,10 @@ export interface JunoApi {
 		list(query?: { clientId?: string }): Promise<DocumentRecord[]>;
 		get(id: string): Promise<DocumentRecord | null>;
 		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
+		/** Copies an existing PDF in and records it as an imported document. */
+		import(input: ImportDocumentInput): Promise<DocumentRecord>;
+		/** Opens a file picker filtered to PDF and imports the choice for a client. Null when cancelled. */
+		chooseImport(clientId: string): Promise<DocumentRecord | null>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;
 		remove(id: string): Promise<DocumentRecord>;
 		restore(id: string): Promise<DocumentRecord>;

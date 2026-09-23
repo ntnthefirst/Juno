@@ -14,7 +14,8 @@ import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 import { type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { SearchHit, SearchKind, SearchQuery } from "../../shared/types";
 import { getDb, type Db } from "../db";
-import { calendarEvents, clients, contacts, documents, projects } from "../db/schema";
+import { calendarEvents, clientAddresses, clientEmails, clients, contacts, documents, projects } from "../db/schema";
+import { primaryAddresses, primaryEmails } from "./clients";
 import { listThreads } from "./mail-threads";
 
 const DEFAULT_LIMIT = 20;
@@ -54,17 +55,21 @@ export async function query(input: SearchQuery, db: Db = getDb()): Promise<Searc
 		if (!ALL_KINDS.includes(kind)) throw new Error(`"${kind}" is not something Juno searches.`);
 	}
 
+	const clientEmail = primaryEmails(db);
+	const clientAddress = primaryAddresses(db);
 	const clientRows = !kinds.has("client") ? [] : db
-		.select({ id: clients.id, name: clients.name, city: clients.city, email: clients.email })
+		.select({ id: clients.id, name: clients.name, city: clientAddress.city, email: clientEmail.email })
 		.from(clients)
+		.leftJoin(clientEmail, eq(clientEmail.clientId, clients.id))
+		.leftJoin(clientAddress, eq(clientAddress.clientId, clients.id))
 		.where(
 			and(
 				isNull(clients.deletedAt),
 				anyOf(
 					contains(clients.name, needle),
-					contains(clients.email, needle),
-					contains(clients.city, needle),
 					contains(clients.vatNumber, needle),
+					sql`exists (select 1 from ${clientEmails} where ${clientEmails.clientId} = ${clients.id} and ${isNull(clientEmails.deletedAt)} and ${contains(clientEmails.email, needle)})`,
+					sql`exists (select 1 from ${clientAddresses} where ${clientAddresses.clientId} = ${clients.id} and ${isNull(clientAddresses.deletedAt)} and ${contains(clientAddresses.city, needle)})`,
 				),
 			),
 		)

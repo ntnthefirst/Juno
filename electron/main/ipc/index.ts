@@ -11,6 +11,9 @@ import { registerAgentIpc } from "./agent";
 import { registerAppIpc } from "./app";
 import { registerBackupIpc } from "./backup";
 import { registerCalendarIpc } from "./calendar";
+import { registerClientAddressesIpc } from "./client-addresses";
+import { registerClientEmailsIpc } from "./client-emails";
+import { registerClientPhonesIpc } from "./client-phones";
 import { registerClientsIpc } from "./clients";
 import { registerDocumentsIpc } from "./documents";
 import { registerContactsIpc } from "./contacts";
@@ -34,6 +37,9 @@ export function registerAllIpc(userDataDir: string): void {
 	registerSettingsIpc();
 
 	registerClientsIpc();
+	registerClientEmailsIpc();
+	registerClientPhonesIpc();
+	registerClientAddressesIpc();
 	registerContactsIpc();
 	registerProjectsIpc();
 	registerSearchIpc();

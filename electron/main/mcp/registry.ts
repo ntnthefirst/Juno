@@ -8,6 +8,9 @@
 import type { ToolSummary } from "../../shared/types";
 import { agentTools } from "./agent";
 import { calendarTools } from "./calendar";
+import { clientAddressTools } from "./client-addresses";
+import { clientEmailTools } from "./client-emails";
+import { clientPhoneTools } from "./client-phones";
 import { clientTools } from "./clients";
 import { contactTools } from "./contacts";
 import { documentTools, templateTools } from "./documents";
@@ -23,6 +26,9 @@ import type { ToolDescriptor } from "./types";
 
 const lists: ToolDescriptor[][] = [
 	clientTools,
+	clientEmailTools,
+	clientPhoneTools,
+	clientAddressTools,
 	contactTools,
 	projectTools,
 	searchTools,

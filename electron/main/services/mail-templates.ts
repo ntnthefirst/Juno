@@ -7,6 +7,7 @@
  * only while unedited, and a removed one is soft-deleted rather than purged.
  */
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { primaryOwnerEmail, primaryOwnerPhone } from "../../shared/owner";
 import type {
 	MailRegister,
 	MailTemplate,
@@ -23,6 +24,7 @@ import { htmlToText, mailShell } from "./mail-html";
 import { MAIL_TEMPLATES, MAIL_TEMPLATE_SEED_VERSION } from "./mail-templates-seed";
 import * as settings from "./settings";
 import { placeholdersIn, render, unescapeHtml } from "./template-render";
+import { parseInputs, serialiseInputs, validateInputs } from "./template-inputs";
 
 export interface SeedMailTemplate {
 	key: string;
@@ -54,6 +56,7 @@ function toRecord(row: Row): MailTemplate {
 		isSystem: row.isSystem,
 		customisedAt: row.customisedAt,
 		placeholders: [...new Set([...placeholdersIn(row.subject), ...placeholdersIn(row.bodyHtml)])].sort(),
+		inputs: parseInputs(row.inputsJson),
 	};
 }
 
@@ -64,6 +67,7 @@ function validate(input: MailTemplateInput | MailTemplatePatch): void {
 	if (input.register !== undefined && !REGISTERS.includes(input.register)) {
 		throw new Error("The register has to be u or je.");
 	}
+	if (input.inputs !== undefined) validateInputs(input.inputs);
 }
 
 export async function list(db: Db = getDb()): Promise<MailTemplate[]> {
@@ -107,6 +111,7 @@ export async function create(input: MailTemplateInput, db: Db = getDb()): Promis
 			register: input.register ?? "u",
 			subject: input.subject.trim(),
 			bodyHtml: input.bodyHtml,
+			inputsJson: serialiseInputs(input.inputs ?? []),
 			isSystem: false,
 			sortOrder: 100,
 			createdAt: stamp,
@@ -128,6 +133,7 @@ export async function update(id: string, patch: MailTemplatePatch, db: Db = getD
 			...(patch.register !== undefined ? { register: patch.register } : {}),
 			...(patch.subject !== undefined ? { subject: patch.subject.trim() } : {}),
 			...(patch.bodyHtml !== undefined ? { bodyHtml: patch.bodyHtml } : {}),
+			...(patch.inputs !== undefined ? { inputsJson: serialiseInputs(patch.inputs) } : {}),
 			// Set once, so an upgrade never overwrites what the owner wrote.
 			customisedAt: stamp,
 			updatedAt: stamp,
@@ -169,7 +175,7 @@ export async function footerLines(): Promise<string[]> {
 		owner.businessName,
 		address,
 		owner.vatNumber ? `Ondernemingsnummer ${owner.vatNumber}` : "",
-		[owner.email, owner.phone].filter(Boolean).join(" | "),
+		[primaryOwnerEmail(owner)?.email, primaryOwnerPhone(owner)?.phone].filter(Boolean).join(" | "),
 	];
 }
 

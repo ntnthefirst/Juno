@@ -1,9 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Client, ClientSummary, Contact, Project } from "@shared/types";
+import type {
+	Client,
+	ClientAddress,
+	ClientEmail,
+	ClientPhone,
+	ClientSummary,
+	Contact,
+	Project,
+} from "@shared/types";
+import type { Crumb } from "../../app/breadcrumb-context";
+import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
+import { ClientAddressPanel } from "./ClientAddressPanel";
 import { ClientDetail, StatusBadge } from "./ClientDetail";
+import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
+import { ClientPhonePanel } from "./ClientPhonePanel";
 import { ContactForm } from "./ContactForm";
 import { ProjectForm } from "./ProjectForm";
 
@@ -20,6 +33,11 @@ export function ClientsScreen() {
 	const [search, setSearch] = useState("");
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+	// Held alongside the id so the title bar has a name to show the moment a row
+	// is clicked, with no fetch and no flash of a stale label. A save that
+	// renames the client corrects it through `saved`, which is the only other
+	// place the full row comes back from the main process.
+	const [selectedName, setSelectedName] = useState<string | null>(null);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const bumpDetail = () => setDetailVersion((current) => current + 1);
 	const [form, setForm] = useState<{ client: Client | null } | null>(null);
@@ -28,6 +46,11 @@ export function ClientsScreen() {
 	// that is too narrow to hold one.
 	const [contactForm, setContactForm] = useState<{ contact: Contact | null } | null>(null);
 	const [projectForm, setProjectForm] = useState<{ project: Project | null } | null>(null);
+	// Unlike contacts and projects, these are small enough to edit in a side
+	// panel next to the detail pane rather than taking over the screen.
+	const [emailPanel, setEmailPanel] = useState<{ email: ClientEmail | null } | null>(null);
+	const [phonePanel, setPhonePanel] = useState<{ phone: ClientPhone | null } | null>(null);
+	const [addressPanel, setAddressPanel] = useState<{ address: ClientAddress | null } | null>(null);
 	const [deleted, setDeleted] = useState<Client | null>(null);
 
 	const fetchRows = useCallback(
@@ -61,9 +84,22 @@ export function ClientsScreen() {
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 
+	function selectRow(row: ClientSummary) {
+		setSelectedId(row.id);
+		setSelectedName(row.name);
+	}
+
+	function backToList() {
+		setSelectedId(null);
+		setSelectedName(null);
+	}
+
 	function saved(client: Client) {
 		setForm(null);
 		setSelectedId(client.id);
+		// A save is the other place a name can change, so the title bar picks up
+		// a rename here rather than waiting on the detail pane to report one.
+		setSelectedName(client.name);
 		// Remounts the detail pane, which is how it picks up an edit made here.
 		setDetailVersion((version) => version + 1);
 		refreshList();
@@ -72,7 +108,7 @@ export function ClientsScreen() {
 	async function remove(client: Client) {
 		try {
 			const removed = await window.juno.clients.remove(client.id);
-			setSelectedId(null);
+			backToList();
 			setDeleted(removed);
 			refreshList();
 		} catch (error: unknown) {
@@ -83,10 +119,12 @@ export function ClientsScreen() {
 	async function restore() {
 		if (!deleted) return;
 		const id = deleted.id;
+		const name = deleted.name;
 		setDeleted(null);
 		try {
 			await window.juno.clients.restore(id);
 			setSelectedId(id);
+			setSelectedName(name);
 			setDetailVersion((version) => version + 1);
 			refreshList();
 		} catch (error: unknown) {
@@ -94,7 +132,51 @@ export function ClientsScreen() {
 		}
 	}
 
-	const split = selectedId !== null;
+	const clientCrumb: Crumb = { label: "Clients", onSelect: backToList };
+
+	let trail: Crumb[] = [];
+	if (form) {
+		trail = form.client
+			? [
+					clientCrumb,
+					{ label: selectedName ?? form.client.name, onSelect: () => setForm(null) },
+					{ label: "Edit client" },
+				]
+			: [clientCrumb, { label: "New client" }];
+	} else if (contactForm && selectedId) {
+		trail = [
+			clientCrumb,
+			{ label: selectedName ?? "Client", onSelect: () => setContactForm(null) },
+			{ label: contactForm.contact ? "Edit contact" : "New contact" },
+		];
+	} else if (projectForm && selectedId) {
+		trail = [
+			clientCrumb,
+			{ label: selectedName ?? "Client", onSelect: () => setProjectForm(null) },
+			{ label: projectForm.project ? "Edit project" : "New project" },
+		];
+	} else if (selectedId !== null) {
+		trail = [clientCrumb, { label: selectedName ?? "Client" }];
+	}
+	usePublishBreadcrumb(trail);
+
+	// Escape steps back to the list, but only when it is the topmost thing open.
+	// A side panel and ClientDetail's own remove confirmation both own Escape
+	// first, so this defers to a side panel by state and to a dialog by the same
+	// `[role='dialog']` guard FormPage uses, since that confirmation is state
+	// this screen does not hold.
+	useEffect(() => {
+		function onKey(event: KeyboardEvent) {
+			if (event.key !== "Escape") return;
+			if (selectedId === null) return;
+			if (form || contactForm || projectForm) return;
+			if (emailPanel || phonePanel || addressPanel) return;
+			if (document.querySelector("[role='dialog']")) return;
+			backToList();
+		}
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [selectedId, form, contactForm, projectForm, emailPanel, phonePanel, addressPanel]);
 
 	// The form takes the screen rather than covering it. Nothing in the list
 	// behind it is worth reading while a client is being filled in.
@@ -130,11 +212,70 @@ export function ClientsScreen() {
 		);
 	}
 
+	// A client replaces the list rather than shrinking it into a column: it gets
+	// the whole working area, and the title bar trail is what says where you are
+	// and how to get back.
+	if (selectedId !== null) {
+		return (
+			<div className="flex h-full min-h-0">
+				<div className="min-h-0 flex-1 overflow-y-auto p-8">
+					<div className="mx-auto w-full max-w-[var(--content-width)]">
+						<ClientDetail
+							key={`${selectedId}:${detailVersion}`}
+							clientId={selectedId}
+							onEdit={(client) => setForm({ client })}
+							onDelete={(client) => void remove(client)}
+							onEditContact={(contact) => setContactForm({ contact })}
+							onEditProject={(project) => setProjectForm({ project })}
+							onEditEmail={(email) => setEmailPanel({ email })}
+							onEditPhone={(phone) => setPhonePanel({ phone })}
+							onEditAddress={(address) => setAddressPanel({ address })}
+						/>
+					</div>
+				</div>
+
+				{emailPanel ? (
+					<ClientEmailPanel
+						clientId={selectedId}
+						email={emailPanel.email}
+						onClose={() => setEmailPanel(null)}
+						onSaved={() => {
+							setEmailPanel(null);
+							bumpDetail();
+						}}
+					/>
+				) : null}
+
+				{phonePanel ? (
+					<ClientPhonePanel
+						clientId={selectedId}
+						phone={phonePanel.phone}
+						onClose={() => setPhonePanel(null)}
+						onSaved={() => {
+							setPhonePanel(null);
+							bumpDetail();
+						}}
+					/>
+				) : null}
+
+				{addressPanel ? (
+					<ClientAddressPanel
+						clientId={selectedId}
+						address={addressPanel.address}
+						onClose={() => setAddressPanel(null)}
+						onSaved={() => {
+							setAddressPanel(null);
+							bumpDetail();
+						}}
+					/>
+				) : null}
+			</div>
+		);
+	}
+
 	return (
 		<div className="flex h-full flex-col p-8">
-			<div
-				className={`mb-6 flex items-center justify-between gap-4 ${split ? "" : "mx-auto w-full max-w-[var(--content-width)]"}`}
-			>
+			<div className="mx-auto mb-6 flex w-full max-w-[var(--content-width)] items-center justify-between gap-4">
 				<div className="flex items-baseline gap-3">
 					<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
 						Clients
@@ -161,44 +302,17 @@ export function ClientsScreen() {
 				</div>
 			</div>
 
-			<div className="flex min-h-0 flex-1">
-				<div
-					className={
-						split
-							? "w-[420px] shrink-0 overflow-y-auto border-r border-[var(--line)] pr-6"
-							: "mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto"
-					}
-				>
-					{load.status === "loading" ? (
-						<p className="text-[var(--ink-muted)]">Loading.</p>
-					) : load.status === "error" ? (
-						<ErrorNote message={load.message} />
-					) : load.rows.length === 0 ? (
-						<Empty searching={search.trim().length > 0} />
-					) : (
-						<ClientTable
-							rows={load.rows}
-							selectedId={selectedId}
-							compact={split}
-							onSelect={setSelectedId}
-						/>
-					)}
-				</div>
-
-				{selectedId !== null ? (
-					<div className="min-w-0 flex-1 overflow-y-auto pl-6">
-						<ClientDetail
-							key={`${selectedId}:${detailVersion}`}
-							clientId={selectedId}
-							onEdit={(client) => setForm({ client })}
-							onDelete={(client) => void remove(client)}
-							onEditContact={(contact) => setContactForm({ contact })}
-							onEditProject={(project) => setProjectForm({ project })}
-						/>
-					</div>
-				) : null}
+			<div className="mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">
+				{load.status === "loading" ? (
+					<p className="text-[var(--ink-muted)]">Loading.</p>
+				) : load.status === "error" ? (
+					<ErrorNote message={load.message} />
+				) : load.rows.length === 0 ? (
+					<Empty searching={search.trim().length > 0} />
+				) : (
+					<ClientTable rows={load.rows} selectedId={selectedId} onSelect={selectRow} />
+				)}
 			</div>
-
 
 			{deleted ? (
 				<Toast
@@ -212,22 +326,18 @@ export function ClientsScreen() {
 	);
 }
 
+type ClientTableProps = {
+	rows: ClientSummary[];
+	selectedId: string | null;
+	onSelect: (row: ClientSummary) => void;
+};
+
 /**
  * Rows are the structure. No outer border, no filled header, no card, per
  * brand/BRAND.md section 7.
  */
-function ClientTable({
-	rows,
-	selectedId,
-	compact,
-	onSelect,
-}: {
-	rows: ClientSummary[];
-	selectedId: string | null;
-	compact: boolean;
-	onSelect: (id: string) => void;
-}) {
-	const heads = compact ? ["Name", "Status"] : ["Name", "Status", "City", "Projects"];
+function ClientTable({ rows, selectedId, onSelect }: ClientTableProps) {
+	const heads = ["Name", "Status", "City", "Projects"];
 
 	return (
 		<table className="w-full border-collapse">
@@ -252,7 +362,7 @@ function ClientTable({
 					return (
 						<tr
 							key={row.id}
-							onClick={() => onSelect(row.id)}
+							onClick={() => onSelect(row)}
 							className={`transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 								selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
 							}`}
@@ -264,7 +374,7 @@ function ClientTable({
 								<button
 									type="button"
 									aria-current={selected ? "true" : undefined}
-									onClick={() => onSelect(row.id)}
+									onClick={() => onSelect(row)}
 									className="block w-full truncate text-left"
 								>
 									{row.name}
@@ -273,16 +383,12 @@ function ClientTable({
 							<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)]">
 								{row.status ? <StatusBadge label={row.status.label} tone={row.status.tone} /> : null}
 							</td>
-							{compact ? null : (
-								<>
-									<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-										{row.city ?? ""}
-									</td>
-									<td className="tabular border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-										{row.openProjectCount} / {row.projectCount}
-									</td>
-								</>
-							)}
+							<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								{row.city ?? ""}
+							</td>
+							<td className="tabular border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								{row.openProjectCount} / {row.projectCount}
+							</td>
 						</tr>
 					);
 				})}

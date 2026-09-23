@@ -4,6 +4,7 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import * as calendar from "./calendar";
+import * as clientAddresses from "./client-addresses";
 import * as clients from "./clients";
 import { lookupAddress, suggestLocations } from "./geocoding";
 
@@ -18,9 +19,10 @@ function freshDb(): Db {
 describe("suggestLocations", () => {
 	it("matches a client by name and formats its stored address", async () => {
 		const db = freshDb();
-		await clients.create(
+		const client = await clients.create({ name: "De Backer BV" }, db);
+		await clientAddresses.create(
 			{
-				name: "De Backer BV",
+				clientId: client.id,
 				addressLine1: "Meirstraat 12",
 				postalCode: "2000",
 				city: "Antwerpen",
@@ -53,7 +55,8 @@ describe("suggestLocations", () => {
 
 	it("does not repeat an address a client suggestion already covers", async () => {
 		const db = freshDb();
-		await clients.create({ name: "Studio Jansen", addressLine1: "Kerkstraat 1", city: "Gent" }, db);
+		const client = await clients.create({ name: "Studio Jansen" }, db);
+		await clientAddresses.create({ clientId: client.id, addressLine1: "Kerkstraat 1", city: "Gent" }, db);
 		await calendar.create({ title: "Kickoff", startLocal: "2026-09-20T09:00", location: "Kerkstraat 1, Gent" }, db);
 
 		const found = suggestLocations("kerkstraat", db);

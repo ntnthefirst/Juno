@@ -1,26 +1,97 @@
-import type { MailAccount, MailFolder, MailOutboxCounts, MailSyncStatus } from "@shared/types";
+import type { MailAccount, MailFolder, MailSpecialUse, MailSyncStatus } from "@shared/types";
 import { describeSync, isSyncing } from "./format";
 
-export type NavSelection = { accountId: string; folderId: string | null; outbox: boolean };
+export type MailView = MailSpecialUse | "outbox";
+export type NavSelection = { accountId: string | null; folderId: string | null; view: MailView };
 
 type FolderNavProps = {
 	accounts: MailAccount[];
 	folders: Record<string, MailFolder[]>;
 	sync: Record<string, MailSyncStatus>;
-	outbox: Record<string, MailOutboxCounts>;
 	selection: NavSelection | null;
 	onSelect: (next: NavSelection) => void;
 	onSyncAccount: (accountId: string) => void;
 };
+
+const STANDARD_VIEWS: { id: MailView; label: string }[] = [
+	{ id: "inbox", label: "Inbox" },
+	{ id: "sent", label: "Sent" },
+	{ id: "drafts", label: "Drafts" },
+	{ id: "archive", label: "Archive" },
+	{ id: "junk", label: "Junk" },
+	{ id: "trash", label: "Trash" },
+	{ id: "outbox", label: "Outbox" },
+];
 
 /**
  * Accounts as headings, synced folders under each, unsynced ones dimmed. The
  * status line under an account says what the sync is doing or what failed,
  * in the same words the settings screen uses.
  */
-export function FolderNav({ accounts, folders, sync, outbox, selection, onSelect, onSyncAccount }: FolderNavProps) {
+export function FolderNav({ accounts, folders, sync, selection, onSelect, onSyncAccount }: FolderNavProps) {
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex flex-col gap-4">
+			<div>
+				<label
+					htmlFor="mail-account-filter"
+					className="mb-1 block px-3 text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-faint)]"
+				>
+					Account
+				</label>
+				<select
+					id="mail-account-filter"
+					value={selection?.accountId ?? "all"}
+					onChange={(event) =>
+						onSelect({
+							accountId: event.target.value === "all" ? null : event.target.value,
+							folderId: null,
+							view: selection?.view ?? "inbox",
+						})
+					}
+					className="mx-3 w-[calc(100%-1.5rem)] rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 text-[length:var(--text-sm)] text-[var(--ink)]"
+				>
+					<option value="all">All accounts</option>
+					{accounts.map((account) => (
+						<option
+							key={account.id}
+							value={account.id}
+						>
+							{account.label}
+						</option>
+					))}
+				</select>
+			</div>
+
+			<div className="flex flex-col gap-px">
+				{STANDARD_VIEWS.map((view) => {
+					const active = selection?.view === view.id && selection.folderId === null;
+					return (
+						<button
+							key={view.id}
+							type="button"
+							onClick={() =>
+								onSelect({ accountId: selection?.accountId ?? null, folderId: null, view: view.id })
+							}
+							aria-current={active ? "true" : undefined}
+							style={{ height: "var(--row-height)" }}
+							className={[
+								"flex w-full items-center rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)]",
+								active
+									? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
+									: "text-[var(--ink)] hover:bg-[var(--hover)]",
+							].join(" ")}
+						>
+							{view.label}
+						</button>
+					);
+				})}
+			</div>
+
+			<div className="border-t border-[var(--line)] pt-3">
+				<h2 className="px-3 text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+					Other folders
+				</h2>
+			</div>
 			{accounts.map((account) => {
 				const status = sync[account.id] ?? null;
 				const failed = status?.phase === "failed" || (!isSyncing(status) && account.lastSyncError);
@@ -28,17 +99,17 @@ export function FolderNav({ accounts, folders, sync, outbox, selection, onSelect
 					? (status?.error ?? account.lastSyncError ?? "Sync failed.")
 					: describeSync(status, account.lastSyncAt);
 				const list = folders[account.id] ?? [];
-				const counts = outbox[account.id] ?? null;
-				const outboxActive = selection?.accountId === account.id && selection.outbox;
-				const waiting = counts ? counts.pending + counts.queued + counts.failed : 0;
+				const customFolders = list.filter((folder) => folder.specialUse === null);
 				return (
 					<div key={account.id}>
 						<button
 							type="button"
-							onClick={() => onSelect({ accountId: account.id, folderId: null, outbox: false })}
+							onClick={() => onSelect({ accountId: account.id, folderId: null, view: "inbox" })}
 							className={[
 								"flex w-full items-center rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-sm)] font-[var(--weight-medium)] uppercase tracking-[0.06em]",
-								selection?.accountId === account.id && selection.folderId === null && !selection.outbox
+								selection?.accountId === account.id &&
+								selection.folderId === null &&
+								selection.view === "inbox"
 									? "bg-[var(--accent-soft)] text-[var(--accent)]"
 									: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 							].join(" ")}
@@ -48,20 +119,22 @@ export function FolderNav({ accounts, folders, sync, outbox, selection, onSelect
 							<span className="truncate">{account.label}</span>
 						</button>
 
-						{list.length === 0 ? (
+						{customFolders.length === 0 ? (
 							<p className="px-3 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 								No folders yet. Sync to list them.
 							</p>
 						) : (
 							<div className="mt-px flex flex-col gap-px">
-								{list.map((folder) => {
+								{customFolders.map((folder) => {
 									const active =
-										selection?.accountId === account.id && selection.folderId === folder.id && !selection.outbox;
+										selection?.accountId === account.id && selection.folderId === folder.id;
 									return (
 										<button
 											key={folder.id}
 											type="button"
-											onClick={() => onSelect({ accountId: account.id, folderId: folder.id, outbox: false })}
+											onClick={() =>
+												onSelect({ accountId: account.id, folderId: folder.id, view: "inbox" })
+											}
 											aria-current={active ? "true" : undefined}
 											style={{ height: "var(--row-height)" }}
 											className={[
@@ -85,29 +158,6 @@ export function FolderNav({ accounts, folders, sync, outbox, selection, onSelect
 								})}
 							</div>
 						)}
-
-						<button
-							type="button"
-							onClick={() => onSelect({ accountId: account.id, folderId: null, outbox: true })}
-							aria-current={outboxActive ? "true" : undefined}
-							style={{ height: "var(--row-height)" }}
-							className={[
-								"mt-px flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)]",
-								outboxActive
-									? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
-									: "text-[var(--ink)] hover:bg-[var(--hover)]",
-							].join(" ")}
-							title={counts ? `${counts.pending} waiting for you, ${counts.queued} queued, ${counts.failed} failed, ${counts.drafts} drafts` : "Outbox"}
-						>
-							<span className="min-w-0 flex-1 truncate">Outbox</span>
-							{counts && counts.pending > 0 ? (
-								<span className="tabular rounded-[var(--radius-sm)] bg-[var(--warn-soft)] px-1.5 text-[length:var(--text-micro)] text-[var(--warn)]">
-									{counts.pending}
-								</span>
-							) : waiting > 0 ? (
-								<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">{waiting}</span>
-							) : null}
-						</button>
 
 						<button
 							type="button"

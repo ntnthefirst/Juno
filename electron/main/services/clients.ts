@@ -11,7 +11,7 @@ import type { ListClientsQuery } from "../../shared/api";
 import type { Client, ClientInput, ClientPatch, ClientSummary } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
-import { clients, projects, referenceItems } from "../db/schema";
+import { clientAddresses, clientEmails, clients, projects, referenceItems } from "../db/schema";
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1000;
@@ -78,6 +78,31 @@ export function requireClient(clientId: string, db: Db = getDb()): Client {
 }
 
 /**
+ * The one email and the one address a summary or a placeholder shows, resolved
+ * with a join rather than a query per client. A client with none joins to
+ * nothing and the column comes back null, which is exactly what "no primary
+ * email yet" is.
+ */
+export function primaryEmails(db: Db) {
+	return db
+		.select({ clientId: clientEmails.clientId, email: clientEmails.email })
+		.from(clientEmails)
+		.where(and(eq(clientEmails.isPrimary, true), isNull(clientEmails.deletedAt)))
+		.as("primary_emails");
+}
+
+export function primaryAddresses(db: Db) {
+	return db
+		.select({
+			clientId: clientAddresses.clientId,
+			city: clientAddresses.city,
+		})
+		.from(clientAddresses)
+		.where(and(eq(clientAddresses.isPrimary, true), isNull(clientAddresses.deletedAt)))
+		.as("primary_addresses");
+}
+
+/**
  * One statement, not one per client: the counts come from a grouped subquery that
  * is joined in, so a list of 500 clients is still a single round trip.
  */
@@ -115,9 +140,9 @@ export async function list(
 	if (term) {
 		const match = or(
 			contains(clients.name, term),
-			contains(clients.email, term),
-			contains(clients.city, term),
 			contains(clients.vatNumber, term),
+			sql`exists (select 1 from ${clientEmails} where ${clientEmails.clientId} = ${clients.id} and ${isNull(clientEmails.deletedAt)} and ${contains(clientEmails.email, term)})`,
+			sql`exists (select 1 from ${clientAddresses} where ${clientAddresses.clientId} = ${clients.id} and ${isNull(clientAddresses.deletedAt)} and ${contains(clientAddresses.city, term)})`,
 		);
 		if (match) conditions.push(match);
 	}
@@ -125,13 +150,15 @@ export async function list(
 	const limit = Math.min(Math.max(query.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 	const offset = Math.max(query.offset ?? 0, 0);
 	const counts = projectCounts(db);
+	const email = primaryEmails(db);
+	const address = primaryAddresses(db);
 
 	const rows = db
 		.select({
 			id: clients.id,
 			name: clients.name,
-			city: clients.city,
-			email: clients.email,
+			city: address.city,
+			email: email.email,
 			status: referenceItems,
 			projectCount: counts.total,
 			openProjectCount: counts.open,
@@ -139,6 +166,8 @@ export async function list(
 		.from(clients)
 		.leftJoin(referenceItems, eq(clients.statusId, referenceItems.id))
 		.leftJoin(counts, eq(counts.clientId, clients.id))
+		.leftJoin(email, eq(email.clientId, clients.id))
+		.leftJoin(address, eq(address.clientId, clients.id))
 		.where(conditions.length ? and(...conditions) : undefined)
 		.orderBy(asc(clients.sortName))
 		.limit(limit)
@@ -149,8 +178,8 @@ export async function list(
 		id: row.id,
 		name: row.name,
 		status: row.status ?? null,
-		city: row.city,
-		email: row.email,
+		city: row.city ?? null,
+		email: row.email ?? null,
 		projectCount: Number(row.projectCount ?? 0),
 		openProjectCount: Number(row.openProjectCount ?? 0),
 	}));

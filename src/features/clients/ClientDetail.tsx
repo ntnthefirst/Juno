@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Client, Contact, Project, ProjectSummary, ReferenceItem } from "@shared/types";
+import type {
+	Client,
+	ClientAddress,
+	ClientEmail,
+	ClientPhone,
+	Contact,
+	Project,
+	ProjectSummary,
+	ReferenceItem,
+} from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { MarkdownNotes } from "../../components/MarkdownNotes";
 
 /** Tone is a token name, never a hex. See brand/BRAND.md section 5. */
 const TONES: Record<string, string> = {
@@ -49,6 +59,9 @@ function messageOf(error: unknown): string {
 type Detail = {
 	client: Client;
 	status: ReferenceItem | null;
+	emails: ClientEmail[];
+	phones: ClientPhone[];
+	addresses: ClientAddress[];
 	contacts: Contact[];
 	projects: ProjectSummary[];
 };
@@ -58,7 +71,16 @@ type Load =
 	| { status: "ready"; detail: Detail }
 	| { status: "error"; message: string };
 
-type Pending = { kind: "contact" | "project"; id: string; name: string };
+type DetailKind = "contact" | "project" | "email" | "phone" | "address";
+type Pending = { kind: DetailKind; id: string; name: string };
+
+const REMOVE_TITLES: Record<DetailKind, string> = {
+	contact: "Remove contact",
+	project: "Remove project",
+	email: "Remove email",
+	phone: "Remove phone number",
+	address: "Remove address",
+};
 
 type ClientDetailProps = {
 	clientId: string;
@@ -71,6 +93,14 @@ type ClientDetailProps = {
 	 */
 	onEditContact: (contact: Contact | null) => void;
 	onEditProject: (project: Project | null) => void;
+	/**
+	 * An email, a phone number or an address is a row of something still being
+	 * browsed, so it opens in a side panel rather than taking the screen. Null
+	 * means a new one.
+	 */
+	onEditEmail: (email: ClientEmail | null) => void;
+	onEditPhone: (phone: ClientPhone | null) => void;
+	onEditAddress: (address: ClientAddress | null) => void;
 };
 
 export function ClientDetail({
@@ -79,14 +109,20 @@ export function ClientDetail({
 	onDelete,
 	onEditContact,
 	onEditProject,
+	onEditEmail,
+	onEditPhone,
+	onEditAddress,
 }: ClientDetailProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [pending, setPending] = useState<Pending | null>(null);
 	const [busy, setBusy] = useState(false);
 
 	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
-		const [client, contacts, projects, statusSet] = await Promise.all([
+		const [client, emails, phones, addresses, contacts, projects, statusSet] = await Promise.all([
 			window.juno.clients.get(clientId),
+			window.juno.clientEmails.listForClient(clientId),
+			window.juno.clientPhones.listForClient(clientId),
+			window.juno.clientAddresses.listForClient(clientId),
 			window.juno.contacts.listForClient(clientId),
 			window.juno.projects.list({ clientId }),
 			window.juno.reference.getSet("client_status"),
@@ -95,7 +131,7 @@ export function ClientDetail({
 		const status = client.statusId
 			? (statusSet?.items.find((item) => item.id === client.statusId) ?? null)
 			: null;
-		return { client, status, contacts, projects };
+		return { client, status, emails, phones, addresses, contacts, projects };
 	}, [clientId]);
 
 	useEffect(() => {
@@ -134,7 +170,10 @@ export function ClientDetail({
 		setBusy(true);
 		try {
 			if (pending.kind === "contact") await window.juno.contacts.remove(pending.id);
-			else await window.juno.projects.remove(pending.id);
+			else if (pending.kind === "project") await window.juno.projects.remove(pending.id);
+			else if (pending.kind === "email") await window.juno.clientEmails.remove(pending.id);
+			else if (pending.kind === "phone") await window.juno.clientPhones.remove(pending.id);
+			else await window.juno.clientAddresses.remove(pending.id);
 			setPending(null);
 			refresh();
 		} catch (cause: unknown) {
@@ -145,9 +184,36 @@ export function ClientDetail({
 		}
 	}
 
-	async function makePrimary(id: string) {
+	async function makeContactPrimary(id: string) {
 		try {
 			await window.juno.contacts.setPrimary(id);
+			refresh();
+		} catch (cause: unknown) {
+			setLoad({ status: "error", message: messageOf(cause) });
+		}
+	}
+
+	async function makeEmailPrimary(id: string) {
+		try {
+			await window.juno.clientEmails.setPrimary(id);
+			refresh();
+		} catch (cause: unknown) {
+			setLoad({ status: "error", message: messageOf(cause) });
+		}
+	}
+
+	async function makePhonePrimary(id: string) {
+		try {
+			await window.juno.clientPhones.setPrimary(id);
+			refresh();
+		} catch (cause: unknown) {
+			setLoad({ status: "error", message: messageOf(cause) });
+		}
+	}
+
+	async function makeAddressPrimary(id: string) {
+		try {
+			await window.juno.clientAddresses.setPrimary(id);
 			refresh();
 		} catch (cause: unknown) {
 			setLoad({ status: "error", message: messageOf(cause) });
@@ -176,7 +242,8 @@ export function ClientDetail({
 		);
 	}
 
-	const { client, status, contacts, projects } = load.detail;
+	const { client, status, emails, phones, addresses, contacts, projects } = load.detail;
+	const primaryAddress = addresses.find((address) => address.isPrimary) ?? null;
 
 	return (
 		<div>
@@ -190,9 +257,9 @@ export function ClientDetail({
 					</h2>
 					<div className="mt-2 flex items-center gap-3">
 						{status ? <StatusBadge label={status.label} tone={status.tone} /> : null}
-						{client.city ? (
+						{primaryAddress?.city ? (
 							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								{client.city}
+								{primaryAddress.city}
 							</span>
 						) : null}
 					</div>
@@ -205,6 +272,184 @@ export function ClientDetail({
 					</Button>
 				</div>
 			</div>
+
+			{client.notes && client.notes.trim().length > 0 ? (
+				<div className="mt-4 text-[length:var(--text-dense)]">
+					<MarkdownNotes text={client.notes} />
+				</div>
+			) : null}
+
+			<section className="mt-10">
+				<div className="mb-4 flex items-center justify-between gap-4">
+					<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Emails</h3>
+					<Button size="dense" onClick={() => onEditEmail(null)}>
+						Add email
+					</Button>
+				</div>
+
+				{emails.length === 0 ? (
+					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						No email addresses for this client yet.
+					</p>
+				) : (
+					<ul>
+						{emails.map((email) => (
+							<li
+								key={email.id}
+								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							>
+								<div className="min-w-0">
+									<div className="flex items-center gap-2">
+										<span data-selectable className="truncate">
+											{email.email}
+										</span>
+										{email.isPrimary ? <StatusBadge label="Primary" tone="accent" /> : null}
+									</div>
+									{email.label ? (
+										<div className="mt-0.5 truncate text-[var(--ink-muted)]">{email.label}</div>
+									) : null}
+								</div>
+								<span className="flex shrink-0 gap-1">
+									{email.isPrimary ? null : (
+										<Button size="dense" onClick={() => void makeEmailPrimary(email.id)}>
+											Make primary
+										</Button>
+									)}
+									<Button size="dense" onClick={() => onEditEmail(email)}>
+										Edit
+									</Button>
+									<Button
+										size="dense"
+										variant="danger"
+										onClick={() => setPending({ kind: "email", id: email.id, name: email.email })}
+									>
+										Remove
+									</Button>
+								</span>
+							</li>
+						))}
+					</ul>
+				)}
+			</section>
+
+			<section className="mt-10">
+				<div className="mb-4 flex items-center justify-between gap-4">
+					<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Phone numbers</h3>
+					<Button size="dense" onClick={() => onEditPhone(null)}>
+						Add phone number
+					</Button>
+				</div>
+
+				{phones.length === 0 ? (
+					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						No phone numbers for this client yet.
+					</p>
+				) : (
+					<ul>
+						{phones.map((phone) => (
+							<li
+								key={phone.id}
+								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							>
+								<div className="min-w-0">
+									<div className="flex items-center gap-2">
+										<span data-selectable className="tabular truncate">
+											{phone.phone}
+										</span>
+										{phone.isPrimary ? <StatusBadge label="Primary" tone="accent" /> : null}
+									</div>
+									{phone.label ? (
+										<div className="mt-0.5 truncate text-[var(--ink-muted)]">{phone.label}</div>
+									) : null}
+								</div>
+								<span className="flex shrink-0 gap-1">
+									{phone.isPrimary ? null : (
+										<Button size="dense" onClick={() => void makePhonePrimary(phone.id)}>
+											Make primary
+										</Button>
+									)}
+									<Button size="dense" onClick={() => onEditPhone(phone)}>
+										Edit
+									</Button>
+									<Button
+										size="dense"
+										variant="danger"
+										onClick={() => setPending({ kind: "phone", id: phone.id, name: phone.phone })}
+									>
+										Remove
+									</Button>
+								</span>
+							</li>
+						))}
+					</ul>
+				)}
+			</section>
+
+			<section className="mt-10">
+				<div className="mb-4 flex items-center justify-between gap-4">
+					<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Addresses</h3>
+					<Button size="dense" onClick={() => onEditAddress(null)}>
+						Add address
+					</Button>
+				</div>
+
+				{addresses.length === 0 ? (
+					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						No addresses for this client yet.
+					</p>
+				) : (
+					<ul>
+						{addresses.map((address) => {
+							const line = [address.addressLine1, address.postalCode, address.city]
+								.filter(Boolean)
+								.join(", ");
+							return (
+								<li
+									key={address.id}
+									className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+								>
+									<div className="min-w-0">
+										<div className="flex items-center gap-2">
+											<span data-selectable className="truncate font-[var(--weight-medium)]">
+												{address.label ?? line}
+											</span>
+											{address.isPrimary ? <StatusBadge label="Primary" tone="accent" /> : null}
+										</div>
+										{address.label ? (
+											<div data-selectable className="mt-0.5 truncate text-[var(--ink-muted)]">
+												{line}
+											</div>
+										) : null}
+									</div>
+									<span className="flex shrink-0 gap-1">
+										{address.isPrimary ? null : (
+											<Button size="dense" onClick={() => void makeAddressPrimary(address.id)}>
+												Make primary
+											</Button>
+										)}
+										<Button size="dense" onClick={() => onEditAddress(address)}>
+											Edit
+										</Button>
+										<Button
+											size="dense"
+											variant="danger"
+											onClick={() =>
+												setPending({
+													kind: "address",
+													id: address.id,
+													name: address.label ?? line,
+												})
+											}
+										>
+											Remove
+										</Button>
+									</span>
+								</li>
+							);
+						})}
+					</ul>
+				)}
+			</section>
 
 			<section className="mt-10">
 				<div className="mb-4 flex items-center justify-between gap-4">
@@ -248,7 +493,7 @@ export function ClientDetail({
 								</div>
 								<span className="flex shrink-0 gap-1">
 									{contact.isPrimary ? null : (
-										<Button size="dense" onClick={() => void makePrimary(contact.id)}>
+										<Button size="dense" onClick={() => void makeContactPrimary(contact.id)}>
 											Make primary
 										</Button>
 									)}
@@ -332,7 +577,7 @@ export function ClientDetail({
 
 			{pending ? (
 				<Dialog
-					title={pending.kind === "contact" ? "Remove contact" : "Remove project"}
+					title={REMOVE_TITLES[pending.kind]}
 					width="narrow"
 					onClose={() => setPending(null)}
 				>

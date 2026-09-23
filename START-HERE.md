@@ -23,12 +23,13 @@ npm run dev
 | **Today** | What needs attention, suggestions worked out from the records, a counts line |
 | **Reminders** | Grouped by bucket, recurring, snooze and complete, one daily notification |
 | **Clients** | Clients, contacts and projects, with search and undo |
-| **Documents** | Generated from templates, rendered to PDF, signed with an audit page |
+| **Documents** | Generated from a template or imported as a PDF, written to disk at generation, signed with an audit page |
 | **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. An outbox that sends over SMTP behind a confirmation gate, with reply, templates and document attachments |
 | **Calendar** | Events and recurring series with an IANA zone each, month, week and agenda views, reminders and project deadlines overlaid, drag to move and resize with the recurrence question asked, .ics in and out |
-| **Agent** | An MCP server over a local pipe, 99 tools, every side-effectful one parked for approval. Automations, an audit log, briefings across every domain, and the config block to paste into an agent |
-| **Templates** | The contract texts and the mail templates, editable, with a live preview |
-| **Settings** | Theme, lock, reference data, owner details, accounting link, mail accounts, signature, backup |
+| **Agent** | An MCP server over a local pipe, 130 tools, every side-effectful one parked for approval. Automations, an audit log, briefings across every domain, and the config block to paste into an agent |
+| **Mail templates** | The subject and body of the emails Juno composes. A visual editor and a code view over the same HTML, declared inputs, and a preview through the shell that sends it |
+| **Document templates** | The contract texts, edited as pages: a margin, blocks that flow, and boxes placed on the paper. Compiled to the HTML the PDF pipeline already took |
+| **Settings** | Theme, lock, reference data, your name and business, your email addresses and phone numbers, accounting link, mail accounts, signature, backup |
 
 Not built: the in-app assistant panel, the one part of phase 6 that needs a
 model and therefore a decision about which one and where its key lives. An
@@ -41,11 +42,32 @@ external agent pointed at Settings > Agent drives the same surface today.
 | [BUILD-LOG.md](BUILD-LOG.md) | **Start here.** Where things stand, every deviation from the plan, and every trap found the hard way |
 | [TODO.md](TODO.md) | The three things waiting on Nathan, and what unblocks each |
 | [PLAN.md](PLAN.md) | The phases, what ships in each, and the test for when one is done |
-| [docs/decisions.md](docs/decisions.md) | 22 decisions, each with what would have to change to reopen it |
+| [docs/decisions.md](docs/decisions.md) | 34 decisions, each with what would have to change to reopen it |
 | [CLAUDE.md](CLAUDE.md) | Loaded automatically. The rules index and the highest-value rules inline |
 
 `BUILD-LOG.md` first, because several things in `PLAN.md` and `decisions.md` have
 been amended by what actually happened. The log says which.
+
+## The first run
+
+An empty install is met by a small modal window in front of the application,
+the same shape as settings and smaller (decision 34): welcome, your name, your
+business, appearance, the lock, mail, done. It cannot be skipped as a whole:
+there is no "Skip setup" and closing the window quits Juno. The two answers it
+insists on are the owner's name and the business name, because every generated
+document carries both; the VAT and establishment numbers are optional, and
+appearance, the lock and mail are each skippable on their own step. A
+walkthrough over the real app follows, and both can be replayed from
+Settings > General.
+
+There is one modal child at a time. Opening setup closes settings and the other
+way round, and when either closes the main process sends `window.childClosed`,
+which is what starts the walkthrough and picks up a replay.
+
+`onboarding` lives in `settings.json`, not the database, so replacing the
+database does not replay setup and `npm run dev:clean` does. The stored version
+is 2; an install that finished the older one is asked again, because it was
+never asked for a name or an establishment number.
 
 ## The eight things that will bite you
 
@@ -56,8 +78,11 @@ been amended by what actually happened. The log says which.
    typecheck says nothing about the custom scheme, the preload bridge or the
    database. `JUNO_SMOKE_DEMO=1 node scripts/smoke.mjs` creates real records
    through the bridge, syncs a mailbox held in memory, sends through a transport
-   held in memory, and photographs eight screens in both themes into `.smoke/`.
-   Several real bugs were found only by looking at those images.
+   held in memory, walks the setup window, both template editors, both
+   use-a-template screens, the walkthrough and both sides of the MCP switch, and
+   photographs every screen and every settings tab in both themes into `.smoke/`. Several real bugs, and
+   every one of the four layout faults fixed in the September rework, were found
+   only by looking at those images.
 3. **Storage is `node:sqlite` behind a shim**, not `better-sqlite3`, because this
    machine has no C++ compiler. Decision 18. Drizzle is assembled by hand in
    `electron/main/db/index.ts` because its own entry point requires
@@ -88,6 +113,20 @@ been amended by what actually happened. The log says which.
    host test in `electron/main/mcp/host.test.ts` will tell you whether its
    flags match what the rules require, and it is meant to fail when they do
    not.
+
+## What the September rework changed
+
+A record opens over the whole working area rather than beside its own list, and
+the title bar carries the trail (`Juno / Clients / Jansen BV`). Notes are edited
+in a live Markdown editor. A second pass in the same month moved the first run
+into its own small window, split the owner profile into a name, a business and
+two lists of contact details, and reworked the MCP tab into one choice with two
+routes: let Juno write the file, or copy the entry. The rest is in
+[docs/rework-2026-09.md](docs/rework-2026-09.md), the editors are specified in
+[docs/editors.md](docs/editors.md), and what it found the hard way is at the end
+of [BUILD-LOG.md](BUILD-LOG.md). Two of those findings are worth knowing now:
+the Agent screen had been unreachable, and `JUNO_SMOKE_DEMO=1` had been failing
+since forms stopped being modals, because nobody had run it.
 
 ## What to do next
 
@@ -121,14 +160,11 @@ After that, the honest move is to install the packaged build and use it on real
 work for a while before building anything else. A phase that is not being
 used is evidence the next one is the wrong thing to build.
 
-## The two open decisions
+## The one open decision
 
-Neither blocks any code, and both get more expensive the longer they wait. Both
-are in [TODO.md](TODO.md) with the detail.
+It blocks no code, and gets more expensive the longer it waits. In
+[TODO.md](TODO.md) with the detail.
 
-- **The repository.** None exists online yet, which is why `electron-builder.yml`
-  has no `publish` block and auto-update is off. An installed build pointing at
-  the wrong feed is worse than one that never checks.
 - **The licence.** All rights reserved by default, which is the right holding
   position. The question that settles it: should a company be able to take
   Juno, host it, and sell it back?

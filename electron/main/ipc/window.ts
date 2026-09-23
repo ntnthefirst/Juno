@@ -11,14 +11,30 @@
  * locked application still knows what it is drawing.
  */
 import { ipcMain } from "electron";
-import { closeSettingsWindow, isSettingsOpen, openSettingsWindow } from "../windows";
+import type { SettingsSection } from "../../shared/types";
+import {
+	closeSettingsWindow,
+	closeSetupWindow,
+	isSettingsOpen,
+	isSetupOpen,
+	openSettingsWindow,
+	openSetupWindow,
+} from "../windows";
 
 export function registerWindowIpc(): void {
 	ipcMain.handle("window.isSettingsOpen", () => isSettingsOpen());
-	ipcMain.handle("window.openSettings", () => {
-		openSettingsWindow();
+	ipcMain.handle("window.openSettings", (_event, section?: SettingsSection) => {
+		openSettingsWindow(section);
 	});
 	ipcMain.handle("window.closeSettings", () => {
 		closeSettingsWindow();
+	});
+
+	ipcMain.handle("window.isSetupOpen", () => isSetupOpen());
+	ipcMain.handle("window.openSetup", () => {
+		openSetupWindow();
+	});
+	ipcMain.handle("window.closeSetup", () => {
+		closeSetupWindow();
 	});
 }

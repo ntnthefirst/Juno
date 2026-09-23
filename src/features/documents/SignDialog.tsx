@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { ownerDisplayName } from "@shared/owner";
 import type { DocumentRecord } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
 import { messageOf } from "../../lib/errors";
+import { SpecimenMark } from "./DocumentDetail";
 
 type SignDialogProps = {
 	record: DocumentRecord;
@@ -28,7 +30,7 @@ export function SignDialog({ record, onClose, onSigned }: SignDialogProps) {
 		Promise.all([window.juno.settings.getOwner(), window.juno.settings.getSignaturePath()])
 			.then(([owner, path]) => {
 				if (cancelled) return;
-				setSignerName(owner.contactName.trim() || owner.businessName.trim());
+				setSignerName(ownerDisplayName(owner));
 				setSignaturePath(path);
 				setUseImage(path !== null);
 			})
@@ -39,6 +41,15 @@ export function SignDialog({ record, onClose, onSigned }: SignDialogProps) {
 			cancelled = true;
 		};
 	}, [specimen]);
+
+	async function openPdf() {
+		setError(null);
+		try {
+			await window.juno.documents.openPdf(record.id);
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		}
+	}
 
 	async function sign() {
 		if (busy) return;
@@ -82,6 +93,31 @@ export function SignDialog({ record, onClose, onSigned }: SignDialogProps) {
 
 	return (
 		<Dialog title="Sign document" onClose={onClose}>
+			<div className="mt-3 flex items-start justify-between gap-4 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2">
+				<div className="min-w-0">
+					<div className="flex items-center gap-2">
+						<p
+							data-selectable
+							className="truncate text-[length:var(--text-base)] font-[var(--weight-medium)]"
+						>
+							{record.title}
+						</p>
+						{record.isSpecimen ? <SpecimenMark /> : null}
+					</div>
+					<p className="mt-0.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						{record.clientName}
+					</p>
+				</div>
+				<Button disabled={record.pdfPath === null} onClick={() => void openPdf()}>
+					Open the PDF
+				</Button>
+			</div>
+			{record.pdfPath === null ? (
+				<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					There is no PDF yet. Create one, or sign now and Juno makes one from the current text.
+				</p>
+			) : null}
+
 			<div className="mt-5 flex flex-col gap-4">
 				<Field
 					label="Signed by"

@@ -19,13 +19,23 @@
  * falls back to db/paths.ts when nothing set one, so a plain Node test can point
  * it at a temp folder.
  */
+import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
 	AccountingTool,
 	AppSettings,
 	LockSettings,
+	OnboardingPatch,
+	OnboardingState,
+	OwnerEmail,
+	OwnerEmailInput,
+	OwnerEmailPatch,
+	OwnerPhone,
+	OwnerPhoneInput,
+	OwnerPhonePatch,
 	OwnerProfile,
+	OwnerProfilePatch,
 	ThemeSetting,
 } from "../../shared/types";
 
@@ -38,19 +48,44 @@ const DEFAULT_LOCK: LockSettings = {
 
 const DEFAULT_OWNER: OwnerProfile = {
 	businessName: "",
-	contactName: "",
-	email: "",
-	phone: "",
+	firstName: "",
+	lastName: "",
 	vatNumber: "",
+	establishmentNumber: "",
 	addressLine1: "",
 	addressLine2: "",
 	postalCode: "",
 	city: "",
 	country: "",
 	iban: "",
+	emails: [],
+	phones: [],
 };
 
+/** The scalar keys, which is what a patch may carry and what normalise reads. */
+const OWNER_SCALARS = (Object.keys(DEFAULT_OWNER) as (keyof OwnerProfile)[]).filter(
+	(key): key is keyof OwnerProfilePatch => key !== "emails" && key !== "phones",
+);
+
 const DEFAULT_ACCOUNTING: AccountingTool = { name: "", url: "" };
+
+/**
+ * The shape of the setup as it stands today. Adding a step that an existing
+ * install has never been asked means bumping this, and nothing else.
+ *
+ * Version 2: the one long business step became a name step and a business
+ * step, the email and phone questions left (they are lists under settings now),
+ * and the whole thing moved into its own window. An install that answered
+ * version 1 was never asked for a first name or an establishment number, so it
+ * is asked once more.
+ */
+export const ONBOARDING_VERSION = 2;
+
+const DEFAULT_ONBOARDING: OnboardingState = {
+	completedAt: null,
+	walkthroughSeenAt: null,
+	version: 0,
+};
 
 const DEFAULTS: AppSettings = {
 	theme: "system",
@@ -60,6 +95,7 @@ const DEFAULTS: AppSettings = {
 	signaturePath: null,
 	accountingTool: DEFAULT_ACCOUNTING,
 	lastNotifiedOn: null,
+	onboarding: DEFAULT_ONBOARDING,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -102,6 +138,67 @@ function int(value: unknown, fallback: number): number {
 	return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : fallback;
 }
 
+/** A timestamp that is either a non-empty string or absent. */
+function iso(value: unknown): string | null {
+	return typeof value === "string" && value ? value : null;
+}
+
+/** A new id for an entry in one of the owner's two lists. */
+function entryId(): string {
+	// Not uuidv7: these are keys inside a JSON file rather than table rows, and
+	// nothing sorts on them, so this avoids importing the database's column
+	// helpers into a module that deliberately knows nothing about the database.
+	return randomUUID();
+}
+
+type RawContact = { id: string; value: string; label: string | null; isPrimary: boolean };
+
+/**
+ * One list of contact details, read defensively and left with exactly one
+ * primary. A file written by an older version, or by hand, can hold two
+ * primaries or none; every read that follows assumes one, so it is settled here.
+ */
+function normaliseContacts(raw: unknown, field: "email" | "phone"): RawContact[] {
+	const rows = Array.isArray(raw) ? raw : [];
+	const seen = new Set<string>();
+	const entries: RawContact[] = [];
+
+	for (const row of rows) {
+		if (!isRecord(row)) continue;
+		const value = str(row[field], "").trim();
+		if (!value || seen.has(value.toLowerCase())) continue;
+		seen.add(value.toLowerCase());
+		entries.push({
+			id: typeof row.id === "string" && row.id ? row.id : entryId(),
+			value,
+			label: typeof row.label === "string" && row.label.trim() ? row.label.trim() : null,
+			isPrimary: bool(row.isPrimary, false),
+		});
+	}
+
+	const primary = entries.findIndex((entry) => entry.isPrimary);
+	const chosen = primary === -1 ? 0 : primary;
+	return entries.map((entry, index) => ({ ...entry, isPrimary: index === chosen }));
+}
+
+function normaliseEmails(raw: unknown): OwnerEmail[] {
+	return normaliseContacts(raw, "email").map(({ id, value, label, isPrimary }) => ({
+		id,
+		email: value,
+		label,
+		isPrimary,
+	}));
+}
+
+function normalisePhones(raw: unknown): OwnerPhone[] {
+	return normaliseContacts(raw, "phone").map(({ id, value, label, isPrimary }) => ({
+		id,
+		phone: value,
+		label,
+		isPrimary,
+	}));
+}
+
 /**
  * Field by field, so an unknown key, a wrong type or a half-written file cannot
  * produce a settings object the rest of the app then has to guard against.
@@ -113,9 +210,31 @@ function normalise(raw: unknown): AppSettings {
 	const ownerRaw = isRecord(raw.owner) ? raw.owner : {};
 
 	const method = lockRaw.method;
-	const owner = { ...DEFAULT_OWNER };
-	for (const key of Object.keys(DEFAULT_OWNER) as (keyof OwnerProfile)[]) {
+	const owner: OwnerProfile = { ...DEFAULT_OWNER };
+	for (const key of OWNER_SCALARS) {
 		owner[key] = str(ownerRaw[key], DEFAULT_OWNER[key]);
+	}
+	owner.emails = normaliseEmails(ownerRaw.emails);
+	owner.phones = normalisePhones(ownerRaw.phones);
+
+	// Carried forward from the shape that held one name, one address and one
+	// number. An install that answered those questions keeps its answers rather
+	// than finding the fields empty after an update.
+	if (!owner.firstName && !owner.lastName) {
+		const legacy = str(ownerRaw.contactName, "").trim();
+		if (legacy) {
+			const cut = legacy.indexOf(" ");
+			owner.firstName = cut === -1 ? legacy : legacy.slice(0, cut);
+			owner.lastName = cut === -1 ? "" : legacy.slice(cut + 1).trim();
+		}
+	}
+	if (owner.emails.length === 0) {
+		const legacy = str(ownerRaw.email, "").trim();
+		if (legacy) owner.emails = [{ id: entryId(), email: legacy, label: null, isPrimary: true }];
+	}
+	if (owner.phones.length === 0) {
+		const legacy = str(ownerRaw.phone, "").trim();
+		if (legacy) owner.phones = [{ id: entryId(), phone: legacy, label: null, isPrimary: true }];
 	}
 
 	return {
@@ -137,6 +256,14 @@ function normalise(raw: unknown): AppSettings {
 		accountingTool: {
 			name: str(isRecord(raw.accountingTool) ? raw.accountingTool.name : undefined, ""),
 			url: str(isRecord(raw.accountingTool) ? raw.accountingTool.url : undefined, ""),
+		},
+		onboarding: {
+			completedAt: iso(isRecord(raw.onboarding) ? raw.onboarding.completedAt : undefined),
+			walkthroughSeenAt: iso(isRecord(raw.onboarding) ? raw.onboarding.walkthroughSeenAt : undefined),
+			version: Math.max(
+				0,
+				int(isRecord(raw.onboarding) ? raw.onboarding.version : undefined, DEFAULT_ONBOARDING.version),
+			),
 		},
 	};
 }
@@ -165,9 +292,18 @@ function write(next: AppSettings): AppSettings {
 	return next;
 }
 
+/** A copy nothing outside this module shares, lists included. */
+function cloneOwner(owner: OwnerProfile): OwnerProfile {
+	return {
+		...owner,
+		emails: owner.emails.map((entry) => ({ ...entry })),
+		phones: owner.phones.map((entry) => ({ ...entry })),
+	};
+}
+
 export async function get(): Promise<AppSettings> {
 	const current = read();
-	return { ...current, lock: { ...current.lock }, owner: { ...current.owner } };
+	return { ...current, lock: { ...current.lock }, owner: cloneOwner(current.owner) };
 }
 
 export async function getTheme(): Promise<ThemeSetting> {
@@ -182,17 +318,136 @@ export async function setTheme(theme: ThemeSetting): Promise<ThemeSetting> {
 }
 
 export async function getOwner(): Promise<OwnerProfile> {
-	return { ...read().owner };
+	return cloneOwner(read().owner);
 }
 
-export async function setOwner(patch: Partial<OwnerProfile>): Promise<OwnerProfile> {
+/**
+ * The scalar fields. The two contact lists are not patchable in one go on
+ * purpose: a form that had loaded three addresses and posted them back would
+ * silently drop a fourth added from anywhere else in between.
+ */
+export async function setOwner(patch: OwnerProfilePatch): Promise<OwnerProfile> {
 	const current = read();
-	const owner = { ...current.owner };
-	for (const key of Object.keys(DEFAULT_OWNER) as (keyof OwnerProfile)[]) {
+	const owner = cloneOwner(current.owner);
+	for (const key of OWNER_SCALARS) {
 		const value = patch[key];
 		if (value !== undefined) owner[key] = String(value);
 	}
-	return { ...write({ ...current, owner }).owner };
+	return cloneOwner(write({ ...current, owner }).owner);
+}
+
+/** Writes one of the two lists back, then hands out a copy of the result. */
+function writeOwner(owner: OwnerProfile): OwnerProfile {
+	return cloneOwner(write({ ...read(), owner }).owner);
+}
+
+function requireValue(value: unknown, what: "email address" | "phone number"): string {
+	const trimmed = typeof value === "string" ? value.trim() : "";
+	if (!trimmed) throw new Error(`An ${what} cannot be empty.`);
+	return trimmed;
+}
+
+/**
+ * Exactly one primary while the list has anything in it. Called after every
+ * change, so no caller has to remember which of the three cases it is in:
+ * a new primary, a removed primary, or a primary that was never set.
+ */
+function settlePrimary<T extends { id: string; isPrimary: boolean }>(entries: T[], prefer: string | null): T[] {
+	if (entries.length === 0) return entries;
+	const chosen =
+		(prefer && entries.some((entry) => entry.id === prefer) ? prefer : null) ??
+		entries.find((entry) => entry.isPrimary)?.id ??
+		entries[0].id;
+	return entries.map((entry) => ({ ...entry, isPrimary: entry.id === chosen }));
+}
+
+function findEntry<T extends { id: string }>(entries: T[], id: string, what: string): T {
+	const found = entries.find((entry) => entry.id === id);
+	if (!found) throw new Error(`No ${what} with id "${id}". It may already have been removed.`);
+	return found;
+}
+
+export async function addOwnerEmail(input: OwnerEmailInput): Promise<OwnerProfile> {
+	const email = requireValue(input.email, "email address");
+	const owner = cloneOwner(read().owner);
+	const existing = owner.emails.find((entry) => entry.email.toLowerCase() === email.toLowerCase());
+
+	if (existing) {
+		// Adding an address that is already there is not an error: it happens the
+		// moment a mail account is added for an address already typed in by hand.
+		// The label and the primary flag still apply, so the call is not wasted.
+		if (input.label !== undefined) existing.label = input.label?.trim() || null;
+		owner.emails = settlePrimary(owner.emails, input.isPrimary === true ? existing.id : null);
+		return writeOwner(owner);
+	}
+
+	const entry: OwnerEmail = {
+		id: entryId(),
+		email,
+		label: input.label?.trim() || null,
+		isPrimary: false,
+	};
+	owner.emails = settlePrimary([...owner.emails, entry], input.isPrimary === true ? entry.id : null);
+	return writeOwner(owner);
+}
+
+export async function updateOwnerEmail(id: string, patch: OwnerEmailPatch): Promise<OwnerProfile> {
+	const owner = cloneOwner(read().owner);
+	const entry = findEntry(owner.emails, id, "email address");
+	if (patch.email !== undefined) entry.email = requireValue(patch.email, "email address");
+	if (patch.label !== undefined) entry.label = patch.label?.trim() || null;
+	owner.emails = settlePrimary(owner.emails, patch.isPrimary === true ? id : null);
+	return writeOwner(owner);
+}
+
+export async function removeOwnerEmail(id: string): Promise<OwnerProfile> {
+	const owner = cloneOwner(read().owner);
+	findEntry(owner.emails, id, "email address");
+	owner.emails = settlePrimary(
+		owner.emails.filter((entry) => entry.id !== id),
+		null,
+	);
+	return writeOwner(owner);
+}
+
+export async function addOwnerPhone(input: OwnerPhoneInput): Promise<OwnerProfile> {
+	const phone = requireValue(input.phone, "phone number");
+	const owner = cloneOwner(read().owner);
+	const existing = owner.phones.find((entry) => entry.phone.toLowerCase() === phone.toLowerCase());
+
+	if (existing) {
+		if (input.label !== undefined) existing.label = input.label?.trim() || null;
+		owner.phones = settlePrimary(owner.phones, input.isPrimary === true ? existing.id : null);
+		return writeOwner(owner);
+	}
+
+	const entry: OwnerPhone = {
+		id: entryId(),
+		phone,
+		label: input.label?.trim() || null,
+		isPrimary: false,
+	};
+	owner.phones = settlePrimary([...owner.phones, entry], input.isPrimary === true ? entry.id : null);
+	return writeOwner(owner);
+}
+
+export async function updateOwnerPhone(id: string, patch: OwnerPhonePatch): Promise<OwnerProfile> {
+	const owner = cloneOwner(read().owner);
+	const entry = findEntry(owner.phones, id, "phone number");
+	if (patch.phone !== undefined) entry.phone = requireValue(patch.phone, "phone number");
+	if (patch.label !== undefined) entry.label = patch.label?.trim() || null;
+	owner.phones = settlePrimary(owner.phones, patch.isPrimary === true ? id : null);
+	return writeOwner(owner);
+}
+
+export async function removeOwnerPhone(id: string): Promise<OwnerProfile> {
+	const owner = cloneOwner(read().owner);
+	findEntry(owner.phones, id, "phone number");
+	owner.phones = settlePrimary(
+		owner.phones.filter((entry) => entry.id !== id),
+		null,
+	);
+	return writeOwner(owner);
 }
 
 /**
@@ -248,4 +503,28 @@ export async function getSeedVersion(): Promise<number> {
 
 export async function setSeedVersion(version: number): Promise<number> {
 	return write({ ...read(), seedVersion: Math.max(0, Math.trunc(version)) }).seedVersion;
+}
+
+export async function getOnboarding(): Promise<OnboardingState> {
+	return { ...read().onboarding };
+}
+
+/**
+ * Patched rather than replaced, because the setup window and the walkthrough
+ * write different fields at different times and neither knows about the other.
+ */
+export async function setOnboarding(patch: OnboardingPatch): Promise<OnboardingState> {
+	const current = read();
+	const next = { ...current.onboarding, ...patch };
+	write({ ...current, onboarding: next });
+	return { ...next };
+}
+
+/**
+ * True on a genuinely first launch, and after a reset. The version check is what
+ * makes a new step reach an install that finished an older setup.
+ */
+export async function needsOnboarding(): Promise<boolean> {
+	const state = read().onboarding;
+	return state.completedAt === null || state.version < ONBOARDING_VERSION;
 }

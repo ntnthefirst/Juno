@@ -3,7 +3,9 @@ import type { Client, ClientPatch, ReferenceItem } from "@shared/types";
 import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
+import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
+import { messageOf } from "../../lib/errors";
 
 type ClientFormProps = {
 	/** Null creates, a client edits. */
@@ -15,15 +17,8 @@ type ClientFormProps = {
 type Values = {
 	name: string;
 	statusId: string;
-	email: string;
-	phone: string;
-	website: string;
 	vatNumber: string;
-	addressLine1: string;
-	addressLine2: string;
-	postalCode: string;
-	city: string;
-	country: string;
+	website: string;
 	notes: string;
 };
 
@@ -31,15 +26,8 @@ function toValues(client: Client | null): Values {
 	return {
 		name: client?.name ?? "",
 		statusId: client?.statusId ?? "",
-		email: client?.email ?? "",
-		phone: client?.phone ?? "",
-		website: client?.website ?? "",
 		vatNumber: client?.vatNumber ?? "",
-		addressLine1: client?.addressLine1 ?? "",
-		addressLine2: client?.addressLine2 ?? "",
-		postalCode: client?.postalCode ?? "",
-		city: client?.city ?? "",
-		country: client?.country ?? "",
+		website: client?.website ?? "",
 		notes: client?.notes ?? "",
 	};
 }
@@ -49,14 +37,14 @@ function textOrNull(value: string): string | null {
 	return trimmed.length > 0 ? trimmed : null;
 }
 
-function messageOf(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
+	const notesId = useId();
 	const [values, setValues] = useState<Values>(() => toValues(client));
+	// Notes stay out of the way until there is something in them, or the user
+	// asks for the field. Filling in a client should not open on a blank essay.
+	const [notesOpen, setNotesOpen] = useState(() => (client?.notes ?? "").trim().length > 0);
 	const [statuses, setStatuses] = useState<ReferenceItem[]>([]);
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -99,16 +87,9 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 		const patch: ClientPatch = {
 			name,
 			statusId: values.statusId.length > 0 ? values.statusId : null,
-			email: textOrNull(values.email),
-			phone: textOrNull(values.phone),
-			website: textOrNull(values.website),
 			vatNumber: textOrNull(values.vatNumber),
-			addressLine1: textOrNull(values.addressLine1),
-			addressLine2: textOrNull(values.addressLine2),
-			postalCode: textOrNull(values.postalCode),
-			city: textOrNull(values.city),
-			country: textOrNull(values.country),
-			notes: textOrNull(values.notes),
+			website: textOrNull(values.website),
+			notes: notesOpen ? textOrNull(values.notes) : null,
 		};
 
 		try {
@@ -127,6 +108,9 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 			title={client ? "Edit client" : "New client"}
 			onBack={onClose}
 			backLabel="Clients"
+			description={
+				client ? undefined : "Just the basics for now. Add emails, phone numbers, addresses and contacts once the client is saved."
+			}
 			actions={
 				<>
 					<Button onClick={onClose}>Cancel</Button>
@@ -161,19 +145,6 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						onChange={(value) => set("vatNumber", value)}
 					/>
 
-					<Field
-						label="Email"
-						type="email"
-						value={values.email}
-						onChange={(value) => set("email", value)}
-					/>
-					<Field
-						label="Phone"
-						type="tel"
-						value={values.phone}
-						onChange={(value) => set("phone", value)}
-					/>
-
 					<div className="col-span-2">
 						<Field
 							label="Website"
@@ -182,47 +153,27 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 							onChange={(value) => set("website", value)}
 						/>
 					</div>
+				</div>
 
-					<div className="col-span-2">
-						<Field
-							label="Address"
-							value={values.addressLine1}
-							onChange={(value) => set("addressLine1", value)}
-						/>
-					</div>
-					<div className="col-span-2">
-						<Field
-							label="Address line 2"
-							value={values.addressLine2}
-							onChange={(value) => set("addressLine2", value)}
-						/>
-					</div>
-
-					<Field
-						label="Postal code"
-						value={values.postalCode}
-						onChange={(value) => set("postalCode", value)}
-						tabular
-					/>
-					<Field label="City" value={values.city} onChange={(value) => set("city", value)} />
-
-					<div className="col-span-2">
-						<Field
-							label="Country"
-							value={values.country}
-							onChange={(value) => set("country", value)}
-						/>
-					</div>
-
-					<div className="col-span-2">
-						<Field
-							label="Notes"
-							multiline
-							rows={3}
-							value={values.notes}
-							onChange={(value) => set("notes", value)}
-						/>
-					</div>
+				<div className="mt-6 border-t border-[var(--line)] pt-6">
+					{notesOpen ? (
+						<div>
+							<label
+								htmlFor={notesId}
+								className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							>
+								Notes
+							</label>
+							<MarkdownEditor id={notesId} value={values.notes} onChange={(value) => set("notes", value)} rows={4} />
+						</div>
+					) : (
+						<Button onClick={() => setNotesOpen(true)}>Add notes</Button>
+					)}
+					{notesOpen ? (
+						<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							Markdown is supported: **bold**, _italic_, a [link](https://example.com), a list.
+						</p>
+					) : null}
 				</div>
 
 				{error ? (
@@ -238,7 +189,6 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						</p>
 					</div>
 				) : null}
-
 			</form>
 		</FormPage>
 	);

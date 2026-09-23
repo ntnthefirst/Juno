@@ -2,30 +2,34 @@ import type { IconName } from "../components/Icon";
 
 export type ScreenId =
 	| "today"
+	| "calendar"
+	| "mail"
+	| "templates"
+	| "documents"
+	| "document-templates"
 	| "clients"
 	| "projects"
-	| "documents"
-	| "mail"
-	| "calendar"
 	| "reminders"
-	| "agent"
-	| "templates";
+	| "agent";
 
 export type ScreenItem = { id: ScreenId; label: string; icon: IconName };
 export type ScreenGroup = { heading: string | null; items: ScreenItem[] };
 
 /**
- * Grouped by what the work actually is, not by which phase built it.
- *
- * Today stands alone because it is where a day starts and it is not a category.
- * The rest splits three ways: who you work for, how you talk to them, what you
- * produce for them. Agent sits last because it acts across all three.
+ * Ordered around the start of a workday: orient yourself, communicate, produce,
+ * then manage the records behind that work.
  *
  * Settings is deliberately absent. It is a window of its own, reached from the
  * footer of the sidebar, not a tenth destination in this list.
  */
 export const SCREEN_GROUPS: ScreenGroup[] = [
-	{ heading: null, items: [{ id: "today", label: "Today", icon: "today" }] },
+	{
+		heading: null,
+		items: [
+			{ id: "today", label: "Today", icon: "today" },
+			{ id: "calendar", label: "Calendar", icon: "calendar" },
+		],
+	},
 	{
 		heading: "Work",
 		items: [
@@ -34,26 +38,34 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
 		],
 	},
 	{
-		heading: "Correspondence",
+		heading: "Mail",
 		items: [
-			{ id: "mail", label: "Mail", icon: "mail" },
-			{ id: "calendar", label: "Calendar", icon: "calendar" },
-			{ id: "reminders", label: "Reminders", icon: "reminders" },
+			{ id: "mail", label: "Inbox", icon: "mail" },
+			{ id: "templates", label: "Mail templates", icon: "templates" },
 		],
 	},
 	{
-		heading: "Paperwork",
+		heading: "Documents",
 		items: [
 			{ id: "documents", label: "Documents", icon: "documents" },
-			{ id: "templates", label: "Templates", icon: "templates" },
+			{ id: "document-templates", label: "Document templates", icon: "templates" },
 		],
 	},
 	{
-		heading: "Automation",
+		heading: null,
 		items: [{ id: "agent", label: "Agent", icon: "agent" }],
 	},
 ];
 
-export const SCREEN_LABELS: Record<ScreenId, string> = Object.fromEntries(
-	SCREEN_GROUPS.flatMap((group) => group.items).map((item) => [item.id, item.label]),
-) as Record<ScreenId, string>;
+export const SCREEN_LABELS: Record<ScreenId, string> = {
+	today: "Today",
+	calendar: "Calendar",
+	mail: "Inbox",
+	templates: "Mail templates",
+	documents: "Documents",
+	"document-templates": "Document templates",
+	clients: "Clients",
+	projects: "Projects",
+	reminders: "Reminders",
+	agent: "Agent",
+};

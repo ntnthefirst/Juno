@@ -10,6 +10,7 @@ import type {
 import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
+import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { CATEGORIES, PATTERNS, describeRecurrence, takesInterval } from "./format";
@@ -56,6 +57,7 @@ function parseCount(raw: string): number | null {
 export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
+	const notesId = useId();
 	const [values, setValues] = useState<Values>(() => toValues(reminder));
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -257,13 +259,13 @@ export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) 
 					/>
 
 					<div className="col-span-2">
-						<Field
-							label="Notes"
-							multiline
-							rows={3}
-							value={values.notes}
-							onChange={(value) => set("notes", value)}
-						/>
+						<label
+							htmlFor={notesId}
+							className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						>
+							Notes
+						</label>
+						<MarkdownEditor id={notesId} value={values.notes} onChange={(value) => set("notes", value)} rows={3} />
 					</div>
 				</div>
 

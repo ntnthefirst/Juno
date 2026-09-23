@@ -3,6 +3,7 @@ import type { Project, ProjectPatch, ReferenceItem } from "@shared/types";
 import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
+import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
 
 type ProjectFormProps = {
@@ -74,6 +75,7 @@ function messageOf(error: unknown): string {
 export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectFormProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
+	const descriptionId = useId();
 	const [values, setValues] = useState<Values>(() => toValues(project));
 	const [statuses, setStatuses] = useState<ReferenceItem[]>([]);
 	const [nameError, setNameError] = useState<string | null>(null);
@@ -195,12 +197,17 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 					/>
 
 					<div className="col-span-2">
-						<Field
-							label="Description"
-							multiline
-							rows={3}
+						<label
+							htmlFor={descriptionId}
+							className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						>
+							Description
+						</label>
+						<MarkdownEditor
+							id={descriptionId}
 							value={values.description}
 							onChange={(value) => set("description", value)}
+							rows={3}
 						/>
 					</div>
 				</div>

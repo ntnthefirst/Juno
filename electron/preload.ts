@@ -20,6 +20,7 @@ import type {
 	LockState,
 	MailOutboxMessage,
 	MailSyncStatus,
+	SettingsSection,
 	ThemeSetting,
 } from "./shared/types";
 
@@ -32,9 +33,27 @@ const api: JunoApi = {
 	},
 
 	window: {
-		openSettings: () => call("window.openSettings"),
+		openSettings: (section) => call("window.openSettings", section),
 		closeSettings: () => call("window.closeSettings"),
 		isSettingsOpen: () => call("window.isSettingsOpen"),
+		onShowSection: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, section: SettingsSection) =>
+				listener(section);
+			ipcRenderer.on("settings.showSection", handler);
+			return () => {
+				ipcRenderer.off("settings.showSection", handler);
+			};
+		},
+		onChildClosed: (listener) => {
+			const handler = () => listener();
+			ipcRenderer.on("window.childClosed", handler);
+			return () => {
+				ipcRenderer.off("window.childClosed", handler);
+			};
+		},
+		openSetup: () => call("window.openSetup"),
+		closeSetup: () => call("window.closeSetup"),
+		isSetupOpen: () => call("window.isSetupOpen"),
 	},
 
 	clients: {
@@ -53,6 +72,33 @@ const api: JunoApi = {
 		remove: (id) => call("contacts.remove", id),
 		restore: (id) => call("contacts.restore", id),
 		setPrimary: (id) => call("contacts.setPrimary", id),
+	},
+
+	clientEmails: {
+		listForClient: (clientId) => call("clientEmails.listForClient", clientId),
+		create: (input) => call("clientEmails.create", input),
+		update: (id, patch) => call("clientEmails.update", id, patch),
+		remove: (id) => call("clientEmails.remove", id),
+		restore: (id) => call("clientEmails.restore", id),
+		setPrimary: (id) => call("clientEmails.setPrimary", id),
+	},
+
+	clientPhones: {
+		listForClient: (clientId) => call("clientPhones.listForClient", clientId),
+		create: (input) => call("clientPhones.create", input),
+		update: (id, patch) => call("clientPhones.update", id, patch),
+		remove: (id) => call("clientPhones.remove", id),
+		restore: (id) => call("clientPhones.restore", id),
+		setPrimary: (id) => call("clientPhones.setPrimary", id),
+	},
+
+	clientAddresses: {
+		listForClient: (clientId) => call("clientAddresses.listForClient", clientId),
+		create: (input) => call("clientAddresses.create", input),
+		update: (id, patch) => call("clientAddresses.update", id, patch),
+		remove: (id) => call("clientAddresses.remove", id),
+		restore: (id) => call("clientAddresses.restore", id),
+		setPrimary: (id) => call("clientAddresses.setPrimary", id),
 	},
 
 	projects: {
@@ -96,6 +142,15 @@ const api: JunoApi = {
 		setAccountingTool: (patch) => call("settings.setAccountingTool", patch),
 		getOwner: () => call("settings.getOwner"),
 		setOwner: (patch) => call("settings.setOwner", patch),
+		addOwnerEmail: (input) => call("settings.addOwnerEmail", input),
+		updateOwnerEmail: (id, patch) => call("settings.updateOwnerEmail", id, patch),
+		removeOwnerEmail: (id) => call("settings.removeOwnerEmail", id),
+		addOwnerPhone: (input) => call("settings.addOwnerPhone", input),
+		updateOwnerPhone: (id, patch) => call("settings.updateOwnerPhone", id, patch),
+		removeOwnerPhone: (id) => call("settings.removeOwnerPhone", id),
+		getOnboarding: () => call("settings.getOnboarding"),
+		setOnboarding: (patch) => call("settings.setOnboarding", patch),
+		needsOnboarding: () => call("settings.needsOnboarding"),
 	},
 
 	lock: {
@@ -193,6 +248,8 @@ const api: JunoApi = {
 		list: (query) => call("documents.list", query),
 		get: (id) => call("documents.get", id),
 		generate: (input) => call("documents.generate", input),
+		import: (input) => call("documents.import", input),
+		chooseImport: (clientId) => call("documents.chooseImport", clientId),
 		setStatus: (id, statusId) => call("documents.setStatus", id, statusId),
 		remove: (id) => call("documents.remove", id),
 		restore: (id) => call("documents.restore", id),

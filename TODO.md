@@ -5,26 +5,14 @@ a **you** tag needs Nathan rather than a session.
 
 ---
 
-## 1. Create the repository, then wire auto-update — **you**
+## 1. Decide the licence — **you**
 
-`electron-builder.yml` has no `publish` block on purpose. An installed build that
-points at the wrong update feed is worse than one that never checks, so the
-updater stays off until there is a real repository behind it.
-
-**What to do:** create the repository (its own GitHub organisation, per the
-earlier decision, so the project outlives whichever business is current), then
-say so in a session.
-
-**What happens then, in one pass:**
-
-- Add `publish:` to `electron-builder.yml` pointing at the repo.
-- Add `electron-updater` wiring in the main process: check a few seconds after
-  launch and every six hours, download in the background, and grow a "restart to
-  update" affordance rather than restarting on its own.
-- Decide the licence. The repo is currently all rights reserved by default, which
-  is the right holding position. See decision 13.
-- Note that the repository is private to start with, and that the update feed
-  needs to be reachable without a token baked into the installer.
+The repository exists (`github.com/ntnthefirst/Juno`), `publish:` in
+`electron-builder.yml` points at it with `releaseType: draft`, and the
+`electron-updater` wiring is in. What is left is the licence: the repo is
+currently all rights reserved by default, which is the right holding position
+until decided otherwise. See decision 13. The question that settles it: should
+a company be able to take Juno, host it, and sell it back?
 
 ## 2. Replace the placeholder legal texts with real ones — **you**
 

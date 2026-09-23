@@ -6,7 +6,16 @@
  * Dutch (Belgium): dates as 14/11/2026 and money as 2 100,00 with a non-breaking
  * thousands space.
  */
-import type { Client, Contact, OwnerProfile, Project } from "../../shared/types";
+import { ownerContact } from "../../shared/owner";
+import type {
+	Client,
+	ClientAddress,
+	ClientEmail,
+	ClientPhone,
+	Contact,
+	OwnerProfile,
+	Project,
+} from "../../shared/types";
 
 export const NBSP = " ";
 
@@ -65,6 +74,10 @@ export function todayIsoDate(now = new Date()): string {
 export interface ContextSources {
 	owner: OwnerProfile;
 	client: Client;
+	/** The client's primary email, phone and address, resolved by the caller. */
+	primaryEmail?: ClientEmail | null;
+	primaryPhone?: ClientPhone | null;
+	primaryAddress?: ClientAddress | null;
 	primaryContact?: Contact | null;
 	project?: Project | null;
 	/** Values the operator typed for this document, such as an addendum summary. */
@@ -73,27 +86,35 @@ export interface ContextSources {
 	title?: string;
 }
 
+/**
+ * The owner as a template sees it: the scalar fields, plus one name, one
+ * address and one number worked out from the profile's two lists. The lists
+ * themselves are dropped, because a template asks for an address and
+ * `{{ owner.emails }}` would print an object.
+ */
+function ownerFields(owner: OwnerProfile): Record<string, unknown> {
+	const fields: Record<string, unknown> = { ...owner, ...ownerContact(owner) };
+	delete fields.emails;
+	delete fields.phones;
+	return fields;
+}
+
 export function buildContext(sources: ContextSources): Record<string, unknown> {
 	const issuedOn = sources.issuedOn ?? todayIsoDate();
 
 	return {
-		owner: {
-			...sources.owner,
-			// The template addresses a person, and the profile may only name a
-			// business. Falling back keeps the sentence grammatical.
-			contactName: sources.owner.contactName || sources.owner.businessName,
-		},
+		owner: ownerFields(sources.owner),
 		client: {
 			name: sources.client.name,
-			email: sources.client.email ?? "",
-			phone: sources.client.phone ?? "",
+			email: sources.primaryEmail?.email ?? "",
+			phone: sources.primaryPhone?.phone ?? "",
 			website: sources.client.website ?? "",
 			vatNumber: sources.client.vatNumber ?? "",
-			addressLine1: sources.client.addressLine1 ?? "",
-			addressLine2: sources.client.addressLine2 ?? "",
-			postalCode: sources.client.postalCode ?? "",
-			city: sources.client.city ?? "",
-			country: sources.client.country ?? "",
+			addressLine1: sources.primaryAddress?.addressLine1 ?? "",
+			addressLine2: sources.primaryAddress?.addressLine2 ?? "",
+			postalCode: sources.primaryAddress?.postalCode ?? "",
+			city: sources.primaryAddress?.city ?? "",
+			country: sources.primaryAddress?.country ?? "",
 			contactName: sources.primaryContact?.name ?? "",
 			contactRole: sources.primaryContact?.role ?? "",
 			contactEmail: sources.primaryContact?.email ?? "",

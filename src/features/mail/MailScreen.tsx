@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type {
-	MailAccount,
-	MailFolder,
-	MailOutboxCounts,
-	MailOutboxMessage,
-	MailSyncStatus,
-	MailThreadSummary,
-} from "@shared/types";
+import type { MailAccount, MailFolder, MailOutboxMessage, MailSyncStatus, MailThreadSummary } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
@@ -26,7 +19,6 @@ import { ThreadView } from "./ThreadView";
 export function MailScreen() {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [folders, setFolders] = useState<Record<string, MailFolder[]>>({});
-	const [outboxCounts, setOutboxCounts] = useState<Record<string, MailOutboxCounts>>({});
 	const [selection, setSelection] = useState<NavSelection | null>(null);
 	const [search, setSearch] = useState("");
 	const [unreadOnly, setUnreadOnly] = useState(false);
@@ -44,28 +36,23 @@ export function MailScreen() {
 	const loadAccounts = useCallback(async () => {
 		const list = await window.juno.mail.accounts.list();
 		const byAccount: Record<string, MailFolder[]> = {};
-		const counts: Record<string, MailOutboxCounts> = {};
 		for (const account of list) {
 			byAccount[account.id] = await window.juno.mail.folders.list(account.id);
-			counts[account.id] = await window.juno.mail.outbox.counts(account.id);
 		}
-		return { list, byAccount, counts };
+		return { list, byAccount };
 	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
 		loadAccounts()
-			.then(({ list, byAccount, counts }) => {
+			.then(({ list, byAccount }) => {
 				if (cancelled) return;
 				setAccounts(list);
 				setFolders(byAccount);
-				setOutboxCounts(counts);
 				setSelection((current) => {
 					if (current && list.some((a) => a.id === current.accountId)) return current;
-					const first = list[0];
-					if (!first) return null;
-					const inbox = byAccount[first.id]?.find((f) => f.specialUse === "inbox");
-					return { accountId: first.id, folderId: inbox?.id ?? null, outbox: false };
+					if (list.length === 0) return null;
+					return current ?? { accountId: null, folderId: null, view: "inbox" };
 				});
 			})
 			.catch((cause: unknown) => {
@@ -102,13 +89,17 @@ export function MailScreen() {
 	}, []);
 
 	const term = search.trim();
-	const showingOutbox = selection?.outbox === true;
+	const showingOutbox = selection?.view === "outbox";
 
 	const fetchThreads = useCallback(() => {
-		if (!selection || selection.outbox) return Promise.resolve<MailThreadSummary[]>([]);
+		if (!selection || selection.view === "outbox") return Promise.resolve<MailThreadSummary[]>([]);
 		return window.juno.mail.threads.list({
-			accountId: selection.accountId,
-			...(term ? { search: term } : selection.folderId ? { folderId: selection.folderId } : {}),
+			...(selection.accountId ? { accountId: selection.accountId } : {}),
+			...(term
+				? { search: term }
+				: selection.folderId
+					? { folderId: selection.folderId }
+					: { folderSpecialUse: selection.view }),
 			unreadOnly,
 			limit: 100,
 		});
@@ -141,7 +132,7 @@ export function MailScreen() {
 		if (!showingOutbox || !selection) return;
 		let cancelled = false;
 		window.juno.mail.outbox
-			.list({ accountId: selection.accountId, limit: 200 })
+			.list({ ...(selection.accountId ? { accountId: selection.accountId } : {}), limit: 200 })
 			.then((rows) => {
 				if (cancelled) return;
 				setOutboxRows(rows);
@@ -191,15 +182,23 @@ export function MailScreen() {
 	if (accounts.length === 0) {
 		return (
 			<div className="p-8">
-				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-					Mail
-				</h1>
+				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">Mail</h1>
 				<div className="mt-12 max-w-[52ch]">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">No accounts yet</h2>
 					<p className="mt-2 text-[var(--ink-muted)]">
-						Add an IMAP account under Settings, then come back here. Juno pulls mail onto this
+						Juno reads mail over IMAP, from an account you type in yourself. It pulls mail onto this
 						machine and sends only what you press Send on.
 					</p>
+					{/*
+						Settings is a separate window, so this opens it on the page that
+						does the job rather than leaving someone to find the tab
+						(main/windows/chrome.ts carries the section in the URL).
+					*/}
+					<div className="mt-6">
+						<Button variant="primary" onClick={() => void window.juno.window.openSettings("mail")}>
+							Connect an account
+						</Button>
+					</div>
 				</div>
 			</div>
 		);
@@ -215,7 +214,11 @@ export function MailScreen() {
 					<h1 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
 						Mail
 					</h1>
-					<Button size="dense" disabled={anySyncing} onClick={() => void syncNow()}>
+					<Button
+						size="dense"
+						disabled={anySyncing}
+						onClick={() => void syncNow()}
+					>
 						{anySyncing ? "Syncing" : "Sync now"}
 					</Button>
 				</div>
@@ -223,7 +226,7 @@ export function MailScreen() {
 					<Button
 						variant="primary"
 						size="dense"
-						onClick={() => setCompose({ accountId: selection?.accountId })}
+						onClick={() => setCompose({ accountId: selection?.accountId ?? accounts[0]?.id })}
 					>
 						New message
 					</Button>
@@ -233,7 +236,6 @@ export function MailScreen() {
 						accounts={accounts}
 						folders={folders}
 						sync={sync}
-						outbox={outboxCounts}
 						selection={selection}
 						onSelect={(next) => {
 							setSelection(next);
@@ -323,13 +325,18 @@ export function MailScreen() {
 						setCompose(null);
 						setNotice(queued ? "Message queued." : "Draft saved.");
 						setOutboxVersion((v) => v + 1);
-						setSelection({ accountId: message.accountId, folderId: null, outbox: true });
+						setSelection({ accountId: message.accountId, folderId: null, view: "outbox" });
 						setSelectedOutboxId(message.id);
 					}}
 				/>
 			) : null}
 
-			{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
+			{notice ? (
+				<Toast
+					message={notice}
+					onDismiss={() => setNotice(null)}
+				/>
+			) : null}
 		</div>
 	);
 }

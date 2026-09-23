@@ -20,7 +20,7 @@ export { DEV_URL };
  * the operating system draws the buttons on top of it, so a mismatch puts the
  * close button off the edge of the bar the user can see.
  */
-export const TITLEBAR_HEIGHT = 40;
+export const TITLEBAR_HEIGHT = 41;
 
 /**
  * The CSP the renderer runs under.
@@ -176,8 +176,16 @@ export function hardenWindow(window: BrowserWindow, isDev: boolean): void {
 	});
 }
 
-/** Where a window loads its renderer from, with the view it should render. */
-export function viewUrl(isDev: boolean, view: "main" | "settings"): string {
+/**
+ * Where a window loads its renderer from, with the view it should render.
+ *
+ * The view rides in the hash so the renderer can read it synchronously and
+ * paint the right shell on the first frame, rather than asking over IPC and
+ * flashing the wrong one. `section` is the settings tab to open on, which is
+ * how "connect a mail account" reaches the right page from the main window.
+ */
+export function viewUrl(isDev: boolean, view: "main" | "settings" | "setup", section?: string): string {
 	const base = isDev ? `${DEV_URL}/` : `${APP_ORIGIN}/index.html`;
-	return view === "main" ? base : `${base}#/settings`;
+	if (view === "main") return base;
+	return section ? `${base}#/${view}/${section}` : `${base}#/${view}`;
 }

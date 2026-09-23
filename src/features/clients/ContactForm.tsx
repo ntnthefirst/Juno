@@ -3,6 +3,7 @@ import type { Contact, ContactPatch } from "@shared/types";
 import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
+import { MarkdownEditor } from "../../components/MarkdownEditor";
 
 type ContactFormProps = {
 	clientId: string;
@@ -42,6 +43,7 @@ function messageOf(error: unknown): string {
 export function ContactForm({ clientId, contact, onClose, onSaved }: ContactFormProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
+	const notesId = useId();
 	const [values, setValues] = useState<Values>(() => toValues(contact));
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -127,13 +129,13 @@ export function ContactForm({ clientId, contact, onClose, onSaved }: ContactForm
 					/>
 
 					<div className="col-span-2">
-						<Field
-							label="Notes"
-							multiline
-							rows={3}
-							value={values.notes}
-							onChange={(value) => set("notes", value)}
-						/>
+						<label
+							htmlFor={notesId}
+							className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						>
+							Notes
+						</label>
+						<MarkdownEditor id={notesId} value={values.notes} onChange={(value) => set("notes", value)} rows={3} />
 					</div>
 				</div>
 

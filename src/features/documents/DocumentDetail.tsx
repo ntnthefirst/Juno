@@ -40,6 +40,14 @@ export function SpecimenMark() {
 	);
 }
 
+function ImportedMark() {
+	return (
+		<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--ink-muted)]">
+			Imported
+		</span>
+	);
+}
+
 type Detail = {
 	record: DocumentRecord;
 	statuses: ReferenceItem[];
@@ -61,9 +69,18 @@ type DocumentDetailProps = {
 	documentId: string;
 	onDeleted: (record: DocumentRecord) => void;
 	onChanged: () => void;
+	/** The screen shows this in the title bar trail. Called with the loaded
+	 * record's own title, so a rename elsewhere still reaches the trail rather
+	 * than leaving it stuck on whatever label the list row had. */
+	onTitleChange: (title: string) => void;
 };
 
-export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDetailProps) {
+export function DocumentDetail({
+	documentId,
+	onDeleted,
+	onChanged,
+	onTitleChange,
+}: DocumentDetailProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [action, setAction] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -164,6 +181,11 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 		}
 	}
 
+	const loadedTitle = load.status === "ready" ? load.detail.record.title : null;
+	useEffect(() => {
+		if (loadedTitle !== null) onTitleChange(loadedTitle);
+	}, [loadedTitle, onTitleChange]);
+
 	if (load.status === "loading") return <p className="text-[var(--ink-muted)]">Loading.</p>;
 
 	if (load.status === "error") {
@@ -182,6 +204,9 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 	const { record, statuses, template, signatures } = load.detail;
 	const hasPdf = record.pdfPath !== null;
 	const version = record.templateVersion ?? template?.version ?? null;
+	// An imported PDF has no body and no template behind it, so nothing here may
+	// offer an action the service would reject: no HTML preview, no re-render.
+	const isImported = record.sourceKind === "imported";
 
 	return (
 		<div>
@@ -194,6 +219,7 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 						{record.title}
 					</h2>
 					{record.isSpecimen ? <SpecimenMark /> : null}
+					{isImported ? <ImportedMark /> : null}
 				</div>
 				<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 					{record.clientName}
@@ -208,10 +234,12 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 			) : null}
 
 			<div className="mt-6 flex flex-wrap gap-2">
-				<Button onClick={() => setPreviewing(true)}>Preview</Button>
-				<Button disabled={busy} onClick={() => void renderPdf()}>
-					{busy ? "Creating" : "Create PDF"}
-				</Button>
+				{!isImported ? <Button onClick={() => setPreviewing(true)}>Preview</Button> : null}
+				{!isImported ? (
+					<Button disabled={busy} onClick={() => void renderPdf()}>
+						{busy ? "Creating" : "Create PDF"}
+					</Button>
+				) : null}
 				<Button
 					disabled={!hasPdf}
 					onClick={() => void run(() => window.juno.documents.openPdf(documentId))}
@@ -261,12 +289,18 @@ export function DocumentDetail({ documentId, onDeleted, onChanged }: DocumentDet
 					<Fact label="Issued on">
 						<span className="tabular">{formatDate(record.issuedOn) || "Not set"}</span>
 					</Fact>
-					<Fact label="Template">
-						{template ? template.name : "The template has since been removed."}
-					</Fact>
-					<Fact label="Version">
-						<span className="tabular">{version === null ? "Unknown" : version}</span>
-					</Fact>
+					{isImported ? (
+						<Fact label="Source">Imported PDF</Fact>
+					) : (
+						<>
+							<Fact label="Template">
+								{template ? template.name : "The template has since been removed."}
+							</Fact>
+							<Fact label="Version">
+								<span className="tabular">{version === null ? "Unknown" : version}</span>
+							</Fact>
+						</>
+					)}
 				</div>
 			</section>
 

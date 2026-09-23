@@ -7,6 +7,8 @@ type FieldProps = {
 	type?: "text" | "email" | "tel" | "url" | "date" | "time" | "password" | "number";
 	placeholder?: string;
 	error?: string | null;
+	/** One sentence under the control, for what the label cannot say in three words. */
+	help?: string | null;
 	required?: boolean;
 	multiline?: boolean;
 	rows?: number;
@@ -26,6 +28,7 @@ export function Field({
 	type = "text",
 	placeholder,
 	error,
+	help,
 	required = false,
 	multiline = false,
 	rows = 4,
@@ -35,6 +38,8 @@ export function Field({
 }: FieldProps) {
 	const id = useId();
 	const errorId = `${id}-error`;
+	const helpId = `${id}-help`;
+	const describedBy = [error ? errorId : null, help ? helpId : null].filter(Boolean).join(" ");
 	const classes = `${CONTROL}${tabular ? " tabular" : ""}${error ? " border-[var(--risk)]" : ""}`;
 
 	return (
@@ -56,7 +61,7 @@ export function Field({
 					placeholder={placeholder}
 					required={required}
 					aria-invalid={error ? true : undefined}
-					aria-describedby={error ? errorId : undefined}
+					aria-describedby={describedBy || undefined}
 					onChange={(event) => onChange(event.target.value)}
 					className={`${classes} resize-y leading-[var(--leading-normal)]`}
 				/>
@@ -70,11 +75,17 @@ export function Field({
 					required={required}
 					inputMode={inputMode}
 					aria-invalid={error ? true : undefined}
-					aria-describedby={error ? errorId : undefined}
+					aria-describedby={describedBy || undefined}
 					onChange={(event) => onChange(event.target.value)}
 					className={classes}
 				/>
 			)}
+
+			{help ? (
+				<p id={helpId} className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					{help}
+				</p>
+			) : null}
 
 			{error ? (
 				<p id={errorId} className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">

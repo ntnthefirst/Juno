@@ -101,6 +101,24 @@
 	/* The sidebar drawer floating over the content on a narrow window. */
 	--shadow-drawer: 0 0 0 1px rgb(22 22 29 / 0.06), 8px 0 32px -8px rgb(22 22 29 / 0.22);
 
+	/* ---- Scrollbars ----
+	 * Drawn by the application rather than by the platform, because Windows
+	 * draws a wide grey trough that sits in a dense list like a seam. The thumb
+	 * is the only visible part: the track keeps the surface it is over, so a
+	 * scrollbar reads as a mark on the content rather than a channel beside it.
+	 * The overlay shadow a panel casts is --shadow-panel, below. */
+	--scrollbar-size: 10px;
+	--scrollbar-thumb: #c7c6d5;
+	--scrollbar-thumb-hover: #a5a4b8;
+	--scrollbar-thumb-active: #83839a;
+
+	/* The side panel that opens over a list it does not block. Cast to the
+	 * left, because that is the side the content it covers is on. */
+	--shadow-panel: -12px 0 40px -12px rgb(22 22 29 / 0.28), -1px 0 0 0 rgb(22 22 29 / 0.06);
+	/* How much the content behind an overlay softens. One value, so a panel and
+	 * a dialog never disagree about it. */
+	--overlay-blur: 2px;
+
 	/* ---- Motion: quick and unshowy. ---- */
 	--ease: cubic-bezier(0.2, 0, 0.13, 1);
 	--duration-fast: 120ms;
@@ -178,6 +196,12 @@
 		--shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
 		--shadow-modal: 0 16px 48px -8px rgb(0 0 0 / 0.6);
 		--shadow-drawer: 0 0 0 1px rgb(255 255 255 / 0.05), 8px 0 32px -8px rgb(0 0 0 / 0.65);
+
+		--scrollbar-thumb: #3a3a49;
+		--scrollbar-thumb-hover: #525266;
+		--scrollbar-thumb-active: #6c6c85;
+
+		--shadow-panel: -12px 0 40px -12px rgb(0 0 0 / 0.7), -1px 0 0 0 rgb(255 255 255 / 0.05);
 	}
 }
 
@@ -214,6 +238,12 @@
 	--shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
 	--shadow-modal: 0 16px 48px -8px rgb(0 0 0 / 0.6);
 	--shadow-drawer: 0 0 0 1px rgb(255 255 255 / 0.05), 8px 0 32px -8px rgb(0 0 0 / 0.65);
+
+	--scrollbar-thumb: #3a3a49;
+	--scrollbar-thumb-hover: #525266;
+	--scrollbar-thumb-active: #6c6c85;
+
+	--shadow-panel: -12px 0 40px -12px rgb(0 0 0 / 0.7), -1px 0 0 0 rgb(255 255 255 / 0.05);
 }
 
 /* Tailwind v4 reads this block to generate utilities: bg-paper, text-ink-muted,
@@ -251,6 +281,9 @@
 	--color-risk: var(--risk);
 	--color-risk-soft: var(--risk-soft);
 	--color-focus: var(--focus);
+	--color-scrollbar-thumb: var(--scrollbar-thumb);
+	--color-scrollbar-thumb-hover: var(--scrollbar-thumb-hover);
+	--color-scrollbar-thumb-active: var(--scrollbar-thumb-active);
 
 	--font-sans: var(--font-ui);
 	--font-mono: var(--font-mono);
@@ -276,6 +309,7 @@
 	--shadow-popover: var(--shadow-popover);
 	--shadow-modal: var(--shadow-modal);
 	--shadow-drawer: var(--shadow-drawer);
+	--shadow-panel: var(--shadow-panel);
 
 	--spacing-sidebar: var(--sidebar-width);
 	--spacing-rail: var(--sidebar-rail-width);

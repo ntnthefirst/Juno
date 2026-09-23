@@ -51,10 +51,6 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
 			{ id: "document-templates", label: "Document templates", icon: "templates" },
 		],
 	},
-	{
-		heading: null,
-		items: [{ id: "agent", label: "Agent", icon: "agent" }],
-	},
 ];
 
 export const SCREEN_LABELS: Record<ScreenId, string> = {

@@ -6,7 +6,6 @@ import {
 	ClockIcon,
 	Cog6ToothIcon,
 	ComputerDesktopIcon,
-	CpuChipIcon,
 	DocumentDuplicateIcon,
 	DocumentTextIcon,
 	EnvelopeIcon,
@@ -15,6 +14,7 @@ import {
 	MagnifyingGlassIcon,
 	MoonIcon,
 	SunIcon,
+	SparklesIcon,
 	UsersIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -59,7 +59,7 @@ const ICONS: Record<IconName, HeroIcon> = {
 	mail: EnvelopeIcon,
 	calendar: CalendarDaysIcon,
 	reminders: BellIcon,
-	agent: CpuChipIcon,
+	agent: SparklesIcon,
 	templates: DocumentDuplicateIcon,
 	settings: Cog6ToothIcon,
 	// A panel with its left column filled. Heroicons has no sidebar glyph, and

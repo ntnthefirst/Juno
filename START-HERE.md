@@ -52,9 +52,13 @@ been amended by what actually happened. The log says which.
 
 An empty install is met by a small modal window in front of the application,
 the same shape as settings and smaller (decision 34): welcome, your name, your
-business, appearance, the lock, mail, done. It is asked once, and skipping a
-step still counts as answering it. A walkthrough over the real app follows, and
-both can be replayed from Settings > General.
+business, appearance, the lock, mail, done. It cannot be skipped as a whole:
+there is no "Skip setup" and closing the window quits Juno. The two answers it
+insists on are the owner's name and the business name, because every generated
+document carries both; the VAT and establishment numbers are optional, and
+appearance, the lock and mail are each skippable on their own step. A
+walkthrough over the real app follows, and both can be replayed from
+Settings > General.
 
 There is one modal child at a time. Opening setup closes settings and the other
 way round, and when either closes the main process sends `window.childClosed`,

@@ -9,9 +9,12 @@ import { overlayGutter } from "../lib/platform";
  * like the settings window, and leaves the operating system's caption buttons
  * the room they are drawn in.
  *
- * Escape is deliberately not a way out. There is one way to leave setup
- * without answering, "Skip setup" on the first step, and it records that it was
- * asked, so nothing asks again.
+ * Escape is deliberately not a way out, and neither is the close button: setup
+ * cannot be skipped as a whole, so closing this window quits Juno instead
+ * (main/windows/index.ts). What can be skipped is most of the inside of it:
+ * appearance, the lock and mail are optional a step at a time, and only the
+ * owner's name and the business name are required, because every generated
+ * document carries both.
  */
 export function SetupWindow() {
 	return (

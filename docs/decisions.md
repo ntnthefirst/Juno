@@ -739,10 +739,17 @@ main window, the same shape settings has had since decision 26. What that buys:
   already see, rather than standing in front of an empty screen.
 - The operating system refuses input to the window behind, so setup cannot be
   half-answered and forgotten.
-- There is one way out without answering, "Skip setup" on the first step, and
-  it records that it was asked. Closing the window without answering leaves the
-  app usable and asks again on the next launch, once, rather than reopening on
-  the focus that closing it caused.
+- **Setup cannot be skipped as a whole, and most of it can be skipped a step at
+  a time.** Two answers are required, the owner's name and the business name,
+  because every generated document carries both and a first run that walked
+  away would print them as missing values. The VAT and establishment numbers
+  are optional, and appearance, the lock and mail are each skippable on their
+  own step.
+- There is no "Skip setup", and the window's close button quits Juno rather
+  than dismissing the questions, which the first step says in one line. The
+  only close the window honours is the one the flow asks for itself, so a
+  close from anywhere else means quit; `before-quit` is what tells it the
+  difference.
 
 `main/windows/index.ts` is still the only file that constructs a window, and it
 still allows one main window (decision 27). It now allows **one modal child at

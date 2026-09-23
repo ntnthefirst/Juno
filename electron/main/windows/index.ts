@@ -17,7 +17,7 @@
  * leaving either painted over a locked application would defeat the lock
  * (decision 15).
  */
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 import * as lock from "../services/lock";
 import { createMainWindow } from "./main-window";
 import { createSettingsWindow } from "./settings-window";
@@ -28,8 +28,28 @@ let settingsWindow: BrowserWindow | null = null;
 let setupWindow: BrowserWindow | null = null;
 let devMode = false;
 
+/**
+ * Setup cannot be dismissed, so the only close it honours is the one it asks
+ * for itself through `closeSetupWindow`. Everything else, a click on the
+ * caption button or Alt+F4, quits the application instead: an install that
+ * walked away from the first run has no name and no business on it, and would
+ * print both into a contract as a missing value.
+ */
+let setupCloseAllowed = false;
+let quitting = false;
+let quitHookInstalled = false;
+
 export function openMainWindow(isDev: boolean): BrowserWindow {
 	devMode = isDev;
+
+	// A quit is the one thing allowed to take the setup window down with it. The
+	// flag keeps this to one listener however often the window is asked for.
+	if (!quitHookInstalled) {
+		quitHookInstalled = true;
+		app.on("before-quit", () => {
+			quitting = true;
+		});
+	}
 
 	if (mainWindow && !mainWindow.isDestroyed()) {
 		focusMainWindow();
@@ -147,14 +167,28 @@ export function openSetupWindow(): void {
 
 	closeSettingsWindow();
 
+	setupCloseAllowed = false;
 	setupWindow = createSetupWindow(parent, devMode);
+	setupWindow.on("close", (event) => {
+		if (setupCloseAllowed || quitting) return;
+		// Quitting rather than refusing outright: a window with a close button
+		// that does nothing is worse than one that says what it does, and the
+		// first step says this closes Juno.
+		event.preventDefault();
+		app.quit();
+	});
 	setupWindow.on("closed", () => {
 		setupWindow = null;
 		childClosed();
 	});
 }
 
+/**
+ * The one close setup honours. Called when the flow finishes, when settings
+ * takes over for a mail account, and when the lock comes on.
+ */
 export function closeSetupWindow(): void {
+	setupCloseAllowed = true;
 	getSetupWindow()?.close();
 }
 

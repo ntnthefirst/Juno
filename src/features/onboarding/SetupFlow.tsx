@@ -106,10 +106,7 @@ export function SetupFlow({ onFinished }: SetupFlowProps) {
 				<div className="flex min-h-0 flex-1 flex-col justify-center">
 					<div ref={panelRef} tabIndex={-1} key={step} className="w-full outline-none">
 						{step === "welcome" ? (
-							// "Skip setup" means skip, not "jump to one more screen with a
-							// button on it": it completes on its own, the same way the last
-							// step's buttons do.
-							<WelcomeStep onStart={() => goTo(1)} onSkip={() => void finish({ walkthrough: false })} />
+							<WelcomeStep onStart={() => goTo(1)} />
 						) : step === "you" ? (
 							<NameStep onContinue={() => goTo(index + 1)} />
 						) : step === "business" ? (
@@ -190,10 +187,16 @@ function StepRail({ step, onSelect }: StepRailProps) {
 
 type WelcomeStepProps = {
 	onStart: () => void;
-	onSkip: () => void;
 };
 
-function WelcomeStep({ onStart, onSkip }: WelcomeStepProps) {
+/**
+ * One way forward and no way past. Setup used to offer "Skip setup" here,
+ * which meant an install could reach the application with no name and no
+ * business on it, and then print both into a contract as a missing value.
+ * Appearance, the lock and mail are still each skippable; the two questions a
+ * generated document cannot do without are not.
+ */
+function WelcomeStep({ onStart }: WelcomeStepProps) {
 	return (
 		<div className="flex flex-col items-center text-center">
 			<WelcomeIllustration />
@@ -205,19 +208,16 @@ function WelcomeStep({ onStart, onSkip }: WelcomeStepProps) {
 				leaves it unless you send it yourself, and there is no account to sign in to.
 			</p>
 			<p className="mt-2 max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-				Five short questions. Every one of them can be answered later instead.
+				Five short questions. Your name and your business are the two that have to be answered,
+				because every contract carries both. Appearance, the lock and mail can all wait.
 			</p>
 			<div className="mt-7 flex flex-col items-center gap-2">
 				<Button variant="primary" onClick={onStart}>
 					Set up Juno
 				</Button>
-				<button
-					type="button"
-					onClick={onSkip}
-					className="inline-flex h-10 items-center px-2 text-[length:var(--text-sm)] text-[var(--ink-muted)] underline-offset-4 hover:text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-				>
-					Skip setup
-				</button>
+				<p className="text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+					Closing this window closes Juno, and setup opens again next time.
+				</p>
 			</div>
 		</div>
 	);
@@ -256,11 +256,20 @@ type StepProps = {
 
 function NameStep({ onContinue }: StepProps) {
 	const { profile, setProfile, loadError } = useOwnerProfile();
+	const [attempted, setAttempted] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
+	// Both halves, because this is what signs a document. Shown only once
+	// Continue has been pressed: a form that complains before it is answered
+	// reads as a form that has already decided you are wrong.
+	const firstMissing = attempted && (profile?.firstName ?? "").trim().length === 0;
+	const lastMissing = attempted && (profile?.lastName ?? "").trim().length === 0;
+
 	async function save() {
 		if (!profile || busy) return;
+		setAttempted(true);
+		if (profile.firstName.trim().length === 0 || profile.lastName.trim().length === 0) return;
 		setBusy(true);
 		setError(null);
 		try {
@@ -280,8 +289,9 @@ function NameStep({ onContinue }: StepProps) {
 		<div>
 			<Heading illustration={<PersonIllustration />} title="Your name" />
 			<p className="mt-3 text-[var(--ink-muted)]">
-				This is the name that signs a contract and goes out under an email. Your email addresses
-				and phone numbers come later, in settings, where they can be a list.
+				This is the name that signs a contract and goes out under an email, so it is one of the two
+				answers setup needs. Your email addresses and phone numbers come later, in settings, where
+				they can be a list.
 			</p>
 
 			{profile === null ? (
@@ -290,12 +300,16 @@ function NameStep({ onContinue }: StepProps) {
 				<div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<Field
 						label="First name"
+						required
 						value={profile.firstName}
+						error={firstMissing ? "Enter your first name." : null}
 						onChange={(value) => setProfile({ ...profile, firstName: value })}
 					/>
 					<Field
 						label="Last name"
+						required
 						value={profile.lastName}
+						error={lastMissing ? "Enter your last name." : null}
 						onChange={(value) => setProfile({ ...profile, lastName: value })}
 					/>
 				</div>
@@ -312,11 +326,18 @@ function NameStep({ onContinue }: StepProps) {
 
 function BusinessStep({ onContinue }: StepProps) {
 	const { profile, setProfile, loadError } = useOwnerProfile();
+	const [attempted, setAttempted] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
+	// The name is required and the two numbers are not: a business without a VAT
+	// number is ordinary, a contract without a party to it is not.
+	const nameMissing = attempted && (profile?.businessName ?? "").trim().length === 0;
+
 	async function save() {
 		if (!profile || busy) return;
+		setAttempted(true);
+		if (profile.businessName.trim().length === 0) return;
 		setBusy(true);
 		setError(null);
 		try {
@@ -337,8 +358,9 @@ function BusinessStep({ onContinue }: StepProps) {
 		<div>
 			<Heading illustration={<BusinessIllustration />} title="Your business" />
 			<p className="mt-3 text-[var(--ink-muted)]">
-				These end up in front of clients, in the contracts and emails Juno generates. Nothing here
-				is required, and your address and IBAN wait in settings, under Your business.
+				These end up in front of clients, in the contracts and emails Juno generates. The name is
+				needed; the two numbers are not, and your address and IBAN wait in settings, under Your
+				business. A one-person business often puts its own name here.
 			</p>
 
 			{profile === null ? (
@@ -347,7 +369,9 @@ function BusinessStep({ onContinue }: StepProps) {
 				<div className="mt-6 flex flex-col gap-4">
 					<Field
 						label="Business name"
+						required
 						value={profile.businessName}
+						error={nameMissing ? "Enter the name clients see. Your own name is a fine answer." : null}
 						onChange={(value) => setProfile({ ...profile, businessName: value })}
 					/>
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

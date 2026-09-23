@@ -500,10 +500,16 @@ if (!app.requestSingleInstanceLock()) {
 								const flow = setup.webContents;
 
 								const setupPresent = await flow.executeJavaScript(
-									`Boolean([...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Skip setup"))`,
-								) as boolean;
+									`(() => {
+										const buttons = [...document.querySelectorAll("button")].map((el) => el.textContent.trim());
+										if (!buttons.includes("Set up Juno")) return "no first step";
+										// Setup cannot be skipped as a whole any more. A way past it
+										// reappearing here is the regression this asserts against.
+										return buttons.includes("Skip setup") ? "still offers a skip" : "ok";
+									})()`,
+								) as string;
 
-								if (!setupPresent) throw new Error("Smoke: the setup window did not paint its first step");
+								if (setupPresent !== "ok") throw new Error(`Smoke: the setup window ${setupPresent}`);
 
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;
@@ -521,16 +527,35 @@ if (!app.requestSingleInstanceLock()) {
 
 								// Walks the steps rather than skipping them, so each one is
 								// photographed and each one's own controls are proven to advance.
-								const steps = ["you", "business", "appearance", "lock", "mail"];
+								const steps = [
+									{ id: "you", label: "Your name" },
+									{ id: "business", label: "Your business" },
+									{ id: "appearance", label: "Appearance" },
+									{ id: "lock", label: "Lock" },
+									{ id: "mail", label: "Mail" },
+								];
 								await flow.executeJavaScript(
 									`(() => { [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Set up Juno").click(); })()`,
 								);
-								for (const step of steps) {
+								for (const { id: step, label } of steps) {
 									await new Promise((r) => setTimeout(r, 500));
 									const image = await flow.capturePage();
 									writeFileSync(joinPath(shotDir, `setup-${step}.png`), image.toPNG());
+									// The name and the business name are the two answers setup
+									// insists on, so a run against an empty profile has to type
+									// them. Filling only what is empty means the demo run, which
+									// seeded a profile already, still walks the same path.
 									const advanced = await flow.executeJavaScript(
-										`(() => {
+										`(async () => {
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											let typed = false;
+											for (const input of document.querySelectorAll("input[required]")) {
+												if (input.value.trim().length > 0) continue;
+												setValue.call(input, "Smoke");
+												input.dispatchEvent(new Event("input", { bubbles: true }));
+												typed = true;
+											}
+											if (typed) await new Promise((r) => setTimeout(r, 200));
 											const next = [...document.querySelectorAll("button")]
 												.find((el) => ["Continue", "Skip for now", "Not now"].includes(el.textContent.trim()));
 											if (!next) return false;
@@ -539,6 +564,15 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									) as boolean;
 									if (!advanced) throw new Error(`Smoke: setup step ${step} had nothing to continue with`);
+									// Pressing Continue on a step that refuses to be passed leaves
+									// the rail where it was, which is the failure worth catching:
+									// a required field nobody can satisfy is a dead end for every
+									// new install, and it looks like a click that did not land.
+									await new Promise((r) => setTimeout(r, 400));
+									const now = await flow.executeJavaScript(
+										`(document.querySelector("[aria-current=step]")?.getAttribute("aria-label") ?? "")`,
+									) as string;
+									if (now === label) throw new Error(`Smoke: setup would not move past ${label}`);
 								}
 
 								await new Promise((r) => setTimeout(r, 500));

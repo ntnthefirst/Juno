@@ -64,6 +64,13 @@
       "when": 1790118582376,
       "tag": "0008_template_inputs_and_pages",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790188081246,
+      "tag": "0009_client_notes",
+      "breakpoints": true
     }
   ]
 }

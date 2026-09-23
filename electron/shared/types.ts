@@ -25,6 +25,74 @@ export interface Standard {
 	deletedAt: Iso | null;
 }
 
+/* --------------------------------------------------------- client timeline */
+
+/**
+ * Something the user wrote down about a client, usually because it left no
+ * other trace. A phone call is the case this exists for.
+ */
+export interface ClientNote extends Standard {
+	clientId: string;
+	/** When it happened, which is not when it was typed in. */
+	happenedAt: Iso;
+	kind: ClientNoteKind;
+	title: string;
+	body: string | null;
+}
+
+export type ClientNoteKind = "note" | "call" | "meeting";
+
+export interface ClientNoteInput {
+	clientId: string;
+	title: string;
+	/** Defaults to now. */
+	happenedAt?: Iso;
+	kind?: ClientNoteKind;
+	body?: string | null;
+}
+
+export interface ClientNotePatch {
+	happenedAt?: Iso;
+	kind?: ClientNoteKind;
+	title?: string;
+	body?: string | null;
+}
+
+export type ClientTimelineKind = "note" | "mail" | "document" | "event" | "reminder" | "project";
+
+/**
+ * One line in a client's history, whichever table it came from.
+ *
+ * `at` is always an instant and is what the stream sorts on. `on` is set
+ * instead when the underlying record is a date with no time: a deadline, a
+ * reminder, an all-day appointment. The interface shows `on` when it is there
+ * and never converts it, because midnight UTC is the day before in Brussels for
+ * half the year and a deadline that moves is the bug that appears twice a year.
+ */
+export interface ClientTimelineEntry {
+	/** Unique across sources: the kind and the row id, so a list key is safe. */
+	id: string;
+	kind: ClientTimelineKind;
+	at: Iso;
+	on: IsoDate | null;
+	title: string;
+	/** One line under the title, already in words. */
+	detail: string | null;
+	/** The row this came from, so the interface can open it. */
+	entityId: string;
+	/** A note's own kind, or null. Drives the icon and nothing else. */
+	variant: string | null;
+}
+
+export interface ClientTimelineQuery {
+	clientId: string;
+	/** Left out means every kind. */
+	kinds?: ClientTimelineKind[];
+	limit?: number;
+	/** Only entries older than this, for the next page. */
+	before?: Iso;
+}
+
 /* ------------------------------------------------------------------ clients */
 
 export interface Client extends Standard {

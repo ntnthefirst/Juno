@@ -69,6 +69,17 @@ const api: JunoApi = {
 		update: (id, patch) => call("clients.update", id, patch),
 		remove: (id) => call("clients.remove", id),
 		restore: (id) => call("clients.restore", id),
+		timeline: (query) => call("clients.timeline", query),
+		timelineCounts: (clientId) => call("clients.timelineCounts", clientId),
+	},
+
+	clientNotes: {
+		listForClient: (clientId) => call("clientNotes.listForClient", clientId),
+		get: (id) => call("clientNotes.get", id),
+		create: (input) => call("clientNotes.create", input),
+		update: (id, patch) => call("clientNotes.update", id, patch),
+		remove: (id) => call("clientNotes.remove", id),
+		restore: (id) => call("clientNotes.restore", id),
 	},
 
 	contacts: {

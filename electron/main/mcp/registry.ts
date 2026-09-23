@@ -11,6 +11,7 @@ import { calendarTools } from "./calendar";
 import { clientAddressTools } from "./client-addresses";
 import { clientEmailTools } from "./client-emails";
 import { clientPhoneTools } from "./client-phones";
+import { clientTimelineTools } from "./client-timeline";
 import { clientTools } from "./clients";
 import { contactTools } from "./contacts";
 import { documentTools, templateTools } from "./documents";
@@ -27,6 +28,7 @@ import type { ToolDescriptor } from "./types";
 
 const lists: ToolDescriptor[][] = [
 	clientTools,
+	clientTimelineTools,
 	clientEmailTools,
 	clientPhoneTools,
 	clientAddressTools,

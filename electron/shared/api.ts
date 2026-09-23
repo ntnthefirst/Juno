@@ -76,6 +76,12 @@ import type {
 	LockSettings,
 	LockState,
 	MailAccount,
+	ClientNote,
+	ClientNoteInput,
+	ClientNotePatch,
+	ClientTimelineEntry,
+	ClientTimelineKind,
+	ClientTimelineQuery,
 	MailFileResult,
 	MailAccountInput,
 	MailAutoconfig,
@@ -190,6 +196,22 @@ export interface JunoApi {
 		/** Soft delete. Returns the row so the interface can offer an undo. */
 		remove(id: string): Promise<Client>;
 		restore(id: string): Promise<Client>;
+		/**
+		 * What has happened with this client, assembled from the records that
+		 * already hold it. Newest first.
+		 */
+		timeline(query: ClientTimelineQuery): Promise<ClientTimelineEntry[]>;
+		timelineCounts(clientId: string): Promise<Record<ClientTimelineKind, number>>;
+	};
+
+	/** Calls, meetings and anything else that leaves no other trace. */
+	clientNotes: {
+		listForClient(clientId: string): Promise<ClientNote[]>;
+		get(id: string): Promise<ClientNote | null>;
+		create(input: ClientNoteInput): Promise<ClientNote>;
+		update(id: string, patch: ClientNotePatch): Promise<ClientNote>;
+		remove(id: string): Promise<ClientNote>;
+		restore(id: string): Promise<ClientNote>;
 	};
 
 	contacts: {

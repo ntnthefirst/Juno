@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { DocumentRecord, GenerateDocumentResult, ReferenceItem } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { Button } from "../../components/Button";
+import { Icon } from "../../components/Icon";
+import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
+import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
 import { DocumentDetail, SpecimenMark } from "./DocumentDetail";
 import { GenerateDialog } from "./GenerateDialog";
@@ -116,6 +119,15 @@ export function DocumentsScreen() {
 		refreshList();
 	}
 
+	async function removeFromList(record: DocumentRecord) {
+		try {
+			const record_ = await window.juno.documents.remove(record.id);
+			removed(record_);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
 	async function restore() {
 		if (!deleted) return;
 		const id = deleted.id;
@@ -186,9 +198,21 @@ export function DocumentsScreen() {
 							) : null}
 						</div>
 
-						<div className="flex gap-2">
-							<Button onClick={() => setImporting(true)}>Import a PDF</Button>
+						<div className="flex items-center gap-2">
+							<MenuButton
+								size="base"
+								ariaLabel="More document actions"
+								items={[
+									{
+										id: "import",
+										label: "Import a PDF",
+										icon: "import",
+										onSelect: () => setImporting(true),
+									},
+								]}
+							/>
 							<Button variant="primary" onClick={() => setGenerating(true)}>
+								<Icon name="add" />
 								New document
 							</Button>
 						</div>
@@ -214,7 +238,12 @@ export function DocumentsScreen() {
 								No documents yet. Generate one from a template or import a PDF.
 							</p>
 						) : (
-							<DocumentTable rows={load.rows} selectedId={selectedId} onSelect={selectDocument} />
+							<DocumentTable
+								rows={load.rows}
+								selectedId={selectedId}
+								onSelect={selectDocument}
+								onRemove={(record) => void removeFromList(record)}
+							/>
 						)}
 					</div>
 				</>
@@ -244,6 +273,7 @@ type DocumentTableProps = {
 	rows: Rows;
 	selectedId: string | null;
 	onSelect: (id: string, title: string) => void;
+	onRemove: (record: DocumentRecord) => void;
 };
 
 const HEADS = ["Title", "Client", "Status", "Issued"];
@@ -252,10 +282,35 @@ const HEADS = ["Title", "Client", "Status", "Issued"];
  * Rows are the structure. No outer border, no filled header, no card, per
  * brand/BRAND.md section 7.
  */
-function DocumentTable({ rows, selectedId, onSelect }: DocumentTableProps) {
+function DocumentTable({ rows, selectedId, onSelect, onRemove }: DocumentTableProps) {
 	const labels = new Map(rows.statuses.map((item) => [item.id, item.label]));
+	const menu = useContextMenu();
+	// Which row the menu belongs to. The menu is one element for the whole
+	// table rather than one per row: sixty rows would otherwise each carry a
+	// portal that is closed.
+	const [target, setTarget] = useState<DocumentRecord | null>(null);
+
+	const items: MenuItem[] = target
+		? [
+				{
+					id: "open",
+					label: "Open",
+					icon: "documents",
+					onSelect: () => onSelect(target.id, target.title),
+				},
+				{
+					id: "delete",
+					label: "Delete",
+					icon: "remove",
+					danger: true,
+					separatorBefore: true,
+					onSelect: () => onRemove(target),
+				},
+			]
+		: [];
 
 	return (
+		<>
 		<table className="w-full border-collapse">
 			<thead>
 				<tr>
@@ -279,6 +334,10 @@ function DocumentTable({ rows, selectedId, onSelect }: DocumentTableProps) {
 						<tr
 							key={row.id}
 							onClick={() => onSelect(row.id, row.title)}
+							onContextMenu={(event) => {
+								setTarget(row);
+								menu.open(event);
+							}}
 							className={`transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 								selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
 							}`}
@@ -313,5 +372,9 @@ function DocumentTable({ rows, selectedId, onSelect }: DocumentTableProps) {
 				})}
 			</tbody>
 		</table>
+		{menu.at && target ? (
+			<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={target.title} />
+		) : null}
+		</>
 	);
 }

@@ -729,20 +729,20 @@ if (!app.requestSingleInstanceLock()) {
 								if (!shellUp) throw new Error("Smoke: closing the walkthrough did not reveal the application");
 							}
 
-							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Client record", "Projects", "Projects as a list", "Project record", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
+							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Client record", "Projects", "Projects as a list", "Project record", "Calendar", "Week", "Event form", "Mail", "Drafts", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(
 									`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 								);
-								// Outbox is a view inside Mail; Week and the event form live inside
+								// Drafts is a view inside Mail; Week and the event form live inside
 								// Calendar. None of the three is a sidebar entry.
 								const sidebarEntry =
 									screen === "Client record"
 										? "Clients"
 										: screen === "Project record" || screen === "Projects as a list"
 											? "Projects"
-											: screen === "Outbox"
+											: screen === "Drafts"
 												? "Mail"
 												: screen === "Week" || screen === "Event form"
 													? "Calendar"
@@ -1311,11 +1311,11 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (switched !== "ok") throw new Error(`Smoke: calendar week view ${switched}`);
 								}
-								if (screen === "Outbox") {
+								if (screen === "Drafts") {
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Outbox"));
-											if (!nav) return "no outbox entry";
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
+											if (!nav) return "no drafts entry";
 											nav.click();
 											await new Promise((r) => setTimeout(r, 600));
 											const row = document.querySelector("ul li button");
@@ -1325,7 +1325,7 @@ if (!app.requestSingleInstanceLock()) {
 											return "ok";
 										})()`,
 									);
-									if (opened !== "ok") throw new Error(`Smoke: outbox ${opened}`);
+									if (opened !== "ok") throw new Error(`Smoke: drafts ${opened}`);
 								}
 								if (screen === "Mail") {
 									// The list and the composer, both themes, before a thread takes
@@ -1344,6 +1344,30 @@ if (!app.requestSingleInstanceLock()) {
 									};
 									await shoot("mail-list");
 
+									// Ticking a row turns the list into something you file in
+									// bulk: the toolbar grows a box, a count and the actions, and
+									// the per-row icons step aside. It is a second layout of the
+									// same screen, so it gets its own picture.
+									const ticked = await window.webContents.executeJavaScript(
+										`(async () => {
+											const box = document.querySelector("ul li input[type=checkbox]");
+											if (!box) return "no row checkbox";
+											box.click();
+											await new Promise((r) => setTimeout(r, 400));
+											const bar = document.querySelector("input[aria-label='Select all'], input[aria-label='Clear selection']");
+											return bar ? "ok" : "no selection toolbar";
+										})()`,
+									);
+									if (ticked !== "ok") throw new Error(`Smoke: mail selection ${ticked}`);
+									await shoot("mail-selection");
+									await window.webContents.executeJavaScript(
+										`(() => {
+											const box = document.querySelector("ul li input[type=checkbox]");
+											if (box) box.click();
+										})()`,
+									);
+									await new Promise((r) => setTimeout(r, 400));
+
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {
 											const open = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "New message");
@@ -1355,13 +1379,25 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (composed !== "ok") throw new Error(`Smoke: compose ${composed}`);
 									await shoot("mail-compose");
-									await window.webContents.executeJavaScript(
-										`(() => {
-											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel");
-											if (back) back.click();
+									// A subject, then Escape, which is the composer's only way
+									// out since it became a full-screen form. Typing first is what
+									// gives autosave something to write, and the draft it leaves
+									// behind is what the Drafts step below has to show.
+									const closed = await window.webContents.executeJavaScript(
+										`(async () => {
+											const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim().startsWith("Subject"));
+											const field = label ? document.getElementById(label.htmlFor) : null;
+											if (!field) return "no subject field";
+											const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+											setValue.call(field, "Smoke draft");
+											field.dispatchEvent(new Event("input", { bubbles: true }));
+											await new Promise((r) => setTimeout(r, 1500));
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 900));
+											return document.querySelector("ul li button") ? "ok" : "the list did not come back";
 										})()`,
 									);
-									await new Promise((r) => setTimeout(r, 500));
+									if (closed !== "ok") throw new Error(`Smoke: compose close ${closed}`);
 
 									// Opens the newest thread, so the reader and its frame are in
 									// the picture, and checks the frame actually loaded a body.

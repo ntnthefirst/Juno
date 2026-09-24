@@ -152,6 +152,7 @@ export async function openSmokeMailbox(): Promise<MailboxSource> {
 		async listFolders() {
 			return [
 				{ path: "INBOX", name: "INBOX", delimiter: "/", specialUse: "inbox" },
+				{ path: "Drafts", name: "Drafts", delimiter: "/", specialUse: "drafts" },
 				{ path: "Sent", name: "Sent", delimiter: "/", specialUse: "sent" },
 			];
 		},

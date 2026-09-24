@@ -973,3 +973,87 @@ file list. That worked: no two touched the same file. What it does not do is
 check the work. Of the four, one had the wheel bug above and one duplicated a
 mapping that belongs in the main process, and both were found by reading the
 diff rather than by the typecheck, which was green in each case.
+
+---
+
+## Session: projects become a workspace
+
+Projects had a screen in the sidebar and a placeholder behind it. They now have
+the whole thing: links, files, a folder on disk, a command that starts the work,
+and three layouts to look at them in. Decision 35 has the reasoning; this is what
+it cost and what it found.
+
+**The projects table was rebuilt, and drizzle-kit's rebuild is wrong twice.**
+SQLite cannot drop a NOT NULL, so making `client_id` nullable means the new
+table, copy, drop, rename dance, and `drizzle-kit generate` produced it with two
+faults. The `INSERT ... SELECT` selected the four new columns from the old
+table, which does not have them, so the migration would have failed on the first
+statement that mattered. And it wrapped the dance in `PRAGMA foreign_keys=OFF`,
+which is a no-op inside a transaction, and the runner puts every migration in
+one. Read a generated rebuild before committing it.
+
+**`defer_foreign_keys` does not rescue a rebuild, and only a test with rows in
+it says so.** The first fix swapped the no-op pragma for `PRAGMA
+defer_foreign_keys=ON`, which does work inside a transaction, and the whole
+suite plus the smoke run went green, because both start from an empty database
+where the rebuild has nothing to carry. A test that applies everything up to
+0011, writes a project with a document pointing at it, and only then applies
+0012 fails immediately: `DROP TABLE` performs an implicit delete of every parent
+row, which raises the deferred counter, and nothing lowers it again when the
+rows come back under a renamed table. It fails at the commit, with no statement
+named.
+
+So the runner now does what SQLite's own documentation says to do: foreign keys
+off around each migration, set outside the transaction where the pragma is not
+ignored, and `PRAGMA foreign_key_check` inside it before the journal row is
+written. That is stricter than running with keys on, not weaker: it looks at the
+whole database rather than only at the rows a statement touched, and a migration
+that leaves a dangling reference now throws and rolls back. It applies to every
+migration from here, which is the point.
+
+**Making a column nullable is a change to every query that joined on it.** Four
+places joined `projects` to `clients` with an inner join, and each one would
+have silently stopped returning the projects that have no client: search, the
+calendar's deadline overlay, the deadline reminder suggestions, and the list
+itself. Three became left joins with `or(isNull(clientId), isNull(clients.deletedAt))`,
+because dropping the deleted-client condition along with the join is how a
+deleted client's projects come back. The fourth, the invoice suggestion, stayed
+inner on purpose: there is nobody to invoice.
+
+**A quoted heredoc in this shell ate a backslash.** `name.split(/[\/]/)` was
+written into `project-storage.ts` as `/[\/]/`, which lints as a useless escape
+and, more to the point, splits Windows paths on nothing. The lint caught it. Any
+file written through a shell heredoc here is worth grepping for `\` afterwards.
+
+**`no-control-regex` fires on `new RegExp` too**, not only on a literal. The
+filename sanitiser compares char codes instead, which reads better in a diff
+than a range of literal control characters anyway.
+
+**A process still dying holds its working directory open.** The runner test
+deleted its temp folder in `afterEach` and got EPERM on Windows, because
+stopping a tree is asynchronous on both platforms and `ping` had not let go yet.
+The long-running case runs in the repo instead. The same fact is why
+`before-quit` calls `stopAll` rather than trusting the children to go with the
+parent.
+
+**Two `...` buttons side by side read as one control repeated.** The header had
+the command overflow next to the record's own menu. The command one is a chevron
+now, because it belongs to the Start button beside it.
+
+**Every screenshot the demo run has ever written was one frame stale.** Reading
+the new project images side by side, the light and dark pair were identical, and
+one of them was a screen from the step before under the wrong name. It was not
+the projects code: `md5sum` across the folder showed `clients-dark` equal to
+both `client record` shots, and `project record` equal to both `calendar` ones.
+`capturePage` resolves against whatever the compositor last produced, so a
+capture taken straight after a change hands back the previous frame, and a run
+that only ever changes one thing between captures produces a whole folder that
+is off by one. Waiting for two animation frames before capturing fixes it, and
+every image in `.smoke/` is distinct now. Anything read out of that folder
+before this commit was evidence for the step before the one it was named after.
+
+The smoke run walks the grid, both other layouts, a record, and the storage
+dialog, and it asserts the cover image actually decoded rather than only that a
+tile drew. That last check is the one that would catch the content policy
+refusing `app://asset`, which is the failure this feature could most easily
+ship with: nothing throws, the layout is fine, and every card is grey.

@@ -1040,17 +1040,27 @@ parent.
 the command overflow next to the record's own menu. The command one is a chevron
 now, because it belongs to the Start button beside it.
 
-**Every screenshot the demo run has ever written was one frame stale.** Reading
-the new project images side by side, the light and dark pair were identical, and
-one of them was a screen from the step before under the wrong name. It was not
-the projects code: `md5sum` across the folder showed `clients-dark` equal to
-both `client record` shots, and `project record` equal to both `calendar` ones.
-`capturePage` resolves against whatever the compositor last produced, so a
-capture taken straight after a change hands back the previous frame, and a run
-that only ever changes one thing between captures produces a whole folder that
-is off by one. Waiting for two animation frames before capturing fixes it, and
-every image in `.smoke/` is distinct now. Anything read out of that folder
-before this commit was evidence for the step before the one it was named after.
+**The demo run's screenshots cannot always be trusted, and nothing said so.**
+Reading the new project images side by side, the light and dark pair were
+identical and one of them was a screen from the step before under the wrong
+name. It was not the projects code: `md5sum` across the folder showed
+`clients-dark` equal to both `client record` shots, and `project record` equal
+to both `calendar` ones.
+
+The first explanation was wrong and worth writing down as such. `capturePage`
+does return the frame before the change, so waiting for two animation frames
+was added, a run came back with every image distinct, and that looked like the
+end of it. It was not: the next run had six unrelated screens sharing one
+picture. The wait is a real improvement when frames are being produced, and it
+cannot help at all when they are not, which is what an occluded or minimised
+window means. The first clean run was a run that happened to be in front.
+
+So the wait stays, raced against a timer because an animation frame that never
+arrives hangs the run rather than delaying it, and `npm run smoke` now hashes
+the folder afterwards and reports how many images repeat an earlier one. That
+turns "these screenshots are fiction" from something nobody can see into a line
+at the end of the run. The timeout went to four minutes at the same time, since
+three more screens in two themes no longer fit in two.
 
 The smoke run walks the grid, both other layouts, a record, and the storage
 dialog, and it asserts the cover image actually decoded rather than only that a

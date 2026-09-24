@@ -122,14 +122,17 @@ A clean typecheck is not proof a screen works.
   index"). Anything that has to touch a real database outside the app runs
   under `ELECTRON_RUN_AS_NODE=1 electron`, with the app closed, on a copy
   first.
-- **`capturePage()` hands back the frame before the change.** It resolves
-  against whatever the compositor last produced, so a screenshot taken straight
-  after toggling the theme or opening a screen shows the previous one. A run
-  that changes one thing between captures writes a whole folder that is off by
-  one, with each light and dark pair identical, and nothing anywhere says so.
-  The smoke run waits for two animation frames before every capture. If a set
-  of `.smoke/` images all look plausible and each pair matches, compare their
-  hashes before trusting them.
+- **`capturePage()` hands back whatever the compositor last produced, which is
+  not always what is on screen.** A capture taken straight after toggling the
+  theme shows the previous frame, and the smoke run waits for two animation
+  frames to avoid that. What the wait cannot fix is a window that is **occluded
+  or minimised**: it is not composited at all, so no frame is produced and no
+  wait conjures one. A run under a window somebody clicked in front of writes a
+  folder where whole stretches of images are the same picture under different
+  names, every one of them plausible on its own.
+  **`npm run smoke` counts the identical images and says so at the end. Read
+  that line before using any screenshot as evidence**, and if it reports
+  repeats, run it again with the window in front.
 - **`tsBuildInfoFile` without `"incremental": true` does nothing at all.** tsc
   writes no build info and recompiles the whole program on every run, including
   the first pass of a `--watch`. It looks configured and is not.

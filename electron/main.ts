@@ -528,23 +528,34 @@ if (!app.requestSingleInstanceLock()) {
 							mkdirSync(shotDir, { recursive: true });
 
 							/**
-							 * Captures the frame that is on screen now, not the one before it.
+							 * Captures the frame that is on screen now rather than the one
+							 * before it, as far as that is possible at all.
 							 *
 							 * `capturePage` resolves against whatever the compositor last
 							 * produced, so a capture taken straight after a change hands back
-							 * the previous frame. The symptom is a set of screenshots that
-							 * each show the step before: every light and dark pair identical,
-							 * and a screen photographed under its predecessor's name. Waiting
-							 * for two animation frames puts the change through layout, paint
-							 * and composite first.
+							 * the previous frame. Waiting for two animation frames puts the
+							 * change through layout, paint and composite first, and that is
+							 * what this does.
 							 *
-							 * This was silently true of every screenshot the demo run wrote
-							 * until it was measured, which is worth remembering the next time
-							 * one of these images is used as evidence.
+							 * It is not a guarantee, and the difference matters. A window that
+							 * is occluded or minimised is not composited at all, so no frame
+							 * is produced and no wait can conjure one: a run under a window
+							 * somebody clicked in front of writes a folder where whole runs of
+							 * images are identical, and nothing in the run says so. The wait
+							 * is raced against a timer for exactly that case, because a bare
+							 * await on an animation frame that will never arrive does not
+							 * resolve late, it hangs the run until the outer timeout kills it
+							 * with no line saying where.
+							 *
+							 * The smoke script counts identical images afterwards and says so.
+							 * Read that line before using any of these as evidence.
 							 */
 							const capture = async (contents: Electron.WebContents) => {
 								await contents.executeJavaScript(
-									`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))`,
+									`Promise.race([
+										new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))),
+										new Promise((r) => setTimeout(() => r(null), 500)),
+									])`,
 								);
 								return contents.capturePage();
 							};

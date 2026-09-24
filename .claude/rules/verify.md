@@ -122,6 +122,14 @@ A clean typecheck is not proof a screen works.
   index"). Anything that has to touch a real database outside the app runs
   under `ELECTRON_RUN_AS_NODE=1 electron`, with the app closed, on a copy
   first.
+- **`capturePage()` hands back the frame before the change.** It resolves
+  against whatever the compositor last produced, so a screenshot taken straight
+  after toggling the theme or opening a screen shows the previous one. A run
+  that changes one thing between captures writes a whole folder that is off by
+  one, with each light and dark pair identical, and nothing anywhere says so.
+  The smoke run waits for two animation frames before every capture. If a set
+  of `.smoke/` images all look plausible and each pair matches, compare their
+  hashes before trusting them.
 - **`tsBuildInfoFile` without `"incremental": true` does nothing at all.** tsc
   writes no build info and recompiles the whole program on every run, including
   the first pass of a `--watch`. It looks configured and is not.

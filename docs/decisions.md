@@ -124,14 +124,17 @@ The **no AI attribution in git history** rule still applies. See
 [../.claude/rules/git.md](../.claude/rules/git.md). Commits should read as though a
 developer wrote them, because the decisions in them are the developer's.
 
-## 13. Licence: undecided, and deliberately so
+## 13. Licence: all rights reserved, permanently
 
-The repo starts private with no `LICENSE` file, which means default copyright,
-meaning all rights reserved. That is the right default while the answer is unknown,
-because adding a permissive licence later is easy and retracting one is not.
+The repo has no `LICENSE` file, which means default copyright, meaning all
+rights reserved. That is not a placeholder waiting on a decision: it is the
+decision. A company must not be able to take Juno, host it, and sell it back,
+and a permissive licence is the one thing that is easy to grant and impossible
+to take back once someone has built on it.
 
-Decide before the repo goes public. The question to answer first is whether a
-company should be able to take Juno, host it, and sell it back.
+If the repo goes public later, it goes public still unlicensed. Public without
+a `LICENSE` file remains "look, don't reuse" under copyright law; nothing about
+visibility changes what this decision settled.
 
 ## 14. Theme is a three-state setting, not a toggle
 

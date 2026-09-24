@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { PhotoIcon } from "@heroicons/react/24/outline";
-import { Button } from "../../../components/Button";
-import { Dialog } from "../../../components/Dialog";
-import { Field } from "../../../components/Field";
+import { Button } from "./Button";
+import { Dialog } from "./Dialog";
+import { Field } from "./Field";
 import { TOOLBAR_BUTTON, TOOLBAR_BUTTON_ACTIVE } from "./toolbar-styles";
 
 const MAX_LOCAL_IMAGE_BYTES = 2 * 1024 * 1024;

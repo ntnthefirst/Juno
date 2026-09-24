@@ -11,9 +11,9 @@ import {
 } from "@heroicons/react/24/outline";
 import { Button } from "../../../components/Button";
 import { Field } from "../../../components/Field";
-import { InsertImageControl } from "./InsertImageControl";
+import { InsertImageControl } from "../../../components/InsertImageControl";
+import { TOOLBAR_BUTTON, TOOLBAR_BUTTON_ACTIVE } from "../../../components/toolbar-styles";
 import type { PlaceholderGroup } from "./placeholders";
-import { TOOLBAR_BUTTON, TOOLBAR_BUTTON_ACTIVE } from "./toolbar-styles";
 
 type VisualEditorProps = {
 	value: string;

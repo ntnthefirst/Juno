@@ -34,30 +34,7 @@ documented in `docs/templates.md`.
 That is what the banner is for, and why it is on the page rather than in a
 tooltip.
 
-## 3. Run mail against a real account, both ways - **you**
-
-Phases 3 and 4 have never seen a real IMAP or SMTP server. Add one account
-under Settings with both servers, press Sync now, then send one message to
-yourself from the composer. Note anything that looks wrong: a folder missing, a
-body that will not fetch, a thread split in two, a date off by a few hours, a
-message that never arrives, a copy missing from Sent, or the house shell
-looking broken in Outlook or on the phone. The questions the runs are meant to
-answer are at the end of the two session entries in `BUILD-LOG.md`.
-
-Deliverability is the other half: SPF, DKIM and DMARC on the real domains have
-to align with the SMTP server the account uses, or the first client mail lands
-in spam. That is DNS, not Juno, and it is worth checking before a real
-contract goes out this way.
-
-The sync still writes nothing to the server. Two other things now do, and
-neither has met a real one either: the sender, which writes the message and a
-copy into Sent, and filing, which moves and expunges. Archive one thread,
-trash one, delete one for good, and check the server agrees. A server without
-UIDPLUS answers a move with nothing, and Juno is written to cope with that by
-forgetting the row until the destination folder is next synced, which is worth
-seeing happen once.
-
-## 4. Decide what the in-app assistant runs on - **you**
+## 3. Decide what the in-app assistant runs on - **you**
 
 Phase 6 is built except its assistant panel. Everything the panel would drive
 is there: 99 tools, the approval gate, briefings and automations. What it needs
@@ -75,7 +52,7 @@ Until then an external agent does the same work. Open Agent, copy the
 configuration, paste it into Claude Desktop or Claude Code. That also answers
 phase 6's done-when in PLAN.md.
 
-## 5. Smaller things
+## 4. Smaller things
 
 - **Auto-update tests.** Nothing exercises the updater, because there is no feed.
 - **The MCP server itself.** The tool descriptors exist for every service, but

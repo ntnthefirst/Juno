@@ -41,9 +41,9 @@ const PAGE = 100;
 const MAX_ROWS = 500;
 
 /**
- * Three panes: where (accounts, folders and the outbox), what (threads or
- * composed messages), and the thing itself. Search replaces the folder with a
- * ranked list across the account.
+ * Three panes: where (accounts and folders), what (threads or, inside
+ * Drafts, whatever an account has not sent yet), and the thing itself. Search
+ * replaces the folder with a ranked list across the account.
  *
  * Writing a message and making a folder take the screen over rather than
  * floating above it, because both have fields in them (decision 30).
@@ -140,12 +140,14 @@ export function MailScreen() {
 	}, []);
 
 	const term = search.trim();
-	const showingOutbox = selection?.view === "outbox";
-	const showingDrafts = selection?.view === "drafts" && !showingOutbox;
+	// Drafts is where a draft, a pending approval, a queued or failed send all
+	// show: everything not sent yet, for the account it belongs to. A sent
+	// message drops out of this list on its own and shows up in Sent instead.
+	const showingDrafts = selection?.view === "drafts";
 	const inTrash = selection?.view === "trash";
 
 	const fetchThreads = useCallback(() => {
-		if (!selection || selection.view === "outbox") return Promise.resolve<MailThreadSummary[]>([]);
+		if (!selection || selection.view === "drafts") return Promise.resolve<MailThreadSummary[]>([]);
 		return window.juno.mail.threads.list({
 			...(selection.accountId ? { accountId: selection.accountId } : {}),
 			...(term
@@ -164,7 +166,7 @@ export function MailScreen() {
 	}, [selection, term, filters, rowLimit]);
 
 	useEffect(() => {
-		if (showingOutbox) return;
+		if (showingDrafts) return;
 		let cancelled = false;
 		const id = setTimeout(
 			() => {
@@ -184,13 +186,20 @@ export function MailScreen() {
 			cancelled = true;
 			clearTimeout(id);
 		};
-	}, [fetchThreads, term, accountsVersion, showingOutbox]);
+	}, [fetchThreads, term, accountsVersion, showingDrafts]);
 
 	useEffect(() => {
-		if (!showingOutbox || !selection) return;
+		if (!showingDrafts || !selection) return;
 		let cancelled = false;
 		window.juno.mail.outbox
-			.list({ ...(selection.accountId ? { accountId: selection.accountId } : {}), limit: 200 })
+			.list({
+				...(selection.accountId ? { accountId: selection.accountId } : {}),
+				// Everything not sent yet. A sent message already has its place in
+				// Sent once it syncs, so it drops out of this list rather than
+				// doubling up.
+				states: ["draft", "pending", "queued", "sending", "failed", "cancelled"],
+				limit: 200,
+			})
 			.then((rows) => {
 				if (cancelled) return;
 				setOutboxRows(rows);
@@ -202,7 +211,7 @@ export function MailScreen() {
 		return () => {
 			cancelled = true;
 		};
-	}, [showingOutbox, selection, outboxVersion]);
+	}, [showingDrafts, selection, outboxVersion]);
 
 	/**
 	 * Widens the horizon and pulls again.
@@ -556,7 +565,8 @@ export function MailScreen() {
 					setCompose(null);
 					setNotice(queued ? "Message queued." : "Draft saved.");
 					setOutboxVersion((v) => v + 1);
-					setSelection({ accountId: message.accountId, folderId: null, view: "outbox" });
+					const draftsFolderId = folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
+					setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
 					setSelectedOutboxId(message.id);
 				}}
 			/>
@@ -641,7 +651,7 @@ export function MailScreen() {
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
-				{selectedThreadId && !showingOutbox ? (
+				{selectedThreadId && !showingDrafts ? (
 					<ThreadView
 						key={selectedThreadId}
 						threadId={selectedThreadId}
@@ -652,7 +662,7 @@ export function MailScreen() {
 						onReply={(messageId, mode) => void reply(messageId, mode)}
 						onAction={(action) => handleThreadAction(action, [selectedThreadId])}
 					/>
-				) : showingOutbox && selectedOutbox ? (
+				) : showingDrafts && selectedOutbox ? (
 					<OutboxDetail
 						key={`${selectedOutbox.id}:${selectedOutbox.updatedAt}`}
 						message={selectedOutbox}
@@ -662,9 +672,9 @@ export function MailScreen() {
 					/>
 				) : (
 					<div className="flex h-full min-h-0 flex-col">
-						{showingOutbox ? (
+						{showingDrafts ? (
 							<div className="px-4 pt-6 pb-3">
-								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Outbox</h2>
+								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Drafts</h2>
 							</div>
 						) : (
 							<div className="px-4 pt-6 pb-3">
@@ -685,7 +695,7 @@ export function MailScreen() {
 							</div>
 						)}
 
-						{!showingOutbox && selectedFolder && !selectedFolder.syncEnabled ? (
+						{!showingDrafts && selectedFolder && !selectedFolder.syncEnabled ? (
 							<div className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2">
 								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 									This folder is not synced, so nothing here reflects the server yet.
@@ -696,21 +706,8 @@ export function MailScreen() {
 							</div>
 						) : null}
 
-						{showingDrafts ? (
-							<div className="mx-4 mb-3 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								Unsent drafts live in the outbox, not here.{" "}
-								<button
-									type="button"
-									onClick={() => setSelection({ accountId: null, folderId: null, view: "outbox" })}
-									className="text-[var(--accent)] hover:underline"
-								>
-									Go to outbox
-								</button>
-							</div>
-						) : null}
-
 						<div className="min-h-0 flex-1 overflow-y-auto">
-							{showingOutbox ? (
+							{showingDrafts ? (
 								<OutboxList
 									messages={outboxRows}
 									error={listError}
@@ -732,7 +729,7 @@ export function MailScreen() {
 									onAction={handleThreadAction}
 								/>
 							)}
-							{!showingOutbox && threads !== null && threads.length >= rowLimit && rowLimit < MAX_ROWS ? (
+							{!showingDrafts && threads !== null && threads.length >= rowLimit && rowLimit < MAX_ROWS ? (
 								<div className="flex justify-center px-4 py-3">
 									<Button
 										size="dense"
@@ -743,7 +740,7 @@ export function MailScreen() {
 								</div>
 							) : null}
 
-							{!showingOutbox && term.length === 0 ? (
+							{!showingDrafts && term.length === 0 ? (
 								<HorizonNote
 									accounts={
 										selection?.accountId

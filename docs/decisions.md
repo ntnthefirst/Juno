@@ -573,12 +573,25 @@ builds installers on Windows and macOS and uploads them to a **draft** release:
 publishing that release is the deliberate act that starts a rollout, so a tag
 alone can never push a build to every installed copy.
 
-The updater is quiet by design. It checks thirty seconds after launch and daily
-after that, it downloads in the background, and it installs on the next quit.
-It never checks while Juno is locked, because locked means nobody is at the
-keyboard and nothing unattended runs then (decision 15). It is also the only
-outbound request Juno makes that the user did not configure themselves, which
-is why it lives in one small file that says so.
+The updater is quiet by design. It checks 38 hours after the last check rather
+than every 24, because a whole number of days lands every check in the same few
+minutes of the working day forever, and an odd interval walks around the clock
+instead. The last check is persisted, so opening and closing Juno four times in
+an afternoon is four launches and no extra checks. It never checks while Juno is
+locked, because locked means nobody is at the keyboard and nothing unattended
+runs then (decision 15). It is also the only outbound request Juno makes that
+the user did not configure themselves, which is why it lives in one small file
+that says so.
+
+Settings > General owns the rest of it: the running version, what the last check
+found, a button that checks now, and a toggle. With the toggle on, a release
+downloads in the background and is applied when Juno is next closed, so the
+following launch is the new version. With it off, nothing is downloaded until
+somebody presses Install, and that press is the only thing in the app that
+restarts it. The button is rate-limited to three checks a minute, shared with
+the agent's `updates.check`, so neither a stuck finger nor a loop hammers the
+feed. There is no MCP tool that installs: restarting the application somebody is
+working in is a person's decision, the same answer as the lock.
 
 **What would reverse this:** shipping to clients who cannot reach GitHub, or a
 signing certificate arriving with its own distribution channel.

@@ -143,7 +143,7 @@ describe("what the declarations promise", () => {
 		 * it, so a person is not asked every time. Adding a name here is a
 		 * decision, which is why the list is written out rather than derived.
 		 */
-		const localOnly = new Set(["mail.sync"]);
+		const localOnly = new Set(["mail.sync", "updates.check"]);
 		const unguarded = listTools()
 			.map((tool) => toolByName(tool.name)!)
 			.filter(
@@ -160,5 +160,12 @@ describe("what the declarations promise", () => {
 	it("has no tool that unlocks Juno or approves an action", () => {
 		const names = listTools().map((tool) => tool.name);
 		expect(names.filter((name) => /unlock|approve/i.test(name))).toEqual([]);
+	});
+
+	it("has no tool that restarts Juno into an update", () => {
+		// Installing quits the app and relaunches it, which ends whatever a
+		// person was in the middle of. Same answer as the lock, same reason.
+		const names = listTools().map((tool) => tool.name);
+		expect(names.filter((name) => /\.install$|restart/i.test(name))).toEqual([]);
 	});
 });

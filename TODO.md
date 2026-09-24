@@ -28,7 +28,7 @@ tooltip.
 ## 2. Decide what the in-app assistant runs on - **you**
 
 Phase 6 is built except its assistant panel. Everything the panel would drive
-is there: 99 tools, the approval gate, briefings and automations. What it needs
+is there: 163 tools, the approval gate, briefings and automations. What it needs
 and nothing else does is a model, which means three answers from you.
 
 - **Which provider**, and whether Juno ever talks to one at all. PLAN.md is
@@ -45,7 +45,6 @@ phase 6's done-when in PLAN.md.
 
 ## 3. Smaller things
 
-- **Auto-update tests.** Nothing exercises the updater, because there is no feed.
 - **The MCP server itself.** The tool descriptors exist for every service, but
   nothing serves them over stdio yet. That is phase 6 in `PLAN.md`; the
   descriptors are written per feature so that phase is assembly, not archaeology.

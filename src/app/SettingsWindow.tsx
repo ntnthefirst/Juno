@@ -11,6 +11,7 @@ import { OwnerSection } from "../features/settings/OwnerSection";
 import { ReferenceSection } from "../features/settings/ReferenceSection";
 import { Section } from "../features/settings/Section";
 import { SignatureSection } from "../features/settings/SignatureSection";
+import { UpdatesSection } from "../features/settings/UpdatesSection";
 import { ConnectionPanel } from "../features/agent/ConnectionPanel";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
@@ -108,6 +109,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 								onChange={setTheme}
 							/>
 							<OnboardingSection onNotice={setToast} />
+							<UpdatesSection />
 							<AboutSection />
 						</Pad>
 					) : tab === "business" ? (
@@ -170,18 +172,20 @@ function AboutSection() {
 	}, []);
 
 	return (
-		<Section title="About">
+		<Section
+			title="About"
+			description="Where this installation keeps its data. The version is under Updates."
+		>
 			{error ? (
 				<p className="text-[var(--risk)]">{error}</p>
 			) : info === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : (
 				<dl className="flex flex-col gap-2 text-[length:var(--text-dense)]">
-					<Row label="Version">
-						{info.version}
-						{info.isDev ? " (development build)" : ""}
+					<Row label="Platform">
+						{info.platform}
+						{info.isDev ? ", development build" : ""}
 					</Row>
-					<Row label="Platform">{info.platform}</Row>
 					<Row label="Database">
 						<span
 							data-selectable

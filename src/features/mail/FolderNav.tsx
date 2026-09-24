@@ -13,7 +13,7 @@ import {
 } from "./folder-tree";
 import { describeSync, isSyncing } from "./format";
 
-export type MailView = MailSpecialUse | "outbox";
+export type MailView = MailSpecialUse;
 export type NavSelection = { accountId: string | null; folderId: string | null; view: MailView };
 
 export type FolderAction = "new" | "newInside" | "rename" | "remove" | "toggleSync" | "markAllRead" | "empty";
@@ -46,8 +46,9 @@ function draggedThreads(event: React.DragEvent): string[] | null {
 }
 
 /**
- * Where mail is: the outbox, then every account with the six folders it has and
- * the tree of the ones somebody made.
+ * Where mail is: every account, with the six folders it has and the tree of
+ * the ones somebody made. Anything not sent yet lives under that account's
+ * own Drafts, not in a separate place.
  *
  * Two things this has to get right. A folder is a drop target, and it says so
  * while something is over it, because a drag with no visible target is a guess.
@@ -245,16 +246,6 @@ export function FolderNav({
 
 	return (
 		<div className="flex flex-col gap-4">
-			{row({
-				key: "outbox",
-				folder: null,
-				label: "Outbox",
-				icon: "sent",
-				depth: 0,
-				active: selection?.view === "outbox",
-				onClick: () => onSelect({ accountId: null, folderId: null, view: "outbox" }),
-			})}
-
 			{accounts.map((account) => {
 				const status = sync[account.id] ?? null;
 				const failed = status?.phase === "failed" || (!isSyncing(status) && account.lastSyncError);

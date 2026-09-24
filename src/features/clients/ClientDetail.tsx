@@ -13,6 +13,7 @@ import type {
 	ProjectSummary,
 	ReferenceItem,
 } from "@shared/types";
+import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon, type IconName } from "../../components/Icon";
@@ -983,9 +984,7 @@ function TimelineTab({
 					<Button size="dense" onClick={onLogCall}>
 						Log a call
 					</Button>
-					<Button size="dense" variant="primary" onClick={onAddNote}>
-						Add note
-					</Button>
+					<AddButton label="Add note" onClick={onAddNote} />
 				</span>
 			</div>
 

@@ -108,7 +108,11 @@ export function RecipientField({
 			// it still moves to the next field on an empty input.
 			if (event.key === "Enter" && chosen) {
 				event.preventDefault();
-				add({ name: chosen.name, address: chosen.address });
+				add({
+					name: chosen.name,
+					address: chosen.address,
+					clientName: chosen.clients[0]?.name,
+				});
 				return;
 			}
 			const typed = parseTyped(text);
@@ -133,7 +137,10 @@ export function RecipientField({
 
 	return (
 		<div>
-			<label htmlFor={id} className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<label
+				htmlFor={id}
+				className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+			>
 				{label}
 				{required ? <span className="text-[var(--risk)]"> *</span> : null}
 			</label>
@@ -147,17 +154,28 @@ export function RecipientField({
 					{value.map((address, index) => (
 						<span
 							key={`${address.address}-${index}`}
-							className="animate-pop inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] py-0.5 pr-1 pl-2 text-[length:var(--text-dense)] text-[var(--ink)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--accent-soft)]"
+							className="group animate-pop inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] py-0.5 pr-1 pl-2 text-[length:var(--text-dense)] text-[var(--ink)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--accent-soft)]"
 							title={address.address}
 						>
-							<span className="max-w-[24ch] truncate">{displayName(address)}</span>
+							<span className="max-w-[24ch] truncate group-hover:hidden">
+								{address.clientName ?? displayName(address)}
+							</span>
+							<span
+								className="hidden max-w-[28ch] truncate group-hover:inline"
+								aria-hidden="true"
+							>
+								{address.address}
+							</span>
 							<button
 								type="button"
 								aria-label={`Remove ${address.address}`}
 								onClick={() => removeAt(index)}
 								className="inline-flex h-4 w-4 items-center justify-center rounded-[var(--radius-sm)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
 							>
-								<Icon name="close" size={10} />
+								<Icon
+									name="close"
+									size={10}
+								/>
 							</button>
 						</span>
 					))}
@@ -197,7 +215,13 @@ export function RecipientField({
 									role="option"
 									aria-selected={index === active}
 									onMouseEnter={() => setActive(index)}
-									onClick={() => add({ name: suggestion.name, address: suggestion.address })}
+									onClick={() =>
+										add({
+											name: suggestion.name,
+											address: suggestion.address,
+											clientName: suggestion.clients[0]?.name,
+										})
+									}
 									className={[
 										"flex w-full items-center gap-2 px-3 py-1.5 text-left",
 										index === active ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
@@ -209,7 +233,7 @@ export function RecipientField({
 									/>
 									<span className="min-w-0 flex-1">
 										<span className="block truncate text-[length:var(--text-dense)]">
-											{suggestion.name ?? suggestion.address}
+											{suggestion.clients[0]?.name ?? suggestion.name ?? suggestion.address}
 										</span>
 										<span className="block truncate text-[length:var(--text-micro)] text-[var(--ink-muted)]">
 											{suggestion.address}

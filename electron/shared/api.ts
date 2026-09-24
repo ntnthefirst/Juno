@@ -111,6 +111,19 @@ import type {
 	Project,
 	ProjectInput,
 	ProjectPatch,
+	ProjectAsset,
+	ProjectAssetPatch,
+	ProjectAssetStorage,
+	ProjectCommand,
+	ProjectCommandInput,
+	ProjectCommandPatch,
+	ProjectLink,
+	ProjectLinkInput,
+	ProjectLinkPatch,
+	ProjectRun,
+	ProjectsView,
+	ProjectStorageChoice,
+	ProjectStorageInfo,
 	ProjectSummary,
 	ReferenceItem,
 	ReferenceItemInput,
@@ -259,12 +272,79 @@ export interface JunoApi {
 	};
 
 	projects: {
-		list(query?: { clientId?: string; statusId?: string | null }): Promise<ProjectSummary[]>;
+		list(query?: {
+			clientId?: string;
+			statusId?: string | null;
+			unassigned?: boolean;
+		}): Promise<ProjectSummary[]>;
 		get(id: string): Promise<Project | null>;
 		create(input: ProjectInput): Promise<Project>;
 		update(id: string, patch: ProjectPatch): Promise<Project>;
 		remove(id: string): Promise<Project>;
 		restore(id: string): Promise<Project>;
+
+		/** Which folder this project's own files are in, and how much is in it. */
+		storage(id: string): Promise<ProjectStorageInfo>;
+		setStorage(id: string, choice: ProjectStorageChoice): Promise<Project>;
+		/**
+		 * Opens a folder picker in the main process and moves the files there.
+		 * Null when the picker was cancelled, which writes nothing.
+		 */
+		chooseStorageFolder(id: string, move: boolean): Promise<ProjectStorageInfo | null>;
+		useAppStorage(id: string, move: boolean): Promise<ProjectStorageInfo>;
+		openStorageFolder(id: string): Promise<void>;
+		/** A directory picker. Returns the path so a form can show it before saving. */
+		chooseLocalFolder(): Promise<string | null>;
+		openLocalFolder(id: string): Promise<void>;
+		setCover(id: string, assetId: string | null): Promise<Project>;
+
+		links: {
+			list(projectId: string): Promise<ProjectLink[]>;
+			create(input: ProjectLinkInput): Promise<ProjectLink>;
+			update(id: string, patch: ProjectLinkPatch): Promise<ProjectLink>;
+			remove(id: string): Promise<ProjectLink>;
+			reorder(projectId: string, orderedIds: string[]): Promise<ProjectLink[]>;
+			/** The main process decides browser or file manager, from the target. */
+			open(id: string): Promise<void>;
+		};
+
+		assets: {
+			list(projectId: string): Promise<ProjectAsset[]>;
+			/**
+			 * A file picker. managed copies the files into the project's folder,
+			 * linked points at them where they are. There is no method that takes a
+			 * path from here: the renderer never names a file on disk.
+			 */
+			choose(projectId: string, storage: ProjectAssetStorage): Promise<ProjectAsset[]>;
+			update(id: string, patch: ProjectAssetPatch): Promise<ProjectAsset>;
+			remove(id: string): Promise<ProjectAsset>;
+			restore(id: string): Promise<ProjectAsset>;
+			reorder(projectId: string, orderedIds: string[]): Promise<ProjectAsset[]>;
+			open(id: string): Promise<void>;
+			reveal(id: string): Promise<void>;
+		};
+
+		/**
+		 * Commands have no MCP counterpart and are not going to get one. One runs
+		 * in a real shell with the owner's privileges, so writing one and running
+		 * one together are a remote shell. Decision 35.
+		 */
+		commands: {
+			list(projectId: string): Promise<ProjectCommand[]>;
+			create(input: ProjectCommandInput): Promise<ProjectCommand>;
+			update(id: string, patch: ProjectCommandPatch): Promise<ProjectCommand>;
+			remove(id: string): Promise<ProjectCommand>;
+			reorder(projectId: string, orderedIds: string[]): Promise<ProjectCommand[]>;
+		};
+
+		runs: {
+			list(projectId?: string): Promise<ProjectRun[]>;
+			start(commandId: string): Promise<ProjectRun>;
+			stop(commandId: string): Promise<ProjectRun | null>;
+			clear(commandId: string): Promise<void>;
+			/** Output arrives as it is printed. Returns an unsubscribe. */
+			onChange(listener: (run: ProjectRun) => void): () => void;
+		};
 	};
 
 	reference: {
@@ -300,6 +380,9 @@ export interface JunoApi {
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
 		/** Fires in every window, so a change made in settings reaches the app. */
 		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
+		/** How the projects screen is drawn. A preference, not a record. */
+		getProjectsView(): Promise<ProjectsView>;
+		setProjectsView(patch: Partial<ProjectsView>): Promise<ProjectsView>;
 		getOwner(): Promise<OwnerProfile>;
 		/**
 		 * The scalar fields only. The two contact lists are edited one entry at a

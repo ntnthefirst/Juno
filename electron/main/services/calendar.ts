@@ -450,7 +450,9 @@ export async function listRange(
 				dueOn: projects.dueOn,
 			})
 			.from(projects)
-			.innerJoin(clients, eq(projects.clientId, clients.id))
+			// Left, not inner: a project with no client still has a due date, and
+			// an inner join is how it would quietly stop appearing on the calendar.
+			.leftJoin(clients, eq(projects.clientId, clients.id))
 			.where(and(...conditions))
 			.all();
 		for (const row of rows) {

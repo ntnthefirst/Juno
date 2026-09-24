@@ -13,7 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
-import { backupsDir, databasePath, documentsDir, mailDir, userDataDir } from "./main/db/paths";
+import { backupsDir, databasePath, documentsDir, mailDir, projectsDir, userDataDir } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import { mcpStatus } from "./main/ipc/agent";
@@ -24,6 +24,8 @@ import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
+import { configureProjectStorage } from "./main/services/project-storage";
+import * as projectRunner from "./main/services/project-runner";
 import * as notifications from "./main/services/notifications";
 import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
@@ -79,6 +81,7 @@ if (!app.requestSingleInstanceLock()) {
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
 		configureDocuments(documentsDir());
 		configureDocumentStorage(documentsDir());
+		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
 		// Sync never starts while locked and stops at the next step when the lock
 		// comes on, per decision 15.
@@ -323,9 +326,45 @@ if (!app.requestSingleInstanceLock()) {
 									],
 								});
 
-								return (await b.clients.list()).length;
-							})()`);
-							console.log(`SMOKE_DEMO clients=${created}`);
+								// Phase 7: a project that is not for a client, which is the case
+								// the nullable client exists for, with somewhere to go and
+								// something to start. The files are added from the main process
+								// below: adding one opens a picker, and a picker has nobody to
+								// answer it here.
+								const own = await b.projects.create({
+									name: "Juno", statusId: running.id,
+									description: "The back office this is.",
+								});
+								await b.projects.links.create({ projectId: own.id, label: "Repository", target: "https://github.com/example/juno" });
+								await b.projects.links.create({ projectId: own.id, label: "Designs", target: "https://figma.com/file/example" });
+								await b.projects.commands.create({ projectId: own.id, label: "Dev server", command: "npm run dev" });
+								await b.projects.commands.create({ projectId: own.id, label: "Database", command: "docker compose up -d", kind: "docker" });
+
+								return { clients: (await b.clients.list()).length, projectId: own.id };
+							})()`) as { clients: number; projectId: string };
+							console.log(`SMOKE_DEMO clients=${created.clients}`);
+
+							// Two files on the project, added through the service rather than
+							// the bridge: the bridge's only way in is a file picker, on purpose
+							// (.claude/rules/security.md section 2, the renderer never names a
+							// path). The icon is a real PNG, so the thumbnail path and the
+							// app://asset origin are exercised with bytes that decode.
+							{
+								const { existsSync } = await import("node:fs");
+								const projectAssets = await import("./main/services/project-assets");
+								const projectsService = await import("./main/services/projects");
+								const icon = join(app.getAppPath(), "build", "icon.png");
+								if (existsSync(icon)) {
+									const cover = await projectAssets.add({ projectId: created.projectId, sourcePath: icon });
+									await projectAssets.add({ projectId: created.projectId, sourcePath: icon, storage: "linked" });
+									await projectsService.setCover(created.projectId, cover.id);
+									const where = await projectsService.storage(created.projectId);
+									if (where.fileCount !== 1) {
+										throw new Error(`Smoke: the project folder holds ${where.fileCount} files, not the one managed copy`);
+									}
+									console.log(`SMOKE_DEMO project files=${where.fileCount} at=${where.mode}`);
+								}
+							}
 
 							// An agent call goes through the same host the socket calls, so the
 							// smoke exercises the real gate rather than a stand-in. Nothing may
@@ -676,7 +715,7 @@ if (!app.requestSingleInstanceLock()) {
 								if (!shellUp) throw new Error("Smoke: closing the walkthrough did not reveal the application");
 							}
 
-							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Client record", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
+							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Client record", "Projects", "Projects as a list", "Project record", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(
@@ -687,13 +726,15 @@ if (!app.requestSingleInstanceLock()) {
 								const sidebarEntry =
 									screen === "Client record"
 										? "Clients"
-										: screen === "Outbox"
-											? "Mail"
-											: screen === "Week" || screen === "Event form"
-												? "Calendar"
-												: screen === "Connection"
-													? "Agent"
-													: screen;
+										: screen === "Project record" || screen === "Projects as a list"
+											? "Projects"
+											: screen === "Outbox"
+												? "Mail"
+												: screen === "Week" || screen === "Event form"
+													? "Calendar"
+													: screen === "Connection"
+														? "Agent"
+														: screen;
 								// Matched on data-nav, never on the label. A collapsed sidebar
 								// renders icons only, and a display narrower than 1100px puts it
 								// in exactly that state, which is what a CI runner gives you.
@@ -756,6 +797,88 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (shown !== "ok") throw new Error(`Smoke: agent requests ${shown}`);
+								}
+								if (screen === "Projects") {
+									// The cards, with the cover the seed set. A card with no image
+									// would still draw, so this looks for the img rather than for
+									// the tile: the thumbnail is served over app://asset, and a
+									// policy that blocks it is exactly the failure worth catching.
+									const grid = await window.webContents.executeJavaScript(
+										`(async () => {
+											await new Promise((r) => setTimeout(r, 400));
+											const main = document.querySelector("main");
+											if (!main.querySelector("[role=group][aria-label=Layout]")) return "no layout switcher";
+											const cards = main.querySelectorAll("ul > li > button");
+											if (cards.length < 3) return "only " + cards.length + " cards";
+											const image = main.querySelector("ul img");
+											if (!image) return "no cover image on any card";
+											if (!image.getAttribute("src").startsWith("app://asset/")) return "the cover is not served from the asset origin";
+											if (!image.complete || image.naturalWidth === 0) return "the cover did not decode";
+											if (!main.textContent.includes("Your own work")) return "the project with no client is not shown";
+											return "ok";
+										})()`,
+									) as string;
+									if (grid !== "ok") throw new Error(`Smoke: projects ${grid}`);
+								}
+								if (screen === "Projects as a list") {
+									// The other two layouts, which is the whole point of the
+									// switcher. Going back to cards afterwards leaves the stored
+									// preference where the record shot below expects it.
+									const switched = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const main = document.querySelector("main");
+											const group = main.querySelector("[role=group][aria-label=Layout]");
+											if (!group) return "no layout switcher";
+											const button = (label) => [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === label);
+											if (!button("List")) return "no list layout";
+											button("List").click();
+											await wait(500);
+											if (!document.querySelector("main table tbody tr")) return "the list layout drew no rows";
+											if (document.querySelector("main table img")) return "the list layout still draws thumbnails";
+											button("Rows").click();
+											await wait(500);
+											if (!document.querySelector("main table img")) return "the rows layout draws no thumbnails";
+											return "ok";
+										})()`,
+									) as string;
+									if (switched !== "ok") throw new Error(`Smoke: project layouts ${switched}`);
+								}
+								if (screen === "Project record") {
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const group = document.querySelector("main [role=group][aria-label=Layout]");
+											const cards = group ? [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Cards") : null;
+											if (cards) { cards.click(); await wait(400); }
+											const own = [...document.querySelectorAll("main ul > li > button")].find((el) => el.textContent.includes("Juno"));
+											if (!own) return "no card for the project with no client";
+											own.click();
+											await wait(800);
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Repository")) return "the links are not shown";
+											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
+											const start = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start");
+											if (!start) return "no start button";
+											const files = main.textContent.includes("Files");
+											if (!files) return "no files section";
+											// The three dots say where the files are kept, which is the
+											// one answer this screen exists to give.
+											const more = main.querySelector("button[aria-label='More project actions']");
+											if (!more) return "no actions menu";
+											more.click();
+											await wait(300);
+											const where = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Where the files are kept");
+											if (!where) return "the menu does not say where the files are";
+											where.click();
+											await wait(600);
+											const dialog = document.querySelector("[role=dialog]");
+											if (!dialog) return "no storage dialog";
+											if (!dialog.textContent.includes("Choose a folder")) return "the storage dialog offers no way to move it";
+											return "ok";
+										})()`,
+									) as string;
+									if (opened !== "ok") throw new Error(`Smoke: project record ${opened}`);
 								}
 								if (screen === "Client record") {
 									const opened = await window.webContents.executeJavaScript(
@@ -1403,6 +1526,8 @@ if (!app.requestSingleInstanceLock()) {
 
 	app.on("before-quit", () => {
 		notifications.stop();
+		// A dev server left behind by a closed app is a port nobody can explain.
+		projectRunner.stopAll();
 		mailSync.stopScheduler();
 		mailSend.stopScheduler();
 		stopAgentSurface({ userDataDir: userDataDir(), instanceKey: databasePath() });

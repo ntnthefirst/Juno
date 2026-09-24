@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { DocumentRecord, GenerateDocumentResult, ReferenceItem } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { Button } from "../../components/Button";
-import { Icon } from "../../components/Icon";
+import { AddButton } from "../../components/AddButton";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { useContextMenu } from "../../lib/use-context-menu";
@@ -211,10 +210,7 @@ export function DocumentsScreen() {
 									},
 								]}
 							/>
-							<Button variant="primary" onClick={() => setGenerating(true)}>
-								<Icon name="add" />
-								New document
-							</Button>
+							<AddButton label="New document" onClick={() => setGenerating(true)} />
 						</div>
 					</div>
 

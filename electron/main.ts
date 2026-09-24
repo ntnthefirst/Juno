@@ -46,7 +46,7 @@ import * as settings from "./main/services/settings";
 import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
 import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
-import { startUpdates } from "./main/updates";
+import { startUpdates } from "./main/services/updates";
 import { devDataDir } from "./main/dev-data";
 
 const isDev = Boolean(process.env.JUNO_DEV);

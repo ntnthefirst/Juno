@@ -15,7 +15,7 @@ import { app } from "electron";
 // main process compiles to CommonJS too, so a default import resolves to an
 // undefined `.default` and throws on the first line that touches it.
 import { autoUpdater } from "electron-updater";
-import { isLocked } from "./services/lock";
+import { isLocked } from "./lock";
 
 /** Once on launch, then daily. A back office is left open for days at a time. */
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;

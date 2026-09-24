@@ -79,11 +79,13 @@ export async function query(input: SearchQuery, db: Db = getDb()): Promise<Searc
 	const projectRows = !kinds.has("project") ? [] : db
 		.select({ id: projects.id, name: projects.name, clientName: clients.name })
 		.from(projects)
-		.innerJoin(clients, eq(projects.clientId, clients.id))
+		// Left, not inner: a project with no client is still a project to find.
+		.leftJoin(clients, eq(projects.clientId, clients.id))
 		.where(
 			and(
 				isNull(projects.deletedAt),
-				isNull(clients.deletedAt),
+				// The client is either absent or alive, never deleted.
+				or(isNull(projects.clientId), isNull(clients.deletedAt)),
 				anyOf(contains(projects.name, needle), contains(projects.description, needle)),
 			),
 		)

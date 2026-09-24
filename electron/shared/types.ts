@@ -200,8 +200,12 @@ export type ContactPatch = Partial<Omit<Contact, keyof Standard | "clientId">>;
 
 /* ----------------------------------------------------------------- projects */
 
+/** app keeps the files under userData, custom keeps them in `storagePath`. */
+export type ProjectStorageMode = "app" | "custom";
+
 export interface Project extends Standard {
-	clientId: string;
+	/** Null for work that is not for anyone: Juno's own repository, a side project. */
+	clientId: string | null;
 	name: string;
 	statusId: string | null;
 	description: string | null;
@@ -209,24 +213,192 @@ export interface Project extends Standard {
 	dueOn: IsoDate | null;
 	agreedValueCents: Cents | null;
 	notes: string | null;
+	/** The checkout on this machine. Juno reads it and never writes to it. */
+	localPath: string | null;
+	storageMode: ProjectStorageMode;
+	/** The folder chosen when `storageMode` is custom, absolute. */
+	storagePath: string | null;
+	coverAssetId: string | null;
 }
 
 export interface ProjectSummary {
 	id: string;
-	clientId: string;
-	clientName: string;
+	clientId: string | null;
+	clientName: string | null;
 	name: string;
 	status: ReferenceItem | null;
 	dueOn: IsoDate | null;
 	agreedValueCents: Cents | null;
+	description: string | null;
+	localPath: string | null;
+	/** So the screen can offer "what did I touch last" without reading each row. */
+	updatedAt: string;
+	/** The asset the card shows, already resolved to something that exists. */
+	coverAssetId: string | null;
+	/** The kinds of link this project has, so a card can show them without a second call. */
+	linkKinds: ProjectLinkKind[];
+	assetCount: number;
+	commandCount: number;
 }
 
-export type ProjectInput = Partial<Omit<Project, keyof Standard>> & {
-	clientId: string;
-	name: string;
+/**
+ * Storage and the cover are left out of both of these on purpose. Moving a
+ * project's files copies them and then deletes the originals, and setting a
+ * cover has to check the asset is still there, so neither is a field you set in
+ * passing on a form that was really about a due date. They have their own
+ * functions: projects.setStorage and projects.setCover.
+ */
+type ProjectWritable = Omit<Project, keyof Standard | "storageMode" | "storagePath" | "coverAssetId">;
+
+export type ProjectInput = Partial<ProjectWritable> & { name: string };
+
+export type ProjectPatch = Partial<ProjectWritable>;
+
+export interface ProjectStorageChoice {
+	mode: ProjectStorageMode;
+	/** Required when the mode is custom, ignored otherwise. */
+	path?: string | null;
+	/** Carry the files that are already there across to the new folder. */
+	move?: boolean;
+}
+
+/* ----------------------------------------------------------- project links */
+
+/**
+ * What a link points at. The kind picks the icon and nothing else: opening one
+ * is decided by whether the target parses as an https URL or a local path.
+ */
+export type ProjectLinkKind =
+	| "github"
+	| "figma"
+	| "website"
+	| "design"
+	| "docs"
+	| "folder"
+	| "other";
+
+export interface ProjectLink extends Standard {
+	projectId: string;
+	kind: ProjectLinkKind;
+	label: string;
+	/** An https URL, or an absolute path to a folder or file on this machine. */
+	target: string;
+	notes: string | null;
+	sortOrder: number;
+}
+
+export type ProjectLinkInput = Partial<Omit<ProjectLink, keyof Standard>> & {
+	projectId: string;
+	label: string;
+	target: string;
 };
 
-export type ProjectPatch = Partial<Omit<Project, keyof Standard | "clientId">>;
+export type ProjectLinkPatch = Partial<Omit<ProjectLink, keyof Standard | "projectId">>;
+
+/* ---------------------------------------------------------- project assets */
+
+/**
+ * managed: Juno copied the file into the project's folder and owns it, so
+ * deleting the asset deletes the file. linked: the file stayed where it was,
+ * which is what a ten-gigabyte export wants, and deleting the asset leaves it
+ * alone.
+ */
+export type ProjectAssetStorage = "managed" | "linked";
+
+/** Decides whether the file previews, and which placeholder it gets if not. */
+export type ProjectAssetKind = "image" | "pdf" | "video" | "audio" | "archive" | "file";
+
+export interface ProjectAsset extends Standard {
+	projectId: string;
+	fileName: string;
+	storage: ProjectAssetStorage;
+	/** Relative to the project folder when managed, absolute when linked. */
+	path: string;
+	byteSize: number | null;
+	mimeType: string | null;
+	kind: ProjectAssetKind;
+	caption: string | null;
+	sortOrder: number;
+	/** Resolved absolute path, for showing where a file actually is. */
+	absolutePath: string;
+	/** False when the file behind the row is gone, which a linked file can be. */
+	exists: boolean;
+}
+
+export type ProjectAssetPatch = {
+	fileName?: string;
+	caption?: string | null;
+	sortOrder?: number;
+};
+
+/* -------------------------------------------------------- project commands */
+
+/** An icon, not a mechanism. Both kinds run the same way. */
+export type ProjectCommandKind = "shell" | "docker";
+
+export interface ProjectCommand extends Standard {
+	projectId: string;
+	label: string;
+	command: string;
+	/** Null falls back to the project's local folder. */
+	workingDir: string | null;
+	kind: ProjectCommandKind;
+	sortOrder: number;
+}
+
+export type ProjectCommandInput = Partial<Omit<ProjectCommand, keyof Standard>> & {
+	projectId: string;
+	label: string;
+	command: string;
+};
+
+export type ProjectCommandPatch = Partial<Omit<ProjectCommand, keyof Standard | "projectId">>;
+
+/**
+ * A running command, held in memory rather than in the database. A process is
+ * not a record: it does not survive a restart, and writing every line it prints
+ * to SQLite would be a log file with extra steps.
+ */
+export interface ProjectRun {
+	commandId: string;
+	projectId: string;
+	label: string;
+	command: string;
+	workingDir: string;
+	state: "running" | "exited" | "failed";
+	pid: number | null;
+	startedAt: string;
+	endedAt: string | null;
+	exitCode: number | null;
+	/** Why it could not start, or why it stopped badly. */
+	error: string | null;
+	/** The tail of what it printed. Bounded, oldest lines dropped first. */
+	output: string[];
+}
+
+/** Where a project's own files are kept, and whether that folder is reachable. */
+export interface ProjectStorageInfo {
+	projectId: string;
+	mode: ProjectStorageMode;
+	/** The folder in use, absolute, whichever mode it is in. */
+	path: string;
+	/** Where the app would keep it, so the settings can offer a way back. */
+	defaultPath: string;
+	exists: boolean;
+	/** Managed files only. A linked file is not Juno's to count. */
+	fileCount: number;
+	byteSize: number;
+}
+
+/** How the projects screen is drawn. Kept in settings.json, not the database. */
+export interface ProjectsView {
+	layout: "grid" | "list" | "rows";
+	/** Grid tile size. Ignored by the other two layouts. */
+	size: "small" | "medium" | "large";
+	/** Covers and thumbnails. Off gives a dense screen with no images at all. */
+	previews: boolean;
+	sort: "recent" | "name" | "due" | "client";
+}
 
 /* ------------------------------------------------------- reference data (16) */
 
@@ -377,6 +549,8 @@ export interface AppSettings {
 	lastNotifiedOn: IsoDate | null;
 	/** What the person has been through once, so it is never shown twice. */
 	onboarding: OnboardingState;
+	/** How the projects screen is drawn. A preference, not a record. */
+	projectsView: ProjectsView;
 }
 
 export interface OnboardingState {
@@ -967,6 +1141,18 @@ export interface MailMessage {
 export const MAIL_FRAME_ORIGIN = "app://mail";
 
 /**
+ * Where a project's images are served from, for thumbnails and previews.
+ *
+ * A third host on the same scheme, and therefore a third origin. The renderer's
+ * policy allows it as an image source and as nothing else, so a file that turns
+ * out not to be an image is a broken picture rather than a document with a
+ * policy of its own. The handler resolves an asset id to a path itself: the
+ * renderer never names a file, which is what keeps this from being the
+ * arbitrary file reader that .claude/rules/security.md section 2 forbids.
+ */
+export const ASSET_ORIGIN = "app://asset";
+
+/**
  * What the reader needs beside the frame: the plain text for a message with no
  * HTML, how many remote images were blocked so it can offer to load them, and
  * every link with its real target, since a click inside the frame goes nowhere.
@@ -1298,8 +1484,9 @@ export interface CalendarDeadlineItem {
 	kind: "deadline";
 	projectId: string;
 	projectName: string;
-	clientId: string;
-	clientName: string;
+	/** Null for a project that is not for a client. See ProjectSummary. */
+	clientId: string | null;
+	clientName: string | null;
 	dueOn: IsoDate;
 }
 

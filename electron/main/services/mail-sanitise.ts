@@ -41,16 +41,81 @@ const BLOCKED_IMAGE =
 	);
 
 const ALLOWED_TAGS = [
-	"a", "abbr", "address", "b", "big", "blockquote", "br", "caption", "center", "cite",
-	"code", "col", "colgroup", "dd", "del", "div", "dl", "dt", "em", "font", "h1", "h2",
-	"h3", "h4", "h5", "h6", "hr", "i", "img", "ins", "kbd", "li", "mark", "ol", "p",
-	"pre", "q", "s", "small", "span", "strike", "strong", "sub", "sup", "table", "tbody",
-	"td", "tfoot", "th", "thead", "tr", "tt", "u", "ul", "wbr",
+	"a",
+	"abbr",
+	"address",
+	"b",
+	"big",
+	"blockquote",
+	"br",
+	"caption",
+	"center",
+	"cite",
+	"code",
+	"col",
+	"colgroup",
+	"dd",
+	"del",
+	"div",
+	"dl",
+	"dt",
+	"em",
+	"font",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"hr",
+	"i",
+	"img",
+	"ins",
+	"kbd",
+	"li",
+	"mark",
+	"ol",
+	"p",
+	"pre",
+	"q",
+	"s",
+	"small",
+	"span",
+	"strike",
+	"strong",
+	"sub",
+	"sup",
+	"table",
+	"tbody",
+	"td",
+	"tfoot",
+	"th",
+	"thead",
+	"tr",
+	"tt",
+	"u",
+	"ul",
+	"wbr",
 ];
 
 const SHARED_ATTRIBUTES = [
-	"style", "class", "id", "dir", "lang", "title", "align", "valign", "width", "height",
-	"bgcolor", "color", "border", "cellpadding", "cellspacing", "colspan", "rowspan",
+	"style",
+	"class",
+	"id",
+	"dir",
+	"lang",
+	"title",
+	"align",
+	"valign",
+	"width",
+	"height",
+	"bgcolor",
+	"color",
+	"border",
+	"cellpadding",
+	"cellspacing",
+	"colspan",
+	"rowspan",
 	"nowrap",
 ];
 
@@ -91,7 +156,10 @@ export function extractStyles(html: string): { css: string; html: string } {
 
 const BASE_CSS = `
 html, body { margin: 0; padding: 0; }
-body { font: 14px/1.5 Inter, -apple-system, "Segoe UI", sans-serif; color: #1c1b19; background: #ffffff; padding: 16px; word-wrap: break-word; overflow-wrap: anywhere; }
+body { font: 15px/1.65 Inter, -apple-system, "Segoe UI", sans-serif; color: #1c1b19; background: #ffffff; padding: 24px 28px; word-wrap: break-word; overflow-wrap: anywhere; }
+h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin: 1.2em 0 0.55em; }
+h1:first-child, h2:first-child, h3:first-child, h4:first-child, h5:first-child, h6:first-child { margin-top: 0; }
+p { margin: 0 0 1em; }
 img { max-width: 100%; height: auto; }
 a[data-href] { color: #4a3fa0; text-decoration: underline; cursor: default; }
 blockquote { margin: 8px 0 8px 8px; padding-left: 12px; border-left: 2px solid #d9d6cf; color: #5c5a55; }
@@ -128,7 +196,9 @@ function collectLinks(body: string): { href: string; text: string }[] {
 	const seen = new Map<string, { href: string; text: string }>();
 	for (const match of body.matchAll(/<a\b[^>]*\bdata-href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) {
 		const href = decodeEntities(match[1] ?? "");
-		const text = decodeEntities((match[2] ?? "").replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+		const text = decodeEntities((match[2] ?? "").replace(/<[^>]+>/g, ""))
+			.replace(/\s+/g, " ")
+			.trim();
 		const existing = seen.get(href);
 		if (existing) {
 			if (!existing.text && text) existing.text = text;
@@ -213,7 +283,7 @@ export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): Saniti
 	const links = collectLinks(body);
 
 	const document =
-		"<!doctype html><html><head><meta charset=\"utf-8\">" +
+		'<!doctype html><html><head><meta charset="utf-8">' +
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(Boolean(options.allowRemoteImages)))}">` +
 		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body></html>`;
 
@@ -241,7 +311,7 @@ export function textDocument(text: string): string {
 		.map((line) => (/^\s*>/.test(line) ? `<span class="q">${escapeText(line)}</span>` : escapeText(line)))
 		.join("\n");
 	return (
-		"<!doctype html><html><head><meta charset=\"utf-8\">" +
+		'<!doctype html><html><head><meta charset="utf-8">' +
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false))}">` +
 		`<style>${BASE_CSS} body { white-space: pre-wrap; } .q { color: #5c5a55; } ${TEXT_DARK_CSS}</style></head>` +
 		`<body>${body}</body></html>`

@@ -38,6 +38,7 @@ import type {
 	OwnerProfilePatch,
 	ProjectsView,
 	ThemeSetting,
+	UpdateSettings,
 } from "../../shared/types";
 
 const DEFAULT_LOCK: LockSettings = {
@@ -108,6 +109,13 @@ const DEFAULT_ONBOARDING: OnboardingState = {
 	version: 0,
 };
 
+/**
+ * Updates install themselves by default. Someone running a back office all day
+ * should not have to remember to go and fetch one, and the install waits for a
+ * close either way, so it never interrupts.
+ */
+const DEFAULT_UPDATES: UpdateSettings = { autoInstall: true, lastCheckedAt: null };
+
 const DEFAULTS: AppSettings = {
 	theme: "system",
 	lock: DEFAULT_LOCK,
@@ -118,6 +126,7 @@ const DEFAULTS: AppSettings = {
 	lastNotifiedOn: null,
 	onboarding: DEFAULT_ONBOARDING,
 	projectsView: DEFAULT_PROJECTS_VIEW,
+	updates: DEFAULT_UPDATES,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -232,6 +241,7 @@ function normalise(raw: unknown): AppSettings {
 			lock: { ...DEFAULT_LOCK },
 			owner: { ...DEFAULT_OWNER },
 			projectsView: { ...DEFAULT_PROJECTS_VIEW },
+			updates: { ...DEFAULT_UPDATES },
 		};
 	}
 
@@ -295,6 +305,15 @@ function normalise(raw: unknown): AppSettings {
 			),
 		},
 		projectsView: normaliseProjectsView(raw.projectsView),
+		updates: normaliseUpdates(raw.updates),
+	};
+}
+
+function normaliseUpdates(raw: unknown): UpdateSettings {
+	const updates = isRecord(raw) ? raw : {};
+	return {
+		autoInstall: bool(updates.autoInstall, DEFAULT_UPDATES.autoInstall),
+		lastCheckedAt: iso(updates.lastCheckedAt),
 	};
 }
 
@@ -348,6 +367,7 @@ export async function get(): Promise<AppSettings> {
 		lock: { ...current.lock },
 		owner: cloneOwner(current.owner),
 		projectsView: { ...current.projectsView },
+		updates: { ...current.updates },
 	};
 }
 
@@ -363,6 +383,20 @@ export async function setProjectsView(patch: Partial<ProjectsView>): Promise<Pro
 	const current = read();
 	const next = normaliseProjectsView({ ...current.projectsView, ...patch });
 	return { ...write({ ...current, projectsView: next }).projectsView };
+}
+
+export async function getUpdates(): Promise<UpdateSettings> {
+	return { ...read().updates };
+}
+
+/**
+ * A patch, because the toggle and the check timestamp are written by two
+ * different things and neither knows what the other last wrote.
+ */
+export async function setUpdates(patch: Partial<UpdateSettings>): Promise<UpdateSettings> {
+	const current = read();
+	const next = normaliseUpdates({ ...current.updates, ...patch });
+	return { ...write({ ...current, updates: next }).updates };
 }
 
 export async function getTheme(): Promise<ThemeSetting> {

@@ -135,8 +135,9 @@ every settings tab, and writes a screenshot of each in both themes to `.smoke/`.
 
 Tagging a version builds installers for Windows and macOS in GitHub Actions and
 uploads them to a **draft** release. Publishing that release is what starts the
-rollout: installed copies check once on launch and daily after, download in the
-background, and install on the next quit.
+rollout: installed copies check every 38 hours, and with automatic installs on,
+download in the background and apply it the next time Juno is closed. Settings >
+General shows the version, checks on demand and holds the toggle.
 
 ```bash
 npm version patch

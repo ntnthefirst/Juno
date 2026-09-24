@@ -487,6 +487,28 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
+
+							/**
+							 * Captures the frame that is on screen now, not the one before it.
+							 *
+							 * `capturePage` resolves against whatever the compositor last
+							 * produced, so a capture taken straight after a change hands back
+							 * the previous frame. The symptom is a set of screenshots that
+							 * each show the step before: every light and dark pair identical,
+							 * and a screen photographed under its predecessor's name. Waiting
+							 * for two animation frames puts the change through layout, paint
+							 * and composite first.
+							 *
+							 * This was silently true of every screenshot the demo run wrote
+							 * until it was measured, which is worth remembering the next time
+							 * one of these images is used as evidence.
+							 */
+							const capture = async (contents: Electron.WebContents) => {
+								await contents.executeJavaScript(
+									`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))`,
+								);
+								return contents.capturePage();
+							};
 							// A throwaway user-data directory is a genuinely first install, so
 							// the setup window opens in front of the application (decision 34).
 							// Photograph it, then finish it the way a person would: if the flow
@@ -520,7 +542,7 @@ if (!app.requestSingleInstanceLock()) {
 										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 									);
 									await new Promise((r) => setTimeout(r, 400));
-									const image = await flow.capturePage();
+									const image = await capture(flow);
 									writeFileSync(joinPath(shotDir, `setup-welcome-${theme}.png`), image.toPNG());
 								}
 								// Back to light, so the screens photographed after this start from
@@ -542,7 +564,7 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								for (const { id: step, label } of steps) {
 									await new Promise((r) => setTimeout(r, 500));
-									const image = await flow.capturePage();
+									const image = await capture(flow);
 									writeFileSync(joinPath(shotDir, `setup-${step}.png`), image.toPNG());
 									// The name and the business name are the two answers setup
 									// insists on, so a run against an empty profile has to type
@@ -579,7 +601,7 @@ if (!app.requestSingleInstanceLock()) {
 								}
 
 								await new Promise((r) => setTimeout(r, 500));
-								const done = await flow.capturePage();
+								const done = await capture(flow);
 								writeFileSync(joinPath(shotDir, `setup-done.png`), done.toPNG());
 
 								// Takes the tour rather than skipping straight in, so the
@@ -636,7 +658,7 @@ if (!app.requestSingleInstanceLock()) {
 									}
 								}
 
-								const walkthroughImage = await window.webContents.capturePage();
+								const walkthroughImage = await capture(window.webContents);
 								writeFileSync(joinPath(shotDir, `walkthrough.png`), walkthroughImage.toPNG());
 
 								await window.webContents.executeJavaScript(
@@ -825,7 +847,7 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (noted !== "ok") throw new Error(`Smoke: notes editor ${noted}`);
 
-									const notesImage = await window.webContents.capturePage();
+									const notesImage = await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, `notes-editor.png`), notesImage.toPNG());
 
 									// Leaves without saving: the client list this screen is about to
@@ -897,7 +919,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 400));
-										const image = await window.webContents.capturePage();
+										const image = await capture(window.webContents);
 										writeFileSync(joinPath(shotDir, `document-template-editor-${theme}.png`), image.toPNG());
 									}
 
@@ -952,7 +974,7 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (usedDocument !== "ok") throw new Error(`Smoke: using a document template ${usedDocument}`);
 
-									const useDocumentImage = await window.webContents.capturePage();
+									const useDocumentImage = await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, `use-document-template.png`), useDocumentImage.toPNG());
 
 									// One click undoes Review, landing back on Link; the same control,
@@ -1009,7 +1031,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 400));
-										const image = await window.webContents.capturePage();
+										const image = await capture(window.webContents);
 										writeFileSync(joinPath(shotDir, `mail-template-editor-${theme}.png`), image.toPNG());
 									}
 
@@ -1046,7 +1068,7 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (usedMail !== "ok") throw new Error(`Smoke: using a mail template ${usedMail}`);
 
-									const useMailImage = await window.webContents.capturePage();
+									const useMailImage = await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, `use-mail-template.png`), useMailImage.toPNG());
 
 									// Nothing was created yet at this point, so Escape is enough: it
@@ -1179,7 +1201,7 @@ if (!app.requestSingleInstanceLock()) {
 												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 											);
 											await new Promise((r) => setTimeout(r, 300));
-											const shot = await window.webContents.capturePage();
+											const shot = await capture(window.webContents);
 											writeFileSync(joinPath(shotDir, `${name}-${theme}.png`), shot.toPNG());
 										}
 									};
@@ -1243,7 +1265,7 @@ if (!app.requestSingleInstanceLock()) {
 										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 									);
 									await new Promise((r) => setTimeout(r, 400));
-									const image = await window.webContents.capturePage();
+									const image = await capture(window.webContents);
 									writeFileSync(
 										joinPath(shotDir, `${screen.toLowerCase()}-${theme}.png`),
 										image.toPNG(),
@@ -1288,7 +1310,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 350));
-										const image = await settingsWindow.webContents.capturePage();
+										const image = await capture(settingsWindow.webContents);
 										const name = tab.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 										writeFileSync(
 											joinPath(shotDir, `settings-${name}-${theme}.png`),
@@ -1320,7 +1342,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 300));
-										const image = await settingsWindow.webContents.capturePage();
+										const image = await capture(settingsWindow.webContents);
 										writeFileSync(joinPath(shotDir, `settings-your-contacts-${theme}.png`), image.toPNG());
 									}
 								}
@@ -1354,7 +1376,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 300));
-										const image = await settingsWindow.webContents.capturePage();
+										const image = await capture(settingsWindow.webContents);
 										writeFileSync(joinPath(shotDir, `settings-mcp-manual-${theme}.png`), image.toPNG());
 									}
 								}

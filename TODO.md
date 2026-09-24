@@ -72,6 +72,17 @@ phase 6's done-when in PLAN.md.
 - **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
   is the phase 4 promise not yet kept. Templates carry their own layout, so it
   matters least for the messages Juno writes on its own.
+- **A new mail template starts from nothing.** `mail-templates.ts` has a
+  `create()`, but the renderer has no "new template" action at all, only edit,
+  preview and use on the four that ship. `mailShell` already wraps every sent
+  message in the house header and footer chrome and the owner's signature line
+  at send time, so that part is not what is missing. What is missing is a
+  starting point for the body someone types: an opening line and a signoff
+  block, the way the seeded templates already share `SIGNOFF_U` and
+  `SIGNOFF_JE` in `mail-templates-seed.ts`, offered as a starter the first time
+  someone writes a template rather than an empty field. This needs a "new
+  template" flow in the editor and a couple of reusable starter bodies, one per
+  register, not a change to the house shell.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.

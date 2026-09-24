@@ -29,8 +29,8 @@ describe("expandSeries", () => {
 	it("keeps the wall clock across the October DST change", () => {
 		// The clocks go back on 25 October 2026. The call stays at 10:00 local,
 		// which means 08:00Z before and 09:00Z after. Expanding in UTC would put
-		// every later occurrence at 08:00Z, an hour early. PLAN.md phase 5 names
-		// this as the test the phase is done by.
+		// every later occurrence at 08:00Z, an hour early. This is the test the
+		// wall-clock storage exists to pass.
 		const out = expandSeries(tuesdayCall, [], "2026-10-19T00:00:00.000Z", "2026-11-05T00:00:00.000Z");
 		expect(out.map((o) => [o.startLocal, o.startUtc])).toEqual([
 			["2026-10-20T10:00:00", "2026-10-20T08:00:00.000Z"],

@@ -8,7 +8,7 @@
  * the app and cannot reach the tokens.
  *
  * Nothing in the shell fetches anything: no logo image, no web font, no pixel.
- * Read receipts and tracking are permanently out of scope (PLAN.md, phase 4).
+ * Read receipts and tracking are permanently out of scope.
  */
 import { convert } from "html-to-text";
 import { escapeHtml } from "./template-render";

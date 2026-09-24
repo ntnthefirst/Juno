@@ -31,9 +31,9 @@ all of it. No invoicing, no payments, no cloud requirement.
 Read [docs/decisions.md](docs/decisions.md) before proposing an alternative to
 any of these. It records what would have to stop being true for each to change.
 
-**Status: phases 0 to 6 built.** Read [START-HERE.md](START-HERE.md) and then
-[BUILD-LOG.md](BUILD-LOG.md) before touching anything; several decisions above
-have been amended by what actually happened, and the log says which.
+**Status: phases 0 to 6 built.** Read [STRUCTURE.md](STRUCTURE.md) and then
+[TODO.md](TODO.md) before touching anything; several decisions above have been
+amended by what actually happened, and the structure map says which.
 
 ---
 

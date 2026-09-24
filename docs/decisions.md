@@ -412,7 +412,7 @@ the first thing to reopen.
 
 Phase 5 stores `start_local` and `end_local` as `YYYY-MM-DDTHH:MM:SS` with no
 zone suffix, beside an IANA `timezone`, and keeps `start_utc`, `end_utc` and
-`series_end_utc` only as an index for range queries. PLAN.md section 3 had
+`series_end_utc` only as an index for range queries. The original plan had
 sketched `starts_at` and `ends_at` as instants with a zone beside them; that
 shape is wrong for the one case the phase exists for. "10:00 every Tuesday in
 Brussels" is at 08:00Z until the clocks change and 09:00Z after, so a rule
@@ -486,7 +486,7 @@ a step needing approval stops the run and waits for a person, on a schedule as
 much as by hand. That is what keeps "an agent may prepare a send and may never
 fire it" true when the caller is a timer.
 
-`@modelcontextprotocol/sdk` is used in the bridge only, as PLAN.md chose. It
+`@modelcontextprotocol/sdk` is used in the bridge only, as planned. It
 costs about 19 MB in the installer through dependencies the stdio path never
 loads (express, hono, jose and the rest are pulled in by other transports).
 Hand-rolling the protocol would save that and take on being wrong about a

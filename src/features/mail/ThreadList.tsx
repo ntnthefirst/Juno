@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import type { MailThreadSummary } from "@shared/types";
-import { Icon, type IconName } from "../../components/Icon";
+import { Icon } from "../../components/Icon";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { startThreadDrag } from "./drag";
 import { formatWhen, participantsLine } from "./format";
+import { IconAction } from "./IconAction";
 
 export type ThreadAction =
 	| "open"
@@ -29,13 +30,9 @@ type ThreadListProps = {
 	selectedIds: string[];
 	onSelect: (id: string) => void;
 	onToggleSelect: (id: string, extend: boolean) => void;
-	onSelectAll: () => void;
-	onClearSelection: () => void;
 	/** One row, or the whole selection when `ids` is given. */
 	onAction: (action: ThreadAction, ids: string[]) => void;
 };
-
-type RowButton = { action: ThreadAction; icon: IconName; label: string; danger?: boolean };
 
 /**
  * Two and a bit lines per thread: who and when, the subject, the snippet.
@@ -46,8 +43,13 @@ type RowButton = { action: ThreadAction; icon: IconName; label: string; danger?:
  *
  * Everything a row can do is reachable three ways, because people reach for
  * different ones: the icons that appear on hover, the right-click menu, and the
- * bar that appears once something is selected. A row is also draggable onto a
- * folder in the sidebar, which is the fastest way to file one.
+ * toolbar above the list once something is selected. A row is also draggable
+ * onto a folder in the sidebar, which is the fastest way to file one.
+ *
+ * Once anything is selected the rows stop opening and start ticking. Clicking
+ * one anywhere adds or removes it, and the hover icons go away, because a list
+ * where the same click sometimes files a row and sometimes opens it is a list
+ * that loses somebody's selection.
  */
 export function ThreadList({
 	threads,
@@ -58,8 +60,6 @@ export function ThreadList({
 	selectedIds,
 	onSelect,
 	onToggleSelect,
-	onSelectAll,
-	onClearSelection,
 	onAction,
 }: ThreadListProps) {
 	const menu = useContextMenu();
@@ -196,43 +196,8 @@ export function ThreadList({
 		}
 	}
 
-	const bulkButtons: RowButton[] = [
-		{ action: "archive", icon: "archive", label: "Archive" },
-		{ action: "move", icon: "projects", label: "Move to folder" },
-		{ action: "markRead", icon: "read", label: "Mark read" },
-		{ action: "flag", icon: "flag", label: "Flag" },
-		{ action: "junk", icon: "junk", label: "Junk" },
-		{
-			action: removeAction,
-			icon: "remove",
-			label: inTrash ? "Delete forever" : "Move to trash",
-			danger: true,
-		},
-	];
-
 	return (
 		<div className="flex flex-col">
-			{hasSelection ? (
-				<div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--paper)] px-3 py-1">
-					<span className="tabular text-[length:var(--text-sm)] font-[var(--weight-medium)]">
-						{selectedIds.length} selected
-					</span>
-					<div className="flex items-center gap-1">
-						{bulkButtons.map((button) => (
-							<IconAction
-								key={button.action}
-								icon={button.icon}
-								label={button.label}
-								danger={button.danger}
-								onClick={() => onAction(button.action, selectedIds)}
-							/>
-						))}
-						<IconAction icon="check" label="Select all" onClick={onSelectAll} />
-						<IconAction icon="close" label="Clear selection" onClick={onClearSelection} />
-					</div>
-				</div>
-			) : null}
-
 			{/*
 				One handler for the list rather than one per row: the keys act on
 				whichever row has focus, and a row is a button that already takes it.
@@ -260,7 +225,7 @@ export function ThreadList({
 							<div
 								className={[
 									"flex items-start gap-2 px-3 py-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-									active ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
+									active || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
 								].join(" ")}
 							>
 								<span className="relative mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center">
@@ -294,8 +259,12 @@ export function ThreadList({
 										if (element) rows.current.set(thread.id, element);
 										else rows.current.delete(thread.id);
 									}}
-									onClick={() => onSelect(thread.id)}
-									aria-current={active ? "true" : undefined}
+									onClick={(event) => {
+										if (hasSelection) onToggleSelect(thread.id, event.shiftKey);
+										else onSelect(thread.id);
+									}}
+									aria-current={active && !hasSelection ? "true" : undefined}
+									aria-pressed={hasSelection ? checked : undefined}
 									className="min-w-0 flex-1 text-left"
 								>
 									<div className="flex items-baseline gap-2">
@@ -312,7 +281,11 @@ export function ThreadList({
 											</span>
 										) : null}
 										{/* The date gives way to the row's actions on hover. */}
-										<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)] group-hover:invisible">
+										<span
+											className={`tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)] ${
+												hasSelection ? "" : "group-hover:invisible"
+											}`}
+										>
 											{formatWhen(thread.lastMessageAt)}
 										</span>
 									</div>
@@ -352,31 +325,36 @@ export function ThreadList({
 								Hover actions, in the row's top-right corner where the date is.
 								Hidden until the row is hovered or something in it has focus, so
 								the list is a list rather than a grid of buttons, and reachable
-								from the keyboard because focus counts as hover here.
+								from the keyboard because focus counts as hover here. They stay
+								away entirely while something is selected: a row is then a thing
+								to tick, and an archive button that files one row out of six is
+								not what anybody was aiming at.
 							*/}
-							<div className="pointer-events-none absolute top-1 right-2 flex gap-0.5 opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
-								<IconAction
-									icon={unread ? "read" : "unread"}
-									label={unread ? "Mark read" : "Mark unread"}
-									onClick={() => onAction(unread ? "markRead" : "markUnread", [thread.id])}
-								/>
-								<IconAction
-									icon="flag"
-									label={thread.isFlagged ? "Clear flag" : "Flag"}
-									onClick={() => onAction(thread.isFlagged ? "unflag" : "flag", [thread.id])}
-								/>
-								<IconAction
-									icon="archive"
-									label="Archive"
-									onClick={() => onAction("archive", [thread.id])}
-								/>
-								<IconAction
-									icon="remove"
-									label={inTrash ? "Delete forever" : "Move to trash"}
-									danger
-									onClick={() => onAction(removeAction, [thread.id])}
-								/>
-							</div>
+							{hasSelection ? null : (
+								<div className="pointer-events-none absolute top-1 right-2 flex gap-0.5 opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+									<IconAction
+										icon={unread ? "read" : "unread"}
+										label={unread ? "Mark read" : "Mark unread"}
+										onClick={() => onAction(unread ? "markRead" : "markUnread", [thread.id])}
+									/>
+									<IconAction
+										icon="flag"
+										label={thread.isFlagged ? "Clear flag" : "Flag"}
+										onClick={() => onAction(thread.isFlagged ? "unflag" : "flag", [thread.id])}
+									/>
+									<IconAction
+										icon="archive"
+										label="Archive"
+										onClick={() => onAction("archive", [thread.id])}
+									/>
+									<IconAction
+										icon="remove"
+										label={inTrash ? "Delete forever" : "Move to trash"}
+										danger
+										onClick={() => onAction(removeAction, [thread.id])}
+									/>
+								</div>
+							)}
 						</li>
 					);
 				})}
@@ -391,36 +369,5 @@ export function ThreadList({
 				/>
 			) : null}
 		</div>
-	);
-}
-
-type IconActionProps = {
-	icon: IconName;
-	label: string;
-	danger?: boolean;
-	onClick: () => void;
-};
-
-/** A 32px icon button for a dense row. The label is the only wording it needs. */
-function IconAction({ icon, label, danger = false, onClick }: IconActionProps) {
-	return (
-		<button
-			type="button"
-			aria-label={label}
-			title={label}
-			onClick={(event) => {
-				event.stopPropagation();
-				onClick();
-			}}
-			className={[
-				"inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)]",
-				"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-				danger
-					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
-					: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
-			].join(" ")}
-		>
-			<Icon name={icon} size={14} />
-		</button>
 	);
 }

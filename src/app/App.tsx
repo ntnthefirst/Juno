@@ -7,6 +7,7 @@ import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
 import { Walkthrough } from "../features/onboarding/Walkthrough";
+import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
@@ -163,6 +164,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 						<TodayScreen />
 					) : screen === "clients" ? (
 						<ClientsScreen />
+					) : screen === "projects" ? (
+						<ProjectsScreen />
 					) : screen === "reminders" ? (
 						<RemindersScreen />
 					) : screen === "documents" ? (

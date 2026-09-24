@@ -25,7 +25,7 @@ import { ClientForm } from "./ClientForm";
 import { ClientNotePanel } from "./ClientNotePanel";
 import { ClientPhonePanel } from "./ClientPhonePanel";
 import { ContactForm } from "./ContactForm";
-import { ProjectForm } from "./ProjectForm";
+import { ProjectForm } from "../projects/ProjectForm";
 
 type Load =
 	| { status: "loading" }
@@ -233,7 +233,8 @@ export function ClientsScreen() {
 	if (projectForm && selectedId) {
 		return (
 			<ProjectForm
-				clientId={selectedId}
+				lockedClientId={selectedId}
+				backLabel="Client"
 				project={projectForm.project}
 				onClose={() => setProjectForm(null)}
 				onSaved={() => {

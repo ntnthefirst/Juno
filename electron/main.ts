@@ -1169,6 +1169,41 @@ if (!app.requestSingleInstanceLock()) {
 									if (opened !== "ok") throw new Error(`Smoke: outbox ${opened}`);
 								}
 								if (screen === "Mail") {
+									// The list and the composer, both themes, before a thread takes
+									// the pane over. The reader is the shot the mail step used to
+									// end on, and it is not the screen anybody spends the day in.
+									const shoot = async (name: string) => {
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 300));
+											const shot = await window.webContents.capturePage();
+											writeFileSync(joinPath(shotDir, `${name}-${theme}.png`), shot.toPNG());
+										}
+									};
+									await shoot("mail-list");
+
+									const composed = await window.webContents.executeJavaScript(
+										`(async () => {
+											const open = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "New message");
+											if (!open) return "no new message button";
+											open.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return document.querySelector("input[role=combobox]") ? "ok" : "no composer";
+										})()`,
+									);
+									if (composed !== "ok") throw new Error(`Smoke: compose ${composed}`);
+									await shoot("mail-compose");
+									await window.webContents.executeJavaScript(
+										`(() => {
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel");
+											if (back) back.click();
+										})()`,
+									);
+									await new Promise((r) => setTimeout(r, 500));
+
 									// Opens the newest thread, so the reader and its frame are in
 									// the picture, and checks the frame actually loaded a body.
 									const mailResponses: { url: string; statusCode: number }[] = [];

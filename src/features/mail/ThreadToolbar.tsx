@@ -25,6 +25,11 @@ type BulkButton = { action: ThreadAction; icon: IconName; label: string; danger?
  * One row above the list: the box that takes or drops the whole page, the
  * count, search, and what can be done to the selection.
  *
+ * The box is there whether or not anything is selected, because a control
+ * that appears once you have already done the thing it does is a control
+ * nobody finds. The actions sit at the far right, away from search, so the
+ * two do not read as one group.
+ *
  * They share a row because search keeps working while something is selected.
  * Picking three threads, searching for a fourth and adding it is the normal
  * way to build a selection, so a bar that pushes search out of the way would
@@ -45,6 +50,7 @@ export function ThreadToolbar({
 }: ThreadToolbarProps) {
 	const hasSelection = selectedIds.length > 0;
 	const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+	const someSelected = hasSelection && !allSelected;
 	const removeAction: ThreadAction = inTrash ? "deleteForever" : "trash";
 
 	const bulkButtons: BulkButton[] = [
@@ -63,27 +69,26 @@ export function ThreadToolbar({
 
 	return (
 		<div className="flex flex-wrap items-center gap-2 px-4 pt-6 pb-3">
+			<label className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)] hover:bg-[var(--hover)] has-[:disabled]:hover:bg-transparent">
+				<input
+					type="checkbox"
+					checked={allSelected}
+					disabled={visibleIds.length === 0}
+					ref={(element) => {
+						// Some of the page, but not all of it, is the third state a
+						// checkbox only has through the DOM.
+						if (element) element.indeterminate = someSelected;
+					}}
+					onChange={() => (hasSelection ? onClearSelection() : onSelectAll())}
+					aria-label={hasSelection ? "Clear selection" : "Select all"}
+					title={hasSelection ? "Clear selection" : "Select all"}
+					className="h-3.5 w-3.5 rounded-[3px] border-[var(--line-strong)] accent-[var(--accent)] disabled:opacity-40"
+				/>
+			</label>
 			{hasSelection ? (
-				<>
-					<label className="flex h-[32px] w-[32px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-md)] hover:bg-[var(--hover)]">
-						<input
-							type="checkbox"
-							checked={allSelected}
-							ref={(element) => {
-								// Some of the page, but not all of it, is the third state a
-								// checkbox only has through the DOM.
-								if (element) element.indeterminate = !allSelected;
-							}}
-							onChange={() => (allSelected ? onClearSelection() : onSelectAll())}
-							aria-label={allSelected ? "Clear selection" : "Select all"}
-							title={allSelected ? "Clear selection" : "Select all"}
-							className="h-3.5 w-3.5 rounded-[3px] border-[var(--line-strong)] accent-[var(--accent)]"
-						/>
-					</label>
-					<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
-						{selectedIds.length} selected
-					</span>
-				</>
+				<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
+					{selectedIds.length} selected
+				</span>
 			) : null}
 
 			<div className="min-w-[200px] max-w-[360px] flex-1">
@@ -91,7 +96,7 @@ export function ThreadToolbar({
 			</div>
 
 			{hasSelection ? (
-				<div className="flex items-center gap-1">
+				<div className="ml-auto flex items-center gap-1">
 					{bulkButtons.map((button) => (
 						<IconAction
 							key={button.action}

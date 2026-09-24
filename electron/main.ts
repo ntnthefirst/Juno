@@ -1354,7 +1354,9 @@ if (!app.requestSingleInstanceLock()) {
 											if (!box) return "no row checkbox";
 											box.click();
 											await new Promise((r) => setTimeout(r, 400));
-											const bar = document.querySelector("input[aria-label='Select all'], input[aria-label='Clear selection']");
+											// The box itself is always there, so it proves nothing. Its
+											// label flips to "Clear selection" only once a row is held.
+											const bar = document.querySelector("input[aria-label='Clear selection']");
 											return bar ? "ok" : "no selection toolbar";
 										})()`,
 									);
@@ -1367,6 +1369,40 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									await new Promise((r) => setTimeout(r, 400));
+
+									// The same list serves a folder the user made and the trash,
+									// so selection has to work in both. The trash is the one that
+									// offers "delete forever" where the others offer the bin.
+									for (const [folder, removeLabel] of [
+										["Offertes", "Move to trash"],
+										["Trash", "Delete forever"],
+									] as const) {
+										const held = await window.webContents.executeJavaScript(
+											`(async () => {
+												const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith(${JSON.stringify(folder)}));
+												if (!nav) return "no folder";
+												nav.click();
+												await new Promise((r) => setTimeout(r, 800));
+												const box = document.querySelector("ul li input[type=checkbox]");
+												if (!box) return "no rows";
+												box.click();
+												await new Promise((r) => setTimeout(r, 400));
+												if (!document.querySelector("input[aria-label='Clear selection']")) return "no selection toolbar";
+												if (!document.querySelector("button[aria-label=" + JSON.stringify(${JSON.stringify(removeLabel)}) + "]")) return "no " + ${JSON.stringify(removeLabel)};
+												box.click();
+												await new Promise((r) => setTimeout(r, 300));
+												return "ok";
+											})()`,
+										);
+										if (held !== "ok") throw new Error(`Smoke: selection in ${folder}: ${held}`);
+									}
+									await window.webContents.executeJavaScript(
+										`(() => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Inbox"));
+											if (nav) nav.click();
+										})()`,
+									);
+									await new Promise((r) => setTimeout(r, 800));
 
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {

@@ -5,16 +5,7 @@ a **you** tag needs Nathan rather than a session.
 
 ---
 
-## 1. Decide the licence — **you**
-
-The repository exists (`github.com/ntnthefirst/Juno`), `publish:` in
-`electron-builder.yml` points at it with `releaseType: draft`, and the
-`electron-updater` wiring is in. What is left is the licence: the repo is
-currently all rights reserved by default, which is the right holding position
-until decided otherwise. See decision 13. The question that settles it: should
-a company be able to take Juno, host it, and sell it back?
-
-## 2. Replace the placeholder legal texts with real ones — **you**
+## 1. Replace the placeholder legal texts with real ones — **you**
 
 Phase 1 ships with **invented** contract templates so the machinery can be built
 and tested. They are structurally plausible and legally worthless.
@@ -34,7 +25,7 @@ documented in `docs/templates.md`.
 That is what the banner is for, and why it is on the page rather than in a
 tooltip.
 
-## 3. Decide what the in-app assistant runs on - **you**
+## 2. Decide what the in-app assistant runs on - **you**
 
 Phase 6 is built except its assistant panel. Everything the panel would drive
 is there: 99 tools, the approval gate, briefings and automations. What it needs
@@ -52,7 +43,7 @@ Until then an external agent does the same work. Open Agent, copy the
 configuration, paste it into Claude Desktop or Claude Code. That also answers
 phase 6's done-when in PLAN.md.
 
-## 4. Smaller things
+## 3. Smaller things
 
 - **Auto-update tests.** Nothing exercises the updater, because there is no feed.
 - **The MCP server itself.** The tool descriptors exist for every service, but

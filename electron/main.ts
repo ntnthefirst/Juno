@@ -1406,7 +1406,9 @@ if (!app.requestSingleInstanceLock()) {
 
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {
-											const open = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "New message");
+											// Matched on the label: writing is a plus on the title line
+											// now, so there is no text to find it by.
+											const open = document.querySelector("button[aria-label='New message']");
 											if (!open) return "no new message button";
 											open.click();
 											await new Promise((r) => setTimeout(r, 700));

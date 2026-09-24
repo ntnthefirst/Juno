@@ -23,6 +23,7 @@ import type {
 	ProjectRun,
 	SettingsSection,
 	ThemeSetting,
+	UpdateStatus,
 } from "./shared/types";
 
 const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
@@ -222,6 +223,20 @@ const api: JunoApi = {
 		getOnboarding: () => call("settings.getOnboarding"),
 		setOnboarding: (patch) => call("settings.setOnboarding", patch),
 		needsOnboarding: () => call("settings.needsOnboarding"),
+	},
+
+	updates: {
+		status: () => call("updates.status"),
+		check: () => call("updates.check"),
+		install: () => call("updates.install"),
+		setAutoInstall: (value) => call("updates.setAutoInstall", value),
+		onChange: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => listener(status);
+			ipcRenderer.on("updates.changed", handler);
+			return () => {
+				ipcRenderer.off("updates.changed", handler);
+			};
+		},
 	},
 
 	lock: {

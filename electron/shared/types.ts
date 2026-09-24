@@ -544,6 +544,8 @@ export interface AppSettings {
 	onboarding: OnboardingState;
 	/** How the projects screen is drawn. A preference, not a record. */
 	projectsView: ProjectsView;
+	/** Whether updates install themselves, and when the last check ran. */
+	updates: UpdateSettings;
 }
 
 export interface OnboardingState {
@@ -568,6 +570,57 @@ export type OnboardingPatch = Partial<OnboardingState>;
 export interface AccountingTool {
 	name: string;
 	url: string;
+}
+
+/* ------------------------------------------------------------------ updates */
+
+/**
+ * What a settings screen has to draw, and the only thing that decides which
+ * button it offers. One field rather than a set of booleans, because
+ * "downloading" and "ready" are not two independent facts.
+ */
+export type UpdateStage =
+	/** Not a packaged build, so there is no version to compare and nothing to install. */
+	| "unsupported"
+	/** Nothing has been checked yet this launch. */
+	| "idle"
+	| "checking"
+	/** Checked, and this is the newest release there is. */
+	| "current"
+	/** A newer release exists and has not been downloaded. */
+	| "available"
+	| "downloading"
+	/** Downloaded and waiting. Installing is a restart away. */
+	| "ready"
+	| "error";
+
+export interface UpdateStatus {
+	stage: UpdateStage;
+	/** The version running right now. */
+	currentVersion: string;
+	/** The newer version, once a check has found one. */
+	newVersion: string | null;
+	/** When that release was published, so the screen can say how old it is. */
+	releasedAt: Iso | null;
+	/** 0 to 100 while downloading, 0 otherwise. */
+	percent: number;
+	lastCheckedAt: Iso | null;
+	/** When the next automatic check is due. Null when none is scheduled. */
+	nextCheckAt: Iso | null;
+	autoInstall: boolean;
+	/** One sentence, set only while the stage is error. */
+	error: string | null;
+}
+
+export interface UpdateSettings {
+	/**
+	 * On: a found update downloads in the background and installs when Juno
+	 * next closes, so the following launch is the new version. Off: nothing is
+	 * downloaded until someone presses Install here.
+	 */
+	autoInstall: boolean;
+	/** Persisted so a restart does not start the interval over. */
+	lastCheckedAt: Iso | null;
 }
 
 /* --------------------------------------------------------------------- lock */

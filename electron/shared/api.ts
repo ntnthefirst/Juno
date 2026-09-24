@@ -144,6 +144,7 @@ import type {
 	OnboardingPatch,
 	OnboardingState,
 	SettingsSection,
+	UpdateStatus,
 } from "./types";
 
 export interface ListClientsQuery {
@@ -403,6 +404,25 @@ export interface JunoApi {
 		setOnboarding(patch: OnboardingPatch): Promise<OnboardingState>;
 		/** True on a genuinely first launch, and after a step is added an install has not seen. */
 		needsOnboarding(): Promise<boolean>;
+	};
+
+	/**
+	 * Updates, against the public GitHub releases. There is no method that
+	 * installs without asking and none that reads the feed URL: the renderer
+	 * says check, install or auto-install, and is told what happened.
+	 */
+	updates: {
+		status(): Promise<UpdateStatus>;
+		/**
+		 * A person pressed the button. Rate-limited to three a minute in the
+		 * service, and it throws with how long to wait when that is exceeded.
+		 */
+		check(): Promise<UpdateStatus>;
+		/** Downloads if needed, then restarts into the new version. */
+		install(): Promise<UpdateStatus>;
+		setAutoInstall(value: boolean): Promise<UpdateStatus>;
+		/** Fires while a download runs, which is the only slow part of this. */
+		onChange(listener: (status: UpdateStatus) => void): () => void;
 	};
 
 	lock: {

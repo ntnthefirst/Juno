@@ -185,10 +185,13 @@ if (!app.requestSingleInstanceLock()) {
 			// An automation is exactly the unattended case the lock pauses, so
 			// the scheduler asks before every tick.
 			startAutomationScheduler(() => lock.isLocked());
-			// Updates come from the public GitHub releases the workflow publishes.
-			// Never in development, where the version is always behind.
-			if (!isDev) startUpdates();
 		}
+
+		// Outside the smoke guard, and with no isDev check, because it decides
+		// both for itself. An unpackaged run has no release to compare against,
+		// so it loads the stored preference for the settings window to draw and
+		// schedules nothing.
+		void startUpdates();
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
 		// its database, rather than proving only that it compiles.
@@ -1555,6 +1558,35 @@ if (!app.requestSingleInstanceLock()) {
 										await new Promise((r) => setTimeout(r, 300));
 										const image = await capture(settingsWindow.webContents);
 										writeFileSync(joinPath(shotDir, `settings-your-contacts-${theme}.png`), image.toPNG());
+									}
+								}
+
+								// General is taller than the window too, and what falls off the
+								// bottom is the whole update section: the version, what the last
+								// check found, and the automatic-install toggle.
+								{
+									const general = tabs.findIndex((tab) => tab === "General");
+									if (general === -1) throw new Error("Smoke: the settings window has no general section");
+									await settingsWindow.webContents.executeJavaScript(`${TABS}[${general}].click()`);
+									await new Promise((r) => setTimeout(r, 300));
+									const shown = (await settingsWindow.webContents.executeJavaScript(
+										`(() => {
+											const main = document.querySelector("main");
+											main.scrollTop = main.scrollHeight;
+											return main.textContent.includes("Install updates automatically");
+										})()`,
+									)) as boolean;
+									if (!shown) {
+										throw new Error("Smoke: the general section did not show the update settings");
+									}
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await settingsWindow.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										const image = await capture(settingsWindow.webContents);
+										writeFileSync(joinPath(shotDir, `settings-updates-${theme}.png`), image.toPNG());
 									}
 								}
 

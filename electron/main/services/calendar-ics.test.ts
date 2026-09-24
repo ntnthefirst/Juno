@@ -117,7 +117,7 @@ describe("round trip", () => {
 		expect(moved.location).toBe("Their office");
 		expect(moved.title).toBeNull();
 
-		// The done-when test from PLAN.md phase 5: after the October change, the
+		// The test this has to pass: after the October change, the
 		// moved occurrence is at 14:00 Brussels, which is 13:00Z, and the regular
 		// ones are still at 10:00 Brussels, now 09:00Z.
 		const occurrences = expandSeries(back, back.exceptions, "2026-10-26T00:00:00.000Z", "2026-11-04T00:00:00.000Z");

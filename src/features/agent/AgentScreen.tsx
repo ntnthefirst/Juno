@@ -14,8 +14,7 @@ type Tab = "requests" | "automations" | "log" | "connection";
  * ended up for a while. Settings is a modal window somebody opens to change
  * how Juno behaves; connecting an agent is a job with steps, done once, with
  * the tool list and the pending requests beside it as the thing being
- * connected to. START-HERE.md sends a reader here for it, and it has to be
- * here for that to be true.
+ * connected to.
  */
 const TABS: { id: Tab; label: string }[] = [
 	{ id: "requests", label: "Requests" },

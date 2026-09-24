@@ -16,8 +16,8 @@ Clients, documents, reminders, a mail client with an outbox, a calendar with
 recurrence and .ics exchange, and an MCP server that exposes all of it to an
 agent behind an approval gate. Mail has not yet met a real server, and the
 in-app assistant panel waits on a model decision. What is built and what is not
-is tracked in [BUILD-LOG.md](BUILD-LOG.md); what comes next is in
-[PLAN.md](PLAN.md).
+is tracked in [STRUCTURE.md](STRUCTURE.md); what comes next is in
+[TODO.md](TODO.md).
 
 ---
 
@@ -76,7 +76,8 @@ the feature ships. The reasoning is in [docs/decisions.md](docs/decisions.md).
 ## Repository layout
 
 ```
-PLAN.md                 The phases, the data model, the MCP surface, the risks
+STRUCTURE.md            What is built, where it lives, and the traps in it
+TODO.md                 What is deliberately not done, and what unblocks each
 docs/decisions.md       Locked technical decisions and the reason for each
 brand/
   BRAND.md              Name, values, voice, colour and logo rules

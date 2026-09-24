@@ -6,12 +6,12 @@
  * briefing can never disagree with what clicking through shows.
  *
  * It lives here rather than in a screen because it is the answer an agent
- * asks for, and phase 6 exists so the window and the agent get one
- * implementation of it. The headline is written to be read aloud on its own:
+ * asks for, and the window and the agent get one implementation of it.
+ * The headline is written to be read aloud on its own:
  * an agent that pastes it has said something true and complete.
  *
  * Nothing here decides anything. Every item points at a record a person can
- * open, which is the test PLAN.md sets for phase 6: an answer he can verify by
+ * open, which is the test it has to pass: an answer he can verify by
  * clicking through.
  */
 import type { Briefing, BriefingItem, BriefingSection } from "../../shared/types";

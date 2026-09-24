@@ -7,7 +7,7 @@ import * as clientInstall from "../services/agent-install";
 import type { ToolDescriptor } from "./types";
 
 /**
- * Phase 6: the tools no single domain owned.
+ * The tools no single domain owned.
  *
  * Briefings answer a question across every domain at once. The action tools
  * let an agent see what became of a request it made. The automation tools
@@ -16,7 +16,7 @@ import type { ToolDescriptor } from "./types";
  * **There is no tool that approves an action**, and there will not be, for the
  * same reason there is no `app.unlock`: the thing being gated is what would
  * call it. Approving is a person in the app
- * (.claude/rules/mcp.md section 4, PLAN.md section 4).
+ * (.claude/rules/mcp.md section 4).
  */
 
 const ACTION_STATES: AgentActionState[] = [

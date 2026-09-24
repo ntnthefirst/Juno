@@ -196,7 +196,7 @@ function Placeholder({ title }: { title: string }) {
 		<div className="p-8">
 			<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">{title}</h1>
 			<p className="mt-3 max-w-[60ch] text-[var(--ink-muted)]">
-				Not built yet. See PLAN.md for which phase this arrives in.
+				Not built yet.
 			</p>
 		</div>
 	);

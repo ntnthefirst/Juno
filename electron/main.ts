@@ -945,7 +945,7 @@ if (!app.requestSingleInstanceLock()) {
 									const noted = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const newClient = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "New client");
+											const newClient = document.querySelector("button[aria-label='New client']");
 											if (!newClient) return "no new client action";
 											newClient.click();
 											await wait(500);

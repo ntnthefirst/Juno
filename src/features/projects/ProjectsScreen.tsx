@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project, ProjectSummary, ProjectsView, ReferenceItem } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
@@ -239,10 +240,7 @@ export function ProjectsScreen() {
 
 					<div className="flex items-center gap-2">
 						{view ? <ViewControls view={view} onChange={changeView} /> : null}
-						<Button variant="primary" onClick={() => setEditing("new")}>
-							<Icon name="add" />
-							New project
-						</Button>
+						<AddButton label="New project" onClick={() => setEditing("new")} />
 					</div>
 				</div>
 

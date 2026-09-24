@@ -12,7 +12,7 @@ import type {
 } from "@shared/types";
 import type { Crumb } from "../../app/breadcrumb-context";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { Button } from "../../components/Button";
+import { AddButton } from "../../components/AddButton";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
@@ -343,9 +343,7 @@ export function ClientsScreen() {
 						aria-label="Search clients"
 						className="w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 					/>
-					<Button variant="primary" onClick={() => setForm({ client: null })}>
-						New client
-					</Button>
+					<AddButton label="New client" onClick={() => setForm({ client: null })} />
 				</div>
 			</div>
 

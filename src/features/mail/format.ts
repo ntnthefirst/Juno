@@ -25,6 +25,26 @@ export function formatWhen(iso: string, now = new Date()): string {
 	return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/**
+ * When an account last synced, short enough to sit beside its name. The clock
+ * for today, "Yesterday", then the weekday, then the date. Longer than a list
+ * row's stamp on purpose: "Tue" is fine on a message, but on a sync it has to
+ * say plainly that nothing has run since.
+ */
+export function formatSyncWhen(iso: string, now = new Date()): string {
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return "";
+	const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const days = Math.floor((midnight.getTime() - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / (24 * 60 * 60 * 1000));
+	if (days <= 0) return date.toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" });
+	if (days === 1) return "Yesterday";
+	if (days < 7) return date.toLocaleDateString("en-GB", { weekday: "short" });
+	if (date.getFullYear() === now.getFullYear()) {
+		return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+	}
+	return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 /** The full timestamp, for a message header. */
 export function formatFull(iso: string): string {
 	const date = new Date(iso);

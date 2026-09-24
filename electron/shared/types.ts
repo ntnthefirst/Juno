@@ -268,14 +268,7 @@ export interface ProjectStorageChoice {
  * What a link points at. The kind picks the icon and nothing else: opening one
  * is decided by whether the target parses as an https URL or a local path.
  */
-export type ProjectLinkKind =
-	| "github"
-	| "figma"
-	| "website"
-	| "design"
-	| "docs"
-	| "folder"
-	| "other";
+export type ProjectLinkKind = "github" | "figma" | "website" | "design" | "docs" | "folder" | "other";
 
 export interface ProjectLink extends Standard {
 	projectId: string;
@@ -1052,6 +1045,7 @@ export interface MailFolder extends Standard {
 export interface MailAddress {
 	name: string | null;
 	address: string;
+	clientName?: string;
 }
 
 /**

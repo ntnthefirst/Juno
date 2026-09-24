@@ -29,13 +29,25 @@ import type { MailFileResult, MailSpecialUse } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { mailFolders, mailMessages, mailThreads } from "../db/schema";
-import { connectionFor } from "./mail-accounts";
-import { describeMailError } from "./mail-source";
+import { ensureSpecialFolder } from "./mail-folders";
 import { refreshFolderCounts } from "./mail-store";
-import { openMailboxWriter, type MailboxWriter } from "./mail-writer";
+import { withWriter } from "./mail-writer";
 
 const FLAG_SEEN = "\\Seen";
 const FLAG_FLAGGED = "\\Flagged";
+
+/**
+ * UIDs per command. A folder with ten thousand messages in it would otherwise
+ * become one IMAP command line carrying ten thousand numbers, which servers
+ * refuse at some length nobody documents.
+ */
+const UID_CHUNK = 500;
+
+function chunked(uids: number[]): number[][] {
+	const out: number[][] = [];
+	for (let i = 0; i < uids.length; i += UID_CHUNK) out.push(uids.slice(i, i + UID_CHUNK));
+	return out;
+}
 
 type MessageRow = typeof mailMessages.$inferSelect;
 type FolderRow = typeof mailFolders.$inferSelect;
@@ -112,30 +124,6 @@ function groupByFolder(rows: { message: MessageRow; folder: FolderRow }[]): Map<
 }
 
 /**
- * Opens a writer per account, runs the work, and logs out in a `finally`
- * whatever happened. The account's own error wording is used, so a rejected
- * password reads the same here as it does on the settings screen.
- */
-async function withWriter<T>(
-	accountId: string,
-	db: Db,
-	work: (writer: MailboxWriter) => Promise<T>,
-): Promise<T> {
-	// Outside the try, because a missing password already reads as a sentence
-	// with the next action in it and must not be rewritten as a server failure.
-	const connection = connectionFor(accountId, db);
-	let writer: MailboxWriter | null = null;
-	try {
-		writer = await openMailboxWriter(connection);
-		return await work(writer);
-	} catch (error) {
-		throw new Error(describeMailError(error, connection));
-	} finally {
-		await writer?.close().catch(() => undefined);
-	}
-}
-
-/**
  * A folder whose UIDVALIDITY has moved has been renumbered by the server, so
  * every uid Juno holds for it points at a different message or at nothing.
  * Acting on one would file the wrong mail, so the call stops instead.
@@ -182,7 +170,9 @@ async function setFlag(
 		await withWriter(group.accountId, db, async (writer) => {
 			const mailbox = await writer.openFolder(group.folder.path);
 			checkUidValidity(group.folder, mailbox.uidValidity);
-			await writer.setFlags(uids, on ? [flag] : [], on ? [] : [flag]);
+			for (const part of chunked(uids)) {
+				await writer.setFlags(part, on ? [flag] : [], on ? [] : [flag]);
+			}
 		});
 		db.update(mailMessages)
 			.set({ ...local, updatedAt: now() })
@@ -199,7 +189,15 @@ async function setFlag(
 /** Where a move is going: a named folder, or whichever one serves a purpose. */
 export type MailMoveTarget = { folderId: string } | { specialUse: MailSpecialUse };
 
-function resolveTarget(db: Db, accountId: string, target: MailMoveTarget): FolderRow {
+/**
+ * A folder named, or the one serving a purpose.
+ *
+ * An account whose server has no Archive folder gets one made, because the
+ * alternative is refusing to archive and sending a person to a webmail to
+ * create a single folder. Inbox is the exception: an account with no inbox has
+ * not been synced, and making one is not this call's business.
+ */
+async function resolveTarget(db: Db, accountId: string, target: MailMoveTarget): Promise<FolderRow> {
 	if ("folderId" in target) {
 		const folder = folderById(db, target.folderId);
 		if (!folder) throw new Error("That folder does not exist.");
@@ -208,13 +206,7 @@ function resolveTarget(db: Db, accountId: string, target: MailMoveTarget): Folde
 		}
 		return folder;
 	}
-	const folder = folderBySpecialUse(db, accountId, target.specialUse);
-	if (!folder) {
-		throw new Error(
-			`This account has no ${target.specialUse} folder on the server. Sync the account, or move the message to a folder by name.`,
-		);
-	}
-	return folder;
+	return folderBySpecialUse(db, accountId, target.specialUse) ?? ensureSpecialFolder(accountId, target.specialUse, db);
 }
 
 /**
@@ -236,7 +228,7 @@ export async function move(
 	let folderName = "";
 
 	for (const group of groupByFolder(rows).values()) {
-		const destination = resolveTarget(db, group.accountId, target);
+		const destination = await resolveTarget(db, group.accountId, target);
 		folderName = destination.name;
 		if (destination.id === group.folder.id) continue;
 
@@ -290,6 +282,40 @@ export async function setThreadsSeen(threadIds: string[], seen: boolean, db: Db 
 	return setSeen(messageIdsOfThreads(db, threadIds), seen, db);
 }
 
+/** Every live message in a folder. The unit both folder-wide calls work on. */
+function messageIdsOfFolder(db: Db, folderId: string): string[] {
+	return db
+		.select({ id: mailMessages.id })
+		.from(mailMessages)
+		.where(and(eq(mailMessages.folderId, folderId), isNull(mailMessages.deletedAt)))
+		.all()
+		.map((row) => row.id);
+}
+
+/**
+ * Marks a whole folder read, or unread.
+ *
+ * "Mark all read" is the one thing a person does to a folder rather than to a
+ * message, and doing it by selecting nine hundred rows first is not doing it.
+ */
+export async function setFolderSeen(folderId: string, seen: boolean, db: Db = getDb()): Promise<number> {
+	const folder = folderById(db, folderId);
+	if (!folder) throw new Error("That folder does not exist.");
+	return setSeen(messageIdsOfFolder(db, folderId), seen, db);
+}
+
+/**
+ * Expunges everything in a folder, on the server and here.
+ *
+ * This is emptying the trash, and it destroys mail. The count is in the
+ * sentence a person confirms, and an agent's call waits for that person.
+ */
+export async function emptyFolder(folderId: string, db: Db = getDb()): Promise<number> {
+	const folder = folderById(db, folderId);
+	if (!folder) throw new Error("That folder does not exist.");
+	return deleteForever(messageIdsOfFolder(db, folderId), db);
+}
+
 export async function archiveThreads(threadIds: string[], db: Db = getDb()): Promise<MailFileResult> {
 	return moveThreads(threadIds, { specialUse: "archive" }, db);
 }
@@ -321,7 +347,7 @@ export async function deleteForever(messageIds: string[], db: Db = getDb()): Pro
 		await withWriter(group.accountId, db, async (writer) => {
 			const mailbox = await writer.openFolder(group.folder.path);
 			checkUidValidity(group.folder, mailbox.uidValidity);
-			await writer.expunge(uids);
+			for (const part of chunked(uids)) await writer.expunge(part);
 		});
 
 		const stamp = now();

@@ -51,7 +51,7 @@ export const mailActionTools: ToolDescriptor[] = [
 		title: "Archive threads",
 		description:
 			"Moves every message in these threads to the account's Archive folder, on the server. " +
-			"Fails with a message saying so if the account has no Archive folder.",
+			"An account whose server has no Archive folder gets one made, because that is what archiving means.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -162,5 +162,40 @@ export const mailActionTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => actions.setFlagged(ids(args, "message_ids"), args.flagged === true),
+	},
+	{
+		name: "mail.file.set_folder_seen",
+		title: "Mark a whole folder read or unread",
+		description:
+			"Sets or clears the read flag on every message in a folder, on the server and here. " +
+			"Returns how many messages changed.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				folder_id: { type: "string" },
+				seen: { type: "boolean", description: "True marks read, false marks unread." },
+			},
+			required: ["folder_id", "seen"],
+			additionalProperties: false,
+		},
+		handler: async (args) => actions.setFolderSeen(String(args.folder_id), args.seen === true),
+	},
+	{
+		name: "mail.file.empty_folder",
+		title: "Empty a folder",
+		description:
+			"Deletes every message in a folder from the mail server and forgets them here. This is emptying the " +
+			"trash: there is no undo on either side, so it waits for a person to approve it.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { folder_id: { type: "string" } },
+			required: ["folder_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => actions.emptyFolder(String(args.folder_id)),
 	},
 ];

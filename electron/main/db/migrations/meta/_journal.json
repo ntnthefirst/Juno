@@ -71,6 +71,20 @@
       "when": 1790188081246,
       "tag": "0009_client_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790210121237,
+      "tag": "0010_mail_folder_sync_choice",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790210138521,
+      "tag": "0011_mail_outbox_clients",
+      "breakpoints": true
     }
   ]
 }

@@ -92,9 +92,12 @@ import type {
 	MailFolder,
 	MailMessage,
 	MailMessageBody,
+	MailMessageClient,
 	MailOutboxCounts,
 	MailOutboxListQuery,
 	MailOutboxMessage,
+	MailRecipientSuggestion,
+	MailReplyMode,
 	MailReplySeed,
 	MailSecurity,
 	MailSyncStatus,
@@ -548,6 +551,16 @@ export interface JunoApi {
 		folders: {
 			list(accountId: string): Promise<MailFolder[]>;
 			setSyncEnabled(id: string, enabled: boolean): Promise<MailFolder>;
+			/** Makes the folder on the server, then lists it here. */
+			create(input: { accountId: string; name: string; parentId?: string | null }): Promise<MailFolder>;
+			rename(id: string, name: string): Promise<MailFolder>;
+			/** Removes it from the server with everything in it. Confirmed first. */
+			remove(id: string): Promise<MailFolder>;
+		};
+		/** Who a message can go to, and which clients an address belongs to. */
+		recipients: {
+			suggest(term: string, limit?: number): Promise<MailRecipientSuggestion[]>;
+			clientsFor(addresses: string[]): Promise<MailMessageClient[]>;
 		};
 		sync: {
 			/** One account, or every enabled one. Resolves when the run is over. */
@@ -578,6 +591,10 @@ export interface JunoApi {
 			setSeen(messageIds: string[], seen: boolean): Promise<number>;
 			setThreadsSeen(threadIds: string[], seen: boolean): Promise<number>;
 			setFlagged(messageIds: string[], flagged: boolean): Promise<number>;
+			/** A whole folder read, or unread. Returns how many messages changed. */
+			setFolderSeen(folderId: string, seen: boolean): Promise<number>;
+			/** Everything in a folder, expunged on the server too. Confirmed first. */
+			emptyFolder(folderId: string): Promise<number>;
 		};
 		messages: {
 			get(id: string): Promise<MailMessage | null>;
@@ -612,8 +629,8 @@ export interface JunoApi {
 			counts(accountId?: string): Promise<MailOutboxCounts>;
 			createDraft(input: MailDraftInput): Promise<MailOutboxMessage>;
 			updateDraft(id: string, patch: MailDraftPatch): Promise<MailOutboxMessage>;
-			/** The addresses, subject and quote a reply starts from. */
-			replySeed(messageId: string, all: boolean): Promise<MailReplySeed>;
+			/** The addresses, subject and quote an answer starts from. */
+			replySeed(messageId: string, mode: MailReplyMode): Promise<MailReplySeed>;
 			/** The person's press. Queues the message; the sender picks it up at once. */
 			send(id: string): Promise<MailOutboxMessage>;
 			/** Approves what an agent prepared. Only a person can reach this. */

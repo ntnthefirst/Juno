@@ -1,16 +1,24 @@
 import { useEffect, useState } from "react";
-import type { MailThread } from "@shared/types";
+import type { MailReplyMode, MailThread } from "@shared/types";
 import { Button } from "../../components/Button";
+import { Icon, type IconName } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { MessageView } from "./MessageView";
+import type { ThreadAction } from "./ThreadList";
 
 type ThreadViewProps = {
 	threadId: string;
+	/** Back to the list. Reading a thread replaces it rather than floating over it. */
+	onBack: () => void;
+	/** Whether this thread is in the trash, where the delete is the final one. */
+	inTrash?: boolean;
 	/** The thread's link changed, so the list needs a refresh. */
 	onChanged: () => void;
 	onNotice: (message: string) => void;
-	onReply: (messageId: string, all: boolean) => void;
+	onReply: (messageId: string, mode: MailReplyMode) => void;
+	/** Filing the whole thread. The screen owns it, the same as from a list row. */
+	onAction: (action: ThreadAction) => void;
 };
 
 type Load =
@@ -18,7 +26,15 @@ type Load =
 	| { status: "ready"; thread: MailThread }
 	| { status: "error"; message: string };
 
-export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadViewProps) {
+export function ThreadView({
+	threadId,
+	onBack,
+	inTrash = false,
+	onChanged,
+	onNotice,
+	onReply,
+	onAction,
+}: ThreadViewProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [linking, setLinking] = useState(false);
 	const [version, setVersion] = useState(0);
@@ -77,7 +93,38 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 	const senderAddress = summary.participants[0]?.address ?? null;
 
 	return (
-		<div className="px-8 py-6">
+		<div className="animate-fade px-8 py-6">
+			{/*
+				The reader's own toolbar. The same actions the list row offers, because
+				the decision to archive something is usually made while reading it.
+			*/}
+			<div className="mb-4 flex items-center gap-1 border-b border-[var(--line)] pb-3">
+				<button
+					type="button"
+					onClick={onBack}
+					className="inline-flex h-[32px] items-center gap-1 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+				>
+					<Icon name="chevron-left" size={14} />
+					Back
+				</button>
+				<span className="flex-1" />
+				<ToolbarAction icon="unread" label="Mark unread" onClick={() => onAction("markUnread")} />
+				<ToolbarAction
+					icon="flag"
+					label={summary.isFlagged ? "Clear flag" : "Flag"}
+					onClick={() => onAction(summary.isFlagged ? "unflag" : "flag")}
+				/>
+				<ToolbarAction icon="archive" label="Archive" onClick={() => onAction("archive")} />
+				<ToolbarAction icon="projects" label="Move to folder" onClick={() => onAction("move")} />
+				<ToolbarAction icon="junk" label="Junk" onClick={() => onAction("junk")} />
+				<ToolbarAction
+					icon="remove"
+					label={inTrash ? "Delete forever" : "Move to trash"}
+					danger
+					onClick={() => onAction(inTrash ? "deleteForever" : "trash")}
+				/>
+			</div>
+
 			<div className="flex items-start justify-between gap-6">
 				<h2 className="min-w-0 text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.01em]">
 					{summary.subject}
@@ -135,5 +182,33 @@ export function ThreadView({ threadId, onChanged, onNotice, onReply }: ThreadVie
 				/>
 			) : null}
 		</div>
+	);
+}
+
+type ToolbarActionProps = {
+	icon: IconName;
+	label: string;
+	danger?: boolean;
+	onClick: () => void;
+};
+
+/** A 32px icon button in the reader's toolbar. The label is its only wording. */
+function ToolbarAction({ icon, label, danger = false, onClick }: ToolbarActionProps) {
+	return (
+		<button
+			type="button"
+			aria-label={label}
+			title={label}
+			onClick={onClick}
+			className={[
+				"inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)]",
+				"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+				danger
+					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
+					: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
+			].join(" ")}
+		>
+			<Icon name={icon} size={14} />
+		</button>
 	);
 }

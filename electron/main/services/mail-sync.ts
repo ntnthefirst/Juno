@@ -33,6 +33,16 @@ const STORE_CHUNK = 250;
 
 const SCHEDULER_TICK_MS = 60 * 1000;
 const FIRST_RUN_DELAY_MS = 8 * 1000;
+/**
+ * How soon a run that left work behind is followed by another.
+ *
+ * One run pulls a bounded number of headers and bodies, so a mailbox of any
+ * size needs several. Waiting the account's whole interval between them means a
+ * first sync of forty thousand messages finishes next week, and in the meantime
+ * the list is a fraction of the mailbox with no explanation. Coming straight
+ * back drains it in minutes and stops on its own when nothing is left.
+ */
+const FOLLOW_UP_MS = 10 * 1000;
 
 type Listener = (status: MailSyncStatus) => void;
 
@@ -52,6 +62,7 @@ const listeners = new Set<Listener>();
 const statuses = new Map<string, MailSyncStatus>();
 const running = new Set<string>();
 let schedulerTimer: NodeJS.Timeout | null = null;
+const followUps = new Map<string, NodeJS.Timeout>();
 
 export function configureMailSync(next: SyncConfig): void {
 	config = next;
@@ -82,6 +93,7 @@ function idle(accountId: string): MailSyncStatus {
 		error: null,
 		newMessages: 0,
 		fetchedBodies: 0,
+		pending: 0,
 	};
 }
 
@@ -231,6 +243,11 @@ async function syncFolder(
 		}
 	}
 
+	// What this run knew about and did not reach. A bounded run is the design,
+	// but a list that stops early with nothing saying so is the bug this number
+	// exists to make visible, and the scheduler uses it to come straight back.
+	progress.pending += outstanding.length - missing.length + store.countPendingBodies(db, folder.id);
+
 	db.update(mailFolders)
 		.set({
 			uidValidity: mailbox.uidValidity,
@@ -293,6 +310,7 @@ export async function syncAccount(accountId: string, db: Db = getDb()): Promise<
 		await accounts.recordSync(accountId, { error: null }, db);
 		const finished: MailSyncStatus = { ...progress, phase: "done", folderPath: null, finishedAt: now() };
 		publish(finished);
+		if (finished.pending > 0) followUp(accountId);
 		return finished;
 	} catch (error) {
 		const message =
@@ -353,9 +371,27 @@ export function startScheduler(): void {
 	schedulerTimer.unref();
 }
 
+/**
+ * Comes back to an account that has more to pull, soon rather than at its
+ * interval. Only while the schedule is running: a test that calls syncAccount
+ * directly gets one run and no timers.
+ */
+function followUp(accountId: string): void {
+	if (!schedulerTimer || followUps.has(accountId)) return;
+	const timer = setTimeout(() => {
+		followUps.delete(accountId);
+		if (paused()) return;
+		void syncAccount(accountId).catch(() => undefined);
+	}, FOLLOW_UP_MS);
+	timer.unref();
+	followUps.set(accountId, timer);
+}
+
 export function stopScheduler(): void {
 	if (schedulerTimer) clearInterval(schedulerTimer);
 	schedulerTimer = null;
+	for (const timer of followUps.values()) clearTimeout(timer);
+	followUps.clear();
 }
 
 /** Test seam. Never called by application code. */

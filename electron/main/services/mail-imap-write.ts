@@ -51,6 +51,21 @@ export async function openImapWriter(connection: MailConnection): Promise<Mailbo
 			return { uidValidity: String(mailbox.uidValidity) };
 		},
 
+		async createFolder(path) {
+			// imapflow answers ALREADYEXISTS with created: false rather than
+			// throwing, and asking for a folder that is already there is not a
+			// failure, so the result is deliberately not checked.
+			await client.mailboxCreate(path);
+		},
+
+		async renameFolder(path, toPath) {
+			await client.mailboxRename(path, toPath);
+		},
+
+		async deleteFolder(path) {
+			await client.mailboxDelete(path);
+		},
+
 		async setFlags(uids, add, remove) {
 			if (uids.length === 0) return;
 			const range = uids.join(",");

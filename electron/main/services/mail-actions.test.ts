@@ -55,6 +55,8 @@ const REMOTE_FOLDERS: RemoteFolder[] = [
 
 /** A mailbox both the reader and the writer act on, so a move is visible to both. */
 class FakeMailbox {
+	/** What the server lists. A folder made through the writer appears here. */
+	folders: RemoteFolder[] = REMOTE_FOLDERS.map((folder) => ({ ...folder }));
 	messages = new Map<string, FakeMessage[]>([
 		["INBOX", []],
 		["Archive", []],
@@ -103,7 +105,7 @@ class FakeMailbox {
 function sourceOver(box: FakeMailbox): MailboxSource {
 	return {
 		async listFolders() {
-			return REMOTE_FOLDERS;
+			return box.folders;
 		},
 		async openFolder(path) {
 			box.open = path;
@@ -163,6 +165,35 @@ function writerOver(box: FakeMailbox): MailboxWriter {
 			if (box.failWrites) throw box.failWrites;
 			open = path;
 			return { uidValidity: box.uidValidity.get(path) ?? "1" };
+		},
+		async createFolder(path) {
+			if (box.failWrites) throw box.failWrites;
+			if (!box.messages.has(path)) {
+				box.messages.set(path, []);
+				box.uidValidity.set(path, "1");
+				box.folders.push({
+					path,
+					name: path.split("/").pop() ?? path,
+					delimiter: "/",
+					specialUse: null,
+				});
+			}
+		},
+		async renameFolder(path, toPath) {
+			if (box.failWrites) throw box.failWrites;
+			box.messages.set(toPath, box.messages.get(path) ?? []);
+			box.messages.delete(path);
+			box.uidValidity.set(toPath, box.uidValidity.get(path) ?? "1");
+			box.folders = box.folders.map((folder) =>
+				folder.path === path
+					? { ...folder, path: toPath, name: toPath.split("/").pop() ?? toPath }
+					: folder,
+			);
+		},
+		async deleteFolder(path) {
+			if (box.failWrites) throw box.failWrites;
+			box.messages.delete(path);
+			box.folders = box.folders.filter((folder) => folder.path !== path);
 		},
 		async setFlags(uids, add, remove) {
 			if (box.failWrites) throw box.failWrites;
@@ -299,14 +330,22 @@ describe("archiving", () => {
 		expect(liveMessage(messageId)).toBeUndefined();
 	});
 
-	it("says which folder is missing rather than inventing one", async () => {
+	it("makes the archive folder when the account has none", async () => {
+		// A server with no Archive folder is common, and refusing to archive over
+		// it sends a person to a webmail to create one folder.
+		box.messages.delete("Archive");
+		box.folders = box.folders.filter((folder) => folder.path !== "Archive");
 		db.update(mailFolders)
 			.set({ deletedAt: new Date().toISOString() })
 			.where(eq(mailFolders.id, folderIdOf("archive")))
 			.run();
-		const { threadId } = await syncedThread();
+		const { threadId, messageId } = await syncedThread();
 
-		await expect(actions.archiveThreads([threadId], db)).rejects.toThrow(/no archive folder/i);
+		const result = await actions.archiveThreads([threadId], db);
+
+		expect(result.folderName).toBe("Archive");
+		expect(box.messages.get("Archive")).toHaveLength(1);
+		expect(liveMessage(messageId)?.folderId).toBe(folderIdOf("archive"));
 	});
 
 	it("leaves the local rows alone when the server refuses", async () => {

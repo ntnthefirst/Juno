@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
-import { MAIL_FRAME_ORIGIN, type MailMessage, type MailMessageBody } from "@shared/types";
+import {
+	MAIL_FRAME_ORIGIN,
+	type MailMessage,
+	type MailMessageBody,
+	type MailReplyMode,
+} from "@shared/types";
 import { Button } from "../../components/Button";
+import { Icon } from "../../components/Icon";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
@@ -10,7 +16,7 @@ type MessageViewProps = {
 	message: MailMessage;
 	initiallyOpen: boolean;
 	onNotice: (message: string) => void;
-	onReply: (messageId: string, all: boolean) => void;
+	onReply: (messageId: string, mode: MailReplyMode) => void;
 	/** A file action on this message changed it (read, flagged): reload the thread. */
 	onChanged: () => void;
 };
@@ -109,8 +115,9 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 	const ariaLabel = `Actions for message from ${from}`;
 
 	const menuItems: MenuItem[] = [
-		{ id: "reply", label: "Reply", icon: "reply", onSelect: () => onReply(message.id, false) },
-		{ id: "reply-all", label: "Reply all", icon: "reply", onSelect: () => onReply(message.id, true) },
+		{ id: "reply", label: "Reply", icon: "reply", onSelect: () => onReply(message.id, "reply") },
+		{ id: "reply-all", label: "Reply all", icon: "reply", onSelect: () => onReply(message.id, "reply_all") },
+		{ id: "forward", label: "Forward", icon: "forward", onSelect: () => onReply(message.id, "forward") },
 		{ id: "mark-unread", label: "Mark unread", icon: "unread", separatorBefore: true, onSelect: () => void markUnread() },
 		{
 			id: "flag",
@@ -129,8 +136,9 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 	];
 
 	const contextItems: MenuItem[] = [
-		{ id: "reply", label: "Reply", icon: "reply", onSelect: () => onReply(message.id, false) },
-		{ id: "reply-all", label: "Reply all", icon: "reply", onSelect: () => onReply(message.id, true) },
+		{ id: "reply", label: "Reply", icon: "reply", onSelect: () => onReply(message.id, "reply") },
+		{ id: "reply-all", label: "Reply all", icon: "reply", onSelect: () => onReply(message.id, "reply_all") },
+		{ id: "forward", label: "Forward", icon: "forward", onSelect: () => onReply(message.id, "forward") },
 		{ id: "mark-unread", label: "Mark unread", icon: "unread", onSelect: () => void markUnread() },
 		{
 			id: "copy-address",
@@ -288,6 +296,27 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 							</p>
 						</div>
 					) : null}
+
+					{/*
+						Answering is the point of reading, so it is a row of buttons rather
+						than three items behind a menu.
+					*/}
+					<div className="flex items-center gap-2 border-t border-[var(--line)] py-3">
+						<Button variant="primary" size="dense" onClick={() => onReply(message.id, "reply")}>
+							<Icon name="reply" size={14} />
+							Reply
+						</Button>
+						{message.to.length + message.cc.length > 1 ? (
+							<Button size="dense" onClick={() => onReply(message.id, "reply_all")}>
+								<Icon name="reply" size={14} />
+								Reply all
+							</Button>
+						) : null}
+						<Button size="dense" onClick={() => onReply(message.id, "forward")}>
+							<Icon name="forward" size={14} />
+							Forward
+						</Button>
+					</div>
 
 					{body && body.links.length > 0 ? (
 						<div className="border-t border-[var(--line)] py-3">

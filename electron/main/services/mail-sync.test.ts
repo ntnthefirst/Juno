@@ -404,19 +404,33 @@ describe("sync", () => {
 		expect(box.calls).toEqual([]);
 	});
 
-	it("syncs only the folders that are enabled, inbox first", async () => {
+	it("pulls every folder the server has, inbox first", async () => {
 		box.folders.push({ path: "Archief", name: "Archief", delimiter: "/", specialUse: null });
 		box.messages.set("Archief", [
 			{ uid: 1, from: "a@x.be", subject: "archived", messageId: "<z@x>", date: recent(2), text: "z" },
 		]);
 		await sync.syncAccount(accountId, db);
-		const listed = await folders.list(accountId, db);
-		expect(listed.map((f) => [f.path, f.syncEnabled])).toEqual([["INBOX", true], ["Archief", false]]);
-		expect(await threads.listThreads({ accountId }, db)).toHaveLength(0);
 
-		await folders.setSyncEnabled(listed[1]!.id, true, db);
-		await sync.syncAccount(accountId, db);
+		const listed = await folders.list(accountId, db);
+		expect(listed.map((f) => [f.path, f.syncEnabled])).toEqual([["INBOX", true], ["Archief", true]]);
 		expect(await threads.listThreads({ accountId }, db)).toHaveLength(1);
+		// Inbox first: it is the folder somebody is waiting on.
+		expect(box.calls.filter((c) => c.startsWith("open:"))[0]).toBe("open:INBOX");
+	});
+
+	it("leaves a folder alone once somebody has switched it off", async () => {
+		box.folders.push({ path: "Archief", name: "Archief", delimiter: "/", specialUse: null });
+		box.messages.set("Archief", [
+			{ uid: 1, from: "a@x.be", subject: "archived", messageId: "<z@x>", date: recent(2), text: "z" },
+		]);
+		await sync.syncAccount(accountId, db);
+		const archief = (await folders.list(accountId, db)).find((f) => f.path === "Archief")!;
+		await folders.setSyncEnabled(archief.id, false, db);
+
+		// A second run reconciles the folder list again, and must not undo the
+		// choice by reapplying the default.
+		await sync.syncAccount(accountId, db);
+		expect((await folders.list(accountId, db)).find((f) => f.path === "Archief")!.syncEnabled).toBe(false);
 	});
 });
 

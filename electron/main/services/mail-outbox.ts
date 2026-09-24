@@ -18,9 +18,11 @@ import type {
 	MailDraftPatch,
 	MailOutboxAttachment,
 	MailOutboxCounts,
+	MailMessageClient,
 	MailOutboxListQuery,
 	MailOutboxMessage,
 	MailOutboxState,
+	MailReplyMode,
 	MailReplySeed,
 } from "../../shared/types";
 import { getDb, type Db } from "../db";
@@ -32,10 +34,12 @@ import {
 	mailMessages,
 	mailOutbox,
 	mailOutboxAttachments,
+	mailOutboxClients,
 	mailThreads,
 } from "../db/schema";
 import { formatDateTime } from "./document-context";
 import { htmlToText, mailShell, quoteForReply, textToHtml } from "./mail-html";
+import { clientsFor } from "./mail-recipients";
 import { footerLines } from "./mail-templates";
 
 export type Actor = "user" | "agent";
@@ -112,7 +116,89 @@ function attachmentsFor(db: Db, outboxIds: string[]): Map<string, MailOutboxAtta
 	return out;
 }
 
-function toRecord(row: Row, clientName: string | null, attachments: MailOutboxAttachment[]): MailOutboxMessage {
+/** Every client each message concerns, by message id. */
+function clientsOf(db: Db, outboxIds: string[]): Map<string, MailMessageClient[]> {
+	const out = new Map<string, MailMessageClient[]>();
+	if (outboxIds.length === 0) return out;
+	const rows = db
+		.select({
+			outboxId: mailOutboxClients.outboxId,
+			clientId: mailOutboxClients.clientId,
+			clientName: clients.name,
+			matchedAddress: mailOutboxClients.matchedAddress,
+		})
+		.from(mailOutboxClients)
+		.innerJoin(clients, eq(clients.id, mailOutboxClients.clientId))
+		.where(and(inArray(mailOutboxClients.outboxId, outboxIds), isNull(mailOutboxClients.deletedAt)))
+		.orderBy(asc(mailOutboxClients.createdAt))
+		.all();
+	for (const row of rows) {
+		const list = out.get(row.outboxId) ?? [];
+		list.push({
+			clientId: row.clientId,
+			clientName: row.clientName,
+			matchedAddress: row.matchedAddress,
+		});
+		out.set(row.outboxId, list);
+	}
+	return out;
+}
+
+/**
+ * Rewrites which clients a message concerns from its addresses, and returns
+ * them. Rows that no longer match are soft-deleted rather than removed, like
+ * everything else here, so a link that was there is still visible in the file.
+ */
+async function relinkClients(db: Db, outboxId: string, addresses: string[]): Promise<MailMessageClient[]> {
+	const resolved = await clientsFor(addresses, db);
+	const stamp = now();
+	const existing = db
+		.select()
+		.from(mailOutboxClients)
+		.where(eq(mailOutboxClients.outboxId, outboxId))
+		.all();
+	db.transaction(() => {
+		for (const row of existing) {
+			const keep = resolved.find((entry) => entry.clientId === row.clientId);
+			if (keep && row.deletedAt === null) continue;
+			if (keep) {
+				db.update(mailOutboxClients)
+					.set({ deletedAt: null, matchedAddress: keep.matchedAddress, updatedAt: stamp })
+					.where(eq(mailOutboxClients.id, row.id))
+					.run();
+			} else if (row.deletedAt === null) {
+				db.update(mailOutboxClients)
+					.set({ deletedAt: stamp, updatedAt: stamp })
+					.where(eq(mailOutboxClients.id, row.id))
+					.run();
+			}
+		}
+		for (const entry of resolved) {
+			if (existing.some((row) => row.clientId === entry.clientId)) continue;
+			db.insert(mailOutboxClients)
+				.values({
+					outboxId,
+					clientId: entry.clientId,
+					matchedAddress: entry.matchedAddress,
+					createdAt: stamp,
+					updatedAt: stamp,
+				})
+				.run();
+		}
+	});
+	return resolved.map((entry) => ({
+		clientId: entry.clientId,
+		clientName: entry.clientName,
+		matchedAddress: entry.matchedAddress,
+	}));
+}
+
+function toRecord(
+	row: Row,
+	clientName: string | null,
+	attachments: MailOutboxAttachment[],
+	messageClients: MailMessageClient[],
+): MailOutboxMessage {
 	return {
 		id: row.id,
 		ownerId: row.ownerId,
@@ -133,6 +219,7 @@ function toRecord(row: Row, clientName: string | null, attachments: MailOutboxAt
 		threadId: row.threadId,
 		clientId: row.clientId,
 		clientName,
+		clients: messageClients,
 		projectId: row.projectId,
 		templateId: row.templateId,
 		requestedBy: row.requestedBy as Actor,
@@ -165,7 +252,12 @@ export async function get(id: string, db: Db = getDb()): Promise<MailOutboxMessa
 		.where(and(eq(mailOutbox.id, id), isNull(mailOutbox.deletedAt)))
 		.get();
 	if (!row) return null;
-	return toRecord(row.outbox, row.clientName, attachmentsFor(db, [id]).get(id) ?? []);
+	return toRecord(
+		row.outbox,
+		row.clientName,
+		attachmentsFor(db, [id]).get(id) ?? [],
+		clientsOf(db, [id]).get(id) ?? [],
+	);
 }
 
 async function requireRecord(id: string, db: Db): Promise<MailOutboxMessage> {
@@ -192,11 +284,12 @@ export async function list(query: MailOutboxListQuery = {}, db: Db = getDb()): P
 		.orderBy(desc(mailOutbox.updatedAt))
 		.limit(limit)
 		.all();
-	const attachments = attachmentsFor(
-		db,
-		rows.map((r) => r.outbox.id),
+	const ids = rows.map((r) => r.outbox.id);
+	const attachments = attachmentsFor(db, ids);
+	const linked = clientsOf(db, ids);
+	return rows.map((r) =>
+		toRecord(r.outbox, r.clientName, attachments.get(r.outbox.id) ?? [], linked.get(r.outbox.id) ?? []),
 	);
-	return rows.map((r) => toRecord(r.outbox, r.clientName, attachments.get(r.outbox.id) ?? []));
 }
 
 /** What the sidebar shows next to the outbox: what is waiting on whom. */
@@ -338,6 +431,18 @@ export async function createDraft(input: MailDraftInput, db: Db = getDb()): Prom
 			.run();
 	});
 	await attachDocuments(db, id, input.documentIds ?? []);
+	await relinkClients(db, id, [...to, ...cc, ...bcc].map((a) => a.address));
+	// Filed under the client the recipients point at, unless the caller said
+	// which, or this is a reply and the thread already belongs to one.
+	if (!input.clientId && !reply.clientId) {
+		const [first] = clientsOf(db, [id]).get(id) ?? [];
+		if (first) {
+			db.update(mailOutbox)
+				.set({ clientId: first.clientId, updatedAt: now() })
+				.where(eq(mailOutbox.id, id))
+				.run();
+		}
+	}
 	return requireRecord(id, db);
 }
 
@@ -383,6 +488,14 @@ export async function updateDraft(id: string, patch: MailDraftPatch, db: Db = ge
 		}
 	});
 	if (patch.documentIds !== undefined) await attachDocuments(db, id, patch.documentIds);
+	if (patch.to !== undefined || patch.cc !== undefined || patch.bcc !== undefined) {
+		const current = requireRow(id, db);
+		await relinkClients(db, id, [
+			...parseAddresses(current.toJson),
+			...parseAddresses(current.ccJson),
+			...parseAddresses(current.bccJson),
+		].map((a) => a.address));
+	}
 	return requireRecord(id, db);
 }
 
@@ -492,17 +605,21 @@ export async function remove(id: string, db: Db = getDb()): Promise<MailOutboxMe
 		.set({ deletedAt: stamp, updatedAt: stamp })
 		.where(eq(mailOutbox.id, id))
 		.run();
-	return toRecord({ ...row, deletedAt: stamp }, null, []);
+	return toRecord({ ...row, deletedAt: stamp }, null, [], []);
 }
 
 /**
- * What a reply starts from. Reply-all keeps everyone on the original except
- * the account itself; a plain reply goes to the sender, or to Reply-To when
- * the sender asked for that.
+ * What an answer starts from.
+ *
+ * A plain reply goes to the sender, or to Reply-To when the sender asked for
+ * that. Reply-all keeps everyone on the original except the account itself. A
+ * forward keeps the text and nothing else: it has no recipients, because the
+ * person forwarding it chooses those, and it carries no threading headers,
+ * because it is a new conversation rather than a turn in this one.
  */
 export async function replySeed(
 	messageId: string,
-	options: { all: boolean },
+	options: { mode: MailReplyMode },
 	db: Db = getDb(),
 ): Promise<MailReplySeed> {
 	const row = db
@@ -530,15 +647,23 @@ export async function replySeed(
 			list.push({ name: entry.name ?? null, address });
 		}
 	};
-	push(to, replyTo.length > 0 ? replyTo : sender);
-	if (options.all) {
-		push(to, parseAddresses(message.toJson));
-		push(cc, parseAddresses(message.ccJson));
+	if (options.mode !== "forward") {
+		push(to, replyTo.length > 0 ? replyTo : sender);
+		if (options.mode === "reply_all") {
+			push(to, parseAddresses(message.toJson));
+			push(cc, parseAddresses(message.ccJson));
+		}
+		// Answering your own sent message: reply to whoever it was sent to.
+		if (to.length === 0) {
+			push(to, parseAddresses(message.toJson).filter((a) => !own.has(a.address.toLowerCase())));
+		}
 	}
-	// Answering your own sent message: reply to whoever it was sent to.
-	if (to.length === 0) push(to, parseAddresses(message.toJson).filter((a) => !own.has(a.address.toLowerCase())));
 
-	const subject = /^\s*(re|antw|aw)\s*:/i.test(message.subject) ? message.subject : `Re: ${message.subject}`;
+	const forwarding = options.mode === "forward";
+	const prefix = forwarding ? /^\s*(fw|fwd|doorst)\s*:/i : /^\s*(re|antw|aw)\s*:/i;
+	const subject = prefix.test(message.subject)
+		? message.subject
+		: `${forwarding ? "Fw" : "Re"}: ${message.subject}`;
 	const fromLine = message.fromName ? `${message.fromName} <${message.fromAddress ?? ""}>` : (message.fromAddress ?? "");
 	return {
 		accountId: message.accountId,
@@ -550,7 +675,7 @@ export async function replySeed(
 			sentAt: formatDateTime(message.sentAt ?? message.internalDate),
 			text: message.bodyText ?? message.snippet,
 		}),
-		replyToMessageId: message.id,
+		replyToMessageId: forwarding ? null : message.id,
 		clientId: row.clientId ?? null,
 	};
 }
@@ -571,12 +696,11 @@ export async function nextQueued(limit: number, db: Db = getDb()): Promise<Queue
 		.orderBy(asc(mailOutbox.queuedAt))
 		.limit(limit)
 		.all();
-	const attachments = attachmentsFor(
-		db,
-		rows.map((r) => r.outbox.id),
-	);
+	const ids = rows.map((r) => r.outbox.id);
+	const attachments = attachmentsFor(db, ids);
+	const linked = clientsOf(db, ids);
 	return rows.map((r) => ({
-		...toRecord(r.outbox, r.clientName, attachments.get(r.outbox.id) ?? []),
+		...toRecord(r.outbox, r.clientName, attachments.get(r.outbox.id) ?? [], linked.get(r.outbox.id) ?? []),
 		references: parseReferences(r.outbox.referencesJson),
 	}));
 }

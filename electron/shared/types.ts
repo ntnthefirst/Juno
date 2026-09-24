@@ -880,6 +880,28 @@ export interface MailAddress {
 	address: string;
 }
 
+/**
+ * A recipient the composer can offer for what has been typed so far.
+ *
+ * `clients` is every client the address belongs to, not the best one: two
+ * clients sharing a bookkeeper both concern a message to that address, and
+ * choosing between them here would throw away something nobody can retype.
+ */
+export interface MailRecipientSuggestion {
+	address: string;
+	name: string | null;
+	clients: { id: string; name: string }[];
+	/** A client's own address, a contact's, or one that has written before. */
+	source: "client" | "contact" | "message";
+}
+
+/** A client an outgoing message concerns, and the address that says so. */
+export interface MailMessageClient {
+	clientId: string;
+	clientName: string;
+	matchedAddress: string;
+}
+
 export interface MailThreadSummary {
 	id: string;
 	accountId: string;
@@ -892,6 +914,8 @@ export interface MailThreadSummary {
 	messageCount: number;
 	unreadCount: number;
 	hasAttachments: boolean;
+	/** True when any message in the thread is flagged. */
+	isFlagged: boolean;
 	/** The people on the thread other than the account itself, deduplicated. */
 	participants: MailAddress[];
 	/** The newest message's first line, or a search snippet when searching. */
@@ -968,6 +992,16 @@ export interface MailThreadListQuery {
 	/** Full-text over subject, body and sender. */
 	search?: string;
 	unreadOnly?: boolean;
+	/** Only threads carrying a flagged message. */
+	flaggedOnly?: boolean;
+	/** Only threads carrying a real attachment. */
+	withAttachments?: boolean;
+	/** Only threads a given address took part in. Matched exactly, lowercased. */
+	fromAddress?: string;
+	/** Only threads whose last message is on or after this date, `YYYY-MM-DD`. */
+	since?: string;
+	/** Only threads whose last message is on or before this date, `YYYY-MM-DD`. */
+	until?: string;
 	limit?: number;
 	/** The `lastMessageAt` of the last row seen, for the next page. */
 	before?: Iso;
@@ -1006,6 +1040,13 @@ export interface MailSyncStatus {
 	/** What the run produced so far. */
 	newMessages: number;
 	fetchedBodies: number;
+	/**
+	 * How much of the mailbox this run knows about and did not reach: headers
+	 * inside the horizon it did not list, plus bodies not fetched yet. A run is
+	 * bounded on purpose, so this is normal on a large mailbox rather than a
+	 * failure, and it is what the next run picks up.
+	 */
+	pending: number;
 }
 
 /* ------------------------------------------------------------- mail: sending */
@@ -1072,6 +1113,12 @@ export interface MailOutboxMessage extends Standard {
 	threadId: string | null;
 	clientId: string | null;
 	clientName: string | null;
+	/**
+	 * Every client the recipients belong to, worked out from the addresses. The
+	 * message is filed under `clientId`; this is the rest of them, and a message
+	 * to two clients carries both rather than silently one.
+	 */
+	clients: MailMessageClient[];
 	projectId: string | null;
 	templateId: string | null;
 	requestedBy: "user" | "agent";
@@ -1107,6 +1154,9 @@ export interface MailDraftInput {
 export type MailDraftPatch = Partial<Omit<MailDraftInput, "accountId">>;
 
 /** What a reply starts from: the addresses and subject, worked out from the original. */
+/** Reply to the sender, reply to everyone, or forward it to somebody new. */
+export type MailReplyMode = "reply" | "reply_all" | "forward";
+
 export interface MailReplySeed {
 	accountId: string;
 	to: MailAddress[];
@@ -1114,7 +1164,8 @@ export interface MailReplySeed {
 	subject: string;
 	/** The original, quoted, for under the reply. */
 	quotedText: string;
-	replyToMessageId: string;
+	/** Null for a forward: it starts a conversation rather than continuing one. */
+	replyToMessageId: string | null;
 	clientId: string | null;
 }
 

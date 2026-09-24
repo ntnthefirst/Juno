@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Automation, AutomationRun } from "@shared/types";
 import { Button } from "../../components/Button";
+import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
+import { useContextMenu } from "../../lib/use-context-menu";
 import { AutomationForm } from "./AutomationForm";
 import { describeTrigger, formatWhen, RUN_LABELS, RUN_TONES } from "./format";
 
@@ -101,69 +103,13 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 			) : (
 				<div className="mt-4">
 					{load.rows.map((automation) => (
-						<div key={automation.id} className="border-b border-[var(--line)] px-2 py-2.5 hover:bg-[var(--hover)]">
-							<div className="flex items-center gap-3">
-								<div className="min-w-0 flex-1">
-									<p className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
-										{automation.name}
-										{automation.enabled ? null : (
-											<span className="ml-2 font-[var(--weight-normal)] text-[var(--ink-muted)]">off</span>
-										)}
-									</p>
-									<p className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-										{describeTrigger(automation.trigger)}
-										{` · ${automation.steps.length} step${automation.steps.length === 1 ? "" : "s"}`}
-										{automation.lastRunAt ? ` · last run ${formatWhen(automation.lastRunAt)}` : ""}
-									</p>
-								</div>
-								{automation.lastStatus ? (
-									<span
-										className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${RUN_TONES[automation.lastStatus]}`}
-									>
-										{RUN_LABELS[automation.lastStatus]}
-									</span>
-								) : null}
-								<div className="flex shrink-0 items-center gap-1">
-									<Button
-										size="dense"
-										disabled={busyId !== null}
-										onClick={() =>
-											void act(automation.id, () => window.juno.automations.run(automation.id))
-										}
-									>
-										Run now
-									</Button>
-									<Button
-										size="dense"
-										disabled={busyId !== null}
-										onClick={() =>
-											void act(automation.id, () =>
-												window.juno.automations.update(automation.id, { enabled: !automation.enabled }),
-											)
-										}
-									>
-										{automation.enabled ? "Turn off" : "Turn on"}
-									</Button>
-									<Button size="dense" onClick={() => setForm({ automation })}>
-										Edit
-									</Button>
-									<Button
-										size="dense"
-										variant="danger"
-										disabled={busyId !== null}
-										onClick={() =>
-											void act(
-												automation.id,
-												() => window.juno.automations.remove(automation.id),
-												`${automation.name} deleted.`,
-											)
-										}
-									>
-										Delete
-									</Button>
-								</div>
-							</div>
-						</div>
+						<AutomationRow
+							key={automation.id}
+							automation={automation}
+							busyId={busyId}
+							onEdit={(entry) => setForm({ automation: entry })}
+							act={act}
+						/>
 					))}
 				</div>
 			)}
@@ -221,6 +167,107 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 				</section>
 			) : null}
 
+		</div>
+	);
+}
+
+type AutomationRowProps = {
+	automation: Automation;
+	/** Non-null while any row's action is in flight, this row's included. */
+	busyId: string | null;
+	onEdit: (automation: Automation) => void;
+	act: (id: string, work: () => Promise<unknown>, done?: string) => Promise<void>;
+};
+
+/**
+ * One act is a button and the rest are a menu, the same shape as a reminder
+ * row: running it again is what happens on nearly all of them, and turning it
+ * off, editing it and deleting it are occasional. The same four sit on the
+ * right-click menu, so the mouse has both routes to any of them.
+ */
+function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) {
+	const menu = useContextMenu();
+	const busy = busyId !== null;
+
+	const items: MenuItem[] = [
+		{
+			id: "run",
+			label: "Run now",
+			icon: "sync",
+			disabled: busy,
+			onSelect: () => void act(automation.id, () => window.juno.automations.run(automation.id)),
+		},
+		{
+			id: "toggle",
+			label: automation.enabled ? "Turn off" : "Turn on",
+			icon: automation.enabled ? "close" : "check",
+			disabled: busy,
+			onSelect: () =>
+				void act(automation.id, () =>
+					window.juno.automations.update(automation.id, { enabled: !automation.enabled }),
+				),
+		},
+		{
+			id: "edit",
+			label: "Edit",
+			icon: "edit",
+			disabled: busy,
+			onSelect: () => onEdit(automation),
+		},
+		{
+			id: "delete",
+			label: "Delete",
+			icon: "remove",
+			danger: true,
+			separatorBefore: true,
+			disabled: busy,
+			onSelect: () =>
+				void act(
+					automation.id,
+					() => window.juno.automations.remove(automation.id),
+					`${automation.name} deleted.`,
+				),
+		},
+	];
+
+	return (
+		<div onContextMenu={menu.open} className="border-b border-[var(--line)] px-2 py-2.5 hover:bg-[var(--hover)]">
+			<div className="flex items-center gap-3">
+				<div className="min-w-0 flex-1">
+					<p className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+						{automation.name}
+						{automation.enabled ? null : (
+							<span className="ml-2 font-[var(--weight-normal)] text-[var(--ink-muted)]">off</span>
+						)}
+					</p>
+					<p className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						{describeTrigger(automation.trigger)}
+						{` · ${automation.steps.length} step${automation.steps.length === 1 ? "" : "s"}`}
+						{automation.lastRunAt ? ` · last run ${formatWhen(automation.lastRunAt)}` : ""}
+					</p>
+				</div>
+				{automation.lastStatus ? (
+					<span
+						className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${RUN_TONES[automation.lastStatus]}`}
+					>
+						{RUN_LABELS[automation.lastStatus]}
+					</span>
+				) : null}
+				<div className="flex shrink-0 items-center gap-1">
+					<Button
+						size="dense"
+						disabled={busy}
+						onClick={() => void act(automation.id, () => window.juno.automations.run(automation.id))}
+					>
+						Run now
+					</Button>
+					<MenuButton items={items} ariaLabel={`More for ${automation.name}`} disabled={busy} />
+				</div>
+			</div>
+
+			{menu.at ? (
+				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={automation.name} />
+			) : null}
 		</div>
 	);
 }

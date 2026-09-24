@@ -13,14 +13,18 @@ import type {
 	MailDraftInput,
 	MailDraftPatch,
 	MailOutboxListQuery,
+	MailReplyMode,
 	MailTemplateInput,
 	MailTemplatePatch,
 	MailThreadListQuery,
 } from "../../shared/types";
+import * as actions from "../services/mail-actions";
 import * as accounts from "../services/mail-accounts";
 import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
+import type { MailFolderInput } from "../services/mail-folders";
 import * as outbox from "../services/mail-outbox";
+import * as recipients from "../services/mail-recipients";
 import * as sender from "../services/mail-send";
 import * as sync from "../services/mail-sync";
 import * as templates from "../services/mail-templates";
@@ -47,6 +51,18 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.folders.setSyncEnabled", (_event, id: string, enabled: boolean) =>
 		folders.setSyncEnabled(id, enabled),
 	);
+	// Folder work reaches the server first, like filing does. Removing one
+	// destroys mail, so the window asks with the count in front of the person.
+	ipcMain.handle("mail.folders.create", (_event, input: MailFolderInput) => folders.create(input));
+	ipcMain.handle("mail.folders.rename", (_event, id: string, name: string) => folders.rename(id, name));
+	ipcMain.handle("mail.folders.remove", (_event, id: string) => folders.remove(id));
+
+	ipcMain.handle("mail.recipients.suggest", (_event, term: string, limit?: number) =>
+		recipients.suggest(term, limit === undefined ? {} : { limit }),
+	);
+	ipcMain.handle("mail.recipients.clientsFor", (_event, addresses: string[]) =>
+		recipients.clientsFor(addresses),
+	);
 
 	ipcMain.handle("mail.sync.run", (_event, accountId?: string) =>
 		accountId ? sync.syncAccount(accountId).then((s) => [s]) : sync.syncAll(),
@@ -64,6 +80,34 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.threads.countForClient", (_event, clientId: string) =>
 		threads.countForClient(clientId),
 	);
+
+	// Filing. Each of these reaches the server before it touches a local row,
+	// so nothing here is quietly undone by the next sync. The window confirms
+	// deleteForever with a count first; the agent's route to the same service
+	// is parked for approval by the generic gate.
+	ipcMain.handle("mail.file.archive", (_event, threadIds: string[]) => actions.archiveThreads(threadIds));
+	ipcMain.handle("mail.file.trash", (_event, threadIds: string[]) => actions.trashThreads(threadIds));
+	ipcMain.handle("mail.file.junk", (_event, threadIds: string[]) => actions.junkThreads(threadIds));
+	ipcMain.handle("mail.file.moveToFolder", (_event, threadIds: string[], folderId: string) =>
+		actions.moveThreads(threadIds, { folderId }),
+	);
+	ipcMain.handle("mail.file.deleteForever", (_event, threadIds: string[]) =>
+		actions.deleteThreadsForever(threadIds),
+	);
+	ipcMain.handle("mail.file.setSeen", (_event, messageIds: string[], seen: boolean) =>
+		actions.setSeen(messageIds, seen),
+	);
+	ipcMain.handle("mail.file.setThreadsSeen", (_event, threadIds: string[], seen: boolean) =>
+		actions.setThreadsSeen(threadIds, seen),
+	);
+	ipcMain.handle("mail.file.setFlagged", (_event, messageIds: string[], flagged: boolean) =>
+		actions.setFlagged(messageIds, flagged),
+	);
+	ipcMain.handle("mail.file.setFolderSeen", (_event, folderId: string, seen: boolean) =>
+		actions.setFolderSeen(folderId, seen),
+	);
+	// Emptying a folder destroys mail. The window says how much first.
+	ipcMain.handle("mail.file.emptyFolder", (_event, folderId: string) => actions.emptyFolder(folderId));
 
 	ipcMain.handle("mail.messages.get", (_event, id: string) => threads.getMessage(id));
 	ipcMain.handle("mail.messages.body", (_event, id: string) => threads.getBody(id));
@@ -112,8 +156,8 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.outbox.updateDraft", (_event, id: string, patch: MailDraftPatch) =>
 		outbox.updateDraft(id, patch),
 	);
-	ipcMain.handle("mail.outbox.replySeed", (_event, messageId: string, all: boolean) =>
-		outbox.replySeed(messageId, { all }),
+	ipcMain.handle("mail.outbox.replySeed", (_event, messageId: string, mode: MailReplyMode) =>
+		outbox.replySeed(messageId, { mode }),
 	);
 	// A person pressed Send. The actor is the one thing the adapter states, and
 	// it is a fact about the caller, not a decision: this channel is only

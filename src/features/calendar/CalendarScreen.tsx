@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, CalendarItem, CalendarOccurrence, CalendarScope } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { Icon } from "../../components/Icon";
+import { MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { AgendaView } from "./AgendaView";
@@ -48,6 +50,12 @@ type ScopeQuestion = {
 
 const AGENDA_DAYS = 30;
 
+const VIEW_OPTIONS: { kind: ViewKind; label: string; short: string }[] = [
+	{ kind: "month", label: "Month", short: "M" },
+	{ kind: "week", label: "Week", short: "W" },
+	{ kind: "agenda", label: "Agenda", short: "A" },
+];
+
 /** The current minute, for the week view's line. Impure, so read in an effect. */
 function minuteNow(): number {
 	const d = new Date();
@@ -69,6 +77,9 @@ export function CalendarScreen() {
 	const [deleted, setDeleted] = useState<CalendarEvent | null>(null);
 	const [warnings, setWarnings] = useState<string[] | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	// Which way the range last moved, for the agenda's entrance. Held here
+	// because nothing below can tell a step forward from a jump to today.
+	const [direction, setDirection] = useState<-1 | 1>(1);
 
 	// The clock is impure, so it is read here and kept current by the minute.
 	useEffect(() => {
@@ -129,11 +140,12 @@ export function CalendarScreen() {
 		[load, from, to],
 	);
 
-	function step(direction: -1 | 1) {
+	function step(towards: -1 | 1) {
 		if (!anchor) return;
-		if (view === "month") setAnchor(addMonths(anchor, direction));
-		else if (view === "week") setAnchor(addDays(anchor, 7 * direction));
-		else setAnchor(addDays(anchor, AGENDA_DAYS * direction));
+		setDirection(towards);
+		if (view === "month") setAnchor(addMonths(anchor, towards));
+		else if (view === "week") setAnchor(addDays(anchor, 7 * towards));
+		else setAnchor(addDays(anchor, AGENDA_DAYS * towards));
 	}
 
 	async function run(work: () => Promise<unknown>, done?: string) {
@@ -317,17 +329,50 @@ export function CalendarScreen() {
 		);
 	}
 
+	const overflowItems: MenuItem[] = [
+		{ id: "import", label: "Import", icon: "import", onSelect: () => void importIcs() },
+		{
+			id: "export",
+			label: "Export",
+			icon: "export",
+			disabled: load.status !== "ready",
+			onSelect: () => void exportIcs(),
+		},
+		{
+			id: "reminders",
+			label: "Reminders",
+			icon: "reminders",
+			hint: showReminders ? "Shown" : "Hidden",
+			separatorBefore: true,
+			onSelect: () => setShowReminders((v) => !v),
+		},
+		{
+			id: "deadlines",
+			label: "Deadlines",
+			icon: "flag",
+			hint: showDeadlines ? "Shown" : "Hidden",
+			onSelect: () => setShowDeadlines((v) => !v),
+		},
+	];
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex flex-none items-center gap-3 border-b border-[var(--line)] px-6 py-3">
-				<h1 className="shrink-0 text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+			<div className="flex flex-none min-w-0 items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:gap-3 sm:px-6">
+				<h1 className="min-w-0 shrink truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
 					{heading}
 				</h1>
-				<div className="flex items-center gap-1">
+				<div className="flex shrink-0 items-center gap-1">
 					<Button size="dense" onClick={() => step(-1)} aria-label="Previous">
 						{"<"}
 					</Button>
-					<Button size="dense" onClick={() => today && setAnchor(today)}>
+					<Button
+						size="dense"
+						onClick={() => {
+							if (!today) return;
+							if (anchor) setDirection(today >= anchor ? 1 : -1);
+							setAnchor(today);
+						}}
+					>
 						Today
 					</Button>
 					<Button size="dense" onClick={() => step(1)} aria-label="Next">
@@ -335,41 +380,51 @@ export function CalendarScreen() {
 					</Button>
 				</div>
 
-				<div className="ml-2 flex items-center gap-px rounded-[var(--radius-md)] bg-[var(--sunken)] p-px" role="group" aria-label="View">
-					{(["month", "week", "agenda"] as ViewKind[]).map((kind) => (
+				<div
+					className="flex shrink-0 items-center gap-px rounded-[var(--radius-md)] bg-[var(--sunken)] p-px"
+					role="group"
+					aria-label="View"
+				>
+					{VIEW_OPTIONS.map((option) => (
 						<button
-							key={kind}
+							key={option.kind}
 							type="button"
-							aria-pressed={view === kind}
-							onClick={() => setView(kind)}
+							aria-pressed={view === option.kind}
+							// Both labels are in the DOM and CSS picks one, so the button
+							// needs a name of its own: without it a screen reader reads the
+							// long one and the short one together, as "Week W".
+							aria-label={option.label}
+							title={option.label}
+							onClick={() => setView(option.kind)}
 							className={`h-[30px] rounded-[var(--radius-md)] px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								view === kind ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+								view === option.kind ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
 							}`}
 						>
-							{kind === "month" ? "Month" : kind === "week" ? "Week" : "Agenda"}
+							<span aria-hidden className="hidden sm:inline">
+								{option.label}
+							</span>
+							<span aria-hidden className="sm:hidden">
+								{option.short}
+							</span>
 						</button>
 					))}
 				</div>
 
-				<div className="ml-auto flex items-center gap-2">
-					<OverlayToggle label="Reminders" on={showReminders} onToggle={() => setShowReminders((v) => !v)} />
-					<OverlayToggle label="Deadlines" on={showDeadlines} onToggle={() => setShowDeadlines((v) => !v)} />
-					<Button size="dense" onClick={() => void importIcs()} title="Import an .ics file">
-						Import
-					</Button>
-					<Button size="dense" onClick={() => void exportIcs()} disabled={load.status !== "ready"} title="Export this range as .ics">
-						Export
-					</Button>
+				<div className="ml-auto flex shrink-0 items-center gap-1">
 					<Button
 						variant="primary"
+						size="dense"
+						aria-label="New event"
+						title="New event"
 						onClick={() => anchor && createAt(view === "month" ? (today ?? anchor) : anchor, 9 * 60)}
 					>
-						New event
+						<Icon name="add" />
 					</Button>
+					<MenuButton items={overflowItems} ariaLabel="More" icon="more" />
 				</div>
 			</div>
 
-			<div className="flex min-h-0 flex-1">
+			<div className="relative flex min-h-0 flex-1">
 				<div className="min-w-0 flex-1 overflow-hidden">
 				{load.status === "error" ? (
 					<div className="m-8 border-l-2 border-[var(--risk)] pl-4">
@@ -391,6 +446,9 @@ export function CalendarScreen() {
 							setView("week");
 						}}
 						onMove={(item, dayDelta) => move(item, dayDelta, 0)}
+						onEdit={(item) => void edit(item)}
+						onDelete={(item) => remove(item)}
+						onStep={step}
 					/>
 				) : view === "week" ? (
 					<WeekView
@@ -402,9 +460,21 @@ export function CalendarScreen() {
 						onCreateAt={createAt}
 						onMove={move}
 						onResize={resize}
+						onEdit={(item) => void edit(item)}
+						onDelete={(item) => remove(item)}
+						onStep={step}
 					/>
 				) : (
-					<AgendaView dates={dates} today={today} placed={placed} onOpen={setDetail} />
+					<AgendaView
+						direction={direction}
+						dates={dates}
+						today={today}
+						placed={placed}
+						onOpen={setDetail}
+						onEdit={(item) => void edit(item)}
+						onDelete={(item) => remove(item)}
+						onStep={step}
+					/>
 				)}
 				</div>
 
@@ -449,27 +519,5 @@ export function CalendarScreen() {
 
 			{deleted === null && notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
 		</div>
-	);
-}
-
-type OverlayToggleProps = {
-	label: string;
-	on: boolean;
-	onToggle: () => void;
-};
-
-/** A pressed state that reads as "shown", not a checkbox that reads as a setting. */
-function OverlayToggle({ label, on, onToggle }: OverlayToggleProps) {
-	return (
-		<button
-			type="button"
-			aria-pressed={on}
-			onClick={onToggle}
-			className={`h-[32px] rounded-[var(--radius-md)] px-2.5 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-				on ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
-			}`}
-		>
-			{label}
-		</button>
 	);
 }

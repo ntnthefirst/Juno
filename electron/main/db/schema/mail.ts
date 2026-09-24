@@ -73,8 +73,19 @@ export const mailFolders = sqliteTable(
 		 */
 		uidValidity: text("uid_validity"),
 		uidNext: integer("uid_next"),
-		/** Whether sync pulls this folder. INBOX on by default, the rest opt in. */
+		/**
+		 * Whether sync pulls this folder. The value a new folder gets is decided by
+		 * mail-store.ts, not by this default, and it is yes for every folder: a
+		 * mail client that holds the inbox and nothing else cannot show what was
+		 * sent, what was filed, or where a move just put something.
+		 */
 		syncEnabled: integer("sync_enabled", { mode: "boolean" }).notNull().default(false),
+		/**
+		 * When the owner last decided this folder's sync setting by hand. While it
+		 * is null the reconcile policy applies, so changing that policy reaches
+		 * folders nobody has an opinion about and leaves the rest alone.
+		 */
+		syncChoiceAt: text("sync_choice_at"),
 		/** The horizon the last full listing used, so a raised horizon triggers one. */
 		syncedHorizonDays: integer("synced_horizon_days"),
 		messageCount: integer("message_count").notNull().default(0),

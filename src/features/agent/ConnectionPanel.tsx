@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { McpServerStatus, ToolSummary } from "@shared/types";
 import { Button } from "../../components/Button";
+import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { ClientInstaller } from "./ClientInstaller";
+import { ManualSetup } from "./ManualSetup";
 
 type ConnectionPanelProps = {
 	onNotice: (message: string) => void;
@@ -50,11 +52,10 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 		};
 	}, []);
 
-	async function copy() {
-		if (!status) return;
+	async function recheckStatus() {
 		try {
-			await navigator.clipboard.writeText(status.configJson);
-			onNotice("Configuration copied.");
+			const current = await window.juno.agent.status();
+			setStatus(current);
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
 		}
@@ -85,20 +86,33 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 					Connecting an agent
 				</h2>
 
-				<div className="mt-4 flex items-center gap-3">
+				<div className="mt-4 flex flex-wrap items-center gap-3">
 					<span
 						className={`inline-block h-2 w-2 rounded-[var(--radius-full)] ${status.running ? "bg-[var(--ok)]" : "bg-[var(--risk)]"}`}
 						aria-hidden
 					/>
 					<p className="text-[length:var(--text-dense)]">
 						{status.running
-							? `Listening. ${status.connections === 0 ? "No agent connected" : `${status.connections} connected`}, ${status.toolCount} tools.`
+							? status.connections === 0
+								? `Listening, ${status.toolCount} tools, no agent connected.`
+								: `Listening. ${status.connections} connected, ${status.toolCount} tools.`
 							: "Not listening."}
 					</p>
+					<Button size="dense" onClick={() => void recheckStatus()}>
+						<Icon name="sync" />
+						Check again
+					</Button>
 				</div>
 				{status.error ? (
 					<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">
 						{status.error}
+					</p>
+				) : null}
+				{status.running && status.connections === 0 ? (
+					<p className="mt-1 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						This count does not update on its own. If you just connected a client below, finish
+						the restart step it asked for, then press "Check again". Juno also refuses every
+						agent while it is locked, so an unlocked window is worth checking too.
 					</p>
 				) : null}
 
@@ -114,40 +128,36 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 					<RouteSwitch route={route} onChange={setRoute} />
 				</div>
 
+				<div className="mt-4 flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2.5">
+					<Icon name="info" className="mt-0.5 flex-none text-[var(--ink-muted)]" />
+					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						Juno's agent server is local. An agent client starts it itself, as a background
+						process on this machine, so there is no server address to type anywhere. Claude's
+						"Add custom connector" dialog, which asks for an HTTPS server URL, is for a remote
+						server and will not accept Juno: use one of the two routes below instead.
+					</p>
+				</div>
+
 				<div className="mt-4">
 					{route === "install" ? (
 						<ClientInstaller onNotice={onNotice} />
 					) : (
-						<div>
-							<p className="max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-								The entry Juno writes, with this machine's paths in it. Paste it into the
-								mcpServers block of whichever client you are using. Codex takes TOML rather
-								than this, and the list on the other side writes that one itself.
-							</p>
-
-							<pre
-								data-selectable
-								className="mt-3 overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-[length:var(--text-sm)]"
-							>
-								{status.configJson}
-							</pre>
-
-							<div className="mt-3 flex flex-wrap items-center gap-2">
-								<Button onClick={() => void copy()}>Copy configuration</Button>
-								<Button onClick={() => void window.juno.agent.revealConnectionFile()}>
-									Show the connection file
-								</Button>
-							</div>
-						</div>
+						<ManualSetup status={status} onNotice={onNotice} />
 					)}
 				</div>
 
-				<p className="mt-6 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					The connection file holds a token, and an agent that does not present it is refused. That
-					stops something that guessed the address. It does not stop a program already running as
-					you, which can read the file: on a machine you are signed in to, that program could read
-					the database directly. The lock is the control that matters, and every tool checks it.
-				</p>
+				<div className="mt-6 flex flex-wrap items-start justify-between gap-4">
+					<p className="max-w-[60ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						The connection file holds a token, and an agent that does not present it is refused. That
+						stops something that guessed the address. It does not stop a program already running as
+						you, which can read the file: on a machine you are signed in to, that program could read
+						the database directly. The lock is the control that matters, and every tool checks it.
+					</p>
+					<Button size="dense" onClick={() => void window.juno.agent.revealConnectionFile()}>
+						<Icon name="external" />
+						Show the connection file
+					</Button>
+				</div>
 			</section>
 
 			<section className="mt-10">

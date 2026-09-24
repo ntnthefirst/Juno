@@ -39,33 +39,40 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 	const [targets, setTargets] = useState<AgentClientTarget[] | null>(null);
 	const [busy, setBusy] = useState<string | null>(null);
 	const [done, setDone] = useState<Done | null>(null);
-	const [error, setError] = useState<string | null>(null);
+	const [loadError, setLoadError] = useState<string | null>(null);
+	// Keyed by target id, so a failure on one client's file says so against that
+	// client's row rather than once at the bottom of a list of seven.
+	const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
 
 	const refresh = useCallback(() => {
 		window.juno.agent.install
 			.targets()
 			.then(setTargets)
-			.catch((cause: unknown) => setError(messageOf(cause)));
+			.catch((cause: unknown) => setLoadError(messageOf(cause)));
 	}, []);
 
 	useEffect(refresh, [refresh]);
 
 	async function write(target: AgentClientTarget) {
 		setBusy(target.id);
-		setError(null);
+		setRowErrors((current) => {
+			const next = { ...current };
+			delete next[target.id];
+			return next;
+		});
 		try {
 			const result = await window.juno.agent.install.write(target.id);
 			setDone({ target, result });
 			onNotice(`${result.name} configured.`);
 			refresh();
 		} catch (cause: unknown) {
-			setError(messageOf(cause));
+			setRowErrors((current) => ({ ...current, [target.id]: messageOf(cause) }));
 		} finally {
 			setBusy(null);
 		}
 	}
 
-	if (targets === null && error === null) {
+	if (targets === null && loadError === null) {
 		return <p className="text-[var(--ink-muted)]">Loading.</p>;
 	}
 
@@ -84,11 +91,21 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 				old one beside it first, and leaves every other server in it alone.
 			</p>
 
+			{loadError ? (
+				<p
+					role="alert"
+					data-selectable
+					className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+				>
+					{loadError}
+				</p>
+			) : null}
+
 			<ul className="mt-4">
 				{rows.map((target) => (
 					<li
 						key={target.id}
-						className="flex items-center gap-3 border-b border-[var(--line)] py-2"
+						className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] py-2"
 					>
 						<span
 							className={
@@ -119,6 +136,15 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 									{target.path}
 								</span>
 							) : null}
+							{rowErrors[target.id] ? (
+								<span
+									role="alert"
+									data-selectable
+									className="mt-1 block text-[length:var(--text-sm)] text-[var(--risk)]"
+								>
+									{rowErrors[target.id]}
+								</span>
+							) : null}
 						</span>
 
 						<Button
@@ -140,41 +166,35 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 			</ul>
 
 			{absent > 0 ? (
-				<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					The greyed ones are not on this machine. Connecting one anyway writes the file it
-					would read, which it picks up the first time it starts.
+				<p className="mt-3 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					The greyed ones are not on this machine. Connecting one anyway creates or updates the
+					configuration file it would read from, in the place it would read it from. It does not
+					install the program itself, and nothing happens until you install that program and start
+					it; from then on, it picks Juno up on its own, no further connecting needed.
 				</p>
 			) : null}
 
 			{done ? (
-				<div className="mt-4 border-l-2 border-[var(--ok)] pl-3">
-					<p className="text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+				<div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
+					<p className="flex items-center gap-1.5 text-[length:var(--text-dense)] text-[var(--ok)]">
+						<Icon name="check" size={14} />
 						{done.result.created
 							? `Created ${done.result.name}'s configuration.`
 							: `Updated ${done.result.name}'s configuration.`}
 					</p>
-					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						{done.result.after}
-					</p>
+					<div className="mt-3 flex items-start gap-2.5 rounded-[var(--radius-md)] bg-[var(--warn-soft)] px-3 py-2.5">
+						<Icon name="sync" className="mt-0.5 flex-none text-[var(--warn)]" />
+						<p className="font-[var(--weight-medium)] text-[var(--warn)]">{done.result.after}</p>
+					</div>
 					{done.result.backupPath ? (
 						<p
 							data-selectable
-							className="mt-1 font-mono text-[length:var(--text-micro)] text-[var(--ink-faint)]"
+							className="mt-3 font-mono text-[length:var(--text-micro)] text-[var(--ink-faint)]"
 						>
 							Previous file kept at {done.result.backupPath}
 						</p>
 					) : null}
 				</div>
-			) : null}
-
-			{error ? (
-				<p
-					role="alert"
-					data-selectable
-					className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
-				>
-					{error}
-				</p>
 			) : null}
 		</div>
 	);
@@ -213,6 +233,11 @@ function Standing({ standing }: StandingProps) {
 		);
 	}
 	return (
-		<span className="text-[length:var(--text-sm)] text-[var(--ink-faint)]">Not on this machine</span>
+		<span
+			title="Connecting writes the configuration file anyway, but does not install the program"
+			className="text-[length:var(--text-sm)] text-[var(--ink-faint)]"
+		>
+			Not on this machine
+		</span>
 	);
 }

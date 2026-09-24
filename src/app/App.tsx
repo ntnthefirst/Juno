@@ -158,7 +158,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					/>
 				) : null}
 
-				<main className="min-w-0 flex-1 overflow-auto">
+				<main className="min-w-0 flex-1 overflow-hidden">
 					{screen === "today" ? (
 						<TodayScreen />
 					) : screen === "clients" ? (

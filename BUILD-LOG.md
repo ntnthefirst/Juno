@@ -909,3 +909,67 @@ Three things worth carrying forward:
   directory.** Adding an owner email on `mail.accounts.create` broke nineteen
   tests in `mail-sync.test.ts` that had never needed one, and the fix is one
   `configureSettings` call in the setup, not a swallowed error in the service.
+
+---
+
+## The interface pass, September 2026
+
+A pass over the whole interface, asked for as "go over the user experience
+fully". Most of it is shape rather than capability, but two pieces are new
+capability and one was a lie that had to be made true.
+
+**The lie.** Archive and Delete in the mail list filtered the rows in the
+renderer and showed a toast. Nothing reached the server, so the next sync put
+everything back. Filing now goes through a `MailboxWriter`, a separate
+interface from the read-only `MailboxSource` the sync engine holds, for the
+same reason the Sent copy has its own appender: sync cannot write because the
+type it is handed has no method that does, and filing is a different act with a
+different permission. Seven tools, all confirmed, and `mail.file.delete` says
+in its description that the copy on the server goes too, because the approval
+screen prints that sentence.
+
+**The client timeline.** One call over six tables that already hold what
+happened: mail threads, documents, appointments, reminders, projects, and a new
+`client_notes` table for the thing that leaves no other trace, which is a phone
+call. Nothing is copied into a history table; a second record of what happened
+starts lying the first time something is edited without going through it.
+
+**The shape.** Custom scrollbars, a menu primitive with a real right-click menu
+behind it, a side panel that floats over the screen instead of taking a column
+of its own, one primary action and a menu per row instead of five buttons, and
+a client that opens on a card with tabs rather than six stacked sections.
+
+Seven things worth carrying forward:
+
+- **`main` had `overflow-auto` while every screen already scrolled itself.**
+  The outer scroller only ever produced a second scrollbar, and a toolbar wider
+  than a narrow window scrolled the whole application sideways. That was the
+  "global overflow in the calendar". The fix was one word.
+- **A React `onWheel` cannot guard a native listener on an ancestor.** React
+  dispatches from its own root container, so every native listener on the way
+  up has already run by the time a React handler could call `stopPropagation`.
+  The week view's hour scroller looked guarded and paged the week while the
+  hours were still scrolling. Both decisions belong in one native listener.
+- **Chromium ignores `::-webkit-scrollbar` on any element that also sets
+  `scrollbar-width` or `scrollbar-color`.** Neither property is used anywhere
+  now, and the comment in `global.css` says why, because setting one in a
+  component silently drops that element back to the platform scrollbar.
+- **A responsive label that swaps with CSS puts both strings in the DOM.** The
+  view switch reads as "WeekW" to anything matching on text, which is a screen
+  reader as much as it is the smoke run. The button needs a name of its own.
+- **A blur over a list is a modal unless the layer takes no pointer events.**
+  That one property is the whole difference between the side panel's shape and
+  a dialog's (decision 30).
+- **The connection tab had been dropped from the Agent screen** in an earlier
+  refactor, leaving Settings as the only route, which `START-HERE.md` says it
+  is not. The smoke run had been failing on that step ever since, unnoticed,
+  which is the second time that has happened for the same reason.
+- **An installer that compares configuration by `JSON.stringify` reports a
+  reformatted file as pointing somewhere else.** Key order is not a difference.
+  Array order is, because an argument and its value are a pair.
+
+Four agents ran in parallel, one per feature folder, each with an exclusive
+file list. That worked: no two touched the same file. What it does not do is
+check the work. Of the four, one had the wheel bug above and one duplicated a
+mapping that belongs in the main process, and both were found by reading the
+diff rather than by the typecheck, which was green in each case.

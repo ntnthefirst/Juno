@@ -22,9 +22,9 @@ npm run dev
 | --- | --- |
 | **Today** | What needs attention, suggestions worked out from the records, a counts line |
 | **Reminders** | Grouped by bucket, recurring, snooze and complete, one daily notification |
-| **Clients** | Clients, contacts and projects, with search and undo |
+| **Clients** | Clients, contacts and projects, with search and undo. A record opens on a card, with tabs and a timeline of everything that has happened with it |
 | **Documents** | Generated from a template or imported as a PDF, written to disk at generation, signed with an audit page |
-| **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. An outbox that sends over SMTP behind a confirmation gate, with reply, templates and document attachments |
+| **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. Filing that reaches the server: archive, trash, junk, move, read and flagged, and a delete that deletes. An outbox that sends over SMTP behind a confirmation gate, with reply, templates and document attachments |
 | **Calendar** | Events and recurring series with an IANA zone each, month, week and agenda views, reminders and project deadlines overlaid, drag to move and resize with the recurrence question asked, .ics in and out |
 | **Agent** | An MCP server over a local pipe, 130 tools, every side-effectful one parked for approval. Automations, an audit log, briefings across every domain, and the config block to paste into an agent |
 | **Mail templates** | The subject and body of the emails Juno composes. A visual editor and a code view over the same HTML, declared inputs, and a preview through the shell that sends it |
@@ -69,7 +69,7 @@ database does not replay setup and `npm run dev:clean` does. The stored version
 is 2; an install that finished the older one is asked again, because it was
 never asked for a name or an establishment number.
 
-## The eight things that will bite you
+## The nine things that will bite you
 
 1. **Tests run under Electron's Node, not the host's.** `node:sqlite` before Node
    24 has no `StatementSync.setReturnArrays`, which the storage shim needs, so
@@ -113,6 +113,14 @@ never asked for a name or an establishment number.
    host test in `electron/main/mcp/host.test.ts` will tell you whether its
    flags match what the rules require, and it is meant to fail when they do
    not.
+
+9. **Sync cannot write, and that is enforced by the type it is handed.**
+   `MailboxSource` has no method that writes; filing goes through
+   `MailboxWriter` in `mail-writer.ts`, and the Sent copy through a third
+   interface again. Adding a write to the source, rather than to the writer, is
+   the one change that would make the read-only promise false. Every filing
+   call changes the server first and the local rows second, so a server that
+   cannot be reached fails the whole call with nothing changed here.
 
 ## What the September rework changed
 

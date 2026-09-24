@@ -11,6 +11,8 @@ type RecipientFieldProps = {
 	autoFocus?: boolean;
 	/** One sentence under the field. */
 	help?: string;
+	/** Rendered to the right of the label, at the same height. "Add Cc or Bcc" lives here. */
+	actions?: React.ReactNode;
 };
 
 /** Anything with an @ and a dot after it. The service validates properly. */
@@ -45,6 +47,7 @@ export function RecipientField({
 	required = false,
 	autoFocus = false,
 	help,
+	actions,
 }: RecipientFieldProps) {
 	const id = useId();
 	const input = useRef<HTMLInputElement>(null);
@@ -137,13 +140,16 @@ export function RecipientField({
 
 	return (
 		<div>
-			<label
-				htmlFor={id}
-				className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
-			>
-				{label}
-				{required ? <span className="text-[var(--risk)]"> *</span> : null}
-			</label>
+			<div className="mb-1 flex items-baseline justify-between gap-2">
+				<label
+					htmlFor={id}
+					className="text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+				>
+					{label}
+					{required ? <span className="text-[var(--risk)]"> *</span> : null}
+				</label>
+				{actions}
+			</div>
 			<div className="relative">
 				<div
 					// Clicking the padding around the chips lands in the input, which is

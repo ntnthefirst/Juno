@@ -17,28 +17,9 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon, type IconName } from "../../components/Icon";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
+import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
-
-/** Tone is a token name, never a hex. See brand/BRAND.md section 5. */
-const TONES: Record<string, string> = {
-	ok: "bg-[var(--ok-soft)] text-[var(--ok)]",
-	warn: "bg-[var(--warn-soft)] text-[var(--warn)]",
-	risk: "bg-[var(--risk-soft)] text-[var(--risk)]",
-	seal: "bg-[var(--seal-soft)] text-[var(--seal)]",
-	accent: "bg-[var(--accent-soft)] text-[var(--accent)]",
-};
-
-export function StatusBadge({ label, tone }: { label: string; tone: string | null }) {
-	const classes = (tone && TONES[tone]) || "bg-[var(--sunken)] text-[var(--ink-muted)]";
-	return (
-		<span
-			className={`inline-block shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${classes}`}
-		>
-			{label}
-		</span>
-	);
-}
 
 /** A non-breaking space, so an amount never wraps between its thousands. */
 const NBSP = String.fromCharCode(0xa0);

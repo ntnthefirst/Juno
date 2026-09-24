@@ -270,6 +270,27 @@
 	}
 }
 
+/* A surface that was not there a moment ago: a menu, a popover, the list of
+ * addresses under a half-typed recipient. It comes up a few pixels and fades,
+ * fast enough not to be waited for.
+ *
+ * Transform and opacity only, like the page slides above, and the
+ * reduced-motion block in global.css cuts it to nothing. */
+@keyframes juno-pop {
+	from {
+		transform: translateY(-4px);
+		opacity: 0;
+	}
+}
+
+/* Content replacing content in place: a thread opening in the reader. No
+ * movement, because the pane it lands in has not moved. */
+@keyframes juno-fade {
+	from {
+		opacity: 0;
+	}
+}
+
 /* Tailwind v4 reads this block to generate utilities: bg-paper, text-ink-muted,
  * border-line, rounded-lg, and so on. Add a token above and to this block
  * together, or the utility silently does not exist. */
@@ -343,6 +364,8 @@
 	--ease-brand: var(--ease);
 	--animate-page-forward: juno-page-forward var(--duration-base) var(--ease);
 	--animate-page-back: juno-page-back var(--duration-base) var(--ease);
+	--animate-pop: juno-pop var(--duration-fast) var(--ease);
+	--animate-fade: juno-fade var(--duration-base) var(--ease);
 	--duration-fast: var(--duration-fast);
 	--duration-base: var(--duration-base);
 }

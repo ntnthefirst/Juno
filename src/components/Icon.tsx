@@ -27,6 +27,7 @@ import {
 	ExclamationTriangleIcon,
 	EyeIcon,
 	FlagIcon,
+	FunnelIcon,
 	FolderIcon,
 	InboxIcon,
 	InformationCircleIcon,
@@ -88,6 +89,7 @@ export type IconName =
 	| "archive"
 	| "link"
 	| "flag"
+	| "filter"
 	| "read"
 	| "unread"
 	| "reply"
@@ -147,6 +149,7 @@ const ICONS: Record<IconName, HeroIcon> = {
 	archive: ArchiveBoxIcon,
 	link: LinkIcon,
 	flag: FlagIcon,
+	filter: FunnelIcon,
 	read: EnvelopeOpenIcon,
 	unread: EyeIcon,
 	reply: ArrowUturnLeftIcon,

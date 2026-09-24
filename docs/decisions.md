@@ -573,6 +573,17 @@ builds installers on Windows and macOS and uploads them to a **draft** release:
 publishing that release is the deliberate act that starts a rollout, so a tag
 alone can never push a build to every installed copy.
 
+Merging into `main` is what produces the tag. The version workflow reads the
+highest tag rather than `package.json`, because the two drift: a release is cut
+on main and the branch it came from keeps the older number. A pull request that
+bumps `package.json` past the highest tag is asking for a minor or a major, and
+is taken at its word. It calls the release workflow rather than letting its own
+tag push start it, because a tag pushed with `GITHUB_TOKEN` starts nothing, and
+an automatic release that waited for that event would quietly never run.
+
+The draft is the line this holds. Every merge produces installers; no merge
+reaches anybody's machine.
+
 The updater is quiet by design. It checks 38 hours after the last check rather
 than every 24, because a whole number of days lands every check in the same few
 minutes of the working day forever, and an odd interval walks around the clock

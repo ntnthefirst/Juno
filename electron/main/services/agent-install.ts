@@ -117,18 +117,40 @@ const CLIENTS: ClientSpec[] = [
 		format: "json",
 		key: "servers",
 		after: "Reload the window, then pick Juno from the tools menu in Copilot Chat.",
+		// Stable first, then Insiders. The first candidate that exists wins, so
+		// a machine with both is configured for the one it actually has a file
+		// for, and a machine with only Insiders is not told VS Code is missing.
 		configCandidates: (home, platform) =>
 			platform === "win32"
-				? [join(APPDATA(home), "Code", "User", "mcp.json")]
+				? [
+						join(APPDATA(home), "Code", "User", "mcp.json"),
+						join(APPDATA(home), "Code - Insiders", "User", "mcp.json"),
+					]
 				: platform === "darwin"
-					? [join(home, "Library", "Application Support", "Code", "User", "mcp.json")]
-					: [join(home, ".config", "Code", "User", "mcp.json")],
+					? [
+							join(home, "Library", "Application Support", "Code", "User", "mcp.json"),
+							join(home, "Library", "Application Support", "Code - Insiders", "User", "mcp.json"),
+						]
+					: [
+							join(home, ".config", "Code", "User", "mcp.json"),
+							join(home, ".config", "Code - Insiders", "User", "mcp.json"),
+						],
 		installMarkers: (home, platform) =>
 			platform === "win32"
-				? [join(APPDATA(home), "Code"), join(LOCALAPPDATA(home), "Programs", "Microsoft VS Code")]
+				? [
+						join(APPDATA(home), "Code"),
+						join(APPDATA(home), "Code - Insiders"),
+						join(LOCALAPPDATA(home), "Programs", "Microsoft VS Code"),
+						join(LOCALAPPDATA(home), "Programs", "Microsoft VS Code Insiders"),
+					]
 				: platform === "darwin"
-					? [join(home, "Library", "Application Support", "Code"), "/Applications/Visual Studio Code.app"]
-					: [join(home, ".config", "Code")],
+					? [
+							join(home, "Library", "Application Support", "Code"),
+							join(home, "Library", "Application Support", "Code - Insiders"),
+							"/Applications/Visual Studio Code.app",
+							"/Applications/Visual Studio Code - Insiders.app",
+						]
+					: [join(home, ".config", "Code"), join(home, ".config", "Code - Insiders")],
 	},
 	{
 		id: "codex",
@@ -407,6 +429,7 @@ export function targetsIn(status: McpServerStatus, home: string, platform: Platf
 				configured: false,
 				upToDate: false,
 				format: client.format,
+				configKey: client.key,
 				after: client.after,
 			};
 		}
@@ -422,7 +445,7 @@ export function targetsIn(status: McpServerStatus, home: string, platform: Platf
 			} else {
 				const current = serversIn(parseJson(path), client.key)["juno"];
 				configured = current !== undefined;
-				upToDate = configured && JSON.stringify(current) === JSON.stringify(wanted);
+				upToDate = configured && sameEntry(current, wanted);
 			}
 		} catch {
 			// A file that cannot be read or parsed tells us nothing about whether
@@ -440,6 +463,7 @@ export function targetsIn(status: McpServerStatus, home: string, platform: Platf
 			configured,
 			upToDate,
 			format: client.format,
+			configKey: client.key,
 			after: client.after,
 		};
 	});
@@ -530,6 +554,30 @@ export function installIn(clientId: string, status: McpServerStatus, home: strin
 	}
 
 	return client.format === "toml" ? installToml(client, path, status) : installJson(client, path, status);
+}
+
+/**
+ * Whether two configuration entries say the same thing.
+ *
+ * Deep and order-insensitive, because key order is not a difference. An editor
+ * that reformats the file, or another tool that rewrites it, can sort the keys
+ * without changing a word of what it means, and a string comparison would then
+ * report Juno as configured to point somewhere else. That wording sends a
+ * person looking for a problem that is not there.
+ */
+export function sameEntry(a: unknown, b: unknown): boolean {
+	if (a === b) return true;
+	if (typeof a !== typeof b) return false;
+	if (a === null || b === null || typeof a !== "object") return false;
+	if (Array.isArray(a) || Array.isArray(b)) {
+		if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+		return a.every((value, index) => sameEntry(value, b[index]));
+	}
+	const left = a as Record<string, unknown>;
+	const right = b as Record<string, unknown>;
+	const keys = Object.keys(left);
+	if (keys.length !== Object.keys(right).length) return false;
+	return keys.every((key) => key in right && sameEntry(left[key], right[key]));
 }
 
 /* ------------------------------------------------------------------ wiring */

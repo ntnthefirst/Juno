@@ -2,7 +2,7 @@
 // The main process compiles to CommonJS, so dist-electron needs its own
 // package.json saying so. Without this, Electron throws
 // "require is not defined in ES module scope" on the first launch after a build.
-import { cpSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,8 +15,16 @@ writeFileSync(join(out, "package.json"), JSON.stringify({ type: "commonjs" }, nu
 // tsc only emits .ts. The migrations are .sql and the app reads them at runtime
 // relative to __dirname, so they have to be carried across by hand. Forgetting
 // this produces an app that boots to an empty database with no error.
+//
+// Emptied first rather than copied over. A migration that was renamed or
+// regenerated leaves the old file behind otherwise, and the runner applies
+// whatever .sql it finds by name: the stale one is not in `_migrations`, so it
+// runs again, fails on a table that already exists, and the app refuses to
+// open. Nothing says which file did it, because the file is not in the repo
+// any more.
 const from = join(root, "electron", "main", "db", "migrations");
 const to = join(out, "main", "db", "migrations");
+rmSync(to, { recursive: true, force: true });
 cpSync(from, to, { recursive: true });
 
 // Documents are rendered to PDF in an offscreen window, which has no access to

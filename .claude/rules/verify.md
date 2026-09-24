@@ -105,6 +105,23 @@ A clean typecheck is not proof a screen works.
   renderer console, which a frameless window with no menu does not open on its
   own. The development policy carries a nonce for exactly this
   ([security.md](security.md)).
+- **A migration that was renamed stays behind in `dist-electron` and runs again.**
+  The migrations are copied out of the source tree next to the compiled main
+  process, and the runner applies every `.sql` it finds there by file name. A
+  file that was renamed or regenerated leaves its old copy in the build folder,
+  that name is not in `_migrations`, so it runs on the next launch and fails on
+  a table it already created. The app then refuses to open, and nothing names
+  the file, because the file is no longer in the repo. `scripts/after-main.mjs`
+  empties the destination before copying for this reason. If a launch fails on
+  "table X already exists", list `dist-electron/main/db/migrations` and compare
+  it with the source folder.
+- **Never write to the app's database with a different SQLite than the app
+  uses.** `node:sqlite` under the host's Node is not the build Electron ships,
+  and a write from the wrong one can leave the file with a schema page that
+  parses on one and not on the other ("malformed database schema ... orphan
+  index"). Anything that has to touch a real database outside the app runs
+  under `ELECTRON_RUN_AS_NODE=1 electron`, with the app closed, on a copy
+  first.
 - **`tsBuildInfoFile` without `"incremental": true` does nothing at all.** tsc
   writes no build info and recompiles the whole program on every run, including
   the first pass of a `--watch`. It looks configured and is not.

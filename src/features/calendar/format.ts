@@ -1,4 +1,5 @@
 import type { CalendarItem, CalendarOccurrence } from "@shared/types";
+import type { MenuItem } from "../../components/Menu";
 import { addDays, dateOf, daysBetween, localDateOfInstant, localMinuteOfInstant } from "./dates";
 
 /** Something drawn on one day of the grid. A multi-day item is placed once per day. */
@@ -136,6 +137,38 @@ export function dotTone(item: CalendarItem): string {
 		case "deadline":
 			return "bg-[var(--seal)]";
 	}
+}
+
+type ItemMenuActions = {
+	onOpen: (item: CalendarItem) => void;
+	onEdit: (item: CalendarOccurrence) => void;
+	onDelete: (item: CalendarOccurrence) => void;
+};
+
+/**
+ * The right-click menu for a chip on the grid, in Month, Week or Agenda.
+ *
+ * Every item opens. Only an event can be edited or deleted here: a reminder
+ * or a deadline is read-only on the calendar and says so in its own panel.
+ */
+export function itemMenuItems(item: CalendarItem, actions: ItemMenuActions): MenuItem[] {
+	const items: MenuItem[] = [
+		{ id: "open", label: "Open", icon: "external", onSelect: () => actions.onOpen(item) },
+	];
+	if (item.kind === "event") {
+		items.push(
+			{ id: "edit", label: "Edit", icon: "edit", onSelect: () => actions.onEdit(item) },
+			{
+				id: "delete",
+				label: "Delete",
+				icon: "remove",
+				danger: true,
+				separatorBefore: true,
+				onSelect: () => actions.onDelete(item),
+			},
+		);
+	}
+	return items;
 }
 
 export const KIND_LABELS: Record<CalendarItem["kind"], string> = {

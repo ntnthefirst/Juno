@@ -1,7 +1,16 @@
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import {
+	useEffect,
+	useRef,
+	useState,
+	type MouseEvent,
+	type PointerEvent,
+} from "react";
 import type { CalendarItem, CalendarOccurrence } from "@shared/types";
+import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { useContextMenu } from "../../lib/use-context-menu";
 import { formatMinutes, snap, weekdayShort } from "./dates";
-import { chipTone, itemTitle, laneLayout, type Placed } from "./format";
+import { chipTone, itemMenuItems, itemTitle, laneLayout, type Placed } from "./format";
+import { useWheelPaging } from "./use-wheel-paging";
 
 type WeekViewProps = {
 	/** Seven dates, Monday first. */
@@ -16,6 +25,10 @@ type WeekViewProps = {
 	onMove: (item: CalendarOccurrence, dayDelta: number, minuteDelta: number) => void;
 	/** Bottom edge dragged: the end moves by this many minutes. */
 	onResize: (item: CalendarOccurrence, minuteDelta: number) => void;
+	onEdit: (item: CalendarOccurrence) => void;
+	onDelete: (item: CalendarOccurrence) => void;
+	/** A wheel gesture over the header, the all-day row or an edge: page a week. */
+	onStep: (direction: -1 | 1) => void;
 };
 
 const HOUR_PX = 48;
@@ -39,16 +52,66 @@ type Drag = {
  * instants in the machine's zone; a drag reports whole days and quarter hours
  * and the screen turns that into a wall-clock edit on the event's own zone.
  */
-export function WeekView({ dates, today, placed, nowMinute, onOpen, onCreateAt, onMove, onResize }: WeekViewProps) {
+export function WeekView({
+	dates,
+	today,
+	placed,
+	nowMinute,
+	onOpen,
+	onCreateAt,
+	onMove,
+	onResize,
+	onEdit,
+	onDelete,
+	onStep,
+}: WeekViewProps) {
+	const root = useRef<HTMLDivElement>(null);
 	const scroller = useRef<HTMLDivElement>(null);
 	const grid = useRef<HTMLDivElement>(null);
 	const [drag, setDrag] = useState<Drag | null>(null);
+	const menu = useContextMenu();
+	const [menuItem, setMenuItem] = useState<CalendarItem | null>(null);
+	const page = useWheelPaging(onStep);
 
 	// Open on the working day, not on midnight.
 	useEffect(() => {
 		const node = scroller.current;
 		if (node) node.scrollTop = 7 * HOUR_PX - 12;
 	}, []);
+
+	// Wheeling over the header, the all-day row or the hour gutter pages the
+	// week. Wheeling inside the hour grid scrolls the hours first, and only
+	// pages once that scroller is already against its top or bottom.
+	//
+	// Both decisions are made in this one native listener rather than in a
+	// second handler on the scroller itself. React dispatches onWheel from its
+	// own root container, which is above this node, so every native listener on
+	// the way up has already run by the time a React handler could call
+	// stopPropagation. A guard written that way looks right and pages the week
+	// while the hours are still scrolling.
+	//
+	// Nothing calls preventDefault, so this stays passive.
+	useEffect(() => {
+		const node = root.current;
+		if (!node) return;
+		function onWheel(event: WheelEvent) {
+			const hours = scroller.current;
+			if (hours && event.target instanceof Node && hours.contains(event.target)) {
+				const atTop = hours.scrollTop <= 0;
+				const atBottom = hours.scrollTop + hours.clientHeight >= hours.scrollHeight - 1;
+				const pastTheEdge = (event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom);
+				if (!pastTheEdge) return;
+			}
+			page(event.deltaY);
+		}
+		node.addEventListener("wheel", onWheel, { passive: true });
+		return () => node.removeEventListener("wheel", onWheel);
+	}, [page]);
+
+	function openItemMenu(event: MouseEvent<HTMLElement>, item: CalendarItem) {
+		setMenuItem(item);
+		menu.open(event);
+	}
 
 	function columnWidth(): number {
 		const node = grid.current;
@@ -95,8 +158,10 @@ export function WeekView({ dates, today, placed, nowMinute, onOpen, onCreateAt, 
 		onCreateAt(date, Math.min(23 * 60 + 30, Math.max(0, minute)));
 	}
 
+	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete }) : [];
+
 	return (
-		<div className="flex h-full min-h-0 flex-col">
+		<div ref={root} className="flex h-full min-h-0 flex-col">
 			<div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] overflow-y-auto border-b border-[var(--line)] [scrollbar-gutter:stable]">
 				<div />
 				{dates.map((date) => (
@@ -134,6 +199,7 @@ export function WeekView({ dates, today, placed, nowMinute, onOpen, onCreateAt, 
 									key={p.key}
 									type="button"
 									onClick={() => onOpen(p.item)}
+									onContextMenu={(event) => openItemMenu(event, p.item)}
 									title={itemTitle(p.item)}
 									className={[
 										"h-5 truncate rounded-[var(--radius-sm)] px-1.5 text-left text-[length:var(--text-micro)] font-[var(--weight-medium)] leading-none",
@@ -150,7 +216,10 @@ export function WeekView({ dates, today, placed, nowMinute, onOpen, onCreateAt, 
 				})}
 			</div>
 
-			<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+			<div
+				ref={scroller}
+				className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+			>
 				<div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))]" style={{ height: 24 * HOUR_PX }}>
 					<div className="relative">
 						{HOURS.map((hour) => (
@@ -213,6 +282,7 @@ export function WeekView({ dates, today, placed, nowMinute, onOpen, onCreateAt, 
 														onOpen(item);
 													}
 												}}
+												onContextMenu={(event) => openItemMenu(event, item)}
 												className={[
 													"absolute z-[1] flex cursor-grab select-none flex-col overflow-hidden rounded-[var(--radius-sm)] border border-[var(--surface)] px-1.5 py-0.5 text-[length:var(--text-micro)] leading-tight",
 													chipTone(item),
@@ -251,6 +321,18 @@ export function WeekView({ dates, today, placed, nowMinute, onOpen, onCreateAt, 
 					</div>
 				</div>
 			</div>
+
+			{menu.at && menuItem ? (
+				<ContextMenu
+					at={menu.at}
+					items={menuItems}
+					ariaLabel="Event"
+					onClose={() => {
+						menu.close();
+						setMenuItem(null);
+					}}
+				/>
+			) : null}
 		</div>
 	);
 }

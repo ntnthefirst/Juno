@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Icon, type IconName } from "../components/Icon";
 import { SCREEN_GROUPS, type ScreenId } from "./screens";
 
@@ -13,6 +14,18 @@ type SidebarProps = {
 
 export function Sidebar({ current, onNavigate, collapsed, floating, onOpenSettings }: SidebarProps) {
 	const width = collapsed ? "var(--sidebar-rail-width)" : "var(--sidebar-width)";
+	const [pending, setPending] = useState(0);
+
+	useEffect(() => {
+		const refresh = () => {
+			void window.juno.agent.actions
+				.pendingCount()
+				.then(setPending)
+				.catch(() => setPending(0));
+		};
+		refresh();
+		return window.juno.agent.actions.onChange(refresh);
+	}, []);
 
 	return (
 		<nav
@@ -40,22 +53,34 @@ export function Sidebar({ current, onNavigate, collapsed, floating, onOpenSettin
 								{group.heading}
 							</GroupHeading>
 						) : null}
-						{group.items.map((item) => (
-							<NavButton
-								key={item.id}
-								navId={item.id}
-								icon={item.icon}
-								label={item.label}
-								active={item.id === current}
-								collapsed={collapsed}
-								onClick={() => onNavigate(item.id)}
-							/>
-						))}
+						{group.items.map((item) => {
+							return (
+								<NavButton
+									key={item.id}
+									navId={item.id}
+									icon={item.icon}
+									label={item.label}
+									active={item.id === current}
+									collapsed={collapsed}
+									badge={0}
+									onClick={() => onNavigate(item.id)}
+								/>
+							);
+						})}
 					</div>
 				))}
 			</div>
 
 			<div className="flex flex-none flex-col gap-px border-t border-[var(--line)] py-2">
+				<NavButton
+					navId="agent"
+					icon="agent"
+					label="Agent"
+					active={current === "agent"}
+					collapsed={collapsed}
+					badge={pending}
+					onClick={() => onNavigate("agent")}
+				/>
 				<NavButton
 					navId="settings"
 					icon="settings"

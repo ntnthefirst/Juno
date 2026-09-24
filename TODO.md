@@ -49,8 +49,13 @@ to align with the SMTP server the account uses, or the first client mail lands
 in spam. That is DNS, not Juno, and it is worth checking before a real
 contract goes out this way.
 
-The sync writes nothing to the server. The sender writes exactly two things:
-the message, and a copy into Sent.
+The sync still writes nothing to the server. Two other things now do, and
+neither has met a real one either: the sender, which writes the message and a
+copy into Sent, and filing, which moves and expunges. Archive one thread,
+trash one, delete one for good, and check the server agrees. A server without
+UIDPLUS answers a move with nothing, and Juno is written to cope with that by
+forgetting the row until the destination folder is next synced, which is worth
+seeing happen once.
 
 ## 4. Decide what the in-app assistant runs on - **you**
 
@@ -88,6 +93,14 @@ phase 6's done-when in PLAN.md.
 - **The reader frame has a fixed height** with a taller and shorter toggle,
   because a sandboxed frame cannot report its content height. A resize handle
   would be nicer.
+- **Unsent drafts are not merged into the Drafts folder.** Juno's own drafts
+  live in the outbox and the server's live in its Drafts folder, and the
+  Drafts view says so in a line pointing at the outbox rather than showing
+  both. Merging them means reconciling two row types through one list, its
+  selection and its menu.
+- **Nothing files mail on a schedule, and nothing should.** Filing is
+  side-effectful, so it is excluded from anything unattended by the same rule
+  that keeps sending out of an automation.
 - **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
   is the phase 4 promise not yet kept. Templates carry their own layout, so it
   matters least for the messages Juno writes on its own.

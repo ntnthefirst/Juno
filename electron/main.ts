@@ -29,8 +29,10 @@ import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
 import * as documentActions from "./main/services/document-actions";
 import { configureCredentialStore } from "./main/services/mail-credentials";
+import { openImapWriter } from "./main/services/mail-imap-write";
 import { openImapSource } from "./main/services/mail-imap";
 import { configureMailboxSource } from "./main/services/mail-source";
+import { configureMailboxWriter } from "./main/services/mail-writer";
 import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
 import * as mailSync from "./main/services/mail-sync";
@@ -82,6 +84,7 @@ if (!app.requestSingleInstanceLock()) {
 		// comes on, per decision 15.
 		mailSync.configureMailSync({ mailDir: mailDir(), isPaused: () => lock.isLocked() });
 		configureMailboxSource(openImapSource);
+		configureMailboxWriter(openImapWriter);
 		configureMailTransport(smtpTransport, imapSentAppender);
 		// The sender pauses with the lock too, and renders a PDF for an attached
 		// document through the same path the documents screen uses.
@@ -651,7 +654,7 @@ if (!app.requestSingleInstanceLock()) {
 								if (!shellUp) throw new Error("Smoke: closing the walkthrough did not reveal the application");
 							}
 
-							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
+							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Client record", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(
@@ -660,13 +663,15 @@ if (!app.requestSingleInstanceLock()) {
 								// Outbox is a view inside Mail; Week and the event form live inside
 								// Calendar. None of the three is a sidebar entry.
 								const sidebarEntry =
-									screen === "Outbox"
-										? "Mail"
-										: screen === "Week" || screen === "Event form"
-											? "Calendar"
-											: screen === "Connection"
-												? "Agent"
-												: screen;
+									screen === "Client record"
+										? "Clients"
+										: screen === "Outbox"
+											? "Mail"
+											: screen === "Week" || screen === "Event form"
+												? "Calendar"
+												: screen === "Connection"
+													? "Agent"
+													: screen;
 								// Matched on data-nav, never on the label. A collapsed sidebar
 								// renders icons only, and a display narrower than 1100px puts it
 								// in exactly that state, which is what a CI runner gives you.
@@ -729,6 +734,24 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (shown !== "ok") throw new Error(`Smoke: agent requests ${shown}`);
+								}
+								if (screen === "Client record") {
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const row = document.querySelector("main table tbody tr button");
+											if (!row) return "no client rows";
+											row.click();
+											await new Promise((r) => setTimeout(r, 700));
+											const main = document.querySelector("main");
+											if (!main.querySelector("[role=tablist]")) return "no tabs";
+											const timeline = [...main.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().startsWith("Timeline"));
+											if (!timeline) return "no timeline tab";
+											timeline.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return "ok";
+										})()`,
+									);
+									if (opened !== "ok") throw new Error(`Smoke: client record ${opened}`);
 								}
 								if (screen === "Connection") {
 									const opened = await window.webContents.executeJavaScript(
@@ -1077,7 +1100,9 @@ if (!app.requestSingleInstanceLock()) {
 									// the recurrence editor is in the picture.
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											const month = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Month");
+											// By accessible name, like the week switch above: the view
+											// buttons carry a long label and a short one at once.
+											const month = document.querySelector("button[aria-label='Month']");
 											if (month) month.click();
 											await new Promise((r) => setTimeout(r, 400));
 											const add = document.querySelector("button[aria-label^='New event on']");
@@ -1115,7 +1140,10 @@ if (!app.requestSingleInstanceLock()) {
 								if (screen === "Week") {
 									const switched = await window.webContents.executeJavaScript(
 										`(async () => {
-											const b = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Week");
+											// By accessible name, not by text: the view switch carries a
+											// long label and a short one and lets CSS pick, so its text
+											// content is "WeekW" at every width.
+											const b = document.querySelector("button[aria-label='Week']");
 											if (!b) return "no week button";
 											b.click();
 											await new Promise((r) => setTimeout(r, 600));
@@ -1141,6 +1169,41 @@ if (!app.requestSingleInstanceLock()) {
 									if (opened !== "ok") throw new Error(`Smoke: outbox ${opened}`);
 								}
 								if (screen === "Mail") {
+									// The list and the composer, both themes, before a thread takes
+									// the pane over. The reader is the shot the mail step used to
+									// end on, and it is not the screen anybody spends the day in.
+									const shoot = async (name: string) => {
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 300));
+											const shot = await window.webContents.capturePage();
+											writeFileSync(joinPath(shotDir, `${name}-${theme}.png`), shot.toPNG());
+										}
+									};
+									await shoot("mail-list");
+
+									const composed = await window.webContents.executeJavaScript(
+										`(async () => {
+											const open = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "New message");
+											if (!open) return "no new message button";
+											open.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return document.querySelector("input[role=combobox]") ? "ok" : "no composer";
+										})()`,
+									);
+									if (composed !== "ok") throw new Error(`Smoke: compose ${composed}`);
+									await shoot("mail-compose");
+									await window.webContents.executeJavaScript(
+										`(() => {
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel");
+											if (back) back.click();
+										})()`,
+									);
+									await new Promise((r) => setTimeout(r, 500));
+
 									// Opens the newest thread, so the reader and its frame are in
 									// the picture, and checks the frame actually loaded a body.
 									const mailResponses: { url: string; statusCode: number }[] = [];

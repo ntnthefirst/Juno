@@ -25,6 +25,77 @@ export interface Standard {
 	deletedAt: Iso | null;
 }
 
+/* --------------------------------------------------------- client timeline */
+
+/**
+ * Something the user wrote down about a client, usually because it left no
+ * other trace. A phone call is the case this exists for.
+ */
+export interface ClientNote extends Standard {
+	clientId: string;
+	/** When it happened, which is not when it was typed in. */
+	happenedAt: Iso;
+	kind: ClientNoteKind;
+	title: string;
+	body: string | null;
+}
+
+export type ClientNoteKind = "note" | "call" | "meeting";
+
+export interface ClientNoteInput {
+	clientId: string;
+	title: string;
+	/** Defaults to now. */
+	happenedAt?: Iso;
+	kind?: ClientNoteKind;
+	body?: string | null;
+}
+
+export interface ClientNotePatch {
+	happenedAt?: Iso;
+	kind?: ClientNoteKind;
+	title?: string;
+	body?: string | null;
+}
+
+export type ClientTimelineKind = "note" | "mail" | "document" | "event" | "reminder" | "project";
+
+/**
+ * One line in a client's history, whichever table it came from.
+ *
+ * `at` is always an instant and is what the stream sorts on. `on` is set
+ * instead when the underlying record is a date with no time: a deadline, a
+ * reminder, an all-day appointment. The interface shows `on` when it is there
+ * and never converts it, because midnight UTC is the day before in Brussels for
+ * half the year and a deadline that moves is the bug that appears twice a year.
+ */
+export interface ClientTimelineEntry {
+	/** Unique across sources: the kind and the row id, so a list key is safe. */
+	id: string;
+	kind: ClientTimelineKind;
+	at: Iso;
+	on: IsoDate | null;
+	title: string;
+	/** One line under the title, already in words. */
+	detail: string | null;
+	/** The row this came from, so the interface can open it. */
+	entityId: string;
+	/**
+	 * A note's own kind, or a reminder's category, or null. It picks an icon
+	 * and nothing else, so a value nothing recognises is safe to ignore.
+	 */
+	variant: string | null;
+}
+
+export interface ClientTimelineQuery {
+	clientId: string;
+	/** Left out means every kind. */
+	kinds?: ClientTimelineKind[];
+	limit?: number;
+	/** Only entries older than this, for the next page. */
+	before?: Iso;
+}
+
 /* ------------------------------------------------------------------ clients */
 
 export interface Client extends Standard {
@@ -809,6 +880,28 @@ export interface MailAddress {
 	address: string;
 }
 
+/**
+ * A recipient the composer can offer for what has been typed so far.
+ *
+ * `clients` is every client the address belongs to, not the best one: two
+ * clients sharing a bookkeeper both concern a message to that address, and
+ * choosing between them here would throw away something nobody can retype.
+ */
+export interface MailRecipientSuggestion {
+	address: string;
+	name: string | null;
+	clients: { id: string; name: string }[];
+	/** A client's own address, a contact's, or one that has written before. */
+	source: "client" | "contact" | "message";
+}
+
+/** A client an outgoing message concerns, and the address that says so. */
+export interface MailMessageClient {
+	clientId: string;
+	clientName: string;
+	matchedAddress: string;
+}
+
 export interface MailThreadSummary {
 	id: string;
 	accountId: string;
@@ -821,6 +914,8 @@ export interface MailThreadSummary {
 	messageCount: number;
 	unreadCount: number;
 	hasAttachments: boolean;
+	/** True when any message in the thread is flagged. */
+	isFlagged: boolean;
 	/** The people on the thread other than the account itself, deduplicated. */
 	participants: MailAddress[];
 	/** The newest message's first line, or a search snippet when searching. */
@@ -897,9 +992,37 @@ export interface MailThreadListQuery {
 	/** Full-text over subject, body and sender. */
 	search?: string;
 	unreadOnly?: boolean;
+	/** Only threads carrying a flagged message. */
+	flaggedOnly?: boolean;
+	/** Only threads carrying a real attachment. */
+	withAttachments?: boolean;
+	/** Only threads a given address took part in. Matched exactly, lowercased. */
+	fromAddress?: string;
+	/** Only threads whose last message is on or after this date, `YYYY-MM-DD`. */
+	since?: string;
+	/** Only threads whose last message is on or before this date, `YYYY-MM-DD`. */
+	until?: string;
 	limit?: number;
 	/** The `lastMessageAt` of the last row seen, for the next page. */
 	before?: Iso;
+}
+
+/**
+ * What a move actually did.
+ *
+ * `remembered` is how many of them Juno can still point at. A server with
+ * UIDPLUS says where each message landed, so the row follows it and shows up in
+ * the destination immediately. A server without it says nothing, so the row is
+ * forgotten and the message reappears when that folder is next synced. The
+ * number is in the result rather than hidden, because it is the difference
+ * between "it is in Archive" and "it is in Archive and Juno will see it again
+ * after a sync", and the interface has to be able to say which happened.
+ */
+export interface MailFileResult {
+	moved: number;
+	/** The destination, by the name the folder list shows. */
+	folderName: string;
+	remembered: number;
 }
 
 export type MailSyncPhase = "idle" | "connecting" | "folders" | "headers" | "bodies" | "done" | "failed";
@@ -917,6 +1040,13 @@ export interface MailSyncStatus {
 	/** What the run produced so far. */
 	newMessages: number;
 	fetchedBodies: number;
+	/**
+	 * How much of the mailbox this run knows about and did not reach: headers
+	 * inside the horizon it did not list, plus bodies not fetched yet. A run is
+	 * bounded on purpose, so this is normal on a large mailbox rather than a
+	 * failure, and it is what the next run picks up.
+	 */
+	pending: number;
 }
 
 /* ------------------------------------------------------------- mail: sending */
@@ -983,6 +1113,12 @@ export interface MailOutboxMessage extends Standard {
 	threadId: string | null;
 	clientId: string | null;
 	clientName: string | null;
+	/**
+	 * Every client the recipients belong to, worked out from the addresses. The
+	 * message is filed under `clientId`; this is the rest of them, and a message
+	 * to two clients carries both rather than silently one.
+	 */
+	clients: MailMessageClient[];
 	projectId: string | null;
 	templateId: string | null;
 	requestedBy: "user" | "agent";
@@ -1018,6 +1154,9 @@ export interface MailDraftInput {
 export type MailDraftPatch = Partial<Omit<MailDraftInput, "accountId">>;
 
 /** What a reply starts from: the addresses and subject, worked out from the original. */
+/** Reply to the sender, reply to everyone, or forward it to somebody new. */
+export type MailReplyMode = "reply" | "reply_all" | "forward";
+
 export interface MailReplySeed {
 	accountId: string;
 	to: MailAddress[];
@@ -1025,7 +1164,8 @@ export interface MailReplySeed {
 	subject: string;
 	/** The original, quoted, for under the reply. */
 	quotedText: string;
-	replyToMessageId: string;
+	/** Null for a forward: it starts a conversation rather than continuing one. */
+	replyToMessageId: string | null;
 	clientId: string | null;
 }
 
@@ -1400,6 +1540,17 @@ export interface AgentClientTarget {
 	/** Juno is in the file with exactly the settings this install would write. */
 	upToDate: boolean;
 	format: AgentConfigFormat;
+	/**
+	 * The object or table the servers live under inside that client's file.
+	 * VS Code calls it "servers", Codex calls it "mcp_servers", everyone else
+	 * copied Claude Desktop and calls it "mcpServers".
+	 *
+	 * It is on the target rather than looked up by id in the renderer, because a
+	 * second copy of this mapping is one that drifts the day a client renames
+	 * its key, and the screen that would be wrong is the one telling a person
+	 * where to paste something by hand.
+	 */
+	configKey: string;
 	/** What the person has to do after the file changes, in one sentence. */
 	after: string;
 }

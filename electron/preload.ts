@@ -30,6 +30,12 @@ const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
 const api: JunoApi = {
 	app: {
 		info: () => call("app.info"),
+		edit: {
+			cut: () => call("app.edit.cut"),
+			copy: () => call("app.edit.copy"),
+			paste: () => call("app.edit.paste"),
+			selectAll: () => call("app.edit.selectAll"),
+		},
 	},
 
 	window: {
@@ -63,6 +69,17 @@ const api: JunoApi = {
 		update: (id, patch) => call("clients.update", id, patch),
 		remove: (id) => call("clients.remove", id),
 		restore: (id) => call("clients.restore", id),
+		timeline: (query) => call("clients.timeline", query),
+		timelineCounts: (clientId) => call("clients.timelineCounts", clientId),
+	},
+
+	clientNotes: {
+		listForClient: (clientId) => call("clientNotes.listForClient", clientId),
+		get: (id) => call("clientNotes.get", id),
+		create: (input) => call("clientNotes.create", input),
+		update: (id, patch) => call("clientNotes.update", id, patch),
+		remove: (id) => call("clientNotes.remove", id),
+		restore: (id) => call("clientNotes.restore", id),
 	},
 
 	contacts: {
@@ -308,6 +325,13 @@ const api: JunoApi = {
 		folders: {
 			list: (accountId) => call("mail.folders.list", accountId),
 			setSyncEnabled: (id, enabled) => call("mail.folders.setSyncEnabled", id, enabled),
+			create: (input) => call("mail.folders.create", input),
+			rename: (id, name) => call("mail.folders.rename", id, name),
+			remove: (id) => call("mail.folders.remove", id),
+		},
+		recipients: {
+			suggest: (term, limit) => call("mail.recipients.suggest", term, limit),
+			clientsFor: (addresses) => call("mail.recipients.clientsFor", addresses),
 		},
 		sync: {
 			run: (accountId) => call("mail.sync.run", accountId),
@@ -327,6 +351,18 @@ const api: JunoApi = {
 			linkClient: (id, clientId) => call("mail.threads.linkClient", id, clientId),
 			unlinkClient: (id) => call("mail.threads.unlinkClient", id),
 			countForClient: (clientId) => call("mail.threads.countForClient", clientId),
+		},
+		file: {
+			archive: (threadIds) => call("mail.file.archive", threadIds),
+			trash: (threadIds) => call("mail.file.trash", threadIds),
+			junk: (threadIds) => call("mail.file.junk", threadIds),
+			moveToFolder: (threadIds, folderId) => call("mail.file.moveToFolder", threadIds, folderId),
+			deleteForever: (threadIds) => call("mail.file.deleteForever", threadIds),
+			setSeen: (messageIds, seen) => call("mail.file.setSeen", messageIds, seen),
+			setThreadsSeen: (threadIds, seen) => call("mail.file.setThreadsSeen", threadIds, seen),
+			setFlagged: (messageIds, flagged) => call("mail.file.setFlagged", messageIds, flagged),
+			setFolderSeen: (folderId, seen) => call("mail.file.setFolderSeen", folderId, seen),
+			emptyFolder: (folderId) => call("mail.file.emptyFolder", folderId),
 		},
 		messages: {
 			get: (id) => call("mail.messages.get", id),
@@ -351,7 +387,7 @@ const api: JunoApi = {
 			counts: (accountId) => call("mail.outbox.counts", accountId),
 			createDraft: (input) => call("mail.outbox.createDraft", input),
 			updateDraft: (id, patch) => call("mail.outbox.updateDraft", id, patch),
-			replySeed: (messageId, all) => call("mail.outbox.replySeed", messageId, all),
+			replySeed: (messageId, mode) => call("mail.outbox.replySeed", messageId, mode),
 			send: (id) => call("mail.outbox.send", id),
 			approve: (id) => call("mail.outbox.approve", id),
 			cancel: (id) => call("mail.outbox.cancel", id),

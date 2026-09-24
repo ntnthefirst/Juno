@@ -2,6 +2,7 @@ import type { MailAccountPatch, MailSecurity, MailThreadListQuery } from "../../
 import * as accounts from "../services/mail-accounts";
 import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
+import * as recipients from "../services/mail-recipients";
 import * as sync from "../services/mail-sync";
 import * as threads from "../services/mail-threads";
 import type { ToolDescriptor } from "./types";
@@ -226,7 +227,8 @@ export const mailTools: ToolDescriptor[] = [
 	{
 		name: "mail.folders.set_sync",
 		title: "Turn a folder's sync on or off",
-		description: "Whether the next sync pulls this folder. The inbox is on by default, the rest off.",
+		description:
+			"Whether the next sync pulls this folder. Every folder is pulled unless somebody turned it off.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -236,6 +238,104 @@ export const mailTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => folders.setSyncEnabled(String(args.id), Boolean(args.enabled)),
+	},
+	{
+		name: "mail.folders.create",
+		title: "Make a folder",
+		description:
+			"Creates a folder on the mail server and lists it here. Give parent_id to put it inside another folder. " +
+			"The name is one segment: it cannot contain the server's path separator.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				account_id: { type: "string" },
+				name: { type: "string", description: "What the folder is called, like Facturen." },
+				parent_id: { type: "string", description: "The folder it goes inside. Omit for a top-level folder." },
+			},
+			required: ["account_id", "name"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			folders.create({
+				accountId: String(args.account_id),
+				name: String(args.name),
+				...(args.parent_id !== undefined ? { parentId: String(args.parent_id) } : {}),
+			}),
+	},
+	{
+		name: "mail.folders.rename",
+		title: "Rename a folder",
+		description:
+			"Renames a folder on the server. Folders inside it come with it. A folder the account needs, " +
+			"like Sent or Trash, keeps the server's name and cannot be renamed.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string" }, name: { type: "string" } },
+			required: ["id", "name"],
+			additionalProperties: false,
+		},
+		handler: async (args) => folders.rename(String(args.id), String(args.name)),
+	},
+	{
+		name: "mail.folders.remove",
+		title: "Remove a folder",
+		description:
+			"Deletes a folder from the mail server with every message in it. There is no undo, on either side, " +
+			"so this waits for a person to approve it. A folder with folders inside it is refused.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string" } },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => folders.remove(String(args.id)),
+	},
+	{
+		name: "mail.recipients.suggest",
+		title: "Suggest recipients",
+		description:
+			"Addresses matching what has been typed, from client records, client contacts and mail already on this " +
+			"machine. Each one carries every client it belongs to, which can be more than one.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				term: { type: "string", description: "Part of a name or an address. At least two characters." },
+				limit: { type: "integer", minimum: 1, maximum: 25 },
+			},
+			required: ["term"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			recipients.suggest(
+				String(args.term),
+				args.limit === undefined ? {} : { limit: Number(args.limit) },
+			),
+	},
+	{
+		name: "mail.recipients.clients_for",
+		title: "Which clients these addresses belong to",
+		description:
+			"The clients a list of addresses resolves to, by client address and by client contact. An address can " +
+			"belong to more than one client, and all of them come back.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				addresses: { type: "array", items: { type: "string" }, minItems: 1 },
+			},
+			required: ["addresses"],
+			additionalProperties: false,
+		},
+		handler: async (args) => recipients.clientsFor((args.addresses as string[]).map(String)),
 	},
 	{
 		name: "mail.sync",
@@ -267,8 +367,9 @@ export const mailTools: ToolDescriptor[] = [
 		name: "mail.threads.list",
 		title: "List threads",
 		description:
-			"Threads newest first, filtered by account, folder or client. With search, a full-text " +
-			"match over subject, body and sender, ranked, with a snippet. Pages with before.",
+			"Threads newest first, filtered by account, folder, client, read state, flag, attachments, " +
+			"one address or a date range. With search, a full-text match over subject, body and sender, " +
+			"ranked, with a snippet. Pages with before.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -279,7 +380,15 @@ export const mailTools: ToolDescriptor[] = [
 				client_id: { type: "string" },
 				search: { type: "string", description: "Words to find. The last one matches as a prefix." },
 				unread_only: { type: "boolean" },
-				limit: { type: "integer", minimum: 1, maximum: 200, description: "Default 50." },
+				flagged_only: { type: "boolean" },
+				with_attachments: { type: "boolean" },
+				from_address: {
+					type: "string",
+					description: "One address. Matches a thread that address wrote to or was written to.",
+				},
+				since: { type: "string", description: "Last message on or after this date, YYYY-MM-DD." },
+				until: { type: "string", description: "Last message on or before this date, YYYY-MM-DD." },
+				limit: { type: "integer", minimum: 1, maximum: 500, description: "Default 50." },
 				before: {
 					type: "string",
 					description: "The last_message_at of the last row seen, for the next page.",
@@ -294,6 +403,11 @@ export const mailTools: ToolDescriptor[] = [
 				...(args.client_id !== undefined ? { clientId: String(args.client_id) } : {}),
 				...(args.search !== undefined ? { search: String(args.search) } : {}),
 				...(args.unread_only !== undefined ? { unreadOnly: Boolean(args.unread_only) } : {}),
+				...(args.flagged_only !== undefined ? { flaggedOnly: Boolean(args.flagged_only) } : {}),
+				...(args.with_attachments !== undefined ? { withAttachments: Boolean(args.with_attachments) } : {}),
+				...(args.from_address !== undefined ? { fromAddress: String(args.from_address) } : {}),
+				...(args.since !== undefined ? { since: String(args.since) } : {}),
+				...(args.until !== undefined ? { until: String(args.until) } : {}),
 				...(args.limit !== undefined ? { limit: Number(args.limit) } : {}),
 				...(args.before !== undefined ? { before: String(args.before) } : {}),
 			};

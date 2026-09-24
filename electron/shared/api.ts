@@ -76,6 +76,13 @@ import type {
 	LockSettings,
 	LockState,
 	MailAccount,
+	ClientNote,
+	ClientNoteInput,
+	ClientNotePatch,
+	ClientTimelineEntry,
+	ClientTimelineKind,
+	ClientTimelineQuery,
+	MailFileResult,
 	MailAccountInput,
 	MailAutoconfig,
 	MailAccountPatch,
@@ -85,9 +92,12 @@ import type {
 	MailFolder,
 	MailMessage,
 	MailMessageBody,
+	MailMessageClient,
 	MailOutboxCounts,
 	MailOutboxListQuery,
 	MailOutboxMessage,
+	MailRecipientSuggestion,
+	MailReplyMode,
 	MailReplySeed,
 	MailSecurity,
 	MailSyncStatus,
@@ -134,6 +144,23 @@ export interface ListClientsQuery {
 export interface JunoApi {
 	app: {
 		info(): Promise<AppInfo>;
+
+		/**
+		 * The clipboard commands, run against whatever has focus in this window.
+		 *
+		 * Electron draws no context menu of its own, so cut, copy and paste have
+		 * to come from somewhere for the app's own menu to offer them. They are
+		 * routed through the main process rather than the renderer reading the
+		 * clipboard itself, which means no clipboard content ever crosses the
+		 * bridge: the renderer asks for the edit, the main process performs it on
+		 * the focused element, and nothing comes back.
+		 */
+		edit: {
+			cut(): Promise<void>;
+			copy(): Promise<void>;
+			paste(): Promise<void>;
+			selectAll(): Promise<void>;
+		};
 	};
 
 	/**
@@ -172,6 +199,22 @@ export interface JunoApi {
 		/** Soft delete. Returns the row so the interface can offer an undo. */
 		remove(id: string): Promise<Client>;
 		restore(id: string): Promise<Client>;
+		/**
+		 * What has happened with this client, assembled from the records that
+		 * already hold it. Newest first.
+		 */
+		timeline(query: ClientTimelineQuery): Promise<ClientTimelineEntry[]>;
+		timelineCounts(clientId: string): Promise<Record<ClientTimelineKind, number>>;
+	};
+
+	/** Calls, meetings and anything else that leaves no other trace. */
+	clientNotes: {
+		listForClient(clientId: string): Promise<ClientNote[]>;
+		get(id: string): Promise<ClientNote | null>;
+		create(input: ClientNoteInput): Promise<ClientNote>;
+		update(id: string, patch: ClientNotePatch): Promise<ClientNote>;
+		remove(id: string): Promise<ClientNote>;
+		restore(id: string): Promise<ClientNote>;
 	};
 
 	contacts: {
@@ -508,6 +551,16 @@ export interface JunoApi {
 		folders: {
 			list(accountId: string): Promise<MailFolder[]>;
 			setSyncEnabled(id: string, enabled: boolean): Promise<MailFolder>;
+			/** Makes the folder on the server, then lists it here. */
+			create(input: { accountId: string; name: string; parentId?: string | null }): Promise<MailFolder>;
+			rename(id: string, name: string): Promise<MailFolder>;
+			/** Removes it from the server with everything in it. Confirmed first. */
+			remove(id: string): Promise<MailFolder>;
+		};
+		/** Who a message can go to, and which clients an address belongs to. */
+		recipients: {
+			suggest(term: string, limit?: number): Promise<MailRecipientSuggestion[]>;
+			clientsFor(addresses: string[]): Promise<MailMessageClient[]>;
 		};
 		sync: {
 			/** One account, or every enabled one. Resolves when the run is over. */
@@ -522,6 +575,26 @@ export interface JunoApi {
 			linkClient(id: string, clientId: string): Promise<MailThreadSummary>;
 			unlinkClient(id: string): Promise<MailThreadSummary>;
 			countForClient(clientId: string): Promise<number>;
+		};
+		/**
+		 * Filing mail. Each of these changes the mailbox on the server first and
+		 * the local rows second, so nothing here is undone by the next sync.
+		 * Deleting for good is exactly that, on the server too, and the window
+		 * confirms it with a count before calling.
+		 */
+		file: {
+			archive(threadIds: string[]): Promise<MailFileResult>;
+			trash(threadIds: string[]): Promise<MailFileResult>;
+			junk(threadIds: string[]): Promise<MailFileResult>;
+			moveToFolder(threadIds: string[], folderId: string): Promise<MailFileResult>;
+			deleteForever(threadIds: string[]): Promise<number>;
+			setSeen(messageIds: string[], seen: boolean): Promise<number>;
+			setThreadsSeen(threadIds: string[], seen: boolean): Promise<number>;
+			setFlagged(messageIds: string[], flagged: boolean): Promise<number>;
+			/** A whole folder read, or unread. Returns how many messages changed. */
+			setFolderSeen(folderId: string, seen: boolean): Promise<number>;
+			/** Everything in a folder, expunged on the server too. Confirmed first. */
+			emptyFolder(folderId: string): Promise<number>;
 		};
 		messages: {
 			get(id: string): Promise<MailMessage | null>;
@@ -556,8 +629,8 @@ export interface JunoApi {
 			counts(accountId?: string): Promise<MailOutboxCounts>;
 			createDraft(input: MailDraftInput): Promise<MailOutboxMessage>;
 			updateDraft(id: string, patch: MailDraftPatch): Promise<MailOutboxMessage>;
-			/** The addresses, subject and quote a reply starts from. */
-			replySeed(messageId: string, all: boolean): Promise<MailReplySeed>;
+			/** The addresses, subject and quote an answer starts from. */
+			replySeed(messageId: string, mode: MailReplyMode): Promise<MailReplySeed>;
 			/** The person's press. Queues the message; the sender picks it up at once. */
 			send(id: string): Promise<MailOutboxMessage>;
 			/** Approves what an agent prepared. Only a person can reach this. */

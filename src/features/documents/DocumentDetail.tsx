@@ -9,7 +9,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
-import { ComposeDialog } from "../mail/ComposeDialog";
+import { ComposePage } from "../mail/ComposePage";
 import { DocumentPreview } from "./DocumentPreview";
 import { SignDialog } from "./SignDialog";
 
@@ -368,7 +368,7 @@ export function DocumentDetail({
 			) : null}
 
 			{sending ? (
-				<ComposeDialog
+				<ComposePage
 					seed={{
 						clientId: record.clientId,
 						projectId: record.projectId,

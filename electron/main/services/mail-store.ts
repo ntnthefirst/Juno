@@ -35,9 +35,15 @@ function escapeLike(value: string): string {
 /* ---------------------------------------------------------------- folders */
 
 /**
- * Brings the local folder list in line with the server's. New folders are
- * added with sync off, except the inbox; folders the server no longer has are
- * soft-deleted along with their messages.
+ * Brings the local folder list in line with the server's. Folders the server no
+ * longer has are soft-deleted along with their messages.
+ *
+ * A folder nobody has an opinion about is pulled. That is the policy, and it
+ * lives here rather than in a column default so it can change without a
+ * migration. It used to be "the inbox and nothing else", which left Sent empty,
+ * Trash empty, and a message moved to a folder nowhere to be found, because the
+ * only copy of it was in a folder sync never opened. `sync_choice_at` is what
+ * keeps a folder the owner switched off switched off.
  */
 export function reconcileFolders(db: Db, accountId: string, remote: RemoteFolder[]): FolderRow[] {
 	const stamp = now();
@@ -71,7 +77,7 @@ export function reconcileFolders(db: Db, accountId: string, remote: RemoteFolder
 					name: folder.name,
 					delimiter: folder.delimiter,
 					specialUse: folder.specialUse,
-					syncEnabled: folder.specialUse === "inbox",
+					syncEnabled: true,
 					createdAt: stamp,
 					updatedAt: stamp,
 				})
@@ -120,6 +126,19 @@ function retireMessages(db: Db, folderId: string, uids: number[] | null): number
 	}
 	for (const threadId of new Set(gone.map((r) => r.threadId))) touchThread(db, threadId);
 	return gone.length;
+}
+
+/**
+ * A folder that is no longer on the server: soft-deleted, with its messages.
+ * The caller is the folder service, after the server said the mailbox is gone.
+ */
+export function retireFolder(db: Db, folderId: string): void {
+	const stamp = now();
+	retireMessages(db, folderId, null);
+	db.update(mailFolders)
+		.set({ deletedAt: stamp, updatedAt: stamp })
+		.where(eq(mailFolders.id, folderId))
+		.run();
 }
 
 /** UIDVALIDITY changed: every local UID for this folder is meaningless. */

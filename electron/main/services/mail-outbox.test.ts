@@ -287,16 +287,30 @@ describe("replies", () => {
 			.get().id;
 	}
 
+	it("seeds a forward with nobody on it and no threading headers", async () => {
+		// A forward is a new conversation. Carrying In-Reply-To would file it under
+		// the thread it came from on both ends, and pre-filling a recipient would
+		// be guessing at the one thing the person forwarding it is deciding.
+		const originalId = storeOriginal(db);
+		const forward = await outbox.replySeed(originalId, { mode: "forward" }, db);
+
+		expect(forward.to).toEqual([]);
+		expect(forward.cc).toEqual([]);
+		expect(forward.subject).toBe("Fw: Offerte");
+		expect(forward.quotedText).toContain("> Kunnen we de offerte bekijken?");
+		expect(forward.replyToMessageId).toBeNull();
+	});
+
 	it("seeds a reply and a reply-all without the account itself, and threads the draft", async () => {
 		const originalId = storeOriginal(db);
-		const reply = await outbox.replySeed(originalId, { all: false }, db);
+		const reply = await outbox.replySeed(originalId, { mode: "reply" }, db);
 		expect(reply.to).toEqual([{ name: "Laura", address: "laura@obet.be" }]);
 		expect(reply.cc).toEqual([]);
 		expect(reply.subject).toBe("Re: Offerte");
 		expect(reply.quotedText).toContain("> Kunnen we de offerte bekijken?");
 		expect(reply.quotedText).toMatch(/^Op .* schreef Laura <laura@obet.be>:/);
 
-		const all = await outbox.replySeed(originalId, { all: true }, db);
+		const all = await outbox.replySeed(originalId, { mode: "reply_all" }, db);
 		expect(all.to.map((a) => a.address)).toEqual(["laura@obet.be", "tom@obet.be"]);
 		expect(all.cc.map((a) => a.address)).toEqual(["cc@elders.be"]);
 

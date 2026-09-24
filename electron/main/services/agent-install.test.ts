@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { installIn as install, targetsIn as targets } from "./agent-install";
+import { installIn as install, sameEntry, targetsIn as targets } from "./agent-install";
 import type { McpServerStatus } from "../../shared/types";
 
 const STATUS: McpServerStatus = {
@@ -293,5 +293,34 @@ describe("codex (toml)", () => {
 		const written = readFileSync(codexPath(), "utf8");
 		expect(written).toContain("[mcp_servers.juno]");
 		expect(written).toContain('command = "node"');
+	});
+});
+
+describe("telling a configured client from a changed one", () => {
+	it("treats a reordered entry as the same entry", () => {
+		// An editor or another tool can rewrite the file with its keys sorted
+		// without changing a word of what it says. Reporting that as "pointing
+		// somewhere else" sends a person looking for a problem that is not there.
+		expect(sameEntry({ command: "node", args: ["a", "b"] }, { args: ["a", "b"], command: "node" })).toBe(
+			true,
+		);
+	});
+
+	it("still sees a real difference", () => {
+		expect(sameEntry({ command: "node", args: ["a"] }, { command: "node", args: ["b"] })).toBe(false);
+		expect(sameEntry({ command: "node" }, { command: "node", env: {} })).toBe(false);
+	});
+
+	it("does not treat a reordered argument list as the same", () => {
+		// Order is meaningless between keys and load-bearing inside an array:
+		// --user-data-dir and its value are a pair, in that order.
+		expect(sameEntry({ args: ["a", "b"] }, { args: ["b", "a"] })).toBe(false);
+	});
+
+	it("says a client reports the key its own file uses", () => {
+		const rows = targets(STATUS, home, "win32");
+		expect(rows.find((row) => row.id === "vscode")?.configKey).toBe("servers");
+		expect(rows.find((row) => row.id === "codex")?.configKey).toBe("mcp_servers");
+		expect(rows.find((row) => row.id === "claude-desktop")?.configKey).toBe("mcpServers");
 	});
 });

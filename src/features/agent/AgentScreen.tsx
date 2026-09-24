@@ -9,6 +9,14 @@ import { RequestList } from "./RequestList";
 
 type Tab = "requests" | "automations" | "log" | "connection";
 
+/**
+ * Connection is on this screen and not only in settings, which is where it
+ * ended up for a while. Settings is a modal window somebody opens to change
+ * how Juno behaves; connecting an agent is a job with steps, done once, with
+ * the tool list and the pending requests beside it as the thing being
+ * connected to. START-HERE.md sends a reader here for it, and it has to be
+ * here for that to be true.
+ */
 const TABS: { id: Tab; label: string }[] = [
 	{ id: "requests", label: "Requests" },
 	{ id: "automations", label: "Automations" },
@@ -58,12 +66,10 @@ export function AgentScreen() {
 	return (
 		<div className="h-full overflow-y-auto p-8">
 			<div className="mx-auto w-full max-w-[var(--content-width)]">
-				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-					Agent
-				</h1>
+				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">Agent</h1>
 				<p className="mt-2 max-w-[68ch] text-[var(--ink-muted)]">
-					Juno exposes everything it can do to an agent on this machine. Reading happens freely;
-					anything that changes a record waits here for you.
+					Juno exposes everything it can do to an agent on this machine. Reading happens freely; anything that
+					changes a record waits here for you.
 				</p>
 
 				<div
@@ -103,7 +109,10 @@ export function AgentScreen() {
 							onNotice={setNotice}
 						/>
 					) : tab === "automations" ? (
-						<AutomationList onNotice={setNotice} onChanged={refresh} />
+						<AutomationList
+							onNotice={setNotice}
+							onChanged={refresh}
+						/>
 					) : tab === "log" ? (
 						<AuditLog />
 					) : (
@@ -112,7 +121,12 @@ export function AgentScreen() {
 				</div>
 			</div>
 
-			{notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
+			{notice ? (
+				<Toast
+					message={notice}
+					onDismiss={dismissNotice}
+				/>
+			) : null}
 		</div>
 	);
 }
@@ -141,7 +155,10 @@ function AuditLog() {
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the log.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p
+					data-selectable
+					className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+				>
 					{error}
 				</p>
 			</div>
@@ -151,9 +168,8 @@ function AuditLog() {
 	if (rows.length === 0) {
 		return (
 			<p className="max-w-[68ch] text-[var(--ink-muted)]">
-				Nothing yet. Every call that changes a record is logged here, with who made it and how it
-				ended. The arguments are not kept; a digest of them is, so two identical calls can be told
-				apart.
+				Nothing yet. Every call that changes a record is logged here, with who made it and how it ended. The
+				arguments are not kept; a digest of them is, so two identical calls can be told apart.
 			</p>
 		);
 	}

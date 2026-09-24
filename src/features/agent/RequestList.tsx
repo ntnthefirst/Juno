@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { AgentAction } from "@shared/types";
 import { Button } from "../../components/Button";
+import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
+import { useContextMenu } from "../../lib/use-context-menu";
 import { ACTION_LABELS, ACTION_TONES, formatArgs, formatWhen } from "./format";
 
 type RequestListProps = {
@@ -79,6 +81,7 @@ type CardProps = {
 /** A pending request floats above the page while it waits, so it earns a surface. */
 function RequestCard({ action, onChanged, onNotice }: CardProps) {
 	const [busy, setBusy] = useState(false);
+	const menu = useContextMenu();
 
 	async function answer(approve: boolean) {
 		if (busy) return;
@@ -95,8 +98,16 @@ function RequestCard({ action, onChanged, onNotice }: CardProps) {
 		}
 	}
 
+	const items: MenuItem[] = [
+		{ id: "approve", label: "Approve", icon: "check", disabled: busy, onSelect: () => void answer(true) },
+		{ id: "reject", label: "Reject", icon: "close", disabled: busy, onSelect: () => void answer(false) },
+	];
+
 	return (
-		<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
+		<div
+			onContextMenu={menu.open}
+			className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4"
+		>
 			<div className="flex items-start justify-between gap-4">
 				<div className="min-w-0">
 					<p className="font-[var(--weight-medium)]">{action.summary}</p>
@@ -130,12 +141,17 @@ function RequestCard({ action, onChanged, onNotice }: CardProps) {
 					{formatArgs(action.args)}
 				</pre>
 			</details>
+
+			{menu.at ? (
+				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={action.summary} />
+			) : null}
 		</div>
 	);
 }
 
 function AnsweredRow({ action, onChanged, onNotice }: CardProps) {
 	const [busy, setBusy] = useState(false);
+	const menu = useContextMenu();
 
 	async function clear() {
 		if (busy) return;
@@ -150,8 +166,15 @@ function AnsweredRow({ action, onChanged, onNotice }: CardProps) {
 		}
 	}
 
+	const items: MenuItem[] = [
+		{ id: "clear", label: "Clear", icon: "remove", disabled: busy, onSelect: () => void clear() },
+	];
+
 	return (
-		<div className="flex items-center gap-3 border-b border-[var(--line)] px-2 py-2 hover:bg-[var(--hover)]">
+		<div
+			onContextMenu={menu.open}
+			className="flex items-center gap-3 border-b border-[var(--line)] px-2 py-2 hover:bg-[var(--hover)]"
+		>
 			<span
 				className={`inline-block shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${ACTION_TONES[action.state]}`}
 			>
@@ -171,6 +194,10 @@ function AnsweredRow({ action, onChanged, onNotice }: CardProps) {
 			<Button size="dense" disabled={busy} onClick={() => void clear()}>
 				Clear
 			</Button>
+
+			{menu.at ? (
+				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={action.summary} />
+			) : null}
 		</div>
 	);
 }

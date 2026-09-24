@@ -97,6 +97,35 @@ export const mailOutbox = sqliteTable(
 );
 
 /**
+ * Every client an outgoing message concerns.
+ *
+ * `mail_outbox.client_id` is the one the message is filed under, and it stays.
+ * This table is the rest of them, because a message addressed to two people who
+ * belong to two different clients concerns both, and dropping one of them the
+ * moment the recipients are resolved loses information nobody typed twice.
+ * Filled from the addresses, so it follows the To and Cc lines.
+ */
+export const mailOutboxClients = sqliteTable(
+	"mail_outbox_clients",
+	{
+		...standardColumns,
+		outboxId: text("outbox_id")
+			.notNull()
+			.references(() => mailOutbox.id),
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		/** The address that resolved to this client, so the composer can say why. */
+		matchedAddress: text("matched_address").notNull(),
+	},
+	(t) => [
+		index("mail_outbox_clients_outbox_idx").on(t.outboxId),
+		index("mail_outbox_clients_client_idx").on(t.clientId),
+		index("mail_outbox_clients_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
  * An attachment on an outgoing message. Only a document row for now: the file
  * is resolved from the document at send time, so no path is stored and a
  * document re-rendered after attaching goes out in its latest form.

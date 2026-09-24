@@ -181,4 +181,12 @@ export function registerMailIpc(): void {
 			if (!window.isDestroyed()) window.webContents.send("mail.outboxChanged", message);
 		}
 	});
+	// A draft autosaved, edited, cancelled, retried or removed: the sender never
+	// touches these, so without this an open outbox list never learned about
+	// them.
+	outbox.onChange((message) => {
+		for (const window of BrowserWindow.getAllWindows()) {
+			if (!window.isDestroyed()) window.webContents.send("mail.outboxChanged", message);
+		}
+	});
 }

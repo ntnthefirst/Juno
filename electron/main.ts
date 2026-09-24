@@ -94,6 +94,9 @@ if (!app.requestSingleInstanceLock()) {
 		mailSend.configureMailSend({
 			isPaused: () => lock.isLocked(),
 			renderDocumentPdf: async (id) => (await documentActions.renderPdf(id)).pdfPath,
+			onSent: (accountId) => {
+				void mailSync.syncAccount(accountId).catch(() => undefined);
+			},
 		});
 		// safeStorage is usable now that the app is ready, and not before.
 		configureCredentialStore(safeStorageCredentialStore);

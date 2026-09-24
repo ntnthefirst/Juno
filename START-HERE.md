@@ -23,10 +23,11 @@ npm run dev
 | **Today** | What needs attention, suggestions worked out from the records, a counts line |
 | **Reminders** | Grouped by bucket, recurring, snooze and complete, one daily notification |
 | **Clients** | Clients, contacts and projects, with search and undo. A record opens on a card, with tabs and a timeline of everything that has happened with it |
+| **Projects** | A piece of work with its links, its files, the folder it is checked out into and the command that starts it. Cards, rows or a dense list, with previews that can be turned off. A project need not belong to a client |
 | **Documents** | Generated from a template or imported as a PDF, written to disk at generation, signed with an audit page |
 | **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. Filing that reaches the server: archive, trash, junk, move, read and flagged, and a delete that deletes. An outbox that sends over SMTP behind a confirmation gate, with reply, templates and document attachments |
 | **Calendar** | Events and recurring series with an IANA zone each, month, week and agenda views, reminders and project deadlines overlaid, drag to move and resize with the recurrence question asked, .ics in and out |
-| **Agent** | An MCP server over a local pipe, 130 tools, every side-effectful one parked for approval. Automations, an audit log, briefings across every domain, and the config block to paste into an agent |
+| **Agent** | An MCP server over a local pipe, 160 tools, every side-effectful one parked for approval. Automations, an audit log, briefings across every domain, and the config block to paste into an agent |
 | **Mail templates** | The subject and body of the emails Juno composes. A visual editor and a code view over the same HTML, declared inputs, and a preview through the shell that sends it |
 | **Document templates** | The contract texts, edited as pages: a margin, blocks that flow, and boxes placed on the paper. Compiled to the HTML the PDF pipeline already took |
 | **Settings** | Theme, lock, reference data, your name and business, your email addresses and phone numbers, accounting link, mail accounts, signature, backup |
@@ -69,7 +70,7 @@ database does not replay setup and `npm run dev:clean` does. The stored version
 is 2; an install that finished the older one is asked again, because it was
 never asked for a name or an establishment number.
 
-## The nine things that will bite you
+## The ten things that will bite you
 
 1. **Tests run under Electron's Node, not the host's.** `node:sqlite` before Node
    24 has no `StatementSync.setReturnArrays`, which the storage shim needs, so
@@ -121,6 +122,14 @@ never asked for a name or an establishment number.
    the one change that would make the read-only promise false. Every filing
    call changes the server first and the local rows second, so a server that
    cannot be reached fails the whole call with nothing changed here.
+
+10. **A project's command has no MCP tool, and adding one would be the mistake.**
+    It runs in a real shell with the owner's privileges, so a tool that writes
+    one plus a tool that runs one is a remote shell with an approval dialog in
+    front of it (decision 35). `projects.list_commands` is read-only and is the
+    only command tool there is. The same reasoning keeps `projects.assets` from
+    taking a path: adding a file opens a native picker, which is a person at the
+    keyboard, and the renderer never names a file on disk.
 
 ## What the September rework changed
 

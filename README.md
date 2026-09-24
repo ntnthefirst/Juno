@@ -133,11 +133,24 @@ every settings tab, and writes a screenshot of each in both themes to `.smoke/`.
 
 ## Releases and updates
 
-Tagging a version builds installers for Windows and macOS in GitHub Actions and
-uploads them to a **draft** release. Publishing that release is what starts the
-rollout: installed copies check every 38 hours, and with automatic installs on,
+**Merging into `main` cuts a release.** The version workflow takes the highest
+tag that exists, adds one to the patch number, writes it into `package.json`,
+tags it, and hands the tag to the release workflow, which builds installers for
+Windows and macOS and uploads them to a **draft** release.
+
+Publishing that release is what starts the rollout, and it stays a person's
+decision. Installed copies check every 38 hours, and with automatic installs on,
 download in the background and apply it the next time Juno is closed. Settings >
 General shows the version, checks on demand and holds the toggle.
+
+Two things change the number that gets cut:
+
+- **Bump `package.json` past the highest tag in the pull request** and that
+  number is used instead. This is how a minor or a major release is asked for.
+- **Put `[skip release]` in the merge commit message** and nothing is cut. A
+  documentation fix does not need an installer.
+
+Cutting one by hand still works, and takes the same path from the tag onwards:
 
 ```bash
 npm version patch

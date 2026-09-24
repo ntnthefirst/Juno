@@ -59,6 +59,25 @@ function notifyQueued(): void {
 	for (const listener of queuedListeners) listener();
 }
 
+/**
+ * Fired whenever a row changes outside the sender's own lifecycle: a draft
+ * saved or edited, a message cancelled, retried, approved or removed. The
+ * sender publishes `sending`, `sent`, `failed` and the Sent-folder append
+ * itself in ./mail-send.ts; this covers everything else `mail.outboxChanged`
+ * also needs to reach the window for, which used to be nothing, so a draft
+ * autosaved in the background never showed up in an open outbox list.
+ */
+const changeListeners = new Set<(message: MailOutboxMessage) => void>();
+
+export function onChange(listener: (message: MailOutboxMessage) => void): () => void {
+	changeListeners.add(listener);
+	return () => changeListeners.delete(listener);
+}
+
+function notifyChanged(message: MailOutboxMessage): void {
+	for (const listener of changeListeners) listener(message);
+}
+
 type Row = typeof mailOutbox.$inferSelect;
 
 const STATES: MailOutboxState[] = ["draft", "pending", "queued", "sending", "sent", "failed", "cancelled"];
@@ -443,7 +462,9 @@ export async function createDraft(input: MailDraftInput, db: Db = getDb()): Prom
 				.run();
 		}
 	}
-	return requireRecord(id, db);
+	const record = await requireRecord(id, db);
+	notifyChanged(record);
+	return record;
 }
 
 export async function updateDraft(id: string, patch: MailDraftPatch, db: Db = getDb()): Promise<MailOutboxMessage> {
@@ -496,7 +517,9 @@ export async function updateDraft(id: string, patch: MailDraftPatch, db: Db = ge
 			...parseAddresses(current.bccJson),
 		].map((a) => a.address));
 	}
-	return requireRecord(id, db);
+	const record = await requireRecord(id, db);
+	notifyChanged(record);
+	return record;
 }
 
 /** The marker the template renderer leaves where a value was missing. */
@@ -549,7 +572,9 @@ export async function requestSend(id: string, options: { actor: Actor }, db: Db 
 			.run();
 		notifyQueued();
 	}
-	return requireRecord(id, db);
+	const record = await requireRecord(id, db);
+	notifyChanged(record);
+	return record;
 }
 
 /** A person approving what an agent prepared. No MCP tool calls this. */
@@ -565,7 +590,9 @@ export async function approve(id: string, db: Db = getDb()): Promise<MailOutboxM
 		.where(eq(mailOutbox.id, id))
 		.run();
 	notifyQueued();
-	return requireRecord(id, db);
+	const record = await requireRecord(id, db);
+	notifyChanged(record);
+	return record;
 }
 
 /** Withdraws a message that has not gone out. A sent message cannot be unsent. */
@@ -578,7 +605,9 @@ export async function cancel(id: string, db: Db = getDb()): Promise<MailOutboxMe
 		.set({ state: "cancelled", updatedAt: now() })
 		.where(eq(mailOutbox.id, id))
 		.run();
-	return requireRecord(id, db);
+	const record = await requireRecord(id, db);
+	notifyChanged(record);
+	return record;
 }
 
 /** Puts a failed message back in the queue, under the same Message-ID. */
@@ -591,7 +620,9 @@ export async function retry(id: string, db: Db = getDb()): Promise<MailOutboxMes
 		.where(eq(mailOutbox.id, id))
 		.run();
 	notifyQueued();
-	return requireRecord(id, db);
+	const record = await requireRecord(id, db);
+	notifyChanged(record);
+	return record;
 }
 
 /** Soft-deletes a draft or a cancelled message. Anything else stays as history. */
@@ -605,7 +636,9 @@ export async function remove(id: string, db: Db = getDb()): Promise<MailOutboxMe
 		.set({ deletedAt: stamp, updatedAt: stamp })
 		.where(eq(mailOutbox.id, id))
 		.run();
-	return toRecord({ ...row, deletedAt: stamp }, null, [], []);
+	const record = toRecord({ ...row, deletedAt: stamp }, null, [], []);
+	notifyChanged(record);
+	return record;
 }
 
 /**

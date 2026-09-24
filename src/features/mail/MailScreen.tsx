@@ -7,15 +7,15 @@ import type {
 	MailSyncStatus,
 	MailThreadSummary,
 } from "@shared/types";
+import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
-import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
 import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
-import { describeMailFileResult, isSyncing } from "./format";
+import { describeMailFileResult } from "./format";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { NO_FILTERS, type MailFilters } from "./mail-filters";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
@@ -598,7 +598,6 @@ export function MailScreen() {
 		);
 	}
 
-	const anySyncing = Object.values(sync).some(isSyncing);
 	const selectedOutbox = outboxRows?.find((m) => m.id === selectedOutboxId) ?? null;
 	const activeFolders = selection?.accountId ? (folders[selection.accountId] ?? []) : [];
 	const selectedFolder = selection?.folderId
@@ -609,34 +608,21 @@ export function MailScreen() {
 
 	return (
 		<div className="flex h-full min-h-0">
-			<div className="flex w-[240px] shrink-0 flex-col border-r border-[var(--line)]">
-				<div className="flex items-center justify-between px-5 pt-6 pb-3">
+			<div className="flex w-[264px] shrink-0 flex-col border-r border-[var(--line)]">
+				{/*
+					Writing is the one thing this pane is for that is not a folder, so it
+					sits on the title line as a plus rather than spending a row of its own
+					on a button. Syncing says so on the account it belongs to, which is
+					the only place the answer is useful when there are two of them.
+				*/}
+				<div className="flex items-center justify-between gap-2 px-5 pt-6 pb-3">
 					<h1 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
 						Mail
 					</h1>
-					{/*
-						Syncing is continuous and says so here. There is no button for it:
-						a mail client that needs to be told to fetch mail is one that has
-						already failed at the only thing it has to do on its own.
-					*/}
-					{anySyncing ? (
-						<span
-							className="flex items-center gap-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]"
-							title="Syncing"
-						>
-							<Icon name="sync" size={12} />
-							Syncing
-						</span>
-					) : null}
-				</div>
-				<div className="px-5 pb-3">
-					<Button
-						variant="primary"
-						size="dense"
+					<AddButton
+						label="New message"
 						onClick={() => setCompose({ accountId: selection?.accountId ?? accounts[0]?.id })}
-					>
-						New message
-					</Button>
+					/>
 				</div>
 				<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
 					<FolderNav

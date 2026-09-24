@@ -18,11 +18,11 @@ import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
 import { describeMailFileResult, isSyncing } from "./format";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { NO_FILTERS, type MailFilters } from "./mail-filters";
-import { MailSearchBar } from "./MailSearchBar";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { OutboxDetail } from "./OutboxDetail";
 import { OutboxList } from "./OutboxList";
 import { ThreadList, type ThreadAction } from "./ThreadList";
+import { ThreadToolbar } from "./ThreadToolbar";
 import { ThreadView } from "./ThreadView";
 
 type LinkTarget = { threadId: string; currentClientId: string | null; senderAddress: string | null };
@@ -289,6 +289,17 @@ export function MailScreen() {
 			current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
 		);
 		setLastPicked(id);
+	}
+
+	/**
+	 * The box takes the rows on screen without dropping what a previous search
+	 * put in the selection. Picking a few, searching again and adding a few more
+	 * is the whole point of leaving search working.
+	 */
+	function selectEveryThread() {
+		const rows = (threads ?? []).map((thread) => thread.id);
+		setSelectedThreadIds((current) => [...new Set([...current, ...rows])]);
+		setLastPicked(rows[rows.length - 1] ?? null);
 	}
 
 	function clearThreadSelection() {
@@ -677,22 +688,24 @@ export function MailScreen() {
 								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Drafts</h2>
 							</div>
 						) : (
-							<div className="px-4 pt-6 pb-3">
-								<div className="max-w-[360px]">
-									<MailSearchBar
-										search={search}
-										onSearch={(value) => {
-											setSearch(value);
-											setRowLimit(PAGE);
-										}}
-										filters={filters}
-										onFilters={(next) => {
-											setFilters(next);
-											setRowLimit(PAGE);
-										}}
-									/>
-								</div>
-							</div>
+							<ThreadToolbar
+								search={search}
+								onSearch={(value) => {
+									setSearch(value);
+									setRowLimit(PAGE);
+								}}
+								filters={filters}
+								onFilters={(next) => {
+									setFilters(next);
+									setRowLimit(PAGE);
+								}}
+								inTrash={inTrash}
+								visibleIds={(threads ?? []).map((thread) => thread.id)}
+								selectedIds={selectedThreadIds}
+								onSelectAll={selectEveryThread}
+								onClearSelection={clearThreadSelection}
+								onAction={handleThreadAction}
+							/>
 						)}
 
 						{!showingDrafts && selectedFolder && !selectedFolder.syncEnabled ? (
@@ -724,8 +737,6 @@ export function MailScreen() {
 									selectedIds={selectedThreadIds}
 									onSelect={setSelectedThreadId}
 									onToggleSelect={toggleThreadSelection}
-									onSelectAll={() => setSelectedThreadIds((threads ?? []).map((t) => t.id))}
-									onClearSelection={clearThreadSelection}
 									onAction={handleThreadAction}
 								/>
 							)}

@@ -565,6 +565,26 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								return contents.capturePage();
 							};
+
+							/**
+							 * Lifts a window over whatever is in front of it, for a run that
+							 * is going to be read as evidence.
+							 *
+							 * A window that is occluded is not composited, so its captures are
+							 * the frame from before it was covered, and no amount of waiting
+							 * fixes that (verify.md). `JUNO_SMOKE_FRONT=1` is how a run on a
+							 * machine nobody is sitting at still produces screenshots worth
+							 * looking at. It is off by default, because a run that steals the
+							 * screen is a run nobody starts twice.
+							 */
+							const front = (target: Electron.BrowserWindow | null) => {
+								if (!process.env.JUNO_SMOKE_FRONT || !target || target.isDestroyed()) return;
+								target.setAlwaysOnTop(true, "screen-saver");
+								target.show();
+								target.focus();
+							};
+							front(window);
+
 							// A throwaway user-data directory is a genuinely first install, so
 							// the setup window opens in front of the application (decision 34).
 							// Photograph it, then finish it the way a person would: if the flow
@@ -578,6 +598,7 @@ if (!app.requestSingleInstanceLock()) {
 									setup = getSetupWindow();
 								}
 								if (!setup) throw new Error("Smoke: a first run did not open the setup window");
+								front(setup);
 								const flow = setup.webContents;
 
 								const setupPresent = await flow.executeJavaScript(

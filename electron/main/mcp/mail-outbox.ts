@@ -4,13 +4,13 @@ import * as templates from "../services/mail-templates";
 import type { ToolDescriptor } from "./types";
 
 /**
- * Sending tools. Phase 4.
+ * Sending tools.
  *
  * `mail.send` does not send. It moves a draft to `pending`, where a person sees
  * the whole message in the app and approves or rejects it. There is no
  * `mail.outbox.approve` tool and there will not be one: the service only queues
  * a message for a caller that says it is a person, and this file never says
- * that (.claude/rules/mcp.md section 4, PLAN.md section 4).
+ * that (.claude/rules/mcp.md section 4).
  *
  * Read receipts and tracking are permanently out of scope, so there is nothing
  * here that could ask for one.

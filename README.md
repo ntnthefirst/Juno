@@ -16,8 +16,8 @@ Clients, documents, reminders, a mail client with an outbox, a calendar with
 recurrence and .ics exchange, and an MCP server that exposes all of it to an
 agent behind an approval gate. Mail has not yet met a real server, and the
 in-app assistant panel waits on a model decision. What is built and what is not
-is tracked in [BUILD-LOG.md](BUILD-LOG.md); what comes next is in
-[PLAN.md](PLAN.md).
+is tracked in [STRUCTURE.md](STRUCTURE.md); what comes next is in
+[TODO.md](TODO.md).
 
 ---
 
@@ -76,7 +76,8 @@ the feature ships. The reasoning is in [docs/decisions.md](docs/decisions.md).
 ## Repository layout
 
 ```
-PLAN.md                 The phases, the data model, the MCP surface, the risks
+STRUCTURE.md            What is built, where it lives, and the traps in it
+TODO.md                 What is deliberately not done, and what unblocks each
 docs/decisions.md       Locked technical decisions and the reason for each
 brand/
   BRAND.md              Name, values, voice, colour and logo rules
@@ -132,10 +133,24 @@ every settings tab, and writes a screenshot of each in both themes to `.smoke/`.
 
 ## Releases and updates
 
-Tagging a version builds installers for Windows and macOS in GitHub Actions and
-uploads them to a **draft** release. Publishing that release is what starts the
-rollout: installed copies check once on launch and daily after, download in the
-background, and install on the next quit.
+**Merging into `main` cuts a release.** The version workflow takes the highest
+tag that exists, adds one to the patch number, writes it into `package.json`,
+tags it, and hands the tag to the release workflow, which builds installers for
+Windows and macOS and uploads them to a **draft** release.
+
+Publishing that release is what starts the rollout, and it stays a person's
+decision. Installed copies check every 38 hours, and with automatic installs on,
+download in the background and apply it the next time Juno is closed. Settings >
+General shows the version, checks on demand and holds the toggle.
+
+Two things change the number that gets cut:
+
+- **Bump `package.json` past the highest tag in the pull request** and that
+  number is used instead. This is how a minor or a major release is asked for.
+- **Put `[skip release]` in the merge commit message** and nothing is cut. A
+  documentation fix does not need an installer.
+
+Cutting one by hand still works, and takes the same path from the tag onwards:
 
 ```bash
 npm version patch

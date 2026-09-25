@@ -36,7 +36,9 @@ import type {
 	OwnerPhonePatch,
 	OwnerProfile,
 	OwnerProfilePatch,
+	ProjectsView,
 	ThemeSetting,
+	UpdateSettings,
 } from "../../shared/types";
 
 const DEFAULT_LOCK: LockSettings = {
@@ -70,6 +72,26 @@ const OWNER_SCALARS = (Object.keys(DEFAULT_OWNER) as (keyof OwnerProfile)[]).fil
 const DEFAULT_ACCOUNTING: AccountingTool = { name: "", url: "" };
 
 /**
+ * A grid with medium covers, newest first. Projects are the one screen where a
+ * picture carries more than a row of text does, so previews start on; a person
+ * with four hundred of them turns them off and gets the dense table back.
+ */
+const DEFAULT_PROJECTS_VIEW: ProjectsView = {
+	layout: "grid",
+	size: "medium",
+	previews: true,
+	sort: "recent",
+};
+
+const PROJECT_LAYOUTS: ProjectsView["layout"][] = ["grid", "list", "rows"];
+const PROJECT_SIZES: ProjectsView["size"][] = ["small", "medium", "large"];
+const PROJECT_SORTS: ProjectsView["sort"][] = ["recent", "name", "due", "client"];
+
+function oneOf<T extends string>(value: unknown, allowed: T[], fallback: T): T {
+	return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+/**
  * The shape of the setup as it stands today. Adding a step that an existing
  * install has never been asked means bumping this, and nothing else.
  *
@@ -87,6 +109,13 @@ const DEFAULT_ONBOARDING: OnboardingState = {
 	version: 0,
 };
 
+/**
+ * Updates install themselves by default. Someone running a back office all day
+ * should not have to remember to go and fetch one, and the install waits for a
+ * close either way, so it never interrupts.
+ */
+const DEFAULT_UPDATES: UpdateSettings = { autoInstall: true, lastCheckedAt: null };
+
 const DEFAULTS: AppSettings = {
 	theme: "system",
 	lock: DEFAULT_LOCK,
@@ -96,6 +125,8 @@ const DEFAULTS: AppSettings = {
 	accountingTool: DEFAULT_ACCOUNTING,
 	lastNotifiedOn: null,
 	onboarding: DEFAULT_ONBOARDING,
+	projectsView: DEFAULT_PROJECTS_VIEW,
+	updates: DEFAULT_UPDATES,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -204,7 +235,15 @@ function normalisePhones(raw: unknown): OwnerPhone[] {
  * produce a settings object the rest of the app then has to guard against.
  */
 function normalise(raw: unknown): AppSettings {
-	if (!isRecord(raw)) return { ...DEFAULTS, lock: { ...DEFAULT_LOCK }, owner: { ...DEFAULT_OWNER } };
+	if (!isRecord(raw)) {
+		return {
+			...DEFAULTS,
+			lock: { ...DEFAULT_LOCK },
+			owner: { ...DEFAULT_OWNER },
+			projectsView: { ...DEFAULT_PROJECTS_VIEW },
+			updates: { ...DEFAULT_UPDATES },
+		};
+	}
 
 	const lockRaw = isRecord(raw.lock) ? raw.lock : {};
 	const ownerRaw = isRecord(raw.owner) ? raw.owner : {};
@@ -265,6 +304,26 @@ function normalise(raw: unknown): AppSettings {
 				int(isRecord(raw.onboarding) ? raw.onboarding.version : undefined, DEFAULT_ONBOARDING.version),
 			),
 		},
+		projectsView: normaliseProjectsView(raw.projectsView),
+		updates: normaliseUpdates(raw.updates),
+	};
+}
+
+function normaliseUpdates(raw: unknown): UpdateSettings {
+	const updates = isRecord(raw) ? raw : {};
+	return {
+		autoInstall: bool(updates.autoInstall, DEFAULT_UPDATES.autoInstall),
+		lastCheckedAt: iso(updates.lastCheckedAt),
+	};
+}
+
+function normaliseProjectsView(raw: unknown): ProjectsView {
+	const view = isRecord(raw) ? raw : {};
+	return {
+		layout: oneOf(view.layout, PROJECT_LAYOUTS, DEFAULT_PROJECTS_VIEW.layout),
+		size: oneOf(view.size, PROJECT_SIZES, DEFAULT_PROJECTS_VIEW.size),
+		previews: bool(view.previews, DEFAULT_PROJECTS_VIEW.previews),
+		sort: oneOf(view.sort, PROJECT_SORTS, DEFAULT_PROJECTS_VIEW.sort),
 	};
 }
 
@@ -303,7 +362,41 @@ function cloneOwner(owner: OwnerProfile): OwnerProfile {
 
 export async function get(): Promise<AppSettings> {
 	const current = read();
-	return { ...current, lock: { ...current.lock }, owner: cloneOwner(current.owner) };
+	return {
+		...current,
+		lock: { ...current.lock },
+		owner: cloneOwner(current.owner),
+		projectsView: { ...current.projectsView },
+		updates: { ...current.updates },
+	};
+}
+
+export async function getProjectsView(): Promise<ProjectsView> {
+	return { ...read().projectsView };
+}
+
+/**
+ * A patch rather than a whole view, because the layout switcher and the preview
+ * toggle are separate controls and each one posts only what it changed.
+ */
+export async function setProjectsView(patch: Partial<ProjectsView>): Promise<ProjectsView> {
+	const current = read();
+	const next = normaliseProjectsView({ ...current.projectsView, ...patch });
+	return { ...write({ ...current, projectsView: next }).projectsView };
+}
+
+export async function getUpdates(): Promise<UpdateSettings> {
+	return { ...read().updates };
+}
+
+/**
+ * A patch, because the toggle and the check timestamp are written by two
+ * different things and neither knows what the other last wrote.
+ */
+export async function setUpdates(patch: Partial<UpdateSettings>): Promise<UpdateSettings> {
+	const current = read();
+	const next = normaliseUpdates({ ...current.updates, ...patch });
+	return { ...write({ ...current, updates: next }).updates };
 }
 
 export async function getTheme(): Promise<ThemeSetting> {

@@ -1,9 +1,9 @@
 /**
  * When a recurring reminder comes round again.
  *
- * Deliberately a small fixed set of patterns, per PLAN.md phase 2: every N days,
- * weeks, months or years, and the Belgian VAT quarter. Anything wider is phase
- * 5's problem, which has `rrule` for it. A half-implemented general recurrence
+ * Deliberately a small fixed set of patterns: every N days, weeks, months or
+ * years, and the Belgian VAT quarter. Anything wider belongs to calendar
+ * recurrence, which has `rrule` for it. A half-implemented general recurrence
  * engine is worse than none, because a calendar that is subtly wrong is worse
  * than a calendar that is missing.
  *

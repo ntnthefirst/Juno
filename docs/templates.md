@@ -5,7 +5,7 @@ A template is the legal text with placeholders in it. The body is HTML, per
 app, not on disk.
 
 **The templates that ship are invented and are not fit to send to anyone.** See
-[../TODO.md](../TODO.md) item 2.
+[../TODO.md](../TODO.md) item 1.
 
 ---
 

@@ -59,7 +59,8 @@ export async function composeMessage(
 			path: a.path,
 			contentType: a.contentType,
 		})),
-		// Juno never asks for a receipt, and never will. See PLAN.md phase 4.
+		// Juno never asks for a receipt, and never will. Read receipts are out
+		// of scope.
 		headers: { "X-Mailer": "Juno" },
 	});
 	const node = composer.compile();

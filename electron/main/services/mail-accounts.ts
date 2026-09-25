@@ -142,7 +142,7 @@ export async function create(input: MailAccountInput, db: Db = getDb()): Promise
 		username: input.username?.trim() || email,
 		credentialKey,
 		horizonDays: input.horizonDays ?? 90,
-		syncIntervalMinutes: input.syncIntervalMinutes ?? 10,
+		syncIntervalMinutes: input.syncIntervalMinutes ?? 3,
 		syncEnabled: input.syncEnabled ?? true,
 		smtpHost: hostOrNull(input.smtpHost),
 		smtpPort: input.smtpPort ?? (input.smtpSecurity === "starttls" ? 587 : 465),

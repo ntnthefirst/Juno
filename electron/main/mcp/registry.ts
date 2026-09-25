@@ -24,6 +24,7 @@ import { referenceTools } from "./reference";
 import { reminderTools } from "./reminders";
 import { searchTools } from "./search";
 import { settingsTools } from "./settings";
+import { updateTools } from "./updates";
 import type { ToolDescriptor } from "./types";
 
 const lists: ToolDescriptor[][] = [
@@ -37,6 +38,7 @@ const lists: ToolDescriptor[][] = [
 	searchTools,
 	referenceTools,
 	settingsTools,
+	updateTools,
 	templateTools,
 	documentTools,
 	reminderTools,

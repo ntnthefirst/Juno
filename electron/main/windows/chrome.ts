@@ -10,7 +10,7 @@
 import { app, BrowserWindow, nativeTheme, session, shell } from "electron";
 import { join } from "node:path";
 import { DEV_CSP_NONCE, DEV_URL, DEV_WS_URL } from "../../shared/dev";
-import { MAIL_FRAME_ORIGIN } from "../../shared/types";
+import { ASSET_ORIGIN, MAIL_FRAME_ORIGIN } from "../../shared/types";
 import { APP_ORIGIN } from "../scheme";
 
 export { DEV_URL };
@@ -44,7 +44,10 @@ function contentSecurityPolicy(isDev: boolean): string {
 		// runtime does the same in the build.
 		"style-src 'self' 'unsafe-inline'",
 		`script-src ${script}`,
-		"img-src 'self' data: blob:",
+		// app://asset serves one thing, the bytes of a project file that is an
+		// image, and only ever as the source of an <img>. It is a separate origin
+		// so a file that turns out not to be one cannot become a document.
+		`img-src 'self' data: blob: ${ASSET_ORIGIN}`,
 		"font-src 'self' data:",
 		`connect-src ${connect}`,
 		"object-src 'none'",
@@ -60,10 +63,15 @@ function contentSecurityPolicy(isDev: boolean): string {
 /** Called once, before the first window. Applies to every window after it. */
 export function installSessionPolicy(isDev: boolean): void {
 	session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-		// A message body arrives with its own, stricter policy from the scheme
-		// handler. Stamping the application's policy on it too would add
-		// frame-ancestors 'none' and block the very frame it is meant for.
-		if (details.url.startsWith(`${MAIL_FRAME_ORIGIN}/`)) {
+		// A message body and a project thumbnail each arrive with their own,
+		// stricter policy from the scheme handler. Stamping the application's
+		// policy over a message body would add frame-ancestors 'none' and block
+		// the very frame it is meant for, and over a thumbnail it would replace
+		// `default-src 'none'` with something broader.
+		if (
+			details.url.startsWith(`${MAIL_FRAME_ORIGIN}/`) ||
+			details.url.startsWith(`${ASSET_ORIGIN}/`)
+		) {
 			callback({ responseHeaders: details.responseHeaders });
 			return;
 		}

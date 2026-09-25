@@ -117,13 +117,23 @@ export const contacts = sqliteTable(
 	],
 );
 
+/**
+ * A piece of work. Usually for a client, and not always: the thing Juno itself
+ * is takes the same shape, and requiring a client for it would mean inventing
+ * one. `clientId` is therefore nullable, which is why every read that wants the
+ * client name joins it left rather than inner.
+ *
+ * The three storage columns are one decision the user makes per project.
+ * `localPath` is the working copy, the checkout a command runs in, and Juno
+ * never writes to it. `storageMode` and `storagePath` are where the files Juno
+ * does own are kept: the app's own folder by default, somewhere with room on it
+ * when the files are large. See services/project-storage.ts.
+ */
 export const projects = sqliteTable(
 	"projects",
 	{
 		...standardColumns,
-		clientId: text("client_id")
-			.notNull()
-			.references(() => clients.id),
+		clientId: text("client_id").references(() => clients.id),
 		name: text("name").notNull(),
 		statusId: text("status_id").references(() => referenceItems.id),
 		description: text("description"),
@@ -133,6 +143,18 @@ export const projects = sqliteTable(
 		/** Integer cents. Never a float, and never a decimal string. */
 		agreedValueCents: integer("agreed_value_cents"),
 		notes: text("notes"),
+		/** The checkout on this machine. Read, never written by Juno. */
+		localPath: text("local_path"),
+		/** app: under userData. custom: the folder in storagePath. */
+		storageMode: text("storage_mode").notNull().default("app"),
+		storagePath: text("storage_path"),
+		/**
+		 * The asset shown on the card. No foreign key on purpose: assets point at
+		 * projects, so a key back would be a cycle, and SQLite resolves those only
+		 * with deferred constraints that the rest of this schema does not use. The
+		 * service clears it when the asset goes.
+		 */
+		coverAssetId: text("cover_asset_id"),
 	},
 	(t) => [
 		index("projects_client_idx").on(t.clientId),

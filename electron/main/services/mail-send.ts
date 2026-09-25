@@ -33,6 +33,13 @@ interface SendConfig {
 	 * renderer needs an Electron window, and this module has to run in a test.
 	 */
 	renderDocumentPdf?: (documentId: string) => Promise<string | null>;
+	/**
+	 * Called once a message is actually sent, so the account's folders can be
+	 * pulled again straight away rather than waiting for the sync scheduler's
+	 * own interval. Injected the same way as renderDocumentPdf: production
+	 * wires it to a real sync, a test does not have to.
+	 */
+	onSent?: (accountId: string) => void;
 }
 
 let config: SendConfig = {};
@@ -164,6 +171,10 @@ async function sendOne(message: outbox.QueuedMessage, db: Db): Promise<void> {
 		} catch (error) {
 			outbox.markAppended(message.id, describeMailError(error, connection), db);
 		}
+		// The message reached the server; the local copy of Sent (and anything
+		// else that changed while sending, such as a reply already back in the
+		// Inbox) is worth pulling now rather than on the next scheduled tick.
+		config.onSent?.(message.accountId);
 	} catch (error) {
 		const attempts = message.attempts + 1;
 		const requeue = isTransient(error) && attempts < MAX_AUTOMATIC_ATTEMPTS;

@@ -64,14 +64,43 @@ export function runMigrations(
 			.map((s) => s.trim())
 			.filter(Boolean);
 
-		// One transaction per migration file: a half-applied migration is the worst
-		// possible state, because the journal would disagree with the schema.
-		connection.transaction(() => {
-			for (const statement of statements) connection.exec(statement);
-			connection
-				.prepare("INSERT INTO _migrations (name, applied_at) VALUES (?, ?)")
-				.run(file, new Date().toISOString());
-		})();
+		// Foreign keys go off for the duration, which is SQLite's own recipe for a
+		// schema change and not a shortcut.
+		//
+		// A table that cannot be altered in place is rebuilt: new table, copy,
+		// drop the old one, rename. `DROP TABLE` performs an implicit delete of
+		// every parent row, so with enforcement on it fails the moment any child
+		// row points at the table being rebuilt, and `defer_foreign_keys` does not
+		// save it: the deferred counter is raised by the drop and nothing lowers it
+		// again when the rows come back under a renamed table. The pragma is also a
+		// no-op inside a transaction, which is why it is set out here.
+		//
+		// What replaces the enforcement is the check below, inside the same
+		// transaction: a migration that leaves a dangling reference throws and
+		// rolls back. That is stricter than running with keys on, because it looks
+		// at the whole database rather than only at the rows a statement touched.
+		connection.exec("PRAGMA foreign_keys = OFF");
+		try {
+			// One transaction per migration file: a half-applied migration is the
+			// worst possible state, because the journal would disagree with the
+			// schema.
+			connection.transaction(() => {
+				for (const statement of statements) connection.exec(statement);
+
+				const broken = connection.prepare("PRAGMA foreign_key_check").all();
+				if (broken.length > 0) {
+					throw new Error(
+						`${file} left ${broken.length} rows pointing at something that is not there. Nothing was applied.`,
+					);
+				}
+
+				connection
+					.prepare("INSERT INTO _migrations (name, applied_at) VALUES (?, ?)")
+					.run(file, new Date().toISOString());
+			})();
+		} finally {
+			connection.exec("PRAGMA foreign_keys = ON");
+		}
 
 		applied.push(file);
 	}

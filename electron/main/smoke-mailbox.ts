@@ -152,7 +152,12 @@ export async function openSmokeMailbox(): Promise<MailboxSource> {
 		async listFolders() {
 			return [
 				{ path: "INBOX", name: "INBOX", delimiter: "/", specialUse: "inbox" },
+				{ path: "Drafts", name: "Drafts", delimiter: "/", specialUse: "drafts" },
 				{ path: "Sent", name: "Sent", delimiter: "/", specialUse: "sent" },
+				{ path: "Trash", name: "Trash", delimiter: "/", specialUse: "trash" },
+				// One folder the user made, so a run covers the shapes a list has
+				// outside the special four.
+				{ path: "Offertes", name: "Offertes", delimiter: "/", specialUse: null },
 			];
 		},
 		async openFolder() {

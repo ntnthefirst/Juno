@@ -1,26 +1,37 @@
 import { type FormEvent, useEffect, useId, useState } from "react";
-import type { Project, ProjectPatch, ReferenceItem } from "@shared/types";
+import type { ClientSummary, Project, ProjectPatch, ReferenceItem } from "@shared/types";
 import { Button } from "../../components/Button";
-import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
+import { FormPage } from "../../components/FormPage";
+import { Icon } from "../../components/Icon";
 import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
+import { messageOf } from "../../lib/errors";
 
 type ProjectFormProps = {
-	clientId: string;
 	/** Null creates, a project edits. */
 	project: Project | null;
+	/**
+	 * Set when the form was reached from a client, which fixes the client and
+	 * hides the picker. A project opened from the projects screen may be moved
+	 * between clients; one opened from a client is already answered.
+	 */
+	lockedClientId?: string;
+	/** Where back goes, in words. "Projects" from the projects screen, "Client" from a client. */
+	backLabel?: string;
 	onClose: () => void;
-	onSaved: () => void;
+	onSaved: (project: Project) => void;
 };
 
 type Values = {
 	name: string;
+	clientId: string;
 	statusId: string;
 	description: string;
 	startsOn: string;
 	dueOn: string;
 	agreedValue: string;
+	localPath: string;
 };
 
 /** Cents in, an editable amount out. The two halves stay integers throughout. */
@@ -46,7 +57,7 @@ function parseAmount(raw: string): ParsedAmount {
 	const match = /^(-?)(\d+)(?:[.,](\d{1,2}))?$/.exec(cleaned);
 	if (!match) return { ok: false };
 
-	const whole = Number.parseInt(match[2], 10);
+	const whole = Number.parseInt(match[2]!, 10);
 	const fraction = Number.parseInt((match[3] ?? "").padEnd(2, "0"), 10);
 	const cents = whole * 100 + fraction;
 	return { ok: true, cents: match[1] === "-" ? -cents : cents };
@@ -55,11 +66,13 @@ function parseAmount(raw: string): ParsedAmount {
 function toValues(project: Project | null): Values {
 	return {
 		name: project?.name ?? "",
+		clientId: project?.clientId ?? "",
 		statusId: project?.statusId ?? "",
 		description: project?.description ?? "",
 		startsOn: project?.startsOn ?? "",
 		dueOn: project?.dueOn ?? "",
 		agreedValue: centsToInput(project?.agreedValueCents ?? null),
+		localPath: project?.localPath ?? "",
 	};
 }
 
@@ -68,16 +81,27 @@ function textOrNull(value: string): string | null {
 	return trimmed.length > 0 ? trimmed : null;
 }
 
-function messageOf(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
-export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectFormProps) {
+/**
+ * The project's own fields. Where its files are kept is not here: moving them
+ * copies gigabytes, so it belongs to a deliberate act on the record rather than
+ * to a form that was really about a due date.
+ */
+export function ProjectForm({
+	project,
+	lockedClientId,
+	backLabel = "Projects",
+	onClose,
+	onSaved,
+}: ProjectFormProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
 	const descriptionId = useId();
-	const [values, setValues] = useState<Values>(() => toValues(project));
+	const [values, setValues] = useState<Values>(() => {
+		const initial = toValues(project);
+		return lockedClientId ? { ...initial, clientId: lockedClientId } : initial;
+	});
 	const [statuses, setStatuses] = useState<ReferenceItem[]>([]);
+	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [valueError, setValueError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -85,22 +109,35 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 
 	useEffect(() => {
 		let cancelled = false;
-		window.juno.reference
-			.getSet("project_status")
-			.then((set) => {
+		Promise.all([
+			window.juno.reference.getSet("project_status"),
+			// Nothing to pick from when the client is already decided.
+			lockedClientId ? Promise.resolve([]) : window.juno.clients.list(),
+		])
+			.then(([set, clientRows]) => {
 				if (cancelled) return;
 				setStatuses(set ? set.items.filter((item) => item.hiddenAt === null) : []);
+				setClients(clientRows);
 			})
 			.catch((cause: unknown) => {
-				if (!cancelled) setError(`Could not load the status list. ${messageOf(cause)}`);
+				if (!cancelled) setError(`Could not load the lists this form needs. ${messageOf(cause)}`);
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [lockedClientId]);
 
 	function set<K extends keyof Values>(key: K, value: Values[K]) {
 		setValues((current) => ({ ...current, [key]: value }));
+	}
+
+	async function pickFolder() {
+		try {
+			const chosen = await window.juno.projects.chooseLocalFolder();
+			if (chosen) set("localPath", chosen);
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		}
 	}
 
 	async function submit(event: FormEvent) {
@@ -117,21 +154,24 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 		setError(null);
 		setBusy(true);
 
-		// startsOn and dueOn stay YYYY-MM-DD strings. A Date round trip shifts them
-		// by a timezone offset, which moves a due date to the day before.
+		// startsOn and dueOn stay YYYY-MM-DD strings. A Date round trip shifts
+		// them by a timezone offset, which moves a due date to the day before.
 		const patch: ProjectPatch = {
 			name,
-			statusId: values.statusId.length > 0 ? values.statusId : null,
+			clientId: textOrNull(values.clientId),
+			statusId: textOrNull(values.statusId),
 			description: textOrNull(values.description),
 			startsOn: textOrNull(values.startsOn),
 			dueOn: textOrNull(values.dueOn),
 			agreedValueCents: amount.cents,
+			localPath: textOrNull(values.localPath),
 		};
 
 		try {
-			if (project) await window.juno.projects.update(project.id, patch);
-			else await window.juno.projects.create({ ...patch, clientId, name });
-			onSaved();
+			const saved = project
+				? await window.juno.projects.update(project.id, patch)
+				: await window.juno.projects.create({ ...patch, name });
+			onSaved(saved);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 			setBusy(false);
@@ -142,7 +182,7 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 		<FormPage
 			title={project ? "Edit project" : "New project"}
 			onBack={onClose}
-			backLabel="Client"
+			backLabel={backLabel}
 			actions={
 				<>
 					<Button onClick={onClose}>Cancel</Button>
@@ -164,21 +204,22 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 						/>
 					</div>
 
+					{lockedClientId ? null : (
+						<Select
+							label="Client"
+							value={values.clientId}
+							onChange={(value) => set("clientId", value)}
+							placeholder="Your own work"
+							help="Leave this empty for work that is not for a client."
+							options={clients.map((client) => ({ value: client.id, label: client.name }))}
+						/>
+					)}
 					<Select
 						label="Status"
 						value={values.statusId}
 						onChange={(value) => set("statusId", value)}
 						placeholder="No status"
 						options={statuses.map((item) => ({ value: item.id, label: item.label }))}
-					/>
-					<Field
-						label="Agreed value"
-						value={values.agreedValue}
-						onChange={(value) => set("agreedValue", value)}
-						error={valueError}
-						inputMode="decimal"
-						placeholder="1250,00"
-						tabular
 					/>
 
 					<Field
@@ -195,6 +236,34 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 						onChange={(value) => set("dueOn", value)}
 						tabular
 					/>
+
+					<Field
+						label="Agreed value"
+						value={values.agreedValue}
+						onChange={(value) => set("agreedValue", value)}
+						error={valueError}
+						inputMode="decimal"
+						placeholder="1250,00"
+						tabular
+					/>
+
+					<div className="col-span-2">
+						<div className="flex items-end gap-2">
+							<div className="min-w-0 flex-1">
+								<Field
+									label="Folder on this machine"
+									value={values.localPath}
+									onChange={(value) => set("localPath", value)}
+									placeholder="C:\\code\\the-project"
+									help="The checkout a command runs in. Juno reads it and never writes to it."
+								/>
+							</div>
+							<Button onClick={() => void pickFolder()}>
+								<Icon name="folder-open" />
+								Choose
+							</Button>
+						</div>
+					</div>
 
 					<div className="col-span-2">
 						<label
@@ -217,15 +286,11 @@ export function ProjectForm({ clientId, project, onClose, onSaved }: ProjectForm
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not save this project.
 						</p>
-						<p
-							data-selectable
-							className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
-						>
+						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>
 				) : null}
-
 			</form>
 		</FormPage>
 	);

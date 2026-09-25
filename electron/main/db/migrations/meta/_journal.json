@@ -85,6 +85,13 @@
       "when": 1790210138521,
       "tag": "0011_mail_outbox_clients",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790243651459,
+      "tag": "0012_project_workspace",
+      "breakpoints": true
     }
   ]
 }

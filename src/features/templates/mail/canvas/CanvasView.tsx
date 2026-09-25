@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent, type HTMLAttributes } from "react";
 import type { MailBlock, MailFont, MailLayout, MailSection, TemplateInput } from "@shared/types";
 import { Icon } from "../../../../components/Icon";
-import { boxCss, fillCss, MAIL_SHELL, placeCss, placementFromCss, sectionCss, textCss, verticalCss } from "./box-style";
+import {
+	boxCss,
+	CLIENT_DEFAULTS,
+	fillCss,
+	MAIL_SHELL,
+	placeCss,
+	placementFromCss,
+	sectionCss,
+	textCss,
+	verticalCss,
+} from "./box-style";
 import { codeMarkup } from "./code-markup";
 import { InlineText, type Caret } from "./InlineText";
 
@@ -101,12 +111,15 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 			// sanitised by the compiler on save and again on render, and this
 			// surface is not where a message from anybody else is displayed.
 			const markup = { __html: block.html || "Tekst" };
+			// A paragraph, as the compiler writes it, unless the markup has
+			// paragraphs of its own (textTag in services/mail-layout.ts).
+			const Tag = /<p[\s>]/i.test(block.html) ? "div" : "p";
 			return block.text.verticalAlign === "top" ? (
-				<div {...own} className={host.className} style={style} dangerouslySetInnerHTML={markup} />
+				<Tag {...own} className={host.className} style={style} dangerouslySetInnerHTML={markup} />
 			) : (
-				<div {...own} className={host.className} style={style}>
+				<Tag {...own} className={host.className} style={style}>
 					<span style={{ display: "block" }} dangerouslySetInnerHTML={markup} />
-				</div>
+				</Tag>
 			);
 		}
 		case "button": {
@@ -182,6 +195,8 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 			return (
 				<div
 					{...own}
+					// The dashed outline is the canvas's, so the client's defaults leave it alone.
+					data-canvas-chrome
 					style={{ height: block.height, boxSizing: "border-box", ...host.place }}
 					className={`rounded-[var(--radius-sm)] border border-dashed border-[var(--canvas-line)] ${host.className}`}
 				/>
@@ -443,7 +458,8 @@ export function CanvasView({
 			onClick={() => onSelect(null)}
 			role="presentation"
 		>
-			<div ref={content}>
+			<style>{CLIENT_DEFAULTS}</style>
+			<div ref={content} data-canvas-content>
 				{layout.sections.map((section: MailSection) => {
 					if (section.hidden) return null;
 					const sectionSelected = selection?.sectionId === section.id && !selection.blockId;
@@ -473,10 +489,13 @@ export function CanvasView({
 										: "hover:outline-1 hover:outline-[var(--line-strong)]"
 							}`}
 						>
-							{shown.length === 0 ? (
+							{shown.length === 0 && section.box.minHeight === null ? (
 								// Only on the canvas: an empty section is sent as nothing, and
-								// this is what there is to click and to drop onto.
+								// this is what there is to click and to drop onto. One with a
+								// height of its own is drawn at that height, because it is a
+								// divider or a gap and the height is the point of it.
 								<p
+									data-canvas-chrome
 									style={{ gridColumn: "1 / -1" }}
 									className="flex-1 px-3 py-6 text-center text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
 								>

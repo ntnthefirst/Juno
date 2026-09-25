@@ -105,5 +105,12 @@ function TemplateInputField({ input, value, onChange, error, disabled }: Templat
 		);
 	}
 
+	// An image and a link are both an https address typed in when the template
+	// is used. The kind decides what the body does with it, not how it is asked
+	// for, so both are a url field here.
+	if (input.kind === "image" || input.kind === "url") {
+		return <Field {...shared} type="url" placeholder="https://" />;
+	}
+
 	return <Field {...shared} />;
 }

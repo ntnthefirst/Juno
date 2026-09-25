@@ -888,3 +888,55 @@ the user's privileges, which Electron does not have and which a back office has
 no business building. **What would reverse the storage rule:** nothing short of
 Juno becoming a sync client, at which point a folder outside its own tree stops
 being something it can reason about at all.
+
+## 36. A mail template links its fonts, and Juno fetches only Google's, by name
+
+A template can set its text in a typeface no mail client has. The message links
+the stylesheet in its head and the recipient's client loads it; Apple Mail, iOS,
+Outlook for Mac and most Android clients do, and Gmail and Outlook on Windows do
+not load web fonts at all. So a linked font is never trusted to arrive: each one
+names a fallback, sans, serif or mono, and every block that uses it is written as
+`'Family', <fallback stack>`.
+
+The hard part is the editor, not the message. The canvas is a page in Juno's own
+window, and that window loads styles and fonts from Juno and nowhere else
+(`.claude/rules/security.md` section 3, and decision 10 for the app's own type).
+Loosening the policy for a typeface would loosen it for everything the window
+shows, including the mail reader's neighbours. It stays as it is.
+
+Instead, **for a Google font, the main process fetches it once and hands the
+canvas the faces inline**, which `font-src data:` already allows.
+`services/mail-fonts.ts` does this, and three things about it are the decision:
+
+- **It is asked for a family name, never an address.** The bridge must not carry
+  a URL for the main process to fetch (security.md section 2). A name that passes
+  `toFamily` cannot become one, the stylesheet address is built by
+  `googleFontHref`, and a font file the stylesheet points at is fetched only from
+  Google's own file host. There is no path from the renderer, or from an agent,
+  to making Juno fetch an arbitrary address.
+- **Only the Latin files are kept.** Google splits every weight into a file per
+  script, and a Dutch letter only ever needs the Latin ones.
+- **It fetches only when a person adds or changes a font**, and caches for as
+  long as the app runs. That is one request to Google per font, with the IP it
+  comes from, which is the same thing the recipient's client does on opening the
+  message. A business that would rather not ask Google at all links Bunny Fonts,
+  which serves the same families from the EU, and sees the fallback on the
+  canvas in exchange.
+
+**A linked font from anywhere else is not fetched, and the canvas shows its
+fallback and says so.** Fetching it would mean fetching an address somebody
+typed, which is exactly what the rule above refuses. The message still links it.
+
+**There is no MCP tool for loading a font.** What the service returns is the bytes
+of a typeface for a canvas to paint with, which an agent has no use for. What an
+agent does need, putting a font on a template, is the layout's `fonts` field, and
+that goes through `mail.templates.update` like every other edit, parked for a
+person to approve (decision 24). This is the one piece of the editor with no
+agent twin, and it is plumbing for the screen rather than a capability.
+
+Revisit if: a font source other than Google needs to show on the canvas (then it
+is a second named source with a builder of its own, never a typed address), or
+the window's content policy is ever loosened for another reason, in which case
+this indirection should go rather than sit beside a second way to do the same
+thing.
+

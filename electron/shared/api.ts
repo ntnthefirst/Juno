@@ -102,6 +102,7 @@ import type {
 	MailSecurity,
 	MailSyncStatus,
 	MailTemplate,
+	MailLayout,
 	MailTemplateDraft,
 	MailTemplateInput,
 	MailTemplatePatch,
@@ -726,6 +727,8 @@ export interface JunoApi {
 			hide(id: string): Promise<MailTemplate>;
 			unhide(id: string): Promise<MailTemplate>;
 			duplicate(id: string): Promise<MailTemplate>;
+			/** Reads hand-edited HTML back into a canvas. Stores nothing. */
+			parseBody(html: string): Promise<MailLayout>;
 			/** Renders values in hand. Writes nothing, so a preview cannot mark a
 			 * template as edited. */
 			preview(draft: MailTemplateDraft): Promise<MailTemplateRender>;

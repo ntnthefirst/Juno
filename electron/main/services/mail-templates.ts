@@ -24,7 +24,7 @@ import { mailTemplates } from "../db/schema";
 import { previewContext } from "./documents";
 import { formatDate } from "./document-context";
 import { htmlToText, mailShell } from "./mail-html";
-import { compileLayout, normaliseLayout, parseLayout, serialiseLayout } from "./mail-layout";
+import { compileLayout, layoutFromHtml, normaliseLayout, parseLayout, serialiseLayout } from "./mail-layout";
 import { MAIL_TEMPLATES, MAIL_TEMPLATE_SEED_VERSION } from "./mail-templates-seed";
 import * as settings from "./settings";
 import { placeholdersIn, render, unescapeHtml } from "./template-render";
@@ -344,6 +344,22 @@ export async function renderTemplate(input: RenderInput, db: Db = getDb()): Prom
  * nothing: a template the owner is still looking at stays untouched until they
  * press save.
  */
+/**
+ * Reads hand-edited HTML back into a canvas.
+ *
+ * This is what makes the code view something that can be typed in rather than
+ * only read. It is a pure read: nothing is stored, so an author can paste
+ * markup, see what it becomes on the canvas, and still walk away.
+ *
+ * Markup it recognises comes back as the block it was; markup it does not
+ * comes back as a raw block where it was written. It never refuses and it
+ * never drops, but it does not promise byte-identical output for a
+ * hand-written document, which is the limit the editor has to state.
+ */
+export async function parseBody(html: string): Promise<MailLayout> {
+	return layoutFromHtml(html);
+}
+
 export async function previewDraft(draft: MailTemplateDraft, db: Db = getDb()): Promise<MailTemplateRender> {
 	const inputs = draft.inputs ?? [];
 	const layout = draft.layout ? normaliseLayout(draft.layout) : null;

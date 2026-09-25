@@ -452,6 +452,7 @@ const api: JunoApi = {
 			hide: (id) => call("mail.templates.hide", id),
 			unhide: (id) => call("mail.templates.unhide", id),
 			duplicate: (id) => call("mail.templates.duplicate", id),
+			parseBody: (html) => call("mail.templates.parseBody", html),
 			preview: (draft) => call("mail.templates.preview", draft),
 			render: (input) => call("mail.templates.render", input),
 		},

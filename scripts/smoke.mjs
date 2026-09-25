@@ -128,8 +128,8 @@ function reportStaleShots() {
 	console.log(
 		`Screenshots: ${files.length}, of which ${repeated} repeat an earlier image. ` +
 			"The window was not being composited for part of the run, so those are the " +
-			"frame from an earlier step. Run it again with the window in front before " +
-			"reading them.",
+			"frame from an earlier step. Run it again with the window in front, or with " +
+			"JUNO_SMOKE_FRONT=1, before reading them.",
 	);
 }
 

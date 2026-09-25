@@ -122,16 +122,26 @@ export function EditorSidebar({
 				/>
 			</div>
 
-			<div className="flex-none border-t border-[var(--line)] px-3 py-2">
-				<label htmlFor={subjectId} className="mb-1 block text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+			<div className="flex-none border-t border-[var(--line)] px-1.5 py-1.5">
+				<label htmlFor={subjectId} className="block px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
 					Subject
 				</label>
-				<input
+				{/* Edited where it is written, like the name, rather than in a box.
+				    A subject is one line, so Enter leaves it instead of breaking it,
+				    and it wraps rather than hiding the end of a long one. */}
+				<textarea
 					id={subjectId}
+					rows={1}
 					value={subject}
-					onChange={(event) => onSubject(event.target.value)}
+					onChange={(event) => onSubject(event.target.value.replace(/[\r\n]+/g, " "))}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") {
+							event.preventDefault();
+							event.currentTarget.blur();
+						}
+					}}
 					placeholder="Onderwerp"
-					className="h-[28px] w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-2 text-[length:var(--text-sm)] text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none"
+					className={`${QUIET_FIELD} field-sizing-content resize-none text-[length:var(--text-sm)] leading-[var(--leading-normal)]`}
 				/>
 				{unreviewed ? (
 					<p className="mt-1.5 border-l-2 border-[var(--warn)] pl-2 text-[length:var(--text-micro)] leading-[var(--leading-normal)] text-[var(--warn)]">

@@ -102,6 +102,7 @@ import type {
 	MailSecurity,
 	MailSyncStatus,
 	MailTemplate,
+	MailTemplateDraft,
 	MailTemplateInput,
 	MailTemplatePatch,
 	MailTemplateRender,
@@ -713,11 +714,21 @@ export interface JunoApi {
 		/** Opens a link from a message in the real browser, after a protocol check. */
 		openLink(url: string): Promise<void>;
 		templates: {
+			/** What a picker offers: hidden templates are left out. */
 			list(): Promise<MailTemplate[]>;
+			/** Every template, hidden ones included. What the management screen shows. */
+			listAll(): Promise<MailTemplate[]>;
 			get(id: string): Promise<MailTemplate | null>;
 			create(input: MailTemplateInput): Promise<MailTemplate>;
 			update(id: string, patch: MailTemplatePatch): Promise<MailTemplate>;
+			/** Hides a shipped template, soft-deletes one of your own. */
 			remove(id: string): Promise<MailTemplate>;
+			hide(id: string): Promise<MailTemplate>;
+			unhide(id: string): Promise<MailTemplate>;
+			duplicate(id: string): Promise<MailTemplate>;
+			/** Renders values in hand. Writes nothing, so a preview cannot mark a
+			 * template as edited. */
+			preview(draft: MailTemplateDraft): Promise<MailTemplateRender>;
 			/** Fills a template against a client and project. Stores nothing. */
 			render(input: {
 				templateId: string;

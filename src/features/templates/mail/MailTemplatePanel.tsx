@@ -3,6 +3,8 @@ import type { MailTemplate } from "@shared/types";
 import { Button } from "../../../components/Button";
 import { SidePanel } from "../../../components/SidePanel";
 import { messageOf } from "../../../lib/errors";
+import { framed } from "./canvas/framed-preview";
+import { useCanvasFonts } from "./canvas/use-canvas-fonts";
 
 type MailTemplatePanelProps = {
 	template: MailTemplate;
@@ -30,6 +32,8 @@ type RenderState =
  */
 export function MailTemplatePanel({ template, onClose, onEdit, onUse }: MailTemplatePanelProps) {
 	const [state, setState] = useState<RenderState | null>(null);
+	// A template with linked fonts is shown in them, the same as in the editor.
+	const fonts = useCanvasFonts(template.layout?.fonts ?? []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -62,7 +66,7 @@ export function MailTemplatePanel({ template, onClose, onEdit, onUse }: MailTemp
 	return (
 		<SidePanel
 			title={template.name}
-			subtitle={template.hiddenAt ? "Hidden from the pickers" : `Register ${template.register}`}
+			subtitle={template.hiddenAt ? "Hidden from the pickers" : undefined}
 			onClose={onClose}
 			actions={
 				<>
@@ -134,7 +138,7 @@ export function MailTemplatePanel({ template, onClose, onEdit, onUse }: MailTemp
 					<div className="mt-3 overflow-hidden rounded-[var(--radius-md)] border border-[var(--line)]">
 						<iframe
 							title="Template preview"
-							srcDoc={rendered.html}
+							srcDoc={framed(rendered.html, fonts.css)}
 							sandbox=""
 							referrerPolicy="no-referrer"
 							className="block h-[420px] w-full bg-[var(--surface)]"

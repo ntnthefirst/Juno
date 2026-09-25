@@ -160,9 +160,6 @@ export function MailTemplateList({
 											{template.subject}
 										</span>
 									</span>
-									<span className="flex-none rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-										{template.register}
-									</span>
 								</button>
 							</div>
 						</li>

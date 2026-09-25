@@ -1156,35 +1156,127 @@ if (!app.requestSingleInstanceLock()) {
 									);
 								}
 								if (screen === "Mail templates") {
-									// One document underneath both tabs (docs/editors.md section 2):
-									// switching to Code has to show the very text the Visual tab was
-									// rendering, not a blank editor or a stale one.
+									// One document underneath every view (docs/editors.md section 2):
+									// switching to Code has to show the very text the body was
+									// rendering, not a blank editor or a stale one. Then onto a
+									// canvas, because the seeded templates are hand-written HTML and
+									// converting one is the only way the canvas is reached at all.
 									const edited = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
 											if (!edit) return "no edit action";
 											edit.click();
-											await wait(700);
-											const visual = document.querySelector('[aria-label="Message body"]');
+											// The editor loads the template before it paints anything, so
+											// this waits for the panel rather than guessing at how long
+											// a cold read of the row takes.
+											const until = async (find) => {
+												for (let tries = 0; tries < 20; tries++) {
+													const found = find();
+													if (found) return found;
+													await wait(150);
+												}
+												return null;
+											};
+											if (!(await until(() => document.querySelector('button[aria-label="Hide the panel"]')))) return "no editor panel";
+											const visual = await until(() => document.querySelector('[aria-label="Message body"]'));
 											if (!visual) return "no visual editor";
 											const visualText = visual.textContent.trim();
 											if (!visualText) return "the visual editor is empty";
-											const codeTab = [...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim() === "Code");
-											if (!codeTab) return "no code tab";
-											codeTab.click();
+											const codeView = document.querySelector('button[title="The HTML under it"]');
+											if (!codeView) return "no code view";
+											codeView.click();
 											await wait(400);
 											const code = document.querySelector('[aria-label="Body HTML"]');
 											if (!code) return "no code editor";
 											if (!code.textContent.includes(visualText.slice(0, 20))) return "the code view does not show the same body";
-											const visualTab = [...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim() === "Visual");
-											if (!visualTab) return "no visual tab";
-											visualTab.click();
+											const bodyView = document.querySelector('button[title="The body"]');
+											if (!bodyView) return "no body view";
+											bodyView.click();
+											await wait(300);
+											const convert = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Lay this out on a canvas");
+											if (!convert) return "no way onto a canvas";
+											convert.click();
+											await wait(800);
+											if (!document.querySelector('[role=group][aria-label="Preview width"]')) return "no canvas stage";
+											if (!document.querySelector('button[aria-label="Drag to change the height of the sheet"]')) return "no height handle";
+											const addText = document.querySelector('button[aria-label="Add text"]');
+											if (!addText) return "no insert bar";
+											addText.click();
 											await wait(400);
+											// A new text opens for typing with its words selected, so what is
+											// typed replaces them, the way Figma's text tool works.
+											const typing = document.querySelector('[role=textbox][aria-label="Text"]');
+											if (!typing || document.activeElement !== typing) return "a new text block did not open for typing";
+											document.execCommand("insertText", false, "Welkom");
+											typing.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											if (document.querySelector('[role=textbox][aria-label="Text"]')) return "Escape did not close the new text";
+											if (!document.querySelector('button[aria-label="Hide Welkom"]')) return "what was typed did not replace the placeholder";
+											if (!document.querySelector('[role=group][aria-label="Horizontal resizing"]')) return "the design panel did not follow the selection";
+
+											// Type from the panel, checked on what the canvas actually draws
+											// rather than on the control that was pressed.
+											const familyLabel = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Font family");
+											const family = familyLabel ? document.getElementById(familyLabel.htmlFor) : null;
+											if (!family) return "no typography panel";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+											setValue.call(family, "Georgia");
+											family.dispatchEvent(new Event("change", { bubbles: true }));
+											await wait(300);
+											const italic = document.querySelector('button[aria-label="Italic"]');
+											if (!italic) return "no italic toggle";
+											italic.click();
+											await wait(300);
+											const textBlocks = () => [...document.querySelectorAll('[title="Double-click to edit the text"]')];
+											const block = textBlocks().pop();
+											if (!block) return "the text block is not on the canvas";
+											const drawn = getComputedStyle(block);
+											if (!drawn.fontFamily.includes("Georgia")) return "the canvas did not take the font";
+											if (drawn.fontStyle !== "italic") return "the canvas did not take the italic";
+
+											// The eye: a hidden layer leaves the canvas and comes back.
+											const shownBefore = textBlocks().length;
+											const hide = document.querySelector('button[aria-label="Hide Welkom"]');
+											if (!hide) return "no eye on the layer";
+											hide.click();
+											await wait(300);
+											if (textBlocks().length !== shownBefore - 1) return "hiding a layer left it on the canvas";
+											const show = document.querySelector('button[aria-label="Show Welkom"]');
+											if (!show) return "a hidden layer has no way back";
+											show.click();
+											await wait(300);
+											if (textBlocks().length !== shownBefore) return "showing a layer did not bring it back";
+
+											// In place, the way a text layer is edited in Figma.
+											const target = textBlocks().pop();
+											const box = target.getBoundingClientRect();
+											target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: box.left + 4, clientY: box.top + 4 }));
+											await wait(400);
+											if (!document.querySelector('[role=toolbar][aria-label="Text format"]')) return "no format bar while editing";
+											if (!document.querySelector('[role=textbox][aria-label="Text"]')) return "the text did not open for editing";
 											return "ok";
 										})()`,
 									) as string;
 									if (edited !== "ok") throw new Error(`Smoke: mail template editor ${edited}`);
+
+									const inlineImage = await capture(window.webContents);
+									writeFileSync(joinPath(shotDir, `mail-template-inline-edit.png`), inlineImage.toPNG());
+
+									// Escape in the text closes the text and nothing else: the block
+									// stays selected, so the panel is still pointed at it below.
+									const closedText = await window.webContents.executeJavaScript(
+										`(async () => {
+											const editor = document.querySelector('[role=textbox][aria-label="Text"]');
+											if (!editor) return "the text editor went away early";
+											editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 300));
+											if (document.querySelector('[role=textbox][aria-label="Text"]')) return "Escape did not close the text";
+											if (!document.querySelector('[role=group][aria-label="Horizontal resizing"]')) return "Escape in the text let go of the block";
+											return "ok";
+										})()`,
+									) as string;
+									if (closedText !== "ok") throw new Error(`Smoke: mail template editor ${closedText}`);
 
 									for (const theme of ["light", "dark"] as const) {
 										nativeTheme.themeSource = theme;
@@ -1196,13 +1288,172 @@ if (!app.requestSingleInstanceLock()) {
 										writeFileSync(joinPath(shotDir, `mail-template-editor-${theme}.png`), image.toPNG());
 									}
 
-									// No content was actually typed, so there is nothing this editor
-									// guards against losing: Escape leaves straight away, the same way
-									// it does everywhere else in this file.
+									// Resizing is Figma's and it is what the canvas draws: the block is
+									// the element the section lays out, so a width of 100 is a box 100
+									// wide, outlined as one, not a line across the frame. Then the
+									// keyboard: duplicate, delete, undo, a tool key, and the list.
+									const resized = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const drawn = () => [...document.querySelectorAll('[title="Double-click to edit the text"]')].find((el) => el.textContent.trim() === "Welkom");
+											const block = drawn();
+											if (!block) return "no Welkom block";
+											block.click();
+											await wait(200);
+											const section = block.parentElement;
+											const across = document.querySelector('[role=group][aria-label="Horizontal resizing"]');
+											const choose = (title) => [...across.querySelectorAll("button")].find((el) => el.title === title);
+											if (!choose("Hug contents") || !choose("Fill container") || !choose("Fixed width")) return "the width modes are not all there";
+											choose("Hug contents").click();
+											await wait(300);
+											if (drawn().offsetWidth >= section.clientWidth - 48) return "hugging did not shrink the block to its text";
+											const label = document.querySelector('label[title="Width"]');
+											const width = label ? document.getElementById(label.htmlFor) : null;
+											if (!width) return "no width field";
+											if (Number(width.value) !== drawn().offsetWidth) return "the width field does not say how wide the block is drawn";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											width.focus();
+											setValue.call(width, "100");
+											width.dispatchEvent(new Event("input", { bubbles: true }));
+											width.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+											width.blur();
+											await wait(300);
+											if (drawn().offsetWidth !== 100) return "a width of 100 is not drawn 100 wide";
+											if (choose("Fixed width").getAttribute("aria-pressed") !== "true") return "typing a width did not make it fixed";
+											if (!getComputedStyle(drawn()).outlineStyle.includes("solid")) return "the selection is not outlined on the block itself";
+											return "ok";
+										})()`,
+									) as string;
+									if (resized !== "ok") throw new Error(`Smoke: mail template editor ${resized}`);
+									writeFileSync(joinPath(shotDir, `mail-template-fixed-width.png`), (await capture(window.webContents)).toPNG());
+
+									const filled = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const drawn = () => [...document.querySelectorAll('[title="Double-click to edit the text"]')].find((el) => el.textContent.trim() === "Welkom");
+											const section = drawn().parentElement;
+											const across = document.querySelector('[role=group][aria-label="Horizontal resizing"]');
+											const choose = (title) => [...across.querySelectorAll("button")].find((el) => el.title === title);
+											choose("Fill container").click();
+											await wait(300);
+											if (Math.abs(drawn().offsetWidth - (section.clientWidth - parseFloat(getComputedStyle(section).paddingLeft) - parseFloat(getComputedStyle(section).paddingRight))) > 1) return "fill did not stretch the block across its section";
+											return "ok";
+										})()`,
+									) as string;
+									if (filled !== "ok") throw new Error(`Smoke: mail template editor ${filled}`);
+
+									const keyed = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const layerRows = () => [...document.querySelectorAll('button[title="Drag to reorder. Alt and an arrow move it too"]')];
+											const blockRows = () => layerRows().filter((el) => el.className.includes("pl-6"));
+											const press = async (key, code, mods = {}) => {
+												document.body.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+											const start = blockRows().length;
+											const welkom = () => blockRows().filter((el) => el.textContent.trim() === "Welkom").length;
+											await press("d", "KeyD", { ctrlKey: true });
+											if (blockRows().length !== start + 1 || welkom() !== 2) return "Ctrl+D did not duplicate the block";
+											await press("Delete", "Delete");
+											if (blockRows().length !== start) return "Delete did not remove the selected block";
+											await press("z", "KeyZ", { ctrlKey: true });
+											if (blockRows().length !== start + 1) return "Ctrl+Z did not bring the deleted block back";
+											await press("z", "KeyZ", { ctrlKey: true });
+											if (blockRows().length !== start || welkom() !== 1) return "a second Ctrl+Z did not undo the duplicate";
+											await press("Z", "KeyZ", { ctrlKey: true, shiftKey: true });
+											if (blockRows().length !== start + 1) return "Ctrl+Shift+Z did not redo";
+											await press("z", "KeyZ", { ctrlKey: true });
+											await press("t", "KeyT");
+											const typing = document.querySelector('[role=textbox][aria-label="Text"]');
+											if (!typing || document.activeElement !== typing) return "T did not add a text open for typing";
+											typing.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											if (blockRows().length !== start + 1) return "T did not add a block";
+											await press("Backspace", "Backspace");
+											if (blockRows().length !== start) return "Backspace did not remove the new block";
+											await press("?", "Slash", { shiftKey: true });
+											if (!document.querySelector('[role=region][aria-label="Keyboard shortcuts"]')) return "? did not open the list of shortcuts";
+											return "ok";
+										})()`,
+									) as string;
+									if (keyed !== "ok") throw new Error(`Smoke: mail template editor ${keyed}`);
+									writeFileSync(joinPath(shotDir, `mail-template-shortcuts.png`), (await capture(window.webContents)).toPNG());
 									await window.webContents.executeJavaScript(
-										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+										`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 									);
-									await new Promise((r) => setTimeout(r, 500));
+									await new Promise((r) => setTimeout(r, 300));
+
+									// The toolbar floats over the canvas, a layer moves with Alt and an
+									// arrow, and "Convert to HTML" turns the block that was just styled
+									// into code the canvas draws exactly as it drew the block.
+									const converted = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											if (!document.querySelector('[role=toolbar][aria-label="Canvas tools"]')) return "no floating toolbar";
+											const layerRows = () => [...document.querySelectorAll('button[title="Drag to reorder. Alt and an arrow move it too"]')];
+											const blockRows = () => layerRows().filter((el) => el.className.includes("pl-6"));
+											if (document.querySelector('[role=region][aria-label="Keyboard shortcuts"]')) return "Escape did not close the list of shortcuts";
+											const tekst = blockRows().find((el) => el.textContent.trim() === "Welkom");
+											if (!tekst) return "no layer for the text block";
+											tekst.click();
+											await wait(200);
+											const before = blockRows().map((el) => el.textContent.trim());
+											tekst.focus();
+											tekst.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
+											await wait(300);
+											const after = blockRows().map((el) => el.textContent.trim());
+											if (after.indexOf("Welkom") !== before.indexOf("Welkom") - 1) return "Alt and an arrow did not move the layer";
+											const moved = blockRows().find((el) => el.textContent.trim() === "Welkom");
+											moved.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true }));
+											await wait(300);
+											if (blockRows().map((el) => el.textContent.trim()).join("|") !== before.join("|")) return "the layer did not move back";
+
+											const convert = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Convert to HTML");
+											if (!convert) return "no Convert to HTML";
+											convert.click();
+											for (let tries = 0; tries < 20 && document.querySelector('[role=group][aria-label="Horizontal resizing"]'); tries++) await wait(150);
+											if (document.querySelector('[role=group][aria-label="Horizontal resizing"]')) return "the panel still shows the design controls";
+											const field = (text) => {
+												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === text);
+												return label ? document.getElementById(label.htmlFor) : null;
+											};
+											const html = field("HTML");
+											const css = field("CSS");
+											if (!html || !css) return "no HTML and CSS fields";
+											if (!html.value.includes("Welkom")) return "the HTML field does not hold the block";
+											if (!css.value.includes("font-style:italic")) return "the CSS field does not hold the block's style";
+											const drawn = [...document.querySelectorAll("div")].find((el) => el.textContent.trim() === "Welkom" && el.children.length === 0);
+											if (!drawn) return "the converted block is not on the canvas";
+											const style = getComputedStyle(drawn);
+											if (!style.fontFamily.includes("Georgia") || style.fontStyle !== "italic") return "the converted block does not look the same";
+											return "ok";
+										})()`,
+									) as string;
+									if (converted !== "ok") throw new Error(`Smoke: mail template editor ${converted}`);
+									writeFileSync(joinPath(shotDir, `mail-template-code-block.png`), (await capture(window.webContents)).toPNG());
+
+									// Escape lets go of what is selected before it leaves, so the
+									// first one drops the block that was just inserted and the second
+									// one walks out. Nothing is saved on the way: the template in the
+									// database is still the hand-written one it was.
+									for (let press = 0; press < 2; press++) {
+										await window.webContents.executeJavaScript(
+											`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+										);
+										await new Promise((r) => setTimeout(r, 400));
+										if (press === 0) {
+											// Nothing selected is the frame: its size, its fill and the
+											// fonts the message links.
+											const framePanel = await window.webContents.executeJavaScript(
+												`[...document.querySelectorAll("h3")].some((el) => el.textContent.trim() === "Fonts")`,
+											);
+											if (!framePanel) throw new Error("Smoke: mail template editor has no Fonts on the frame panel");
+											const frameImage = await capture(window.webContents);
+											writeFileSync(joinPath(shotDir, `mail-template-frame.png`), frameImage.toPNG());
+										}
+									}
 
 									// No Fill step either: the seeded mail templates ask for nothing
 									// beyond a client and a project, so one Next reaches Review.
@@ -1238,6 +1489,76 @@ if (!app.requestSingleInstanceLock()) {
 										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 									);
 									await new Promise((r) => setTimeout(r, 500));
+
+									// A new template, the way a person makes one: the plus opens into
+									// a name, Enter creates it, and the editor opens on a canvas. This
+									// used to refuse outright, because it created with no subject and
+									// the service requires one.
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											// The template read earlier is still open beside the list.
+											const close = document.querySelector('button[aria-label="Close"]');
+											if (close) {
+												close.click();
+												await wait(400);
+											}
+											const plus = document.querySelector('button[aria-label="New mail template"]');
+											if (!plus) return "no plus on the list";
+											plus.click();
+											await wait(400);
+											const field = document.querySelector('input[aria-label="New mail template"]');
+											if (!field) return "the plus did not open into a name field";
+											if (document.activeElement !== field) return "the name field did not take the focus";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											setValue.call(field, "Smoke nieuwsbrief");
+											field.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(200);
+											return "ok";
+										})()`,
+									) as string;
+									if (opened !== "ok") throw new Error(`Smoke: creating a mail template ${opened}`);
+									writeFileSync(joinPath(shotDir, `mail-template-add.png`), (await capture(window.webContents)).toPNG());
+
+									const created = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const field = document.querySelector('input[aria-label="New mail template"]');
+											field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+											let panel = null;
+											for (let tries = 0; tries < 20 && !panel; tries++) {
+												await wait(150);
+												panel = document.querySelector('button[aria-label="Hide the panel"]');
+											}
+											if (!panel) {
+												const alert = document.querySelector("[role=alert]");
+												return "no editor opened" + (alert ? ": " + alert.textContent.trim() : "");
+											}
+											const valueOf = (text) => {
+												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === text);
+												const input = label ? document.getElementById(label.htmlFor) : null;
+												return input ? input.value : null;
+											};
+											if (valueOf("Template name") !== "Smoke nieuwsbrief") return "the editor does not carry the name";
+											if (valueOf("Subject") !== "Smoke nieuwsbrief") return "the subject did not start as the name";
+											if (!document.querySelector('[role=group][aria-label="Preview width"]')) return "a new template did not open on a canvas";
+											return "ok";
+										})()`,
+									) as string;
+									if (created !== "ok") throw new Error(`Smoke: creating a mail template ${created}`);
+									writeFileSync(joinPath(shotDir, `mail-template-new.png`), (await capture(window.webContents)).toPNG());
+
+									// Nothing is selected on a new canvas, so one Escape leaves, and the
+									// template is on the list because creating it saved it.
+									const listed = await window.webContents.executeJavaScript(
+										`(async () => {
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 600));
+											const rows = [...document.querySelectorAll("main li")].map((el) => el.textContent);
+											return rows.some((text) => text.includes("Smoke nieuwsbrief")) ? "ok" : "the new template is not on the list";
+										})()`,
+									) as string;
+									if (listed !== "ok") throw new Error(`Smoke: creating a mail template ${listed}`);
 								}
 								if (screen === "Calendar") {
 									// Opens a recurring occurrence, asks to edit it, answers the

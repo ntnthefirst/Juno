@@ -103,6 +103,9 @@ import type {
 	MailSyncStatus,
 	MailTemplate,
 	MailLayout,
+	GoogleFontLoad,
+	GoogleFontRequest,
+	MailBlockConversion,
 	MailTemplateDraft,
 	MailTemplateInput,
 	MailTemplatePatch,
@@ -729,6 +732,13 @@ export interface JunoApi {
 			duplicate(id: string): Promise<MailTemplate>;
 			/** Reads hand-edited HTML back into a canvas. Stores nothing. */
 			parseBody(html: string): Promise<MailLayout>;
+			/**
+			 * A Google font by name, with its files inline, so the canvas can show
+			 * it. Juno builds the address itself and never fetches one it is given.
+			 */
+			loadGoogleFont(request: GoogleFontRequest): Promise<GoogleFontLoad>;
+			/** One block as its HTML and CSS. Answers with the changed canvas; stores nothing. */
+			convertBlock(input: MailBlockConversion): Promise<MailLayout>;
 			/** Renders values in hand. Writes nothing, so a preview cannot mark a
 			 * template as edited. */
 			preview(draft: MailTemplateDraft): Promise<MailTemplateRender>;

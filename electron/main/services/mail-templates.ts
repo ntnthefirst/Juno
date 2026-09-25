@@ -9,6 +9,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { primaryOwnerEmail, primaryOwnerPhone } from "../../shared/owner";
 import type {
+	MailBlockConversion,
 	MailLayout,
 	MailRegister,
 	MailTemplate,
@@ -24,7 +25,15 @@ import { mailTemplates } from "../db/schema";
 import { previewContext } from "./documents";
 import { formatDate } from "./document-context";
 import { htmlToText, mailShell } from "./mail-html";
-import { compileLayout, layoutFromHtml, normaliseLayout, parseLayout, serialiseLayout } from "./mail-layout";
+import {
+	compileLayout,
+	convertBlockToCode,
+	fontLinks,
+	layoutFromHtml,
+	normaliseLayout,
+	parseLayout,
+	serialiseLayout,
+} from "./mail-layout";
 import { MAIL_TEMPLATES, MAIL_TEMPLATE_SEED_VERSION } from "./mail-templates-seed";
 import * as settings from "./settings";
 import { placeholdersIn, render, unescapeHtml } from "./template-render";
@@ -324,7 +333,7 @@ export async function renderTemplate(input: RenderInput, db: Db = getDb()): Prom
 
 	const subject = render(template.subject, context);
 	const body = render(template.bodyHtml, context);
-	const bodyHtml = mailShell(body.html, { footerLines: await footerLines() });
+	const bodyHtml = mailShell(body.html, { footerLines: await footerLines(), fontLinks: fontLinks(template.layout) });
 	return {
 		// The subject is text, so the escaping the renderer applied comes off again,
 		// and a missing-value marker keeps its words and loses its markup.
@@ -360,6 +369,25 @@ export async function parseBody(html: string): Promise<MailLayout> {
 	return layoutFromHtml(html);
 }
 
+/**
+ * One block of a canvas in hand turned into the HTML and CSS it compiles to,
+ * which is what "Convert to HTML" does in the editor.
+ *
+ * A pure read like `parseBody`: it answers with the changed canvas and stores
+ * nothing, so the conversion is part of the draft and is saved, or not, with
+ * everything else. An agent has no need of it, because an agent writes a code
+ * block into the layout it proposes directly.
+ */
+export async function convertBlock(input: MailBlockConversion): Promise<MailLayout> {
+	const layout = normaliseLayout(input.layout);
+	if (!layout) throw new Error("That layout could not be read. Nothing was converted.");
+	const section = layout.sections.find((entry) => entry.id === input.sectionId);
+	if (!section?.blocks.some((block) => block.id === input.blockId)) {
+		throw new Error("That block is not on the canvas any more. Select it again and convert it.");
+	}
+	return convertBlockToCode(layout, input.sectionId, input.blockId, input.inputs ?? []);
+}
+
 export async function previewDraft(draft: MailTemplateDraft, db: Db = getDb()): Promise<MailTemplateRender> {
 	const inputs = draft.inputs ?? [];
 	const layout = draft.layout ? normaliseLayout(draft.layout) : null;
@@ -379,7 +407,7 @@ export async function previewDraft(draft: MailTemplateDraft, db: Db = getDb()): 
 	const rendered = render(body, context);
 	return {
 		subject: unescapeHtml(subject.html.replace(/<[^>]+>/g, "")).trim(),
-		bodyHtml: mailShell(rendered.html, { footerLines: await footerLines() }),
+		bodyHtml: mailShell(rendered.html, { footerLines: await footerLines(), fontLinks: fontLinks(layout) }),
 		bodyText: htmlToText(rendered.html),
 		missing: [...new Set([...subject.missing, ...rendered.missing])].sort(),
 	};

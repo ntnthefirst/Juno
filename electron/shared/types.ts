@@ -749,7 +749,24 @@ export type MailDirection = "row" | "column";
 export type MailJustify = "start" | "center" | "end" | "between" | "around";
 export type MailAlign = "start" | "center" | "end" | "stretch";
 export type MailTextAlign = "left" | "center" | "right" | "justify";
-export type MailWeight = "normal" | "medium" | "semibold" | "bold";
+/** The nine weights a typeface can have, by the names designers use for them. */
+export type MailWeight =
+	| "thin"
+	| "extralight"
+	| "light"
+	| "normal"
+	| "medium"
+	| "semibold"
+	| "bold"
+	| "extrabold"
+	| "black";
+
+/** Where a block sits across its section, when that is not what the section says. */
+export type MailSelfAlign = "auto" | "start" | "center" | "end" | "stretch";
+
+export type MailVerticalAlign = "top" | "middle" | "bottom";
+export type MailTextDecoration = "none" | "underline" | "strike";
+export type MailTextCase = "none" | "upper" | "lower" | "title";
 
 /**
  * How a section arranges what is in it. Two choices, and there is deliberately
@@ -775,32 +792,114 @@ export type MailSectionLayout =
 	| { kind: "grid"; columns: number; gap: number; align: MailAlign };
 
 /**
+ * A fill: one flat colour, or a two-stop linear gradient.
+ *
+ * A gradient is compiled as `background-image:linear-gradient(...)` with its
+ * first stop written out as a plain `background-color` underneath, because
+ * Outlook on Windows drops the image and would otherwise paint nothing at
+ * all. Every fill therefore has a flat colour a client can fall back to.
+ */
+export type MailFill =
+	| { kind: "solid"; color: MailColor }
+	| { kind: "gradient"; angle: number; from: MailColor; to: MailColor };
+
+/** How a border is drawn. Three values, because those are the three every mail
+ * client draws the same way. */
+export type MailStrokeStyle = "solid" | "dashed" | "dotted";
+
+/** The four corners, for when they are not all the same. */
+export interface MailCorners {
+	topLeft: number;
+	topRight: number;
+	bottomRight: number;
+	bottomLeft: number;
+}
+
+/**
+ * A drop shadow, an inner shadow, or a blur.
+ *
+ * The same three effects Figma calls them, minus a background blur: that is
+ * `backdrop-filter`, which no mail client on the list renders, and an effect
+ * nothing applies is an effect that lies about what the message will look
+ * like. A shadow compiles to `box-shadow` and a blur to `filter`, both of
+ * which a client that does not know them ignores without breaking the layout.
+ */
+export type MailEffect =
+	| {
+			kind: "shadow";
+			/** Inside the box rather than under it. Figma's inner shadow. */
+			inset: boolean;
+			x: number;
+			y: number;
+			blur: number;
+			spread: number;
+			color: MailColor;
+			/** 0 to 1. A shadow is almost never opaque. */
+			opacity: number;
+	  }
+	| { kind: "blur"; radius: number };
+
+/**
  * The box around anything: a section or a single block.
  *
- * `customCss` is declarations only (`background:#fff;border:1px solid #eee`),
- * applied after everything above it so a hand-written value wins. Anything
- * that positions is stripped on the way in by `sanitiseDeclarations` in
+ * This is the appearance panel, and it is deliberately the set of Figma
+ * controls that survives being read in somebody else's mail client: a fill, a
+ * stroke, corner radii, opacity and effects. There is nothing here that
+ * places the box, because nothing in this model is placed.
+ *
+ * `customCss` is declarations only (`text-transform:uppercase`), applied after
+ * everything above it so a hand-written value wins. Anything that positions is
+ * stripped on the way in by `sanitiseDeclarations` in
  * services/mail-layout.ts, because a template whose author can write
  * `position:absolute` is a template that has the thing this model exists to
  * prevent.
  */
 export interface MailBoxStyle {
-	background: MailColor | null;
+	fill: MailFill | null;
 	padding: MailSpacing;
 	borderWidth: number;
 	borderColor: MailColor | null;
+	borderStyle: MailStrokeStyle;
+	/** Used for all four corners unless `corners` says otherwise. */
 	borderRadius: number;
+	corners: MailCorners | null;
+	/** 0 to 1. 1 is opaque, and is what everything starts at. */
+	opacity: number;
+	effects: MailEffect[];
+	/**
+	 * A fixed width in pixels, or null to hug the content or fill the room.
+	 * Compiled with `max-width:100%`, so a fixed box still gives way on a phone
+	 * rather than pushing the message sideways.
+	 */
+	width: number | null;
+	/** The least height, in pixels. Content taller than it still makes it taller. */
+	minHeight: number | null;
+	/** Figma's clip content: whatever reaches past the box is cut off at its edge. */
+	clip: boolean;
 	customCss: string | null;
 }
 
 export interface MailTextStyle {
 	color: MailColor | null;
+	/**
+	 * A family name: one of the system families every mail client has, or the
+	 * family of a font the canvas links (`MailLayout.fonts`). Null is the
+	 * message's own typeface.
+	 */
+	fontFamily: string | null;
 	/** Pixels. Null leaves the shell's own size alone. */
 	fontSize: number | null;
 	/** A multiplier, so 1.5 is 150%. */
 	lineHeight: number | null;
+	/** Pixels between letters. Negative tightens. Null leaves it alone. */
+	letterSpacing: number | null;
 	weight: MailWeight;
+	italic: boolean;
+	decoration: MailTextDecoration;
+	transform: MailTextCase;
 	align: MailTextAlign;
+	/** Where the text sits inside a block that is taller than it. */
+	verticalAlign: MailVerticalAlign;
 }
 
 /**
@@ -818,51 +917,122 @@ export interface MailTextStyle {
  * `html` is the escape hatch, and it is where anything the code view could not
  * place ends up. It is sanitised, never evaluated.
  */
-export type MailBlock =
-	| { id: string; kind: "text"; html: string; text: MailTextStyle; box: MailBoxStyle; grow: number }
-	| {
-			id: string;
-			kind: "heading";
-			level: 1 | 2 | 3;
-			content: string;
-			text: MailTextStyle;
-			box: MailBoxStyle;
-			grow: number;
-	  }
-	| {
-			id: string;
-			kind: "button";
-			label: string;
-			href: string;
-			background: MailColor;
-			color: MailColor;
-			radius: number;
-			box: MailBoxStyle;
-			grow: number;
-	  }
-	| {
-			id: string;
-			kind: "image";
-			src: string;
-			alt: string;
-			/** Pixels, or null for the picture's own width. */
-			width: number | null;
-			align: MailTextAlign;
-			box: MailBoxStyle;
-			grow: number;
-	  }
-	| { id: string; kind: "divider"; color: MailColor; thickness: number; box: MailBoxStyle; grow: number }
-	| { id: string; kind: "spacer"; height: number; grow: number }
-	| { id: string; kind: "field"; inputKey: string; text: MailTextStyle; box: MailBoxStyle; grow: number }
-	| { id: string; kind: "html"; html: string; box: MailBoxStyle; grow: number };
+/** What every block has, whatever kind it is. */
+export interface MailBlockCommon {
+	id: string;
+	/** The flex grow factor. 0 hugs the content, 1 or more takes a share of what is left. */
+	grow: number;
+	/** Where it sits across its section, overriding the section's own alignment. */
+	alignSelf: MailSelfAlign;
+	/** Figma's eye. A hidden block stays on the canvas and is left out of the message. */
+	hidden: boolean;
+}
+
+export type MailBlock = MailBlockCommon &
+	(
+		| { kind: "text"; html: string; text: MailTextStyle; box: MailBoxStyle }
+		| { kind: "heading"; level: 1 | 2 | 3; content: string; text: MailTextStyle; box: MailBoxStyle }
+		| {
+				kind: "button";
+				label: string;
+				href: string;
+				background: MailColor;
+				/** The label's colour. The rest of its type is `text`, whose own colour is not used. */
+				color: MailColor;
+				radius: number;
+				text: MailTextStyle;
+				box: MailBoxStyle;
+		  }
+		| {
+				kind: "image";
+				src: string;
+				alt: string;
+				/** Pixels, or null for the picture's own width. */
+				width: number | null;
+				align: MailTextAlign;
+				box: MailBoxStyle;
+		  }
+		| { kind: "divider"; color: MailColor; thickness: number; box: MailBoxStyle }
+		| { kind: "spacer"; height: number }
+		| { kind: "field"; inputKey: string; text: MailTextStyle; box: MailBoxStyle }
+		/**
+		 * A block that is its own HTML and CSS, edited as code. What any block
+		 * becomes with "Convert to HTML", and what the code view puts anything
+		 * it could not place into. The CSS is declarations for the element
+		 * itself, or for a div around the markup when it is more than one
+		 * element.
+		 */
+		| { kind: "html"; html: string; css: string }
+	);
 
 export interface MailSection {
 	id: string;
+	/** Left out of the message and kept on the canvas, like a hidden layer. */
+	hidden: boolean;
 	/** Shown on the section rail. Never rendered into the message. */
 	name: string;
 	layout: MailSectionLayout;
 	box: MailBoxStyle;
 	blocks: MailBlock[];
+}
+
+/** One block of a canvas in hand, to be turned into the HTML and CSS it compiles to. */
+export interface MailBlockConversion {
+	layout: MailLayout;
+	sectionId: string;
+	blockId: string;
+	/** What the template asks for, which decides how an input block compiles. */
+	inputs?: TemplateInput[];
+}
+
+/** A Google font asked for by name, for the editor's canvas to paint with. */
+export interface GoogleFontRequest {
+	family: string;
+	weights: number[];
+	italic: boolean;
+}
+
+/**
+ * A Google font the canvas can use: the stylesheet the message links, and
+ * the same faces with their files written inline. The inline copy is for the
+ * editor only and is never sent.
+ */
+export interface GoogleFontLoad {
+	family: string;
+	href: string;
+	css: string;
+}
+
+/** What a client that will not load a linked font shows in its place. */
+export type MailFontFallback = "sans" | "serif" | "mono";
+
+/**
+ * A typeface the message links rather than one every client already has.
+ *
+ * Linked in the head of the message as a stylesheet, which Apple Mail, iOS,
+ * Outlook for Mac and most Android clients load and Gmail and Outlook on
+ * Windows do not. So every font carries a fallback, and the text is written in
+ * `'Family', <fallback stack>` everywhere it is used: the message still reads
+ * as intended in a client that ignores the link.
+ *
+ * A Google font is named rather than linked, and the stylesheet address is
+ * built from the name. That is also what lets the editor show it: Juno asks
+ * Google for it once by name, and never fetches an address a person or an
+ * agent typed (security.md section 2). A font from anywhere else is a link the
+ * recipient's client loads and Juno does not, so the canvas shows the
+ * fallback for it and says so.
+ */
+export interface MailFont {
+	/** The family name, exactly as the stylesheet declares it. What a text block names. */
+	family: string;
+	source: "google" | "link";
+	/** An https stylesheet, for a linked font. Null for Google, where it is built from the name. */
+	href: string | null;
+	/** The weights to ask Google for, 100 to 900. */
+	weights: number[];
+	/** Whether to ask Google for the italics too. */
+	italic: boolean;
+	fallback: MailFontFallback;
 }
 
 /**
@@ -881,7 +1051,9 @@ export interface MailLayout {
 	version: 1;
 	width: number;
 	minHeight: number;
-	background: MailColor | null;
+	fill: MailFill | null;
+	/** The typefaces the message links. Every text block can name one of these. */
+	fonts: MailFont[];
 	customCss: string | null;
 	sections: MailSection[];
 }

@@ -38,14 +38,24 @@ import type {
 	MailBlock,
 	MailBoxStyle,
 	MailColor,
+	MailCorners,
 	MailDirection,
+	MailEffect,
+	MailFill,
+	MailFont,
+	MailFontFallback,
 	MailJustify,
 	MailLayout,
 	MailSection,
 	MailSectionLayout,
+	MailSelfAlign,
 	MailSpacing,
+	MailStrokeStyle,
 	MailTextAlign,
+	MailTextCase,
+	MailTextDecoration,
 	MailTextStyle,
+	MailVerticalAlign,
 	MailWeight,
 	TemplateInput,
 } from "../../shared/types";
@@ -65,17 +75,41 @@ export function noSpacing(): MailSpacing {
 
 export function emptyBox(): MailBoxStyle {
 	return {
-		background: null,
+		fill: null,
 		padding: noSpacing(),
 		borderWidth: 0,
 		borderColor: null,
+		borderStyle: "solid",
 		borderRadius: 0,
+		corners: null,
+		opacity: 1,
+		effects: [],
+		width: null,
+		minHeight: null,
+		clip: false,
 		customCss: null,
 	};
 }
 
+/** A flat colour as a fill, which is what every fill control starts from. */
+export function solidFill(color: MailColor): MailFill {
+	return { kind: "solid", color };
+}
+
 export function defaultText(): MailTextStyle {
-	return { color: null, fontSize: null, lineHeight: null, weight: "normal", align: "left" };
+	return {
+		color: null,
+		fontFamily: null,
+		fontSize: null,
+		lineHeight: null,
+		letterSpacing: null,
+		weight: "normal",
+		italic: false,
+		decoration: "none",
+		transform: "none",
+		align: "left",
+		verticalAlign: "top",
+	};
 }
 
 export function stackLayout(): MailSectionLayout {
@@ -83,7 +117,7 @@ export function stackLayout(): MailSectionLayout {
 }
 
 export function emptySection(name = "Section"): MailSection {
-	return { id: randomUUID(), name, layout: stackLayout(), box: emptyBox(), blocks: [] };
+	return { id: randomUUID(), name, hidden: false, layout: stackLayout(), box: emptyBox(), blocks: [] };
 }
 
 export function emptyLayout(): MailLayout {
@@ -91,44 +125,154 @@ export function emptyLayout(): MailLayout {
 		version: 1,
 		width: DEFAULT_WIDTH,
 		minHeight: 320,
-		background: null,
+		fill: null,
+		fonts: [],
 		customCss: null,
 		sections: [emptySection("Body")],
 	};
 }
 
-/** A new block of each kind, with values that render as something visible. */
+/**
+ * A new block of each kind, with values that render as something visible. A
+ * button and a picture hug their content: in a section that stretches what is
+ * in it, a button would otherwise be sent as a bar the width of the message.
+ */
 export function newBlock(kind: MailBlock["kind"]): MailBlock {
-	const id = randomUUID();
+	const common = { id: randomUUID(), grow: 0, alignSelf: "auto" as const, hidden: false };
 	switch (kind) {
 		case "heading":
-			return { id, kind, level: 2, content: "Titel", text: { ...defaultText(), weight: "semibold" }, box: emptyBox(), grow: 0 };
+			return { ...common, kind, level: 2, content: "Titel", text: { ...defaultText(), weight: "semibold" }, box: emptyBox() };
 		case "button":
 			return {
-				id,
+				...common,
+				alignSelf: "start",
 				kind,
 				label: "Bekijk",
 				href: "https://",
 				background: "#4a3fa0",
 				color: "#ffffff",
 				radius: 4,
+				text: { ...defaultText(), weight: "semibold", align: "center" },
 				box: { ...emptyBox(), padding: { top: 10, right: 18, bottom: 10, left: 18 } },
-				grow: 0,
 			};
 		case "image":
-			return { id, kind, src: "", alt: "", width: null, align: "left", box: emptyBox(), grow: 0 };
+			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", box: emptyBox() };
 		case "divider":
-			return { id, kind, color: "#e3e2ec", thickness: 1, box: emptyBox(), grow: 1 };
+			return { ...common, kind, color: "#e3e2ec", thickness: 1, box: emptyBox(), grow: 1 };
 		case "spacer":
-			return { id, kind, height: 16, grow: 0 };
+			return { ...common, kind, height: 16 };
 		case "field":
-			return { id, kind, inputKey: "", text: defaultText(), box: emptyBox(), grow: 0 };
+			return { ...common, kind, inputKey: "", text: defaultText(), box: emptyBox() };
 		case "html":
-			return { id, kind, html: "", box: emptyBox(), grow: 0 };
+			return { ...common, kind, html: "", css: "" };
 		case "text":
 		default:
-			return { id, kind: "text", html: "Tekst", text: defaultText(), box: emptyBox(), grow: 0 };
+			return { ...common, kind: "text", html: "Tekst", text: defaultText(), box: emptyBox() };
 	}
+}
+
+/* ------------------------------------------------------------------- fonts */
+
+/**
+ * The families every mail client already has, and the stack each one is
+ * written as. A block that names one of these needs no link.
+ */
+export const SYSTEM_FONTS: Record<string, string> = {
+	Arial: "Arial, Helvetica, sans-serif",
+	Helvetica: "Helvetica, Arial, sans-serif",
+	Verdana: "Verdana, Geneva, sans-serif",
+	Tahoma: "Tahoma, Verdana, sans-serif",
+	"Trebuchet MS": "'Trebuchet MS', Helvetica, sans-serif",
+	Georgia: "Georgia, 'Times New Roman', serif",
+	"Times New Roman": "'Times New Roman', Times, serif",
+	"Courier New": "'Courier New', Courier, monospace",
+};
+
+/** What a linked font stands on when the client will not load it. */
+export const FALLBACK_STACKS: Record<MailFontFallback, string> = {
+	sans: "Arial, Helvetica, sans-serif",
+	serif: "Georgia, 'Times New Roman', serif",
+	mono: "'Courier New', Courier, monospace",
+};
+
+export const FONT_WEIGHTS: Record<MailWeight, number> = {
+	thin: 100,
+	extralight: 200,
+	light: 300,
+	normal: 400,
+	medium: 500,
+	semibold: 600,
+	bold: 700,
+	extrabold: 800,
+	black: 900,
+};
+
+/** At most this many linked typefaces. Each one is a request the reader's client makes. */
+const MAX_FONTS = 6;
+
+/**
+ * A family name and nothing else.
+ *
+ * Letters, digits, spaces and hyphens: every family Google serves fits, and
+ * nothing that fits can close the quote it is written in, so a family cannot
+ * become a second way to write a declaration into a style attribute.
+ */
+export function toFamily(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim().replace(/\s+/g, " ");
+	return /^[A-Za-z0-9][A-Za-z0-9 -]{0,59}$/.test(trimmed) ? trimmed : null;
+}
+
+/** An https stylesheet for a linked font, or nothing. */
+export function safeStylesheetHref(raw: string): string | null {
+	const trimmed = raw.trim();
+	if (!/^https:\/\/[^\s"'<>()\\]+$/i.test(trimmed) || trimmed.length > 500) return null;
+	try {
+		return new URL(trimmed).protocol === "https:" ? trimmed : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The Google Fonts stylesheet for a family, built from its name.
+ *
+ * The css2 API wants the axis tuples in order, italics after uprights, and it
+ * answers with an error for a weight the family does not have, which is why
+ * the editor loads a font before offering it rather than trusting the list.
+ */
+export function googleFontHref(family: string, weights: number[], italic: boolean): string {
+	const sorted = [...new Set(weights)].sort((a, b) => a - b);
+	const axis = italic
+		? `ital,wght@${[...sorted.map((weight) => `0,${weight}`), ...sorted.map((weight) => `1,${weight}`)].join(";")}`
+		: `wght@${sorted.join(";")}`;
+	return `https://fonts.googleapis.com/css2?family=${family.trim().replace(/ /g, "+")}:${axis}&display=swap`;
+}
+
+/** Where a font's stylesheet is, or null for a linked font with no usable address. */
+export function fontHref(font: MailFont): string | null {
+	return font.source === "google" ? googleFontHref(font.family, font.weights, font.italic) : font.href;
+}
+
+/** The stylesheets a message links, in the order the fonts were added. */
+export function fontLinks(layout: MailLayout | null): string[] {
+	if (!layout) return [];
+	return layout.fonts.map(fontHref).filter((href): href is string => href !== null);
+}
+
+/**
+ * How a family is written into `font-family`.
+ *
+ * A system family is its stack. A linked family is quoted and stood on its
+ * fallback, so a client that ignores the link still shows something of the
+ * same kind. A family that is neither, which is what a pasted block or a
+ * removed font leaves behind, stands on a plain sans serif.
+ */
+export function fontStack(family: string, fonts: MailFont[]): string {
+	const system = SYSTEM_FONTS[family];
+	if (system) return system;
+	const linked = fonts.find((font) => font.family === family);
+	return `'${family}', ${FALLBACK_STACKS[linked?.fallback ?? "sans"]}`;
 }
 
 /* -------------------------------------------------------------------- parse */
@@ -192,7 +336,27 @@ function toDirection(value: unknown): MailDirection {
 }
 
 function toWeight(value: unknown): MailWeight {
-	return value === "medium" || value === "semibold" || value === "bold" ? value : "normal";
+	return typeof value === "string" && value in FONT_WEIGHTS ? (value as MailWeight) : "normal";
+}
+
+function toSelfAlign(value: unknown): MailSelfAlign {
+	return value === "start" || value === "center" || value === "end" || value === "stretch" ? value : "auto";
+}
+
+function toVerticalAlign(value: unknown): MailVerticalAlign {
+	return value === "middle" || value === "bottom" ? value : "top";
+}
+
+function toDecoration(value: unknown): MailTextDecoration {
+	return value === "underline" || value === "strike" ? value : "none";
+}
+
+function toTextCase(value: unknown): MailTextCase {
+	return value === "upper" || value === "lower" || value === "title" ? value : "none";
+}
+
+function toFallback(value: unknown): MailFontFallback {
+	return value === "serif" || value === "mono" ? value : "sans";
 }
 
 function parseSpacing(raw: unknown): MailSpacing {
@@ -205,14 +369,88 @@ function parseSpacing(raw: unknown): MailSpacing {
 	};
 }
 
+/**
+ * A fill, from whatever is stored.
+ *
+ * A canvas written before fills existed carries a plain `background` colour,
+ * and that is read as a solid fill rather than dropped. An upgrade that
+ * quietly empties somebody's backgrounds is the kind of data loss nobody
+ * notices until the message has gone out.
+ */
+function parseFill(raw: unknown, legacy?: unknown): MailFill | null {
+	if (isRecord(raw)) {
+		if (raw.kind === "gradient") {
+			return {
+				kind: "gradient",
+				angle: toNum(raw.angle, 180, 0, 360),
+				from: colorOr(raw.from, "#ffffff"),
+				to: colorOr(raw.to, "#000000"),
+			};
+		}
+		const color = toColor(raw.color);
+		return color ? { kind: "solid", color } : null;
+	}
+	const carried = toColor(legacy);
+	return carried ? { kind: "solid", color: carried } : null;
+}
+
+function toStrokeStyle(value: unknown): MailStrokeStyle {
+	return value === "dashed" || value === "dotted" ? value : "solid";
+}
+
+function parseCorners(raw: unknown): MailCorners | null {
+	if (!isRecord(raw)) return null;
+	return {
+		topLeft: toNum(raw.topLeft, 0, 0, 80),
+		topRight: toNum(raw.topRight, 0, 0, 80),
+		bottomRight: toNum(raw.bottomRight, 0, 0, 80),
+		bottomLeft: toNum(raw.bottomLeft, 0, 0, 80),
+	};
+}
+
+function parseEffect(raw: unknown): MailEffect | null {
+	if (!isRecord(raw)) return null;
+	if (raw.kind === "blur") return { kind: "blur", radius: toNum(raw.radius, 4, 0, 60) };
+	if (raw.kind !== "shadow") return null;
+	return {
+		kind: "shadow",
+		inset: raw.inset === true,
+		x: toNum(raw.x, 0, -200, 200),
+		y: toNum(raw.y, 2, -200, 200),
+		blur: toNum(raw.blur, 6, 0, 200),
+		spread: toNum(raw.spread, 0, -100, 100),
+		color: colorOr(raw.color, "#16161d"),
+		opacity: toNum(raw.opacity, 0.2, 0, 1),
+	};
+}
+
+/** Enough to stack a shadow on a glow. Past that it is a message that renders
+ * slowly on a phone and a panel nobody can read. */
+const MAX_EFFECTS = 8;
+
+function parseEffects(raw: unknown): MailEffect[] {
+	if (!Array.isArray(raw)) return [];
+	return raw
+		.map(parseEffect)
+		.filter((effect): effect is MailEffect => effect !== null)
+		.slice(0, MAX_EFFECTS);
+}
+
 function parseBox(raw: unknown): MailBoxStyle {
 	if (!isRecord(raw)) return emptyBox();
 	return {
-		background: toColor(raw.background),
+		fill: parseFill(raw.fill, raw.background),
 		padding: parseSpacing(raw.padding),
 		borderWidth: toNum(raw.borderWidth, 0, 0, 40),
 		borderColor: toColor(raw.borderColor),
+		borderStyle: toStrokeStyle(raw.borderStyle),
 		borderRadius: toNum(raw.borderRadius, 0, 0, 80),
+		corners: parseCorners(raw.corners),
+		opacity: toNum(raw.opacity, 1, 0, 1),
+		effects: parseEffects(raw.effects),
+		width: toNullableNum(raw.width, 8, MAX_WIDTH),
+		minHeight: toNullableNum(raw.minHeight, 1, MAX_HEIGHT),
+		clip: raw.clip === true,
 		customCss: sanitiseDeclarations(toStr(raw.customCss)) || null,
 	};
 }
@@ -221,11 +459,55 @@ function parseTextStyle(raw: unknown): MailTextStyle {
 	if (!isRecord(raw)) return defaultText();
 	return {
 		color: toColor(raw.color),
+		fontFamily: toFamily(raw.fontFamily),
 		fontSize: toNullableNum(raw.fontSize, 8, 96),
 		lineHeight: toNullableNum(raw.lineHeight, 0.8, 4),
+		letterSpacing: toNullableNum(raw.letterSpacing, -10, 40),
 		weight: toWeight(raw.weight),
+		italic: raw.italic === true,
+		decoration: toDecoration(raw.decoration),
+		transform: toTextCase(raw.transform),
 		align: toAlignText(raw.align),
+		verticalAlign: toVerticalAlign(raw.verticalAlign),
 	};
+}
+
+const WEIGHT_STEPS = new Set([100, 200, 300, 400, 500, 600, 700, 800, 900]);
+
+function parseFont(raw: unknown): MailFont | null {
+	if (!isRecord(raw)) return null;
+	const family = toFamily(raw.family);
+	if (!family) return null;
+	const source = raw.source === "link" ? "link" : "google";
+	const weights = Array.isArray(raw.weights)
+		? [
+				...new Set(
+					raw.weights.filter((weight): weight is number => typeof weight === "number" && WEIGHT_STEPS.has(weight)),
+				),
+			].sort((a, b) => a - b)
+		: [];
+	return {
+		family,
+		source,
+		// A linked font whose address is not usable is kept rather than dropped,
+		// so the author sees it and can correct it. It links nothing meanwhile.
+		href: source === "link" ? safeStylesheetHref(toStr(raw.href)) : null,
+		weights: weights.length > 0 ? weights : [400, 700],
+		italic: raw.italic === true,
+		fallback: toFallback(raw.fallback),
+	};
+}
+
+function parseFonts(raw: unknown): MailFont[] {
+	if (!Array.isArray(raw)) return [];
+	const fonts: MailFont[] = [];
+	for (const entry of raw) {
+		const font = parseFont(entry);
+		// One family, one entry: two links for the same name is the second one
+		// winning in some clients and the first in others.
+		if (font && !fonts.some((other) => other.family === font.family)) fonts.push(font);
+	}
+	return fonts.slice(0, MAX_FONTS);
 }
 
 function parseSectionLayout(raw: unknown): MailSectionLayout {
@@ -250,48 +532,71 @@ function parseSectionLayout(raw: unknown): MailSectionLayout {
 
 function parseBlock(raw: unknown): MailBlock | null {
 	if (!isRecord(raw)) return null;
-	const id = toId(raw.id);
-	const grow = toNum(raw.grow, 0, 0, 12);
+	const common = {
+		id: toId(raw.id),
+		grow: toNum(raw.grow, 0, 0, 12),
+		alignSelf: toSelfAlign(raw.alignSelf),
+		hidden: raw.hidden === true,
+	};
 	const box = parseBox(raw.box);
 
 	switch (raw.kind) {
 		case "heading": {
 			const level = raw.level === 1 || raw.level === 3 ? raw.level : 2;
-			return { id, kind: "heading", level, content: toStr(raw.content), text: parseTextStyle(raw.text), box, grow };
+			return { ...common, kind: "heading", level, content: toStr(raw.content), text: parseTextStyle(raw.text), box };
 		}
 		case "button":
 			return {
-				id,
+				...common,
 				kind: "button",
 				label: toStr(raw.label),
 				href: safeHref(toStr(raw.href)) ?? "",
 				background: colorOr(raw.background, "#4a3fa0"),
 				color: colorOr(raw.color, "#ffffff"),
 				radius: toNum(raw.radius, 4, 0, 80),
+				// A button stored before it had type of its own keeps the weight
+				// it was drawn with.
+				text: isRecord(raw.text) ? parseTextStyle(raw.text) : { ...defaultText(), weight: "semibold" },
 				box,
-				grow,
 			};
 		case "image":
 			return {
-				id,
+				...common,
 				kind: "image",
 				src: safeImageSrc(toStr(raw.src)) ?? "",
 				alt: toStr(raw.alt),
 				width: toNullableNum(raw.width, 8, MAX_WIDTH),
 				align: toAlignText(raw.align),
-				box,
-				grow,
+				// A picture has a width of its own, and the box's would be a second one.
+				box: { ...box, width: null },
 			};
 		case "divider":
-			return { id, kind: "divider", color: colorOr(raw.color, "#e3e2ec"), thickness: toNum(raw.thickness, 1, 1, 20), box, grow };
+			return {
+				...common,
+				kind: "divider",
+				color: colorOr(raw.color, "#e3e2ec"),
+				thickness: toNum(raw.thickness, 1, 1, 20),
+				box,
+			};
 		case "spacer":
-			return { id, kind: "spacer", height: toNum(raw.height, 16, 1, 400), grow };
+			return { ...common, kind: "spacer", height: toNum(raw.height, 16, 1, 400) };
 		case "field":
-			return { id, kind: "field", inputKey: toStr(raw.inputKey).trim(), text: parseTextStyle(raw.text), box, grow };
-		case "html":
-			return { id, kind: "html", html: sanitiseFragment(toStr(raw.html)), box, grow };
+			return { ...common, kind: "field", inputKey: toStr(raw.inputKey).trim(), text: parseTextStyle(raw.text), box };
+		case "html": {
+			if (typeof raw.css === "string") {
+				return { ...common, kind: "html", html: sanitiseMarkup(toStr(raw.html)), css: sanitiseDeclarations(raw.css) };
+			}
+			// A raw block from before blocks were code had a box around its
+			// markup. The box becomes the CSS of a div holding the markup, which
+			// is exactly what it compiled to, so nothing moves.
+			const css = boxDeclarations(box)
+				.filter((declaration): declaration is string => Boolean(declaration))
+				.join(";");
+			const html = sanitiseMarkup(toStr(raw.html));
+			return { ...common, kind: "html", html: css ? `<div>${html}</div>` : html, css };
+		}
 		case "text":
-			return { id, kind: "text", html: sanitiseFragment(toStr(raw.html)), text: parseTextStyle(raw.text), box, grow };
+			return { ...common, kind: "text", html: sanitiseFragment(toStr(raw.html)), text: parseTextStyle(raw.text), box };
 		default:
 			return null;
 	}
@@ -305,6 +610,7 @@ function parseSection(raw: unknown): MailSection | null {
 	return {
 		id: toId(raw.id),
 		name: toStr(raw.name, "Section"),
+		hidden: raw.hidden === true,
 		layout: parseSectionLayout(raw.layout),
 		box: parseBox(raw.box),
 		blocks,
@@ -338,7 +644,8 @@ export function normaliseLayout(raw: unknown): MailLayout | null {
 		version: 1,
 		width: toNum(raw.width, DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH),
 		minHeight: toNum(raw.minHeight, 320, 0, MAX_HEIGHT),
-		background: toColor(raw.background),
+		fill: parseFill(raw.fill, raw.background),
+		fonts: parseFonts(raw.fonts),
 		customCss: sanitiseDeclarations(toStr(raw.customCss)) || null,
 		sections: sections.length > 0 ? sections : [emptySection("Body")],
 	};
@@ -486,6 +793,146 @@ export function sanitiseFragment(html: string): string {
 	return out;
 }
 
+/** What a code block may carry: an email's worth of structure, and nothing that runs. */
+const MARKUP_TAGS = new Set([
+	"a",
+	"b",
+	"strong",
+	"i",
+	"em",
+	"u",
+	"s",
+	"small",
+	"sup",
+	"sub",
+	"span",
+	"br",
+	"p",
+	"div",
+	"center",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"blockquote",
+	"hr",
+	"ul",
+	"ol",
+	"li",
+	"img",
+	"table",
+	"thead",
+	"tbody",
+	"tfoot",
+	"tr",
+	"td",
+	"th",
+]);
+
+/** Never content in a message body: dropped together with what is inside them. */
+const DROPPED_WITH_CONTENT = ["script", "style", "head", "title", "iframe", "object", "embed", "form", "svg", "noscript", "template"];
+
+/** A whole document pasted in: the wrapper goes, what it wrapped stays. */
+const UNWRAPPED = new Set(["html", "body"]);
+
+const TABLE_TAGS = new Set(["table", "tr", "td", "th", "thead", "tbody", "tfoot"]);
+
+/**
+ * The attributes a code block keeps, each checked before it is written back.
+ *
+ * Style goes through the same declaration cleaning as every other style, a
+ * link through `safeHref` and a picture through `safeImageSrc`, so an https
+ * address is the only kind of address that survives. The rest are the
+ * presentation attributes mail HTML still leans on for Outlook, and each is
+ * held to the shape of its value: a number, a keyword, a hex colour.
+ */
+function markupAttributes(name: string, attrs: string): string {
+	const kept: string[] = [];
+	const style = sanitiseDeclarations(unescapeAttr(attribute(attrs, "style") ?? ""));
+	if (style) kept.push(`style="${escapeHtml(style)}"`);
+	if (name === "a") {
+		const href = safeHref(unescapeAttr(attribute(attrs, "href") ?? ""));
+		if (href) kept.push(`href="${escapeHtml(href)}"`);
+	}
+	if (name === "img") {
+		const src = safeImageSrc(unescapeAttr(attribute(attrs, "src") ?? ""));
+		if (src) kept.push(`src="${escapeHtml(src)}"`);
+		const alt = attribute(attrs, "alt");
+		kept.push(`alt="${escapeHtml(unescapeAttr(alt ?? ""))}"`);
+	}
+	if (name === "img" || TABLE_TAGS.has(name)) {
+		for (const key of ["width", "height"]) {
+			const value = attribute(attrs, key);
+			if (value && /^\d{1,4}%?$/.test(value)) kept.push(`${key}="${value}"`);
+		}
+	}
+	if (TABLE_TAGS.has(name) || name === "div" || name === "p" || name.startsWith("h")) {
+		const align = attribute(attrs, "align");
+		if (align && /^(left|center|right|justify)$/i.test(align)) kept.push(`align="${align.toLowerCase()}"`);
+	}
+	if (TABLE_TAGS.has(name)) {
+		const valign = attribute(attrs, "valign");
+		if (valign && /^(top|middle|bottom|baseline)$/i.test(valign)) kept.push(`valign="${valign.toLowerCase()}"`);
+		const bgcolor = attribute(attrs, "bgcolor");
+		if (bgcolor && toColor(bgcolor)) kept.push(`bgcolor="${bgcolor}"`);
+		for (const key of ["colspan", "rowspan", "cellpadding", "cellspacing", "border"]) {
+			const value = attribute(attrs, key);
+			if (value && /^\d{1,3}$/.test(value)) kept.push(`${key}="${value}"`);
+		}
+		if (name === "table" && attribute(attrs, "role") === "presentation") kept.push('role="presentation"');
+	}
+	return kept.length > 0 ? ` ${kept.join(" ")}` : "";
+}
+
+/**
+ * The markup a code block is allowed to carry.
+ *
+ * Wider than `sanitiseFragment`, because a block converted to HTML or pasted
+ * from another email is headings, tables and pictures rather than a sentence,
+ * and just as strict about what can run. Comments go, and so do scripts,
+ * styles, frames and forms with everything inside them, because none of that
+ * is ever something a reader sees. A tag outside the set is escaped to visible
+ * text, the same rule the inline sanitiser keeps, so nothing disappears
+ * without trace.
+ */
+export function sanitiseMarkup(html: string): string {
+	let source = html.replace(/<!--[\s\S]*?-->/g, "");
+	for (const tag of DROPPED_WITH_CONTENT) {
+		source = source
+			.replace(new RegExp(`<${tag}\\b[\\s\\S]*?<\\/${tag}\\s*>`, "gi"), "")
+			.replace(new RegExp(`<\\/?${tag}\\b[^>]*>`, "gi"), "");
+	}
+
+	let out = "";
+	let cursor = 0;
+	for (const match of source.matchAll(TAG_RE)) {
+		const start = match.index ?? 0;
+		out += escapeHtml(source.slice(cursor, start));
+		cursor = start + match[0].length;
+
+		const closing = Boolean(match[1]);
+		const name = (match[2] ?? "").toLowerCase();
+		const attrs = match[3] ?? "";
+
+		if (UNWRAPPED.has(name)) continue;
+		if (!MARKUP_TAGS.has(name)) {
+			out += escapeHtml(match[0]);
+			continue;
+		}
+		if (name === "br" || name === "hr" || name === "img") {
+			if (!closing) out += `<${name}${markupAttributes(name, attrs)}>`;
+			continue;
+		}
+		out += closing ? `</${name}>` : `<${name}${markupAttributes(name, attrs)}>`;
+	}
+	out += escapeHtml(source.slice(cursor));
+	// Entities the author wrote come back escaped once too many; put the ones
+	// that are plainly entities back.
+	return out.replace(/&amp;(#\d+|#x[0-9a-f]+|[a-z]+);/gi, "&$1;");
+}
+
 /* ------------------------------------------------------------------ compile */
 
 function styleString(pairs: (string | null)[]): string {
@@ -499,26 +946,163 @@ function paddingDeclaration(padding: MailSpacing): string | null {
 	return `padding:${top}px ${right}px ${bottom}px ${left}px`;
 }
 
+/**
+ * A hex colour and an alpha, as the `rgba()` a shadow is written in.
+ *
+ * Generated rather than typed, so the value can carry nothing but numbers,
+ * which is what keeps a colour control from becoming a second way to write
+ * arbitrary CSS.
+ */
+function rgba(color: MailColor, opacity: number): string {
+	const hex = color.slice(1);
+	const full =
+		hex.length === 3
+			? hex
+					.split("")
+					.map((part) => part + part)
+					.join("")
+			: hex;
+	const r = Number.parseInt(full.slice(0, 2), 16);
+	const g = Number.parseInt(full.slice(2, 4), 16);
+	const b = Number.parseInt(full.slice(4, 6), 16);
+	return `rgba(${r},${g},${b},${Number(opacity.toFixed(3))})`;
+}
+
+/**
+ * A fill, as the one or two declarations a mail client needs.
+ *
+ * A gradient writes its first stop as a flat `background-color` before the
+ * image, so a client that ignores `background-image` paints that colour rather
+ * than nothing. Outlook on Windows is the obvious one, and it is not the only
+ * one.
+ */
+function fillDeclarations(fill: MailFill | null): (string | null)[] {
+	if (!fill) return [];
+	if (fill.kind === "solid") return [`background-color:${fill.color}`];
+	return [
+		`background-color:${fill.from}`,
+		`background-image:linear-gradient(${fill.angle}deg,${fill.from},${fill.to})`,
+	];
+}
+
+function radiusDeclaration(box: MailBoxStyle): string | null {
+	const corners = box.corners;
+	if (!corners) return box.borderRadius > 0 ? `border-radius:${box.borderRadius}px` : null;
+	if (!corners.topLeft && !corners.topRight && !corners.bottomRight && !corners.bottomLeft) return null;
+	return `border-radius:${corners.topLeft}px ${corners.topRight}px ${corners.bottomRight}px ${corners.bottomLeft}px`;
+}
+
+/**
+ * The effects, as `box-shadow` and `filter`.
+ *
+ * Every shadow goes into one comma-separated `box-shadow`, because that is how
+ * the property stacks them, and the blurs are added up into a single `filter`,
+ * because two `filter` declarations on one element replace each other rather
+ * than compose.
+ */
+function effectDeclarations(effects: MailEffect[]): (string | null)[] {
+	const shadows = effects
+		.filter((effect): effect is Extract<MailEffect, { kind: "shadow" }> => effect.kind === "shadow")
+		.map(
+			(effect) =>
+				`${effect.inset ? "inset " : ""}${effect.x}px ${effect.y}px ${effect.blur}px ${effect.spread}px ${rgba(effect.color, effect.opacity)}`,
+		);
+	const blur = effects.reduce((total, effect) => (effect.kind === "blur" ? total + effect.radius : total), 0);
+	return [
+		shadows.length > 0 ? `box-shadow:${shadows.join(",")}` : null,
+		blur > 0 ? `filter:blur(${blur}px)` : null,
+	];
+}
+
 function boxDeclarations(box: MailBoxStyle): (string | null)[] {
 	return [
-		box.background ? `background:${box.background}` : null,
+		...fillDeclarations(box.fill),
 		paddingDeclaration(box.padding),
-		box.borderWidth > 0 ? `border:${box.borderWidth}px solid ${box.borderColor ?? "#e3e2ec"}` : null,
-		box.borderRadius > 0 ? `border-radius:${box.borderRadius}px` : null,
+		box.borderWidth > 0
+			? `border:${box.borderWidth}px ${box.borderStyle} ${box.borderColor ?? "#e3e2ec"}`
+			: null,
+		radiusDeclaration(box),
+		box.opacity < 1 ? `opacity:${Number(box.opacity.toFixed(3))}` : null,
+		...effectDeclarations(box.effects),
+		// A fixed width gives way on a narrow screen rather than pushing the
+		// message sideways, and it is measured the way Figma measures it, border
+		// and padding included.
+		box.width !== null ? `width:${box.width}px` : null,
+		box.width !== null ? "max-width:100%" : null,
+		box.width !== null ? "box-sizing:border-box" : null,
+		box.minHeight !== null ? `min-height:${box.minHeight}px` : null,
+		box.clip ? "overflow:hidden" : null,
 		// Last, so a hand-written declaration wins over the controls above it.
 		box.customCss,
 	];
 }
 
-function textDeclarations(text: MailTextStyle): (string | null)[] {
-	const weight =
-		text.weight === "bold" ? "700" : text.weight === "semibold" ? "600" : text.weight === "medium" ? "500" : null;
+const CASE_CSS: Record<MailTextCase, string | null> = {
+	none: null,
+	upper: "uppercase",
+	lower: "lowercase",
+	title: "capitalize",
+};
+
+const VERTICAL_CSS: Record<MailVerticalAlign, string> = { top: "flex-start", middle: "center", bottom: "flex-end" };
+
+const SELF_CSS: Record<Exclude<MailSelfAlign, "auto">, string> = {
+	start: "flex-start",
+	center: "center",
+	end: "flex-end",
+	stretch: "stretch",
+};
+
+type TextOptions = {
+	/** A heading left to the client comes out bold whatever the panel said. */
+	alwaysWeight?: boolean;
+	/** A button's label colour is the button's own, not the text style's. */
+	skipColor?: boolean;
+};
+
+function textDeclarations(text: MailTextStyle, fonts: MailFont[], options: TextOptions = {}): (string | null)[] {
+	const weight = FONT_WEIGHTS[text.weight];
+	const textCase = CASE_CSS[text.transform];
 	return [
-		text.color ? `color:${text.color}` : null,
+		text.color && !options.skipColor ? `color:${text.color}` : null,
+		text.fontFamily ? `font-family:${fontStack(text.fontFamily, fonts)}` : null,
 		text.fontSize ? `font-size:${text.fontSize}px` : null,
 		text.lineHeight ? `line-height:${text.lineHeight}` : null,
-		weight ? `font-weight:${weight}` : null,
+		text.letterSpacing !== null ? `letter-spacing:${text.letterSpacing}px` : null,
+		weight !== 400 || options.alwaysWeight ? `font-weight:${weight}` : null,
+		text.italic ? "font-style:italic" : null,
+		text.decoration === "underline"
+			? "text-decoration:underline"
+			: text.decoration === "strike"
+				? "text-decoration:line-through"
+				: null,
+		textCase ? `text-transform:${textCase}` : null,
 		text.align !== "left" ? `text-align:${text.align}` : null,
+	];
+}
+
+/**
+ * Text that does not sit at the top of its block.
+ *
+ * The block becomes a column that pushes one inner span up or down. The span
+ * is what keeps it a paragraph: made a flex container directly, every piece of
+ * inline markup in it would become an item of its own, and a word in bold
+ * would land on a line by itself.
+ */
+function verticalDeclarations(text: MailTextStyle): string[] {
+	if (text.verticalAlign === "top") return [];
+	return ["display:flex", "flex-direction:column", `justify-content:${VERTICAL_CSS[text.verticalAlign]}`];
+}
+
+function wrapVertical(text: MailTextStyle, inner: string): string {
+	return text.verticalAlign === "top" ? inner : `<span data-juno-inner="1" style="display:block">${inner}</span>`;
+}
+
+/** How a block takes its place in the section: its share of the room, and where it sits across. */
+function placeDeclarations(block: MailBlock): (string | null)[] {
+	return [
+		block.grow > 0 ? `flex:${block.grow} 1 0%` : null,
+		block.alignSelf !== "auto" ? `align-self:${SELF_CSS[block.alignSelf]}` : null,
 	];
 }
 
@@ -566,36 +1150,48 @@ export function fieldPlaceholder(inputKey: string): string {
 	return `{{document.${inputKey}}}`;
 }
 
-function compileBlock(block: MailBlock, inputs: TemplateInput[]): string {
+function compileBlock(block: MailBlock, inputs: TemplateInput[], fonts: MailFont[]): string {
+	// Hidden is Figma's eye: kept on the canvas, left out of the message.
+	if (block.hidden) return "";
 	const marker = ` data-juno-block="${block.kind}" data-juno-id="${escapeHtml(block.id)}"`;
-	const grow = block.grow > 0 ? `flex:${block.grow} 1 0%` : null;
+	const place = placeDeclarations(block);
 
 	switch (block.kind) {
 		case "heading": {
 			const tag = `h${block.level}`;
 			const style = styleString([
 				"margin:0",
-				...textDeclarations(block.text),
+				...textDeclarations(block.text, fonts, { alwaysWeight: true }),
+				...verticalDeclarations(block.text),
 				...boxDeclarations(block.box),
-				grow,
+				...place,
 			]);
-			return `<${tag}${marker}${style}>${escapeHtml(block.content)}</${tag}>`;
+			return `<${tag}${marker}${style}>${wrapVertical(block.text, escapeHtml(block.content))}</${tag}>`;
 		}
 		case "text": {
-			const style = styleString(["margin:0", ...textDeclarations(block.text), ...boxDeclarations(block.box), grow]);
-			return `<div${marker}${style}>${sanitiseFragment(block.html)}</div>`;
+			const style = styleString([
+				"margin:0",
+				...textDeclarations(block.text, fonts),
+				...verticalDeclarations(block.text),
+				...boxDeclarations(block.box),
+				...place,
+			]);
+			return `<div${marker}${style}>${wrapVertical(block.text, sanitiseFragment(block.html))}</div>`;
 		}
 		case "button": {
 			const href = safeHref(block.href);
+			const padded = paddingDeclaration(block.box.padding) !== null;
 			const style = styleString([
 				"display:inline-block",
 				"text-decoration:none",
 				`background:${block.background}`,
 				`color:${block.color}`,
-				`border-radius:${block.radius}px`,
-				paddingDeclaration(block.box.padding) ?? "padding:10px 18px",
-				block.box.customCss,
-				grow,
+				...textDeclarations(block.text, fonts, { skipColor: true }),
+				// The button's own fill and radius are the box's, so the appearance
+				// controls reach it the same way they reach anything else.
+				...boxDeclarations({ ...block.box, fill: null, borderRadius: block.radius }),
+				padded ? null : "padding:10px 18px",
+				...place,
 			]);
 			// Without a target it is a label, not a link. Emitting an <a> with no
 			// href would give the recipient something that looks pressable and is
@@ -615,8 +1211,8 @@ function compileBlock(block: MailBlock, inputs: TemplateInput[]): string {
 				block.width ? `width:${block.width}px` : null,
 				"height:auto",
 				block.align === "center" ? "margin:0 auto" : block.align === "right" ? "margin-left:auto" : null,
-				...boxDeclarations(block.box),
-				grow,
+				...boxDeclarations({ ...block.box, width: null }),
+				...place,
 			]);
 			return `<img${marker} src="${escapeHtml(src)}" alt="${escapeHtml(block.alt)}"${style}>`;
 		}
@@ -624,28 +1220,31 @@ function compileBlock(block: MailBlock, inputs: TemplateInput[]): string {
 			const style = styleString([
 				"border:0",
 				`border-top:${block.thickness}px solid ${block.color}`,
-				"width:100%",
+				block.box.width === null ? "width:100%" : null,
 				paddingDeclaration(block.box.padding),
+				block.box.opacity < 1 ? `opacity:${Number(block.box.opacity.toFixed(3))}` : null,
+				block.box.width !== null ? `width:${block.box.width}px` : null,
+				block.box.width !== null ? "max-width:100%" : null,
 				block.box.customCss,
-				grow,
+				...place,
 			]);
 			return `<hr${marker}${style}>`;
 		}
 		case "spacer": {
-			const style = styleString([`height:${block.height}px`, "line-height:0", "font-size:0", grow]);
+			const style = styleString([`height:${block.height}px`, "line-height:0", "font-size:0", ...place]);
 			return `<div${marker}${style}>&nbsp;</div>`;
 		}
 		case "field": {
 			const declared = inputs.find((input) => input.key === block.inputKey);
 			const token = block.inputKey ? fieldPlaceholder(block.inputKey) : "";
-			const style = styleString([...textDeclarations(block.text), ...boxDeclarations(block.box), grow]);
+			const style = styleString([...textDeclarations(block.text, fonts), ...boxDeclarations(block.box), ...place]);
 			if (!token) {
 				return `<span${marker} style="color:#5d5e70;font-size:12px;">${escapeHtml("Geen invoerveld gekozen")}</span>`;
 			}
 			// An image input is a picture, not its address. Anything else is text,
 			// and the renderer fills the token wherever it lands.
 			if (declared?.kind === "image") {
-				return `<img${marker} data-juno-field="${escapeHtml(block.inputKey)}" src="${token}" alt="${escapeHtml(declared.label || block.inputKey)}"${styleString(["display:block", "max-width:100%", "height:auto", ...boxDeclarations(block.box), grow])}>`;
+				return `<img${marker} data-juno-field="${escapeHtml(block.inputKey)}" src="${token}" alt="${escapeHtml(declared.label || block.inputKey)}"${styleString(["display:block", "max-width:100%", "height:auto", ...boxDeclarations(block.box), ...place])}>`;
 			}
 			if (declared?.kind === "url") {
 				return `<a${marker} data-juno-field="${escapeHtml(block.inputKey)}" href="${token}"${style}>${escapeHtml(declared.label || block.inputKey)}</a>`;
@@ -653,31 +1252,46 @@ function compileBlock(block: MailBlock, inputs: TemplateInput[]): string {
 			return `<span${marker} data-juno-field="${escapeHtml(block.inputKey)}"${style}>${token}</span>`;
 		}
 		case "html": {
-			const style = styleString([...boxDeclarations(block.box), grow]);
-			return `<div${marker}${style}>${sanitiseFragment(block.html)}</div>`;
+			const markup = sanitiseMarkup(block.html);
+			const css = sanitiseDeclarations(block.css) || null;
+			const nodes = splitTopLevel(markup).filter((node) => node.type === "element" || node.raw.trim() !== "");
+			const root = nodes.length === 1 && nodes[0]?.type === "element" ? nodes[0] : null;
+			if (!root) {
+				// More than one element, or loose text: the CSS goes on a div around
+				// it, and the marker says so, so the code view reads it back the
+				// same way.
+				return `<div${marker} data-juno-wrap="1"${styleString([css, ...place])}>${markup}</div>`;
+			}
+			// One element: the CSS is its own, after any style it already carries,
+			// so the field in the panel wins over an inline style in the markup.
+			const own = unescapeAttr(attribute(root.attrs, "style") ?? "") || null;
+			const rest = root.attrs.replace(/\s+style\s*=\s*"[^"]*"/i, "");
+			const opening = `<${root.name}${marker}${rest}${styleString([own, css, ...place])}>`;
+			return VOID_TAGS.has(root.name) ? opening : `${opening}${root.inner}</${root.name}>`;
 		}
 	}
 }
 
-function compileSection(section: MailSection, inputs: TemplateInput[]): string {
+function compileSection(section: MailSection, inputs: TemplateInput[], fonts: MailFont[]): string {
+	if (section.hidden) return "";
 	const style = styleString([...layoutDeclarations(section.layout), ...boxDeclarations(section.box)]);
-	const children = section.blocks.map((block) => compileBlock(block, inputs)).join("");
+	const children = section.blocks.map((block) => compileBlock(block, inputs, fonts)).join("");
 	return `<div data-juno-section="${escapeHtml(section.name)}" data-juno-id="${escapeHtml(section.id)}"${style}>${children}</div>`;
 }
 
 /**
  * The body fragment for a canvas. `mailShell` wraps this, so it deliberately
  * emits no `<html>`, no `<head>` and no width of its own beyond the frame the
- * author set.
+ * author set. The fonts it links go in the shell's head, through `fontLinks`.
  */
 export function compileLayout(layout: MailLayout, inputs: TemplateInput[] = []): string {
 	const style = styleString([
 		`max-width:${layout.width}px`,
 		layout.minHeight > 0 ? `min-height:${layout.minHeight}px` : null,
-		layout.background ? `background:${layout.background}` : null,
+		...fillDeclarations(layout.fill),
 		layout.customCss,
 	]);
-	const sections = layout.sections.map((section) => compileSection(section, inputs)).join("");
+	const sections = layout.sections.map((section) => compileSection(section, inputs, layout.fonts)).join("");
 	return `<div data-juno-canvas="1"${style}>${sections}</div>`;
 }
 
@@ -813,7 +1427,115 @@ function leftoverCss(map: Declarations, owned: string[]): string | null {
 	return css || null;
 }
 
-const BOX_PROPERTIES = ["background", "background-color", "padding", "border", "border-radius"];
+const BOX_PROPERTIES = [
+	"background",
+	"background-color",
+	"background-image",
+	"padding",
+	"border",
+	"border-radius",
+	"opacity",
+	"box-shadow",
+	"filter",
+	"width",
+	"max-width",
+	"box-sizing",
+	"min-height",
+	"overflow",
+	"align-self",
+];
+
+/** The fill, from whichever of the two declarations the compiler wrote. */
+function readFill(map: Declarations): MailFill | null {
+	const image = (map.get("background-image") ?? "").trim();
+	const gradient = /^linear-gradient\(\s*(-?[\d.]+)deg\s*,\s*(#[0-9a-f]{3,6})\s*,\s*(#[0-9a-f]{3,6})\s*\)$/i.exec(image);
+	if (gradient) {
+		const from = toColor(gradient[2] ?? "");
+		const to = toColor(gradient[3] ?? "");
+		if (from && to) {
+			const angle = Number.parseFloat(gradient[1] ?? "180");
+			return { kind: "gradient", angle: Number.isFinite(angle) ? angle : 180, from, to };
+		}
+	}
+	const flat = toColor(map.get("background-color") ?? map.get("background"));
+	return flat ? { kind: "solid", color: flat } : null;
+}
+
+/** A colour that may carry an alpha, which is how a shadow was written. */
+function readColorWithAlpha(value: string): { color: MailColor; opacity: number } | null {
+	const hex = toColor(value);
+	if (hex) return { color: hex, opacity: 1 };
+	const parts = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(value.trim());
+	if (!parts) return null;
+	const channel = (raw: string): string =>
+		Math.min(255, Math.max(0, Number.parseInt(raw, 10) || 0))
+			.toString(16)
+			.padStart(2, "0");
+	const alpha = parts[4] === undefined ? 1 : Number.parseFloat(parts[4]);
+	return {
+		color: `#${channel(parts[1] ?? "0")}${channel(parts[2] ?? "0")}${channel(parts[3] ?? "0")}`,
+		opacity: Number.isFinite(alpha) ? Math.min(Math.max(alpha, 0), 1) : 1,
+	};
+}
+
+/** Splits a shadow list on the commas between shadows, not the ones inside an
+ * `rgba()`. */
+function splitShadows(value: string): string[] {
+	const out: string[] = [];
+	let depth = 0;
+	let current = "";
+	for (const character of value) {
+		if (character === "(") depth++;
+		if (character === ")") depth--;
+		if (character === "," && depth === 0) {
+			out.push(current);
+			current = "";
+			continue;
+		}
+		current += character;
+	}
+	if (current.trim()) out.push(current);
+	return out;
+}
+
+function readEffects(map: Declarations): MailEffect[] {
+	const effects: MailEffect[] = [];
+	for (const part of splitShadows(map.get("box-shadow") ?? "")) {
+		const trimmed = part.trim();
+		const inset = /^inset\s+/i.test(trimmed);
+		const shadow = /^(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(.+)$/.exec(
+			trimmed.replace(/^inset\s+/i, ""),
+		);
+		if (!shadow) continue;
+		const colour = readColorWithAlpha(shadow[5] ?? "");
+		if (!colour) continue;
+		effects.push({
+			kind: "shadow",
+			inset,
+			x: Number.parseFloat(shadow[1] ?? "0"),
+			y: Number.parseFloat(shadow[2] ?? "0"),
+			blur: Number.parseFloat(shadow[3] ?? "0"),
+			spread: Number.parseFloat(shadow[4] ?? "0"),
+			color: colour.color,
+			opacity: colour.opacity,
+		});
+	}
+	const blur = /blur\(\s*([\d.]+)px\s*\)/i.exec(map.get("filter") ?? "");
+	if (blur) effects.push({ kind: "blur", radius: Number.parseFloat(blur[1] ?? "0") });
+	return effects.slice(0, MAX_EFFECTS);
+}
+
+function readCorners(map: Declarations): { borderRadius: number; corners: MailCorners | null } {
+	const value = map.get("border-radius");
+	if (!value) return { borderRadius: 0, corners: null };
+	const parts = value.trim().split(/\s+/).map((part) => Number.parseFloat(part));
+	if (parts.length === 0 || parts.some((part) => !Number.isFinite(part))) {
+		return { borderRadius: 0, corners: null };
+	}
+	const [a = 0, b = a, c = a, d = b] = parts;
+	if (parts.length === 1) return { borderRadius: a, corners: null };
+	return { borderRadius: a, corners: { topLeft: a, topRight: b, bottomRight: c, bottomLeft: d } };
+}
 
 function readPadding(map: Declarations): MailSpacing {
 	const value = map.get("padding");
@@ -829,36 +1551,100 @@ function readPadding(map: Declarations): MailSpacing {
 
 function readBox(map: Declarations, extraOwned: string[] = []): MailBoxStyle {
 	const border = map.get("border") ?? "";
-	const borderMatch = /^(\d+(?:\.\d+)?)px\s+solid\s+(#[0-9a-f]{3,6})$/i.exec(border.trim());
+	const borderMatch = /^(\d+(?:\.\d+)?)px\s+(solid|dashed|dotted)\s+(#[0-9a-f]{3,6})$/i.exec(border.trim());
+	const opacity = Number.parseFloat(map.get("opacity") ?? "");
+	const radius = readCorners(map);
 	return {
-		background: toColor(map.get("background") ?? map.get("background-color")),
+		fill: readFill(map),
 		padding: readPadding(map),
 		borderWidth: borderMatch ? Number.parseFloat(borderMatch[1] ?? "0") : 0,
-		borderColor: borderMatch ? toColor(borderMatch[2]) : null,
-		borderRadius: px(map, "border-radius") ?? 0,
+		borderColor: borderMatch ? toColor(borderMatch[3]) : null,
+		borderStyle: toStrokeStyle((borderMatch?.[2] ?? "solid").toLowerCase()),
+		borderRadius: radius.borderRadius,
+		corners: radius.corners,
+		opacity: Number.isFinite(opacity) ? Math.min(Math.max(opacity, 0), 1) : 1,
+		effects: readEffects(map),
+		// Pixels only: a divider's `width:100%` is its own, not a fixed width.
+		width: /^\d+(?:\.\d+)?px$/.test(map.get("width") ?? "") ? px(map, "width") : null,
+		minHeight: px(map, "min-height"),
+		clip: map.get("overflow") === "hidden",
 		customCss: leftoverCss(map, [...BOX_PROPERTIES, ...extraOwned]),
 	};
 }
 
-const TEXT_PROPERTIES = ["color", "font-size", "line-height", "font-weight", "text-align", "margin"];
+const TEXT_PROPERTIES = [
+	"color",
+	"font-family",
+	"font-size",
+	"line-height",
+	"letter-spacing",
+	"font-weight",
+	"font-style",
+	"text-decoration",
+	"text-transform",
+	"text-align",
+	"margin",
+];
+
+/** The three declarations vertical alignment writes, owned only when they are that. */
+function verticalOwned(map: Declarations): string[] {
+	return map.get("display") === "flex" && map.get("flex-direction") === "column"
+		? ["display", "flex-direction", "justify-content"]
+		: [];
+}
+
+/** The family a `font-family` names first, as the panel knows it. */
+function readFamily(value: string | undefined): string | null {
+	if (!value) return null;
+	const first = (value.split(",")[0] ?? "").trim().replace(/^['"]|['"]$/g, "");
+	return toFamily(first);
+}
 
 function readTextStyle(map: Declarations): MailTextStyle {
-	const weightValue = map.get("font-weight");
-	const weight: MailWeight =
-		weightValue === "700" || weightValue === "bold"
-			? "bold"
-			: weightValue === "600"
-				? "semibold"
-				: weightValue === "500"
-					? "medium"
-					: "normal";
+	const weightValue = map.get("font-weight") ?? "";
+	const numeric = weightValue === "bold" ? 700 : weightValue === "normal" ? 400 : Number.parseInt(weightValue, 10);
+	const weight = (Object.keys(FONT_WEIGHTS) as MailWeight[]).find((name) => FONT_WEIGHTS[name] === numeric) ?? "normal";
+	const decoration = map.get("text-decoration") ?? "";
+	const textCase = map.get("text-transform");
+	const justify = verticalOwned(map).length > 0 ? map.get("justify-content") : undefined;
+	const lineHeight = Number.parseFloat(map.get("line-height") ?? "");
 	return {
 		color: toColor(map.get("color")),
+		fontFamily: readFamily(map.get("font-family")),
 		fontSize: px(map, "font-size"),
-		lineHeight: map.get("line-height") ? Number.parseFloat(map.get("line-height") ?? "") || null : null,
+		lineHeight: Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : null,
+		letterSpacing: px(map, "letter-spacing"),
 		weight,
+		italic: map.get("font-style") === "italic",
+		decoration: /underline/.test(decoration) ? "underline" : /line-through/.test(decoration) ? "strike" : "none",
+		transform:
+			textCase === "uppercase" ? "upper" : textCase === "lowercase" ? "lower" : textCase === "capitalize" ? "title" : "none",
 		align: toAlignText(map.get("text-align")),
+		verticalAlign: justify === "center" ? "middle" : justify === "flex-end" ? "bottom" : "top",
 	};
+}
+
+function readSelfAlign(value: string | undefined): MailSelfAlign {
+	switch (value) {
+		case "flex-start":
+		case "start":
+			return "start";
+		case "center":
+			return "center";
+		case "flex-end":
+		case "end":
+			return "end";
+		case "stretch":
+			return "stretch";
+		default:
+			return "auto";
+	}
+}
+
+/** The content inside the span vertical alignment wraps it in, or the content as it is. */
+function unwrapVertical(inner: string): string {
+	const wrapped = /^<span data-juno-inner="1"[^>]*>([\s\S]*)<\/span>$/.exec(inner.trim());
+	return wrapped ? (wrapped[1] ?? "") : inner;
 }
 
 function readGrow(map: Declarations): number {
@@ -869,99 +1655,126 @@ function readGrow(map: Declarations): number {
 }
 
 function rawBlock(html: string): MailBlock {
-	return { id: randomUUID(), kind: "html", html: sanitiseFragment(html), box: emptyBox(), grow: 0 };
+	return {
+		id: randomUUID(),
+		kind: "html",
+		html: sanitiseMarkup(html),
+		css: "",
+		grow: 0,
+		alignSelf: "auto",
+		hidden: false,
+	};
+}
+
+/** An element's markup without the compiler's markers and without its style, which is the CSS. */
+function bareElement(node: Extract<Node, { type: "element" }>): string {
+	const attrs = node.attrs.replace(/\s+data-juno-[a-z-]+="[^"]*"/g, "").replace(/\s+style\s*=\s*"[^"]*"/i, "");
+	return VOID_TAGS.has(node.name) ? `<${node.name}${attrs}>` : `<${node.name}${attrs}>${node.inner}</${node.name}>`;
 }
 
 function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 	const kind = attribute(node.attrs, "data-juno-block");
-	const id = attribute(node.attrs, "data-juno-id") ?? randomUUID();
 	const map = readStyle(node.attrs);
-	const grow = readGrow(map);
+	const common = {
+		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
+		grow: readGrow(map),
+		alignSelf: readSelfAlign(map.get("align-self")),
+		hidden: false,
+	};
+	const textOwned = [...TEXT_PROPERTIES, ...verticalOwned(map), "flex"];
 
 	switch (kind) {
 		case "heading": {
 			const level = node.name === "h1" ? 1 : node.name === "h3" ? 3 : 2;
 			return {
-				id,
+				...common,
 				kind: "heading",
 				level,
-				content: unescapeAttr(node.inner.replace(/<[^>]+>/g, "")),
+				content: unescapeAttr(unwrapVertical(node.inner).replace(/<[^>]+>/g, "")),
 				text: readTextStyle(map),
-				box: readBox(map, [...TEXT_PROPERTIES, "flex"]),
-				grow,
+				box: readBox(map, textOwned),
 			};
 		}
 		case "text":
 			return {
-				id,
+				...common,
 				kind: "text",
-				html: sanitiseFragment(node.inner),
+				html: sanitiseFragment(unwrapVertical(node.inner)),
 				text: readTextStyle(map),
-				box: readBox(map, [...TEXT_PROPERTIES, "flex"]),
-				grow,
+				box: readBox(map, textOwned),
 			};
-		case "button":
+		case "button": {
+			const box = readBox(map, [...textOwned, "display", "text-decoration", "background"]);
+			const padding = box.padding;
+			const defaultPadding = padding.top === 10 && padding.right === 18 && padding.bottom === 10 && padding.left === 18;
 			return {
-				id,
+				...common,
 				kind: "button",
 				label: unescapeAttr(node.inner.replace(/<[^>]+>/g, "")),
 				href: safeHref(unescapeAttr(attribute(node.attrs, "href") ?? "")) ?? "",
 				background: colorOr(map.get("background"), "#4a3fa0"),
 				color: colorOr(map.get("color"), "#ffffff"),
-				radius: px(map, "border-radius") ?? 4,
+				radius: box.borderRadius || 4,
+				// The label colour is the button's own, so the text style carries none.
+				text: { ...readTextStyle(map), color: null },
 				box: {
-					...emptyBox(),
-					padding: readPadding(map),
-					customCss: leftoverCss(map, [
-						"display",
-						"text-decoration",
-						"background",
-						"color",
-						"border-radius",
-						"padding",
-						"flex",
-					]),
+					...box,
+					fill: null,
+					borderRadius: 0,
+					// The padding a button gets when it has none is written out, so
+					// reading it back as the author's own would pin it.
+					padding: defaultPadding ? { top: 10, right: 18, bottom: 10, left: 18 } : padding,
 				},
-				grow,
 			};
+		}
 		case "image":
 			return {
-				id,
+				...common,
 				kind: "image",
 				src: safeImageSrc(unescapeAttr(attribute(node.attrs, "src") ?? "")) ?? "",
 				alt: unescapeAttr(attribute(node.attrs, "alt") ?? ""),
 				width: px(map, "width"),
 				align: map.get("margin") === "0 auto" ? "center" : map.get("margin-left") === "auto" ? "right" : "left",
-				box: readBox(map, ["display", "max-width", "width", "height", "margin", "margin-left", "flex"]),
-				grow,
+				box: {
+					...readBox(map, ["display", "max-width", "width", "height", "margin", "margin-left", "flex"]),
+					width: null,
+				},
 			};
 		case "divider": {
 			const top = map.get("border-top") ?? "";
 			const dividerMatch = /^(\d+(?:\.\d+)?)px\s+solid\s+(#[0-9a-f]{3,6})$/i.exec(top.trim());
 			return {
-				id,
+				...common,
 				kind: "divider",
 				color: dividerMatch ? colorOr(dividerMatch[2], "#e3e2ec") : "#e3e2ec",
 				thickness: dividerMatch ? Number.parseFloat(dividerMatch[1] ?? "1") : 1,
-				box: { ...emptyBox(), padding: readPadding(map), customCss: leftoverCss(map, ["border", "border-top", "width", "padding", "flex"]) },
-				grow,
+				box: readBox(map, ["border-top", "flex"]),
 			};
 		}
 		case "spacer":
-			return { id, kind: "spacer", height: px(map, "height") ?? 16, grow };
+			return { ...common, kind: "spacer", height: px(map, "height") ?? 16 };
 		case "field": {
 			const inputKey = attribute(node.attrs, "data-juno-field") ?? "";
 			return {
-				id,
+				...common,
 				kind: "field",
 				inputKey: unescapeAttr(inputKey),
 				text: readTextStyle(map),
-				box: readBox(map, [...TEXT_PROPERTIES, "display", "max-width", "height", "flex"]),
-				grow,
+				box: readBox(map, [...textOwned, "display", "height"]),
 			};
 		}
-		case "html":
-			return { id, kind: "html", html: sanitiseFragment(node.inner), box: readBox(map, ["flex"]), grow };
+		case "html": {
+			// The CSS is what the style says, bar the flex and alignment that
+			// `common` has already read into the block's own placement.
+			const css = leftoverCss(map, ["flex", "align-self"]) ?? "";
+			const wrapped = attribute(node.attrs, "data-juno-wrap") !== null;
+			return {
+				...common,
+				kind: "html",
+				html: sanitiseMarkup(wrapped ? node.inner : bareElement(node)),
+				css,
+			};
+		}
 		default:
 			return rawBlock(node.raw);
 	}
@@ -1057,6 +1870,8 @@ function readSection(node: Extract<Node, { type: "element" }>): MailSection {
 	return {
 		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
 		name: unescapeAttr(attribute(node.attrs, "data-juno-section") || "Section"),
+		// A hidden section is never compiled, so anything read back was showing.
+		hidden: false,
 		layout: readSectionLayout(map),
 		box: readBox(map, [...SECTION_PROPERTIES, "flex"]),
 		blocks,
@@ -1124,8 +1939,69 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 		version: 1,
 		width: px(map, "max-width") ?? base.width,
 		minHeight: px(map, "min-height") ?? 0,
-		background: toColor(map.get("background")),
-		customCss: leftoverCss(map, ["max-width", "min-height", "background"]),
+		fill: readFill(map),
+		// Fonts live in the head of the message, not in this fragment, so the
+		// canvas the markup came from is the only place to find them.
+		fonts: base.fonts,
+		customCss: leftoverCss(map, ["max-width", "min-height", "background", "background-color", "background-image"]),
 		sections: sections.length > 0 ? sections : [emptySection("Body")],
+	};
+}
+
+/* ------------------------------------------------------------ convert to code */
+
+/**
+ * A block as the HTML and CSS it compiles to: the element, and its style as
+ * declarations. Compiling the result gives the same markup back, which is
+ * what makes "Convert to HTML" a change of how a block is edited rather than
+ * of what it looks like.
+ */
+export function blockToCode(block: MailBlock, inputs: TemplateInput[], fonts: MailFont[]): { html: string; css: string } {
+	if (block.kind === "html") return { html: block.html, css: block.css };
+	// Compiled as showing, whatever the eye says: a hidden block converts to
+	// the code it would be if it were shown, and stays hidden.
+	const compiled = compileBlock({ ...block, hidden: false }, inputs, fonts);
+	const node = splitTopLevel(compiled).find(
+		(entry): entry is Extract<Node, { type: "element" }> => entry.type === "element",
+	);
+	if (!node) return { html: sanitiseMarkup(compiled), css: "" };
+	return {
+		html: sanitiseMarkup(bareElement(node)),
+		css: sanitiseDeclarations(unescapeAttr(attribute(node.attrs, "style") ?? "")),
+	};
+}
+
+/**
+ * Replaces one block with the code it compiles to. The placement it had is
+ * part of that code now, so the new block carries none of its own.
+ */
+export function convertBlockToCode(
+	layout: MailLayout,
+	sectionId: string,
+	blockId: string,
+	inputs: TemplateInput[],
+): MailLayout {
+	return {
+		...layout,
+		sections: layout.sections.map((section) =>
+			section.id !== sectionId
+				? section
+				: {
+						...section,
+						blocks: section.blocks.map((block) => {
+							if (block.id !== blockId || block.kind === "html") return block;
+							const code = blockToCode(block, inputs, layout.fonts);
+							return {
+								id: block.id,
+								kind: "html",
+								html: code.html,
+								css: code.css,
+								grow: 0,
+								alignSelf: "auto",
+								hidden: block.hidden,
+							};
+						}),
+					},
+		),
 	};
 }

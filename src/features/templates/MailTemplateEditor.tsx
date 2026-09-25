@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { MailRegister, MailTemplate, TemplateInput } from "@shared/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MailLayout, MailRegister, MailTemplate, TemplateInput } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { FormPage } from "../../components/FormPage";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { CanvasEditor } from "./mail/canvas/CanvasEditor";
 import { HtmlCodeEditor } from "./mail/HtmlCodeEditor";
 import { mailPlaceholderGroups } from "./mail/placeholders";
 import { TemplateInputsEditor } from "./mail/TemplateInputsEditor";
@@ -21,66 +22,64 @@ const REGISTER_OPTIONS: { value: MailRegister; label: string }[] = [
 	{ value: "je", label: "je (familiar)" },
 ];
 
-const EDIT_TABS: { id: "visual" | "code"; label: string }[] = [
-	{ id: "visual", label: "Visual" },
-	{ id: "code", label: "Code" },
-];
+type Draft = {
+	name: string;
+	description: string;
+	subject: string;
+	register: MailRegister;
+	bodyHtml: string;
+	inputs: TemplateInput[];
+	layout: MailLayout | null;
+};
+
+type Preview = { subject: string; html: string; missing: string[] };
+
+const AUTOSAVE_KEY = "juno.mailTemplates.autosave";
 
 /**
- * Two views over one HTML document (docs/editors.md section 2): Visual, a
- * contentEditable surface with a formatting toolbar, and Code, the same
- * string in CodeMirror. Neither is the source of truth over the other;
- * `bodyHtml` in this component's state is, and both views read and write it
- * the same way MarkdownEditor's controlled value works, so switching tabs
- * never rewrites markup nobody touched.
+ * Editing one mail template.
  *
- * The preview can only ever show what `mail.templates.render` renders, and
- * that always reads the saved row rather than taking body text as an
- * argument (electron/main/services/mail-templates.ts). So a "live" preview
- * here means a debounced autosave followed by a render, not a separate
- * render-from-draft path this project does not have. The explicit Save
- * button exists for the deliberate moment and the "Saved." confirmation;
- * the debounce exists so the preview below is never far behind what is
- * typed.
+ * Two things changed from the editor this replaces, and both come from the
+ * same old bug. That editor previewed by saving: `mail.templates.render` could
+ * only read a saved row, so keeping the preview honest meant writing on a
+ * timer, and writing stamped `customisedAt` on templates nobody had
+ * deliberately edited. `mail.templates.preview` renders values in hand, so a
+ * preview is a read again.
+ *
+ * With that fixed, saving became a choice rather than a mechanism, which is
+ * what the autosave switch is. Off, the button is the only way out. On, the
+ * hook waits for a pause, saves anyway once an edit is old enough, and does
+ * nothing at all when nothing changed.
+ *
+ * A template with a layout is edited on the canvas and its HTML is compiled
+ * from it. A template without one is what everything written before the canvas
+ * is, and it keeps the visual and code editors it has always had.
  */
 export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplateEditorProps) {
 	const [template, setTemplate] = useState<MailTemplate | null>(null);
-	const [name, setName] = useState("");
-	const [description, setDescription] = useState("");
-	const [subject, setSubject] = useState("");
-	const [register, setRegister] = useState<MailRegister>("u");
-	const [bodyHtml, setBodyHtml] = useState("");
-	const [inputs, setInputs] = useState<TemplateInput[]>([]);
-	const [editTab, setEditTab] = useState<"visual" | "code">("visual");
+	const [draft, setDraft] = useState<Draft | null>(null);
+	const [tab, setTab] = useState<"canvas" | "visual" | "code">("visual");
+	const [code, setCode] = useState<string | null>(null);
 
-	const [preview, setPreview] = useState<{ subject: string; html: string; missing: string[] } | null>(null);
+	const [preview, setPreview] = useState<Preview | null>(null);
 	const [previewError, setPreviewError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState<"save" | null>(null);
-	const [saved, setSaved] = useState(false);
+	const [saving, setSaving] = useState(false);
+	const [savedAt, setSavedAt] = useState<number | null>(null);
 
-	const cancelledRef = useRef(false);
-	const runningRef = useRef(false);
-	const pendingRef = useRef(false);
-	// The first time these fields hold the fetched values is hydration, not an
-	// edit. Without this guard the debounce effect below would fire on load and
-	// stamp customisedAt on a template nobody has touched yet (data.md section 9).
-	const skippedInitialRef = useRef(false);
-	// runPreview reads from here rather than closing over name/description/...
-	// directly, so its own identity does not need to change every time one of
-	// them does, and the debounce effect below can depend on it honestly.
-	const latestRef = useRef({ name, description, subject, register, bodyHtml, inputs });
-
-	useEffect(() => {
-		latestRef.current = { name, description, subject, register, bodyHtml, inputs };
+	// Remembered per machine rather than per template: it is a habit about how
+	// somebody works, not a property of one piece of text.
+	const [autosave, setAutosave] = useState(() => {
+		try {
+			return window.localStorage.getItem(AUTOSAVE_KEY) === "on";
+		} catch {
+			return false;
+		}
 	});
 
-	useEffect(() => {
-		cancelledRef.current = false;
-		return () => {
-			cancelledRef.current = true;
-		};
-	}, []);
+	// State, not a ref: `dirty` below is read during render, so what is saved
+	// has to be something React re-renders on.
+	const [savedKey, setSavedKey] = useState("");
 
 	useEffect(() => {
 		let cancelled = false;
@@ -92,13 +91,19 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 					setError("That template no longer exists.");
 					return;
 				}
+				const loaded: Draft = {
+					name: row.name,
+					description: row.description ?? "",
+					subject: row.subject,
+					register: row.register,
+					bodyHtml: row.bodyHtml,
+					inputs: row.inputs,
+					layout: row.layout,
+				};
 				setTemplate(row);
-				setName(row.name);
-				setDescription(row.description ?? "");
-				setSubject(row.subject);
-				setRegister(row.register);
-				setBodyHtml(row.bodyHtml);
-				setInputs(row.inputs);
+				setDraft(loaded);
+				setTab(row.layout ? "canvas" : "visual");
+				setSavedKey(JSON.stringify(loaded));
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setError(messageOf(cause));
@@ -108,78 +113,91 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 		};
 	}, [templateId]);
 
-	// Loops rather than recursing: if a field changes again while the current
-	// save-and-render round is still in flight, one more round runs with
-	// whatever is in latestRef by then, and at most one request pair is ever
-	// on the wire at once.
-	const runPreview = useCallback(async () => {
-		if (runningRef.current) {
-			pendingRef.current = true;
-			return;
-		}
-		runningRef.current = true;
-		try {
-			do {
-				pendingRef.current = false;
-				const current = latestRef.current;
-				const updated = await window.juno.mail.templates.update(templateId, {
-					name: current.name,
-					description: current.description.trim() || null,
-					subject: current.subject,
-					register: current.register,
-					bodyHtml: current.bodyHtml,
-					inputs: current.inputs,
-				});
-				if (cancelledRef.current) return;
-				setTemplate(updated);
-				const rendered = await window.juno.mail.templates.render({ templateId, clientId: null });
-				if (cancelledRef.current) return;
-				setPreview({ subject: rendered.subject, html: rendered.bodyHtml, missing: rendered.missing });
-				setPreviewError(null);
-			} while (pendingRef.current);
-		} catch (cause: unknown) {
-			if (!cancelledRef.current) setPreviewError(messageOf(cause));
-		} finally {
-			runningRef.current = false;
-		}
-	}, [templateId]);
+	const draftKey = draft ? JSON.stringify(draft) : "";
+	const dirty = Boolean(draft) && draftKey !== savedKey;
 
-	useEffect(() => {
-		if (!template) return;
-		if (!skippedInitialRef.current) {
-			skippedInitialRef.current = true;
-			return;
-		}
-		const timer = window.setTimeout(() => {
-			void runPreview();
-		}, 600);
-		return () => window.clearTimeout(timer);
-	}, [name, description, subject, register, bodyHtml, inputs, template, runPreview]);
-
-	async function save() {
-		if (busy) return;
-		setBusy("save");
+	const save = useCallback(async (): Promise<void> => {
+		if (!draft) return;
+		setSaving(true);
 		setError(null);
 		try {
 			const updated = await window.juno.mail.templates.update(templateId, {
-				name,
-				description: description.trim() || null,
-				subject,
-				register,
-				bodyHtml,
-				inputs,
+				name: draft.name,
+				description: draft.description.trim() || null,
+				subject: draft.subject,
+				register: draft.register,
+				bodyHtml: draft.bodyHtml,
+				inputs: draft.inputs,
+				layout: draft.layout,
 			});
 			setTemplate(updated);
-			setSaved(true);
+			setSavedKey(JSON.stringify(draft));
+			setSavedAt(Date.now());
 			onSaved();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		} finally {
-			setBusy(null);
+			setSaving(false);
 		}
-	}
+	}, [draft, onSaved, templateId]);
 
-	if (!template) {
+	// Autosave: a pause of 1.5s, or 15s after the oldest unsaved edit whichever
+	// comes first, and never when nothing changed. Written here rather than in
+	// a shared hook because it has to close over the same `dirty` the button
+	// reads, so the two can never disagree about whether there is work to do.
+	const dirtySince = useRef<number | null>(null);
+	useEffect(() => {
+		if (!dirty) {
+			dirtySince.current = null;
+			return;
+		}
+		if (dirtySince.current === null) dirtySince.current = Date.now();
+		if (!autosave || saving) return;
+		const age = Date.now() - dirtySince.current;
+		const wait = Math.max(0, Math.min(1500, 15000 - age));
+		const timer = window.setTimeout(() => void save(), wait);
+		return () => window.clearTimeout(timer);
+	}, [dirty, draftKey, autosave, saving, save]);
+
+	// The preview is a read, so it runs whether or not anything is being saved,
+	// and it is debounced on its own clock.
+	useEffect(() => {
+		if (!draft) return;
+		const timer = window.setTimeout(() => {
+			let cancelled = false;
+			window.juno.mail.templates
+				.preview({
+					subject: draft.subject,
+					bodyHtml: draft.bodyHtml,
+					layout: draft.layout,
+					inputs: draft.inputs,
+					clientId: null,
+				})
+				.then((result) => {
+					if (cancelled) return;
+					setPreview({ subject: result.subject, html: result.bodyHtml, missing: result.missing });
+					setPreviewError(null);
+				})
+				.catch((cause: unknown) => {
+					if (!cancelled) setPreviewError(messageOf(cause));
+				});
+			return () => {
+				cancelled = true;
+			};
+		}, 500);
+		return () => window.clearTimeout(timer);
+	}, [draftKey, draft]);
+
+	const patch = useCallback((next: Partial<Draft>) => {
+		setDraft((current) => (current ? { ...current, ...next } : current));
+	}, []);
+
+	const placeholderGroups = useMemo(
+		() => mailPlaceholderGroups(draft?.inputs ?? []),
+		[draft?.inputs],
+	);
+
+	if (!draft || !template) {
 		return (
 			<div className="flex h-full flex-col overflow-y-auto p-8">
 				<div className="mx-auto w-full max-w-[var(--content-width)]">
@@ -190,18 +208,63 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	}
 
 	const unreviewed = template.isSystem && template.customisedAt === null;
-	const placeholderGroups = mailPlaceholderGroups(inputs);
+	const tabs: { id: "canvas" | "visual" | "code"; label: string }[] = draft.layout
+		? [
+				{ id: "canvas", label: "Canvas" },
+				{ id: "code", label: "Code" },
+			]
+		: [
+				{ id: "visual", label: "Visual" },
+				{ id: "code", label: "Code" },
+			];
+
+	const status = saving
+		? "Saving"
+		: dirty
+			? autosave
+				? "Unsaved"
+				: "Not saved"
+			: savedAt
+				? "Saved."
+				: "";
 
 	return (
 		<FormPage
-			title={template.name || "Mail template"}
+			title={draft.name || "Mail template"}
 			onBack={onBack}
 			width="wide"
 			actions={
 				<>
-					{saved ? <span className="mr-auto text-[length:var(--text-sm)] text-[var(--ok)]">Saved.</span> : null}
-					<Button variant="primary" disabled={busy !== null} onClick={() => void save()}>
-						{busy === "save" ? "Saving" : "Save"}
+					<span className="mr-auto flex items-center gap-3">
+						<label className="flex items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<input
+								type="checkbox"
+								checked={autosave}
+								onChange={(event) => {
+									setAutosave(event.target.checked);
+									try {
+										window.localStorage.setItem(AUTOSAVE_KEY, event.target.checked ? "on" : "off");
+									} catch {
+										// A browser with storage blocked still gets the switch for this
+										// session; only the memory of it is lost.
+									}
+								}}
+								className="h-4 w-4 accent-[var(--accent)]"
+							/>
+							Autosave
+						</label>
+						{status ? (
+							<span
+								className={`text-[length:var(--text-sm)] ${
+									dirty ? "text-[var(--ink-muted)]" : "text-[var(--ok)]"
+								}`}
+							>
+								{status}
+							</span>
+						) : null}
+					</span>
+					<Button variant="primary" disabled={saving || !dirty} onClick={() => void save()}>
+						{saving ? "Saving" : "Save"}
 					</Button>
 				</>
 			}
@@ -213,48 +276,84 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 			) : null}
 
 			<div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_200px]">
-				<Field label="Name" value={name} onChange={(v) => { setName(v); setSaved(false); }} required />
+				<Field label="Name" value={draft.name} onChange={(v) => patch({ name: v })} required />
 				<Select
 					label="Register"
-					value={register}
-					onChange={(v) => { setRegister(v as MailRegister); setSaved(false); }}
+					value={draft.register}
+					onChange={(v) => patch({ register: v as MailRegister })}
 					options={REGISTER_OPTIONS}
 				/>
 				<div className="sm:col-span-2">
 					<Field
 						label="Description"
-						value={description}
-						onChange={(v) => { setDescription(v); setSaved(false); }}
+						value={draft.description}
+						onChange={(v) => patch({ description: v })}
 						placeholder="Shown in the template list"
 					/>
 				</div>
 				<div className="sm:col-span-2">
-					<Field label="Subject" value={subject} onChange={(v) => { setSubject(v); setSaved(false); }} required />
+					<Field label="Subject" value={draft.subject} onChange={(v) => patch({ subject: v })} required />
 				</div>
 			</div>
 
 			{error ? (
-				<p role="alert" data-selectable className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p
+					role="alert"
+					data-selectable
+					className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+				>
 					{error}
 				</p>
 			) : null}
 
 			<div className="mt-6">
-				<span className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">Body</span>
-				<div
-					className="flex items-center gap-px border-b border-[var(--line)]"
-					role="tablist"
-					aria-label="Body"
-				>
-					{EDIT_TABS.map((entry) => (
+				<div className="mb-1 flex items-center gap-2">
+					<span className="block text-[length:var(--text-sm)] text-[var(--ink-muted)]">Body</span>
+					{draft.layout ? (
+						<Button
+							size="dense"
+							onClick={() => {
+								patch({ layout: null });
+								setTab("visual");
+							}}
+						>
+							Keep as HTML
+						</Button>
+					) : (
+						<Button
+							size="dense"
+							onClick={() => {
+								// The body it already has becomes one raw block, which the
+								// author can then break into sections. Compiling it into
+								// blocks automatically would rewrite somebody's hand-written
+								// table without being asked.
+								void window.juno.mail.templates
+									.parseBody(draft.bodyHtml)
+									.then((next) => {
+										patch({ layout: next });
+										setTab("canvas");
+									})
+									.catch((cause: unknown) => setError(messageOf(cause)));
+							}}
+						>
+							Lay out on a canvas
+						</Button>
+					)}
+				</div>
+
+				<div className="flex items-center gap-px border-b border-[var(--line)]" role="tablist" aria-label="Body">
+					{tabs.map((entry) => (
 						<button
 							key={entry.id}
 							type="button"
 							role="tab"
-							aria-selected={editTab === entry.id}
-							onClick={() => setEditTab(entry.id)}
+							aria-selected={tab === entry.id}
+							onClick={() => {
+								setTab(entry.id);
+								if (entry.id === "code") setCode(draft.bodyHtml);
+							}}
 							className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								editTab === entry.id
+								tab === entry.id
 									? "border-[var(--accent)] text-[var(--accent)]"
 									: "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
 							}`}
@@ -263,27 +362,77 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 						</button>
 					))}
 				</div>
-				<div className="overflow-hidden rounded-b-[var(--radius-lg)] border border-t-0 border-[var(--line)]">
-					<VisualEditor
-						active={editTab === "visual"}
-						value={bodyHtml}
-						onChange={(v) => { setBodyHtml(v); setSaved(false); }}
-						disabled={busy !== null}
-						placeholderGroups={placeholderGroups}
+
+				{tab === "canvas" && draft.layout ? (
+					<CanvasEditor
+						layout={draft.layout}
+						inputs={draft.inputs}
+						onChange={(next) => patch({ layout: next })}
 					/>
-					<HtmlCodeEditor
-						active={editTab === "code"}
-						value={bodyHtml}
-						onChange={(v) => { setBodyHtml(v); setSaved(false); }}
-						disabled={busy !== null}
-					/>
-				</div>
+				) : null}
+
+				{tab === "visual" && !draft.layout ? (
+					<div className="overflow-hidden rounded-b-[var(--radius-lg)] border border-t-0 border-[var(--line)]">
+						<VisualEditor
+							active
+							value={draft.bodyHtml}
+							onChange={(v) => patch({ bodyHtml: v })}
+							disabled={saving}
+							placeholderGroups={placeholderGroups}
+						/>
+					</div>
+				) : null}
+
+				{tab === "code" ? (
+					<div className="rounded-b-[var(--radius-lg)] border border-t-0 border-[var(--line)]">
+						<HtmlCodeEditor
+							active
+							value={code ?? draft.bodyHtml}
+							onChange={(v) => {
+								setCode(v);
+								// Without a canvas the HTML is the template, so typing here is
+								// editing it directly.
+								if (!draft.layout) patch({ bodyHtml: v });
+							}}
+							disabled={saving}
+						/>
+						{draft.layout ? (
+							<div className="flex items-center gap-3 border-t border-[var(--line)] px-3 py-2">
+								<Button
+									size="dense"
+									disabled={code === null}
+									onClick={() => {
+										void window.juno.mail.templates
+											.parseBody(code ?? draft.bodyHtml)
+											.then((next) => {
+												patch({ layout: next });
+												setCode(null);
+												setTab("canvas");
+											})
+											.catch((cause: unknown) => setError(messageOf(cause)));
+									}}
+								>
+									Apply to canvas
+								</Button>
+								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									Markup the canvas knows comes back as the block it was. Anything else comes back
+									as a raw block where you wrote it, so nothing is lost. The structure is kept, the
+									exact spacing is not.
+								</p>
+							</div>
+						) : null}
+					</div>
+				) : null}
 			</div>
 
 			<div className="mt-6">
 				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Preview</p>
 				{previewError ? (
-					<p role="alert" data-selectable className="mt-1 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p
+						role="alert"
+						data-selectable
+						className="mt-1 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					>
 						{previewError}
 					</p>
 				) : null}
@@ -296,7 +445,13 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 							</p>
 						) : null}
 						<div className="mt-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
-							<iframe title="Template preview" srcDoc={preview.html} sandbox="" referrerPolicy="no-referrer" className="block h-[420px] w-full bg-[var(--surface)]" />
+							<iframe
+								title="Template preview"
+								srcDoc={preview.html}
+								sandbox=""
+								referrerPolicy="no-referrer"
+								className="block h-[420px] w-full bg-[var(--surface)]"
+							/>
 						</div>
 					</>
 				) : previewError ? null : (
@@ -309,14 +464,15 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 					What this asks for
 				</h2>
 				<p className="mt-1 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					A value nothing in the records can answer. Each one becomes a placeholder in the body,
-					so it can be written in and filled every time this template is used.
+					A value nothing in the records can answer. Each one becomes a placeholder in the body, so
+					it can be written in and filled every time this template is used. An input of kind image
+					can be dropped on the canvas as a picture.
 				</p>
 				<div className="mt-4">
 					<TemplateInputsEditor
-						inputs={inputs}
-						onChange={(next) => { setInputs(next); setSaved(false); }}
-						disabled={busy !== null}
+						inputs={draft.inputs}
+						onChange={(next) => patch({ inputs: next })}
+						disabled={saving}
 					/>
 				</div>
 			</div>

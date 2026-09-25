@@ -940,3 +940,45 @@ the window's content policy is ever loosened for another reason, in which case
 this indirection should go rather than sit beside a second way to do the same
 thing.
 
+## 37. A canvas message is sent with nothing around it, and changes by media query
+
+A mail template laid out on the canvas used to go out inside the house shell:
+a tinted page, a 600 pixel card with an accent line over it, and a footer with
+the business name and address. That shell was made for text somebody typed,
+which has no look of its own and needs one. A canvas has a look of its own, and
+the shell put a border, a margin and a footer round it that the author never
+drew and could not remove.
+
+So **a canvas is the whole message** (`canvasShell` in services/mail-html.ts).
+The frame fills the reader's mail client, or is given a width and sits in the
+middle, and what is drawn is what is sent. The footer's business details are
+not lost: they are what the author puts in a section, and a template that wants
+them has them where the author can see and style them. Hand-written templates
+and plain messages keep the house shell, because it is still what makes them
+look like anything.
+
+**The message changes at narrower widths by media query**, written in the head
+of the message from the breakpoints on the canvas. Media queries are the only
+way an email changes with the screen, and the clients most phones open mail in
+read them: Apple Mail on iOS and Gmail's app among them. Outlook on Windows does
+not, and shows the default, which is why the default is a
+complete design and a breakpoint only ever changes it. Every declaration in a
+breakpoint is `!important`, because the message's own styles are inline, and an
+inline style gives way to nothing less.
+
+Two things about this are the decision:
+
+- **A breakpoint holds only what it changes**, per section and per block by id,
+  and starts as a copy of the widths above it. A change to the default reaches
+  every breakpoint that did not change the same thing, which is what somebody
+  editing a design at two widths expects, and what the media queries do anyway.
+- **Only how something looks can differ by width.** The words, the links and
+  the pictures are the same at every width, because a message that says
+  something different on a phone is two messages, and an agent or a person
+  reading one of them would not know about the other.
+
+Revisit if: a client that matters stops reading media queries, or the house
+shell turns out to be something people want back round a canvas, in which case
+it becomes a section the canvas can start with rather than a frame it cannot
+remove.
+

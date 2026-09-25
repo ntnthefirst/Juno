@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MailTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { AddButton } from "../../components/AddButton";
+import { InlineAdd } from "../../components/InlineAdd";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
+import { emptyLayout } from "./mail/canvas/canvas-actions";
 import { messageOf } from "../../lib/errors";
 import { MailTemplateEditor } from "./MailTemplateEditor";
 import { MailTemplateList, type TemplateAction } from "./mail/MailTemplateList";
@@ -44,6 +45,7 @@ export function MailTemplatesScreen() {
 	const [openId, setOpenId] = useState<string | null>(null);
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
 	const [confirm, setConfirm] = useState<Confirm | null>(null);
+	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const fetchRows = useCallback(() => window.juno.mail.templates.listAll(), []);
@@ -144,18 +146,29 @@ export function MailTemplatesScreen() {
 		void run(action, ids);
 	}
 
-	async function create(): Promise<void> {
+	/**
+	 * A new template, from the one thing worth asking for before it exists.
+	 *
+	 * The subject starts as the name because a template without one cannot be
+	 * saved, and a blank subject was what made this refuse to create anything
+	 * at all. It is the first field in the editor that opens on top of this.
+	 */
+	async function create(name: string): Promise<void> {
 		setError(null);
+		setCreating(true);
 		try {
 			const created = await window.juno.mail.templates.create({
-				name: "New template",
-				subject: "",
+				name,
+				subject: name,
 				bodyHtml: "<p></p>",
+				layout: emptyLayout(),
 			});
 			refresh();
 			setView({ mode: "edit", id: created.id });
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
+		} finally {
+			setCreating(false);
 		}
 	}
 
@@ -195,7 +208,12 @@ export function MailTemplatesScreen() {
 							</span>
 						) : null}
 						<span className="ml-auto" />
-						<AddButton label="New mail template" onClick={() => void create()} />
+						<InlineAdd
+							label="New mail template"
+							placeholder="Template name"
+							busy={creating}
+							onSubmit={(name) => void create(name)}
+						/>
 					</div>
 					<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 						The subject and body of the emails Juno composes for you. The texts that ship are

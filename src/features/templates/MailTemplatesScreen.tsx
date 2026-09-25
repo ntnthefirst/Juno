@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MailTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { AddButton } from "../../components/AddButton";
+import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
+import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { MailTemplateEditor } from "./MailTemplateEditor";
-import { MailTemplatePreview } from "./mail/MailTemplatePreview";
+import { MailTemplateList, type TemplateAction } from "./mail/MailTemplateList";
+import { MailTemplatePanel } from "./mail/MailTemplatePanel";
 import { UseMailTemplateScreen } from "./UseMailTemplateScreen";
 
 type Load =
@@ -11,17 +16,43 @@ type Load =
 	| { status: "ready"; rows: MailTemplate[] }
 	| { status: "error"; message: string };
 
-type View =
-	| { mode: "list" }
-	| { mode: "preview"; id: string }
-	| { mode: "edit"; id: string }
-	| { mode: "use"; id: string };
+type View = { mode: "list" } | { mode: "edit"; id: string } | { mode: "use"; id: string };
 
+/** What a delete is about to do, held while the question is on screen. */
+type Confirm = { ids: string[]; deleting: MailTemplate[]; hiding: MailTemplate[] };
+
+function matches(template: MailTemplate, needle: string): boolean {
+	const haystack = [template.name, template.subject, template.description ?? "", template.key]
+		.join(" ")
+		.toLowerCase();
+	return haystack.includes(needle);
+}
+
+/**
+ * The mail templates screen: a list with a search over it, a panel on the
+ * right for the one being read, and the editor and the use flow as pages that
+ * replace it.
+ *
+ * `listAll` rather than `list`, because a hidden template has to be reachable
+ * to be put back. The pickers elsewhere call `list` and never see one
+ * (.claude/rules/data.md section 9).
+ */
 export function MailTemplatesScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [view, setView] = useState<View>({ mode: "list" });
+	const [search, setSearch] = useState("");
+	const [openId, setOpenId] = useState<string | null>(null);
+	const [selectedIds, setSelectedIds] = useState<string[]>([]);
+	const [confirm, setConfirm] = useState<Confirm | null>(null);
+	const [error, setError] = useState<string | null>(null);
 
-	const fetchRows = useCallback(() => window.juno.mail.templates.list(), []);
+	const fetchRows = useCallback(() => window.juno.mail.templates.listAll(), []);
+
+	const refresh = useCallback(() => {
+		fetchRows()
+			.then((rows) => setLoad({ status: "ready", rows }))
+			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
+	}, [fetchRows]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -37,148 +68,256 @@ export function MailTemplatesScreen() {
 		};
 	}, [fetchRows]);
 
-	const refresh = useCallback(() => {
-		fetchRows()
-			.then((rows) => setLoad({ status: "ready", rows }))
-			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
-	}, [fetchRows]);
-
-	const selected = view.mode !== "list" && load.status === "ready"
-		? load.rows.find((row) => row.id === view.id) ?? null
-		: null;
-
-	usePublishBreadcrumb(
-		!selected
-			? []
-			: view.mode === "preview"
-				? [{ label: "Mail templates", onSelect: () => setView({ mode: "list" }) }, { label: selected.name }]
-				: [
-						{ label: "Mail templates", onSelect: () => setView({ mode: "list" }) },
-						{ label: selected.name, onSelect: () => setView({ mode: "preview", id: selected.id }) },
-						{ label: view.mode === "edit" ? "Edit" : "Use" },
-					],
+	// Memoised because it is a dependency of the filter below and of byId: a
+	// fresh [] on every render would rebuild both on every keystroke.
+	const rows = useMemo(() => (load.status === "ready" ? load.rows : []), [load]);
+	const needle = search.trim().toLowerCase();
+	const shown = useMemo(
+		() => (needle ? rows.filter((row) => matches(row, needle)) : rows),
+		[rows, needle],
 	);
 
-	// Every non-list view below renders through FormPage, which already binds
-	// Escape to its own onBack (guarded the same way, behind a dialog check),
-	// and each one is wired to the level directly above it. A second listener
-	// here would only ever fire the same transition a second time.
+	const byId = useCallback((id: string) => rows.find((row) => row.id === id) ?? null, [rows]);
+	const opened = openId ? byId(openId) : null;
+	const editing = view.mode === "edit" ? byId(view.id) : null;
+	const using = view.mode === "use" ? byId(view.id) : null;
+	const selectedRow = editing ?? using;
 
-	if (view.mode === "edit" && selected) {
+	usePublishBreadcrumb(
+		!selectedRow
+			? []
+			: [
+					{ label: "Mail templates", onSelect: () => setView({ mode: "list" }) },
+					{ label: selectedRow.name },
+					{ label: view.mode === "edit" ? "Edit" : "Use" },
+				],
+	);
+
+	async function run(action: TemplateAction, ids: string[]): Promise<void> {
+		setError(null);
+		try {
+			const templates = window.juno.mail.templates;
+			switch (action) {
+				case "open":
+					setOpenId(ids[0] ?? null);
+					return;
+				case "use":
+					if (ids[0]) setView({ mode: "use", id: ids[0] });
+					return;
+				case "edit":
+					if (ids[0]) setView({ mode: "edit", id: ids[0] });
+					return;
+				case "duplicate":
+					for (const id of ids) await templates.duplicate(id);
+					break;
+				case "hide":
+					for (const id of ids) await templates.hide(id);
+					break;
+				case "unhide":
+					for (const id of ids) await templates.unhide(id);
+					break;
+				case "remove":
+					for (const id of ids) await templates.remove(id);
+					if (openId && ids.includes(openId)) setOpenId(null);
+					break;
+			}
+			setSelectedIds([]);
+			refresh();
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		}
+	}
+
+	function onAction(action: TemplateAction, ids: string[]): void {
+		// A delete asks first and says what it will do to each kind, because a
+		// shipped template is hidden rather than deleted and the count alone
+		// would not say which of the two is about to happen.
+		if (action === "remove") {
+			const targets = ids.map(byId).filter((row): row is MailTemplate => row !== null);
+			setConfirm({
+				ids,
+				deleting: targets.filter((row) => !row.isSystem),
+				hiding: targets.filter((row) => row.isSystem),
+			});
+			return;
+		}
+		void run(action, ids);
+	}
+
+	async function create(): Promise<void> {
+		setError(null);
+		try {
+			const created = await window.juno.mail.templates.create({
+				name: "New template",
+				subject: "",
+				bodyHtml: "<p></p>",
+			});
+			refresh();
+			setView({ mode: "edit", id: created.id });
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		}
+	}
+
+	if (view.mode === "edit" && editing) {
 		return (
 			<MailTemplateEditor
-				key={selected.id}
-				templateId={selected.id}
-				onBack={() => setView({ mode: "preview", id: selected.id })}
+				key={editing.id}
+				templateId={editing.id}
+				onBack={() => setView({ mode: "list" })}
 				onSaved={refresh}
 			/>
 		);
 	}
 
-	if (view.mode === "use" && selected) {
+	if (view.mode === "use" && using) {
 		return (
 			<UseMailTemplateScreen
-				key={selected.id}
-				template={selected}
-				onBack={() => setView({ mode: "preview", id: selected.id })}
-				onCreated={() => setView({ mode: "preview", id: selected.id })}
-			/>
-		);
-	}
-
-	if (view.mode === "preview" && selected) {
-		return (
-			<MailTemplatePreview
-				key={selected.id}
-				template={selected}
+				key={using.id}
+				template={using}
 				onBack={() => setView({ mode: "list" })}
-				onEdit={() => setView({ mode: "edit", id: selected.id })}
-				onUse={() => setView({ mode: "use", id: selected.id })}
+				onCreated={() => setView({ mode: "list" })}
 			/>
 		);
 	}
 
 	return (
-		<div className="flex h-full flex-col p-8">
-			<div className="mx-auto mb-6 w-full max-w-[var(--content-width)]">
-				<div className="flex items-baseline gap-3">
-					<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-						Mail templates
-					</h1>
-					{load.status === "ready" ? (
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							{load.rows.length} {load.rows.length === 1 ? "template" : "templates"}
-						</span>
+		<div className="relative flex h-full flex-col">
+			<div className="flex-none px-8 pt-8">
+				<div className="mx-auto w-full max-w-[var(--content-width)]">
+					<div className="flex items-center gap-3">
+						<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
+							Mail templates
+						</h1>
+						{load.status === "ready" ? (
+							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								{shown.length} {shown.length === 1 ? "template" : "templates"}
+							</span>
+						) : null}
+						<span className="ml-auto" />
+						<AddButton label="New mail template" onClick={() => void create()} />
+					</div>
+					<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						The subject and body of the emails Juno composes for you. The texts that ship are
+						invented, so read one, correct it, and mark it as reviewed before Juno sends anything
+						drafted from it.
+					</p>
+
+					<div className="mt-5 flex items-center gap-2">
+						<div className="flex min-w-0 flex-1 items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pr-1 pl-2 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
+							<Icon name="search" size={14} />
+							<input
+								type="search"
+								value={search}
+								onChange={(event) => setSearch(event.target.value)}
+								placeholder="Search templates"
+								aria-label="Search templates"
+								className="min-w-0 flex-1 bg-transparent py-1.5 text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+							/>
+						</div>
+						{selectedIds.length > 0 ? (
+							<>
+								<span className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+									{selectedIds.length} selected
+								</span>
+								<Button size="dense" onClick={() => onAction("duplicate", selectedIds)}>
+									Duplicate
+								</Button>
+								<Button size="dense" onClick={() => onAction("hide", selectedIds)}>
+									Hide
+								</Button>
+								<Button size="dense" variant="danger" onClick={() => onAction("remove", selectedIds)}>
+									Delete
+								</Button>
+								<Button size="dense" onClick={() => setSelectedIds([])}>
+									Clear
+								</Button>
+							</>
+						) : null}
+					</div>
+
+					{error ? (
+						<p
+							role="alert"
+							data-selectable
+							className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+						>
+							{error}
+						</p>
 					) : null}
 				</div>
-				<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					The subject and body of the emails Juno composes for you. The texts that ship are
-					invented, so read one, correct it, and mark it as reviewed before Juno sends anything
-					drafted from it.
-				</p>
 			</div>
 
-			<div className="mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">
-				{load.status === "loading" ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
-				) : load.status === "error" ? (
-					<div className="border-l-2 border-[var(--risk)] pl-4">
-						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
-							Could not load your mail templates.
+			<div className="min-h-0 flex-1 overflow-y-auto px-8 pb-8">
+				<div className="mx-auto mt-4 w-full max-w-[var(--content-width)]">
+					{load.status === "loading" ? (
+						<p className="text-[var(--ink-muted)]">Loading.</p>
+					) : load.status === "error" ? (
+						<div className="border-l-2 border-[var(--risk)] pl-4">
+							<p className="font-[var(--weight-medium)] text-[var(--risk)]">
+								Could not load your mail templates.
+							</p>
+							<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								{load.message}
+							</p>
+						</div>
+					) : (
+						<MailTemplateList
+							rows={shown}
+							searching={needle.length > 0}
+							openId={openId}
+							selectedIds={selectedIds}
+							onOpen={setOpenId}
+							onToggle={(id) =>
+								setSelectedIds((current) =>
+									current.includes(id) ? current.filter((other) => other !== id) : [...current, id],
+								)
+							}
+							onAction={onAction}
+						/>
+					)}
+				</div>
+			</div>
+
+			{opened ? (
+				<MailTemplatePanel
+					key={opened.id}
+					template={opened}
+					onClose={() => setOpenId(null)}
+					onEdit={() => setView({ mode: "edit", id: opened.id })}
+					onUse={() => setView({ mode: "use", id: opened.id })}
+				/>
+			) : null}
+
+			{confirm ? (
+				<Dialog title="Delete templates" onClose={() => setConfirm(null)} width="narrow">
+					<p className="text-[length:var(--text-dense)]">
+						{confirm.deleting.length > 0
+							? `${confirm.deleting.length} ${confirm.deleting.length === 1 ? "template" : "templates"} will be deleted.`
+							: null}
+					</p>
+					{confirm.hiding.length > 0 ? (
+						<p className="mt-2 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							{confirm.hiding.length} shipped {confirm.hiding.length === 1 ? "template" : "templates"} will
+							be hidden instead of deleted. Drafts already using {confirm.hiding.length === 1 ? "it" : "them"}{" "}
+							keep working.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							{load.message}
-						</p>
+					) : null}
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setConfirm(null)}>Cancel</Button>
+						<Button
+							variant="danger"
+							onClick={() => {
+								const ids = confirm.ids;
+								setConfirm(null);
+								void run("remove", ids);
+							}}
+						>
+							Delete
+						</Button>
 					</div>
-				) : load.rows.length === 0 ? (
-					<p className="text-[var(--ink-muted)]">No mail templates yet.</p>
-				) : (
-					<ul>
-						{load.rows.map((row) => (
-							<MailTemplateRow
-								key={row.id}
-								template={row}
-								selected={false}
-								onSelect={(id) => setView({ mode: "preview", id })}
-							/>
-						))}
-					</ul>
-				)}
-			</div>
+				</Dialog>
+			) : null}
 		</div>
-	);
-}
-
-type MailTemplateRowProps = {
-	template: MailTemplate;
-	selected: boolean;
-	onSelect: (id: string) => void;
-};
-
-function MailTemplateRow({ template, selected, onSelect }: MailTemplateRowProps) {
-	return (
-		<li className="border-b border-[var(--line)]">
-			<button
-				type="button"
-				aria-current={selected ? "true" : undefined}
-				onClick={() => onSelect(template.id)}
-				style={{ minHeight: "var(--row-height)" }}
-				className={`block w-full rounded-[var(--radius-md)] px-3 py-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
-					selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
-				}`}
-			>
-				<span className="flex items-center gap-2">
-					<span className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
-						{template.name}
-					</span>
-					<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-						{template.register}
-					</span>
-				</span>
-				<span className="mt-0.5 block truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-					{template.subject}
-				</span>
-			</button>
-		</li>
 	);
 }

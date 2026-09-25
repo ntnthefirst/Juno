@@ -28,7 +28,17 @@ function grid(): MailSection {
 
 /** Applies a patch the way the editor does, through updateBlock. */
 function apply(block: MailBlock, section: MailSection, patch: Partial<MailBlock>): MailBlock {
-	const layout = { version: 1 as const, width: 600, minHeight: 0, fill: null, fonts: [], customCss: null, sections: [{ ...section, blocks: [block] }] };
+	const layout = {
+		version: 1 as const,
+		width: 600,
+		widthMode: "fill" as const,
+		minHeight: 0,
+		fill: null,
+		fonts: [],
+		customCss: null,
+		sections: [{ ...section, blocks: [block] }],
+		breakpoints: [],
+	};
 	return updateBlock(layout, section.id, block.id, patch).sections[0]!.blocks[0]!;
 }
 

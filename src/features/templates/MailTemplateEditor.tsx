@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { FONT_WEIGHTS } from "./mail/canvas/box-style";
+import { absorb, copyOverrides, layoutAt, widestFirst } from "./mail/canvas/breakpoints";
 import {
 	addSection,
 	cloneBlock,
@@ -79,8 +80,6 @@ const TOOL_KINDS: Partial<Record<ShortcutAction, BlockKind>> = {
 	"add-button": "button",
 	"add-image": "image",
 	"add-field": "field",
-	"add-divider": "divider",
-	"add-spacer": "spacer",
 };
 
 /**
@@ -125,7 +124,10 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	const [editing, setEditing] = useState<Editing | null>(null);
 	const [measured, setMeasured] = useState<Measured | null>(null);
 	const [contentHeight, setContentHeight] = useState(0);
+	// A hand-written template is previewed at three widths; a canvas at its breakpoints.
 	const [previewWidth, setPreviewWidth] = useState<PreviewWidth>("wide");
+	// The breakpoint being edited and looked at, or null for the default.
+	const [breakpoint, setBreakpoint] = useState<string | null>(null);
 	const [sidebar, setSidebar] = useState(true);
 	const [help, setHelp] = useState(false);
 
@@ -276,12 +278,21 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	const placeholderGroups = useMemo(() => mailPlaceholderGroups(draft?.inputs ?? []), [draft?.inputs]);
 
 	const layout = draft?.layout ?? null;
+	// A breakpoint that has gone, by undo or by removing it, is the default again.
+	const active = layout && breakpoint && layout.breakpoints.some((entry) => entry.id === breakpoint) ? breakpoint : null;
+	// The canvas as the selected breakpoint draws it. The canvas, the layers
+	// and the design panel show this; how something looks is changed on it and
+	// folded back by `restyleLayout`, and what is in it is changed on `layout`.
+	const shown = layout ? layoutAt(layout, active) : null;
 	const canvasFonts = useCanvasFonts(layout?.fonts ?? []);
 	// An undo can take away what was selected. What is gone is not selected.
 	const live = layout && selection && selectionIn(layout, selection) ? selection : null;
 	const selectedSection = layout && live ? (layout.sections.find((section) => section.id === live.sectionId) ?? null) : null;
 	const selectedBlock =
 		selectedSection && live?.blockId ? (selectedSection.blocks.find((block) => block.id === live.blockId) ?? null) : null;
+	const shownSection = shown && live ? (shown.sections.find((section) => section.id === live.sectionId) ?? null) : null;
+	const shownBlock =
+		shownSection && live?.blockId ? (shownSection.blocks.find((block) => block.id === live.blockId) ?? null) : null;
 	// With nothing selected a new block lands in the last section that is
 	// showing, which is where an author is usually working. A hidden one would
 	// swallow the block where nobody can see it land.
@@ -315,6 +326,15 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 			);
 		}
 		patch({ layout: next });
+	}
+
+	/**
+	 * A change to how things look, made on the canvas as the selected breakpoint
+	 * draws it. At a breakpoint it becomes what that breakpoint changes; on the
+	 * default it is the layout.
+	 */
+	function restyleLayout(next: MailLayout): void {
+		if (layout) onLayout(absorb(layout, active, next));
 	}
 
 	function undo(): void {
@@ -364,12 +384,13 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 		if (added) setSelection({ sectionId: added.id });
 	}
 
+	/** Figma's eye. At a breakpoint it hides or shows at that width and narrower. */
 	function setHidden(target: { sectionId: string; blockId?: string }, hidden: boolean): void {
-		if (!layout) return;
-		onLayout(
+		if (!shown) return;
+		restyleLayout(
 			target.blockId
-				? updateBlock(layout, target.sectionId, target.blockId, { hidden })
-				: updateSection(layout, target.sectionId, { hidden }),
+				? updateBlock(shown, target.sectionId, target.blockId, { hidden })
+				: updateSection(shown, target.sectionId, { hidden }),
 		);
 	}
 
@@ -415,14 +436,21 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 
 	function duplicate(): void {
 		if (!layout || !selectedSection) return;
+		// A copy looks at every breakpoint the way its original does.
 		if (selectedBlock) {
 			const block = cloneBlock(selectedBlock);
-			onLayout(insertBlockAfter(layout, selectedSection.id, selectedBlock.id, block));
+			onLayout(
+				copyOverrides(insertBlockAfter(layout, selectedSection.id, selectedBlock.id, block), [[selectedBlock.id, block.id]]),
+			);
 			setSelection({ sectionId: selectedSection.id, blockId: block.id });
 			return;
 		}
 		const section = cloneSection(selectedSection);
-		onLayout(insertSectionAfter(layout, selectedSection.id, section));
+		const pairs: [string, string][] = [
+			[selectedSection.id, section.id],
+			...selectedSection.blocks.map((original, index): [string, string] => [original.id, section.blocks[index]?.id ?? original.id]),
+		];
+		onLayout(copyOverrides(insertSectionAfter(layout, selectedSection.id, section), pairs));
 		setSelection({ sectionId: section.id });
 	}
 
@@ -440,17 +468,17 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 
 	/** A change to the selected block's type, from the keyboard. */
 	function restyle(change: (text: MailTextStyle) => Partial<MailTextStyle>): void {
-		if (!layout || !selectedSection || !selectedBlock || !("text" in selectedBlock)) return;
-		const text = { ...selectedBlock.text, ...change(selectedBlock.text) };
-		onLayout(updateBlock(layout, selectedSection.id, selectedBlock.id, { text } as Partial<MailBlock>));
+		if (!shown || !shownSection || !shownBlock || !("text" in shownBlock)) return;
+		const text = { ...shownBlock.text, ...change(shownBlock.text) };
+		restyleLayout(updateBlock(shown, shownSection.id, shownBlock.id, { text } as Partial<MailBlock>));
 	}
 
 	/** Alt with a letter: across the section, and only along the way the section lets a block move. */
 	function alignSelected(across: Across, axis: "h" | "v"): void {
-		if (!layout || !selectedSection || !selectedBlock) return;
-		const free = flowOf(selectedSection) === "column" ? "h" : "v";
+		if (!shown || !shownSection || !shownBlock) return;
+		const free = flowOf(shownSection) === "column" ? "h" : "v";
 		if (axis !== free) return;
-		onLayout(updateBlock(layout, selectedSection.id, selectedBlock.id, alignAcross(selectedBlock, selectedSection, across)));
+		restyleLayout(updateBlock(shown, shownSection.id, shownBlock.id, alignAcross(shownBlock, shownSection, across)));
 	}
 
 	/**
@@ -570,7 +598,7 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 				return run(duplicate);
 			case "hide":
 				return run(() => {
-					const hidden = selectedBlock ? selectedBlock.hidden : Boolean(selectedSection?.hidden);
+					const hidden = shownBlock ? shownBlock.hidden : Boolean(shownSection?.hidden);
 					setHidden(live, !hidden);
 				});
 			case "bold":
@@ -661,7 +689,7 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 						onName={(name) => patch({ name })}
 						onDescription={(description) => patch({ description })}
 						onSubject={(subject) => patch({ subject })}
-						layout={layout}
+						layout={shown}
 						selection={live}
 						onSelect={setSelection}
 						onHidden={setHidden}
@@ -718,9 +746,10 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 						</p>
 					) : null}
 
-					{onCanvas && layout ? (
+					{onCanvas && layout && shown ? (
 						<CanvasStage
-							layout={layout}
+							layout={shown}
+							label={active ? (layout.breakpoints.find((entry) => entry.id === active)?.name ?? "") : "Default"}
 							inputs={draft.inputs}
 							selection={live}
 							onSelect={setSelection}
@@ -736,8 +765,6 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 							onHeight={(minHeight) => onLayout({ ...layout, minHeight })}
 							contentHeight={contentHeight}
 							onContentHeight={setContentHeight}
-							preview={previewWidth}
-							onPreview={setPreviewWidth}
 						/>
 					) : null}
 
@@ -758,7 +785,45 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 					{mode === "preview" ? (
 						<div className="flex min-h-0 flex-1 flex-col bg-[var(--sunken)]">
 							<div className="flex h-[40px] flex-none items-center justify-center gap-2 px-3">
-								<WidthSwitch value={previewWidth} onChange={setPreviewWidth} />
+								{layout && shown ? (
+									// A canvas is looked at at its own breakpoints, so the media
+									// queries in the preview are the ones being edited.
+									<div
+										role="group"
+										aria-label="Preview width"
+										className="flex h-[30px] items-center gap-0.5 rounded-[var(--radius-md)] bg-[var(--surface)] p-0.5 shadow-[var(--shadow-popover)]"
+									>
+										{[
+											// Default has no width of its own: it is the message without a
+											// media query, looked at here at the width it is designed at.
+											{ id: null, name: "Default", width: null },
+											...widestFirst(layout.breakpoints).map((entry) => ({
+												id: entry.id,
+												name: entry.name,
+												width: entry.maxWidth,
+											})),
+										].map((entry) => (
+											<button
+												key={entry.id ?? "default"}
+												type="button"
+												aria-pressed={active === entry.id}
+												onClick={() => setBreakpoint(entry.id)}
+												className={`h-[26px] rounded-[var(--radius-sm)] px-2 text-[length:var(--text-sm)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
+													active === entry.id
+														? "bg-[var(--accent-soft)] text-[var(--accent)]"
+														: "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+												}`}
+											>
+												{entry.name}
+												{entry.width !== null ? (
+													<span className="tabular text-[length:var(--text-micro)]"> {entry.width}</span>
+												) : null}
+											</button>
+										))}
+									</div>
+								) : (
+									<WidthSwitch value={previewWidth} onChange={setPreviewWidth} />
+								)}
 							</div>
 							<div className="min-h-0 flex-1 overflow-y-auto px-6 pb-24">
 								{previewError ? (
@@ -770,7 +835,7 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 										{previewError}
 									</p>
 								) : preview ? (
-									<div className="mx-auto" style={{ width: PREVIEW_WIDTHS[previewWidth] }}>
+									<div className="mx-auto" style={{ width: shown ? shown.width : PREVIEW_WIDTHS[previewWidth] }}>
 										<p className="truncate pb-2 text-[length:var(--text-dense)] font-[var(--weight-medium)]">
 											{preview.subject || "No subject yet"}
 										</p>
@@ -818,9 +883,16 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 											void window.juno.mail.templates
 												.parseBody(code ?? draft.bodyHtml)
 												.then((next) => {
-													// Fonts live in the head of the message, not in the markup
-													// that was edited, so they come across from the canvas.
-													onLayout({ ...next, fonts: layout.fonts });
+													// Fonts and breakpoints live in the head of the message, not
+													// in the markup that was edited, so they come across from the
+													// canvas, and so does the width a filling frame is drawn at,
+													// which is not in the markup either.
+													onLayout({
+														...next,
+														fonts: layout.fonts,
+														breakpoints: layout.breakpoints,
+														width: next.widthMode === "fill" ? layout.width : next.width,
+													});
 													setCode(null);
 													setMode("canvas");
 												})
@@ -877,17 +949,21 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 				{onCanvas && layout ? (
 					<aside className="w-[256px] flex-none overflow-y-auto border-l border-[var(--line)] bg-[var(--surface)]">
 						<DesignPanel
-							layout={layout}
+							base={layout}
+							active={active}
+							onActive={setBreakpoint}
+							onBase={onLayout}
+							layout={shown ?? layout}
 							inputs={draft.inputs}
 							selection={live}
 							contentHeight={contentHeight}
 							measured={measured}
 							fonts={canvasFonts}
-							onLayout={(next) => onLayout({ ...layout, ...next })}
-							onReplace={onLayout}
-							onSection={(sectionId, sectionPatch) => onLayout(updateSection(layout, sectionId, sectionPatch))}
+							onLayout={(next) => restyleLayout({ ...(shown ?? layout), ...next })}
+							onReplace={restyleLayout}
+							onSection={(sectionId, sectionPatch) => restyleLayout(updateSection(shown ?? layout, sectionId, sectionPatch))}
 							onBlock={(sectionId, blockId, blockPatch) =>
-								onLayout(updateBlock(layout, sectionId, blockId, blockPatch))
+								restyleLayout(updateBlock(shown ?? layout, sectionId, blockId, blockPatch))
 							}
 							onRemoveSection={(sectionId) => {
 								onLayout(removeSection(layout, sectionId));

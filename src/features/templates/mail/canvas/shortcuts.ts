@@ -43,8 +43,6 @@ export type ShortcutAction =
 	| "add-button"
 	| "add-image"
 	| "add-field"
-	| "add-divider"
-	| "add-spacer"
 	| "zoom-in"
 	| "zoom-out"
 	| "zoom-reset"
@@ -66,8 +64,6 @@ const TOOLS: Record<string, ShortcutAction> = {
 	b: "add-button",
 	i: "add-image",
 	e: "add-field",
-	l: "add-divider",
-	s: "add-spacer",
 };
 
 const ALIGN: Record<string, ShortcutAction> = {
@@ -198,8 +194,6 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ label: "Button", keys: "B" },
 			{ label: "Image", keys: "I" },
 			{ label: "Input", keys: "E" },
-			{ label: "Divider", keys: "L" },
-			{ label: "Spacer", keys: "S" },
 		],
 	},
 	{

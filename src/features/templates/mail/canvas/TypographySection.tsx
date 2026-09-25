@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { MailFont, MailFontFallback, MailTextStyle, MailWeight } from "@shared/types";
 import { SYSTEM_FONTS, WEIGHT_LABELS, FONT_WEIGHTS } from "./box-style";
+import { ColorRow } from "./ColorRow";
 import {
-	ColorInput,
 	NumberInput,
 	PanelButton,
 	PanelNote,
@@ -24,8 +24,13 @@ type TypographySectionProps = {
 	 * the first, and the font would be named without ever being linked.
 	 */
 	onLinkAndUse: (family: string, fallback: MailFontFallback) => void;
-	/** Off for a button, whose label colour is part of what the button is. */
-	showColor: boolean;
+	/**
+	 * The colour the words are in. A text's own can be cleared back to the
+	 * message's ink; a button's label always has one.
+	 */
+	color: { value: string | null; onChange: (value: string | null) => void; clearable: boolean };
+	/** A heading's level, which is set here with the rest of its type. */
+	level?: { value: 1 | 2 | 3; onChange: (level: 1 | 2 | 3) => void };
 	/** Only a text block or a heading can sit lower in a taller box. */
 	showVertical: boolean;
 };
@@ -49,7 +54,7 @@ function cleanFamily(value: string): string | null {
  * because that is where somebody is when they want one. Everything else is the
  * set Figma shows, bar the OpenType features, which no mail client applies.
  */
-export function TypographySection({ text, onText, fonts, onLinkAndUse, showColor, showVertical }: TypographySectionProps) {
+export function TypographySection({ text, onText, fonts, onLinkAndUse, color, level, showVertical }: TypographySectionProps) {
 	const [linking, setLinking] = useState(false);
 	const [name, setName] = useState("");
 	const [fallback, setFallback] = useState<MailFontFallback>("sans");
@@ -71,6 +76,18 @@ export function TypographySection({ text, onText, fonts, onLinkAndUse, showColor
 
 	return (
 		<PanelSection title="Typography">
+			{level ? (
+				<Segmented
+					label="Heading level"
+					value={String(level.value)}
+					options={[
+						{ value: "1", label: "Heading 1", icon: "h1", title: "Heading 1" },
+						{ value: "2", label: "Heading 2", icon: "h2", title: "Heading 2" },
+						{ value: "3", label: "Heading 3", icon: "h3", title: "Heading 3" },
+					]}
+					onChange={(next) => level.onChange(Number.parseInt(next, 10) as 1 | 2 | 3)}
+				/>
+			) : null}
 			<div className="flex items-center gap-1">
 				<div className="min-w-0 flex-1">
 					<PanelSelect
@@ -238,12 +255,14 @@ export function TypographySection({ text, onText, fonts, onLinkAndUse, showColor
 				</div>
 			</div>
 
-			{showColor ? (
-				<ColorInput label="Text colour" value={text.color} fallback="#16161d" onChange={(color) => onText({ color })} />
-			) : null}
-
-			<PanelNote>An empty size or line height is the message's own, 15 and 1.65. Clear one to go back to it.</PanelNote>
-			<PanelNote>Bold, italic and links inside the text: double-click the block on the canvas.</PanelNote>
+			<div className="flex items-center gap-0.5">
+				<div className="min-w-0 flex-1">
+					<ColorRow label="Text colour" value={color.value} fallback="#16161d" onChange={color.onChange} />
+				</div>
+				{color.clearable && color.value !== null ? (
+					<PanelButton label="Back to the message's ink" icon="minus" onClick={() => color.onChange(null)} />
+				) : null}
+			</div>
 		</PanelSection>
 	);
 }

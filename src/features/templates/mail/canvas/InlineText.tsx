@@ -178,6 +178,7 @@ export function InlineText({ rich, value, tag, style, caret, host: frame, onComm
 			{rich ? (
 				<div
 					ref={bar}
+					data-canvas-chrome
 					role="toolbar"
 					aria-label="Text format"
 					className="absolute bottom-full left-0 z-20 mb-1 flex items-center gap-px rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] p-0.5 font-[family-name:var(--font-ui)] text-[var(--ink)] shadow-[var(--shadow-popover)]"

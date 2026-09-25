@@ -338,16 +338,26 @@ type SegmentedProps<T extends string> = {
 	onChange: (value: T) => void;
 	/** When given, pressing the active option again lets go of it. */
 	onClear?: () => void;
+	/** Shown and not pressable, the way Figma greys out an alignment that does not apply. */
+	disabled?: boolean;
 };
 
 /** One of a handful of choices, laid out as a row rather than a dropdown,
  * because a row shows what the choices are without being opened. */
-export function Segmented<T extends string>({ label, value, options, onChange, onClear }: SegmentedProps<T>) {
+export function Segmented<T extends string>({
+	label,
+	value,
+	options,
+	onChange,
+	onClear,
+	disabled = false,
+}: SegmentedProps<T>) {
 	return (
 		<div
 			role="group"
 			aria-label={label}
-			className="flex h-[28px] items-center gap-px rounded-[var(--radius-sm)] bg-[var(--sunken)] p-px"
+			aria-disabled={disabled || undefined}
+			className={`flex h-[28px] items-center gap-px rounded-[var(--radius-sm)] bg-[var(--sunken)] p-px ${disabled ? "opacity-40" : ""}`}
 		>
 			{options.map((option) => {
 				const active = option.value === value;
@@ -356,6 +366,7 @@ export function Segmented<T extends string>({ label, value, options, onChange, o
 						key={option.value}
 						type="button"
 						aria-pressed={active}
+						disabled={disabled}
 						title={option.title ?? option.label}
 						onClick={() => (active && onClear ? onClear() : onChange(option.value))}
 						className={`flex h-[26px] min-w-[26px] flex-1 items-center justify-center rounded-[3px] px-1 text-[length:var(--text-micro)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
@@ -369,6 +380,103 @@ export function Segmented<T extends string>({ label, value, options, onChange, o
 					</button>
 				);
 			})}
+		</div>
+	);
+}
+
+/** Figma's three ways a side can be sized. Matches Sizing in sizing.ts. */
+type DimensionMode = "fixed" | "hug" | "fill";
+
+const MODE_LABELS: Record<DimensionMode, string> = { fixed: "Fixed", hug: "Hug", fill: "Fill" };
+
+type DimensionInputProps = {
+	/** W or H, inside the field. */
+	prefix: string;
+	label: string;
+	/** How big it is drawn, or its own number when it is fixed. Null when it is not drawn. */
+	value: number | null;
+	/** Whether a number can be typed. Typing one makes the side fixed. */
+	editable: boolean;
+	onValue: (value: number) => void;
+	mode: DimensionMode;
+	/** The modes this side can have. One or none shows no choice. */
+	modes: DimensionMode[];
+	onMode: (mode: DimensionMode) => void;
+	/** Words for the choices, where Figma's would mislead: a frame fills the mail client, not a container. */
+	modeLabels?: Partial<Record<DimensionMode, string>>;
+	min?: number;
+	max?: number;
+};
+
+/**
+ * Figma's W and H: the size, and beside it inside the same field whether that
+ * side is fixed, hugs what is in it, or fills what it is in. The number is
+ * always how big it is drawn, so a side that fills still says how wide it came
+ * out, and typing a number fixes it at that.
+ */
+export function DimensionInput({
+	prefix,
+	label,
+	value,
+	editable,
+	onValue,
+	mode,
+	modes,
+	onMode,
+	modeLabels = {},
+	min = 1,
+	max = 2000,
+}: DimensionInputProps) {
+	const id = useId();
+	const [typed, setTyped] = useState<{ over: number | null; text: string } | null>(null);
+	const shown = typed && typed.over === value ? typed.text : value === null ? "" : String(value);
+
+	const commit = () => {
+		const parsed = Number.parseFloat(shown);
+		setTyped(null);
+		if (!Number.isFinite(parsed) || parsed === value) return;
+		onValue(Math.min(Math.max(parsed, min), max));
+	};
+
+	return (
+		<div className="flex h-[28px] min-w-0 items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-2 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
+			<label htmlFor={id} title={label} className="flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+				{prefix}
+				<span className="sr-only">{label}</span>
+			</label>
+			<input
+				id={id}
+				inputMode="decimal"
+				readOnly={!editable}
+				value={shown}
+				placeholder="Auto"
+				onChange={(event) => setTyped({ over: value, text: event.target.value })}
+				onBlur={commit}
+				onKeyDown={(event) => {
+					if (event.key === "Enter") commit();
+				}}
+				className={`tabular min-w-0 flex-1 bg-transparent text-[length:var(--text-sm)] placeholder:text-[var(--ink-muted)] focus:outline-none ${
+					editable ? "text-[var(--ink)]" : "text-[var(--ink-muted)]"
+				}`}
+			/>
+			{modes.length > 1 ? (
+				<select
+					aria-label={`${label} resizing`}
+					value={mode}
+					onChange={(event) => onMode(event.target.value as DimensionMode)}
+					className="h-[26px] max-w-[52px] flex-none cursor-pointer rounded-[var(--radius-sm)] bg-transparent pr-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] hover:text-[var(--ink)] focus:outline-none focus-visible:outline-2 focus-visible:outline-focus"
+				>
+					{modes.map((option) => (
+						<option key={option} value={option}>
+							{modeLabels[option] ?? MODE_LABELS[option]}
+						</option>
+					))}
+				</select>
+			) : (
+				<span className="pr-2 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+					{modeLabels[mode] ?? MODE_LABELS[mode]}
+				</span>
+			)}
 		</div>
 	);
 }

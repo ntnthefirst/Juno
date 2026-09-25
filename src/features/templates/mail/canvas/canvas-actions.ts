@@ -18,6 +18,7 @@ import type {
 	MailLayout,
 	MailSection,
 	MailSectionLayout,
+	MailSides,
 	MailSpacing,
 	MailTextStyle,
 } from "@shared/types";
@@ -30,6 +31,10 @@ export function noSpacing(): MailSpacing {
 	return { top: 0, right: 0, bottom: 0, left: 0 };
 }
 
+export function allSides(): MailSides {
+	return { top: true, right: true, bottom: true, left: true };
+}
+
 export function emptyBox(): MailBoxStyle {
 	return {
 		fill: null,
@@ -37,6 +42,8 @@ export function emptyBox(): MailBoxStyle {
 		borderWidth: 0,
 		borderColor: null,
 		borderStyle: "solid",
+		borderSides: allSides(),
+		strokeHidden: false,
 		borderRadius: 0,
 		corners: null,
 		opacity: 1,
@@ -50,17 +57,17 @@ export function emptyBox(): MailBoxStyle {
 
 /** A flat colour as a fill, which is where every fill control starts. */
 export function solidFill(color: string): MailFill {
-	return { kind: "solid", color };
+	return { kind: "solid", color, hidden: false };
 }
 
 /** The shadow the effects list adds, at values that are visible without being
  * the only thing anybody sees. */
 export function newShadow(inset: boolean): MailEffect {
-	return { kind: "shadow", inset, x: 0, y: inset ? 1 : 2, blur: 6, spread: 0, color: "#16161d", opacity: 0.2 };
+	return { kind: "shadow", inset, x: 0, y: inset ? 1 : 2, blur: 6, spread: 0, color: "#16161d", opacity: 0.2, hidden: false };
 }
 
 export function newBlur(): MailEffect {
-	return { kind: "blur", radius: 4 };
+	return { kind: "blur", radius: 4, hidden: false };
 }
 
 export function defaultText(): MailTextStyle {
@@ -84,29 +91,34 @@ export function stackLayout(): MailSectionLayout {
 }
 
 export function emptySection(name = "Section"): MailSection {
-	return { id: newId(), name, hidden: false, layout: stackLayout(), box: emptyBox(), blocks: [] };
+	return { id: newId(), name, hidden: false, alignSelf: "auto", layout: stackLayout(), box: emptyBox(), blocks: [] };
 }
 
 /**
  * A section as an author adds one: with room around what goes in it, the way a
  * message's own sections have. `emptySection` stays bare, because it is also
- * what holds a hand-written body when it moves onto a canvas, and padding that
- * body would change how it looks.
+ * what a section is reduced to when the last one is removed, and the room is
+ * a choice somebody makes rather than something every section has.
  */
 export function newSection(name = "Section"): MailSection {
 	return { ...emptySection(name), box: { ...emptyBox(), padding: { top: 24, right: 24, bottom: 24, left: 24 } } };
 }
 
-/** What a new template starts from: the frame, and one section with room in it. */
+/**
+ * What a new template starts from: a frame that fills the mail client, drawn
+ * at 600 until a breakpoint says otherwise, and one section with room in it.
+ */
 export function emptyLayout(): MailLayout {
 	return {
 		version: 1,
 		width: 600,
+		widthMode: "fill",
 		minHeight: 320,
 		fill: null,
 		fonts: [],
 		customCss: null,
 		sections: [newSection("Body")],
+		breakpoints: [],
 	};
 }
 
@@ -115,9 +127,12 @@ export type BlockKind = MailBlock["kind"];
 /**
  * What the toolbar inserts. A code block is not on the list: it is what any
  * block becomes with "Convert to HTML", and what the code view puts anything
- * it could not place into, rather than something started empty.
+ * it could not place into, rather than something started empty. Neither is a
+ * divider or a spacer: a section with a height, a fill or a stroke on one side
+ * is both, and it is one thing to learn instead of three. The two still load
+ * and still compile, so a template that has them keeps them.
  */
-export const BLOCK_KINDS: BlockKind[] = ["text", "heading", "button", "image", "field", "divider", "spacer"];
+export const BLOCK_KINDS: BlockKind[] = ["text", "heading", "button", "image", "field"];
 
 export const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
 	text: "Text",

@@ -4,9 +4,10 @@
  *
  * Pure and Electron-free on purpose: the editor, the service and the tests all
  * call these directly, and nothing below them ever learns that a canvas
- * exists. `mailShell` (mail-html.ts) wraps whatever `compileLayout` returns in
- * the 600 pixel house table, so this function emits the contents of that
- * table and never a document.
+ * exists. `canvasShell` (mail-html.ts) puts whatever `compileLayout` returns
+ * into a document with nothing around it, and the breakpoints'
+ * `breakpointCss` into that document's head, so this function emits a body
+ * fragment and never a document.
  *
  * Two rules shape the whole model:
  *
@@ -36,7 +37,9 @@ import { randomUUID } from "node:crypto";
 import type {
 	MailAlign,
 	MailBlock,
+	MailBlockOverride,
 	MailBoxStyle,
+	MailBreakpoint,
 	MailColor,
 	MailCorners,
 	MailDirection,
@@ -48,7 +51,9 @@ import type {
 	MailLayout,
 	MailSection,
 	MailSectionLayout,
+	MailSectionOverride,
 	MailSelfAlign,
+	MailSides,
 	MailSpacing,
 	MailStrokeStyle,
 	MailTextAlign,
@@ -64,13 +69,18 @@ import { escapeHtml } from "./template-render";
 /** What every mail client agrees a message body is. Also mailShell's table. */
 export const DEFAULT_WIDTH = 600;
 const MIN_WIDTH = 280;
-const MAX_WIDTH = 900;
+/** Wide enough to design a message for a desktop client that is given the room. */
+const MAX_WIDTH = 1600;
 const MAX_HEIGHT = 20000;
 
 /* ----------------------------------------------------------------- defaults */
 
 export function noSpacing(): MailSpacing {
 	return { top: 0, right: 0, bottom: 0, left: 0 };
+}
+
+export function allSides(): MailSides {
+	return { top: true, right: true, bottom: true, left: true };
 }
 
 export function emptyBox(): MailBoxStyle {
@@ -80,6 +90,8 @@ export function emptyBox(): MailBoxStyle {
 		borderWidth: 0,
 		borderColor: null,
 		borderStyle: "solid",
+		borderSides: allSides(),
+		strokeHidden: false,
 		borderRadius: 0,
 		corners: null,
 		opacity: 1,
@@ -93,7 +105,7 @@ export function emptyBox(): MailBoxStyle {
 
 /** A flat colour as a fill, which is what every fill control starts from. */
 export function solidFill(color: MailColor): MailFill {
-	return { kind: "solid", color };
+	return { kind: "solid", color, hidden: false };
 }
 
 export function defaultText(): MailTextStyle {
@@ -117,18 +129,33 @@ export function stackLayout(): MailSectionLayout {
 }
 
 export function emptySection(name = "Section"): MailSection {
-	return { id: randomUUID(), name, hidden: false, layout: stackLayout(), box: emptyBox(), blocks: [] };
+	return {
+		id: randomUUID(),
+		name,
+		hidden: false,
+		alignSelf: "auto",
+		layout: stackLayout(),
+		box: emptyBox(),
+		blocks: [],
+	};
 }
 
+/**
+ * A canvas with nothing on it. It fills the mail client, because a message
+ * is read at whatever width the client has, and the 600 is only the width it
+ * is drawn at until a breakpoint says otherwise.
+ */
 export function emptyLayout(): MailLayout {
 	return {
 		version: 1,
 		width: DEFAULT_WIDTH,
+		widthMode: "fill",
 		minHeight: 320,
 		fill: null,
 		fonts: [],
 		customCss: null,
 		sections: [emptySection("Body")],
+		breakpoints: [],
 	};
 }
 
@@ -304,15 +331,23 @@ function toNullableNum(value: unknown, min: number, max: number): number | null 
 /**
  * A colour is a hex string and nothing else.
  *
- * Refusing anything that is not `#rgb` or `#rrggbb` is what keeps a colour
- * field from becoming a second way to write arbitrary CSS: `red;position:fixed`
- * is a perfectly good-looking string until it is concatenated into a style
- * attribute.
+ * Refusing anything that is not `#rgb`, `#rrggbb` or `#rrggbbaa` is what keeps
+ * a colour field from becoming a second way to write arbitrary CSS:
+ * `red;position:fixed` is a perfectly good-looking string until it is
+ * concatenated into a style attribute. A colour whose opacity is whole is kept
+ * as its six digits, so the same colour is only ever written one way.
  */
 export function toColor(value: unknown): MailColor | null {
 	if (typeof value !== "string") return null;
 	const trimmed = value.trim();
+	if (/^#[0-9a-f]{8}$/i.test(trimmed)) return /ff$/i.test(trimmed) ? trimmed.slice(0, 7) : trimmed;
 	return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed) ? trimmed : null;
+}
+
+/** A colour with no opacity of its own, for an HTML attribute that only takes those. */
+function toOpaqueColor(value: unknown): MailColor | null {
+	const color = toColor(value);
+	return color && color.length !== 9 ? color : null;
 }
 
 function colorOr(value: unknown, fallback: MailColor): MailColor {
@@ -379,19 +414,21 @@ function parseSpacing(raw: unknown): MailSpacing {
  */
 function parseFill(raw: unknown, legacy?: unknown): MailFill | null {
 	if (isRecord(raw)) {
+		const hidden = raw.hidden === true;
 		if (raw.kind === "gradient") {
 			return {
 				kind: "gradient",
 				angle: toNum(raw.angle, 180, 0, 360),
 				from: colorOr(raw.from, "#ffffff"),
 				to: colorOr(raw.to, "#000000"),
+				hidden,
 			};
 		}
 		const color = toColor(raw.color);
-		return color ? { kind: "solid", color } : null;
+		return color ? { kind: "solid", color, hidden } : null;
 	}
 	const carried = toColor(legacy);
-	return carried ? { kind: "solid", color: carried } : null;
+	return carried ? { kind: "solid", color: carried, hidden: false } : null;
 }
 
 function toStrokeStyle(value: unknown): MailStrokeStyle {
@@ -410,7 +447,8 @@ function parseCorners(raw: unknown): MailCorners | null {
 
 function parseEffect(raw: unknown): MailEffect | null {
 	if (!isRecord(raw)) return null;
-	if (raw.kind === "blur") return { kind: "blur", radius: toNum(raw.radius, 4, 0, 60) };
+	const hidden = raw.hidden === true;
+	if (raw.kind === "blur") return { kind: "blur", radius: toNum(raw.radius, 4, 0, 60), hidden };
 	if (raw.kind !== "shadow") return null;
 	return {
 		kind: "shadow",
@@ -419,8 +457,10 @@ function parseEffect(raw: unknown): MailEffect | null {
 		y: toNum(raw.y, 2, -200, 200),
 		blur: toNum(raw.blur, 6, 0, 200),
 		spread: toNum(raw.spread, 0, -100, 100),
-		color: colorOr(raw.color, "#16161d"),
+		// A shadow carries its opacity beside its colour, so the colour is kept solid.
+		color: (toColor(raw.color) ?? "#16161d").slice(0, 7),
 		opacity: toNum(raw.opacity, 0.2, 0, 1),
+		hidden,
 	};
 }
 
@@ -436,6 +476,11 @@ function parseEffects(raw: unknown): MailEffect[] {
 		.slice(0, MAX_EFFECTS);
 }
 
+function parseSides(raw: unknown): MailSides {
+	if (!isRecord(raw)) return allSides();
+	return { top: raw.top !== false, right: raw.right !== false, bottom: raw.bottom !== false, left: raw.left !== false };
+}
+
 function parseBox(raw: unknown): MailBoxStyle {
 	if (!isRecord(raw)) return emptyBox();
 	return {
@@ -444,6 +489,8 @@ function parseBox(raw: unknown): MailBoxStyle {
 		borderWidth: toNum(raw.borderWidth, 0, 0, 40),
 		borderColor: toColor(raw.borderColor),
 		borderStyle: toStrokeStyle(raw.borderStyle),
+		borderSides: parseSides(raw.borderSides),
+		strokeHidden: raw.strokeHidden === true,
 		borderRadius: toNum(raw.borderRadius, 0, 0, 80),
 		corners: parseCorners(raw.corners),
 		opacity: toNum(raw.opacity, 1, 0, 1),
@@ -611,10 +658,180 @@ function parseSection(raw: unknown): MailSection | null {
 		id: toId(raw.id),
 		name: toStr(raw.name, "Section"),
 		hidden: raw.hidden === true,
+		alignSelf: toSelfAlign(raw.alignSelf),
 		layout: parseSectionLayout(raw.layout),
 		box: parseBox(raw.box),
 		blocks,
 	};
+}
+
+/* -------------------------------------------------------------- breakpoints */
+
+/** A breakpoint for a phone, a tablet and whatever else, and no more. */
+const MAX_BREAKPOINTS = 4;
+
+/** The fields of a block a breakpoint can change, beyond the three every block has. */
+const KIND_STYLE: Record<MailBlock["kind"], (keyof MailBlockOverride)[]> = {
+	text: [],
+	heading: [],
+	button: ["background", "color", "radius"],
+	image: ["width", "align"],
+	divider: ["color", "thickness"],
+	spacer: ["height"],
+	field: [],
+	html: [],
+};
+
+const COMMON_STYLE = ["hidden", "grow", "alignSelf"] as const;
+
+/** Keys that would reach an object's prototype rather than name an entry in it. */
+function unsafeKey(key: string): boolean {
+	return key === "__proto__" || key === "constructor" || key === "prototype";
+}
+
+function entryOf(record: unknown, key: string): unknown {
+	return isRecord(record) && !unsafeKey(key) && Object.prototype.hasOwnProperty.call(record, key)
+		? record[key]
+		: undefined;
+}
+
+/**
+ * What a breakpoint changes about one block, checked the way the block itself
+ * is: the block is parsed as it would be with the change applied, and the
+ * override keeps the parsed value of each field it named. So an override can
+ * hold nothing the block could not, and a field it names stays named even when
+ * it matches the default, because a narrower breakpoint may be putting back
+ * what a wider one changed.
+ */
+function parseBlockOverride(raw: unknown, block: MailBlock): MailBlockOverride | null {
+	if (!isRecord(raw)) return null;
+	const top = [...COMMON_STYLE, ...KIND_STYLE[block.kind]].filter((key) => key in raw);
+	const boxKeys = isRecord(raw.box) && "box" in block ? Object.keys(raw.box).filter((key) => key in block.box) : [];
+	const textKeys = isRecord(raw.text) && "text" in block ? Object.keys(raw.text).filter((key) => key in block.text) : [];
+	if (top.length === 0 && boxKeys.length === 0 && textKeys.length === 0) return null;
+
+	const merged = parseBlock({
+		...block,
+		...Object.fromEntries(top.map((key) => [key, raw[key]])),
+		...("box" in block && isRecord(raw.box) ? { box: { ...block.box, ...raw.box } } : {}),
+		...("text" in block && isRecord(raw.text) ? { text: { ...block.text, ...raw.text } } : {}),
+	});
+	if (!merged || merged.kind !== block.kind) return null;
+
+	const override: Record<string, unknown> = {};
+	const parsed = merged as unknown as Record<string, unknown>;
+	for (const key of top) override[key] = parsed[key];
+	if ("box" in merged && boxKeys.length > 0) {
+		override.box = Object.fromEntries(boxKeys.map((key) => [key, merged.box[key as keyof MailBoxStyle]]));
+	}
+	if ("text" in merged && textKeys.length > 0) {
+		override.text = Object.fromEntries(textKeys.map((key) => [key, merged.text[key as keyof MailTextStyle]]));
+	}
+	return override as MailBlockOverride;
+}
+
+/** The same, for a section. Its layout is changed whole, the way the panel changes it. */
+function parseSectionOverride(raw: unknown, section: MailSection): MailSectionOverride | null {
+	if (!isRecord(raw)) return null;
+	const top = (["hidden", "alignSelf", "layout"] as const).filter((key) => key in raw);
+	const boxKeys = isRecord(raw.box) ? Object.keys(raw.box).filter((key) => key in section.box) : [];
+	if (top.length === 0 && boxKeys.length === 0) return null;
+
+	const merged = parseSection({
+		...section,
+		blocks: [],
+		...Object.fromEntries(top.map((key) => [key, raw[key]])),
+		...(isRecord(raw.box) ? { box: { ...section.box, ...raw.box } } : {}),
+	});
+	if (!merged) return null;
+
+	const override: Record<string, unknown> = {};
+	const parsed = merged as unknown as Record<string, unknown>;
+	for (const key of top) override[key] = parsed[key];
+	if (boxKeys.length > 0) {
+		override.box = Object.fromEntries(boxKeys.map((key) => [key, merged.box[key as keyof MailBoxStyle]]));
+	}
+	return override as MailSectionOverride;
+}
+
+/**
+ * The breakpoints, checked against the sections and blocks that are there: an
+ * override for something that has gone is dropped rather than kept for a
+ * block that might come back with the same id.
+ */
+function parseBreakpoints(raw: unknown, sections: MailSection[]): MailBreakpoint[] {
+	if (!Array.isArray(raw)) return [];
+	const out: MailBreakpoint[] = [];
+	for (const entry of raw) {
+		if (!isRecord(entry)) continue;
+		const maxWidth = Math.round(toNum(entry.maxWidth, 480, 200, 1600));
+		const breakpoint: MailBreakpoint = {
+			id: toId(entry.id),
+			name: toStr(entry.name).trim().slice(0, 40) || `${maxWidth}`,
+			maxWidth,
+			sections: {},
+			blocks: {},
+		};
+		for (const section of sections) {
+			if (unsafeKey(section.id)) continue;
+			const sectionOverride = parseSectionOverride(entryOf(entry.sections, section.id), section);
+			if (sectionOverride) breakpoint.sections[section.id] = sectionOverride;
+			for (const block of section.blocks) {
+				if (unsafeKey(block.id)) continue;
+				const blockOverride = parseBlockOverride(entryOf(entry.blocks, block.id), block);
+				if (blockOverride) breakpoint.blocks[block.id] = blockOverride;
+			}
+		}
+		out.push(breakpoint);
+	}
+	return out.slice(0, MAX_BREAKPOINTS);
+}
+
+/** A block as a breakpoint draws it. */
+export function applyBlockOverride(block: MailBlock, override: MailBlockOverride | undefined): MailBlock {
+	if (!override) return block;
+	const { box, text, ...top } = override;
+	return {
+		...block,
+		...top,
+		...(box && "box" in block ? { box: { ...block.box, ...box } } : {}),
+		...(text && "text" in block ? { text: { ...block.text, ...text } } : {}),
+	} as MailBlock;
+}
+
+/** A section as a breakpoint draws it, blocks and all. */
+function applySectionOverride(section: MailSection, breakpoint: MailBreakpoint): MailSection {
+	const override = entryOf(breakpoint.sections, section.id) as MailSectionOverride | undefined;
+	const { box, ...top } = override ?? ({} as MailSectionOverride);
+	return {
+		...section,
+		...top,
+		box: box ? { ...section.box, ...box } : section.box,
+		blocks: section.blocks.map((block) =>
+			applyBlockOverride(block, entryOf(breakpoint.blocks, block.id) as MailBlockOverride | undefined),
+		),
+	};
+}
+
+/** The breakpoints from the widest down, which is the order their media queries stack in. */
+export function widestFirst(breakpoints: MailBreakpoint[]): MailBreakpoint[] {
+	return breakpoints
+		.map((breakpoint, index) => ({ breakpoint, index }))
+		.sort((a, b) => b.breakpoint.maxWidth - a.breakpoint.maxWidth || a.index - b.index)
+		.map((entry) => entry.breakpoint);
+}
+
+/** The canvas as it is drawn at a breakpoint: the default, then every wider breakpoint, then this one. */
+export function layoutAt(layout: MailLayout, breakpointId: string | null): MailLayout {
+	if (!breakpointId || !layout.breakpoints.some((breakpoint) => breakpoint.id === breakpointId)) return layout;
+	let sections = layout.sections;
+	let width = layout.width;
+	for (const breakpoint of widestFirst(layout.breakpoints)) {
+		sections = sections.map((section) => applySectionOverride(section, breakpoint));
+		width = breakpoint.maxWidth;
+		if (breakpoint.id === breakpointId) break;
+	}
+	return { ...layout, width, sections };
 }
 
 /**
@@ -640,14 +857,19 @@ export function normaliseLayout(raw: unknown): MailLayout | null {
 	const sections = Array.isArray(raw.sections)
 		? raw.sections.map(parseSection).filter((section): section is MailSection => section !== null)
 		: [];
+	const kept = sections.length > 0 ? sections : [emptySection("Body")];
 	return {
 		version: 1,
 		width: toNum(raw.width, DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH),
+		// A canvas saved before the choice existed was sent 600 wide, and it
+		// keeps that until somebody says otherwise.
+		widthMode: raw.widthMode === "fill" ? "fill" : "fixed",
 		minHeight: toNum(raw.minHeight, 320, 0, MAX_HEIGHT),
 		fill: parseFill(raw.fill, raw.background),
 		fonts: parseFonts(raw.fonts),
 		customCss: sanitiseDeclarations(toStr(raw.customCss)) || null,
-		sections: sections.length > 0 ? sections : [emptySection("Body")],
+		sections: kept,
+		breakpoints: parseBreakpoints(raw.breakpoints, kept),
 	};
 }
 
@@ -876,7 +1098,7 @@ function markupAttributes(name: string, attrs: string): string {
 		const valign = attribute(attrs, "valign");
 		if (valign && /^(top|middle|bottom|baseline)$/i.test(valign)) kept.push(`valign="${valign.toLowerCase()}"`);
 		const bgcolor = attribute(attrs, "bgcolor");
-		if (bgcolor && toColor(bgcolor)) kept.push(`bgcolor="${bgcolor}"`);
+		if (bgcolor && toOpaqueColor(bgcolor)) kept.push(`bgcolor="${bgcolor}"`);
 		for (const key of ["colspan", "rowspan", "cellpadding", "cellspacing", "border"]) {
 			const value = attribute(attrs, key);
 			if (value && /^\d{1,3}$/.test(value)) kept.push(`${key}="${value}"`);
@@ -947,11 +1169,11 @@ function paddingDeclaration(padding: MailSpacing): string | null {
 }
 
 /**
- * A hex colour and an alpha, as the `rgba()` a shadow is written in.
+ * A hex colour and an alpha, as `rgba()`.
  *
  * Generated rather than typed, so the value can carry nothing but numbers,
  * which is what keeps a colour control from becoming a second way to write
- * arbitrary CSS.
+ * arbitrary CSS. A colour with an opacity of its own has it multiplied in.
  */
 function rgba(color: MailColor, opacity: number): string {
 	const hex = color.slice(1);
@@ -965,23 +1187,49 @@ function rgba(color: MailColor, opacity: number): string {
 	const r = Number.parseInt(full.slice(0, 2), 16);
 	const g = Number.parseInt(full.slice(2, 4), 16);
 	const b = Number.parseInt(full.slice(4, 6), 16);
-	return `rgba(${r},${g},${b},${Number(opacity.toFixed(3))})`;
+	return `rgba(${r},${g},${b},${Number((opacity * alphaOf(color)).toFixed(3))})`;
+}
+
+/** A colour's own opacity, from the two digits after the six. */
+function alphaOf(color: MailColor): number {
+	return color.length === 9 ? Number.parseInt(color.slice(7), 16) / 255 : 1;
+}
+
+/** The colour with its opacity taken off, for a client that cannot read `rgba()`. */
+function opaque(color: MailColor): MailColor {
+	return color.length === 9 ? color.slice(0, 7) : color;
+}
+
+/** A colour as CSS: its hex when it is solid, `rgba()` when it is not. */
+function cssColor(color: MailColor): string {
+	return alphaOf(color) < 1 ? rgba(color, 1) : color;
 }
 
 /**
- * A fill, as the one or two declarations a mail client needs.
+ * A declaration that carries a colour. One with an opacity is written twice,
+ * solid first and `rgba()` second: a client that reads `rgba()` takes the
+ * second, and Outlook on Windows, which does not, keeps the first rather than
+ * painting nothing.
+ */
+function colorDeclarations(property: string, color: MailColor, value: (color: string) => string = (c) => c): string[] {
+	const solid = `${property}:${value(opaque(color))}`;
+	return alphaOf(color) < 1 ? [solid, `${property}:${value(cssColor(color))}`] : [solid];
+}
+
+/**
+ * A fill, as the declarations a mail client needs.
  *
  * A gradient writes its first stop as a flat `background-color` before the
  * image, so a client that ignores `background-image` paints that colour rather
  * than nothing. Outlook on Windows is the obvious one, and it is not the only
- * one.
+ * one. A hidden fill is Figma's eye, and writes nothing.
  */
 function fillDeclarations(fill: MailFill | null): (string | null)[] {
-	if (!fill) return [];
-	if (fill.kind === "solid") return [`background-color:${fill.color}`];
+	if (!fill || fill.hidden) return [];
+	if (fill.kind === "solid") return colorDeclarations("background-color", fill.color);
 	return [
-		`background-color:${fill.from}`,
-		`background-image:linear-gradient(${fill.angle}deg,${fill.from},${fill.to})`,
+		`background-color:${opaque(fill.from)}`,
+		`background-image:linear-gradient(${fill.angle}deg,${cssColor(fill.from)},${cssColor(fill.to)})`,
 	];
 }
 
@@ -992,22 +1240,39 @@ function radiusDeclaration(box: MailBoxStyle): string | null {
 	return `border-radius:${corners.topLeft}px ${corners.topRight}px ${corners.bottomRight}px ${corners.bottomLeft}px`;
 }
 
+const SIDES = ["top", "right", "bottom", "left"] as const;
+
+/**
+ * The stroke, on every side as one `border`, or on the sides it is drawn on as
+ * `border-top` and the rest. A stroke on the bottom of an empty section is
+ * how a divider is drawn.
+ */
+function strokeDeclarations(box: MailBoxStyle): string[] {
+	if (box.borderWidth <= 0 || box.strokeHidden) return [];
+	const color = box.borderColor ?? "#e3e2ec";
+	const value = (c: string) => `${box.borderWidth}px ${box.borderStyle} ${c}`;
+	const sides = SIDES.filter((side) => box.borderSides[side]);
+	if (sides.length === SIDES.length) return colorDeclarations("border", color, value);
+	return sides.flatMap((side) => colorDeclarations(`border-${side}`, color, value));
+}
+
 /**
  * The effects, as `box-shadow` and `filter`.
  *
  * Every shadow goes into one comma-separated `box-shadow`, because that is how
  * the property stacks them, and the blurs are added up into a single `filter`,
  * because two `filter` declarations on one element replace each other rather
- * than compose.
+ * than compose. A hidden effect writes nothing.
  */
 function effectDeclarations(effects: MailEffect[]): (string | null)[] {
-	const shadows = effects
+	const shown = effects.filter((effect) => !effect.hidden);
+	const shadows = shown
 		.filter((effect): effect is Extract<MailEffect, { kind: "shadow" }> => effect.kind === "shadow")
 		.map(
 			(effect) =>
 				`${effect.inset ? "inset " : ""}${effect.x}px ${effect.y}px ${effect.blur}px ${effect.spread}px ${rgba(effect.color, effect.opacity)}`,
 		);
-	const blur = effects.reduce((total, effect) => (effect.kind === "blur" ? total + effect.radius : total), 0);
+	const blur = shown.reduce((total, effect) => (effect.kind === "blur" ? total + effect.radius : total), 0);
 	return [
 		shadows.length > 0 ? `box-shadow:${shadows.join(",")}` : null,
 		blur > 0 ? `filter:blur(${blur}px)` : null,
@@ -1015,21 +1280,20 @@ function effectDeclarations(effects: MailEffect[]): (string | null)[] {
 }
 
 function boxDeclarations(box: MailBoxStyle): (string | null)[] {
+	const sized = box.width !== null || box.minHeight !== null;
 	return [
 		...fillDeclarations(box.fill),
 		paddingDeclaration(box.padding),
-		box.borderWidth > 0
-			? `border:${box.borderWidth}px ${box.borderStyle} ${box.borderColor ?? "#e3e2ec"}`
-			: null,
+		...strokeDeclarations(box),
 		radiusDeclaration(box),
 		box.opacity < 1 ? `opacity:${Number(box.opacity.toFixed(3))}` : null,
 		...effectDeclarations(box.effects),
 		// A fixed width gives way on a narrow screen rather than pushing the
-		// message sideways, and it is measured the way Figma measures it, border
-		// and padding included.
+		// message sideways. Both sizes are measured the way Figma measures
+		// them, stroke and padding included.
 		box.width !== null ? `width:${box.width}px` : null,
 		box.width !== null ? "max-width:100%" : null,
-		box.width !== null ? "box-sizing:border-box" : null,
+		sized ? "box-sizing:border-box" : null,
 		box.minHeight !== null ? `min-height:${box.minHeight}px` : null,
 		box.clip ? "overflow:hidden" : null,
 		// Last, so a hand-written declaration wins over the controls above it.
@@ -1064,7 +1328,7 @@ function textDeclarations(text: MailTextStyle, fonts: MailFont[], options: TextO
 	const weight = FONT_WEIGHTS[text.weight];
 	const textCase = CASE_CSS[text.transform];
 	return [
-		text.color && !options.skipColor ? `color:${text.color}` : null,
+		...(text.color && !options.skipColor ? colorDeclarations("color", text.color) : []),
 		text.fontFamily ? `font-family:${fontStack(text.fontFamily, fonts)}` : null,
 		text.fontSize ? `font-size:${text.fontSize}px` : null,
 		text.lineHeight ? `line-height:${text.lineHeight}` : null,
@@ -1104,6 +1368,16 @@ function placeDeclarations(block: MailBlock): (string | null)[] {
 		block.grow > 0 ? `flex:${block.grow} 1 0%` : null,
 		block.alignSelf !== "auto" ? `align-self:${SELF_CSS[block.alignSelf]}` : null,
 	];
+}
+
+/**
+ * Where a section narrower than the frame sits across it. The frame lays its
+ * sections one under the next, so this is margins, which every client reads.
+ */
+function sectionPlaceDeclarations(section: MailSection): string[] {
+	if (section.alignSelf === "center") return ["margin-left:auto", "margin-right:auto"];
+	if (section.alignSelf === "end") return ["margin-left:auto"];
+	return [];
 }
 
 const JUSTIFY_CSS: Record<MailJustify, string> = {
@@ -1150,49 +1424,147 @@ export function fieldPlaceholder(inputKey: string): string {
 	return `{{document.${inputKey}}}`;
 }
 
-function compileBlock(block: MailBlock, inputs: TemplateInput[], fonts: MailFont[]): string {
-	// Hidden is Figma's eye: kept on the canvas, left out of the message.
-	if (block.hidden) return "";
-	const marker = ` data-juno-block="${block.kind}" data-juno-id="${escapeHtml(block.id)}"`;
-	const place = placeDeclarations(block);
+/**
+ * The tag a text block is written as: a paragraph, which is what it is, unless
+ * its own markup has paragraphs in it. A paragraph inside a paragraph is not
+ * HTML, and every client would split it somewhere different.
+ */
+function textTag(html: string): "p" | "div" {
+	return /<p[\s>]/i.test(html) ? "div" : "p";
+}
 
+/** A code block's markup split into its one root element, when it has exactly one. */
+function codeRoot(markup: string): Extract<Node, { type: "element" }> | null {
+	const nodes = splitTopLevel(markup).filter((node) => node.type === "element" || node.raw.trim() !== "");
+	return nodes.length === 1 && nodes[0]?.type === "element" ? nodes[0] : null;
+}
+
+/**
+ * The style a block is written with, as the list of declarations. The same
+ * list the compiler writes into the element is what a breakpoint is compared
+ * against, so what a media query changes is exactly what differs.
+ */
+function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: MailFont[]): (string | null)[] {
+	const place = placeDeclarations(block);
 	switch (block.kind) {
-		case "heading": {
-			const tag = `h${block.level}`;
-			const style = styleString([
+		case "heading":
+			return [
 				"margin:0",
 				...textDeclarations(block.text, fonts, { alwaysWeight: true }),
 				...verticalDeclarations(block.text),
 				...boxDeclarations(block.box),
 				...place,
-			]);
-			return `<${tag}${marker}${style}>${wrapVertical(block.text, escapeHtml(block.content))}</${tag}>`;
-		}
-		case "text": {
-			const style = styleString([
+			];
+		case "text":
+			return [
 				"margin:0",
 				...textDeclarations(block.text, fonts),
 				...verticalDeclarations(block.text),
 				...boxDeclarations(block.box),
 				...place,
-			]);
-			return `<div${marker}${style}>${wrapVertical(block.text, sanitiseFragment(block.html))}</div>`;
-		}
+			];
 		case "button": {
-			const href = safeHref(block.href);
 			const padded = paddingDeclaration(block.box.padding) !== null;
-			const style = styleString([
+			return [
 				"display:inline-block",
 				"text-decoration:none",
-				`background:${block.background}`,
-				`color:${block.color}`,
+				...colorDeclarations("background", block.background),
+				...colorDeclarations("color", block.color),
 				...textDeclarations(block.text, fonts, { skipColor: true }),
 				// The button's own fill and radius are the box's, so the appearance
 				// controls reach it the same way they reach anything else.
 				...boxDeclarations({ ...block.box, fill: null, borderRadius: block.radius }),
 				padded ? null : "padding:10px 18px",
 				...place,
-			]);
+			];
+		}
+		case "image":
+			if (!safeImageSrc(block.src)) return ["color:#5d5e70", "font-size:12px"];
+			return [
+				"display:block",
+				"max-width:100%",
+				block.width ? `width:${block.width}px` : null,
+				"height:auto",
+				block.align === "center" ? "margin:0 auto" : block.align === "right" ? "margin-left:auto" : null,
+				...boxDeclarations({ ...block.box, width: null }),
+				...place,
+			];
+		case "divider":
+			return [
+				"border:0",
+				...colorDeclarations("border-top", block.color, (c) => `${block.thickness}px solid ${c}`),
+				block.box.width === null ? "width:100%" : null,
+				paddingDeclaration(block.box.padding),
+				block.box.opacity < 1 ? `opacity:${Number(block.box.opacity.toFixed(3))}` : null,
+				block.box.width !== null ? `width:${block.box.width}px` : null,
+				block.box.width !== null ? "max-width:100%" : null,
+				block.box.customCss,
+				...place,
+			];
+		case "spacer":
+			return [`height:${block.height}px`, "line-height:0", "font-size:0", ...place];
+		case "field": {
+			if (!block.inputKey) return ["color:#5d5e70", "font-size:12px"];
+			const declared = inputs.find((input) => input.key === block.inputKey);
+			if (declared?.kind === "image") {
+				return ["display:block", "max-width:100%", "height:auto", ...boxDeclarations(block.box), ...place];
+			}
+			return [...textDeclarations(block.text, fonts), ...boxDeclarations(block.box), ...place];
+		}
+		case "html": {
+			const css = sanitiseDeclarations(block.css) || null;
+			const root = codeRoot(sanitiseMarkup(block.html));
+			// One element: the CSS is its own, after any style it already carries,
+			// so the field in the panel wins over an inline style in the markup.
+			const own = root ? unescapeAttr(attribute(root.attrs, "style") ?? "") || null : null;
+			return root ? [own, css, ...place] : [css, ...place];
+		}
+	}
+}
+
+/**
+ * What the breakpoints add to an element: a class for their media queries to
+ * find it by, and, for one that is hidden by default and shown at some
+ * breakpoint, the declarations that keep it out of sight until then.
+ */
+type Marks = { className: string | null; hiddenByDefault: boolean };
+
+const NO_MARKS: Marks = { className: null, hiddenByDefault: false };
+
+/**
+ * Hidden by default, shown by a breakpoint. `mso-hide` is what Outlook on
+ * Windows reads, because Word draws some `display:none` content anyway.
+ * They are always the last two declarations, which is how the reader knows
+ * them from the author's own.
+ */
+const HIDDEN_DECLARATIONS = ["display:none", "mso-hide:all"];
+
+function markAttributes(marks: Marks): string {
+	return marks.className ? ` class="${marks.className}"` : "";
+}
+
+function compileBlock(
+	block: MailBlock,
+	inputs: TemplateInput[],
+	fonts: MailFont[],
+	marks: Marks = NO_MARKS,
+): string {
+	const marker = ` data-juno-block="${block.kind}" data-juno-id="${escapeHtml(block.id)}"${markAttributes(marks)}`;
+	const declarations = blockDeclarations(block, inputs, fonts);
+	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
+
+	switch (block.kind) {
+		case "heading": {
+			const tag = `h${block.level}`;
+			return `<${tag}${marker}${style}>${wrapVertical(block.text, escapeHtml(block.content))}</${tag}>`;
+		}
+		case "text": {
+			const html = sanitiseFragment(block.html);
+			const tag = textTag(html);
+			return `<${tag}${marker}${style}>${wrapVertical(block.text, html)}</${tag}>`;
+		}
+		case "button": {
+			const href = safeHref(block.href);
 			// Without a target it is a label, not a link. Emitting an <a> with no
 			// href would give the recipient something that looks pressable and is
 			// not, which is worse than showing the words.
@@ -1202,97 +1574,282 @@ function compileBlock(block: MailBlock, inputs: TemplateInput[], fonts: MailFont
 		}
 		case "image": {
 			const src = safeImageSrc(block.src);
-			if (!src) {
-				return `<span${marker} style="color:#5d5e70;font-size:12px;">${escapeHtml(block.alt || "Geen afbeelding")}</span>`;
-			}
-			const style = styleString([
-				"display:block",
-				"max-width:100%",
-				block.width ? `width:${block.width}px` : null,
-				"height:auto",
-				block.align === "center" ? "margin:0 auto" : block.align === "right" ? "margin-left:auto" : null,
-				...boxDeclarations({ ...block.box, width: null }),
-				...place,
-			]);
+			if (!src) return `<span${marker}${style}>${escapeHtml(block.alt || "Geen afbeelding")}</span>`;
 			return `<img${marker} src="${escapeHtml(src)}" alt="${escapeHtml(block.alt)}"${style}>`;
 		}
-		case "divider": {
-			const style = styleString([
-				"border:0",
-				`border-top:${block.thickness}px solid ${block.color}`,
-				block.box.width === null ? "width:100%" : null,
-				paddingDeclaration(block.box.padding),
-				block.box.opacity < 1 ? `opacity:${Number(block.box.opacity.toFixed(3))}` : null,
-				block.box.width !== null ? `width:${block.box.width}px` : null,
-				block.box.width !== null ? "max-width:100%" : null,
-				block.box.customCss,
-				...place,
-			]);
+		case "divider":
 			return `<hr${marker}${style}>`;
-		}
-		case "spacer": {
-			const style = styleString([`height:${block.height}px`, "line-height:0", "font-size:0", ...place]);
+		case "spacer":
 			return `<div${marker}${style}>&nbsp;</div>`;
-		}
 		case "field": {
+			if (!block.inputKey) return `<span${marker}${style}>${escapeHtml("Geen invoerveld gekozen")}</span>`;
 			const declared = inputs.find((input) => input.key === block.inputKey);
-			const token = block.inputKey ? fieldPlaceholder(block.inputKey) : "";
-			const style = styleString([...textDeclarations(block.text, fonts), ...boxDeclarations(block.box), ...place]);
-			if (!token) {
-				return `<span${marker} style="color:#5d5e70;font-size:12px;">${escapeHtml("Geen invoerveld gekozen")}</span>`;
-			}
+			const token = fieldPlaceholder(block.inputKey);
+			const field = ` data-juno-field="${escapeHtml(block.inputKey)}"`;
 			// An image input is a picture, not its address. Anything else is text,
 			// and the renderer fills the token wherever it lands.
 			if (declared?.kind === "image") {
-				return `<img${marker} data-juno-field="${escapeHtml(block.inputKey)}" src="${token}" alt="${escapeHtml(declared.label || block.inputKey)}"${styleString(["display:block", "max-width:100%", "height:auto", ...boxDeclarations(block.box), ...place])}>`;
+				return `<img${marker}${field} src="${token}" alt="${escapeHtml(declared.label || block.inputKey)}"${style}>`;
 			}
 			if (declared?.kind === "url") {
-				return `<a${marker} data-juno-field="${escapeHtml(block.inputKey)}" href="${token}"${style}>${escapeHtml(declared.label || block.inputKey)}</a>`;
+				return `<a${marker}${field} href="${token}"${style}>${escapeHtml(declared.label || block.inputKey)}</a>`;
 			}
-			return `<span${marker} data-juno-field="${escapeHtml(block.inputKey)}"${style}>${token}</span>`;
+			return `<span${marker}${field}${style}>${token}</span>`;
 		}
 		case "html": {
 			const markup = sanitiseMarkup(block.html);
-			const css = sanitiseDeclarations(block.css) || null;
-			const nodes = splitTopLevel(markup).filter((node) => node.type === "element" || node.raw.trim() !== "");
-			const root = nodes.length === 1 && nodes[0]?.type === "element" ? nodes[0] : null;
+			const root = codeRoot(markup);
 			if (!root) {
 				// More than one element, or loose text: the CSS goes on a div around
 				// it, and the marker says so, so the code view reads it back the
 				// same way.
-				return `<div${marker} data-juno-wrap="1"${styleString([css, ...place])}>${markup}</div>`;
+				return `<div${marker} data-juno-wrap="1"${style}>${markup}</div>`;
 			}
-			// One element: the CSS is its own, after any style it already carries,
-			// so the field in the panel wins over an inline style in the markup.
-			const own = unescapeAttr(attribute(root.attrs, "style") ?? "") || null;
 			const rest = root.attrs.replace(/\s+style\s*=\s*"[^"]*"/i, "");
-			const opening = `<${root.name}${marker}${rest}${styleString([own, css, ...place])}>`;
+			const opening = `<${root.name}${marker}${rest}${style}>`;
 			return VOID_TAGS.has(root.name) ? opening : `${opening}${root.inner}</${root.name}>`;
 		}
 	}
 }
 
-function compileSection(section: MailSection, inputs: TemplateInput[], fonts: MailFont[]): string {
-	if (section.hidden) return "";
-	const style = styleString([...layoutDeclarations(section.layout), ...boxDeclarations(section.box)]);
-	const children = section.blocks.map((block) => compileBlock(block, inputs, fonts)).join("");
-	return `<div data-juno-section="${escapeHtml(section.name)}" data-juno-id="${escapeHtml(section.id)}"${style}>${children}</div>`;
+function sectionDeclarations(section: MailSection): (string | null)[] {
+	return [...layoutDeclarations(section.layout), ...boxDeclarations(section.box), ...sectionPlaceDeclarations(section)];
+}
+
+function compileSection(section: MailSection, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules): string {
+	const marks = marksFor(section.id, section.hidden, rules);
+	if (!marks) return "";
+	const declarations = sectionDeclarations(section);
+	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
+	const children = section.blocks
+		.map((block) => {
+			const blockMarks = marksFor(block.id, block.hidden, rules);
+			return blockMarks ? compileBlock(block, inputs, fonts, blockMarks) : "";
+		})
+		.join("");
+	return `<div data-juno-section="${escapeHtml(section.name)}" data-juno-id="${escapeHtml(section.id)}"${markAttributes(marks)}${style}>${children}</div>`;
 }
 
 /**
- * The body fragment for a canvas. `mailShell` wraps this, so it deliberately
- * emits no `<html>`, no `<head>` and no width of its own beyond the frame the
- * author set. The fonts it links go in the shell's head, through `fontLinks`.
+ * How an element is marked, or null when it is left out of the message: hidden
+ * by default and shown at no breakpoint, which is Figma's eye.
+ */
+function marksFor(id: string, hidden: boolean, rules: BreakpointRules): Marks | null {
+	if (hidden && !rules.shown.has(id)) return null;
+	return { className: rules.classes.get(id) ?? null, hiddenByDefault: hidden };
+}
+
+/**
+ * The body fragment for a canvas. `canvasShell` wraps this, so it emits no
+ * `<html>` and no `<head>`: the fonts it links and the breakpoints' media
+ * queries go in the shell's head, through `fontLinks` and `breakpointCss`.
+ *
+ * A frame that fills is as wide as the client showing it. One that is fixed
+ * is never wider than the width it was designed at, and sits in the middle.
  */
 export function compileLayout(layout: MailLayout, inputs: TemplateInput[] = []): string {
+	const rules = breakpointRules(layout, inputs);
 	const style = styleString([
-		`max-width:${layout.width}px`,
+		...(layout.widthMode === "fixed" ? [`max-width:${layout.width}px`, "margin:0 auto"] : ["width:100%"]),
 		layout.minHeight > 0 ? `min-height:${layout.minHeight}px` : null,
 		...fillDeclarations(layout.fill),
 		layout.customCss,
 	]);
-	const sections = layout.sections.map((section) => compileSection(section, inputs, layout.fonts)).join("");
+	const sections = layout.sections.map((section) => compileSection(section, inputs, layout.fonts, rules)).join("");
 	return `<div data-juno-canvas="1"${style}>${sections}</div>`;
+}
+
+/* ------------------------------------------------------ breakpoints, as CSS */
+
+type BreakpointRules = {
+	/** The class each element with a media query rule is given, by id. */
+	classes: Map<string, string>;
+	/** Elements hidden by default that some breakpoint shows. */
+	shown: Set<string>;
+	/** The media queries, widest first. */
+	css: string;
+};
+
+/**
+ * What a property goes back to when a breakpoint takes away a declaration the
+ * default has. `!important` in a stylesheet is the only thing that beats an
+ * inline style, so a breakpoint cannot simply leave a declaration out: it has
+ * to write what the property is without it.
+ */
+const RESET: Record<string, string> = {
+	padding: "0",
+	border: "0",
+	"border-top": "0",
+	"border-right": "0",
+	"border-bottom": "0",
+	"border-left": "0",
+	"border-radius": "0",
+	background: "transparent",
+	"background-color": "transparent",
+	"background-image": "none",
+	opacity: "1",
+	"box-shadow": "none",
+	filter: "none",
+	width: "auto",
+	"max-width": "none",
+	"box-sizing": "content-box",
+	"min-height": "0",
+	overflow: "visible",
+	color: "inherit",
+	"font-family": "inherit",
+	"font-size": "inherit",
+	"line-height": "inherit",
+	"letter-spacing": "normal",
+	"font-weight": "inherit",
+	"font-style": "normal",
+	"text-decoration": "none",
+	"text-transform": "none",
+	"text-align": "inherit",
+	display: "block",
+	"flex-direction": "row",
+	"justify-content": "flex-start",
+	"align-items": "stretch",
+	gap: "0",
+	"flex-wrap": "nowrap",
+	"grid-template-columns": "none",
+	flex: "0 1 auto",
+	"align-self": "auto",
+	margin: "0",
+	"margin-left": "0",
+	"margin-right": "0",
+};
+
+/** A declaration list as property to value, the last of a repeated property winning as it does in CSS. */
+function declarationMap(declarations: (string | null)[]): Map<string, string> {
+	const map = new Map<string, string>();
+	for (const entry of declarations) {
+		if (!entry) continue;
+		for (const part of entry.split(";")) {
+			const colon = part.indexOf(":");
+			if (colon < 0) continue;
+			const property = part.slice(0, colon).trim().toLowerCase();
+			const value = part.slice(colon + 1).trim();
+			if (property && value) map.set(property, value);
+		}
+	}
+	return map;
+}
+
+/**
+ * The declarations a breakpoint writes for one element: what it changes from
+ * what the wider widths already say, and what it takes away, as resets that
+ * come first so a side's `border-top` is not undone by the `border:0` that
+ * clears the rest.
+ */
+function ruleDeclarations(
+	inherited: Map<string, string>,
+	effective: Map<string, string>,
+	hiddenBefore: boolean,
+	hiddenHere: boolean,
+	naturalDisplay: string,
+): string[] {
+	if (hiddenHere) return hiddenBefore ? [] : ["display:none"];
+	const out: string[] = [];
+	// Shown here after being hidden wider up: the display comes back whatever
+	// else is the same, because what hid it was a display of its own.
+	const restoring = hiddenBefore;
+	for (const property of inherited.keys()) {
+		if (restoring && property === "display") continue;
+		if (!effective.has(property)) out.push(`${property}:${RESET[property] ?? "initial"}`);
+	}
+	if (restoring) out.push(`display:${effective.get("display") ?? naturalDisplay}`);
+	for (const [property, value] of effective) {
+		if (restoring && property === "display") continue;
+		if (inherited.get(property) !== value) out.push(`${property}:${value}`);
+	}
+	return out;
+}
+
+/**
+ * A class for an element's media query rules. Built from its id with anything
+ * outside a class name's letters taken out, because an id is stored data and
+ * a stylesheet is not somewhere stored data gets to write freely.
+ */
+function classFor(id: string): string {
+	return `jb-${id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 48)}`;
+}
+
+/**
+ * Every breakpoint's media query, and the marks the elements need for them.
+ *
+ * Breakpoints are applied widest first, the way `max-width` queries stack in a
+ * client: at 320 pixels the rules for 480 apply as well, and the ones for 320
+ * come after them and win. So each breakpoint is compared with what the wider
+ * ones already made of the default, not with the default itself.
+ */
+function breakpointRules(layout: MailLayout, inputs: TemplateInput[]): BreakpointRules {
+	const classes = new Map<string, string>();
+	const shown = new Set<string>();
+	const queries: string[] = [];
+	let before = layout.sections;
+
+	for (const breakpoint of widestFirst(layout.breakpoints)) {
+		const here = before.map((section) => applySectionOverride(section, breakpoint));
+		const rules: string[] = [];
+		const add = (id: string, declarations: string[]) => {
+			if (declarations.length === 0) return;
+			const className = classes.get(id) ?? classFor(id);
+			classes.set(id, className);
+			rules.push(`.${className}{${declarations.map((declaration) => `${declaration} !important`).join(";")}}`);
+		};
+
+		here.forEach((section, sectionIndex) => {
+			const was = before[sectionIndex];
+			if (!was) return;
+			add(
+				section.id,
+				ruleDeclarations(
+					declarationMap(sectionDeclarations(was)),
+					declarationMap(sectionDeclarations(section)),
+					was.hidden,
+					section.hidden,
+					"block",
+				),
+			);
+			if (!section.hidden) shown.add(section.id);
+			section.blocks.forEach((block, blockIndex) => {
+				const previous = was.blocks[blockIndex];
+				if (!previous) return;
+				add(
+					block.id,
+					ruleDeclarations(
+						declarationMap(blockDeclarations(previous, inputs, layout.fonts)),
+						declarationMap(blockDeclarations(block, inputs, layout.fonts)),
+						previous.hidden,
+						block.hidden,
+						block.kind === "html" && codeRoot(sanitiseMarkup(block.html))?.name === "table" ? "table" : "block",
+					),
+				);
+				if (!block.hidden) shown.add(block.id);
+			});
+		});
+
+		if (rules.length > 0) queries.push(`@media only screen and (max-width:${breakpoint.maxWidth}px){${rules.join("")}}`);
+		before = here;
+	}
+
+	// The default's own hidden elements are only "shown" when a breakpoint
+	// showed them, not merely because they were visible before one hid them.
+	for (const section of layout.sections) {
+		if (!section.hidden) shown.delete(section.id);
+		for (const block of section.blocks) if (!block.hidden) shown.delete(block.id);
+	}
+
+	return { classes, shown, css: queries.join("").replace(/[<>]/g, "") };
+}
+
+/**
+ * The breakpoints as a stylesheet for the head of the message, or an empty
+ * string when there are none. Built from the same layout, in the same order,
+ * as the classes `compileLayout` writes, so the two always agree.
+ */
+export function breakpointCss(layout: MailLayout | null, inputs: TemplateInput[] = []): string {
+	return layout ? breakpointRules(layout, inputs).css : "";
 }
 
 /* --------------------------------------------------------------- read back */
@@ -1433,6 +1990,10 @@ const BOX_PROPERTIES = [
 	"background-image",
 	"padding",
 	"border",
+	"border-top",
+	"border-right",
+	"border-bottom",
+	"border-left",
 	"border-radius",
 	"opacity",
 	"box-shadow",
@@ -1445,20 +2006,43 @@ const BOX_PROPERTIES = [
 	"align-self",
 ];
 
-/** The fill, from whichever of the two declarations the compiler wrote. */
+/** A colour and an opacity as one colour, the opacity in the two digits after the six. */
+function withAlpha(color: MailColor, opacity: number): MailColor {
+	if (opacity >= 1) return color;
+	return `${color}${Math.round(Math.max(opacity, 0) * 255)
+		.toString(16)
+		.padStart(2, "0")}`;
+}
+
+/** A colour as the compiler writes it: hex, or `rgba()` for one with an opacity. */
+function readColor(value: string | undefined): MailColor | null {
+	if (!value) return null;
+	const hex = toColor(value);
+	if (hex) return hex;
+	const parsed = readColorWithAlpha(value);
+	return parsed ? toColor(withAlpha(parsed.color, parsed.opacity)) : null;
+}
+
+const GRADIENT_STOP = "(#[0-9a-f]{3,8}|rgba?\\([^)]*\\))";
+const GRADIENT = new RegExp(
+	`^linear-gradient\\(\\s*(-?[\\d.]+)deg\\s*,\\s*${GRADIENT_STOP}\\s*,\\s*${GRADIENT_STOP}\\s*\\)$`,
+	"i",
+);
+
+/** The fill, from whichever of the declarations the compiler wrote. */
 function readFill(map: Declarations): MailFill | null {
 	const image = (map.get("background-image") ?? "").trim();
-	const gradient = /^linear-gradient\(\s*(-?[\d.]+)deg\s*,\s*(#[0-9a-f]{3,6})\s*,\s*(#[0-9a-f]{3,6})\s*\)$/i.exec(image);
+	const gradient = GRADIENT.exec(image);
 	if (gradient) {
-		const from = toColor(gradient[2] ?? "");
-		const to = toColor(gradient[3] ?? "");
+		const from = readColor(gradient[2]);
+		const to = readColor(gradient[3]);
 		if (from && to) {
 			const angle = Number.parseFloat(gradient[1] ?? "180");
-			return { kind: "gradient", angle: Number.isFinite(angle) ? angle : 180, from, to };
+			return { kind: "gradient", angle: Number.isFinite(angle) ? angle : 180, from, to, hidden: false };
 		}
 	}
-	const flat = toColor(map.get("background-color") ?? map.get("background"));
-	return flat ? { kind: "solid", color: flat } : null;
+	const flat = readColor(map.get("background-color") ?? map.get("background"));
+	return flat ? { kind: "solid", color: flat, hidden: false } : null;
 }
 
 /** A colour that may carry an alpha, which is how a shadow was written. */
@@ -1516,12 +2100,13 @@ function readEffects(map: Declarations): MailEffect[] {
 			y: Number.parseFloat(shadow[2] ?? "0"),
 			blur: Number.parseFloat(shadow[3] ?? "0"),
 			spread: Number.parseFloat(shadow[4] ?? "0"),
-			color: colour.color,
-			opacity: colour.opacity,
+			color: colour.color.slice(0, 7),
+			opacity: colour.opacity * alphaOf(colour.color),
+			hidden: false,
 		});
 	}
 	const blur = /blur\(\s*([\d.]+)px\s*\)/i.exec(map.get("filter") ?? "");
-	if (blur) effects.push({ kind: "blur", radius: Number.parseFloat(blur[1] ?? "0") });
+	if (blur) effects.push({ kind: "blur", radius: Number.parseFloat(blur[1] ?? "0"), hidden: false });
 	return effects.slice(0, MAX_EFFECTS);
 }
 
@@ -1549,17 +2134,57 @@ function readPadding(map: Declarations): MailSpacing {
 	return { top: a, right: b, bottom: c, left: d };
 }
 
-function readBox(map: Declarations, extraOwned: string[] = []): MailBoxStyle {
-	const border = map.get("border") ?? "";
-	const borderMatch = /^(\d+(?:\.\d+)?)px\s+(solid|dashed|dotted)\s+(#[0-9a-f]{3,6})$/i.exec(border.trim());
+type Stroke = { width: number; color: MailColor | null; style: MailStrokeStyle; sides: MailSides };
+
+const STROKE = /^(\d+(?:\.\d+)?)px\s+(solid|dashed|dotted)\s+(.+)$/i;
+
+/**
+ * The stroke, from one `border` or from the sides it is drawn on. `sides` is
+ * off for a divider, whose `border-top` is the rule itself rather than a
+ * stroke round a box.
+ */
+function readStroke(map: Declarations, sides: boolean): Stroke {
+	const none: Stroke = { width: 0, color: null, style: "solid", sides: allSides() };
+	const all = STROKE.exec((map.get("border") ?? "").trim());
+	if (all && readColor(all[3])) {
+		return {
+			width: Number.parseFloat(all[1] ?? "0"),
+			color: readColor(all[3]),
+			style: toStrokeStyle((all[2] ?? "solid").toLowerCase()),
+			sides: allSides(),
+		};
+	}
+	if (!sides) return none;
+	const found = SIDES.map((side) => ({ side, match: STROKE.exec((map.get(`border-${side}`) ?? "").trim()) })).filter(
+		(entry) => entry.match !== null && readColor(entry.match[3]) !== null,
+	);
+	const first = found[0]?.match;
+	if (!first) return none;
+	return {
+		width: Number.parseFloat(first[1] ?? "0"),
+		color: readColor(first[3]),
+		style: toStrokeStyle((first[2] ?? "solid").toLowerCase()),
+		sides: {
+			top: found.some((entry) => entry.side === "top"),
+			right: found.some((entry) => entry.side === "right"),
+			bottom: found.some((entry) => entry.side === "bottom"),
+			left: found.some((entry) => entry.side === "left"),
+		},
+	};
+}
+
+function readBox(map: Declarations, extraOwned: string[] = [], sides = true): MailBoxStyle {
+	const stroke = readStroke(map, sides);
 	const opacity = Number.parseFloat(map.get("opacity") ?? "");
 	const radius = readCorners(map);
 	return {
 		fill: readFill(map),
 		padding: readPadding(map),
-		borderWidth: borderMatch ? Number.parseFloat(borderMatch[1] ?? "0") : 0,
-		borderColor: borderMatch ? toColor(borderMatch[3]) : null,
-		borderStyle: toStrokeStyle((borderMatch?.[2] ?? "solid").toLowerCase()),
+		borderWidth: stroke.width,
+		borderColor: stroke.color,
+		borderStyle: stroke.style,
+		borderSides: stroke.sides,
+		strokeHidden: false,
 		borderRadius: radius.borderRadius,
 		corners: radius.corners,
 		opacity: Number.isFinite(opacity) ? Math.min(Math.max(opacity, 0), 1) : 1,
@@ -1609,7 +2234,7 @@ function readTextStyle(map: Declarations): MailTextStyle {
 	const justify = verticalOwned(map).length > 0 ? map.get("justify-content") : undefined;
 	const lineHeight = Number.parseFloat(map.get("line-height") ?? "");
 	return {
-		color: toColor(map.get("color")),
+		color: readColor(map.get("color")),
 		fontFamily: readFamily(map.get("font-family")),
 		fontSize: px(map, "font-size"),
 		lineHeight: Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : null,
@@ -1666,20 +2291,35 @@ function rawBlock(html: string): MailBlock {
 	};
 }
 
-/** An element's markup without the compiler's markers and without its style, which is the CSS. */
+/** An element's markup without the compiler's markers, its breakpoint class and its style, which is the CSS. */
 function bareElement(node: Extract<Node, { type: "element" }>): string {
-	const attrs = node.attrs.replace(/\s+data-juno-[a-z-]+="[^"]*"/g, "").replace(/\s+style\s*=\s*"[^"]*"/i, "");
+	const attrs = node.attrs
+		.replace(/\s+data-juno-[a-z-]+="[^"]*"/g, "")
+		.replace(/\s+class="jb-[A-Za-z0-9_-]*"/g, "")
+		.replace(/\s+style\s*=\s*"[^"]*"/i, "");
 	return VOID_TAGS.has(node.name) ? `<${node.name}${attrs}>` : `<${node.name}${attrs}>${node.inner}</${node.name}>`;
+}
+
+/**
+ * Whether the compiler wrote an element as hidden by default and shown at a
+ * breakpoint, and its attributes without the two declarations that say so.
+ * They are always the last two, so they cannot be mistaken for the author's.
+ */
+function withoutHiddenMarks(attrs: string): { attrs: string; hidden: boolean } {
+	const match = /(\sstyle="[^"]*?);?display:none;mso-hide:all"/i.exec(attrs);
+	if (!match) return { attrs, hidden: false };
+	return { attrs: attrs.replace(match[0], `${match[1]}"`), hidden: true };
 }
 
 function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 	const kind = attribute(node.attrs, "data-juno-block");
-	const map = readStyle(node.attrs);
+	const marks = withoutHiddenMarks(node.attrs);
+	const map = readStyle(marks.attrs);
 	const common = {
 		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
 		grow: readGrow(map),
 		alignSelf: readSelfAlign(map.get("align-self")),
-		hidden: false,
+		hidden: marks.hidden,
 	};
 	const textOwned = [...TEXT_PROPERTIES, ...verticalOwned(map), "flex"];
 
@@ -1712,8 +2352,8 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 				kind: "button",
 				label: unescapeAttr(node.inner.replace(/<[^>]+>/g, "")),
 				href: safeHref(unescapeAttr(attribute(node.attrs, "href") ?? "")) ?? "",
-				background: colorOr(map.get("background"), "#4a3fa0"),
-				color: colorOr(map.get("color"), "#ffffff"),
+				background: readColor(map.get("background")) ?? "#4a3fa0",
+				color: readColor(map.get("color")) ?? "#ffffff",
 				radius: box.borderRadius || 4,
 				// The label colour is the button's own, so the text style carries none.
 				text: { ...readTextStyle(map), color: null },
@@ -1742,13 +2382,13 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 			};
 		case "divider": {
 			const top = map.get("border-top") ?? "";
-			const dividerMatch = /^(\d+(?:\.\d+)?)px\s+solid\s+(#[0-9a-f]{3,6})$/i.exec(top.trim());
+			const dividerMatch = /^(\d+(?:\.\d+)?)px\s+solid\s+(.+)$/i.exec(top.trim());
 			return {
 				...common,
 				kind: "divider",
-				color: dividerMatch ? colorOr(dividerMatch[2], "#e3e2ec") : "#e3e2ec",
+				color: (dividerMatch ? readColor(dividerMatch[2]) : null) ?? "#e3e2ec",
 				thickness: dividerMatch ? Number.parseFloat(dividerMatch[1] ?? "1") : 1,
-				box: readBox(map, ["border-top", "flex"]),
+				box: readBox(map, ["border-top", "flex"], false),
 			};
 		}
 		case "spacer":
@@ -1842,7 +2482,8 @@ const SECTION_PROPERTIES = [
 ];
 
 function readSection(node: Extract<Node, { type: "element" }>): MailSection {
-	const map = readStyle(node.attrs);
+	const marks = withoutHiddenMarks(node.attrs);
+	const map = readStyle(marks.attrs);
 	const blocks: MailBlock[] = [];
 	// Markup between two blocks is somebody's hand-written HTML. It becomes a
 	// raw block in the order it was written, which is what "editable, within
@@ -1867,13 +2508,17 @@ function readSection(node: Extract<Node, { type: "element" }>): MailSection {
 	}
 	flush();
 
+	const left = map.get("margin-left") === "auto";
+	const right = map.get("margin-right") === "auto";
 	return {
 		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
 		name: unescapeAttr(attribute(node.attrs, "data-juno-section") || "Section"),
-		// A hidden section is never compiled, so anything read back was showing.
-		hidden: false,
+		// A section hidden everywhere is never compiled. One that is here was
+		// showing, or was hidden by default for a breakpoint to show.
+		hidden: marks.hidden,
+		alignSelf: left && right ? "center" : left ? "end" : "auto",
 		layout: readSectionLayout(map),
-		box: readBox(map, [...SECTION_PROPERTIES, "flex"]),
+		box: readBox(map, [...SECTION_PROPERTIES, "flex", "margin-left", "margin-right"]),
 		blocks,
 	};
 }
@@ -1903,10 +2548,14 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 
 	if (!canvas) {
 		// Hand-written from nothing, or pasted in. One section holding it all,
-		// which the author can then break up on the canvas.
+		// which the author can then break up on the canvas. It gets the room the
+		// house frame used to give a hand-written body, so moving it onto a
+		// canvas, which sends it without that frame, does not push the words
+		// against the edge of the message.
 		const section = emptySection("Body");
+		section.box = { ...section.box, padding: { top: 32, right: 36, bottom: 32, left: 36 } };
 		section.blocks = html.trim() ? [rawBlock(html)] : [];
-		return { ...base, sections: [section] };
+		return { ...base, sections: [section], breakpoints: parseBreakpoints(base.breakpoints, [section]) };
 	}
 
 	const map = readStyle(canvas.attrs);
@@ -1935,16 +2584,32 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 	}
 	flush();
 
+	const kept = sections.length > 0 ? sections : [emptySection("Body")];
+	const maxWidth = px(map, "max-width");
 	return {
 		version: 1,
-		width: px(map, "max-width") ?? base.width,
+		// A frame that fills writes no width of its own, so the width it is
+		// drawn at comes from the canvas the markup came from.
+		width: maxWidth ?? base.width,
+		widthMode: maxWidth !== null ? "fixed" : "fill",
 		minHeight: px(map, "min-height") ?? 0,
 		fill: readFill(map),
-		// Fonts live in the head of the message, not in this fragment, so the
-		// canvas the markup came from is the only place to find them.
+		// Fonts and breakpoints live in the head of the message, not in this
+		// fragment, so the canvas the markup came from is the only place to
+		// find them. A breakpoint keeps what it changes about the sections and
+		// blocks that are still there.
 		fonts: base.fonts,
-		customCss: leftoverCss(map, ["max-width", "min-height", "background", "background-color", "background-image"]),
-		sections: sections.length > 0 ? sections : [emptySection("Body")],
+		customCss: leftoverCss(map, [
+			"max-width",
+			"width",
+			"margin",
+			"min-height",
+			"background",
+			"background-color",
+			"background-image",
+		]),
+		sections: kept,
+		breakpoints: parseBreakpoints(base.breakpoints, kept),
 	};
 }
 
@@ -2003,5 +2668,14 @@ export function convertBlockToCode(
 						}),
 					},
 		),
+		// What a breakpoint changed about the block was its style, which is code
+		// now. Whether it shows at a breakpoint is still the block's own.
+		breakpoints: layout.breakpoints.map((breakpoint) => {
+			const override = entryOf(breakpoint.blocks, blockId) as MailBlockOverride | undefined;
+			if (!override) return breakpoint;
+			const blocks = Object.fromEntries(Object.entries(breakpoint.blocks).filter(([id]) => id !== blockId));
+			if (override.hidden !== undefined) blocks[blockId] = { hidden: override.hidden };
+			return { ...breakpoint, blocks };
+		}),
 	};
 }

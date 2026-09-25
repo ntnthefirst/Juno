@@ -24,8 +24,9 @@ import { now } from "../db/columns";
 import { mailTemplates } from "../db/schema";
 import { previewContext } from "./documents";
 import { formatDate } from "./document-context";
-import { htmlToText, mailShell } from "./mail-html";
+import { canvasShell, htmlToText, mailShell } from "./mail-html";
 import {
+	breakpointCss,
 	compileLayout,
 	convertBlockToCode,
 	fontLinks,
@@ -313,6 +314,17 @@ export async function footerLines(): Promise<string[]> {
 }
 
 /**
+ * The document a rendered body is sent in. A canvas is the whole message and
+ * goes out as it was laid out, with its fonts and its breakpoints in the head.
+ * A hand-written template goes in the house shell, which gives it the card and
+ * the footer it was written to sit in.
+ */
+async function shellFor(bodyHtml: string, layout: MailLayout | null, inputs: TemplateInput[]): Promise<string> {
+	if (layout) return canvasShell(bodyHtml, { fontLinks: fontLinks(layout), css: breakpointCss(layout, inputs) });
+	return mailShell(bodyHtml, { footerLines: await footerLines() });
+}
+
+/**
  * Fills a template against a client and project. The subject is rendered as
  * text, the body as HTML in the house shell, and the text twin is derived from
  * the body so the two never disagree.
@@ -333,7 +345,7 @@ export async function renderTemplate(input: RenderInput, db: Db = getDb()): Prom
 
 	const subject = render(template.subject, context);
 	const body = render(template.bodyHtml, context);
-	const bodyHtml = mailShell(body.html, { footerLines: await footerLines(), fontLinks: fontLinks(template.layout) });
+	const bodyHtml = await shellFor(body.html, template.layout, template.inputs);
 	return {
 		// The subject is text, so the escaping the renderer applied comes off again,
 		// and a missing-value marker keeps its words and loses its markup.
@@ -407,7 +419,7 @@ export async function previewDraft(draft: MailTemplateDraft, db: Db = getDb()): 
 	const rendered = render(body, context);
 	return {
 		subject: unescapeHtml(subject.html.replace(/<[^>]+>/g, "")).trim(),
-		bodyHtml: mailShell(rendered.html, { footerLines: await footerLines(), fontLinks: fontLinks(layout) }),
+		bodyHtml: await shellFor(rendered.html, layout, inputs),
 		bodyText: htmlToText(rendered.html),
 		missing: [...new Set([...subject.missing, ...rendered.missing])].sort(),
 	};

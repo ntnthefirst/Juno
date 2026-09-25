@@ -139,7 +139,7 @@ describe("selection colours", () => {
 		const styled =
 			text.kind === "text" ? { ...text, text: { ...text.text, color: "#4A3FA0" } } : text;
 		return {
-			layout: addBlock(addBlock({ ...layout, fill: { kind: "solid" as const, color: "#f6f6fa" } }, sectionId, button), sectionId, styled),
+			layout: addBlock(addBlock({ ...layout, fill: { kind: "solid" as const, color: "#f6f6fa", hidden: false } }, sectionId, button), sectionId, styled),
 			sectionId,
 			buttonId: button.id,
 			textId: text.id,

@@ -61,19 +61,26 @@ function addresses(value: unknown): MailAddress[] {
 const LAYOUT_SCHEMA = {
 	type: ["object", "null"],
 	description:
-		"The section and block canvas. { version: 1, width, minHeight, fill, fonts, customCss, " +
-		"sections: [{ id, name, hidden, layout, box, blocks }] }. A section lays its blocks out with " +
-		"flex or grid; nothing is positioned absolutely and custom CSS that tries to is dropped. A " +
-		"box carries fill (solid or a two-stop gradient), stroke, radius or four corners, opacity, " +
-		"effects (shadow or blur), width, minHeight and clip. A text style carries fontFamily, " +
-		"weight (thin to black), italic, decoration, transform, letterSpacing and both alignments. " +
-		"fonts: [{ family, source: google or link, href for a link, weights, italic, fallback: sans, " +
-		"serif or mono }]; a block names a font by its family. A code block is { kind: html, " +
-		"html, css }: its markup, and declarations for its element (or for a div around it when " +
-		"the markup is more than one element). Colours are hex, images and links " +
-		"https only. Call mail.templates.get on an existing template to see the shape, and " +
-		"mail.templates.preview to check one before proposing it. Null drops the canvas and keeps " +
-		"the HTML it compiled to.",
+		"The section and block canvas. { version: 1, width, widthMode: fill or fixed, minHeight, " +
+		"fill, fonts, customCss, sections: [{ id, name, hidden, alignSelf, layout, box, blocks }], " +
+		"breakpoints }. The message is sent with nothing around it: with widthMode fill it is as " +
+		"wide as the reader's mail client, with fixed it is at most width and centred. A section " +
+		"lays its blocks out with flex or grid; nothing is positioned absolutely and custom CSS " +
+		"that tries to is dropped. A box carries fill (solid or a two-stop gradient, each with " +
+		"hidden), stroke (borderWidth, borderColor, borderStyle, borderSides, strokeHidden), " +
+		"radius or four corners, opacity, effects (shadow or blur, each with hidden), width, " +
+		"minHeight and clip. An empty section with a minHeight and a fill or a one-sided stroke " +
+		"is a divider. A text style carries fontFamily, weight (thin to black), italic, " +
+		"decoration, transform, letterSpacing and both alignments. fonts: [{ family, source: " +
+		"google or link, href for a link, weights, italic, fallback: sans, serif or mono }]; a " +
+		"block names a font by its family. A code block is { kind: html, html, css }. " +
+		"breakpoints: [{ id, name, maxWidth, sections: { [sectionId]: { hidden, alignSelf, " +
+		"layout, box } }, blocks: { [blockId]: { hidden, grow, alignSelf, box, text, ... } } }], " +
+		"each holding only what changes at that width and narrower, as partial box and text " +
+		"styles; content is the same at every width. Colours are hex, #rrggbbaa for an opacity; " +
+		"images and links https only. Call mail.templates.get on an existing template to see the " +
+		"shape, and mail.templates.preview to check one before proposing it. Null drops the " +
+		"canvas and keeps the HTML it compiled to.",
 };
 
 export const mailOutboxTools: ToolDescriptor[] = [

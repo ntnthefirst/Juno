@@ -150,6 +150,7 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.templates.hide", (_event, id: string) => templates.hide(id));
 	ipcMain.handle("mail.templates.unhide", (_event, id: string) => templates.unhide(id));
 	ipcMain.handle("mail.templates.duplicate", (_event, id: string) => templates.duplicate(id));
+	ipcMain.handle("mail.templates.parseBody", (_event, html: string) => templates.parseBody(html));
 	ipcMain.handle("mail.templates.preview", (_event, draft: MailTemplateDraft) =>
 		templates.previewDraft(draft),
 	);

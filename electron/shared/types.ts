@@ -694,7 +694,17 @@ export interface AppInfo {
  * What kind of answer an input wants. This decides the control shown when a
  * template is used, and how the value is formatted before it reaches the body.
  */
-export type TemplateInputKind = "text" | "textarea" | "number" | "money" | "date" | "choice";
+export type TemplateInputKind =
+	| "text"
+	| "textarea"
+	| "number"
+	| "money"
+	| "date"
+	| "choice"
+	/** An https URL to a picture. Rendered as an image, not as its address. */
+	| "image"
+	/** An https URL, rendered as a link. */
+	| "url";
 
 /**
  * A value a template asks for when it is used, because nothing in the records
@@ -713,6 +723,167 @@ export interface TemplateInput {
 	defaultValue?: string | null;
 	/** The choices, for `choice`. Ignored for every other kind. */
 	options?: string[];
+}
+
+/* ----------------------------------------------- mail templates: the canvas */
+
+/**
+ * A colour in a mail template is a hex string, not a token.
+ *
+ * Every other surface in Juno reads `brand/tokens.css`, and this one cannot: a
+ * message is read in somebody else's mail client, which has never heard of a
+ * CSS variable. The same reason mail-html.ts writes the house palette out as
+ * values.
+ */
+export type MailColor = string;
+
+/** Pixels on each side. Email measures in pixels, not millimetres. */
+export interface MailSpacing {
+	top: number;
+	right: number;
+	bottom: number;
+	left: number;
+}
+
+export type MailDirection = "row" | "column";
+export type MailJustify = "start" | "center" | "end" | "between" | "around";
+export type MailAlign = "start" | "center" | "end" | "stretch";
+export type MailTextAlign = "left" | "center" | "right" | "justify";
+export type MailWeight = "normal" | "medium" | "semibold" | "bold";
+
+/**
+ * How a section arranges what is in it. Two choices, and there is deliberately
+ * no third: nothing in a mail template is positioned absolutely, so a block is
+ * placed by the rules of the section holding it or it is not placed at all.
+ *
+ * This is flexbox and grid as the author means them, and it is compiled to
+ * literal `display:flex` and `display:grid`. Outlook on Windows renders with
+ * Word's engine, which supports neither, and stacks every section into one
+ * column with the gaps and the alignment dropped. The editor says so on the
+ * section inspector rather than leaving it to be discovered by a client.
+ */
+export type MailSectionLayout =
+	| {
+			kind: "flex";
+			direction: MailDirection;
+			justify: MailJustify;
+			align: MailAlign;
+			/** Pixels between children. */
+			gap: number;
+			wrap: boolean;
+	  }
+	| { kind: "grid"; columns: number; gap: number; align: MailAlign };
+
+/**
+ * The box around anything: a section or a single block.
+ *
+ * `customCss` is declarations only (`background:#fff;border:1px solid #eee`),
+ * applied after everything above it so a hand-written value wins. Anything
+ * that positions is stripped on the way in by `sanitiseDeclarations` in
+ * services/mail-layout.ts, because a template whose author can write
+ * `position:absolute` is a template that has the thing this model exists to
+ * prevent.
+ */
+export interface MailBoxStyle {
+	background: MailColor | null;
+	padding: MailSpacing;
+	borderWidth: number;
+	borderColor: MailColor | null;
+	borderRadius: number;
+	customCss: string | null;
+}
+
+export interface MailTextStyle {
+	color: MailColor | null;
+	/** Pixels. Null leaves the shell's own size alone. */
+	fontSize: number | null;
+	/** A multiplier, so 1.5 is 150%. */
+	lineHeight: number | null;
+	weight: MailWeight;
+	align: MailTextAlign;
+}
+
+/**
+ * One thing in a section.
+ *
+ * `grow` is the flex grow factor, and it is the only sizing control there is:
+ * a block takes its content's width, or a share of what is left. No width in
+ * pixels, because a mail body is read at widths this editor cannot know.
+ *
+ * `field` is a declared input placed as a block rather than typed as a
+ * placeholder. It compiles to `{{document.<inputKey>}}`, or to an `<img>`
+ * around it when the input it names is an image, which is what makes a picture
+ * something a template can ask for.
+ *
+ * `html` is the escape hatch, and it is where anything the code view could not
+ * place ends up. It is sanitised, never evaluated.
+ */
+export type MailBlock =
+	| { id: string; kind: "text"; html: string; text: MailTextStyle; box: MailBoxStyle; grow: number }
+	| {
+			id: string;
+			kind: "heading";
+			level: 1 | 2 | 3;
+			content: string;
+			text: MailTextStyle;
+			box: MailBoxStyle;
+			grow: number;
+	  }
+	| {
+			id: string;
+			kind: "button";
+			label: string;
+			href: string;
+			background: MailColor;
+			color: MailColor;
+			radius: number;
+			box: MailBoxStyle;
+			grow: number;
+	  }
+	| {
+			id: string;
+			kind: "image";
+			src: string;
+			alt: string;
+			/** Pixels, or null for the picture's own width. */
+			width: number | null;
+			align: MailTextAlign;
+			box: MailBoxStyle;
+			grow: number;
+	  }
+	| { id: string; kind: "divider"; color: MailColor; thickness: number; box: MailBoxStyle; grow: number }
+	| { id: string; kind: "spacer"; height: number; grow: number }
+	| { id: string; kind: "field"; inputKey: string; text: MailTextStyle; box: MailBoxStyle; grow: number }
+	| { id: string; kind: "html"; html: string; box: MailBoxStyle; grow: number };
+
+export interface MailSection {
+	id: string;
+	/** Shown on the section rail. Never rendered into the message. */
+	name: string;
+	layout: MailSectionLayout;
+	box: MailBoxStyle;
+	blocks: MailBlock[];
+}
+
+/**
+ * The editable shape of a mail template. `bodyHtml` is compiled from this on
+ * every save, so the renderer, the placeholder substitution and the outbox
+ * below them never learn that a canvas exists.
+ *
+ * The frame is fixed in width and adjustable in height, which is what a mail
+ * body is: 600 pixels is what every client agrees on, and the height is
+ * whatever the content comes to. `minHeight` is the canvas the author draws
+ * on, not a limit on the message.
+ *
+ * `version` is the shape of this object, not the template's version number.
+ */
+export interface MailLayout {
+	version: 1;
+	width: number;
+	minHeight: number;
+	background: MailColor | null;
+	customCss: string | null;
+	sections: MailSection[];
 }
 
 /* --------------------------------------------- document templates: the page */
@@ -1296,9 +1467,21 @@ export interface MailTemplate extends Standard {
 	bodyHtml: string;
 	isSystem: boolean;
 	customisedAt: Iso | null;
+	/**
+	 * Set when a shipped template is removed. Hidden means it is not offered
+	 * when composing, and still resolves on every draft that already points at
+	 * it (.claude/rules/data.md section 9).
+	 */
+	hiddenAt: Iso | null;
 	placeholders: string[];
 	/** What the template asks for when it is used. Empty when it asks nothing. */
 	inputs: TemplateInput[];
+	/**
+	 * The canvas the editor works on. Null means this template is HTML only,
+	 * which is true of everything written before the canvas existed and stays
+	 * true for a template somebody prefers to keep as HTML.
+	 */
+	layout: MailLayout | null;
 }
 
 export interface MailTemplateInput {
@@ -1309,11 +1492,33 @@ export interface MailTemplateInput {
 	description?: string | null;
 	register?: MailRegister;
 	inputs?: TemplateInput[];
+	/** Passing a layout compiles the body from it and ignores `bodyHtml`. */
+	layout?: MailLayout | null;
 }
 
 export type MailTemplatePatch = Partial<
-	Pick<MailTemplateInput, "name" | "subject" | "bodyHtml" | "description" | "register" | "inputs">
+	Pick<
+		MailTemplateInput,
+		"name" | "subject" | "bodyHtml" | "description" | "register" | "inputs" | "layout"
+	>
 >;
+
+/**
+ * A template rendered from values in hand rather than from the saved row.
+ *
+ * The editor needs this: a preview that can only read what is saved forces a
+ * save on every keystroke, which is how the old editor stamped `customisedAt`
+ * on templates nobody had deliberately edited.
+ */
+export interface MailTemplateDraft {
+	subject: string;
+	bodyHtml?: string;
+	layout?: MailLayout | null;
+	inputs?: TemplateInput[];
+	clientId?: string | null;
+	projectId?: string | null;
+	extras?: Record<string, string>;
+}
 
 /** A template filled against a client and project, ready to put in a draft. */
 export interface MailTemplateRender {

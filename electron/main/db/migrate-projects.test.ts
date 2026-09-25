@@ -67,7 +67,10 @@ describe("the projects rebuild in migration 0012", () => {
 		seedOldShape(connection);
 
 		const result = runMigrations(connection, MIGRATIONS);
-		expect(result.applied).toEqual([REBUILD]);
+		// The rebuild runs first, and whatever was generated after it runs after
+		// it. Pinning the whole list instead would make this test fail on every
+		// later migration while saying nothing about the rebuild.
+		expect(result.applied[0]).toBe(REBUILD);
 
 		const project = connection
 			.prepare("SELECT * FROM projects WHERE id = ?")

@@ -49,6 +49,25 @@ function addresses(value: unknown): MailAddress[] {
 		.map((v) => ({ name: v.name ?? null, address: v.address }));
 }
 
+/**
+ * The canvas, as an argument.
+ *
+ * Declared loosely on purpose: the shape is large, it is versioned in
+ * shared/types.ts, and `normaliseLayout` in services/mail-layout.ts is what
+ * actually decides what a valid layout is. A second copy of those rules
+ * written out as JSON Schema would be a second thing to keep in step, and the
+ * one that drifted would be this one.
+ */
+const LAYOUT_SCHEMA = {
+	type: ["object", "null"],
+	description:
+		"The section and block canvas. { version: 1, width, minHeight, background, customCss, " +
+		"sections: [{ id, name, layout, box, blocks }] }. A section lays its blocks out with flex " +
+		"or grid; nothing is positioned absolutely and custom CSS that tries to is dropped. Call " +
+		"mail.templates.get on an existing template to see the shape, and mail.templates.preview " +
+		"to check one before proposing it. Null drops the canvas and keeps the HTML it compiled to.",
+};
+
 export const mailOutboxTools: ToolDescriptor[] = [
 	{
 		name: "mail.templates.list",
@@ -93,6 +112,144 @@ export const mailOutboxTools: ToolDescriptor[] = [
 					? { extras: args.extras as Record<string, string> }
 					: {}),
 			}),
+	},
+	{
+		name: "mail.templates.get",
+		title: "Read one mail template",
+		description:
+			"One template with its subject, its compiled body, the values it asks for and, when it " +
+			"has one, the canvas it is laid out on. Read this before proposing an edit, because " +
+			"mail.templates.update replaces what it is given.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: { template_id: { type: "string" } },
+			required: ["template_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => templates.get(String(args.template_id)),
+	},
+	{
+		name: "mail.templates.preview",
+		title: "Preview a mail template that is not saved",
+		description:
+			"Compiles a subject and a body or a canvas and renders them the way a message would go " +
+			"out, without touching anything stored. This is how to check an edit before proposing " +
+			"it: try a layout here, read the HTML and the missing placeholders back, and only then " +
+			"call mail.templates.update.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				subject: { type: "string" },
+				body_html: { type: "string", description: "Ignored when a layout is given." },
+				layout: LAYOUT_SCHEMA,
+				inputs: { type: "array", description: "The declared inputs, so a field block knows its kind." },
+				client_id: { type: ["string", "null"] },
+				project_id: { type: ["string", "null"] },
+			},
+			required: ["subject"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			templates.previewDraft({
+				subject: String(args.subject),
+				...(typeof args.body_html === "string" ? { bodyHtml: args.body_html } : {}),
+				...(args.layout !== undefined ? { layout: args.layout as never } : {}),
+				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
+				clientId: (args.client_id as string | null) ?? null,
+				projectId: (args.project_id as string | null) ?? null,
+			}),
+	},
+	{
+		name: "mail.templates.create",
+		title: "Create a mail template",
+		description:
+			"A new template of the owner's own, never a system one. The body is Dutch, because a " +
+			"client reads it. Pass a layout to lay it out on the canvas, or body_html to write the " +
+			"HTML by hand.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				name: { type: "string" },
+				subject: { type: "string" },
+				body_html: { type: "string", description: "Ignored when a layout is given." },
+				description: { type: ["string", "null"] },
+				register: { type: "string", enum: ["u", "je"], description: "Held for the whole template." },
+				inputs: { type: "array" },
+				layout: LAYOUT_SCHEMA,
+			},
+			required: ["name", "subject"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			templates.create({
+				name: String(args.name),
+				subject: String(args.subject),
+				bodyHtml: typeof args.body_html === "string" ? args.body_html : "<p></p>",
+				description: (args.description as string | null) ?? null,
+				...(args.register === "je" || args.register === "u" ? { register: args.register } : {}),
+				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
+				...(args.layout !== undefined ? { layout: args.layout as never } : {}),
+			}),
+	},
+	{
+		name: "mail.templates.update",
+		title: "Edit a mail template",
+		description:
+			"Changes a template in place. Only the fields given are touched, and a layout replaces " +
+			"the whole canvas rather than merging into it, so read the template first and send the " +
+			"canvas back with the change made. The edit is applied to the template as it stands " +
+			"when a person approves it, so a template somebody is editing in the window at the " +
+			"same time keeps their work and takes this on top.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				template_id: { type: "string" },
+				name: { type: "string" },
+				subject: { type: "string" },
+				body_html: { type: "string", description: "Ignored when the template has a canvas." },
+				description: { type: ["string", "null"] },
+				register: { type: "string", enum: ["u", "je"] },
+				inputs: { type: "array" },
+				layout: LAYOUT_SCHEMA,
+			},
+			required: ["template_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			templates.update(String(args.template_id), {
+				...(typeof args.name === "string" ? { name: args.name } : {}),
+				...(typeof args.subject === "string" ? { subject: args.subject } : {}),
+				...(typeof args.body_html === "string" ? { bodyHtml: args.body_html } : {}),
+				...(args.description !== undefined ? { description: args.description as string | null } : {}),
+				...(args.register === "je" || args.register === "u" ? { register: args.register } : {}),
+				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
+				...(args.layout !== undefined ? { layout: args.layout as never } : {}),
+			}),
+	},
+	{
+		name: "mail.templates.hide",
+		title: "Hide a mail template",
+		description:
+			"Takes a template out of the pickers. Everything already pointing at it still resolves " +
+			"and still renders, so this is how a shipped template is retired. There is no tool that " +
+			"deletes one.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { template_id: { type: "string" } },
+			required: ["template_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => templates.hide(String(args.template_id)),
 	},
 	{
 		name: "mail.outbox.list",

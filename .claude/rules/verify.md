@@ -26,7 +26,10 @@ Run from the repo root. The project uses npm.
 
 Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
 screen and the settings window, and write a screenshot of each in both themes
-to `.smoke/`. That is the fastest honest look at a visual change.
+to `.smoke/`. That is the fastest honest look at a visual change. Add
+`JUNO_SMOKE_FRONT=1` to keep the window above every other window for the run;
+without it, a window somebody covers produces stale captures (see the
+`capturePage` trap below).
 
 These names are the canonical set. A skill or a script that invents a different
 one (`npm run package`, `npm run dist`) is wrong and should be corrected to match.
@@ -132,7 +135,10 @@ A clean typecheck is not proof a screen works.
   names, every one of them plausible on its own.
   **`npm run smoke` counts the identical images and says so at the end. Read
   that line before using any screenshot as evidence**, and if it reports
-  repeats, run it again with the window in front.
+  repeats, run it again with the window in front, or with
+  `JUNO_SMOKE_FRONT=1`, which puts it there and keeps it there. Two captures of
+  the same screen in the same state are identical too; check which ones repeat
+  before calling them stale.
 - **`tsBuildInfoFile` without `"incremental": true` does nothing at all.** tsc
   writes no build info and recompiles the whole program on every run, including
   the first pass of a `--watch`. It looks configured and is not.

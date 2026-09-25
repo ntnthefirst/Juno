@@ -223,7 +223,8 @@ export type IconName =
 	| "effect-inner"
 	| "effect-blur"
 	| "wrap"
-	| "keyboard";
+	| "keyboard"
+	| "minus";
 
 type GlyphProps = {
 	width?: number;
@@ -552,6 +553,7 @@ const ICONS: Record<IconName, Glyph> = {
 	"effect-blur": DRAWN.effectBlur,
 	wrap: DRAWN.wrap,
 	keyboard: DRAWN.keyboard,
+	minus: MinusIcon,
 };
 
 type IconProps = {

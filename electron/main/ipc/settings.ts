@@ -14,6 +14,7 @@ import type {
 	OwnerPhoneInput,
 	OwnerPhonePatch,
 	OwnerProfilePatch,
+	ProjectsView,
 	ThemeSetting,
 } from "../../shared/types";
 import * as settings from "../services/settings";
@@ -55,6 +56,10 @@ export function registerSettingsIpc(): void {
 	ipcMain.handle("settings.get", () => settings.get());
 	ipcMain.handle("settings.getTheme", () => settings.getTheme());
 	ipcMain.handle("settings.setTheme", (_event, theme: ThemeSetting) => applyTheme(theme));
+	ipcMain.handle("settings.getProjectsView", () => settings.getProjectsView());
+	ipcMain.handle("settings.setProjectsView", (_event, patch: Partial<ProjectsView>) =>
+		settings.setProjectsView(patch),
+	);
 	ipcMain.handle("settings.getOwner", () => settings.getOwner());
 	ipcMain.handle("settings.setOwner", (_event, patch: OwnerProfilePatch) =>
 		settings.setOwner(patch),

@@ -3,11 +3,15 @@ import {
 	ArrowDownTrayIcon,
 	ArrowPathIcon,
 	ArrowTopRightOnSquareIcon,
+	ArrowUpIcon,
 	ArrowUpTrayIcon,
 	ArrowUturnLeftIcon,
 	ArrowUturnRightIcon,
+	ArrowDownIcon,
 	Bars3BottomLeftIcon,
+	Bars4Icon,
 	BellIcon,
+	BookOpenIcon,
 	BuildingOffice2Icon,
 	CalendarDaysIcon,
 	CheckIcon,
@@ -17,8 +21,11 @@ import {
 	ClipboardDocumentIcon,
 	ClipboardIcon,
 	ClockIcon,
+	CodeBracketIcon,
 	Cog6ToothIcon,
+	CommandLineIcon,
 	ComputerDesktopIcon,
+	CubeIcon,
 	DocumentDuplicateIcon,
 	DocumentTextIcon,
 	EllipsisHorizontalIcon,
@@ -29,23 +36,33 @@ import {
 	FlagIcon,
 	FunnelIcon,
 	FolderIcon,
+	FolderOpenIcon,
+	GlobeAltIcon,
 	InboxIcon,
 	InformationCircleIcon,
 	LinkIcon,
+	ListBulletIcon,
 	LockClosedIcon,
 	MagnifyingGlassIcon,
 	MapPinIcon,
 	MoonIcon,
 	NoSymbolIcon,
+	PaintBrushIcon,
 	PaperAirplaneIcon,
 	PaperClipIcon,
 	PencilIcon,
 	PencilSquareIcon,
 	PhoneIcon,
+	PhotoIcon,
+	PlayIcon,
 	PlusIcon,
 	ScissorsIcon,
 	SparklesIcon,
+	Squares2X2Icon,
+	StarIcon,
+	StopIcon,
 	SunIcon,
+	SwatchIcon,
 	TrashIcon,
 	UsersIcon,
 	XMarkIcon,
@@ -112,7 +129,24 @@ export type IconName =
 	| "cut"
 	| "paste"
 	| "warning"
-	| "info";
+	| "info"
+	| "play"
+	| "stop"
+	| "terminal"
+	| "container"
+	| "repo"
+	| "figma"
+	| "design"
+	| "web"
+	| "docs"
+	| "folder-open"
+	| "image"
+	| "star"
+	| "grid"
+	| "list"
+	| "rows"
+	| "move-up"
+	| "move-down";
 
 type HeroIcon = typeof ClockIcon;
 
@@ -173,6 +207,29 @@ const ICONS: Record<IconName, HeroIcon> = {
 	paste: ClipboardIcon,
 	warning: ExclamationTriangleIcon,
 	info: InformationCircleIcon,
+	play: PlayIcon,
+	stop: StopIcon,
+	terminal: CommandLineIcon,
+	// Docker. There is no container glyph in the set and a box is what everyone
+	// draws for one anyway.
+	container: CubeIcon,
+	repo: CodeBracketIcon,
+	// Figma has no mark here and would not be ours to draw. A swatch is what the
+	// link is: somewhere the design lives.
+	figma: SwatchIcon,
+	design: PaintBrushIcon,
+	web: GlobeAltIcon,
+	docs: BookOpenIcon,
+	"folder-open": FolderOpenIcon,
+	image: PhotoIcon,
+	star: StarIcon,
+	grid: Squares2X2Icon,
+	list: ListBulletIcon,
+	// Wider bars than the list glyph: rows carry a thumbnail and a line of text,
+	// where the list is one line each.
+	rows: Bars4Icon,
+	"move-up": ArrowUpIcon,
+	"move-down": ArrowDownIcon,
 };
 
 type IconProps = {

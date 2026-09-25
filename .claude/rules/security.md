@@ -178,4 +178,4 @@ theatre.
 - Turning encryption on requires the passphrase twice and states, in those words,
   that a forgotten passphrase means the data is unrecoverable and there is no reset.
 - An MCP tool may lock Juno and may never unlock it. There is no `app.unlock`
-  ([mcp.md](mcp.md), PLAN.md section 4). Unlocking is a person at the keyboard.
+  ([mcp.md](mcp.md) section 4). Unlocking is a person at the keyboard.

@@ -67,6 +67,19 @@ the service, not by a DB default, so the value is the same on every platform.
   same file. A separate "fix the data" step is a step somebody skips.
 - Migrations run inside a transaction. If one fails, the app must refuse to open
   rather than run on a half-migrated file.
+- **Foreign keys are off while a migration runs, and checked before it commits.**
+  A table SQLite cannot alter in place is rebuilt, and a rebuild drops the old
+  table, which is an implicit delete of every parent row: with enforcement on it
+  fails as soon as a child row points at it, and `defer_foreign_keys` does not
+  save it either. `db/migrate.ts` sets `PRAGMA foreign_keys = OFF` outside the
+  transaction, where the pragma is not ignored, and runs `PRAGMA
+  foreign_key_check` inside it, so a migration that leaves a dangling reference
+  throws and rolls back. Never put either pragma in a migration file.
+- **Test a rebuild against a database with rows in it.** Running the whole folder
+  against an empty database proves nothing about a rebuild: there is nothing to
+  carry and no child row to break. Apply everything up to the file before it,
+  write the rows that make it hard, then apply the one under test. See
+  `db/migrate-projects.test.ts`.
 
 ## 4. Time is UTC, everywhere, always
 

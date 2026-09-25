@@ -11,9 +11,9 @@ import {
 	specialFolders,
 	type FolderNode,
 } from "./folder-tree";
-import { describeSync, isSyncing } from "./format";
+import { describeSync, formatSyncWhen, isSyncing } from "./format";
 
-export type MailView = MailSpecialUse | "outbox";
+export type MailView = MailSpecialUse;
 export type NavSelection = { accountId: string | null; folderId: string | null; view: MailView };
 
 export type FolderAction = "new" | "newInside" | "rename" | "remove" | "toggleSync" | "markAllRead" | "empty";
@@ -46,8 +46,9 @@ function draggedThreads(event: React.DragEvent): string[] | null {
 }
 
 /**
- * Where mail is: the outbox, then every account with the six folders it has and
- * the tree of the ones somebody made.
+ * Where mail is: every account, with the six folders it has and the tree of
+ * the ones somebody made. Anything not sent yet lives under that account's
+ * own Drafts, not in a separate place.
  *
  * Two things this has to get right. A folder is a drop target, and it says so
  * while something is over it, because a drag with no visible target is a guess.
@@ -245,33 +246,55 @@ export function FolderNav({
 
 	return (
 		<div className="flex flex-col gap-4">
-			{row({
-				key: "outbox",
-				folder: null,
-				label: "Outbox",
-				icon: "sent",
-				depth: 0,
-				active: selection?.view === "outbox",
-				onClick: () => onSelect({ accountId: null, folderId: null, view: "outbox" }),
-			})}
-
 			{accounts.map((account) => {
 				const status = sync[account.id] ?? null;
 				const failed = status?.phase === "failed" || (!isSyncing(status) && account.lastSyncError);
+				const syncing = isSyncing(status);
 				const line = failed
 					? (status?.error ?? account.lastSyncError ?? "Sync failed.")
 					: describeSync(status, account.lastSyncAt);
+				// The button has room for a word, so the detail stays in the tooltip.
+				const stamp = syncing
+					? "Syncing"
+					: failed
+						? "Failed"
+						: account.lastSyncAt
+							? formatSyncWhen(account.lastSyncAt)
+							: "Never";
 				const list = folders[account.id] ?? [];
 
 				return (
 					<div key={account.id}>
-						<p
-							className="truncate px-3 text-[length:var(--text-sm)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]"
-							style={{ height: "var(--row-height)", lineHeight: "var(--row-height)" }}
-							title={account.email}
+						{/*
+							The account name and when it last heard from the server, side by
+							side. The stamp used to sit at the bottom of the folder list,
+							which is a long way from the thing it is about.
+						*/}
+						<div
+							className="flex items-center gap-2 px-3"
+							style={{ height: "var(--row-height)" }}
 						>
-							{account.label}
-						</p>
+							<p
+								className="min-w-0 truncate text-[length:var(--text-sm)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]"
+								title={account.email}
+							>
+								{account.label}
+							</p>
+							<button
+								type="button"
+								onClick={() => onSyncAccount(account.id)}
+								disabled={syncing}
+								title={failed ? line : `${line}. Sync this account now`}
+								className={[
+									"flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1 text-[length:var(--text-micro)]",
+									"hover:bg-[var(--hover)] disabled:hover:bg-transparent",
+									failed ? "text-[var(--risk)]" : "text-[var(--ink-faint)] hover:text-[var(--ink-muted)]",
+								].join(" ")}
+							>
+								<Icon name="sync" size={12} />
+								<span className="tabular">{stamp}</span>
+							</button>
+						</div>
 
 						{list.length === 0 ? (
 							<p className="px-3 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
@@ -305,18 +328,6 @@ export function FolderNav({
 							<span>New folder</span>
 						</button>
 
-						<button
-							type="button"
-							onClick={() => onSyncAccount(account.id)}
-							disabled={isSyncing(status)}
-							className={[
-								"mt-1 block w-full truncate px-3 text-left text-[length:var(--text-micro)] hover:underline disabled:no-underline",
-								failed ? "text-[var(--risk)]" : "text-[var(--ink-muted)]",
-							].join(" ")}
-							title={failed ? line : "Sync this account now"}
-						>
-							{line}
-						</button>
 					</div>
 				);
 			})}

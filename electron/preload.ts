@@ -20,8 +20,10 @@ import type {
 	LockState,
 	MailOutboxMessage,
 	MailSyncStatus,
+	ProjectRun,
 	SettingsSection,
 	ThemeSetting,
+	UpdateStatus,
 } from "./shared/types";
 
 const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
@@ -125,6 +127,57 @@ const api: JunoApi = {
 		update: (id, patch) => call("projects.update", id, patch),
 		remove: (id) => call("projects.remove", id),
 		restore: (id) => call("projects.restore", id),
+		storage: (id) => call("projects.storage", id),
+		setStorage: (id, choice) => call("projects.setStorage", id, choice),
+		chooseStorageFolder: (id, move) => call("projects.chooseStorageFolder", id, move),
+		useAppStorage: (id, move) => call("projects.useAppStorage", id, move),
+		openStorageFolder: (id) => call("projects.openStorageFolder", id),
+		chooseLocalFolder: () => call("projects.chooseLocalFolder"),
+		openLocalFolder: (id) => call("projects.openLocalFolder", id),
+		setCover: (id, assetId) => call("projects.setCover", id, assetId),
+
+		links: {
+			list: (projectId) => call("projects.links.list", projectId),
+			create: (input) => call("projects.links.create", input),
+			update: (id, patch) => call("projects.links.update", id, patch),
+			remove: (id) => call("projects.links.remove", id),
+			reorder: (projectId, orderedIds) => call("projects.links.reorder", projectId, orderedIds),
+			open: (id) => call("projects.links.open", id),
+		},
+
+		assets: {
+			list: (projectId) => call("projects.assets.list", projectId),
+			choose: (projectId, storage) => call("projects.assets.choose", projectId, storage),
+			update: (id, patch) => call("projects.assets.update", id, patch),
+			remove: (id) => call("projects.assets.remove", id),
+			restore: (id) => call("projects.assets.restore", id),
+			reorder: (projectId, orderedIds) => call("projects.assets.reorder", projectId, orderedIds),
+			open: (id) => call("projects.assets.open", id),
+			reveal: (id) => call("projects.assets.reveal", id),
+		},
+
+		commands: {
+			list: (projectId) => call("projects.commands.list", projectId),
+			create: (input) => call("projects.commands.create", input),
+			update: (id, patch) => call("projects.commands.update", id, patch),
+			remove: (id) => call("projects.commands.remove", id),
+			reorder: (projectId, orderedIds) =>
+				call("projects.commands.reorder", projectId, orderedIds),
+		},
+
+		runs: {
+			list: (projectId) => call("projects.runs.list", projectId),
+			start: (commandId) => call("projects.runs.start", commandId),
+			stop: (commandId) => call("projects.runs.stop", commandId),
+			clear: (commandId) => call("projects.runs.clear", commandId),
+			onChange: (listener) => {
+				const handler = (_event: Electron.IpcRendererEvent, run: ProjectRun) => listener(run);
+				ipcRenderer.on("projects.runChanged", handler);
+				return () => {
+					ipcRenderer.off("projects.runChanged", handler);
+				};
+			},
+		},
 	},
 
 	reference: {
@@ -147,6 +200,8 @@ const api: JunoApi = {
 		chooseSignature: () => call("settings.chooseSignature"),
 		clearSignature: () => call("settings.clearSignature"),
 		getTheme: () => call("settings.getTheme"),
+		getProjectsView: () => call("settings.getProjectsView"),
+		setProjectsView: (patch) => call("settings.setProjectsView", patch),
 		setTheme: (theme) => call("settings.setTheme", theme),
 		onThemeChange: (listener) => {
 			const handler = (_event: Electron.IpcRendererEvent, theme: ThemeSetting) => listener(theme);
@@ -168,6 +223,20 @@ const api: JunoApi = {
 		getOnboarding: () => call("settings.getOnboarding"),
 		setOnboarding: (patch) => call("settings.setOnboarding", patch),
 		needsOnboarding: () => call("settings.needsOnboarding"),
+	},
+
+	updates: {
+		status: () => call("updates.status"),
+		check: () => call("updates.check"),
+		install: () => call("updates.install"),
+		setAutoInstall: (value) => call("updates.setAutoInstall", value),
+		onChange: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => listener(status);
+			ipcRenderer.on("updates.changed", handler);
+			return () => {
+				ipcRenderer.off("updates.changed", handler);
+			};
+		},
 	},
 
 	lock: {

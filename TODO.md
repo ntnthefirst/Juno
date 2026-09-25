@@ -5,16 +5,7 @@ a **you** tag needs Nathan rather than a session.
 
 ---
 
-## 1. Decide the licence — **you**
-
-The repository exists (`github.com/ntnthefirst/Juno`), `publish:` in
-`electron-builder.yml` points at it with `releaseType: draft`, and the
-`electron-updater` wiring is in. What is left is the licence: the repo is
-currently all rights reserved by default, which is the right holding position
-until decided otherwise. See decision 13. The question that settles it: should
-a company be able to take Juno, host it, and sell it back?
-
-## 2. Replace the placeholder legal texts with real ones — **you**
+## 1. Replace the placeholder legal texts with real ones — **you**
 
 Phase 1 ships with **invented** contract templates so the machinery can be built
 and tested. They are structurally plausible and legally worthless.
@@ -34,33 +25,10 @@ documented in `docs/templates.md`.
 That is what the banner is for, and why it is on the page rather than in a
 tooltip.
 
-## 3. Run mail against a real account, both ways - **you**
-
-Phases 3 and 4 have never seen a real IMAP or SMTP server. Add one account
-under Settings with both servers, press Sync now, then send one message to
-yourself from the composer. Note anything that looks wrong: a folder missing, a
-body that will not fetch, a thread split in two, a date off by a few hours, a
-message that never arrives, a copy missing from Sent, or the house shell
-looking broken in Outlook or on the phone. The questions the runs are meant to
-answer are at the end of the two session entries in `BUILD-LOG.md`.
-
-Deliverability is the other half: SPF, DKIM and DMARC on the real domains have
-to align with the SMTP server the account uses, or the first client mail lands
-in spam. That is DNS, not Juno, and it is worth checking before a real
-contract goes out this way.
-
-The sync still writes nothing to the server. Two other things now do, and
-neither has met a real one either: the sender, which writes the message and a
-copy into Sent, and filing, which moves and expunges. Archive one thread,
-trash one, delete one for good, and check the server agrees. A server without
-UIDPLUS answers a move with nothing, and Juno is written to cope with that by
-forgetting the row until the destination folder is next synced, which is worth
-seeing happen once.
-
-## 4. Decide what the in-app assistant runs on - **you**
+## 2. Decide what the in-app assistant runs on - **you**
 
 Phase 6 is built except its assistant panel. Everything the panel would drive
-is there: 99 tools, the approval gate, briefings and automations. What it needs
+is there: 163 tools, the approval gate, briefings and automations. What it needs
 and nothing else does is a model, which means three answers from you.
 
 - **Which provider**, and whether Juno ever talks to one at all. PLAN.md is
@@ -75,9 +43,8 @@ Until then an external agent does the same work. Open Agent, copy the
 configuration, paste it into Claude Desktop or Claude Code. That also answers
 phase 6's done-when in PLAN.md.
 
-## 5. Smaller things
+## 3. Smaller things
 
-- **Auto-update tests.** Nothing exercises the updater, because there is no feed.
 - **The MCP server itself.** The tool descriptors exist for every service, but
   nothing serves them over stdio yet. That is phase 6 in `PLAN.md`; the
   descriptors are written per feature so that phase is assembly, not archaeology.
@@ -104,6 +71,17 @@ phase 6's done-when in PLAN.md.
 - **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
   is the phase 4 promise not yet kept. Templates carry their own layout, so it
   matters least for the messages Juno writes on its own.
+- **A new mail template starts from nothing.** `mail-templates.ts` has a
+  `create()`, but the renderer has no "new template" action at all, only edit,
+  preview and use on the four that ship. `mailShell` already wraps every sent
+  message in the house header and footer chrome and the owner's signature line
+  at send time, so that part is not what is missing. What is missing is a
+  starting point for the body someone types: an opening line and a signoff
+  block, the way the seeded templates already share `SIGNOFF_U` and
+  `SIGNOFF_JE` in `mail-templates-seed.ts`, offered as a starter the first time
+  someone writes a template rather than an empty field. This needs a "new
+  template" flow in the editor and a couple of reusable starter bodies, one per
+  register, not a change to the house shell.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.

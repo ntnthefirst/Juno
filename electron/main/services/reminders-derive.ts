@@ -10,7 +10,7 @@
  * Decision 9 again: a "time to invoice" suggestion links to wherever invoicing
  * actually happens. Juno never generates, numbers or sends one.
  */
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { getDb, type Db } from "../db";
 import { clients, projects, referenceItems, reminders } from "../db/schema";
 import { formatDate, formatEuros, todayIsoDate } from "./document-context";
@@ -47,6 +47,8 @@ export async function invoiceSuggestions(
 ): Promise<ReminderSuggestion[]> {
 	const tool = await settings.getAccountingTool();
 
+	// Inner, deliberately: an invoice suggestion needs somebody to invoice, so a
+	// project with no client is not one of these and never should be.
 	const rows = db
 		.select({ project: projects, client: clients, status: referenceItems })
 		.from(projects)
@@ -106,8 +108,12 @@ export async function deadlineSuggestions(
 	return db
 		.select({ project: projects, client: clients })
 		.from(projects)
-		.innerJoin(clients, eq(projects.clientId, clients.id))
-		.where(and(isNull(projects.deletedAt), isNull(clients.deletedAt)))
+		// Left, not inner: a deadline on a project that is not for a client is
+		// still a deadline, and it is often one of Juno's own.
+		.leftJoin(clients, eq(projects.clientId, clients.id))
+		// The client is either absent or alive. Dropping the second half would
+		// bring back the projects of a client that was deleted.
+		.where(and(isNull(projects.deletedAt), or(isNull(projects.clientId), isNull(clients.deletedAt))))
 		.all()
 		.filter((row) => {
 			const due = row.project.dueOn;
@@ -118,11 +124,13 @@ export async function deadlineSuggestions(
 		})
 		.map((row) => ({
 			key: `deadline:${row.project.id}`,
-			title: `${row.project.name} is due for ${row.client.name}`,
+			title: row.client
+				? `${row.project.name} is due for ${row.client.name}`
+				: `${row.project.name} is due`,
 			notes: `The project's due date is ${formatDate(row.project.dueOn)}.`,
 			category: "other" as const,
 			dueOn: row.project.dueOn!,
-			clientId: row.client.id,
+			clientId: row.client?.id ?? null,
 			projectId: row.project.id,
 			actionUrl: null,
 			actionLabel: null,

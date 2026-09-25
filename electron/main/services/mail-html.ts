@@ -8,7 +8,7 @@
  * the app and cannot reach the tokens.
  *
  * Nothing in the shell fetches anything: no logo image, no web font, no pixel.
- * Read receipts and tracking are permanently out of scope (PLAN.md, phase 4).
+ * Read receipts and tracking are permanently out of scope.
  */
 import { convert } from "html-to-text";
 import { escapeHtml } from "./template-render";
@@ -44,7 +44,7 @@ export function mailShell(bodyHtml: string, options: MailShellOptions): string {
 		`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER};">`,
 		`<tr><td align="center" style="padding:24px 12px;">`,
 		`<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:${SURFACE};border:1px solid ${LINE};border-top:3px solid ${ACCENT};">`,
-		`<tr><td style="padding:28px 32px;font-family:${FONT};font-size:15px;line-height:1.55;color:${INK};">`,
+		`<tr><td style="padding:32px 36px;font-family:${FONT};font-size:15px;line-height:1.65;color:${INK};">`,
 		bodyHtml,
 		"</td></tr>",
 		footer

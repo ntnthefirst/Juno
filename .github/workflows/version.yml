@@ -1,0 +1,133 @@
+name: Version
+
+# A merge into main cuts the next release. This works out the version number,
+# writes it into package.json, tags it, and hands the tag to release.yml, which
+# builds the installers on Windows and macOS and uploads them.
+#
+# The release is still a draft at the end of it. Publishing is what makes every
+# installed copy start downloading, and that stays a deliberate act by a person
+# (decision 28 in docs/decisions.md).
+#
+# The number comes from the highest tag that exists, not from package.json,
+# because the two drift: a release is cut on main and the branch it was merged
+# from keeps the older number. A pull request that bumps package.json past the
+# highest tag on purpose is respected and that number is used instead, which is
+# how a minor or a major release is asked for.
+#
+# Put [skip release] anywhere in the merge commit message to land something on
+# main without cutting one. A documentation fix does not need an installer.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One at a time. Two merges landing together would both read the same highest
+# tag and try to cut the same version.
+concurrency:
+  group: version-main
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+      cut: ${{ steps.next.outputs.cut }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every tag and every commit. "The highest version released so far"
+          # is otherwise whatever happened to be inside the default depth.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Work out the next version
+        id: next
+        run: |
+          set -euo pipefail
+
+          if git log -1 --pretty=%B | grep -qF "[skip release]"; then
+            echo "cut=no" >> "$GITHUB_OUTPUT"
+            echo "The merge commit asked for no release."
+            exit 0
+          fi
+
+          # || true because head closes the pipe early, which under pipefail
+          # is a failure rather than a list that was longer than one line.
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
+          current=$(node -p "require('./package.json').version")
+          echo "Highest tag: ${latest:-none}. In package.json: $current."
+
+          next=$(node -e '
+            const [current, latest] = process.argv.slice(1);
+            const parts = (v) => v.replace(/^v/, "").split(".").map(Number);
+            const ahead = (a, b) => {
+              const [x, y] = [parts(a), parts(b)];
+              for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+              return false;
+            };
+            if (!latest || ahead(current, latest)) {
+              // Somebody bumped it deliberately, which is how a minor or a
+              // major release is asked for. Take them at their word.
+              console.log(current);
+            } else {
+              const [major, minor, patch] = parts(latest);
+              console.log(`${major}.${minor}.${patch + 1}`);
+            }
+          ' "$current" "$latest")
+
+          if git rev-parse -q --verify "refs/tags/v$next" > /dev/null; then
+            echo "cut=no" >> "$GITHUB_OUTPUT"
+            echo "v$next is already tagged, so there is nothing to cut."
+            exit 0
+          fi
+
+          echo "cut=yes" >> "$GITHUB_OUTPUT"
+          echo "tag=v$next" >> "$GITHUB_OUTPUT"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "Cutting v$next."
+
+      - name: Tag it
+        if: steps.next.outputs.cut == 'yes'
+        env:
+          VERSION: ${{ steps.next.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ "$(node -p "require('./package.json').version")" = "$VERSION" ]; then
+            # The number was already in the pull request. Nothing to write, so
+            # the tag goes straight onto the merge commit.
+            git tag -a "v$VERSION" -m "Release v$VERSION"
+          else
+            # Writes package.json and package-lock.json, commits and tags, in
+            # the same shape as a release cut by hand.
+            npm version "$VERSION" --message "Release v%s"
+          fi
+
+          # The tag separately rather than --follow-tags: when the branch has
+          # nothing new on it the push is a no-op and takes the tag with it.
+          git push origin HEAD:main
+          git push origin "v$VERSION"
+
+  # Called rather than left to the tag push. A tag pushed with GITHUB_TOKEN does
+  # not start another workflow, which is GitHub's loop protection, so the push
+  # above reaches nothing on its own. See the header of release.yml.
+  release:
+    needs: tag
+    if: needs.tag.outputs.cut == 'yes'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    permissions:
+      contents: write
+    secrets: inherit

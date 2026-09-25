@@ -13,7 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
-import { backupsDir, databasePath, documentsDir, mailDir, userDataDir } from "./main/db/paths";
+import { backupsDir, databasePath, documentsDir, mailDir, projectsDir, userDataDir } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import { mcpStatus } from "./main/ipc/agent";
@@ -24,6 +24,8 @@ import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
+import { configureProjectStorage } from "./main/services/project-storage";
+import * as projectRunner from "./main/services/project-runner";
 import * as notifications from "./main/services/notifications";
 import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
@@ -44,7 +46,7 @@ import * as settings from "./main/services/settings";
 import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
 import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
-import { startUpdates } from "./main/updates";
+import { startUpdates } from "./main/services/updates";
 import { devDataDir } from "./main/dev-data";
 
 const isDev = Boolean(process.env.JUNO_DEV);
@@ -79,6 +81,7 @@ if (!app.requestSingleInstanceLock()) {
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
 		configureDocuments(documentsDir());
 		configureDocumentStorage(documentsDir());
+		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
 		// Sync never starts while locked and stops at the next step when the lock
 		// comes on, per decision 15.
@@ -91,6 +94,9 @@ if (!app.requestSingleInstanceLock()) {
 		mailSend.configureMailSend({
 			isPaused: () => lock.isLocked(),
 			renderDocumentPdf: async (id) => (await documentActions.renderPdf(id)).pdfPath,
+			onSent: (accountId) => {
+				void mailSync.syncAccount(accountId).catch(() => undefined);
+			},
 		});
 		// safeStorage is usable now that the app is ready, and not before.
 		configureCredentialStore(safeStorageCredentialStore);
@@ -179,10 +185,13 @@ if (!app.requestSingleInstanceLock()) {
 			// An automation is exactly the unattended case the lock pauses, so
 			// the scheduler asks before every tick.
 			startAutomationScheduler(() => lock.isLocked());
-			// Updates come from the public GitHub releases the workflow publishes.
-			// Never in development, where the version is always behind.
-			if (!isDev) startUpdates();
 		}
+
+		// Outside the smoke guard, and with no isDev check, because it decides
+		// both for itself. An unpackaged run has no release to compare against,
+		// so it loads the stored preference for the settings window to draw and
+		// schedules nothing.
+		void startUpdates();
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
 		// its database, rather than proving only that it compiles.
@@ -323,9 +332,45 @@ if (!app.requestSingleInstanceLock()) {
 									],
 								});
 
-								return (await b.clients.list()).length;
-							})()`);
-							console.log(`SMOKE_DEMO clients=${created}`);
+								// Phase 7: a project that is not for a client, which is the case
+								// the nullable client exists for, with somewhere to go and
+								// something to start. The files are added from the main process
+								// below: adding one opens a picker, and a picker has nobody to
+								// answer it here.
+								const own = await b.projects.create({
+									name: "Juno", statusId: running.id,
+									description: "The back office this is.",
+								});
+								await b.projects.links.create({ projectId: own.id, label: "Repository", target: "https://github.com/example/juno" });
+								await b.projects.links.create({ projectId: own.id, label: "Designs", target: "https://figma.com/file/example" });
+								await b.projects.commands.create({ projectId: own.id, label: "Dev server", command: "npm run dev" });
+								await b.projects.commands.create({ projectId: own.id, label: "Database", command: "docker compose up -d", kind: "docker" });
+
+								return { clients: (await b.clients.list()).length, projectId: own.id };
+							})()`) as { clients: number; projectId: string };
+							console.log(`SMOKE_DEMO clients=${created.clients}`);
+
+							// Two files on the project, added through the service rather than
+							// the bridge: the bridge's only way in is a file picker, on purpose
+							// (.claude/rules/security.md section 2, the renderer never names a
+							// path). The icon is a real PNG, so the thumbnail path and the
+							// app://asset origin are exercised with bytes that decode.
+							{
+								const { existsSync } = await import("node:fs");
+								const projectAssets = await import("./main/services/project-assets");
+								const projectsService = await import("./main/services/projects");
+								const icon = join(app.getAppPath(), "build", "icon.png");
+								if (existsSync(icon)) {
+									const cover = await projectAssets.add({ projectId: created.projectId, sourcePath: icon });
+									await projectAssets.add({ projectId: created.projectId, sourcePath: icon, storage: "linked" });
+									await projectsService.setCover(created.projectId, cover.id);
+									const where = await projectsService.storage(created.projectId);
+									if (where.fileCount !== 1) {
+										throw new Error(`Smoke: the project folder holds ${where.fileCount} files, not the one managed copy`);
+									}
+									console.log(`SMOKE_DEMO project files=${where.fileCount} at=${where.mode}`);
+								}
+							}
 
 							// An agent call goes through the same host the socket calls, so the
 							// smoke exercises the real gate rather than a stand-in. Nothing may
@@ -487,6 +532,39 @@ if (!app.requestSingleInstanceLock()) {
 							const { writeFileSync, mkdirSync } = await import("node:fs");
 							const { join: joinPath } = await import("node:path");
 							mkdirSync(shotDir, { recursive: true });
+
+							/**
+							 * Captures the frame that is on screen now rather than the one
+							 * before it, as far as that is possible at all.
+							 *
+							 * `capturePage` resolves against whatever the compositor last
+							 * produced, so a capture taken straight after a change hands back
+							 * the previous frame. Waiting for two animation frames puts the
+							 * change through layout, paint and composite first, and that is
+							 * what this does.
+							 *
+							 * It is not a guarantee, and the difference matters. A window that
+							 * is occluded or minimised is not composited at all, so no frame
+							 * is produced and no wait can conjure one: a run under a window
+							 * somebody clicked in front of writes a folder where whole runs of
+							 * images are identical, and nothing in the run says so. The wait
+							 * is raced against a timer for exactly that case, because a bare
+							 * await on an animation frame that will never arrive does not
+							 * resolve late, it hangs the run until the outer timeout kills it
+							 * with no line saying where.
+							 *
+							 * The smoke script counts identical images afterwards and says so.
+							 * Read that line before using any of these as evidence.
+							 */
+							const capture = async (contents: Electron.WebContents) => {
+								await contents.executeJavaScript(
+									`Promise.race([
+										new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))),
+										new Promise((r) => setTimeout(() => r(null), 500)),
+									])`,
+								);
+								return contents.capturePage();
+							};
 							// A throwaway user-data directory is a genuinely first install, so
 							// the setup window opens in front of the application (decision 34).
 							// Photograph it, then finish it the way a person would: if the flow
@@ -520,7 +598,7 @@ if (!app.requestSingleInstanceLock()) {
 										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 									);
 									await new Promise((r) => setTimeout(r, 400));
-									const image = await flow.capturePage();
+									const image = await capture(flow);
 									writeFileSync(joinPath(shotDir, `setup-welcome-${theme}.png`), image.toPNG());
 								}
 								// Back to light, so the screens photographed after this start from
@@ -542,7 +620,7 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								for (const { id: step, label } of steps) {
 									await new Promise((r) => setTimeout(r, 500));
-									const image = await flow.capturePage();
+									const image = await capture(flow);
 									writeFileSync(joinPath(shotDir, `setup-${step}.png`), image.toPNG());
 									// The name and the business name are the two answers setup
 									// insists on, so a run against an empty profile has to type
@@ -579,7 +657,7 @@ if (!app.requestSingleInstanceLock()) {
 								}
 
 								await new Promise((r) => setTimeout(r, 500));
-								const done = await flow.capturePage();
+								const done = await capture(flow);
 								writeFileSync(joinPath(shotDir, `setup-done.png`), done.toPNG());
 
 								// Takes the tour rather than skipping straight in, so the
@@ -636,7 +714,7 @@ if (!app.requestSingleInstanceLock()) {
 									}
 								}
 
-								const walkthroughImage = await window.webContents.capturePage();
+								const walkthroughImage = await capture(window.webContents);
 								writeFileSync(joinPath(shotDir, `walkthrough.png`), walkthroughImage.toPNG());
 
 								await window.webContents.executeJavaScript(
@@ -654,24 +732,26 @@ if (!app.requestSingleInstanceLock()) {
 								if (!shellUp) throw new Error("Smoke: closing the walkthrough did not reveal the application");
 							}
 
-							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Client record", "Calendar", "Week", "Event form", "Mail", "Outbox", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
+							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Client record", "Projects", "Projects as a list", "Project record", "Calendar", "Week", "Event form", "Mail", "Drafts", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(
 									`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 								);
-								// Outbox is a view inside Mail; Week and the event form live inside
+								// Drafts is a view inside Mail; Week and the event form live inside
 								// Calendar. None of the three is a sidebar entry.
 								const sidebarEntry =
 									screen === "Client record"
 										? "Clients"
-										: screen === "Outbox"
-											? "Mail"
-											: screen === "Week" || screen === "Event form"
-												? "Calendar"
-												: screen === "Connection"
-													? "Agent"
-													: screen;
+										: screen === "Project record" || screen === "Projects as a list"
+											? "Projects"
+											: screen === "Drafts"
+												? "Mail"
+												: screen === "Week" || screen === "Event form"
+													? "Calendar"
+													: screen === "Connection"
+														? "Agent"
+														: screen;
 								// Matched on data-nav, never on the label. A collapsed sidebar
 								// renders icons only, and a display narrower than 1100px puts it
 								// in exactly that state, which is what a CI runner gives you.
@@ -735,6 +815,88 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (shown !== "ok") throw new Error(`Smoke: agent requests ${shown}`);
 								}
+								if (screen === "Projects") {
+									// The cards, with the cover the seed set. A card with no image
+									// would still draw, so this looks for the img rather than for
+									// the tile: the thumbnail is served over app://asset, and a
+									// policy that blocks it is exactly the failure worth catching.
+									const grid = await window.webContents.executeJavaScript(
+										`(async () => {
+											await new Promise((r) => setTimeout(r, 400));
+											const main = document.querySelector("main");
+											if (!main.querySelector("[role=group][aria-label=Layout]")) return "no layout switcher";
+											const cards = main.querySelectorAll("ul > li > button");
+											if (cards.length < 3) return "only " + cards.length + " cards";
+											const image = main.querySelector("ul img");
+											if (!image) return "no cover image on any card";
+											if (!image.getAttribute("src").startsWith("app://asset/")) return "the cover is not served from the asset origin";
+											if (!image.complete || image.naturalWidth === 0) return "the cover did not decode";
+											if (!main.textContent.includes("Your own work")) return "the project with no client is not shown";
+											return "ok";
+										})()`,
+									) as string;
+									if (grid !== "ok") throw new Error(`Smoke: projects ${grid}`);
+								}
+								if (screen === "Projects as a list") {
+									// The other two layouts, which is the whole point of the
+									// switcher. Going back to cards afterwards leaves the stored
+									// preference where the record shot below expects it.
+									const switched = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const main = document.querySelector("main");
+											const group = main.querySelector("[role=group][aria-label=Layout]");
+											if (!group) return "no layout switcher";
+											const button = (label) => [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === label);
+											if (!button("List")) return "no list layout";
+											button("List").click();
+											await wait(500);
+											if (!document.querySelector("main table tbody tr")) return "the list layout drew no rows";
+											if (document.querySelector("main table img")) return "the list layout still draws thumbnails";
+											button("Rows").click();
+											await wait(500);
+											if (!document.querySelector("main table img")) return "the rows layout draws no thumbnails";
+											return "ok";
+										})()`,
+									) as string;
+									if (switched !== "ok") throw new Error(`Smoke: project layouts ${switched}`);
+								}
+								if (screen === "Project record") {
+									const opened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const group = document.querySelector("main [role=group][aria-label=Layout]");
+											const cards = group ? [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Cards") : null;
+											if (cards) { cards.click(); await wait(400); }
+											const own = [...document.querySelectorAll("main ul > li > button")].find((el) => el.textContent.includes("Juno"));
+											if (!own) return "no card for the project with no client";
+											own.click();
+											await wait(800);
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Repository")) return "the links are not shown";
+											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
+											const start = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start");
+											if (!start) return "no start button";
+											const files = main.textContent.includes("Files");
+											if (!files) return "no files section";
+											// The three dots say where the files are kept, which is the
+											// one answer this screen exists to give.
+											const more = main.querySelector("button[aria-label='More project actions']");
+											if (!more) return "no actions menu";
+											more.click();
+											await wait(300);
+											const where = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Where the files are kept");
+											if (!where) return "the menu does not say where the files are";
+											where.click();
+											await wait(600);
+											const dialog = document.querySelector("[role=dialog]");
+											if (!dialog) return "no storage dialog";
+											if (!dialog.textContent.includes("Choose a folder")) return "the storage dialog offers no way to move it";
+											return "ok";
+										})()`,
+									) as string;
+									if (opened !== "ok") throw new Error(`Smoke: project record ${opened}`);
+								}
 								if (screen === "Client record") {
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
@@ -786,7 +948,7 @@ if (!app.requestSingleInstanceLock()) {
 									const noted = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const newClient = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "New client");
+											const newClient = document.querySelector("button[aria-label='New client']");
 											if (!newClient) return "no new client action";
 											newClient.click();
 											await wait(500);
@@ -825,7 +987,7 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (noted !== "ok") throw new Error(`Smoke: notes editor ${noted}`);
 
-									const notesImage = await window.webContents.capturePage();
+									const notesImage = await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, `notes-editor.png`), notesImage.toPNG());
 
 									// Leaves without saving: the client list this screen is about to
@@ -897,7 +1059,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 400));
-										const image = await window.webContents.capturePage();
+										const image = await capture(window.webContents);
 										writeFileSync(joinPath(shotDir, `document-template-editor-${theme}.png`), image.toPNG());
 									}
 
@@ -952,7 +1114,7 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (usedDocument !== "ok") throw new Error(`Smoke: using a document template ${usedDocument}`);
 
-									const useDocumentImage = await window.webContents.capturePage();
+									const useDocumentImage = await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, `use-document-template.png`), useDocumentImage.toPNG());
 
 									// One click undoes Review, landing back on Link; the same control,
@@ -1009,7 +1171,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 400));
-										const image = await window.webContents.capturePage();
+										const image = await capture(window.webContents);
 										writeFileSync(joinPath(shotDir, `mail-template-editor-${theme}.png`), image.toPNG());
 									}
 
@@ -1046,7 +1208,7 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (usedMail !== "ok") throw new Error(`Smoke: using a mail template ${usedMail}`);
 
-									const useMailImage = await window.webContents.capturePage();
+									const useMailImage = await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, `use-mail-template.png`), useMailImage.toPNG());
 
 									// Nothing was created yet at this point, so Escape is enough: it
@@ -1152,11 +1314,11 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (switched !== "ok") throw new Error(`Smoke: calendar week view ${switched}`);
 								}
-								if (screen === "Outbox") {
+								if (screen === "Drafts") {
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Outbox"));
-											if (!nav) return "no outbox entry";
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
+											if (!nav) return "no drafts entry";
 											nav.click();
 											await new Promise((r) => setTimeout(r, 600));
 											const row = document.querySelector("ul li button");
@@ -1166,7 +1328,7 @@ if (!app.requestSingleInstanceLock()) {
 											return "ok";
 										})()`,
 									);
-									if (opened !== "ok") throw new Error(`Smoke: outbox ${opened}`);
+									if (opened !== "ok") throw new Error(`Smoke: drafts ${opened}`);
 								}
 								if (screen === "Mail") {
 									// The list and the composer, both themes, before a thread takes
@@ -1179,15 +1341,77 @@ if (!app.requestSingleInstanceLock()) {
 												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 											);
 											await new Promise((r) => setTimeout(r, 300));
-											const shot = await window.webContents.capturePage();
+											const shot = await capture(window.webContents);
 											writeFileSync(joinPath(shotDir, `${name}-${theme}.png`), shot.toPNG());
 										}
 									};
 									await shoot("mail-list");
 
+									// Ticking a row turns the list into something you file in
+									// bulk: the toolbar grows a box, a count and the actions, and
+									// the per-row icons step aside. It is a second layout of the
+									// same screen, so it gets its own picture.
+									const ticked = await window.webContents.executeJavaScript(
+										`(async () => {
+											const box = document.querySelector("ul li input[type=checkbox]");
+											if (!box) return "no row checkbox";
+											box.click();
+											await new Promise((r) => setTimeout(r, 400));
+											// The box itself is always there, so it proves nothing. Its
+											// label flips to "Clear selection" only once a row is held.
+											const bar = document.querySelector("input[aria-label='Clear selection']");
+											return bar ? "ok" : "no selection toolbar";
+										})()`,
+									);
+									if (ticked !== "ok") throw new Error(`Smoke: mail selection ${ticked}`);
+									await shoot("mail-selection");
+									await window.webContents.executeJavaScript(
+										`(() => {
+											const box = document.querySelector("ul li input[type=checkbox]");
+											if (box) box.click();
+										})()`,
+									);
+									await new Promise((r) => setTimeout(r, 400));
+
+									// The same list serves a folder the user made and the trash,
+									// so selection has to work in both. The trash is the one that
+									// offers "delete forever" where the others offer the bin.
+									for (const [folder, removeLabel] of [
+										["Offertes", "Move to trash"],
+										["Trash", "Delete forever"],
+									] as const) {
+										const held = await window.webContents.executeJavaScript(
+											`(async () => {
+												const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith(${JSON.stringify(folder)}));
+												if (!nav) return "no folder";
+												nav.click();
+												await new Promise((r) => setTimeout(r, 800));
+												const box = document.querySelector("ul li input[type=checkbox]");
+												if (!box) return "no rows";
+												box.click();
+												await new Promise((r) => setTimeout(r, 400));
+												if (!document.querySelector("input[aria-label='Clear selection']")) return "no selection toolbar";
+												if (!document.querySelector("button[aria-label=" + JSON.stringify(${JSON.stringify(removeLabel)}) + "]")) return "no " + ${JSON.stringify(removeLabel)};
+												box.click();
+												await new Promise((r) => setTimeout(r, 300));
+												return "ok";
+											})()`,
+										);
+										if (held !== "ok") throw new Error(`Smoke: selection in ${folder}: ${held}`);
+									}
+									await window.webContents.executeJavaScript(
+										`(() => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Inbox"));
+											if (nav) nav.click();
+										})()`,
+									);
+									await new Promise((r) => setTimeout(r, 800));
+
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {
-											const open = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "New message");
+											// Matched on the label: writing is a plus on the title line
+											// now, so there is no text to find it by.
+											const open = document.querySelector("button[aria-label='New message']");
 											if (!open) return "no new message button";
 											open.click();
 											await new Promise((r) => setTimeout(r, 700));
@@ -1196,13 +1420,25 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (composed !== "ok") throw new Error(`Smoke: compose ${composed}`);
 									await shoot("mail-compose");
-									await window.webContents.executeJavaScript(
-										`(() => {
-											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel");
-											if (back) back.click();
+									// A subject, then Escape, which is the composer's only way
+									// out since it became a full-screen form. Typing first is what
+									// gives autosave something to write, and the draft it leaves
+									// behind is what the Drafts step below has to show.
+									const closed = await window.webContents.executeJavaScript(
+										`(async () => {
+											const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim().startsWith("Subject"));
+											const field = label ? document.getElementById(label.htmlFor) : null;
+											if (!field) return "no subject field";
+											const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+											setValue.call(field, "Smoke draft");
+											field.dispatchEvent(new Event("input", { bubbles: true }));
+											await new Promise((r) => setTimeout(r, 1500));
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 900));
+											return document.querySelector("ul li button") ? "ok" : "the list did not come back";
 										})()`,
 									);
-									await new Promise((r) => setTimeout(r, 500));
+									if (closed !== "ok") throw new Error(`Smoke: compose close ${closed}`);
 
 									// Opens the newest thread, so the reader and its frame are in
 									// the picture, and checks the frame actually loaded a body.
@@ -1243,7 +1479,7 @@ if (!app.requestSingleInstanceLock()) {
 										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 									);
 									await new Promise((r) => setTimeout(r, 400));
-									const image = await window.webContents.capturePage();
+									const image = await capture(window.webContents);
 									writeFileSync(
 										joinPath(shotDir, `${screen.toLowerCase()}-${theme}.png`),
 										image.toPNG(),
@@ -1288,7 +1524,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 350));
-										const image = await settingsWindow.webContents.capturePage();
+										const image = await capture(settingsWindow.webContents);
 										const name = tab.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 										writeFileSync(
 											joinPath(shotDir, `settings-${name}-${theme}.png`),
@@ -1320,8 +1556,37 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 300));
-										const image = await settingsWindow.webContents.capturePage();
+										const image = await capture(settingsWindow.webContents);
 										writeFileSync(joinPath(shotDir, `settings-your-contacts-${theme}.png`), image.toPNG());
+									}
+								}
+
+								// General is taller than the window too, and what falls off the
+								// bottom is the whole update section: the version, what the last
+								// check found, and the automatic-install toggle.
+								{
+									const general = tabs.findIndex((tab) => tab === "General");
+									if (general === -1) throw new Error("Smoke: the settings window has no general section");
+									await settingsWindow.webContents.executeJavaScript(`${TABS}[${general}].click()`);
+									await new Promise((r) => setTimeout(r, 300));
+									const shown = (await settingsWindow.webContents.executeJavaScript(
+										`(() => {
+											const main = document.querySelector("main");
+											main.scrollTop = main.scrollHeight;
+											return main.textContent.includes("Install updates automatically");
+										})()`,
+									)) as boolean;
+									if (!shown) {
+										throw new Error("Smoke: the general section did not show the update settings");
+									}
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await settingsWindow.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										const image = await capture(settingsWindow.webContents);
+										writeFileSync(joinPath(shotDir, `settings-updates-${theme}.png`), image.toPNG());
 									}
 								}
 
@@ -1354,7 +1619,7 @@ if (!app.requestSingleInstanceLock()) {
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 300));
-										const image = await settingsWindow.webContents.capturePage();
+										const image = await capture(settingsWindow.webContents);
 										writeFileSync(joinPath(shotDir, `settings-mcp-manual-${theme}.png`), image.toPNG());
 									}
 								}
@@ -1381,6 +1646,8 @@ if (!app.requestSingleInstanceLock()) {
 
 	app.on("before-quit", () => {
 		notifications.stop();
+		// A dev server left behind by a closed app is a port nobody can explain.
+		projectRunner.stopAll();
 		mailSync.stopScheduler();
 		mailSend.stopScheduler();
 		stopAgentSurface({ userDataDir: userDataDir(), instanceKey: databasePath() });

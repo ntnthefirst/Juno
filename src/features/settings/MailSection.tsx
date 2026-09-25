@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MailAccount, MailFolder } from "@shared/types";
+import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
@@ -81,9 +82,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 				title="Mail accounts"
 				description="IMAP accounts Juno reads from. Nothing is ever written back to the server: no flags, no moves, no deletes. Passwords go into the operating system keychain and are never shown again."
 				action={
-					<Button size="dense" variant="primary" onClick={() => setForm({ account: null })}>
-						Add account
-					</Button>
+					<AddButton label="Add account" onClick={() => setForm({ account: null })} />
 				}
 			>
 				{accounts === null ? (

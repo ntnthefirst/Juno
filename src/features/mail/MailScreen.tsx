@@ -7,22 +7,22 @@ import type {
 	MailSyncStatus,
 	MailThreadSummary,
 } from "@shared/types";
+import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
-import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
 import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
-import { describeMailFileResult, isSyncing } from "./format";
+import { describeMailFileResult } from "./format";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { NO_FILTERS, type MailFilters } from "./mail-filters";
-import { MailSearchBar } from "./MailSearchBar";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { OutboxDetail } from "./OutboxDetail";
 import { OutboxList } from "./OutboxList";
 import { ThreadList, type ThreadAction } from "./ThreadList";
+import { ThreadToolbar } from "./ThreadToolbar";
 import { ThreadView } from "./ThreadView";
 
 type LinkTarget = { threadId: string; currentClientId: string | null; senderAddress: string | null };
@@ -41,9 +41,9 @@ const PAGE = 100;
 const MAX_ROWS = 500;
 
 /**
- * Three panes: where (accounts, folders and the outbox), what (threads or
- * composed messages), and the thing itself. Search replaces the folder with a
- * ranked list across the account.
+ * Three panes: where (accounts and folders), what (threads or, inside
+ * Drafts, whatever an account has not sent yet), and the thing itself. Search
+ * replaces the folder with a ranked list across the account.
  *
  * Writing a message and making a folder take the screen over rather than
  * floating above it, because both have fields in them (decision 30).
@@ -140,12 +140,14 @@ export function MailScreen() {
 	}, []);
 
 	const term = search.trim();
-	const showingOutbox = selection?.view === "outbox";
-	const showingDrafts = selection?.view === "drafts" && !showingOutbox;
+	// Drafts is where a draft, a pending approval, a queued or failed send all
+	// show: everything not sent yet, for the account it belongs to. A sent
+	// message drops out of this list on its own and shows up in Sent instead.
+	const showingDrafts = selection?.view === "drafts";
 	const inTrash = selection?.view === "trash";
 
 	const fetchThreads = useCallback(() => {
-		if (!selection || selection.view === "outbox") return Promise.resolve<MailThreadSummary[]>([]);
+		if (!selection || selection.view === "drafts") return Promise.resolve<MailThreadSummary[]>([]);
 		return window.juno.mail.threads.list({
 			...(selection.accountId ? { accountId: selection.accountId } : {}),
 			...(term
@@ -164,7 +166,7 @@ export function MailScreen() {
 	}, [selection, term, filters, rowLimit]);
 
 	useEffect(() => {
-		if (showingOutbox) return;
+		if (showingDrafts) return;
 		let cancelled = false;
 		const id = setTimeout(
 			() => {
@@ -184,13 +186,20 @@ export function MailScreen() {
 			cancelled = true;
 			clearTimeout(id);
 		};
-	}, [fetchThreads, term, accountsVersion, showingOutbox]);
+	}, [fetchThreads, term, accountsVersion, showingDrafts]);
 
 	useEffect(() => {
-		if (!showingOutbox || !selection) return;
+		if (!showingDrafts || !selection) return;
 		let cancelled = false;
 		window.juno.mail.outbox
-			.list({ ...(selection.accountId ? { accountId: selection.accountId } : {}), limit: 200 })
+			.list({
+				...(selection.accountId ? { accountId: selection.accountId } : {}),
+				// Everything not sent yet. A sent message already has its place in
+				// Sent once it syncs, so it drops out of this list rather than
+				// doubling up.
+				states: ["draft", "pending", "queued", "sending", "failed", "cancelled"],
+				limit: 200,
+			})
 			.then((rows) => {
 				if (cancelled) return;
 				setOutboxRows(rows);
@@ -202,7 +211,7 @@ export function MailScreen() {
 		return () => {
 			cancelled = true;
 		};
-	}, [showingOutbox, selection, outboxVersion]);
+	}, [showingDrafts, selection, outboxVersion]);
 
 	/**
 	 * Widens the horizon and pulls again.
@@ -280,6 +289,17 @@ export function MailScreen() {
 			current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
 		);
 		setLastPicked(id);
+	}
+
+	/**
+	 * The box takes the rows on screen without dropping what a previous search
+	 * put in the selection. Picking a few, searching again and adding a few more
+	 * is the whole point of leaving search working.
+	 */
+	function selectEveryThread() {
+		const rows = (threads ?? []).map((thread) => thread.id);
+		setSelectedThreadIds((current) => [...new Set([...current, ...rows])]);
+		setLastPicked(rows[rows.length - 1] ?? null);
 	}
 
 	function clearThreadSelection() {
@@ -556,7 +576,8 @@ export function MailScreen() {
 					setCompose(null);
 					setNotice(queued ? "Message queued." : "Draft saved.");
 					setOutboxVersion((v) => v + 1);
-					setSelection({ accountId: message.accountId, folderId: null, view: "outbox" });
+					const draftsFolderId = folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
+					setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
 					setSelectedOutboxId(message.id);
 				}}
 			/>
@@ -577,7 +598,6 @@ export function MailScreen() {
 		);
 	}
 
-	const anySyncing = Object.values(sync).some(isSyncing);
 	const selectedOutbox = outboxRows?.find((m) => m.id === selectedOutboxId) ?? null;
 	const activeFolders = selection?.accountId ? (folders[selection.accountId] ?? []) : [];
 	const selectedFolder = selection?.folderId
@@ -588,34 +608,21 @@ export function MailScreen() {
 
 	return (
 		<div className="flex h-full min-h-0">
-			<div className="flex w-[240px] shrink-0 flex-col border-r border-[var(--line)]">
-				<div className="flex items-center justify-between px-5 pt-6 pb-3">
+			<div className="flex w-[264px] shrink-0 flex-col border-r border-[var(--line)]">
+				{/*
+					Writing is the one thing this pane is for that is not a folder, so it
+					sits on the title line as a plus rather than spending a row of its own
+					on a button. Syncing says so on the account it belongs to, which is
+					the only place the answer is useful when there are two of them.
+				*/}
+				<div className="flex items-center justify-between gap-2 px-5 pt-6 pb-3">
 					<h1 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
 						Mail
 					</h1>
-					{/*
-						Syncing is continuous and says so here. There is no button for it:
-						a mail client that needs to be told to fetch mail is one that has
-						already failed at the only thing it has to do on its own.
-					*/}
-					{anySyncing ? (
-						<span
-							className="flex items-center gap-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]"
-							title="Syncing"
-						>
-							<Icon name="sync" size={12} />
-							Syncing
-						</span>
-					) : null}
-				</div>
-				<div className="px-5 pb-3">
-					<Button
-						variant="primary"
-						size="dense"
+					<AddButton
+						label="New message"
 						onClick={() => setCompose({ accountId: selection?.accountId ?? accounts[0]?.id })}
-					>
-						New message
-					</Button>
+					/>
 				</div>
 				<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
 					<FolderNav
@@ -641,7 +648,7 @@ export function MailScreen() {
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
-				{selectedThreadId && !showingOutbox ? (
+				{selectedThreadId && !showingDrafts ? (
 					<ThreadView
 						key={selectedThreadId}
 						threadId={selectedThreadId}
@@ -652,7 +659,7 @@ export function MailScreen() {
 						onReply={(messageId, mode) => void reply(messageId, mode)}
 						onAction={(action) => handleThreadAction(action, [selectedThreadId])}
 					/>
-				) : showingOutbox && selectedOutbox ? (
+				) : showingDrafts && selectedOutbox ? (
 					<OutboxDetail
 						key={`${selectedOutbox.id}:${selectedOutbox.updatedAt}`}
 						message={selectedOutbox}
@@ -662,30 +669,32 @@ export function MailScreen() {
 					/>
 				) : (
 					<div className="flex h-full min-h-0 flex-col">
-						{showingOutbox ? (
+						{showingDrafts ? (
 							<div className="px-4 pt-6 pb-3">
-								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Outbox</h2>
+								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Drafts</h2>
 							</div>
 						) : (
-							<div className="px-4 pt-6 pb-3">
-								<div className="max-w-[360px]">
-									<MailSearchBar
-										search={search}
-										onSearch={(value) => {
-											setSearch(value);
-											setRowLimit(PAGE);
-										}}
-										filters={filters}
-										onFilters={(next) => {
-											setFilters(next);
-											setRowLimit(PAGE);
-										}}
-									/>
-								</div>
-							</div>
+							<ThreadToolbar
+								search={search}
+								onSearch={(value) => {
+									setSearch(value);
+									setRowLimit(PAGE);
+								}}
+								filters={filters}
+								onFilters={(next) => {
+									setFilters(next);
+									setRowLimit(PAGE);
+								}}
+								inTrash={inTrash}
+								visibleIds={(threads ?? []).map((thread) => thread.id)}
+								selectedIds={selectedThreadIds}
+								onSelectAll={selectEveryThread}
+								onClearSelection={clearThreadSelection}
+								onAction={handleThreadAction}
+							/>
 						)}
 
-						{!showingOutbox && selectedFolder && !selectedFolder.syncEnabled ? (
+						{!showingDrafts && selectedFolder && !selectedFolder.syncEnabled ? (
 							<div className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2">
 								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 									This folder is not synced, so nothing here reflects the server yet.
@@ -696,21 +705,8 @@ export function MailScreen() {
 							</div>
 						) : null}
 
-						{showingDrafts ? (
-							<div className="mx-4 mb-3 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								Unsent drafts live in the outbox, not here.{" "}
-								<button
-									type="button"
-									onClick={() => setSelection({ accountId: null, folderId: null, view: "outbox" })}
-									className="text-[var(--accent)] hover:underline"
-								>
-									Go to outbox
-								</button>
-							</div>
-						) : null}
-
 						<div className="min-h-0 flex-1 overflow-y-auto">
-							{showingOutbox ? (
+							{showingDrafts ? (
 								<OutboxList
 									messages={outboxRows}
 									error={listError}
@@ -727,12 +723,10 @@ export function MailScreen() {
 									selectedIds={selectedThreadIds}
 									onSelect={setSelectedThreadId}
 									onToggleSelect={toggleThreadSelection}
-									onSelectAll={() => setSelectedThreadIds((threads ?? []).map((t) => t.id))}
-									onClearSelection={clearThreadSelection}
 									onAction={handleThreadAction}
 								/>
 							)}
-							{!showingOutbox && threads !== null && threads.length >= rowLimit && rowLimit < MAX_ROWS ? (
+							{!showingDrafts && threads !== null && threads.length >= rowLimit && rowLimit < MAX_ROWS ? (
 								<div className="flex justify-center px-4 py-3">
 									<Button
 										size="dense"
@@ -743,7 +737,7 @@ export function MailScreen() {
 								</div>
 							) : null}
 
-							{!showingOutbox && term.length === 0 ? (
+							{!showingDrafts && term.length === 0 ? (
 								<HorizonNote
 									accounts={
 										selection?.accountId

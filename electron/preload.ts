@@ -453,6 +453,8 @@ const api: JunoApi = {
 			unhide: (id) => call("mail.templates.unhide", id),
 			duplicate: (id) => call("mail.templates.duplicate", id),
 			parseBody: (html) => call("mail.templates.parseBody", html),
+			loadGoogleFont: (request) => call("mail.templates.loadGoogleFont", request),
+			convertBlock: (input) => call("mail.templates.convertBlock", input),
 			preview: (draft) => call("mail.templates.preview", draft),
 			render: (input) => call("mail.templates.render", input),
 		},

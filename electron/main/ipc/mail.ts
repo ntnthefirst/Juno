@@ -8,7 +8,9 @@
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { copyFileSync } from "node:fs";
 import type {
+	GoogleFontRequest,
 	MailAccountInput,
+	MailBlockConversion,
 	MailAccountPatch,
 	MailDraftInput,
 	MailDraftPatch,
@@ -23,6 +25,7 @@ import * as actions from "../services/mail-actions";
 import * as accounts from "../services/mail-accounts";
 import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
+import * as fonts from "../services/mail-fonts";
 import type { MailFolderInput } from "../services/mail-folders";
 import * as outbox from "../services/mail-outbox";
 import * as recipients from "../services/mail-recipients";
@@ -151,6 +154,8 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.templates.unhide", (_event, id: string) => templates.unhide(id));
 	ipcMain.handle("mail.templates.duplicate", (_event, id: string) => templates.duplicate(id));
 	ipcMain.handle("mail.templates.parseBody", (_event, html: string) => templates.parseBody(html));
+	ipcMain.handle("mail.templates.loadGoogleFont", (_event, request: GoogleFontRequest) => fonts.loadGoogleFont(request));
+	ipcMain.handle("mail.templates.convertBlock", (_event, input: MailBlockConversion) => templates.convertBlock(input));
 	ipcMain.handle("mail.templates.preview", (_event, draft: MailTemplateDraft) =>
 		templates.previewDraft(draft),
 	);

@@ -61,11 +61,19 @@ function addresses(value: unknown): MailAddress[] {
 const LAYOUT_SCHEMA = {
 	type: ["object", "null"],
 	description:
-		"The section and block canvas. { version: 1, width, minHeight, background, customCss, " +
-		"sections: [{ id, name, layout, box, blocks }] }. A section lays its blocks out with flex " +
-		"or grid; nothing is positioned absolutely and custom CSS that tries to is dropped. Call " +
-		"mail.templates.get on an existing template to see the shape, and mail.templates.preview " +
-		"to check one before proposing it. Null drops the canvas and keeps the HTML it compiled to.",
+		"The section and block canvas. { version: 1, width, minHeight, fill, fonts, customCss, " +
+		"sections: [{ id, name, hidden, layout, box, blocks }] }. A section lays its blocks out with " +
+		"flex or grid; nothing is positioned absolutely and custom CSS that tries to is dropped. A " +
+		"box carries fill (solid or a two-stop gradient), stroke, radius or four corners, opacity, " +
+		"effects (shadow or blur), width, minHeight and clip. A text style carries fontFamily, " +
+		"weight (thin to black), italic, decoration, transform, letterSpacing and both alignments. " +
+		"fonts: [{ family, source: google or link, href for a link, weights, italic, fallback: sans, " +
+		"serif or mono }]; a block names a font by its family. A code block is { kind: html, " +
+		"html, css }: its markup, and declarations for its element (or for a div around it when " +
+		"the markup is more than one element). Colours are hex, images and links " +
+		"https only. Call mail.templates.get on an existing template to see the shape, and " +
+		"mail.templates.preview to check one before proposing it. Null drops the canvas and keeps " +
+		"the HTML it compiled to.",
 };
 
 export const mailOutboxTools: ToolDescriptor[] = [

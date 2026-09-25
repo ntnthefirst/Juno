@@ -29,6 +29,11 @@ const FONT = "Inter, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-s
 export interface MailShellOptions {
 	/** The footer line: business name, address, VAT number. Escaped here. */
 	footerLines: string[];
+	/**
+	 * Stylesheets for the typefaces the body names, linked in the head. Built
+	 * by `fontLinks` in mail-layout.ts, which only ever returns https addresses.
+	 */
+	fontLinks?: string[];
 }
 
 /** Wraps a rendered body in the house shell. The body is trusted HTML from a template. */
@@ -39,7 +44,11 @@ export function mailShell(bodyHtml: string, options: MailShellOptions): string {
 		.join("<br>");
 	return [
 		'<!doctype html><html lang="nl-BE"><head><meta charset="utf-8">',
-		'<meta name="viewport" content="width=device-width, initial-scale=1"></head>',
+		'<meta name="viewport" content="width=device-width, initial-scale=1">',
+		// A client that will not load these falls back to the stack each block
+		// names after the family, so leaving one out costs a typeface, not text.
+		...(options.fontLinks ?? []).map((href) => `<link rel="stylesheet" href="${escapeHtml(href)}">`),
+		"</head>",
 		`<body style="margin:0;padding:0;background:${PAPER};">`,
 		`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER};">`,
 		`<tr><td align="center" style="padding:24px 12px;">`,

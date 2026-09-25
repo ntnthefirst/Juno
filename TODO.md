@@ -45,10 +45,11 @@ phase 6's done-when in PLAN.md.
 
 ## 3. Smaller things
 
-- **The MCP server itself.** The tool descriptors exist for every service, but
-  nothing serves them over stdio yet. That is phase 6 in `PLAN.md`; the
-  descriptors are written per feature so that phase is assembly, not archaeology.
-- **`npm run test` runs under Electron's Node** because the host's Node 23.9 has
+nothing serves them over stdio yet. That is phase 6 in `PLAN.md`; the
+descriptors are written per feature so that phase is assembly, not archaeology.
+
+- **Projects overview layout.** Remove the max-width constraint and use fixed responsive padding that grows slightly on larger screens. In the rows view, let the title and description column fill the remaining space after the other columns keep fixed widths, and truncate overflowing text with an ellipsis.
+- **Client detail quick status.** Add a small clickable status tag beside the client name in the detail header. Changing it should update the client and add a timeline entry, coalescing changes made within 10 minutes into one entry and removing the entry when the status is changed back to its original value.
   no `StatementSync.setReturnArrays`. If the host Node moves past 24 this can go
   back to plain `vitest`.
 - **Database encryption** is out of scope and would mean revisiting decision 18,

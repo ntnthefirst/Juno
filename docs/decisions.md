@@ -124,14 +124,17 @@ The **no AI attribution in git history** rule still applies. See
 [../.claude/rules/git.md](../.claude/rules/git.md). Commits should read as though a
 developer wrote them, because the decisions in them are the developer's.
 
-## 13. Licence: undecided, and deliberately so
+## 13. Licence: all rights reserved, permanently
 
-The repo starts private with no `LICENSE` file, which means default copyright,
-meaning all rights reserved. That is the right default while the answer is unknown,
-because adding a permissive licence later is easy and retracting one is not.
+The repo has no `LICENSE` file, which means default copyright, meaning all
+rights reserved. That is not a placeholder waiting on a decision: it is the
+decision. A company must not be able to take Juno, host it, and sell it back,
+and a permissive licence is the one thing that is easy to grant and impossible
+to take back once someone has built on it.
 
-Decide before the repo goes public. The question to answer first is whether a
-company should be able to take Juno, host it, and sell it back.
+If the repo goes public later, it goes public still unlicensed. Public without
+a `LICENSE` file remains "look, don't reuse" under copyright law; nothing about
+visibility changes what this decision settled.
 
 ## 14. Theme is a three-state setting, not a toggle
 
@@ -412,7 +415,7 @@ the first thing to reopen.
 
 Phase 5 stores `start_local` and `end_local` as `YYYY-MM-DDTHH:MM:SS` with no
 zone suffix, beside an IANA `timezone`, and keeps `start_utc`, `end_utc` and
-`series_end_utc` only as an index for range queries. PLAN.md section 3 had
+`series_end_utc` only as an index for range queries. The original plan had
 sketched `starts_at` and `ends_at` as instants with a zone beside them; that
 shape is wrong for the one case the phase exists for. "10:00 every Tuesday in
 Brussels" is at 08:00Z until the clocks change and 09:00Z after, so a rule
@@ -486,7 +489,7 @@ a step needing approval stops the run and waits for a person, on a schedule as
 much as by hand. That is what keeps "an agent may prepare a send and may never
 fire it" true when the caller is a timer.
 
-`@modelcontextprotocol/sdk` is used in the bridge only, as PLAN.md chose. It
+`@modelcontextprotocol/sdk` is used in the bridge only, as planned. It
 costs about 19 MB in the installer through dependencies the stdio path never
 loads (express, hono, jose and the rest are pulled in by other transports).
 Hand-rolling the protocol would save that and take on being wrong about a
@@ -570,12 +573,36 @@ builds installers on Windows and macOS and uploads them to a **draft** release:
 publishing that release is the deliberate act that starts a rollout, so a tag
 alone can never push a build to every installed copy.
 
-The updater is quiet by design. It checks thirty seconds after launch and daily
-after that, it downloads in the background, and it installs on the next quit.
-It never checks while Juno is locked, because locked means nobody is at the
-keyboard and nothing unattended runs then (decision 15). It is also the only
-outbound request Juno makes that the user did not configure themselves, which
-is why it lives in one small file that says so.
+Merging into `main` is what produces the tag. The version workflow reads the
+highest tag rather than `package.json`, because the two drift: a release is cut
+on main and the branch it came from keeps the older number. A pull request that
+bumps `package.json` past the highest tag is asking for a minor or a major, and
+is taken at its word. It calls the release workflow rather than letting its own
+tag push start it, because a tag pushed with `GITHUB_TOKEN` starts nothing, and
+an automatic release that waited for that event would quietly never run.
+
+The draft is the line this holds. Every merge produces installers; no merge
+reaches anybody's machine.
+
+The updater is quiet by design. It checks 38 hours after the last check rather
+than every 24, because a whole number of days lands every check in the same few
+minutes of the working day forever, and an odd interval walks around the clock
+instead. The last check is persisted, so opening and closing Juno four times in
+an afternoon is four launches and no extra checks. It never checks while Juno is
+locked, because locked means nobody is at the keyboard and nothing unattended
+runs then (decision 15). It is also the only outbound request Juno makes that
+the user did not configure themselves, which is why it lives in one small file
+that says so.
+
+Settings > General owns the rest of it: the running version, what the last check
+found, a button that checks now, and a toggle. With the toggle on, a release
+downloads in the background and is applied when Juno is next closed, so the
+following launch is the new version. With it off, nothing is downloaded until
+somebody presses Install, and that press is the only thing in the app that
+restarts it. The button is rate-limited to three checks a minute, shared with
+the agent's `updates.check`, so neither a stuck finger nor a loop hammers the
+feed. There is no MCP tool that installs: restarting the application somebody is
+working in is a person's decision, the same answer as the lock.
 
 **What would reverse this:** shipping to clients who cannot reach GitHub, or a
 signing certificate arriving with its own distribution channel.
@@ -786,3 +813,78 @@ never seen.
 **What would reverse this:** nothing short of setup growing into something with
 its own navigation, which would make it a screen again. If it ever needs more
 than one field per line, the questions are wrong rather than the window.
+
+## 35. A project is a workspace, and the command that starts it is not an agent's to write
+
+Projects were a name, a client, a date and a value. They are now the place a
+piece of work actually lives: its links, its files, the folder it is checked out
+into, and the command that starts it.
+
+Four things were decided along the way, and each one is the kind that is
+expensive to reverse.
+
+**A project need not belong to a client.** `projects.client_id` is nullable, and
+migration 0012 rebuilds the table to make it so, which is also what made the
+migration runner turn foreign keys off around each file and run `PRAGMA
+foreign_key_check` inside the transaction instead. A rebuild drops the parent
+table, and a drop is an implicit delete of every parent row; with enforcement on
+it fails the moment a document points at a project, and deferring the check does
+not help because nothing lowers the counter the drop raised. The work a one-person business
+does for itself takes exactly the shape of the work it does for someone else,
+and requiring a client for it would mean inventing one and putting a fiction in
+the client list. Every read that wants a client name joins it left; the one
+place that still joins inner is the invoice suggestion in `reminders-derive.ts`,
+deliberately, because there is nobody to invoice.
+
+**Files are held one of two ways, and the user picks.** A managed file is copied
+into the project's folder and Juno owns it: it moves when the folder moves, it
+is backed up with the folder, and deleting the record eventually deletes it. A
+linked file stays where it is and the record points at it: nothing is copied,
+which is the whole reason it exists, and Juno never writes to it or deletes it.
+The cost of the second kind is that moving the original breaks the record, which
+is why `exists` is on every asset the service returns and why the interface
+shows it rather than drawing a blank square.
+
+**Where the managed files live is per project, and the default is the app's own
+folder.** `storage_mode` is `app` or `custom`. The app's folder is under
+userData, so it travels with a backup; a project carrying four gigabytes of
+video wants somewhere with room on it, and that is the whole feature. Changing
+it moves the files first and writes the row second, because the other order
+leaves a project whose row says one folder and whose files are in another, and
+nothing would ever tell you which was right. A move renames when it can and
+copies when it cannot, and deletes nothing from the source until the
+destination has the file.
+
+**A command runs in a real shell, so no agent may write one or run one.** This
+is the one place Juno deliberately breaks the rule in decision 2 that anything
+the interface can do an agent can do, and it is worth being exact about why.
+`npm run dev` and `docker compose up` are shell lines; there is no weaker
+version of this feature, because anything that can start a dev server can start
+anything. The confirmation gate does not help: a tool that writes a command
+plus a tool that runs one is a remote shell with a dialog in front of it asking
+a person to read a command line and guess. So `projects.list_commands` is
+read-only and there is no tool that creates, edits, deletes or runs one.
+`.claude/rules/mcp.md` section 7 already says a tool does not take a raw
+statement; this is that rule applied rather than an exception to it. The panel
+that writes a command says in plain words what it does, the same way the lock
+settings say the lock screen does not protect the file on disk (decision 15).
+
+A run is held in memory rather than in the database. A process is not a record:
+it does not survive a restart, and writing every line a dev server prints into
+SQLite would be a log file with extra steps and a database that grows while
+nothing happens. Output is pushed to the window as it arrives, the tree is
+killed rather than the shell alone, and `before-quit` stops everything, because
+a dev server left behind by a closed app is a port nobody can explain.
+
+Thumbnails are served over `app://asset`, a third host on the custom scheme and
+therefore a third origin, which the renderer's policy allows as an image source
+and as nothing else. The handler takes an asset id and resolves the path
+itself, so the renderer never names a file on disk, and it refuses to serve
+anything that is not one of six image types it is willing to decode. SVG is
+absent on purpose: it is a document that can carry script.
+
+**What would reverse the command rule:** a sandbox that can run a build without
+the user's privileges, which Electron does not have and which a back office has
+no business building. **What would reverse the storage rule:** nothing short of
+Juno becoming a sync client, at which point a folder outside its own tree stops
+being something it can reason about at all.

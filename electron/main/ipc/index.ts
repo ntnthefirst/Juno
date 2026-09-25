@@ -26,6 +26,7 @@ import { registerRemindersIpc } from "./reminders";
 import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
 import { registerTemplatesIpc } from "./templates";
+import { registerUpdatesIpc } from "./updates";
 import { registerWindowIpc } from "./window";
 
 export function registerAllIpc(userDataDir: string): void {
@@ -35,6 +36,7 @@ export function registerAllIpc(userDataDir: string): void {
 	registerWindowIpc();
 	registerLockIpc();
 	registerSettingsIpc();
+	registerUpdatesIpc();
 
 	registerClientsIpc();
 	registerClientEmailsIpc();

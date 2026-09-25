@@ -142,3 +142,23 @@ describe("a settings file from the older shape", () => {
 		expect(owner.emails[0].email).toBe("b@juno.test");
 	});
 });
+
+describe("the update preference", () => {
+	it("installs automatically until somebody says otherwise", async () => {
+		freshStore();
+		expect(await settings.getUpdates()).toEqual({ autoInstall: true, lastCheckedAt: null });
+	});
+
+	it("patches one field without clearing the other", async () => {
+		freshStore();
+		const checked = "2026-03-14T09:00:00.000Z";
+		await settings.setUpdates({ lastCheckedAt: checked });
+		const updates = await settings.setUpdates({ autoInstall: false });
+		expect(updates).toEqual({ autoInstall: false, lastCheckedAt: checked });
+	});
+
+	it("falls back to the default when the stored value is the wrong type", async () => {
+		freshStore({ updates: { autoInstall: "yes", lastCheckedAt: 17 } });
+		expect(await settings.getUpdates()).toEqual({ autoInstall: true, lastCheckedAt: null });
+	});
+});

@@ -10,9 +10,20 @@ name: Release
 # The release is created as a draft. Look at it, then publish it: publishing is
 # what makes every installed copy start downloading, and that is not something
 # to do by accident.
+#
+# version.yml calls this workflow directly rather than letting its tag push
+# start it. A tag pushed with GITHUB_TOKEN does not trigger another workflow.
+# That is GitHub's loop protection and no setting turns it off, so an automatic
+# release that waited for the tag event would sit there doing nothing.
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to build, when this is called rather than pushed.
+        required: true
+        type: string
   workflow_dispatch:
 
 permissions:
@@ -21,7 +32,7 @@ permissions:
 # A re-run of the same tag, or a workflow_dispatch on top of a tag push,
 # should not race the earlier run for the same draft release.
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -37,13 +48,14 @@ jobs:
       - name: Create draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          gh release create "${{ github.ref_name }}" \
+          gh release create "$TAG" \
             --repo "${{ github.repository }}" \
-            --title "${{ github.ref_name }}" \
+            --title "$TAG" \
             --draft \
             --notes "" \
-            || echo "Release for ${{ github.ref_name }} already exists, reusing it."
+            || echo "Release for $TAG already exists, reusing it."
 
   build:
     needs: create-release
@@ -61,7 +73,12 @@ jobs:
     timeout-minutes: 40
 
     steps:
+      # The tag, not the branch. A called run starts from main, and building
+      # main would name the installers after whatever version is on it rather
+      # than the one being released.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:

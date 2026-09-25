@@ -12,19 +12,20 @@ import type {
 } from "@shared/types";
 import type { Crumb } from "../../app/breadcrumb-context";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { Button } from "../../components/Button";
+import { AddButton } from "../../components/AddButton";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { ClientAddressPanel } from "./ClientAddressPanel";
-import { ClientDetail, StatusBadge } from "./ClientDetail";
+import { StatusBadge } from "../../components/StatusBadge";
+import { ClientDetail } from "./ClientDetail";
 import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
 import { ClientNotePanel } from "./ClientNotePanel";
 import { ClientPhonePanel } from "./ClientPhonePanel";
 import { ContactForm } from "./ContactForm";
-import { ProjectForm } from "./ProjectForm";
+import { ProjectForm } from "../projects/ProjectForm";
 
 type Load =
 	| { status: "loading" }
@@ -232,7 +233,8 @@ export function ClientsScreen() {
 	if (projectForm && selectedId) {
 		return (
 			<ProjectForm
-				clientId={selectedId}
+				lockedClientId={selectedId}
+				backLabel="Client"
 				project={projectForm.project}
 				onClose={() => setProjectForm(null)}
 				onSaved={() => {
@@ -341,9 +343,7 @@ export function ClientsScreen() {
 						aria-label="Search clients"
 						className="w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 					/>
-					<Button variant="primary" onClick={() => setForm({ client: null })}>
-						New client
-					</Button>
+					<AddButton label="New client" onClick={() => setForm({ client: null })} />
 				</div>
 			</div>
 

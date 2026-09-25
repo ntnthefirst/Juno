@@ -123,6 +123,31 @@ describe("drafts", () => {
 	});
 });
 
+describe("change notifications", () => {
+	it("fires onChange for a draft created, edited, cancelled and removed", async () => {
+		const seen: string[] = [];
+		const unsubscribe = outbox.onChange((message) => seen.push(`${message.state}:${message.id}`));
+		try {
+			const created = await outbox.createDraft(
+				{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Offerte", bodyText: "Hallo." },
+				db,
+			);
+			const updated = await outbox.updateDraft(created.id, { subject: "Herziene offerte" }, db);
+			const cancelled = await outbox.cancel(updated.id, db);
+			const removed = await outbox.remove(cancelled.id, db);
+
+			expect(seen).toEqual([
+				`draft:${created.id}`,
+				`draft:${updated.id}`,
+				`cancelled:${cancelled.id}`,
+				`cancelled:${removed.id}`,
+			]);
+		} finally {
+			unsubscribe();
+		}
+	});
+});
+
 describe("the gate", () => {
 	async function draft(): Promise<string> {
 		const made = await outbox.createDraft(

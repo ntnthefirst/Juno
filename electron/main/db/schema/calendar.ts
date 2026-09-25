@@ -10,8 +10,8 @@ import { clients, projects } from "./clients";
  * means: a call at 10:00 Brussels time is at 10:00 after the clocks change too.
  * `start_utc` and `end_utc` are the first occurrence as instants, kept only so
  * a range query can be indexed. Expanding a series always starts from the
- * wall-clock values; deriving them back from UTC is the bug decision 11 and
- * PLAN.md phase 5 both warn about.
+ * wall-clock values; deriving them back from UTC is the bug decision 11
+ * warns about.
  */
 export const calendarEvents = sqliteTable(
 	"calendar_events",

@@ -39,6 +39,17 @@ export function documentsDir(): string {
 	return dir;
 }
 
+/**
+ * A project's own files, one folder per project. A project can be pointed at a
+ * folder outside this one when its files are large, which is why the service
+ * resolves a folder rather than everything joining onto this path.
+ */
+export function projectsDir(): string {
+	const dir = join(userDataDir(), "projects");
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
 /** Attachments, one folder per account and message. Never in the database. */
 export function mailDir(): string {
 	const dir = join(userDataDir(), "mail");

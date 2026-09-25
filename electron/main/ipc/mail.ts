@@ -14,6 +14,7 @@ import type {
 	MailDraftPatch,
 	MailOutboxListQuery,
 	MailReplyMode,
+	MailTemplateDraft,
 	MailTemplateInput,
 	MailTemplatePatch,
 	MailThreadListQuery,
@@ -144,7 +145,14 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.templates.update", (_event, id: string, patch: MailTemplatePatch) =>
 		templates.update(id, patch),
 	);
+	ipcMain.handle("mail.templates.listAll", () => templates.listAll());
 	ipcMain.handle("mail.templates.remove", (_event, id: string) => templates.remove(id));
+	ipcMain.handle("mail.templates.hide", (_event, id: string) => templates.hide(id));
+	ipcMain.handle("mail.templates.unhide", (_event, id: string) => templates.unhide(id));
+	ipcMain.handle("mail.templates.duplicate", (_event, id: string) => templates.duplicate(id));
+	ipcMain.handle("mail.templates.preview", (_event, draft: MailTemplateDraft) =>
+		templates.previewDraft(draft),
+	);
 	ipcMain.handle("mail.templates.render", (_event, input: Parameters<typeof templates.renderTemplate>[0]) =>
 		templates.renderTemplate(input),
 	);

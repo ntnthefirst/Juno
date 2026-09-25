@@ -444,10 +444,15 @@ const api: JunoApi = {
 		openLink: (url) => call("mail.openLink", url),
 		templates: {
 			list: () => call("mail.templates.list"),
+			listAll: () => call("mail.templates.listAll"),
 			get: (id) => call("mail.templates.get", id),
 			create: (input) => call("mail.templates.create", input),
 			update: (id, patch) => call("mail.templates.update", id, patch),
 			remove: (id) => call("mail.templates.remove", id),
+			hide: (id) => call("mail.templates.hide", id),
+			unhide: (id) => call("mail.templates.unhide", id),
+			duplicate: (id) => call("mail.templates.duplicate", id),
+			preview: (draft) => call("mail.templates.preview", draft),
 			render: (input) => call("mail.templates.render", input),
 		},
 		outbox: {

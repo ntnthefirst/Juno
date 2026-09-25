@@ -190,6 +190,10 @@ Not for amounts, which are tabular sans.
   button in a 36px row), and 40x40px for anything standalone: toolbar buttons,
   primary actions, anything in a modal. Pad a small icon out to the target rather
   than growing the icon.
+- **One exception, by the owner's choice: the mail template editor.** Its design
+  panel, layers and floating toolbar use Figma's sizes, 28px controls and 34px
+  tools, because that editor is a canvas tool and is used like one. It does not
+  spread: every other screen keeps the targets above.
 - Every interactive element is a `<button>` or an `<a>`, never a `div` with
   `onClick`. Icon-only buttons carry an `aria-label`.
 - Text contrast at least 4.5:1 against its actual background. `--ink-muted` passes,

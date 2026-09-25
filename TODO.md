@@ -72,17 +72,14 @@ descriptors are written per feature so that phase is assembly, not archaeology.
 - **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
   is the phase 4 promise not yet kept. Templates carry their own layout, so it
   matters least for the messages Juno writes on its own.
-- **A new mail template starts from nothing.** `mail-templates.ts` has a
-  `create()`, but the renderer has no "new template" action at all, only edit,
-  preview and use on the four that ship. `mailShell` already wraps every sent
-  message in the house header and footer chrome and the owner's signature line
-  at send time, so that part is not what is missing. What is missing is a
-  starting point for the body someone types: an opening line and a signoff
-  block, the way the seeded templates already share `SIGNOFF_U` and
-  `SIGNOFF_JE` in `mail-templates-seed.ts`, offered as a starter the first time
-  someone writes a template rather than an empty field. This needs a "new
-  template" flow in the editor and a couple of reusable starter bodies, one per
-  register, not a change to the house shell.
+- **A new mail template starts from an empty canvas.** The plus on the list
+  asks for a name and opens the editor on a canvas with one empty section, and
+  the name doubles as the subject until somebody changes it. What is still
+  missing is a starting point for the body: an opening line and a signoff, the
+  way the seeded templates share `SIGNOFF_U` and `SIGNOFF_JE` in
+  `mail-templates-seed.ts`, laid in as blocks rather than typed from nothing.
+  The editor no longer offers the register, so a starter either picks u, which
+  is what the contracts use, or comes as two starters to choose from.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.

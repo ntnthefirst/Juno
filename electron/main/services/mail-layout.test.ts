@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { MailBlock, MailFont, MailLayout, MailSection, MailTextStyle, TemplateInput } from "../../shared/types";
 import {
 	blockToCode,
+	breakpointCss,
 	compileLayout,
+	layoutAt,
 	convertBlockToCode,
 	fontLinks,
 	sanitiseMarkup,
@@ -90,10 +92,25 @@ describe("compileLayout", () => {
 	});
 
 	it("keeps the frame width and the canvas height", () => {
-		const layout = { ...emptyLayout(), width: 640, minHeight: 500 };
+		const layout: MailLayout = { ...emptyLayout(), widthMode: "fixed", width: 640, minHeight: 500 };
 		const html = compileLayout(layout);
-		expect(html).toContain("max-width:640px");
+		expect(html).toContain("max-width:640px;margin:0 auto");
 		expect(html).toContain("min-height:500px");
+	});
+
+	it("fills the mail client with a new canvas, whatever width it is drawn at", () => {
+		const html = compileLayout({ ...emptyLayout(), width: 640 });
+		expect(html).toContain('style="width:100%');
+		expect(html).not.toContain("max-width:640px");
+		// The width it is drawn at is not in the markup, so it comes back from the canvas it came from.
+		const back = layoutFromHtml(html, { ...emptyLayout(), width: 640 });
+		expect(back.widthMode).toBe("fill");
+		expect(back.width).toBe(640);
+	});
+
+	it("keeps a canvas saved before the choice existed at the width it was sent at", () => {
+		const layout = normaliseLayout({ version: 1, width: 600, sections: [] });
+		expect(layout?.widthMode).toBe("fixed");
 	});
 
 	it("renders an image input as a picture and a text input as its token", () => {
@@ -289,24 +306,24 @@ describe("appearance", () => {
 
 	it("carries an appearance through a compile and a read back", () => {
 		const layout = boxed({
-			fill: { kind: "gradient", angle: 45, from: "#ffffff", to: "#4a3fa0" },
+			fill: { kind: "gradient", angle: 45, from: "#ffffff", to: "#4a3fa0", hidden: false },
 			borderWidth: 1,
 			borderColor: "#e3e2ec",
 			borderStyle: "dotted",
 			borderRadius: 6,
 			opacity: 0.8,
 			effects: [
-				{ kind: "shadow", inset: false, x: 0, y: 4, blur: 12, spread: 0, color: "#16161d", opacity: 0.2 },
+				{ kind: "shadow", inset: false, x: 0, y: 4, blur: 12, spread: 0, color: "#16161d", opacity: 0.2, hidden: false },
 			],
 		});
 		const back = layoutFromHtml(compileLayout(layout));
 		const box = back.sections[0]?.blocks[0]?.box;
-		expect(box?.fill).toEqual({ kind: "gradient", angle: 45, from: "#ffffff", to: "#4a3fa0" });
+		expect(box?.fill).toEqual({ kind: "gradient", angle: 45, from: "#ffffff", to: "#4a3fa0", hidden: false });
 		expect(box?.borderStyle).toBe("dotted");
 		expect(box?.borderRadius).toBe(6);
 		expect(box?.opacity).toBe(0.8);
 		expect(box?.effects).toEqual([
-			{ kind: "shadow", inset: false, x: 0, y: 4, blur: 12, spread: 0, color: "#16161d", opacity: 0.2 },
+			{ kind: "shadow", inset: false, x: 0, y: 4, blur: 12, spread: 0, color: "#16161d", opacity: 0.2, hidden: false },
 		]);
 		// Everything above is a control, so none of it lands in the escape hatch.
 		expect(box?.customCss).toBeNull();
@@ -318,8 +335,8 @@ describe("appearance", () => {
 			background: "#f6f6fa",
 			sections: [{ id: "s1", name: "Body", blocks: [{ id: "b1", kind: "text", html: "Dag", box: { background: "#ffffff" } }] }],
 		});
-		expect(layout?.fill).toEqual({ kind: "solid", color: "#f6f6fa" });
-		expect(layout?.sections[0]?.blocks[0]?.box.fill).toEqual({ kind: "solid", color: "#ffffff" });
+		expect(layout?.fill).toEqual({ kind: "solid", color: "#f6f6fa", hidden: false });
+		expect(layout?.sections[0]?.blocks[0]?.box.fill).toEqual({ kind: "solid", color: "#ffffff", hidden: false });
 	});
 
 	it("refuses a colour that is not a hex value anywhere in the appearance", () => {
@@ -548,7 +565,7 @@ describe("code blocks", () => {
 		const hidden = { ...newBlock("text"), id: "t9", hidden: true } as MailBlock;
 		const layout = layoutWith([sectionWith([hidden])]);
 		expect(convertBlockToCode(layout, layout.sections[0]!.id, "t9", []).sections[0]?.blocks[0]?.hidden).toBe(true);
-		expect(blockToCode(hidden, [], []).html).toBe("<div>Tekst</div>");
+		expect(blockToCode(hidden, [], []).html).toBe("<p>Tekst</p>");
 	});
 
 	it("reads a code block back as the code it was", () => {
@@ -582,5 +599,257 @@ describe("code blocks", () => {
 			{ kind: "html", html: "<div>Dag <b>Jan</b></div>", css: "padding:8px 8px 8px 8px" },
 			{ kind: "html", html: "<p>Los</p>", css: "" },
 		]);
+	});
+});
+
+describe("colours with an opacity", () => {
+	function boxed(box: Partial<MailBlock["box"] & object>): MailLayout {
+		return layoutWith([sectionWith([{ ...text("Dag"), box: { ...emptyBox(), ...box } }])]);
+	}
+
+	it("takes eight digits and keeps a whole opacity as six", () => {
+		expect(toColor("#4a3fa080")).toBe("#4a3fa080");
+		expect(toColor("#4a3fa0ff")).toBe("#4a3fa0");
+		expect(toColor("#4a3fa0f")).toBeNull();
+	});
+
+	it("writes the colour solid first, for a client that cannot read rgba", () => {
+		const html = compileLayout(boxed({ fill: { kind: "solid", color: "#4a3fa080", hidden: false } }));
+		expect(html).toContain("background-color:#4a3fa0;background-color:rgba(74,63,160,0.502)");
+	});
+
+	it("carries a colour's opacity through a compile and a read back", () => {
+		const layout = layoutWith([
+			sectionWith([
+				{
+					...text("Dag"),
+					text: { ...defaultText(), color: "#16161d80" },
+					box: {
+						...emptyBox(),
+						fill: { kind: "gradient", angle: 90, from: "#ffffff00", to: "#4a3fa0cc", hidden: false },
+						borderWidth: 2,
+						borderColor: "#e3e2ec40",
+					},
+				},
+			]),
+		]);
+		const html = compileLayout(layout);
+		const block = layoutFromHtml(html).sections[0]?.blocks[0];
+		expect(block?.kind === "text" ? block.text.color : null).toBe("#16161d80");
+		expect(block?.box).toMatchObject({
+			fill: { kind: "gradient", angle: 90, from: "#ffffff00", to: "#4a3fa0cc" },
+			borderColor: "#e3e2ec40",
+			borderWidth: 2,
+		});
+		expect(compileLayout(layoutFromHtml(html))).toBe(html);
+	});
+});
+
+describe("fills, strokes and effects with an eye", () => {
+	function boxed(box: Partial<MailBlock["box"] & object>): MailLayout {
+		return layoutWith([sectionWith([{ ...text("Dag"), box: { ...emptyBox(), ...box } }])]);
+	}
+
+	it("leaves a hidden fill, a hidden stroke and a hidden effect out of the message", () => {
+		const html = compileLayout(
+			boxed({
+				fill: { kind: "solid", color: "#4a3fa0", hidden: true },
+				borderWidth: 1,
+				borderColor: "#e3e2ec",
+				strokeHidden: true,
+				effects: [{ kind: "blur", radius: 4, hidden: true }],
+			}),
+		);
+		expect(html).not.toContain("background-color");
+		expect(html).not.toContain("border:");
+		expect(html).not.toContain("blur(");
+	});
+
+	it("draws a stroke on the sides it is on, and reads them back", () => {
+		const layout = boxed({
+			borderWidth: 1,
+			borderColor: "#e3e2ec",
+			borderSides: { top: false, right: false, bottom: true, left: false },
+		});
+		const html = compileLayout(layout);
+		expect(html).toContain("border-bottom:1px solid #e3e2ec");
+		expect(html).not.toContain("border:1px");
+		const box = layoutFromHtml(html).sections[0]?.blocks[0]?.box;
+		expect(box?.borderSides).toEqual({ top: false, right: false, bottom: true, left: false });
+		expect(box?.customCss).toBeNull();
+	});
+
+	it("measures a fixed height the way Figma does, padding included", () => {
+		const html = compileLayout(boxed({ minHeight: 1, padding: { top: 0, right: 0, bottom: 0, left: 0 } }));
+		expect(html).toContain("box-sizing:border-box;min-height:1px");
+	});
+});
+
+describe("text and sections", () => {
+	it("writes a text block as a paragraph, unless its own markup has paragraphs", () => {
+		expect(compileLayout(layoutWith([sectionWith([text("Dag")])]))).toContain('<p data-juno-block="text"');
+		expect(compileLayout(layoutWith([sectionWith([text("<p>Een</p><p>Twee</p>")])]))).toContain(
+			'<div data-juno-block="text"',
+		);
+	});
+
+	it("reads a paragraph back as the text block it was", () => {
+		const html = compileLayout(layoutWith([sectionWith([text("Dag <b>jij</b>")])]));
+		const block = layoutFromHtml(html).sections[0]?.blocks[0];
+		expect(block?.kind === "text" ? block.html : null).toBe("Dag <b>jij</b>");
+	});
+
+	it("puts a section narrower than the frame in the middle with margins, and reads it back", () => {
+		const section = { ...sectionWith([]), alignSelf: "center" as const, box: { ...emptyBox(), width: 400 } };
+		const html = compileLayout(layoutWith([section]));
+		expect(html).toContain("margin-left:auto;margin-right:auto");
+		const back = layoutFromHtml(html).sections[0];
+		expect(back?.alignSelf).toBe("center");
+		expect(back?.box.customCss).toBeNull();
+	});
+});
+
+describe("breakpoints", () => {
+	function withBreakpoints(): MailLayout {
+		const block = { ...text("Dag"), id: "t1", text: { ...defaultText(), fontSize: 18 } };
+		const section = { ...sectionWith([block], { direction: "row" }), id: "s1" };
+		return {
+			...layoutWith([section]),
+			breakpoints: [
+				{
+					id: "phone",
+					name: "Phone",
+					maxWidth: 320,
+					sections: {},
+					blocks: { t1: { text: { fontSize: 18 } } },
+				},
+				{
+					id: "tablet",
+					name: "Tablet",
+					maxWidth: 480,
+					sections: { s1: { layout: { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 12, wrap: false } } },
+					blocks: { t1: { text: { fontSize: 14 } } },
+				},
+			],
+		};
+	}
+
+	it("writes each breakpoint as a media query, widest first, with only what it changes", () => {
+		const layout = withBreakpoints();
+		const css = breakpointCss(layout);
+		const tablet = css.indexOf("max-width:480px");
+		const phone = css.indexOf("max-width:320px");
+		expect(tablet).toBeGreaterThanOrEqual(0);
+		expect(phone).toBeGreaterThan(tablet);
+		expect(css).toContain(".jb-s1{flex-direction:column !important}");
+		expect(css).toContain(".jb-t1{font-size:14px !important}");
+		// The phone puts back the size the tablet changed, which is only a
+		// change against the tablet, not against the default.
+		expect(css.slice(phone)).toContain(".jb-t1{font-size:18px !important}");
+		const html = compileLayout(layout);
+		expect(html).toContain('data-juno-id="s1" class="jb-s1"');
+		expect(html).toContain('data-juno-id="t1" class="jb-t1"');
+	});
+
+	it("draws a breakpoint on the canvas the way the queries stack", () => {
+		const layout = withBreakpoints();
+		const tablet = layoutAt(layout, "tablet");
+		const phone = layoutAt(layout, "phone");
+		expect(tablet.width).toBe(480);
+		expect(phone.width).toBe(320);
+		const at = (shown: MailLayout) => {
+			const block = shown.sections[0]?.blocks[0];
+			return block?.kind === "text" ? block.text.fontSize : null;
+		};
+		expect(at(tablet)).toBe(14);
+		expect(at(phone)).toBe(18);
+		// The phone inherits the tablet's column.
+		const section = phone.sections[0]?.layout;
+		expect(section?.kind === "flex" ? section.direction : null).toBe("column");
+	});
+
+	it("resets what a breakpoint takes away, because an inline style only gives way to !important", () => {
+		const block = { ...text("Dag"), id: "t1", grow: 1 };
+		const layout: MailLayout = {
+			...layoutWith([{ ...sectionWith([block]), id: "s1" }]),
+			breakpoints: [{ id: "b", name: "Phone", maxWidth: 480, sections: {}, blocks: { t1: { grow: 0 } } }],
+		};
+		expect(breakpointCss(layout)).toContain(".jb-t1{flex:0 1 auto !important}");
+	});
+
+	it("hides a block at a breakpoint, and shows one there that is hidden by default", () => {
+		const shown = { ...text("Mobiel"), id: "m1", hidden: true };
+		const gone = { ...text("Groot"), id: "g1" };
+		const layout: MailLayout = {
+			...layoutWith([{ ...sectionWith([shown, gone]), id: "s1" }]),
+			breakpoints: [
+				{ id: "b", name: "Phone", maxWidth: 480, sections: {}, blocks: { m1: { hidden: false }, g1: { hidden: true } } },
+			],
+		};
+		const html = compileLayout(layout);
+		expect(html).toContain('data-juno-id="m1" class="jb-m1" style="margin:0;display:none;mso-hide:all"');
+		const css = breakpointCss(layout);
+		expect(css).toContain(".jb-m1{display:block !important}");
+		expect(css).toContain(".jb-g1{display:none !important}");
+		// Hidden everywhere is still left out entirely.
+		const nowhere: MailLayout = { ...layout, breakpoints: [] };
+		expect(compileLayout(nowhere)).not.toContain("Mobiel");
+		// And the reader knows the two declarations for what they are.
+		const back = layoutFromHtml(html, layout).sections[0]?.blocks[0];
+		expect(back?.hidden).toBe(true);
+		expect(back?.box.customCss).toBeNull();
+	});
+
+	it("keeps only real changes to things that are there, whatever it is handed", () => {
+		const layout = normaliseLayout({
+			version: 1,
+			sections: [{ id: "s1", name: "Body", blocks: [{ id: "t1", kind: "text", html: "Dag" }] }],
+			breakpoints: [
+				{
+					id: "b",
+					name: "Phone",
+					maxWidth: 480,
+					sections: { s1: { box: { padding: { top: 8, right: 8, bottom: 8, left: 8 }, position: "fixed" } } },
+					// Parsed, because an object literal would set the prototype rather
+					// than name an entry, which is not what arrives over the bridge.
+					blocks: JSON.parse(
+						'{"t1":{"text":{"fontSize":14,"color":"red;position:fixed"},"href":"javascript:alert(1)"},"gone":{"hidden":true},"__proto__":{"hidden":true}}',
+					),
+				},
+			],
+		});
+		const breakpoint = layout?.breakpoints[0];
+		expect(breakpoint?.sections.s1).toEqual({ box: { padding: { top: 8, right: 8, bottom: 8, left: 8 } } });
+		expect(breakpoint?.blocks.t1).toEqual({ text: { fontSize: 14, color: null } });
+		expect(Object.keys(breakpoint?.blocks ?? {})).toEqual(["t1"]);
+	});
+
+	it("keeps a class name to letters, whatever the id holds", () => {
+		const block = { ...text("Dag"), id: "a}b<c{d" };
+		const layout: MailLayout = {
+			...layoutWith([sectionWith([block])]),
+			breakpoints: [{ id: "b", name: "Phone", maxWidth: 480, sections: {}, blocks: { "a}b<c{d": { hidden: true } } }],
+		};
+		expect(breakpointCss(layout)).toContain(".jb-abcd{display:none !important}");
+		expect(compileLayout(layout)).toContain('class="jb-abcd"');
+	});
+
+	it("carries the breakpoints through the code view, for what is still there", () => {
+		const layout = withBreakpoints();
+		const html = compileLayout(layout);
+		const back = layoutFromHtml(html, layout);
+		expect(back.breakpoints.map((breakpoint) => breakpoint.id)).toEqual(["phone", "tablet"]);
+		expect(back.breakpoints[1]?.blocks.t1).toEqual({ text: { fontSize: 14 } });
+		const emptied = layoutFromHtml(html.replace(/<p data-juno-block="text"[^>]*>Dag<\/p>/, ""), layout);
+		expect(emptied.breakpoints[1]?.blocks.t1).toBeUndefined();
+	});
+
+	it("keeps whether a converted block shows at a breakpoint, and drops its style there", () => {
+		const layout: MailLayout = {
+			...withBreakpoints(),
+			breakpoints: [{ id: "b", name: "Phone", maxWidth: 480, sections: {}, blocks: { t1: { hidden: true, text: { fontSize: 12 } } } }],
+		};
+		const converted = convertBlockToCode(layout, "s1", "t1", []);
+		expect(converted.breakpoints[0]?.blocks.t1).toEqual({ hidden: true });
 	});
 });

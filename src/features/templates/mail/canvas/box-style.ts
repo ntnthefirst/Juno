@@ -41,6 +41,34 @@ export const MAIL_SHELL = {
 	lineHeight: 1.65,
 } as const;
 
+/**
+ * What a mail client's own stylesheet gives an element and the app's reset
+ * takes away, given back inside the canvas.
+ *
+ * The canvas is drawn in the app's own document, where Tailwind's reset has
+ * set every heading to the size of the text around it, every paragraph and
+ * list to no margin, and every link to the colour of its words. A mail client
+ * has none of that: a heading with no size of its own is drawn large, a link
+ * blue and underlined. Without this the canvas would show a heading at 15
+ * pixels that the message sends at 22, which is a preview that lies.
+ *
+ * `revert` goes back to the browser's own stylesheet, which is what a client
+ * starts from, and an inline style still wins over it, so everything the
+ * compiler writes stands. The canvas's own marks and bars carry
+ * `data-canvas-chrome` and are left to the app's styles. It is a stylesheet
+ * scoped to the canvas rather than a set of classes, because the elements it
+ * reaches are the author's markup, which carries no classes to hang it on.
+ */
+export const CLIENT_DEFAULTS = [
+	"[data-canvas-content] :where(p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote,hr,figure,dl,dd,pre):not([data-canvas-chrome],[data-canvas-chrome] *){margin:revert}",
+	"[data-canvas-content] :where(h1,h2,h3,h4,h5,h6):not([data-canvas-chrome] *){font-size:revert;font-weight:revert}",
+	"[data-canvas-content] :where(ul,ol):not([data-canvas-chrome] *){list-style:revert;padding:revert}",
+	"[data-canvas-content] :where(a):not([data-canvas-chrome] *){color:revert;text-decoration:revert}",
+	"[data-canvas-content] :where(table):not([data-canvas-chrome] *){border-collapse:revert;border-spacing:revert;text-indent:revert;border-color:revert}",
+	"[data-canvas-content] :where(img,video):not([data-canvas-chrome] *){display:revert;vertical-align:revert}",
+	"[data-canvas-content] :where(*):not([data-canvas-chrome],[data-canvas-chrome] *){box-sizing:revert;border-style:revert;border-width:revert}",
+].join("");
+
 /** Matches SYSTEM_FONTS in services/mail-layout.ts: the families every client has. */
 export const SYSTEM_FONTS: Record<string, string> = {
 	Arial: "Arial, Helvetica, sans-serif",
@@ -108,7 +136,7 @@ const BANNED = new Set([
 ]);
 
 function rgba(color: string, opacity: number): string {
-	const hex = color.slice(1);
+	const hex = color.slice(1, 7);
 	const full =
 		hex.length === 3
 			? hex
@@ -126,7 +154,7 @@ function rgba(color: string, opacity: number): string {
  * compiled message does, so the canvas shows what a client without gradients
  * will fall back to. */
 export function fillCss(fill: MailFill | null): CSSProperties {
-	if (!fill) return {};
+	if (!fill || fill.hidden) return {};
 	if (fill.kind === "solid") return { backgroundColor: fill.color };
 	return {
 		backgroundColor: fill.from,
@@ -139,7 +167,8 @@ export function effectLabel(effect: MailEffect): string {
 	return effect.inset ? "Inner shadow" : "Drop shadow";
 }
 
-function effectsCss(effects: MailEffect[]): CSSProperties {
+function effectsCss(all: MailEffect[]): CSSProperties {
+	const effects = all.filter((effect) => !effect.hidden);
 	const shadows = effects
 		.filter((effect): effect is Extract<MailEffect, { kind: "shadow" }> => effect.kind === "shadow")
 		.map(
@@ -228,20 +257,32 @@ function radiusCss(box: MailBoxStyle): string | undefined {
 	return `${corners.topLeft}px ${corners.topRight}px ${corners.bottomRight}px ${corners.bottomLeft}px`;
 }
 
+/** Matches strokeDeclarations: every side as one border, or the sides the stroke is on. */
+function strokeCss(box: MailBoxStyle): CSSProperties {
+	if (box.borderWidth <= 0 || box.strokeHidden) return {};
+	const value = `${box.borderWidth}px ${box.borderStyle} ${box.borderColor ?? "#e3e2ec"}`;
+	const { top, right, bottom, left } = box.borderSides;
+	if (top && right && bottom && left) return { border: value };
+	return {
+		borderTop: top ? value : undefined,
+		borderRight: right ? value : undefined,
+		borderBottom: bottom ? value : undefined,
+		borderLeft: left ? value : undefined,
+	};
+}
+
 export function boxCss(box: MailBoxStyle): CSSProperties {
+	const sized = box.width !== null || box.minHeight !== null;
 	return {
 		...fillCss(box.fill),
 		padding: `${box.padding.top}px ${box.padding.right}px ${box.padding.bottom}px ${box.padding.left}px`,
-		border:
-			box.borderWidth > 0
-				? `${box.borderWidth}px ${box.borderStyle} ${box.borderColor ?? "#e3e2ec"}`
-				: undefined,
+		...strokeCss(box),
 		borderRadius: radiusCss(box),
 		opacity: box.opacity < 1 ? box.opacity : undefined,
 		...effectsCss(box.effects),
 		width: box.width ?? undefined,
 		maxWidth: box.width !== null ? "100%" : undefined,
-		boxSizing: box.width !== null ? "border-box" : undefined,
+		boxSizing: sized ? "border-box" : undefined,
 		minHeight: box.minHeight ?? undefined,
 		overflow: box.clip ? "hidden" : undefined,
 		// Last, so a hand-written declaration wins over the controls above it.
@@ -301,8 +342,15 @@ export function placeCss(block: MailBlock): CSSProperties {
 	};
 }
 
+/** Matches sectionPlaceDeclarations: a section narrower than the frame, moved by its margins. */
+function sectionPlaceCss(section: MailSection): CSSProperties {
+	if (section.alignSelf === "center") return { marginLeft: "auto", marginRight: "auto" };
+	if (section.alignSelf === "end") return { marginLeft: "auto" };
+	return {};
+}
+
 export function sectionCss(section: MailSection): CSSProperties {
-	const box = boxCss(section.box);
+	const box = { ...boxCss(section.box), ...sectionPlaceCss(section) };
 	if (section.layout.kind === "grid") {
 		return {
 			...box,

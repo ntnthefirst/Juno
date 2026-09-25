@@ -734,8 +734,21 @@ export interface TemplateInput {
  * message is read in somebody else's mail client, which has never heard of a
  * CSS variable. The same reason mail-html.ts writes the house palette out as
  * values.
+ *
+ * `#rgb`, `#rrggbb`, or `#rrggbbaa` for a colour with an opacity of its own,
+ * Figma's percentage beside the hex. The compiler writes an opacity as
+ * `rgba()` after the flat colour, so a client that cannot read `rgba()`, which
+ * is Outlook on Windows, paints the colour solid rather than not at all.
  */
 export type MailColor = string;
+
+/** Which sides a stroke is drawn on. All four, or any of them, the way Figma's stroke sides work. */
+export interface MailSides {
+	top: boolean;
+	right: boolean;
+	bottom: boolean;
+	left: boolean;
+}
 
 /** Pixels on each side. Email measures in pixels, not millimetres. */
 export interface MailSpacing {
@@ -799,9 +812,13 @@ export type MailSectionLayout =
  * Outlook on Windows drops the image and would otherwise paint nothing at
  * all. Every fill therefore has a flat colour a client can fall back to.
  */
-export type MailFill =
+export type MailFill = (
 	| { kind: "solid"; color: MailColor }
-	| { kind: "gradient"; angle: number; from: MailColor; to: MailColor };
+	| { kind: "gradient"; angle: number; from: MailColor; to: MailColor }
+) & {
+	/** Figma's eye on a fill: kept in the panel, left out of the message. */
+	hidden: boolean;
+};
 
 /** How a border is drawn. Three values, because those are the three every mail
  * client draws the same way. */
@@ -824,7 +841,7 @@ export interface MailCorners {
  * like. A shadow compiles to `box-shadow` and a blur to `filter`, both of
  * which a client that does not know them ignores without breaking the layout.
  */
-export type MailEffect =
+export type MailEffect = (
 	| {
 			kind: "shadow";
 			/** Inside the box rather than under it. Figma's inner shadow. */
@@ -837,7 +854,11 @@ export type MailEffect =
 			/** 0 to 1. A shadow is almost never opaque. */
 			opacity: number;
 	  }
-	| { kind: "blur"; radius: number };
+	| { kind: "blur"; radius: number }
+) & {
+	/** Figma's eye on an effect. */
+	hidden: boolean;
+};
 
 /**
  * The box around anything: a section or a single block.
@@ -860,6 +881,10 @@ export interface MailBoxStyle {
 	borderWidth: number;
 	borderColor: MailColor | null;
 	borderStyle: MailStrokeStyle;
+	/** The sides the stroke is drawn on. A section with only a bottom stroke is a divider. */
+	borderSides: MailSides;
+	/** Figma's eye on the stroke: kept in the panel, left out of the message. */
+	strokeHidden: boolean;
 	/** Used for all four corners unless `corners` says otherwise. */
 	borderRadius: number;
 	corners: MailCorners | null;
@@ -872,7 +897,11 @@ export interface MailBoxStyle {
 	 * rather than pushing the message sideways.
 	 */
 	width: number | null;
-	/** The least height, in pixels. Content taller than it still makes it taller. */
+	/**
+	 * The least height, in pixels, measured the way Figma measures a height,
+	 * padding and stroke included. Content taller than it still makes it
+	 * taller. An empty section with one is how a divider or a gap is drawn.
+	 */
 	minHeight: number | null;
 	/** Figma's clip content: whatever reaches past the box is cut off at its edge. */
 	clip: boolean;
@@ -971,9 +1000,66 @@ export interface MailSection {
 	hidden: boolean;
 	/** Shown on the section rail. Never rendered into the message. */
 	name: string;
+	/**
+	 * Where a section narrower than the frame sits across it: at the start, in
+	 * the middle or at the end, written as auto margins. "auto" and "stretch"
+	 * are the start. A section that fills the frame has nowhere to go.
+	 */
+	alignSelf: MailSelfAlign;
 	layout: MailSectionLayout;
 	box: MailBoxStyle;
 	blocks: MailBlock[];
+}
+
+/**
+ * What a breakpoint changes about one block. Only how it looks and where it
+ * sits: what it says, where it links and what it shows are the same at every
+ * width, so they are not here. A field left out is whatever the wider
+ * breakpoints, and in the end the default, say.
+ */
+export interface MailBlockOverride {
+	hidden?: boolean;
+	grow?: number;
+	alignSelf?: MailSelfAlign;
+	box?: Partial<MailBoxStyle>;
+	text?: Partial<MailTextStyle>;
+	/** A button's fill and label colour, a divider's colour. */
+	background?: MailColor;
+	color?: MailColor;
+	radius?: number;
+	/** A picture's width and alignment. */
+	width?: number | null;
+	align?: MailTextAlign;
+	thickness?: number;
+	/** A spacer's height. */
+	height?: number;
+}
+
+/** What a breakpoint changes about one section. */
+export interface MailSectionOverride {
+	hidden?: boolean;
+	alignSelf?: MailSelfAlign;
+	layout?: MailSectionLayout;
+	box?: Partial<MailBoxStyle>;
+}
+
+/**
+ * A width at and below which the message looks different: Figma's
+ * breakpoints, written as a media query.
+ *
+ * A breakpoint starts as a copy of the default and holds only what is changed
+ * at it, keyed by the id of the section or block, so a change to the default
+ * reaches every breakpoint that did not change the same thing. A narrower
+ * breakpoint starts from the wider ones, because that is how the media
+ * queries stack in a client.
+ */
+export interface MailBreakpoint {
+	id: string;
+	name: string;
+	/** The widest screen, in pixels, this applies to. */
+	maxWidth: number;
+	sections: Record<string, MailSectionOverride>;
+	blocks: Record<string, MailBlockOverride>;
 }
 
 /** One block of a canvas in hand, to be turned into the HTML and CSS it compiles to. */
@@ -1040,22 +1126,26 @@ export interface MailFont {
  * every save, so the renderer, the placeholder substitution and the outbox
  * below them never learn that a canvas exists.
  *
- * The frame is fixed in width and adjustable in height, which is what a mail
- * body is: 600 pixels is what every client agrees on, and the height is
- * whatever the content comes to. `minHeight` is the canvas the author draws
- * on, not a limit on the message.
+ * `width` is the width the message is designed at, the default breakpoint.
+ * With `widthMode` "fill" the message takes the whole width of the mail
+ * client, and `width` is only the size it is drawn at on the canvas; with
+ * "fixed" it is also the widest the message gets, centred in the client.
+ * `minHeight` is the canvas the author draws on, not a limit on the message.
  *
  * `version` is the shape of this object, not the template's version number.
  */
 export interface MailLayout {
 	version: 1;
 	width: number;
+	widthMode: "fill" | "fixed";
 	minHeight: number;
 	fill: MailFill | null;
 	/** The typefaces the message links. Every text block can name one of these. */
 	fonts: MailFont[];
 	customCss: string | null;
 	sections: MailSection[];
+	/** Narrower widths the message changes at. The default is not in the list. */
+	breakpoints: MailBreakpoint[];
 }
 
 /* --------------------------------------------- document templates: the page */

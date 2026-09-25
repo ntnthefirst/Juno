@@ -8,15 +8,16 @@ import {
 } from "react";
 import type { MailBlock, MailLayout, TemplateInput } from "@shared/types";
 import { CanvasView, type DropTarget, type Editing, type Measured, type Selection } from "./CanvasView";
-import { PREVIEW_WIDTHS, type PreviewWidth } from "./preview-width";
 import { isTyping, keysFor, shortcutFor } from "./shortcuts";
-import { WidthSwitch } from "./WidthSwitch";
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2;
 
 type CanvasStageProps = {
+	/** The canvas as the selected breakpoint draws it, at that breakpoint's width. */
 	layout: MailLayout;
+	/** The breakpoint's name, written over the sheet with its size. */
+	label: string;
 	inputs: TemplateInput[];
 	selection: Selection;
 	onSelect: (selection: Selection) => void;
@@ -29,9 +30,6 @@ type CanvasStageProps = {
 	onHeight: (height: number) => void;
 	contentHeight: number;
 	onContentHeight: (height: number) => void;
-	/** Held by the editor, so the canvas and the rendered message agree. */
-	preview: PreviewWidth;
-	onPreview: (width: PreviewWidth) => void;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -39,8 +37,9 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * The surface the frame sits on: the width being previewed, the zoom, and the
- * handle that makes the sheet taller.
+ * The surface the frame sits on: the zoom, and the handle that makes the
+ * sheet taller. The sheet is as wide as the breakpoint being edited, which
+ * the design panel chooses.
  *
  * It scrolls rather than floating the frame at a coordinate, so a trackpad,
  * a wheel and a scrollbar all behave the way they do everywhere else, and
@@ -48,6 +47,7 @@ function clamp(value: number, min: number, max: number): number {
  */
 export function CanvasStage({
 	layout,
+	label,
 	inputs,
 	selection,
 	onSelect,
@@ -59,8 +59,6 @@ export function CanvasStage({
 	onHeight,
 	contentHeight,
 	onContentHeight,
-	preview,
-	onPreview,
 }: CanvasStageProps) {
 	const [zoom, setZoom] = useState(1);
 	// Whether the zoom is the author's rather than the one the stage picked. A
@@ -87,7 +85,7 @@ export function CanvasStage({
 		return () => observer.disconnect();
 	}, []);
 
-	const width = Math.min(layout.width, PREVIEW_WIDTHS[preview]);
+	const width = layout.width;
 	const floor = Math.ceil(contentHeight);
 	const height = Math.max(layout.minHeight, floor);
 
@@ -217,8 +215,6 @@ export function CanvasStage({
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--sunken)]">
 			<div className="flex h-[36px] flex-none items-center gap-2 px-3">
-				<div className="flex-1" />
-				<WidthSwitch value={preview} onChange={onPreview} />
 				<div className="flex flex-1 items-center justify-end gap-1">
 					<button
 						type="button"
@@ -292,7 +288,7 @@ export function CanvasStage({
 						style={{ width, transform: `scale(${zoom})`, transformOrigin: "top left" }}
 					>
 						<p className="tabular pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-							{width} x {height}
+							<span className="font-[var(--weight-medium)] text-[var(--ink)]">{label}</span> {width} x {height}
 						</p>
 
 						<CanvasView

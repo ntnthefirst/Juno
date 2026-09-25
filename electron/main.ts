@@ -1198,7 +1198,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!convert) return "no way onto a canvas";
 											convert.click();
 											await wait(800);
-											if (!document.querySelector('[role=group][aria-label="Preview width"]')) return "no canvas stage";
+											if (![...document.querySelectorAll("h3")].some((el) => el.textContent.trim() === "Breakpoints")) return "no breakpoints in the panel";
 											if (!document.querySelector('button[aria-label="Drag to change the height of the sheet"]')) return "no height handle";
 											const addText = document.querySelector('button[aria-label="Add text"]');
 											if (!addText) return "no insert bar";
@@ -1213,7 +1213,7 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(300);
 											if (document.querySelector('[role=textbox][aria-label="Text"]')) return "Escape did not close the new text";
 											if (!document.querySelector('button[aria-label="Hide Welkom"]')) return "what was typed did not replace the placeholder";
-											if (!document.querySelector('[role=group][aria-label="Horizontal resizing"]')) return "the design panel did not follow the selection";
+											if (!document.querySelector('select[aria-label="Width resizing"]')) return "the design panel did not follow the selection";
 
 											// Type from the panel, checked on what the canvas actually draws
 											// rather than on the control that was pressed.
@@ -1272,7 +1272,7 @@ if (!app.requestSingleInstanceLock()) {
 											editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await new Promise((r) => setTimeout(r, 300));
 											if (document.querySelector('[role=textbox][aria-label="Text"]')) return "Escape did not close the text";
-											if (!document.querySelector('[role=group][aria-label="Horizontal resizing"]')) return "Escape in the text let go of the block";
+											if (!document.querySelector('select[aria-label="Width resizing"]')) return "Escape in the text let go of the block";
 											return "ok";
 										})()`,
 									) as string;
@@ -1301,11 +1301,16 @@ if (!app.requestSingleInstanceLock()) {
 											block.click();
 											await wait(200);
 											const section = block.parentElement;
-											const across = document.querySelector('[role=group][aria-label="Horizontal resizing"]');
-											const choose = (title) => [...across.querySelectorAll("button")].find((el) => el.title === title);
-											if (!choose("Hug contents") || !choose("Fill container") || !choose("Fixed width")) return "the width modes are not all there";
-											choose("Hug contents").click();
-											await wait(300);
+											const mode = () => document.querySelector('select[aria-label="Width resizing"]');
+											if (!mode()) return "no width resizing";
+											if ([...mode().options].map((option) => option.value).join(",") !== "fixed,hug,fill") return "the width modes are not all there";
+											const setMode = async (value) => {
+												const select = mode();
+												Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, value);
+												select.dispatchEvent(new Event("change", { bubbles: true }));
+												await wait(300);
+											};
+											await setMode("hug");
 											if (drawn().offsetWidth >= section.clientWidth - 48) return "hugging did not shrink the block to its text";
 											const label = document.querySelector('label[title="Width"]');
 											const width = label ? document.getElementById(label.htmlFor) : null;
@@ -1319,7 +1324,7 @@ if (!app.requestSingleInstanceLock()) {
 											width.blur();
 											await wait(300);
 											if (drawn().offsetWidth !== 100) return "a width of 100 is not drawn 100 wide";
-											if (choose("Fixed width").getAttribute("aria-pressed") !== "true") return "typing a width did not make it fixed";
+											if (mode().value !== "fixed") return "typing a width did not make it fixed";
 											if (!getComputedStyle(drawn()).outlineStyle.includes("solid")) return "the selection is not outlined on the block itself";
 											return "ok";
 										})()`,
@@ -1332,15 +1337,119 @@ if (!app.requestSingleInstanceLock()) {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const drawn = () => [...document.querySelectorAll('[title="Double-click to edit the text"]')].find((el) => el.textContent.trim() === "Welkom");
 											const section = drawn().parentElement;
-											const across = document.querySelector('[role=group][aria-label="Horizontal resizing"]');
-											const choose = (title) => [...across.querySelectorAll("button")].find((el) => el.title === title);
-											choose("Fill container").click();
+											const select = document.querySelector('select[aria-label="Width resizing"]');
+											Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, "fill");
+											select.dispatchEvent(new Event("change", { bubbles: true }));
 											await wait(300);
 											if (Math.abs(drawn().offsetWidth - (section.clientWidth - parseFloat(getComputedStyle(section).paddingLeft) - parseFloat(getComputedStyle(section).paddingRight))) > 1) return "fill did not stretch the block across its section";
 											return "ok";
 										})()`,
 									) as string;
 									if (filled !== "ok") throw new Error(`Smoke: mail template editor ${filled}`);
+
+									// A breakpoint: the canvas is drawn at its width, a change made
+									// there stays there, and the default is untouched by it.
+									const narrowed = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const drawn = () => [...document.querySelectorAll('[title="Double-click to edit the text"]')].find((el) => el.textContent.trim() === "Welkom");
+											const sheet = () => {
+												const handle = document.querySelector('button[aria-label="Drag to change the height of the sheet"]');
+												return handle ? handle.parentElement.firstElementChild.textContent.trim() : "";
+											};
+											const row = (name) => [...document.querySelectorAll("button[aria-pressed]")].find((el) => el.textContent.trim() === name);
+											const add = document.querySelector('button[aria-label="Add a breakpoint"]');
+											if (!add) return "no way to add a breakpoint";
+											add.click();
+											await wait(400);
+											if (!/^Phone 480 x/.test(sheet())) return "the canvas is not drawn at the new breakpoint: " + sheet();
+											if (!drawn()) return "the block is not on the canvas at the breakpoint";
+											const sizeLabel = document.querySelector('label[title="Font size"]');
+											const size = sizeLabel ? document.getElementById(sizeLabel.htmlFor) : null;
+											if (!size) return "no font size at the breakpoint";
+											size.focus();
+											Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(size, "12");
+											size.dispatchEvent(new Event("input", { bubbles: true }));
+											size.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+											size.blur();
+											await wait(300);
+											if (getComputedStyle(drawn()).fontSize !== "12px") return "a size set at the breakpoint is not on its canvas";
+											row("Default").click();
+											await wait(300);
+											if (getComputedStyle(drawn()).fontSize === "12px") return "a change at the breakpoint reached the default";
+											if (!/^Default /.test(sheet())) return "the default is not drawn at its own width: " + sheet();
+											row("Phone").click();
+											await wait(300);
+											if (getComputedStyle(drawn()).fontSize !== "12px") return "the breakpoint lost its change";
+											return "ok";
+										})()`,
+									) as string;
+									if (narrowed !== "ok") throw new Error(`Smoke: mail template editor ${narrowed}`);
+									writeFileSync(joinPath(shotDir, `mail-template-breakpoint.png`), (await capture(window.webContents)).toPNG());
+
+									// What is sent: the canvas with nothing around it, and the
+									// breakpoint as a media query in its head.
+									const sent = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const view = document.querySelector('button[title="The message as it will be sent"]');
+											if (!view) return "no preview view";
+											view.click();
+											let frame = null;
+											for (let tries = 0; tries < 30 && !frame; tries++) {
+												await wait(150);
+												frame = document.querySelector('iframe[title="Template preview"]');
+											}
+											if (!frame) return "the message did not render";
+											const html = frame.getAttribute("srcdoc") || "";
+											if (!html.includes("data-juno-canvas")) return "the preview is not the canvas";
+											if (html.includes("border-top:3px")) return "the canvas is still sent in the house frame";
+											if (!html.includes("@media only screen and (max-width:480px)")) return "the breakpoint is not in the message";
+											if (!document.querySelector('[role=group][aria-label="Preview width"]')) return "the preview has no breakpoints to look at";
+											return "ok";
+										})()`,
+									) as string;
+									if (sent !== "ok") throw new Error(`Smoke: mail template editor ${sent}`);
+									writeFileSync(joinPath(shotDir, `mail-template-sent.png`), (await capture(window.webContents)).toPNG());
+
+									// A colour the way Figma picks one, on the default again.
+									const picked = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const canvas = document.querySelector('button[title="The canvas"]');
+											if (!canvas) return "no canvas view";
+											canvas.click();
+											await wait(400);
+											const row = [...document.querySelectorAll("button[aria-pressed]")].find((el) => el.textContent.trim() === "Default");
+											if (!row) return "no default breakpoint";
+											row.click();
+											await wait(300);
+											const addFill = document.querySelector('button[aria-label="Add fill"]');
+											if (!addFill) return "no way to add a fill";
+											addFill.click();
+											await wait(300);
+											const swatch = document.querySelector('button[aria-label="Pick fill"]');
+											if (!swatch) return "the fill has no swatch";
+											swatch.click();
+											await wait(300);
+											const picker = document.querySelector('[role=dialog][aria-label="Fill"]');
+											if (!picker) return "the swatch did not open a picker";
+											if (picker.querySelectorAll("[role=slider]").length !== 3) return "the picker has no square, hue and opacity";
+											return "ok";
+										})()`,
+									) as string;
+									if (picked !== "ok") throw new Error(`Smoke: mail template editor ${picked}`);
+									writeFileSync(joinPath(shotDir, `mail-template-color-picker.png`), (await capture(window.webContents)).toPNG());
+									const closedPicker = await window.webContents.executeJavaScript(
+										`(async () => {
+											document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+											await new Promise((r) => setTimeout(r, 300));
+											if (document.querySelector('[role=dialog][aria-label="Fill"]')) return "Escape did not close the picker";
+											if (!document.querySelector('select[aria-label="Width resizing"]')) return "Escape in the picker let go of the block";
+											return "ok";
+										})()`,
+									) as string;
+									if (closedPicker !== "ok") throw new Error(`Smoke: mail template editor ${closedPicker}`);
 
 									const keyed = await window.webContents.executeJavaScript(
 										`(async () => {
@@ -1413,8 +1522,8 @@ if (!app.requestSingleInstanceLock()) {
 											const convert = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Convert to HTML");
 											if (!convert) return "no Convert to HTML";
 											convert.click();
-											for (let tries = 0; tries < 20 && document.querySelector('[role=group][aria-label="Horizontal resizing"]'); tries++) await wait(150);
-											if (document.querySelector('[role=group][aria-label="Horizontal resizing"]')) return "the panel still shows the design controls";
+											for (let tries = 0; tries < 20 && document.querySelector('select[aria-label="Width resizing"]'); tries++) await wait(150);
+											if (document.querySelector('select[aria-label="Width resizing"]')) return "the panel still shows the design controls";
 											const field = (text) => {
 												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === text);
 												return label ? document.getElementById(label.htmlFor) : null;
@@ -1424,7 +1533,8 @@ if (!app.requestSingleInstanceLock()) {
 											if (!html || !css) return "no HTML and CSS fields";
 											if (!html.value.includes("Welkom")) return "the HTML field does not hold the block";
 											if (!css.value.includes("font-style:italic")) return "the CSS field does not hold the block's style";
-											const drawn = [...document.querySelectorAll("div")].find((el) => el.textContent.trim() === "Welkom" && el.children.length === 0);
+											// A text block converts to the paragraph it was sent as.
+											const drawn = [...document.querySelectorAll("main p")].find((el) => el.textContent.trim() === "Welkom" && el.children.length === 0);
 											if (!drawn) return "the converted block is not on the canvas";
 											const style = getComputedStyle(drawn);
 											if (!style.fontFamily.includes("Georgia") || style.fontStyle !== "italic") return "the converted block does not look the same";
@@ -1541,7 +1651,7 @@ if (!app.requestSingleInstanceLock()) {
 											};
 											if (valueOf("Template name") !== "Smoke nieuwsbrief") return "the editor does not carry the name";
 											if (valueOf("Subject") !== "Smoke nieuwsbrief") return "the subject did not start as the name";
-											if (!document.querySelector('[role=group][aria-label="Preview width"]')) return "a new template did not open on a canvas";
+											if (!document.querySelector('button[aria-label="Drag to change the height of the sheet"]')) return "a new template did not open on a canvas";
 											return "ok";
 										})()`,
 									) as string;

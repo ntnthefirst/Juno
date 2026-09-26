@@ -21,6 +21,11 @@ built and tested. They are structurally plausible and legally worthless.
 - It is seeded **only on a first install**, into an empty database, and after
   that it is an ordinary template the owner can edit or delete. An upgrade
   never adds it to an existing install and never brings it back.
+- The five are **deleted on existing installs too**, not hidden, by the same
+  exception as the mail templates in 4c (write it into docs/decisions.md).
+  `documents.template_id` references them, so set it to null on every
+  document generated from one, in the same transaction. The documents keep
+  their text and their PDF.
 - It keeps `reviewedAt: null`, so it carries the specimen banner like every
   shipped text, and the signing screen still refuses to treat it as final.
 
@@ -29,7 +34,10 @@ example or from nothing. The placeholder syntax and the fields are in
 `docs/templates.md`. **Do not send a document generated from an unreviewed
 template to a client.** That is what the banner is for.
 
-## 2. Decide what the in-app assistant runs on - **you**
+## 2. Decide what the in-app assistant runs on - **you**, parked
+
+**Parked on purpose.** Not now; picked up later. Until then an external agent
+does the job, as below.
 
 Phase 6 is built except its assistant panel. Everything the panel would drive
 is there: 170 tools, the approval gate, briefings and automations. What it needs
@@ -73,17 +81,7 @@ Decided and ready to build, roughly smallest first.
   file attached and an empty body. `DocumentDetail.tsx` (around line 376)
   passes `templateKey: "contract_cover"` today; that goes, and so does the
   smoke walk's lookup of the cover template (`electron/main.ts` around line
-  288). The composer's greetings and sign-offs (below) still apply.
-- **Greetings and sign-offs for ordinary mail**, the way other mail clients
-  have signatures. Nothing to do with templates.
-  - The owner keeps a list of openings ("Beste {{client.firstName}},") and a
-    list of closings ("Met vriendelijke groeten, ..."). None, one or several
-    of each.
-  - Rules decide when one is added, for example "always add this closing". The
-    composer puts it in on a new message and it stays editable there.
-  - Stored in the database with the five columns, behind a service, an IPC
-    channel and MCP tools, like everything else. Edited in Settings > Mail.
-  - Open questions below, under "Needs an answer".
+  288). Greetings and sign-offs (section 5a) still apply.
 - **Audit log purge.** The log under Agent gets one row per write and is never
   emptied. Rows older than **6 months** are purged automatically. The client
   timeline is not built from the log (it reads notes, documents, mail and the
@@ -130,9 +128,13 @@ Not tasks, written down so nobody builds them by accident:
 - **An automation cannot pass one step's result to the next.** Anything that
   needs the output of a previous step is a job for an agent, which can read and
   then decide, rather than for a recording.
-- **Database encryption** is out of scope and would mean revisiting decision
-  18, since `node:sqlite` cannot do SQLCipher. The likely answer then is
-  `@libsql/client`. Still to be decided whether it stays on the roadmap.
+- **Database encryption is dropped.** The third layer of decision 15 is not
+  built. What it would protect against, a stolen laptop or a copied file, is
+  what BitLocker and FileVault already cover for the whole disk, and they are
+  on by default on most machines Juno will run on. Building it would also mean
+  leaving `node:sqlite` (decision 18) for something that can do SQLCipher.
+  Revisit only if Juno ever syncs the file off the machine. Update decision 15
+  to say so when this list is next cleaned.
 
 ## 4. Mail template editor
 
@@ -197,13 +199,14 @@ the list the toolbar shows), `MailTemplateEditor.tsx` (insert, paste,
 duplicate), the MCP layout description in `electron/main/mcp/mail-outbox.ts`,
 and docs/editors.md.
 
-**Decide before starting.** Whether the old sections become `section`
-elements in the sent HTML or stay `div`s. `section` is the better HTML;
-some older clients style unknown block elements oddly, so the compiler may
-want `display:block` on every one. Test in the preview and write the choice
-down in docs/editors.md.
+**Decided.** A section is written as `<section>` in the sent HTML, with
+`display:block` on it because some older clients style unknown block elements
+oddly. That includes every section in a version 1 layout, which compiles to a
+`div` today. A `div` added from the Containers group stays a `div`. Every other
+container is written as its own tag. Write this down in docs/editors.md.
 
-**Done when.** A version 1 layout loads and sends byte for byte the same body.
+**Done when.** A version 1 layout loads and sends the same body, except that
+each section is now a `<section>` with `display:block`, which a test checks.
 Every element in the table can be added from the toolbar and from its key,
 changed within its group, nested, dragged in the layers, hidden at a
 breakpoint, converted to HTML, and read back from the code view. The smoke walk
@@ -294,3 +297,50 @@ finds the example with a canvas. The smoke walk opens the example, and its
 preview renders with no missing values against the demo client. Send the
 example to yourself once and read it in Gmail on a phone and in Outlook on
 Windows, and write down what each shows.
+
+## 5. Mail rules: greetings for every message, automation per mailbox
+
+Two kinds of rule, and they live in different places on purpose. Greetings and
+sign-offs apply to every message from every account, so they are one list.
+Automation belongs to one mailbox, so each mailbox has its own list.
+
+Both are built the same way, like Cloudflare's rules: a rule has a **name**, an
+on and off switch, **conditions** and **what it does**. Rules sit in an
+**ordered list** that is reordered by dragging, and they are checked top to
+bottom. Stored in the database with the five columns, behind a service, IPC
+channels and MCP tools, like everything else (decision 2).
+
+### 5a. Greetings and sign-offs
+
+The way other mail clients have signatures. Nothing to do with templates.
+
+- The owner keeps a list of greetings ("Beste {{client.firstName}},") and a
+  list of sign-offs ("Met vriendelijke groeten, ..."), none, one or several of
+  each, with placeholders.
+- A rule picks one of each for the messages it matches. Conditions:
+  - what the message is: new, reply or forward;
+  - who it goes to: a client, a known contact, or anyone else;
+  - which account it is sent from.
+- The composer puts in what the first matching rule picks when a message is
+  started, and it stays editable there. No rule matches, nothing is added.
+- Edited in Settings > Mail accounts, above the accounts, because it is common
+  to all of them.
+
+### 5b. Automation rules per mailbox
+
+- **The account gets a detail page.** Settings > Mail accounts lists the
+  connected mailboxes; clicking one opens its page (a `FormPage`, decision 30)
+  with its details, its folders (the folders dialog moves here) and its rules.
+- A rule runs on each new message that mailbox syncs. Conditions on the sender,
+  the recipients, the subject, whether the sender is a client, and whether it
+  has attachments. Actions like linking the thread to the client, flagging,
+  marking read and moving to a folder.
+- The rule ordering decides which rule wins when two match; whether a match
+  stops the ones below it is an open question.
+
+**This runs into a rule already written down.** Section 3 says nothing files
+mail unattended, because filing is side-effectful (mcp.md section 4). A rule
+the owner wrote and switched on is the owner's standing instruction, not an
+agent acting alone, but moving, archiving or deleting mail on the server is
+still filing. Decide before building which actions a rule may take on its own,
+and write the answer into docs/decisions.md.

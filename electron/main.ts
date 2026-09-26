@@ -2135,13 +2135,12 @@ if (!app.requestSingleInstanceLock()) {
 									});
 									const unticked = (await again.webContents.executeJavaScript(
 										`(async () => {
-											const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Collapse the sidebar on its own");
-											const box = label?.querySelector("input[type=checkbox]");
-											if (!box) return "no checkbox";
-											if (!box.checked) return "the checkbox starts off";
-											box.click();
+											const toggle = [...document.querySelectorAll("button[role=switch]")].find((el) => el.textContent.includes("Collapse the sidebar on its own"));
+											if (!toggle) return "no switch";
+											if (toggle.getAttribute("aria-checked") !== "true") return "the switch starts off";
+											toggle.click();
 											await new Promise((r) => setTimeout(r, 400));
-											return box.checked ? "the checkbox did not change" : "ok";
+											return toggle.getAttribute("aria-checked") === "false" ? "ok" : "the switch did not change";
 										})()`,
 									)) as string;
 									if (unticked !== "ok") throw new Error(`Smoke: sidebar setting ${unticked}`);

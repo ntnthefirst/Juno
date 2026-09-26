@@ -1,6 +1,7 @@
 import type { ThemeSetting } from "@shared/types";
 import type { ReactNode } from "react";
 import { Icon } from "../../components/Icon";
+import { Toggle } from "../../components/Toggle";
 import { Section } from "./Section";
 
 type Option = { id: ThemeSetting; label: string; hint: string };
@@ -38,7 +39,7 @@ export function AppearanceSection({
 			title="Appearance"
 			description="Three states rather than a switch, because following the operating system is a choice of its own."
 		>
-			<div role="radiogroup" aria-label="Theme" className="flex flex-wrap gap-5">
+			<div role="radiogroup" aria-label="Theme" className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-5 p-0.5">
 				{OPTIONS.map((option) => (
 					<ThemeCard
 						key={option.id}
@@ -51,19 +52,13 @@ export function AppearanceSection({
 
 			{onSidebarAutoCollapseChange && sidebarAutoCollapse !== undefined ? (
 				<div className="mt-6">
-					<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
-						<input
-							type="checkbox"
-							checked={sidebarAutoCollapse ?? true}
-							disabled={sidebarAutoCollapse === null}
-							onChange={(event) => onSidebarAutoCollapseChange(event.target.checked)}
-							className="h-4 w-4 accent-[var(--accent)]"
-						/>
-						Collapse the sidebar on its own
-					</label>
-					<p className="mt-2 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						The sidebar goes back to icons when you choose something or click beside it.
-					</p>
+					<Toggle
+						checked={sidebarAutoCollapse ?? true}
+						disabled={sidebarAutoCollapse === null}
+						onChange={onSidebarAutoCollapseChange}
+						label="Collapse the sidebar on its own"
+						description="The sidebar goes back to icons when you choose something or click beside it."
+					/>
 				</div>
 			) : null}
 		</Section>
@@ -84,12 +79,12 @@ function ThemeCard({ option, selected, onSelect }: ThemeCardProps) {
 			aria-checked={selected}
 			onClick={onSelect}
 			title={option.hint}
-			className="group flex flex-col items-start gap-2 rounded-[var(--radius-md)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--focus)]"
+			className="group flex w-full min-w-0 flex-col items-start gap-2 rounded-[var(--radius-md)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--focus)]"
 		>
 			<span
 				aria-hidden
 				className={[
-					"block overflow-hidden rounded-[var(--radius-lg)] transition-shadow duration-[var(--duration-fast)] ease-[var(--ease)]",
+					"block w-full overflow-hidden rounded-[var(--radius-lg)] transition-shadow duration-[var(--duration-fast)] ease-[var(--ease)]",
 					selected
 						? "shadow-[0_0_0_2px_var(--accent)]"
 						: "shadow-[0_0_0_1px_var(--line-strong)] group-hover:shadow-[0_0_0_1px_var(--ink-faint)]",
@@ -122,18 +117,23 @@ function ThemeCard({ option, selected, onSelect }: ThemeCardProps) {
  * so it stays right when the interface changes, and built from the swatch
  * tokens rather than the live ones, because the light card has to look light
  * while the application around it is dark.
+ *
+ * It fills the width of its grid column and keeps the proportions of the
+ * 164 by 104 drawing it started as, so the three cards stay the same shape
+ * in the settings window and in the smaller setup window.
  */
 function Preview({ variant }: { variant: ThemeSetting }) {
 	if (variant === "system") {
 		// Split down the middle, which is the only honest picture of "whichever
 		// the machine is using". Each half is the full window, clipped.
 		return (
-			<span className="relative block h-[104px] w-[164px]">
+			<span className="relative block aspect-[164/104] w-full">
 				<span className="absolute inset-0">
 					<Window tone="light" />
 				</span>
 				<span className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
-					<span className="absolute inset-y-0 right-0 w-[164px]">
+					{/* Twice the half it sits in, which is the whole card. */}
+					<span className="absolute inset-y-0 right-0 w-[200%]">
 						<Window tone="dark" />
 					</span>
 				</span>
@@ -141,7 +141,7 @@ function Preview({ variant }: { variant: ThemeSetting }) {
 		);
 	}
 	return (
-		<span className="block h-[104px] w-[164px]">
+		<span className="block aspect-[164/104] w-full">
 			<Window tone={variant === "dark" ? "dark" : "light"} />
 		</span>
 	);

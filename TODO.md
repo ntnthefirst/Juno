@@ -380,15 +380,3 @@ service refuses an empty body, the service gains a sensible empty default for
 it rather than the screen inventing one, with a test, so an agent's
 `templates.create` with only a name behaves the same.
 
-### 6d. A side panel closes on a click outside it
-
-`src/components/SidePanel.tsx`. Every right-edge panel (mail template, calendar
-event, client address, email, phone and note, project link and command) closes
-when the owner clicks outside it, the way it already closes on Escape.
-
-- A click on another row that opens a panel swaps what the panel shows, as now,
-  rather than closing it and reopening.
-- A click inside a menu, a dialog or a popover the panel opened is not outside,
-  even though those render elsewhere in the tree.
-- A panel holding unsaved field edits does what it does today on Escape.
-- Update the comment on `SidePanel` and styling.md section 5c.

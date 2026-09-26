@@ -1689,7 +1689,18 @@ if (!app.requestSingleInstanceLock()) {
 											const detail = document.querySelector("aside[aria-label]");
 											if (!detail) return "no side panel";
 											if (!detail.textContent.includes("Every week on Tuesday")) return "the side panel does not show the rule";
-											const edit = [...detail.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
+
+											// A click outside the panel closes it, the same way Escape
+											// does. Escape is the other path this walk checks below.
+											document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+											await new Promise((r) => setTimeout(r, 200));
+											if (document.querySelector("aside[aria-label]")) return "a click outside did not close the side panel";
+
+											chip.click();
+											await new Promise((r) => setTimeout(r, 400));
+											const reopened = document.querySelector("aside[aria-label]");
+											if (!reopened) return "the side panel did not reopen";
+											const edit = [...reopened.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
 											if (!edit) return "the side panel has no edit";
 											edit.click();
 											await new Promise((r) => setTimeout(r, 500));

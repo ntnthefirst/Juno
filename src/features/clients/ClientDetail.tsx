@@ -625,7 +625,7 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Emails</h3>
-				<Button size="dense" onClick={onAdd}>
+				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add email
 				</Button>
 			</div>
@@ -658,7 +658,7 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 										Make primary
 									</Button>
 								)}
-								<Button size="dense" onClick={() => onEdit(email)}>
+								<Button size="dense" data-opens-panel onClick={() => onEdit(email)}>
 									Edit
 								</Button>
 								<Button size="dense" variant="danger" onClick={() => onRemove(email)}>
@@ -686,7 +686,7 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Phone numbers</h3>
-				<Button size="dense" onClick={onAdd}>
+				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add phone number
 				</Button>
 			</div>
@@ -719,7 +719,7 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 										Make primary
 									</Button>
 								)}
-								<Button size="dense" onClick={() => onEdit(phone)}>
+								<Button size="dense" data-opens-panel onClick={() => onEdit(phone)}>
 									Edit
 								</Button>
 								<Button size="dense" variant="danger" onClick={() => onRemove(phone)}>
@@ -747,7 +747,7 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Addresses</h3>
-				<Button size="dense" onClick={onAdd}>
+				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add address
 				</Button>
 			</div>
@@ -786,7 +786,7 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 											Make primary
 										</Button>
 									)}
-									<Button size="dense" onClick={() => onEdit(address)}>
+									<Button size="dense" data-opens-panel onClick={() => onEdit(address)}>
 										Edit
 									</Button>
 									<Button size="dense" variant="danger" onClick={() => onRemove(address, line)}>
@@ -980,7 +980,7 @@ function TimelineTab({
 		<div>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Timeline</h3>
-				<span className="flex gap-2">
+				<span data-opens-panel className="flex gap-2">
 					<Button size="dense" onClick={onLogCall}>
 						Log a call
 					</Button>

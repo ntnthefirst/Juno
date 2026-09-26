@@ -198,6 +198,7 @@ export function WeekView({
 								<button
 									key={p.key}
 									type="button"
+									data-opens-panel
 									onClick={() => onOpen(p.item)}
 									onContextMenu={(event) => openItemMenu(event, p.item)}
 									title={itemTitle(p.item)}
@@ -273,6 +274,7 @@ export function WeekView({
 												role="button"
 												tabIndex={0}
 												aria-label={label}
+												data-opens-panel
 												onPointerDown={(event) => beginDrag(event, p, "move")}
 												onPointerMove={trackDrag}
 												onPointerUp={endDrag}

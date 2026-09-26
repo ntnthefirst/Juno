@@ -665,6 +665,12 @@ Consequences:
   and reaches it with `form={id}`.
 - Sections in the settings window own their padding, because a section that
   turns into a form page draws its header and footer against the window edges.
+- A side panel closes on a click outside it, the same way it closes on
+  Escape, since a modeless panel that only Escape can dismiss is halfway to
+  the shape it was chosen instead of. A click on the row that opens the next
+  one swaps the panel's content rather than closing and reopening it, and a
+  click inside a menu, a dialog or another popover the panel opened is not
+  outside it, even though that content renders elsewhere in the tree.
 
 ## 31. Server settings are guessed, and the MX record is the second guess
 

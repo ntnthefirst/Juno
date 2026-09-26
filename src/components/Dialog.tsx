@@ -78,6 +78,7 @@ export function Dialog({ title, onClose, children, width = "base" }: DialogProps
 
 	return createPortal(
 		<div
+			data-popover-root
 			className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-[var(--ink)]/25 p-8"
 			onMouseDown={(event) => {
 				if (event.target === event.currentTarget) onClose();

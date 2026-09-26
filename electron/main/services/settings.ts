@@ -118,6 +118,7 @@ const DEFAULT_UPDATES: UpdateSettings = { autoInstall: true, lastCheckedAt: null
 
 const DEFAULTS: AppSettings = {
 	theme: "system",
+	sidebarAutoCollapse: true,
 	lock: DEFAULT_LOCK,
 	owner: DEFAULT_OWNER,
 	seedVersion: 0,
@@ -278,6 +279,7 @@ function normalise(raw: unknown): AppSettings {
 
 	return {
 		theme: THEMES.includes(raw.theme as ThemeSetting) ? (raw.theme as ThemeSetting) : DEFAULTS.theme,
+		sidebarAutoCollapse: bool(raw.sidebarAutoCollapse, DEFAULTS.sidebarAutoCollapse),
 		lock: {
 			method:
 				method === "passphrase" || method === "pin" || method === "none"
@@ -408,6 +410,17 @@ export async function setTheme(theme: ThemeSetting): Promise<ThemeSetting> {
 		throw new Error(`Unknown theme "${theme}". Use system, light or dark.`);
 	}
 	return write({ ...read(), theme }).theme;
+}
+
+export async function getSidebarAutoCollapse(): Promise<boolean> {
+	return read().sidebarAutoCollapse;
+}
+
+export async function setSidebarAutoCollapse(value: boolean): Promise<boolean> {
+	if (typeof value !== "boolean") {
+		throw new Error("Pass true to collapse the sidebar on its own, or false to leave it as it was left.");
+	}
+	return write({ ...read(), sidebarAutoCollapse: value }).sidebarAutoCollapse;
 }
 
 export async function getOwner(): Promise<OwnerProfile> {

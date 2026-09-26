@@ -528,6 +528,11 @@ export type OwnerPhonePatch = Partial<OwnerPhoneInput>;
 
 export interface AppSettings {
 	theme: ThemeSetting;
+	/**
+	 * Whether the main sidebar, opened fully, goes back to the rail on its own
+	 * when an entry is chosen or something beside it is clicked.
+	 */
+	sidebarAutoCollapse: boolean;
 	lock: LockSettings;
 	owner: OwnerProfile;
 	seedVersion: number;

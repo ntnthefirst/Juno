@@ -173,6 +173,13 @@ the key must be held in memory while unlocked, a forgotten passphrase means the
 data is unrecoverable, and there is no reset. Turning it on must state that in
 those words and require the passphrase to be entered twice.
 
+**Database encryption is dropped, and not built.** What it protects against, a
+stolen laptop or a copied file, is what BitLocker and FileVault already cover
+for the whole disk, and they are on by default on most machines Juno runs on.
+Building it would also mean leaving `node:sqlite` (decision 18) for a SQLite
+that can do SQLCipher. The two layers that exist are the OS account and the
+lock screen. Revisit only if Juno ever syncs the file off the machine.
+
 **Unlock methods**, in order of how much work they are:
 
 - **Passphrase.** Argon2id, per-install random salt, parameters stored alongside.

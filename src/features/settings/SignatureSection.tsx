@@ -77,7 +77,7 @@ export function SignatureSection() {
 	return (
 		<Section
 			title="Signature"
-			description="The image stamped onto a PDF when you sign a document. Signing works without one, and still records the name, the time and a hash of what was signed."
+			description="Stamped onto a PDF when you sign it. Optional."
 			action={
 				<div className="flex gap-1">
 					<Button size="dense" disabled={busy} onClick={() => void choose()}>
@@ -95,7 +95,7 @@ export function SignatureSection() {
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : path === null ? (
 				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-					No signature image is set. A PNG with a transparent background works best.
+					No image set. A transparent PNG works best.
 				</p>
 			) : (
 				<div>

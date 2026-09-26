@@ -194,7 +194,7 @@ function AboutSection() {
 	return (
 		<Section
 			title="About"
-			description="Where this installation keeps its data. The version is under Updates."
+			description="Where this installation keeps its data."
 		>
 			{error ? (
 				<p className="text-[var(--risk)]">{error}</p>

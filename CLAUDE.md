@@ -225,7 +225,9 @@ The commands are `npm run check` (lint, typecheck and test together) and
 `npm run smoke`, and a change is not done until both are clean and anything
 visual has been looked at in both themes. `JUNO_SMOKE_DEMO=1 npm run smoke`
 writes a screenshot of every screen and every settings tab, in both themes, to
-`.smoke/`. The stack's traps
+`.smoke/`; add `JUNO_SMOKE_FRONT=1` to keep the window above everything else for
+the run, which is what makes those screenshots evidence on a machine where it
+might be covered. The stack's traps
 and the definition of done are in
 [.claude/rules/verify.md](.claude/rules/verify.md).
 

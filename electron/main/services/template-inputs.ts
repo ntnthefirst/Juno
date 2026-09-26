@@ -11,7 +11,16 @@
  */
 import type { TemplateInput, TemplateInputKind } from "../../shared/types";
 
-const KINDS: TemplateInputKind[] = ["text", "textarea", "number", "money", "date", "choice"];
+const KINDS: TemplateInputKind[] = [
+	"text",
+	"textarea",
+	"number",
+	"money",
+	"date",
+	"choice",
+	"image",
+	"url",
+];
 
 /**
  * A key becomes `{{document.<key>}}` in a body, and the tiny template language

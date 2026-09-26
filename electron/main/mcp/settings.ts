@@ -112,6 +112,36 @@ export const settingsTools: ToolDescriptor[] = [
 		handler: (args) => applyTheme(args.theme as ThemeSetting),
 	},
 	{
+		name: "settings.get_sidebar_auto_collapse",
+		title: "Get whether the sidebar collapses on its own",
+		description:
+			"True when the main sidebar, opened fully, goes back to icons on its own once an entry is chosen or something beside it is clicked. False when it stays the way it was left.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: { type: "object", properties: {}, additionalProperties: false },
+		handler: () => settings.getSidebarAutoCollapse(),
+	},
+	{
+		name: "settings.set_sidebar_auto_collapse",
+		title: "Turn the sidebar auto-collapse on or off",
+		description:
+			"On, which is the default: the main sidebar goes back to icons when an entry is chosen or something beside it is clicked. Off: it stays open or collapsed the way it was left. Takes effect in the window the next time settings closes or Juno starts.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				auto_collapse: {
+					type: "boolean",
+					description: "True to collapse the sidebar on its own, false to leave it as it was left.",
+				},
+			},
+			required: ["auto_collapse"],
+			additionalProperties: false,
+		},
+		handler: (args) => settings.setSidebarAutoCollapse(args.auto_collapse === true),
+	},
+	{
 		name: "settings.get_owner",
 		title: "Get the owner profile",
 		description:

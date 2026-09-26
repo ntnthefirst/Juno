@@ -87,8 +87,7 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 	return (
 		<div>
 			<p className="max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-				Juno can write itself into these directly. Each one edits a single file, copies the
-				old one beside it first, and leaves every other server in it alone.
+				Juno adds itself to the client's configuration and keeps a copy of the old file.
 			</p>
 
 			{loadError ? (
@@ -167,10 +166,7 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 
 			{absent > 0 ? (
 				<p className="mt-3 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					The greyed ones are not on this machine. Connecting one anyway creates or updates the
-					configuration file it would read from, in the place it would read it from. It does not
-					install the program itself, and nothing happens until you install that program and start
-					it; from then on, it picks Juno up on its own, no further connecting needed.
+					The greyed ones are not installed. Connecting one prepares it for when you install it.
 				</p>
 			) : null}
 

@@ -18,7 +18,6 @@ export type ComposeSeed = {
 	clientId?: string | null;
 	projectId?: string | null;
 	documentIds?: string[];
-	templateKey?: string;
 	draft?: MailOutboxMessage;
 };
 
@@ -118,16 +117,15 @@ export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
 		return () => document.removeEventListener("mousedown", onPointerDown);
 	}, [attachmentsOpen]);
 
-	// Resolved by key for a fresh message opened from elsewhere (a document's
-	// "send" action), or by id for a draft reopened later that already carries
-	// one. Either way, nothing here shows a template picker: this is the one
-	// cover-letter case that still needs rendered text, not the regular way of
-	// sending a message.
+	// A draft that already carries a template id, an older cover-letter draft
+	// or one an agent made through mail.draft from a template, still resolves
+	// it here so reopening renders the same way it did when it was made.
+	// Composing fresh never starts from a template, so nothing here shows a
+	// template picker.
 	const template = useMemo(() => {
-		if (seed.templateKey) return templates.find((item) => item.key === seed.templateKey) ?? null;
 		if (seed.draft?.templateId) return templates.find((item) => item.id === seed.draft!.templateId) ?? null;
 		return null;
-	}, [templates, seed.templateKey, seed.draft]);
+	}, [templates, seed.draft]);
 	const extraFields = useMemo(
 		() =>
 			(template?.placeholders ?? [])

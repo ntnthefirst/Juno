@@ -162,3 +162,24 @@ describe("the update preference", () => {
 		expect(await settings.getUpdates()).toEqual({ autoInstall: true, lastCheckedAt: null });
 	});
 });
+
+describe("the sidebar auto-collapse", () => {
+	it("is on until somebody turns it off", async () => {
+		freshStore();
+		expect(await settings.getSidebarAutoCollapse()).toBe(true);
+	});
+
+	it("keeps the value it was given across a write and a fresh read", async () => {
+		const dir = freshStore();
+		await settings.setSidebarAutoCollapse(false);
+		// Pointing the store at the same folder again drops the cache, so this
+		// read comes from the file rather than from memory.
+		configureSettings(dir);
+		expect(await settings.getSidebarAutoCollapse()).toBe(false);
+	});
+
+	it("falls back to on when the stored value is the wrong type", async () => {
+		freshStore({ sidebarAutoCollapse: "no" });
+		expect(await settings.getSidebarAutoCollapse()).toBe(true);
+	});
+});

@@ -43,6 +43,9 @@ const TABS: { id: SettingsSection; label: string }[] = [
  */
 export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	const [theme, setTheme] = useTheme();
+	// Null until the stored value is in, so the checkbox does not flash a
+	// state it is about to leave.
+	const [autoCollapse, setAutoCollapse] = useState<boolean | null>(null);
 	const [tab, setTab] = useState<SettingsSection>(initialSection ?? "general");
 	const [toast, setToast] = useState<string | null>(null);
 
@@ -54,6 +57,21 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, []);
+
+	useEffect(() => {
+		void window.juno.settings.getSidebarAutoCollapse().then(setAutoCollapse);
+	}, []);
+
+	function changeAutoCollapse(next: boolean) {
+		setAutoCollapse(next);
+		window.juno.settings
+			.setSidebarAutoCollapse(next)
+			.then(setAutoCollapse)
+			.catch((cause: unknown) => {
+				setAutoCollapse(!next);
+				setToast(messageOf(cause));
+			});
+	}
 
 	// Asked for a tab while this window was already open, so it could not ride
 	// in the URL. Reloading instead would throw away a half-typed field.
@@ -107,6 +125,8 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 							<AppearanceSection
 								theme={theme}
 								onChange={setTheme}
+								sidebarAutoCollapse={autoCollapse}
+								onSidebarAutoCollapseChange={changeAutoCollapse}
 							/>
 							<OnboardingSection onNotice={setToast} />
 							<UpdatesSection />

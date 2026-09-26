@@ -12,7 +12,7 @@ Phase 1 ships five **invented** contract templates (`nda`,
 `electron/main/services/document-templates-seed.ts`) so the machinery could be
 built and tested. They are structurally plausible and legally worthless.
 
-**Decided.** They go, and one example ships in their place.
+**Decided.** New installs stop getting them, and one example ships in their place.
 
 - The example is a single document template that shows every part of the
   document editor: every kind of placeholder, an input the template asks for,

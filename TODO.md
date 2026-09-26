@@ -68,12 +68,6 @@ Decided and ready to build, roughly smallest first.
   - Changes within 10 minutes of each other fold into one entry, from the
     first status to the last. If the last is the same as the first, the entry
     is removed, because nothing changed.
-- **Sending a document is an attachment, not a template.** There is no
-  contract mail. A document or file is sent by opening the composer with the
-  file attached and an empty body. `DocumentDetail.tsx` (around line 376)
-  passes `templateKey: "contract_cover"` today; that goes, and so does the
-  smoke walk's lookup of the cover template (`electron/main.ts` around line
-  288). Greetings and sign-offs (section 5a) still apply.
 - **Audit log purge.** The log under Agent gets one row per write and is never
   emptied. Rows older than **6 months** are purged automatically. The client
   timeline is not built from the log (it reads notes, documents, mail and the
@@ -253,8 +247,8 @@ an on-click action to a text block and checks the sent HTML has the link.
   they are, and an upgrade neither hides nor deletes them, so no reference
   breaks and the seeding rules (data.md section 9) are not touched.
 - Nothing in the code may point at `contract_cover` by key any more, because
-  a new install will not have it. See "Sending a document is an attachment" in
-  section 3, which removes the two callers.
+  a new install will not have it. The two callers went when sending a document
+  became an attachment with an empty body.
 - **One example ships in their place, only on a first install.** A single
   canvas template that uses every part of the editor, so opening it teaches
   the canvas. It is seeded into an empty database and never added by an

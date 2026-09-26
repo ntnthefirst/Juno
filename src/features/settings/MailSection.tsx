@@ -80,7 +80,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 		<div className="px-6 py-5">
 			<Section
 				title="Mail accounts"
-				description="IMAP accounts Juno reads from. Nothing is ever written back to the server: no flags, no moves, no deletes. Passwords go into the operating system keychain and are never shown again."
+				description="Passwords are kept in the operating system keychain."
 				action={
 					<AddButton label="Add account" onClick={() => setForm({ account: null })} />
 				}

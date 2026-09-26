@@ -84,7 +84,7 @@ export function UpdatesSection() {
 	return (
 		<Section
 			title="Updates"
-			description="Juno looks at the releases published on GitHub, roughly every day and a half, and never while it is locked. Nothing restarts on its own."
+			description="Checked about every day and a half. Nothing restarts on its own."
 			action={
 				<Button
 					size="dense"
@@ -112,8 +112,7 @@ export function UpdatesSection() {
 					{canInstall ? (
 						<div className="flex items-center justify-between gap-4">
 							<p className="max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								Juno closes and reopens on the new version. Anything unsaved is lost, so
-								finish what is open first.
+								Juno restarts. Anything unsaved is lost.
 							</p>
 							<Button
 								variant="primary"
@@ -132,8 +131,8 @@ export function UpdatesSection() {
 						label="Install updates automatically"
 						description={
 							status.autoInstall
-								? "A new release downloads in the background and is applied the next time you close Juno, so the launch after that is the new version."
-								: "Nothing is downloaded until you press Install here."
+								? "Downloads in the background and installs when you close Juno."
+								: "Nothing downloads until you press Install."
 						}
 					/>
 				</div>

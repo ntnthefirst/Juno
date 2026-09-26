@@ -131,8 +131,8 @@ Not tasks, written down so nobody builds them by accident:
   what BitLocker and FileVault already cover for the whole disk, and they are
   on by default on most machines Juno will run on. Building it would also mean
   leaving `node:sqlite` (decision 18) for something that can do SQLCipher.
-  Revisit only if Juno ever syncs the file off the machine. Update decision 15
-  to say so when this list is next cleaned.
+  Revisit only if Juno ever syncs the file off the machine. Decision 15 says
+  so.
 
 ## 4. Mail template editor
 

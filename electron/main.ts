@@ -283,14 +283,12 @@ if (!app.requestSingleInstanceLock()) {
 								const synced = await b.mail.sync.run();
 								if (synced.some((s) => s.phase !== "done")) throw new Error("Smoke: mail sync did not finish: " + JSON.stringify(synced));
 
-								// Phase 4: a cover mail from a template with the document attached,
-								// sent by a person, and a second one an agent would have to wait on.
-								const coverTemplate = (await b.mail.templates.list()).find((t) => t.key === "contract_cover");
-								const rendered = await b.mail.templates.render({ templateId: coverTemplate.id, clientId: made[0].id, extras: { title: "de ontwikkelovereenkomst" } });
+								// Phase 4: the generated document sent as an attachment with an
+								// empty body, by a person, and a second message an agent would
+								// have to wait on.
 								const draft = await b.mail.outbox.createDraft({
-									accountId: mailAccount.id, to: [{ name: "Laura", address: "laura@obet.be" }], subject: rendered.subject,
-									bodyText: rendered.bodyText, bodyHtml: rendered.bodyHtml, clientId: made[0].id, templateId: coverTemplate.id,
-									documentIds: [gen.document.id],
+									accountId: mailAccount.id, to: [{ name: "Laura", address: "laura@obet.be" }], subject: "Ontwikkelovereenkomst",
+									bodyText: "", clientId: made[0].id, documentIds: [gen.document.id],
 								});
 								await b.mail.outbox.send(draft.id);
 								await b.mail.outbox.createDraft({
@@ -486,7 +484,7 @@ if (!app.requestSingleInstanceLock()) {
 							const sentCount = await mailSend.processQueue();
 							const outboxRows = await (await import("./main/services/mail-outbox")).list({ states: ["sent"] });
 							if (sentCount !== 1 || outboxRows.length !== 1 || outboxRows[0]!.attachments.length !== 1) {
-								throw new Error(`Smoke: the outbox did not send the cover mail: ${JSON.stringify(outboxRows)}`);
+								throw new Error(`Smoke: the outbox did not send the document mail: ${JSON.stringify(outboxRows)}`);
 							}
 							console.log(`SMOKE_DEMO outbox sent=${outboxRows[0]!.messageId}`);
 

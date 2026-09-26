@@ -224,8 +224,8 @@ export function ProjectsScreen() {
 	}
 
 	return (
-		<div className="flex h-full flex-col p-8">
-			<div className="mx-auto mb-6 flex w-full max-w-[var(--content-width)] flex-col gap-4">
+		<div className="flex h-full flex-col px-6 py-8 lg:px-8 xl:px-10">
+			<div className="mb-6 flex w-full flex-col gap-4">
 				<div className="flex items-center justify-between gap-4">
 					<div className="flex items-baseline gap-3">
 						<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
@@ -279,7 +279,7 @@ export function ProjectsScreen() {
 				) : null}
 			</div>
 
-			<div className="mx-auto min-h-0 w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">
+			<div className="min-h-0 w-full flex-1 overflow-y-auto">
 				{load.status === "loading" || !view ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
 				) : load.status === "error" ? (

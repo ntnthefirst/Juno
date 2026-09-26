@@ -100,54 +100,7 @@ descriptors are written per feature so that phase is assembly, not archaeology.
   previous step is a job for an agent, which can read and then decide, rather
   than for a recording.
 
-## 4. The main sidebar collapses on its own
-
-Small, one session. Start with `/screen-new` only if a new component is
-needed; this is mostly a change to an existing hook.
-
-**What it does.** The main sidebar (`src/app/Sidebar.tsx`) starts as the rail.
-Opened fully, it goes back to the rail by itself when an entry in it is chosen
-or when anything outside it is clicked, the way the narrow-window drawer
-already closes. A setting turns the going-back off, and then the sidebar stays
-the way it was left, as it does today.
-
-**Files.**
-
-- `electron/shared/types.ts`: `AppSettings` gains `sidebarAutoCollapse: boolean`.
-- `electron/main/services/settings.ts`: default `true` in `DEFAULTS`, read with
-  a boolean fallback in the parse near line 280, and a getter and setter
-  beside `getTheme` and `setTheme`.
-- The IPC adapter, the preload bridge and `electron/shared/api.ts`: one channel
-  each way, named like the theme's.
-- `electron/main/mcp/settings.ts`: `settings.get_sidebar_auto_collapse` and
-  `settings.set_sidebar_auto_collapse`, the setter marked side-effectful but
-  local, like `settings.set_theme` (mcp.md section 4).
-- `src/features/settings/AppearanceSection.tsx`: a checkbox under the theme,
-  "Collapse the sidebar on its own", with one line under it: "The sidebar goes
-  back to icons when you choose something or click beside it."
-- `src/app/use-sidebar-layout.ts`: the stored preference defaults to collapsed
-  when nothing is stored, and a new `autoCollapse` input makes `close()`
-  collapse a docked, expanded sidebar as well as the drawer.
-- `src/app/App.tsx` (around line 124): `sidebar.close()` after a choice is
-  called for a docked sidebar too, not only when `floating`. A pointerdown
-  outside the sidebar collapses it, the same listener the drawer uses.
-- The settings window is a separate modal window, so the main window has to
-  hear the change: re-read the setting on `window.childClosed`, which is how a
-  setting reaches the main window today.
-- `.claude/rules/styling.md` section 5b: the table and the paragraph under it
-  describe the new default and the setting.
-
-**Done when.**
-
-- A test for the settings service: the default is on, and the value survives a
-  write and a read.
-- The smoke walk (`electron/main.ts`) opens the sidebar fully, clicks a screen,
-  and checks it is a rail again; then turns the setting off in the settings
-  window and checks it stays open.
-- Looked at in both themes, wide and medium windows. The narrow-window drawer
-  behaves exactly as before.
-
-## 5. Mail template editor
+## 4. Mail template editor
 
 Three pieces of work, in this order, because the second changes the model the
 third and the example build on. Read docs/editors.md section 2 and decisions
@@ -156,7 +109,7 @@ commits, and each keeps the four checks green: `npm run check`,
 `JUNO_SMOKE_DEMO=1 JUNO_SMOKE_FRONT=1 npm run smoke`, both themes looked at, and
 the copy sweep in writing.md section 7.
 
-### 5a. A tool for every element a mail client renders, grouped like Figma's
+### 4a. A tool for every element a mail client renders, grouped like Figma's
 
 **What it does.** The floating toolbar
 (`src/features/templates/mail/canvas/CanvasToolbar.tsx`) becomes groups. Each
@@ -222,7 +175,7 @@ changed within its group, nested, dragged in the layers, hidden at a
 breakpoint, converted to HTML, and read back from the code view. The smoke walk
 adds one element of each group and nests a text block in a header.
 
-### 5b. Actions instead of a button block
+### 4b. Actions instead of a button block
 
 **What it does.** The button leaves the toolbar. Every element gets an
 **Actions** section in the design panel, after Effects, listing actions as rows
@@ -259,7 +212,7 @@ the code view; a hover action writes one rule with the element's class; tel,
 mailto and https pass and javascript, data and http do not. The smoke walk adds
 an on-click action to a text block and checks the sent HTML has the link.
 
-### 5c. Replace the shipped templates with one example of everything
+### 4c. Replace the shipped templates with one example of everything
 
 **What it does.** The four shipped mail templates (`contract_cover`,
 `project_kickoff`, `invoice_due`, `hosting_renewal` in

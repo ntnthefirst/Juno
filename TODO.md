@@ -45,10 +45,11 @@ phase 6's done-when in PLAN.md.
 
 ## 3. Smaller things
 
-- **The MCP server itself.** The tool descriptors exist for every service, but
-  nothing serves them over stdio yet. That is phase 6 in `PLAN.md`; the
-  descriptors are written per feature so that phase is assembly, not archaeology.
-- **`npm run test` runs under Electron's Node** because the host's Node 23.9 has
+nothing serves them over stdio yet. That is phase 6 in `PLAN.md`; the
+descriptors are written per feature so that phase is assembly, not archaeology.
+
+- **Projects overview layout.** Remove the max-width constraint and use fixed responsive padding that grows slightly on larger screens. In the rows view, let the title and description column fill the remaining space after the other columns keep fixed widths, and truncate overflowing text with an ellipsis.
+- **Client detail quick status.** Add a small clickable status tag beside the client name in the detail header. Changing it should update the client and add a timeline entry, coalescing changes made within 10 minutes into one entry and removing the entry when the status is changed back to its original value.
   no `StatementSync.setReturnArrays`. If the host Node moves past 24 this can go
   back to plain `vitest`.
 - **Database encryption** is out of scope and would mean revisiting decision 18,
@@ -71,17 +72,14 @@ phase 6's done-when in PLAN.md.
 - **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
   is the phase 4 promise not yet kept. Templates carry their own layout, so it
   matters least for the messages Juno writes on its own.
-- **A new mail template starts from nothing.** `mail-templates.ts` has a
-  `create()`, but the renderer has no "new template" action at all, only edit,
-  preview and use on the four that ship. `mailShell` already wraps every sent
-  message in the house header and footer chrome and the owner's signature line
-  at send time, so that part is not what is missing. What is missing is a
-  starting point for the body someone types: an opening line and a signoff
-  block, the way the seeded templates already share `SIGNOFF_U` and
-  `SIGNOFF_JE` in `mail-templates-seed.ts`, offered as a starter the first time
-  someone writes a template rather than an empty field. This needs a "new
-  template" flow in the editor and a couple of reusable starter bodies, one per
-  register, not a change to the house shell.
+- **A new mail template starts from an empty canvas.** The plus on the list
+  asks for a name and opens the editor on a canvas with one empty section, and
+  the name doubles as the subject until somebody changes it. What is still
+  missing is a starting point for the body: an opening line and a signoff, the
+  way the seeded templates share `SIGNOFF_U` and `SIGNOFF_JE` in
+  `mail-templates-seed.ts`, laid in as blocks rather than typed from nothing.
+  The editor no longer offers the register, so a starter either picks u, which
+  is what the contracts use, or comes as two starters to choose from.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.
@@ -101,3 +99,166 @@ phase 6's done-when in PLAN.md.
   independent calls with fixed arguments. Anything that needs the output of a
   previous step is a job for an agent, which can read and then decide, rather
   than for a recording.
+
+## 4. Mail template editor
+
+Three pieces of work, in this order, because the second changes the model the
+third and the example build on. Read docs/editors.md section 2 and decisions
+36 and 37 first; every rule there still holds. Each piece is its own set of
+commits, and each keeps the four checks green: `npm run check`,
+`JUNO_SMOKE_DEMO=1 JUNO_SMOKE_FRONT=1 npm run smoke`, both themes looked at, and
+the copy sweep in writing.md section 7.
+
+### 4a. A tool for every element a mail client renders, grouped like Figma's
+
+**What it does.** The floating toolbar
+(`src/features/templates/mail/canvas/CanvasToolbar.tsx`) becomes groups. Each
+group is one button with a chevron beside it, and the chevron opens a menu of
+the group's elements, each with its name and its key, the way Figma's frame
+tool opens Frame, Section and Slice. The button adds the group's last-used
+element (remembered per machine in localStorage, like autosave). What is added
+is that HTML element, so the layers and the code view name it for what it is,
+and the tag can be changed afterwards in the design panel within its group,
+the way a heading's level is changed now.
+
+| Group | Elements | Notes |
+| --- | --- | --- |
+| **Containers** | section, div, header, footer, main, article, aside, nav | Each lays out what is in it the way a section does now: flow, gap, padding, alignment, breakpoints. Each can hold blocks and other containers |
+| **Text** | h1 to h6, p, blockquote, pre, address, span, and a list (ul or ol with li) | The element only. Bold, italic, underline and links stay inside the text, on the format bar |
+| **Columns** | a table laid out for mail: `table role="presentation"`, rows, cells | The one layout that stays side by side in Outlook on Windows ("The Outlook problem" in docs/editors.md). Cells hold blocks |
+| **Media** | img, and img inside a link | Video, audio and embeds play in no client that matters. The menu says so in one line instead of offering them: a video is a picture with an on-click action to where it plays |
+| **Other** | hr, and a declared input | As they are now |
+
+**The model change, which is the bulk of it.**
+
+- Today `MailLayout.sections` is one level: sections hold blocks, and a
+  section compiles to a `div`. Containers nest, so the model becomes a tree: a
+  container holds an ordered list of children, each a container, a text
+  element, a table or a leaf block. Keep ids stable; breakpoints key their
+  overrides by id and must keep working (`breakpoints.ts`,
+  `parseBreakpoints` and `breakpointRules` in `mail-layout.ts`).
+- Give every element a `tag` field, checked against its group's list in the
+  parser the way `toColor` checks a colour. A text element's `kind` stays
+  "text" or "heading"; the tag says which one it is written as.
+- **A schema version bump, not a migration.** The layout is JSON in
+  `layout_json`, so there is no Drizzle migration, but `MailLayout.version`
+  goes to 2 and `normaliseLayout` reads a version 1 layout into the tree:
+  each section becomes a `section` container holding its blocks. Every
+  template saved today must open unchanged, and a test must prove it.
+- The compiler writes each element with its own tag, keeps the `data-juno-*`
+  markers, and `layoutFromHtml` reads them back, nested. The code view round
+  trip tests in `mail-layout.test.ts` must pass for nested containers and for
+  a table.
+- The layers panel (`LayerTree.tsx`) becomes a real tree: expand and collapse
+  at every level, drag into and out of containers, Alt and an arrow still move
+  one place. The canvas drop targets follow.
+- `sizing.ts` works per parent rather than per section, since any container is
+  a parent now.
+
+**Files you will touch.** `electron/shared/types.ts`,
+`electron/main/services/mail-layout.ts` and its test, `canvas-actions.ts`,
+`breakpoints.ts`, `sizing.ts`, `CanvasView.tsx`, `LayerTree.tsx`,
+`DesignPanel.tsx`, `CanvasToolbar.tsx`, `shortcuts.ts` (keys per element, and
+the list the toolbar shows), `MailTemplateEditor.tsx` (insert, paste,
+duplicate), the MCP layout description in `electron/main/mcp/mail-outbox.ts`,
+and docs/editors.md.
+
+**Decide before starting.** Whether the old sections become `section`
+elements in the sent HTML or stay `div`s. `section` is the better HTML;
+some older clients style unknown block elements oddly, so the compiler may
+want `display:block` on every one. Test in the preview and write the choice
+down in docs/editors.md.
+
+**Done when.** A version 1 layout loads and sends byte for byte the same body.
+Every element in the table can be added from the toolbar and from its key,
+changed within its group, nested, dragged in the layers, hidden at a
+breakpoint, converted to HTML, and read back from the code view. The smoke walk
+adds one element of each group and nests a text block in a header.
+
+### 4b. Actions instead of a button block
+
+**What it does.** The button leaves the toolbar. Every element gets an
+**Actions** section in the design panel, after Effects, listing actions as rows
+like the effects: a trigger, what it does, an eye and a minus.
+
+| Trigger | What it can do | Compiles to | Where it works |
+| --- | --- | --- | --- |
+| **On click** | Open a link (https), start a mail (mailto), call (tel) | The element wrapped in an `<a>`, or an `<a>` itself for inline text | Every client |
+| **On hover** | Change the fill, text colour, underline or opacity | A `:hover` rule in the head, next to the breakpoints, `!important` like them | Apple Mail, iOS, Outlook on the web. Not Gmail, not Outlook on Windows; the panel says so on the row |
+
+Nothing else: focus, scroll and timed triggers need a script.
+
+- A button becomes a text element with a fill, a radius and an on-click
+  action. Existing `button` blocks keep loading and compiling, the way
+  dividers and spacers do now; they are simply not offered.
+- `safeHref` already refuses anything but https and mailto; add tel there,
+  with a test, and refuse everything else as it does now.
+- The hover rules come out of the same place as the breakpoints
+  (`breakpointRules` in `mail-layout.ts`), so the class names and the
+  sanitising are shared, and a rule can never contain an angle bracket.
+- A link on a whole block must not wrap block elements in a way clients
+  break: an `<a>` around a `div` is valid HTML5 and Gmail keeps it, but test it
+  in the preview and in the Outlook note.
+
+**No custom JavaScript.** Not a choice Juno gets to make: every mail client
+removes `<script>` and every `on*` handler before the reader sees the message,
+Gmail and Outlook drop the whole element, and mail with scripts in it scores
+as spam. `sanitiseMarkup` strips them for that reason. The two triggers above
+are the whole of what an email can do when somebody interacts with it. Do not
+add a script field, and do not let a code block carry one.
+
+**Done when.** Tests: an on-click action compiles to a link and reads back from
+the code view; a hover action writes one rule with the element's class; tel,
+mailto and https pass and javascript, data and http do not. The smoke walk adds
+an on-click action to a text block and checks the sent HTML has the link.
+
+### 4c. Replace the shipped templates with one example of everything
+
+**What it does.** The four shipped mail templates (`contract_cover`,
+`project_kickoff`, `invoice_due`, `hosting_renewal` in
+`electron/main/services/mail-templates-seed.ts`) are hidden, and one example
+ships in their place: a single canvas template that uses every part of the
+editor, so opening it teaches the canvas. Written in Dutch, "u", by writing.md
+section 1, and native, not translated.
+
+What it has to show, one of each:
+
+- A header container with a logo picture (an https address) and a linked
+  Google font on the heading.
+- Rich text with bold, italic, a link and a placeholder (`{{client.firstName}}`).
+- A picture input the template asks for, in the Asks view.
+- Two columns across that stack into one at a Phone breakpoint, and a Columns
+  table for comparison.
+- A divider: an empty section with a height and a bottom stroke.
+- A gradient fill, a drop shadow, rounded corners, a colour with opacity.
+- A text element with an on-click action, styled as a button, with a hover
+  action.
+- A code block.
+- A footer container with the business details, which the house frame used to
+  add and a canvas no longer does (decision 37).
+
+**Careful: `contract_cover` is used.** `src/features/documents/DocumentDetail.tsx`
+(around line 376) sends a signed document with `templateKey: "contract_cover"`,
+and the smoke walk looks it up by key (`electron/main.ts` around line 288).
+Hiding it breaks sending a contract. Either keep `contract_cover` and hide the
+other three, or make the example the cover template and point both callers at
+it. Decide with Nathan, and do not leave a caller pointing at a hidden row.
+
+**How, by the seeding rules (data.md section 9, decision 16).**
+
+- Shipped rows are never deleted: rows already point at them. Bump
+  `MAIL_TEMPLATE_SEED_VERSION` and teach `ensureMailTemplatesSeeded` to set
+  `hidden_at` on a retired seed key, but only on a row whose `customisedAt`
+  and `hiddenAt` are null. An edited one is the owner's and stays as it is.
+- The example gets its own `seed_key`, `isSystem: true`, and a layout, so it
+  seeds with a canvas rather than hand-written HTML. `reviewedAt` stays null
+  like every shipped text, so the list marks it unreviewed.
+- The reset in settings (reference data) must restore the example and must not
+  bring back the retired ones.
+
+**Done when.** A test seeds version 1, edits one retired template, seeds the new
+version, and checks: the edited one is untouched and visible, the rest are
+hidden, the example exists with a canvas, and seeding again changes nothing.
+The smoke walk opens the example, and its preview renders with no missing
+values against the demo client. Send the example to yourself once and read it
+in Gmail on a phone and in Outlook on Windows, and write down what each shows.

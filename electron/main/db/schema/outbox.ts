@@ -27,10 +27,21 @@ export const mailTemplates = sqliteTable(
 		 * and the project already answer. JSON array of input declarations.
 		 */
 		inputsJson: text("inputs_json"),
+		/**
+		 * The canvas the editor works on, as JSON. Null is an HTML-only template:
+		 * everything written before the canvas existed, and anything somebody
+		 * prefers to keep as hand-written HTML. `body_html` is compiled from this
+		 * whenever it is set, so the two cannot disagree.
+		 */
+		layoutJson: text("layout_json"),
 	},
 	(t) => [
 		index("mail_templates_key_idx").on(t.key),
 		index("mail_templates_deleted_idx").on(t.deletedAt),
+		// The list filters both of these on every read: a hidden system template
+		// is gone from the pickers and still resolves on the drafts that point at
+		// it (.claude/rules/data.md section 9).
+		index("mail_templates_hidden_idx").on(t.hiddenAt),
 	],
 );
 

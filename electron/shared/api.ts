@@ -102,6 +102,11 @@ import type {
 	MailSecurity,
 	MailSyncStatus,
 	MailTemplate,
+	MailLayout,
+	GoogleFontLoad,
+	GoogleFontRequest,
+	MailBlockConversion,
+	MailTemplateDraft,
 	MailTemplateInput,
 	MailTemplatePatch,
 	MailTemplateRender,
@@ -381,6 +386,9 @@ export interface JunoApi {
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
 		/** Fires in every window, so a change made in settings reaches the app. */
 		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
+		/** Whether the main sidebar goes back to the rail on its own. */
+		getSidebarAutoCollapse(): Promise<boolean>;
+		setSidebarAutoCollapse(value: boolean): Promise<boolean>;
 		/** How the projects screen is drawn. A preference, not a record. */
 		getProjectsView(): Promise<ProjectsView>;
 		setProjectsView(patch: Partial<ProjectsView>): Promise<ProjectsView>;
@@ -713,11 +721,30 @@ export interface JunoApi {
 		/** Opens a link from a message in the real browser, after a protocol check. */
 		openLink(url: string): Promise<void>;
 		templates: {
+			/** What a picker offers: hidden templates are left out. */
 			list(): Promise<MailTemplate[]>;
+			/** Every template, hidden ones included. What the management screen shows. */
+			listAll(): Promise<MailTemplate[]>;
 			get(id: string): Promise<MailTemplate | null>;
 			create(input: MailTemplateInput): Promise<MailTemplate>;
 			update(id: string, patch: MailTemplatePatch): Promise<MailTemplate>;
+			/** Hides a shipped template, soft-deletes one of your own. */
 			remove(id: string): Promise<MailTemplate>;
+			hide(id: string): Promise<MailTemplate>;
+			unhide(id: string): Promise<MailTemplate>;
+			duplicate(id: string): Promise<MailTemplate>;
+			/** Reads hand-edited HTML back into a canvas. Stores nothing. */
+			parseBody(html: string): Promise<MailLayout>;
+			/**
+			 * A Google font by name, with its files inline, so the canvas can show
+			 * it. Juno builds the address itself and never fetches one it is given.
+			 */
+			loadGoogleFont(request: GoogleFontRequest): Promise<GoogleFontLoad>;
+			/** One block as its HTML and CSS. Answers with the changed canvas; stores nothing. */
+			convertBlock(input: MailBlockConversion): Promise<MailLayout>;
+			/** Renders values in hand. Writes nothing, so a preview cannot mark a
+			 * template as edited. */
+			preview(draft: MailTemplateDraft): Promise<MailTemplateRender>;
 			/** Fills a template against a client and project. Stores nothing. */
 			render(input: {
 				templateId: string;

@@ -116,13 +116,15 @@ type MainShellProps = {
 /** The application proper: title bar, sidebar and the current screen. */
 function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProps) {
 	const [screen, setScreen] = useState<ScreenId>("today");
-	const sidebar = useSidebarLayout();
+	const autoCollapse = useSidebarAutoCollapse();
+	const sidebar = useSidebarLayout(autoCollapse);
 	const trail = useBreadcrumbTrail();
 
 	const navigate = (id: ScreenId) => {
 		setScreen(id);
-		// On a narrow window the sidebar is covering the thing just chosen.
-		if (sidebar.floating) sidebar.close();
+		// On a narrow window the sidebar is covering the thing just chosen. On a
+		// wider one, close() collapses it only when auto-collapse is on.
+		sidebar.close();
 	};
 
 	return (
@@ -189,6 +191,36 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 		</div>
 	);
+}
+
+/**
+ * The auto-collapse setting, as the main window knows it. It is changed in the
+ * settings window, which has no channel back (decision 26), so it is read again
+ * whenever a modal child closes. Until the first answer arrives it is the
+ * default, which is on.
+ */
+function useSidebarAutoCollapse(): boolean {
+	const [value, setValue] = useState(true);
+	useEffect(() => {
+		let cancelled = false;
+		const read = () => {
+			void window.juno.settings
+				.getSidebarAutoCollapse()
+				.then((next) => {
+					if (!cancelled) setValue(next);
+				})
+				.catch(() => {
+					// Keeps the value it had. A sidebar is not worth an error on screen.
+				});
+		};
+		read();
+		const stop = window.juno.window.onChildClosed(read);
+		return () => {
+			cancelled = true;
+			stop();
+		};
+	}, []);
+	return value;
 }
 
 function Placeholder({ title }: { title: string }) {

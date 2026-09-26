@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { UpdateStatus } from "@shared/types";
 import { Button } from "../../components/Button";
+import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
 
@@ -83,7 +84,7 @@ export function UpdatesSection() {
 	return (
 		<Section
 			title="Updates"
-			description="Juno looks at the releases published on GitHub, roughly every day and a half, and never while it is locked. Nothing restarts on its own."
+			description="Checked about every day and a half. Nothing restarts on its own."
 			action={
 				<Button
 					size="dense"
@@ -111,8 +112,7 @@ export function UpdatesSection() {
 					{canInstall ? (
 						<div className="flex items-center justify-between gap-4">
 							<p className="max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								Juno closes and reopens on the new version. Anything unsaved is lost, so
-								finish what is open first.
+								Juno restarts. Anything unsaved is lost.
 							</p>
 							<Button
 								variant="primary"
@@ -124,26 +124,17 @@ export function UpdatesSection() {
 						</div>
 					) : null}
 
-					<div>
-						<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
-							<input
-								type="checkbox"
-								checked={status.autoInstall}
-								disabled={busy}
-								onChange={(event) => {
-									const value = event.target.checked;
-									void run(() => window.juno.updates.setAutoInstall(value));
-								}}
-								className="h-4 w-4 accent-[var(--accent)]"
-							/>
-							Install updates automatically
-						</label>
-						<p className="mt-2 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							{status.autoInstall
-								? "A new release downloads in the background and is applied the next time you close Juno, so the launch after that is the new version."
-								: "Nothing is downloaded until you press Install here."}
-						</p>
-					</div>
+					<Toggle
+						checked={status.autoInstall}
+						disabled={busy}
+						onChange={(value) => void run(() => window.juno.updates.setAutoInstall(value))}
+						label="Install updates automatically"
+						description={
+							status.autoInstall
+								? "Downloads in the background and installs when you close Juno."
+								: "Nothing downloads until you press Install."
+						}
+					/>
 				</div>
 			)}
 

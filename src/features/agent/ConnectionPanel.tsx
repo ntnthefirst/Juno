@@ -81,8 +81,8 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 
 	return (
 		<div className="mx-auto w-full max-w-[var(--content-width)]">
-			<section>
-				<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+			<section className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">
 					Connecting an agent
 				</h2>
 
@@ -108,22 +108,13 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 						{status.error}
 					</p>
 				) : null}
-				{status.running && status.connections === 0 ? (
-					<p className="mt-1 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						This count does not update on its own. If you just connected a client below, finish
-						the restart step it asked for, then press "Check again". Juno also refuses every
-						agent while it is locked, so an unlocked window is worth checking too.
-					</p>
-				) : null}
-
-				<p className="mt-4 max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-					An agent talks to Juno through a bridge it starts itself. Juno has to be running,
-					and it will refuse everything while locked.
+				<p className="mt-2 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					Juno has to be running and unlocked. Just connected one? Restart it, then check again.
 				</p>
 			</section>
 
-			<section className="mt-8">
-				<div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-[var(--line)] pb-2">
+			<section className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+				<div className="flex flex-wrap items-center justify-between gap-3">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Connect a client</h2>
 					<RouteSwitch route={route} onChange={setRoute} />
 				</div>
@@ -131,10 +122,8 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 				<div className="mt-4 flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2.5">
 					<Icon name="info" className="mt-0.5 flex-none text-[var(--ink-muted)]" />
 					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-						Juno's agent server is local. An agent client starts it itself, as a background
-						process on this machine, so there is no server address to type anywhere. Claude's
-						"Add custom connector" dialog, which asks for an HTTPS server URL, is for a remote
-						server and will not accept Juno: use one of the two routes below instead.
+						Juno runs on this machine, so there is no server address. "Add custom connector"
+						is for remote servers and will not accept Juno.
 					</p>
 				</div>
 
@@ -148,10 +137,7 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 
 				<div className="mt-6 flex flex-wrap items-start justify-between gap-4">
 					<p className="max-w-[60ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						The connection file holds a token, and an agent that does not present it is refused. That
-						stops something that guessed the address. It does not stop a program already running as
-						you, which can read the file: on a machine you are signed in to, that program could read
-						the database directly. The lock is the control that matters, and every tool checks it.
+						An agent without the token in this file is refused. The lock is the control that matters.
 					</p>
 					<Button size="dense" onClick={() => void window.juno.agent.revealConnectionFile()}>
 						<Icon name="external" />
@@ -160,8 +146,8 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 				</div>
 			</section>
 
-			<section className="mt-10">
-				<div className="flex items-baseline justify-between gap-4 border-b border-[var(--line)] pb-2">
+			<section className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+				<div className="flex items-baseline justify-between gap-4">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">
 						What an agent can do
 					</h2>

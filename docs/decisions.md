@@ -888,3 +888,97 @@ the user's privileges, which Electron does not have and which a back office has
 no business building. **What would reverse the storage rule:** nothing short of
 Juno becoming a sync client, at which point a folder outside its own tree stops
 being something it can reason about at all.
+
+## 36. A mail template links its fonts, and Juno fetches only Google's, by name
+
+A template can set its text in a typeface no mail client has. The message links
+the stylesheet in its head and the recipient's client loads it; Apple Mail, iOS,
+Outlook for Mac and most Android clients do, and Gmail and Outlook on Windows do
+not load web fonts at all. So a linked font is never trusted to arrive: each one
+names a fallback, sans, serif or mono, and every block that uses it is written as
+`'Family', <fallback stack>`.
+
+The hard part is the editor, not the message. The canvas is a page in Juno's own
+window, and that window loads styles and fonts from Juno and nowhere else
+(`.claude/rules/security.md` section 3, and decision 10 for the app's own type).
+Loosening the policy for a typeface would loosen it for everything the window
+shows, including the mail reader's neighbours. It stays as it is.
+
+Instead, **for a Google font, the main process fetches it once and hands the
+canvas the faces inline**, which `font-src data:` already allows.
+`services/mail-fonts.ts` does this, and three things about it are the decision:
+
+- **It is asked for a family name, never an address.** The bridge must not carry
+  a URL for the main process to fetch (security.md section 2). A name that passes
+  `toFamily` cannot become one, the stylesheet address is built by
+  `googleFontHref`, and a font file the stylesheet points at is fetched only from
+  Google's own file host. There is no path from the renderer, or from an agent,
+  to making Juno fetch an arbitrary address.
+- **Only the Latin files are kept.** Google splits every weight into a file per
+  script, and a Dutch letter only ever needs the Latin ones.
+- **It fetches only when a person adds or changes a font**, and caches for as
+  long as the app runs. That is one request to Google per font, with the IP it
+  comes from, which is the same thing the recipient's client does on opening the
+  message. A business that would rather not ask Google at all links Bunny Fonts,
+  which serves the same families from the EU, and sees the fallback on the
+  canvas in exchange.
+
+**A linked font from anywhere else is not fetched, and the canvas shows its
+fallback and says so.** Fetching it would mean fetching an address somebody
+typed, which is exactly what the rule above refuses. The message still links it.
+
+**There is no MCP tool for loading a font.** What the service returns is the bytes
+of a typeface for a canvas to paint with, which an agent has no use for. What an
+agent does need, putting a font on a template, is the layout's `fonts` field, and
+that goes through `mail.templates.update` like every other edit, parked for a
+person to approve (decision 24). This is the one piece of the editor with no
+agent twin, and it is plumbing for the screen rather than a capability.
+
+Revisit if: a font source other than Google needs to show on the canvas (then it
+is a second named source with a builder of its own, never a typed address), or
+the window's content policy is ever loosened for another reason, in which case
+this indirection should go rather than sit beside a second way to do the same
+thing.
+
+## 37. A canvas message is sent with nothing around it, and changes by media query
+
+A mail template laid out on the canvas used to go out inside the house shell:
+a tinted page, a 600 pixel card with an accent line over it, and a footer with
+the business name and address. That shell was made for text somebody typed,
+which has no look of its own and needs one. A canvas has a look of its own, and
+the shell put a border, a margin and a footer round it that the author never
+drew and could not remove.
+
+So **a canvas is the whole message** (`canvasShell` in services/mail-html.ts).
+The frame fills the reader's mail client, or is given a width and sits in the
+middle, and what is drawn is what is sent. The footer's business details are
+not lost: they are what the author puts in a section, and a template that wants
+them has them where the author can see and style them. Hand-written templates
+and plain messages keep the house shell, because it is still what makes them
+look like anything.
+
+**The message changes at narrower widths by media query**, written in the head
+of the message from the breakpoints on the canvas. Media queries are the only
+way an email changes with the screen, and the clients most phones open mail in
+read them: Apple Mail on iOS and Gmail's app among them. Outlook on Windows does
+not, and shows the default, which is why the default is a
+complete design and a breakpoint only ever changes it. Every declaration in a
+breakpoint is `!important`, because the message's own styles are inline, and an
+inline style gives way to nothing less.
+
+Two things about this are the decision:
+
+- **A breakpoint holds only what it changes**, per section and per block by id,
+  and starts as a copy of the widths above it. A change to the default reaches
+  every breakpoint that did not change the same thing, which is what somebody
+  editing a design at two widths expects, and what the media queries do anyway.
+- **Only how something looks can differ by width.** The words, the links and
+  the pictures are the same at every width, because a message that says
+  something different on a phone is two messages, and an agent or a person
+  reading one of them would not know about the other.
+
+Revisit if: a client that matters stops reading media queries, or the house
+shell turns out to be something people want back round a canvas, in which case
+it becomes a section the canvas can start with rather than a frame it cannot
+remove.
+

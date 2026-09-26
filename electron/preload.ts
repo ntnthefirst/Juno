@@ -203,6 +203,8 @@ const api: JunoApi = {
 		getProjectsView: () => call("settings.getProjectsView"),
 		setProjectsView: (patch) => call("settings.setProjectsView", patch),
 		setTheme: (theme) => call("settings.setTheme", theme),
+		getSidebarAutoCollapse: () => call("settings.getSidebarAutoCollapse"),
+		setSidebarAutoCollapse: (value) => call("settings.setSidebarAutoCollapse", value),
 		onThemeChange: (listener) => {
 			const handler = (_event: Electron.IpcRendererEvent, theme: ThemeSetting) => listener(theme);
 			ipcRenderer.on("settings.themeChanged", handler);
@@ -444,10 +446,18 @@ const api: JunoApi = {
 		openLink: (url) => call("mail.openLink", url),
 		templates: {
 			list: () => call("mail.templates.list"),
+			listAll: () => call("mail.templates.listAll"),
 			get: (id) => call("mail.templates.get", id),
 			create: (input) => call("mail.templates.create", input),
 			update: (id, patch) => call("mail.templates.update", id, patch),
 			remove: (id) => call("mail.templates.remove", id),
+			hide: (id) => call("mail.templates.hide", id),
+			unhide: (id) => call("mail.templates.unhide", id),
+			duplicate: (id) => call("mail.templates.duplicate", id),
+			parseBody: (html) => call("mail.templates.parseBody", html),
+			loadGoogleFont: (request) => call("mail.templates.loadGoogleFont", request),
+			convertBlock: (input) => call("mail.templates.convertBlock", input),
+			preview: (draft) => call("mail.templates.preview", draft),
 			render: (input) => call("mail.templates.render", input),
 		},
 		outbox: {

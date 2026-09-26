@@ -29,9 +29,19 @@ const FONT = "Inter, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-s
 export interface MailShellOptions {
 	/** The footer line: business name, address, VAT number. Escaped here. */
 	footerLines: string[];
+	/**
+	 * Stylesheets for the typefaces the body names, linked in the head. Built
+	 * by `fontLinks` in mail-layout.ts, which only ever returns https addresses.
+	 */
+	fontLinks?: string[];
 }
 
-/** Wraps a rendered body in the house shell. The body is trusted HTML from a template. */
+/**
+ * Wraps a rendered body in the house shell: the tinted page, the 600 pixel
+ * card with the accent line over it, and the footer with the business under
+ * it. What a plain message and a hand-written template are sent in. The body is
+ * trusted HTML from a template.
+ */
 export function mailShell(bodyHtml: string, options: MailShellOptions): string {
 	const footer = options.footerLines
 		.filter((line) => line.trim())
@@ -39,7 +49,11 @@ export function mailShell(bodyHtml: string, options: MailShellOptions): string {
 		.join("<br>");
 	return [
 		'<!doctype html><html lang="nl-BE"><head><meta charset="utf-8">',
-		'<meta name="viewport" content="width=device-width, initial-scale=1"></head>',
+		'<meta name="viewport" content="width=device-width, initial-scale=1">',
+		// A client that will not load these falls back to the stack each block
+		// names after the family, so leaving one out costs a typeface, not text.
+		...(options.fontLinks ?? []).map((href) => `<link rel="stylesheet" href="${escapeHtml(href)}">`),
+		"</head>",
 		`<body style="margin:0;padding:0;background:${PAPER};">`,
 		`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER};">`,
 		`<tr><td align="center" style="padding:24px 12px;">`,
@@ -51,6 +65,39 @@ export function mailShell(bodyHtml: string, options: MailShellOptions): string {
 			? `<tr><td style="padding:16px 32px 20px;border-top:1px solid ${LINE};font-family:${FONT};font-size:12px;line-height:1.5;color:${INK_MUTED};">${footer}</td></tr>`
 			: "",
 		"</table></td></tr></table></body></html>",
+	].join("");
+}
+
+export interface CanvasShellOptions {
+	/** Stylesheets for the typefaces the canvas names. Only https addresses, from `fontLinks`. */
+	fontLinks?: string[];
+	/** The breakpoints' media queries, from `breakpointCss`. Carries no angle brackets. */
+	css?: string;
+}
+
+/**
+ * A message laid out on the canvas, with nothing around it.
+ *
+ * The canvas is the whole message: no tinted page, no card, no accent line and
+ * no footer, because whatever the author wanted there is on the canvas, and
+ * the frame fills the client's width unless it was given one. What the shell
+ * still does is what a body cannot do for itself: the viewport, so a phone
+ * does not zoom out to a desktop width; the fonts and the media queries, which
+ * only work in the head; and the message's own type on a wrapper, where a
+ * block with no family of its own inherits it, the way it does on the canvas.
+ */
+export function canvasShell(bodyHtml: string, options: CanvasShellOptions = {}): string {
+	const css = (options.css ?? "").replace(/[<>]/g, "");
+	return [
+		'<!doctype html><html lang="nl-BE"><head><meta charset="utf-8">',
+		'<meta name="viewport" content="width=device-width, initial-scale=1">',
+		...(options.fontLinks ?? []).map((href) => `<link rel="stylesheet" href="${escapeHtml(href)}">`),
+		css ? `<style>${css}</style>` : "",
+		"</head>",
+		'<body style="margin:0;padding:0;">',
+		`<div style="font-family:${FONT};font-size:15px;line-height:1.65;color:${INK};">`,
+		bodyHtml,
+		"</div></body></html>",
 	].join("");
 }
 

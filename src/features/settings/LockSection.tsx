@@ -85,13 +85,7 @@ export function LockSection() {
 					</Button>
 				)
 			}
-			description={
-				<>
-					The lock screen protects against someone using this machine while Juno is running. It
-					does not encrypt the database on disk, so anyone who can copy the file can still read
-					it. Encryption at rest is a separate thing and Juno does not do it yet.
-				</>
-			}
+			description="The lock screen does not protect the database file on disk."
 		>
 			<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 				{configured

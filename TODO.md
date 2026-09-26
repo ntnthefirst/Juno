@@ -346,26 +346,6 @@ The way Outlook does signatures. Nothing to do with templates.
 Asked for on 2026-09-27. Renderer work except where a service is missing, and
 built before the larger sections above.
 
-### 6a. The walkthrough card keeps its buttons inside it
-
-`src/features/onboarding/Walkthrough.tsx`. The card is 320px wide and its
-footer puts "Close the walkthrough", "Back" and "Next" on one row, so "Next"
-sticks out past the right edge (visible in `.smoke/walkthrough.png`).
-
-- Lay the footer out so every button stays inside the card at 320px: the step
-  count and the way out on one line, Back and Next on the right, or the way
-  out as a quieter text button. Nothing may overflow at any stop, in either
-  theme. Keep the 40px standalone hit target.
-- "Step 3 of 10" is `--ink-faint` at 11px, which styling.md section 1 forbids
-  for readable text. Use `--ink-muted`.
-- The stops must match the sidebar as it is now: its order (Today, Calendar,
-  Clients, Projects, Inbox, Mail templates, Documents, Document templates),
-  its labels ("Inbox", not "Mail"), a stop for Projects, which is missing, and
-  the Agent stop's target, which is `[data-tour="agent"]` and matches nothing;
-  the sidebar footer has `data-nav="agent"`. Reminders and Settings stay.
-- The smoke walk's walkthrough screenshot shows a card with every button
-  inside it.
-
 ### 6b. A small search bar with filters and selection, on four list screens
 
 The mail list has the shape to copy (`MailSearchBar.tsx`, `ThreadToolbar.tsx`):

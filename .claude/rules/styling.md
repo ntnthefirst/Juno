@@ -129,13 +129,19 @@ not resolving the OS preference yourself.
 
 | Window width | Behaviour |
 | --- | --- |
-| >= 1100px | Beside the content, expanded. The toggle collapses it to a rail |
-| 760 to 1100px | The same, but a rail by default. A 248px sidebar is a third of the screen here |
+| >= 760px | Beside the content, a rail by default. The toggle opens it fully |
 | < 760px | Out of the layout. The toggle floats it over the content as a drawer |
 
 The drawer closes on Escape, on a click outside, and when something in it is
 chosen. Widening the window past 760px puts the sidebar back and closes the
 drawer, so a panel is never left hanging over the content.
+
+A docked sidebar opened fully goes back to the rail the same way, when an
+entry is chosen or anything beside it is pressed. That is the "Collapse the
+sidebar on its own" setting in Settings > General, on by default. Turned off,
+the sidebar stays open or collapsed the way the toggle left it, and that
+choice is remembered per machine. The main window reads the setting again
+when the settings window closes, which is the only way a change reaches it.
 
 Collapsed means icons only: the label moves into `aria-label` and `title`, and a
 group heading becomes a hairline rather than an abbreviation. Every entry keeps

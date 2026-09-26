@@ -24,6 +24,9 @@ type WalkthroughStop = {
 	target: string;
 };
 
+// Ordered to match the sidebar: the unheaded group, then Work, Mail and
+// Documents, then the footer entries (Agent, Settings). Reminders sits in the
+// title bar rather than the sidebar, and comes just before the footer.
 const STOPS: WalkthroughStop[] = [
 	{
 		id: "today",
@@ -33,11 +36,39 @@ const STOPS: WalkthroughStop[] = [
 		target: '[data-nav="today"]',
 	},
 	{
+		id: "calendar",
+		title: "Calendar",
+		body: "Your appointments, and the dates tied to a project.",
+		screen: "calendar",
+		target: '[data-nav="calendar"]',
+	},
+	{
 		id: "clients",
 		title: "Clients",
 		body: "Every business you work with, their contacts and the documents tied to them.",
 		screen: "clients",
 		target: '[data-nav="clients"]',
+	},
+	{
+		id: "projects",
+		title: "Projects",
+		body: "A piece of work: its links, its files, the folder it is checked out into and the command that starts it.",
+		screen: "projects",
+		target: '[data-nav="projects"]',
+	},
+	{
+		id: "mail",
+		title: "Inbox",
+		body: "Reads your IMAP accounts from here. Nothing leaves this machine unless you send it.",
+		screen: "mail",
+		target: '[data-nav="mail"]',
+	},
+	{
+		id: "templates",
+		title: "Mail templates",
+		body: "The emails you send to clients again and again.",
+		screen: "templates",
+		target: '[data-nav="templates"]',
 	},
 	{
 		id: "documents",
@@ -54,27 +85,6 @@ const STOPS: WalkthroughStop[] = [
 		target: '[data-nav="document-templates"]',
 	},
 	{
-		id: "mail",
-		title: "Mail",
-		body: "Reads your IMAP accounts from here. Nothing leaves this machine unless you send it.",
-		screen: "mail",
-		target: '[data-nav="mail"]',
-	},
-	{
-		id: "templates",
-		title: "Mail templates",
-		body: "The emails you send to clients again and again.",
-		screen: "templates",
-		target: '[data-nav="templates"]',
-	},
-	{
-		id: "calendar",
-		title: "Calendar",
-		body: "Your appointments, and the dates tied to a project.",
-		screen: "calendar",
-		target: '[data-nav="calendar"]',
-	},
-	{
 		id: "reminders",
 		title: "Reminders",
 		body: "This bell shows what is due, from any screen. Open it for the full list.",
@@ -85,7 +95,7 @@ const STOPS: WalkthroughStop[] = [
 		id: "agent",
 		title: "Agent",
 		body: "An agent can read and act on Juno over the same connection. Anything it sends, signs or deletes waits for your approval first. Connect one from settings, under MCP.",
-		target: '[data-tour="agent"]',
+		target: '[data-nav="agent"]',
 	},
 	{
 		id: "settings",
@@ -386,11 +396,15 @@ export function Walkthrough({ onNavigate, onClose }: WalkthroughProps) {
 					{stop.body}
 				</p>
 				<div className="mt-4 flex flex-col gap-2">
-					<span className="tabular whitespace-nowrap text-[length:var(--text-micro)] text-[var(--ink-faint)]">
-						Step {index + 1} of {STOPS.length}
-					</span>
-					<div className="flex items-center gap-2">
-						<Button onClick={() => void markSeen()}>Close the walkthrough</Button>
+					<div className="flex items-center justify-between gap-2">
+						<span className="tabular whitespace-nowrap text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+							Step {index + 1} of {STOPS.length}
+						</span>
+						<Button variant="quiet" onClick={() => void markSeen()}>
+							Close the walkthrough
+						</Button>
+					</div>
+					<div className="flex items-center justify-end gap-2">
 						<Button onClick={back} disabled={index === 0}>
 							Back
 						</Button>

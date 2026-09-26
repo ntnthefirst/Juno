@@ -715,7 +715,7 @@ if (!app.requestSingleInstanceLock()) {
 								// Two stops forward, checking the card actually changed each time
 								// rather than only that a click landed: a tour stuck on the first
 								// card would still answer every one of these clicks.
-								for (const expected of ["Clients", "Documents"]) {
+								for (const expected of ["Calendar", "Clients"]) {
 									const advanced = await window.webContents.executeJavaScript(
 										`(() => {
 											const card = document.querySelector("[role=dialog][aria-modal=true]");

@@ -56,11 +56,6 @@ phase 6's done-when in PLAN.md.
 
 Decided and ready to build, roughly smallest first.
 
-- **Projects overview layout.** Remove the max-width constraint and use fixed
-  responsive padding that grows slightly on larger screens. In the rows view,
-  let the title and description column fill the remaining space after the
-  other columns keep fixed widths, and truncate overflowing text with an
-  ellipsis.
 - **Client detail quick status.** The status tag moves beside the client name
   in the card header of `src/features/clients/ClientDetail.tsx` (it sits under
   the name today) and becomes a button that opens a menu of the statuses. A

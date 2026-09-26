@@ -227,6 +227,7 @@ function Chip({ placed, onOpen, onDragStart, onDragEnd, onContextMenu }: ChipPro
 		<button
 			type="button"
 			draggable={draggable}
+			data-opens-panel
 			onDragStart={(event) => onDragStart(event, placed)}
 			onDragEnd={onDragEnd}
 			onClick={() => onOpen(item)}

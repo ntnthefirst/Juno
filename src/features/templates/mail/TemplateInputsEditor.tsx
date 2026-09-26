@@ -15,6 +15,8 @@ const KIND_OPTIONS: { value: TemplateInputKind; label: string }[] = [
 	{ value: "money", label: "Amount" },
 	{ value: "date", label: "Date" },
 	{ value: "choice", label: "Choice" },
+	{ value: "image", label: "Image" },
+	{ value: "url", label: "Link" },
 ];
 
 const ICON_BUTTON =

@@ -21,13 +21,10 @@ built and tested. They are structurally plausible and legally worthless.
 - It is seeded **only on a first install**, into an empty database, and after
   that it is an ordinary template the owner can edit or delete. An upgrade
   never adds it to an existing install and never brings it back.
-- The five are **deleted on existing installs too**, not hidden, by the same
-  exception as the mail templates in 4c (write it into docs/decisions.md).
-  `documents.template_id` references them, so set it to null on every
-  document generated from one, in the same transaction. The documents keep
-  their text and their PDF.
-- It keeps `reviewedAt: null`, so it carries the specimen banner like every
-  shipped text, and the signing screen still refuses to treat it as final.
+- **Existing installs keep the five exactly as they are.** They are simply no
+  longer seeded: a new install gets the example and nothing else, and an
+  upgrade neither adds, hides nor deletes anything. No row is removed, so the
+  hide-don't-delete rule (data.md section 9) is not touched.
 
 **Still yours.** Write your real contract templates in the app, from the
 example or from nothing. The placeholder syntax and the fields are in
@@ -122,9 +119,10 @@ Needs your hands rather than code:
 
 Not tasks, written down so nobody builds them by accident:
 
-- **Nothing files mail on a schedule, and nothing should.** Filing is
-  side-effectful, so it is excluded from anything unattended by the same rule
-  that keeps sending out of an automation.
+- **Nothing files mail on its own except the owner's mailbox rules** (5b).
+  An agent or an automation still cannot: filing is side-effectful, so it is
+  excluded from anything unattended by the same rule that keeps sending out of
+  an automation.
 - **An automation cannot pass one step's result to the next.** Anything that
   needs the output of a previous step is a job for an agent, which can read and
   then decide, rather than for a recording.
@@ -249,23 +247,19 @@ the code view; a hover action writes one rule with the element's class; tel,
 mailto and https pass and javascript, data and http do not. The smoke walk adds
 an on-click action to a text block and checks the sent HTML has the link.
 
-### 4c. Delete the shipped mail templates, and ship one example on first install
+### 4c. Stop seeding the shipped mail templates, and ship one example on first install
 
 **Decided.**
 
 - The four shipped mail templates (`contract_cover`, `project_kickoff`,
   `invoice_due`, `hosting_renewal` in
-  `electron/main/services/mail-templates-seed.ts`) are **deleted for good**:
-  gone from the seed, and removed from existing installs. This is the owner's
-  call and it overrides the hide-don't-delete rule for these four
-  (data.md section 9, decision 16); write that exception into
-  docs/decisions.md in the same commit.
-- `outbox.template_id` references `mail_templates.id`, so a message already
-  written from one of them must survive: set its `template_id` to null in the
-  same transaction. The outbox keeps the rendered subject and body, so nothing
-  it shows changes.
-- Nothing may still point at `contract_cover` by key. See "Sending a document
-  is an attachment" in section 3, which removes the two callers.
+  `electron/main/services/mail-templates-seed.ts`) are **no longer seeded**. A
+  new install does not get them. An existing install keeps them exactly as
+  they are, and an upgrade neither hides nor deletes them, so no reference
+  breaks and the seeding rules (data.md section 9) are not touched.
+- Nothing in the code may point at `contract_cover` by key any more, because
+  a new install will not have it. See "Sending a document is an attachment" in
+  section 3, which removes the two callers.
 - **One example ships in their place, only on a first install.** A single
   canvas template that uses every part of the editor, so opening it teaches
   the canvas. It is seeded into an empty database and never added by an
@@ -289,11 +283,10 @@ What the example has to show, one of each:
 - A footer container with the business details, which the house frame used to
   add and a canvas no longer does (decision 37).
 
-**Done when.** A test seeds the old version with a message written from
-`invoice_due`, runs the new seed, and checks: the four are gone, the message
-still has its body and a null `template_id`, and no example was added to an
-install that already had data. A second test seeds an empty database and
-finds the example with a canvas. The smoke walk opens the example, and its
+**Done when.** A test seeds the old version, runs the new seed, and checks
+the four are still there and unchanged and no example was added to an install
+that already had data. A second test seeds an empty database and finds the
+example with a canvas and none of the four. The smoke walk opens the example, and its
 preview renders with no missing values against the demo client. Send the
 example to yourself once and read it in Gmail on a phone and in Outlook on
 Windows, and write down what each shows.
@@ -304,43 +297,57 @@ Two kinds of rule, and they live in different places on purpose. Greetings and
 sign-offs apply to every message from every account, so they are one list.
 Automation belongs to one mailbox, so each mailbox has its own list.
 
-Both are built the same way, like Cloudflare's rules: a rule has a **name**, an
-on and off switch, **conditions** and **what it does**. Rules sit in an
-**ordered list** that is reordered by dragging, and they are checked top to
-bottom. Stored in the database with the five columns, behind a service, IPC
-channels and MCP tools, like everything else (decision 2).
+Both are built like Cloudflare's rules: a rule has a **name**, an on and off
+switch, **conditions** and **what it does**. Rules sit in an **ordered list**
+that is reordered by dragging, and are checked top to bottom. Stored in the
+database with the five columns, behind a service, IPC channels and MCP tools,
+like everything else (decision 2).
 
 ### 5a. Greetings and sign-offs
 
-The way other mail clients have signatures. Nothing to do with templates.
+The way Outlook does signatures. Nothing to do with templates.
 
-- The owner keeps a list of greetings ("Beste {{client.firstName}},") and a
-  list of sign-offs ("Met vriendelijke groeten, ..."), none, one or several of
-  each, with placeholders.
-- A rule picks one of each for the messages it matches. Conditions:
+- **Greetings and sign-offs are named, static texts.** The owner keeps a list
+  of each, as many as they like, each with a title and a text. For example a
+  greeting "Basic" with "Beste,", and a greeting "Reply to clients" with
+  "Beste," and "Bedankt voor uw bericht." on the next line. Sign-offs the
+  same way. Static means
+  plain text, no placeholders, so there is nothing to fill in and nothing that
+  can come out empty.
+- **Rules decide which one goes where.** A rule has a name, conditions, and
+  which greeting and which sign-off it adds (either may be none). Conditions:
   - what the message is: new, reply or forward;
   - who it goes to: a client, a known contact, or anyone else;
   - which account it is sent from.
-- The composer puts in what the first matching rule picks when a message is
-  started, and it stays editable there. No rule matches, nothing is added.
+  So "every new mail" adds "Basic", and "every reply to a client" adds
+  "Reply to clients".
+- The first rule that matches decides. The composer puts its greeting and
+  sign-off in when a message is started, and they stay editable there. No rule
+  matches, nothing is added.
 - Edited in Settings > Mail accounts, above the accounts, because it is common
-  to all of them.
+  to all of them: the greetings, the sign-offs, and the rules.
 
 ### 5b. Automation rules per mailbox
 
 - **The account gets a detail page.** Settings > Mail accounts lists the
   connected mailboxes; clicking one opens its page (a `FormPage`, decision 30)
   with its details, its folders (the folders dialog moves here) and its rules.
-- A rule runs on each new message that mailbox syncs. Conditions on the sender,
-  the recipients, the subject, whether the sender is a client, and whether it
-  has attachments. Actions like linking the thread to the client, flagging,
-  marking read and moving to a folder.
-- The rule ordering decides which rule wins when two match; whether a match
-  stops the ones below it is an open question.
-
-**This runs into a rule already written down.** Section 3 says nothing files
-mail unattended, because filing is side-effectful (mcp.md section 4). A rule
-the owner wrote and switched on is the owner's standing instruction, not an
-agent acting alone, but moving, archiving or deleting mail on the server is
-still filing. Decide before building which actions a rule may take on its own,
-and write the answer into docs/decisions.md.
+- **When they run.** On every sync of that mailbox, on new incoming messages in
+  its **inbox** only. Not on sent mail, not on other folders, and not again on
+  a message a rule has already seen.
+- **Conditions** on the sender, the recipients, the subject, whether the
+  sender is a client, and whether it has attachments.
+- **Actions**, one or several per rule: move to a folder, move to trash,
+  archive, mark read, flag, link the thread to its client. For example "from
+  this address: mark read and move to trash".
+- **Order, like Cloudflare.** Rules run top to bottom. Each rule has its own
+  choice of whether a match stops the rules below it or lets them run too.
+- **The owner's rules may file on their own.** Moving and deleting on the
+  server is filing, which the project otherwise never does unattended
+  (mcp.md section 4). A rule the owner wrote and switched on is the owner's
+  standing instruction, so it runs without asking each time. That is an
+  exception, and it covers these rules only: an agent may create or edit a
+  rule only through the approval gate, and an automation may not run one.
+  Write the exception into docs/decisions.md in the same commit.
+- Every action a rule takes writes an audit row naming the rule, so "why did
+  this message move" always has an answer.

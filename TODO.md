@@ -5,30 +5,34 @@ a **you** tag needs Nathan rather than a session.
 
 ---
 
-## 1. Replace the placeholder legal texts with real ones — **you**
+## 1. One example document template, and your own real ones
 
-Phase 1 ships with **invented** contract templates so the machinery can be built
-and tested. They are structurally plausible and legally worthless.
+Phase 1 ships five **invented** contract templates (`nda`,
+`development_agreement`, `hosting_agreement`, `project_scope`, `addendum` in
+`electron/main/services/document-templates-seed.ts`) so the machinery could be
+built and tested. They are structurally plausible and legally worthless.
 
-Every seeded template carries `reviewedAt: null`, and the app treats that as a
-first-class state:
+**Decided.** They go, and one example ships in their place.
 
-- The template list marks them plainly as not reviewed.
-- Generating from one stamps a visible specimen banner into the document.
-- The signing screen refuses to treat an unreviewed template as final.
+- The example is a single document template that shows every part of the
+  document editor: every kind of placeholder, an input the template asks for,
+  pages, headings, a table, and the signature block. Written in Dutch with "u",
+  by writing.md section 1, and native rather than translated.
+- It is seeded **only on a first install**, into an empty database, and after
+  that it is an ordinary template the owner can edit or delete. An upgrade
+  never adds it to an existing install and never brings it back.
+- It keeps `reviewedAt: null`, so it carries the specimen banner like every
+  shipped text, and the signing screen still refuses to treat it as final.
 
-**What to do:** rewrite each template's body with your real text, then clear the
-specimen flag on it. The placeholder syntax and the available fields are
-documented in `docs/templates.md`.
-
-**Do not send a document generated from an unreviewed template to a client.**
-That is what the banner is for, and why it is on the page rather than in a
-tooltip.
+**Still yours.** Write your real contract templates in the app, from the
+example or from nothing. The placeholder syntax and the fields are in
+`docs/templates.md`. **Do not send a document generated from an unreviewed
+template to a client.** That is what the banner is for.
 
 ## 2. Decide what the in-app assistant runs on - **you**
 
 Phase 6 is built except its assistant panel. Everything the panel would drive
-is there: 163 tools, the approval gate, briefings and automations. What it needs
+is there: 170 tools, the approval gate, briefings and automations. What it needs
 and nothing else does is a model, which means three answers from you.
 
 - **Which provider**, and whether Juno ever talks to one at all. PLAN.md is
@@ -45,60 +49,90 @@ phase 6's done-when in PLAN.md.
 
 ## 3. Smaller things
 
-nothing serves them over stdio yet. That is phase 6 in `PLAN.md`; the
-descriptors are written per feature so that phase is assembly, not archaeology.
+Decided and ready to build, roughly smallest first.
 
-- **Projects overview layout.** Remove the max-width constraint and use fixed responsive padding that grows slightly on larger screens. In the rows view, let the title and description column fill the remaining space after the other columns keep fixed widths, and truncate overflowing text with an ellipsis.
-- **Client detail quick status.** Add a small clickable status tag beside the client name in the detail header. Changing it should update the client and add a timeline entry, coalescing changes made within 10 minutes into one entry and removing the entry when the status is changed back to its original value.
-  no `StatementSync.setReturnArrays`. If the host Node moves past 24 this can go
-  back to plain `vitest`.
-- **Database encryption** is out of scope and would mean revisiting decision 18,
-  since `node:sqlite` cannot do SQLCipher. The likely answer then is
-  `@libsql/client`.
-- **Purging a removed mail account.** Removing an account forgets its password
-  and soft-deletes the row; its messages and attachments stay on disk until a
-  purge exists. That purge is a confirmed action, never an MCP tool.
+- **Projects overview layout.** Remove the max-width constraint and use fixed
+  responsive padding that grows slightly on larger screens. In the rows view,
+  let the title and description column fill the remaining space after the
+  other columns keep fixed widths, and truncate overflowing text with an
+  ellipsis.
+- **Client detail quick status.** The status tag moves beside the client name
+  in the card header of `src/features/clients/ClientDetail.tsx` (it sits under
+  the name today) and becomes a button that opens a menu of the statuses. A
+  client with no status shows "No status" in the same place, so there is
+  always something to click. Picking one updates the client through the
+  service, so the agent can do the same.
+  - It writes a timeline entry that reads "Status changed from Lead to
+    Active". Only the two status names are coloured, each in its own status
+    colour as plain text: no tag, no box, no background.
+  - Changes within 10 minutes of each other fold into one entry, from the
+    first status to the last. If the last is the same as the first, the entry
+    is removed, because nothing changed.
+- **Sending a document is an attachment, not a template.** There is no
+  contract mail. A document or file is sent by opening the composer with the
+  file attached and an empty body. `DocumentDetail.tsx` (around line 376)
+  passes `templateKey: "contract_cover"` today; that goes, and so does the
+  smoke walk's lookup of the cover template (`electron/main.ts` around line
+  288). The composer's greetings and sign-offs (below) still apply.
+- **Greetings and sign-offs for ordinary mail**, the way other mail clients
+  have signatures. Nothing to do with templates.
+  - The owner keeps a list of openings ("Beste {{client.firstName}},") and a
+    list of closings ("Met vriendelijke groeten, ..."). None, one or several
+    of each.
+  - Rules decide when one is added, for example "always add this closing". The
+    composer puts it in on a new message and it stays editable there.
+  - Stored in the database with the five columns, behind a service, an IPC
+    channel and MCP tools, like everything else. Edited in Settings > Mail.
+  - Open questions below, under "Needs an answer".
+- **Audit log purge.** The log under Agent gets one row per write and is never
+  emptied. Rows older than **6 months** are purged automatically. The client
+  timeline is not built from the log (it reads notes, documents, mail and the
+  rest directly), so nothing on a timeline disappears. A row an agent request
+  still points at (`actionId` on an open request) stays until that request is
+  closed. The purge is a service function run on launch, logged, and not an MCP
+  tool.
 - **The reader frame has a fixed height** with a taller and shorter toggle,
   because a sandboxed frame cannot report its content height. A resize handle
   would be nicer.
+- **Sent messages show in the reader only after the Sent folder is synced.**
+  Until then the outbox is the record. Showing outbox rows inside a thread
+  would close the gap.
+- **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
+  is the phase 4 promise not yet kept.
 - **Unsent drafts are not merged into the Drafts folder.** Juno's own drafts
   live in the outbox and the server's live in its Drafts folder, and the
   Drafts view says so in a line pointing at the outbox rather than showing
   both. Merging them means reconciling two row types through one list, its
   selection and its menu.
-- **Nothing files mail on a schedule, and nothing should.** Filing is
-  side-effectful, so it is excluded from anything unattended by the same rule
-  that keeps sending out of an automation.
-- **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
-  is the phase 4 promise not yet kept. Templates carry their own layout, so it
-  matters least for the messages Juno writes on its own.
-- **A new mail template starts from an empty canvas.** The plus on the list
-  asks for a name and opens the editor on a canvas with one empty section, and
-  the name doubles as the subject until somebody changes it. What is still
-  missing is a starting point for the body: an opening line and a signoff, the
-  way the seeded templates share `SIGNOFF_U` and `SIGNOFF_JE` in
-  `mail-templates-seed.ts`, laid in as blocks rather than typed from nothing.
-  The editor no longer offers the register, so a starter either picks u, which
-  is what the contracts use, or comes as two starters to choose from.
-- **Sent messages show in the reader only after the Sent folder is synced.**
-  Until then the outbox is the record. Showing outbox rows inside a thread
-  would close the gap.
+- **Purging a removed mail account.** Removing an account forgets its password
+  and soft-deletes the row; its messages and attachments stay on disk until a
+  purge exists. That purge is a confirmed action, never an MCP tool.
+
+Needs your hands rather than code:
+
+- **No real mail server has been used yet.** Reading and sending are proven
+  against a mailbox and a transport held in memory.
 - **No other calendar has read a Juno .ics file yet.** Export a month, open
   it in Google Calendar or Outlook, and check the moved occurrence of a
   recurring event after the October change. Then import an Outlook export the
   other way; its Windows zone names are handled through the file's VTIMEZONE,
   which is tested against a hand-written one and not yet a real one.
 - **No third-party MCP client has connected yet.** The smoke run starts the
-  real bridge and speaks MCP to it, so the socket, the token and the wire are
-  covered, but Claude Desktop and Claude Code have not. Try both, and check
-  that a tool list cached while Juno was closed recovers when it opens.
-- **The audit log has no purge.** It grows by one row per write. A year of
-  ordinary use is a few thousand rows, so this is not urgent, but "keep the
-  last N months" belongs next to the backup settings eventually.
-- **An automation cannot pass one step's result to the next.** Steps are
-  independent calls with fixed arguments. Anything that needs the output of a
-  previous step is a job for an agent, which can read and then decide, rather
-  than for a recording.
+  real bridge and speaks MCP to it, but Claude Desktop and Claude Code have
+  not. Try both, and check that a tool list cached while Juno was closed
+  recovers when it opens.
+
+Not tasks, written down so nobody builds them by accident:
+
+- **Nothing files mail on a schedule, and nothing should.** Filing is
+  side-effectful, so it is excluded from anything unattended by the same rule
+  that keeps sending out of an automation.
+- **An automation cannot pass one step's result to the next.** Anything that
+  needs the output of a previous step is a job for an agent, which can read and
+  then decide, rather than for a recording.
+- **Database encryption** is out of scope and would mean revisiting decision
+  18, since `node:sqlite` cannot do SQLCipher. The likely answer then is
+  `@libsql/client`. Still to be decided whether it stays on the roadmap.
 
 ## 4. Mail template editor
 
@@ -212,16 +246,31 @@ the code view; a hover action writes one rule with the element's class; tel,
 mailto and https pass and javascript, data and http do not. The smoke walk adds
 an on-click action to a text block and checks the sent HTML has the link.
 
-### 4c. Replace the shipped templates with one example of everything
+### 4c. Delete the shipped mail templates, and ship one example on first install
 
-**What it does.** The four shipped mail templates (`contract_cover`,
-`project_kickoff`, `invoice_due`, `hosting_renewal` in
-`electron/main/services/mail-templates-seed.ts`) are hidden, and one example
-ships in their place: a single canvas template that uses every part of the
-editor, so opening it teaches the canvas. Written in Dutch, "u", by writing.md
-section 1, and native, not translated.
+**Decided.**
 
-What it has to show, one of each:
+- The four shipped mail templates (`contract_cover`, `project_kickoff`,
+  `invoice_due`, `hosting_renewal` in
+  `electron/main/services/mail-templates-seed.ts`) are **deleted for good**:
+  gone from the seed, and removed from existing installs. This is the owner's
+  call and it overrides the hide-don't-delete rule for these four
+  (data.md section 9, decision 16); write that exception into
+  docs/decisions.md in the same commit.
+- `outbox.template_id` references `mail_templates.id`, so a message already
+  written from one of them must survive: set its `template_id` to null in the
+  same transaction. The outbox keeps the rendered subject and body, so nothing
+  it shows changes.
+- Nothing may still point at `contract_cover` by key. See "Sending a document
+  is an attachment" in section 3, which removes the two callers.
+- **One example ships in their place, only on a first install.** A single
+  canvas template that uses every part of the editor, so opening it teaches
+  the canvas. It is seeded into an empty database and never added by an
+  upgrade. After that it is the owner's to edit or delete. Written in Dutch,
+  "u", by writing.md section 1, and native, not translated. `reviewedAt` stays
+  null like every shipped text.
+
+What the example has to show, one of each:
 
 - A header container with a logo picture (an https address) and a linked
   Google font on the heading.
@@ -237,28 +286,11 @@ What it has to show, one of each:
 - A footer container with the business details, which the house frame used to
   add and a canvas no longer does (decision 37).
 
-**Careful: `contract_cover` is used.** `src/features/documents/DocumentDetail.tsx`
-(around line 376) sends a signed document with `templateKey: "contract_cover"`,
-and the smoke walk looks it up by key (`electron/main.ts` around line 288).
-Hiding it breaks sending a contract. Either keep `contract_cover` and hide the
-other three, or make the example the cover template and point both callers at
-it. Decide with Nathan, and do not leave a caller pointing at a hidden row.
-
-**How, by the seeding rules (data.md section 9, decision 16).**
-
-- Shipped rows are never deleted: rows already point at them. Bump
-  `MAIL_TEMPLATE_SEED_VERSION` and teach `ensureMailTemplatesSeeded` to set
-  `hidden_at` on a retired seed key, but only on a row whose `customisedAt`
-  and `hiddenAt` are null. An edited one is the owner's and stays as it is.
-- The example gets its own `seed_key`, `isSystem: true`, and a layout, so it
-  seeds with a canvas rather than hand-written HTML. `reviewedAt` stays null
-  like every shipped text, so the list marks it unreviewed.
-- The reset in settings (reference data) must restore the example and must not
-  bring back the retired ones.
-
-**Done when.** A test seeds version 1, edits one retired template, seeds the new
-version, and checks: the edited one is untouched and visible, the rest are
-hidden, the example exists with a canvas, and seeding again changes nothing.
-The smoke walk opens the example, and its preview renders with no missing
-values against the demo client. Send the example to yourself once and read it
-in Gmail on a phone and in Outlook on Windows, and write down what each shows.
+**Done when.** A test seeds the old version with a message written from
+`invoice_due`, runs the new seed, and checks: the four are gone, the message
+still has its body and a null `template_id`, and no example was added to an
+install that already had data. A second test seeds an empty database and
+finds the example with a canvas. The smoke walk opens the example, and its
+preview renders with no missing values against the demo client. Send the
+example to yourself once and read it in Gmail on a phone and in Outlook on
+Windows, and write down what each shows.

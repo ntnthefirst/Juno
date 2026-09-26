@@ -386,6 +386,9 @@ export interface JunoApi {
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
 		/** Fires in every window, so a change made in settings reaches the app. */
 		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
+		/** Whether the main sidebar goes back to the rail on its own. */
+		getSidebarAutoCollapse(): Promise<boolean>;
+		setSidebarAutoCollapse(value: boolean): Promise<boolean>;
 		/** How the projects screen is drawn. A preference, not a record. */
 		getProjectsView(): Promise<ProjectsView>;
 		setProjectsView(patch: Partial<ProjectsView>): Promise<ProjectsView>;

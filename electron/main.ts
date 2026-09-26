@@ -2077,6 +2077,84 @@ if (!app.requestSingleInstanceLock()) {
 								}
 								console.log(`SMOKE_DEMO settings tabs=${tabs.length}`);
 								closeSettingsWindow();
+
+								// The sidebar goes back to the rail on its own, and the setting
+								// in the window just photographed turns that off. Only a docked
+								// sidebar does either: a window narrow enough for the drawer has
+								// nothing to prove here, and the screens loop covers the drawer.
+								const docked = (await window.webContents.executeJavaScript(
+									`Boolean(document.querySelector("nav[data-sidebar]")) && window.innerWidth >= 760`,
+								)) as boolean;
+								if (docked) {
+									await new Promise((r) => setTimeout(r, 500));
+									const sidebarState = () =>
+										window.webContents.executeJavaScript(
+											`document.querySelector("nav[data-sidebar]")?.getAttribute("data-collapsed") ?? "missing"`,
+										) as Promise<string>;
+									const expand = async () => {
+										if ((await sidebarState()) === "true") {
+											await window.webContents.executeJavaScript(
+												`document.querySelector("[data-sidebar-toggle]").click()`,
+											);
+											await new Promise((r) => setTimeout(r, 300));
+										}
+										if ((await sidebarState()) !== "false") throw new Error("Smoke: the sidebar toggle did not open it");
+									};
+									const choose = async () => {
+										await window.webContents.executeJavaScript(
+											`document.querySelector("nav[data-sidebar] button[data-nav=clients]").click()`,
+										);
+										await new Promise((r) => setTimeout(r, 400));
+									};
+
+									await expand();
+									await choose();
+									if ((await sidebarState()) !== "true") {
+										throw new Error("Smoke: choosing a screen did not collapse the sidebar");
+									}
+									await expand();
+									await window.webContents.executeJavaScript(
+										`document.querySelector("main").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`,
+									);
+									await new Promise((r) => setTimeout(r, 300));
+									if ((await sidebarState()) !== "true") {
+										throw new Error("Smoke: a click beside the sidebar did not collapse it");
+									}
+
+									// Off, in the settings window, the way a person turns it off.
+									// Closing the window is what tells the main window.
+									openSettingsWindow("general");
+									const again = getSettingsWindow();
+									if (!again) throw new Error("Smoke: the settings window did not open a second time");
+									await new Promise<void>((resolve) => {
+										if (!again.webContents.isLoading()) {
+											setTimeout(resolve, 900);
+											return;
+										}
+										again.webContents.once("did-finish-load", () => setTimeout(resolve, 900));
+									});
+									const unticked = (await again.webContents.executeJavaScript(
+										`(async () => {
+											const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Collapse the sidebar on its own");
+											const box = label?.querySelector("input[type=checkbox]");
+											if (!box) return "no checkbox";
+											if (!box.checked) return "the checkbox starts off";
+											box.click();
+											await new Promise((r) => setTimeout(r, 400));
+											return box.checked ? "the checkbox did not change" : "ok";
+										})()`,
+									)) as string;
+									if (unticked !== "ok") throw new Error(`Smoke: sidebar setting ${unticked}`);
+									closeSettingsWindow();
+									await new Promise((r) => setTimeout(r, 700));
+
+									await expand();
+									await choose();
+									if ((await sidebarState()) !== "false") {
+										throw new Error("Smoke: the sidebar collapsed with the setting turned off");
+									}
+									console.log("SMOKE_DEMO sidebar auto-collapse=ok");
+								}
 							}
 						}
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);

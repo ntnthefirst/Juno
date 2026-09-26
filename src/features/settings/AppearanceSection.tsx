@@ -19,9 +19,20 @@ const OPTIONS: Option[] = [
 type AppearanceSectionProps = {
 	theme: ThemeSetting;
 	onChange: (next: ThemeSetting) => void;
+	/**
+	 * The sidebar setting. Left out by setup, which asks about the theme and
+	 * nothing else, so the checkbox only appears when both of these are given.
+	 */
+	sidebarAutoCollapse?: boolean | null;
+	onSidebarAutoCollapseChange?: (next: boolean) => void;
 };
 
-export function AppearanceSection({ theme, onChange }: AppearanceSectionProps) {
+export function AppearanceSection({
+	theme,
+	onChange,
+	sidebarAutoCollapse,
+	onSidebarAutoCollapseChange,
+}: AppearanceSectionProps) {
 	return (
 		<Section
 			title="Appearance"
@@ -37,6 +48,24 @@ export function AppearanceSection({ theme, onChange }: AppearanceSectionProps) {
 					/>
 				))}
 			</div>
+
+			{onSidebarAutoCollapseChange && sidebarAutoCollapse !== undefined ? (
+				<div className="mt-6">
+					<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
+						<input
+							type="checkbox"
+							checked={sidebarAutoCollapse ?? true}
+							disabled={sidebarAutoCollapse === null}
+							onChange={(event) => onSidebarAutoCollapseChange(event.target.checked)}
+							className="h-4 w-4 accent-[var(--accent)]"
+						/>
+						Collapse the sidebar on its own
+					</label>
+					<p className="mt-2 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						The sidebar goes back to icons when you choose something or click beside it.
+					</p>
+				</div>
+			) : null}
 		</Section>
 	);
 }

@@ -203,6 +203,8 @@ const api: JunoApi = {
 		getProjectsView: () => call("settings.getProjectsView"),
 		setProjectsView: (patch) => call("settings.setProjectsView", patch),
 		setTheme: (theme) => call("settings.setTheme", theme),
+		getSidebarAutoCollapse: () => call("settings.getSidebarAutoCollapse"),
+		setSidebarAutoCollapse: (value) => call("settings.setSidebarAutoCollapse", value),
 		onThemeChange: (listener) => {
 			const handler = (_event: Electron.IpcRendererEvent, theme: ThemeSetting) => listener(theme);
 			ipcRenderer.on("settings.themeChanged", handler);

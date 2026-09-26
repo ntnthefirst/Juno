@@ -81,7 +81,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 	return (
 		<Section
 			title="Backup"
-			description="The database is a single file on this machine, so nothing is backed up anywhere else unless you do it. A backup is a copy of that file."
+			description="Nothing is backed up unless you do it here."
 			action={
 				<div className="flex gap-1">
 					<Button size="dense" onClick={() => void window.juno.backup.revealFolder()}>

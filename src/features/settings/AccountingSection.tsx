@@ -42,7 +42,7 @@ export function AccountingSection({ onSaved }: { onSaved: (message: string) => v
 	return (
 		<Section
 			title="Accounting"
-			description="Juno never raises an invoice or moves money. It tells you when one is due and links to wherever invoicing actually happens, which is what you put here."
+			description="Where you invoice. Invoice reminders link here."
 			action={
 				<Button size="dense" variant="primary" disabled={!tool || busy} onClick={() => void save()}>
 					Save

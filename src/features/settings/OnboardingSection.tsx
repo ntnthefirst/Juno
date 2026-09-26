@@ -46,17 +46,17 @@ export function OnboardingSection({ onNotice }: OnboardingSectionProps) {
 	return (
 		<Section
 			title="Getting started"
-			description="Both of these start as soon as this window is closed."
+			description="Starts when you close this window."
 		>
 			<div className="flex flex-col gap-5">
 				<Row
-					description="A guided tour of the sidebar and what each screen behind it is for."
+					description="A short tour of every screen."
 					button="Show the walkthrough again"
 					disabled={busy !== null}
 					onClick={() => void replayWalkthrough()}
 				/>
 				<Row
-					description="Asks the setup questions again, in its own small window. It deletes nothing and only asks what a first run asks."
+					description="Asks the first-run questions again. Deletes nothing."
 					button="Run setup again"
 					disabled={busy !== null}
 					onClick={() => void replaySetup()}

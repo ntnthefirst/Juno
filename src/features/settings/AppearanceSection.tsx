@@ -37,7 +37,7 @@ export function AppearanceSection({
 	return (
 		<Section
 			title="Appearance"
-			description="Three states rather than a switch, because following the operating system is a choice of its own."
+			description="System follows your operating system."
 		>
 			<div role="radiogroup" aria-label="Theme" className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-5 p-0.5">
 				{OPTIONS.map((option) => (
@@ -57,7 +57,7 @@ export function AppearanceSection({
 						disabled={sidebarAutoCollapse === null}
 						onChange={onSidebarAutoCollapseChange}
 						label="Collapse the sidebar on its own"
-						description="The sidebar goes back to icons when you choose something or click beside it."
+						description="Back to icons after you choose something or click beside it."
 					/>
 				</div>
 			) : null}

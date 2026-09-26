@@ -30,6 +30,8 @@ export function Sidebar({ current, onNavigate, collapsed, floating, onOpenSettin
 	return (
 		<nav
 			aria-label="Sections"
+			data-sidebar
+			data-collapsed={collapsed}
 			style={{ width }}
 			className={[
 				"flex flex-none flex-col bg-[var(--paper)] transition-[width] duration-[var(--duration-base)] ease-[var(--ease)]",

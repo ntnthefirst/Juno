@@ -25,7 +25,7 @@ npm run dev
 | **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. Filing that reaches the server, and an outbox that sends over SMTP behind a confirmation gate |
 | **Calendar** | Events and recurring series with an IANA zone each, month, week and agenda views, drag to move and resize, .ics in and out |
 | **Agent** | An MCP server over a local pipe, every side-effectful tool parked for approval. Automations, an audit log, briefings across every domain |
-| **Templates** | Mail templates as a visual editor and a code view over the same HTML. Document templates edited as pages, compiled to the HTML the PDF pipeline takes |
+| **Templates** | Mail templates laid out on a canvas of sections and blocks in a Figma-shaped editor: layers on the left, a pannable sheet at three reading widths, a design panel on the right with fills, strokes, effects, typography and linked fonts, Figma's resizing, colour picker and keyboard with undo, breakpoints sent as media queries, a floating toolbar, text edited in place, and any block convertible to its own HTML and CSS. A canvas is sent with nothing around it. Compiled to the HTML a message is made of, with an editable code view back into it. Document templates edited as pages, compiled to the HTML the PDF pipeline takes |
 | **Settings** | Theme, lock, reference data, owner profile, accounting link, mail accounts, signature, backup |
 
 **Not built:** the in-app assistant panel, which needs a decision about which
@@ -148,7 +148,16 @@ scripts/                dev, build, smoke, the MCP bridge, icon generation
    interface again. Every filing call changes the server first and the local
    rows second, so a server that cannot be reached fails the whole call with
    nothing changed here.
-10. **A project's command has no MCP tool, and adding one would be the
+10. **A mail template canvas compiles to flexbox and grid, and Outlook cannot
+    render either.** Outlook on Windows uses Word's engine, so it stacks every
+    section into one column and drops the gaps and the alignment. That was
+    chosen over compiling to nested tables, and the section inspector states
+    it where the choice is made. Nothing in the model is positioned: custom
+    CSS is allowed and `sanitiseDeclarations` strips the positioning
+    properties out of it, so the escape hatch cannot reintroduce what the
+    model refuses. `layout_json` is null for every template written before the
+    canvas, and those stay on the HTML editor until somebody converts one.
+11. **A project's command has no MCP tool, and adding one would be the
     mistake.** It runs in a real shell with the owner's privileges, so a tool
     that writes one plus a tool that runs one is a remote shell with an
     approval dialog in front of it (decision 35). `projects.list_commands` is

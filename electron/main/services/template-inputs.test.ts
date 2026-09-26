@@ -3,6 +3,18 @@ import type { TemplateInput } from "../../shared/types";
 import { parseInputs, serialiseInputs, validateInputs, validateValues } from "./template-inputs";
 
 describe("parseInputs", () => {
+	it("keeps an image and a url input as the kind they are", () => {
+		// A field block renders a picture for an image input and a link for a url
+		// one, so a kind that quietly fell back to text would change the message.
+		const parsed = parseInputs(
+			JSON.stringify([
+				{ key: "banner", label: "Banner", kind: "image", required: false },
+				{ key: "portal", label: "Portal", kind: "url", required: false },
+			]),
+		);
+		expect(parsed.map((input) => input.kind)).toEqual(["image", "url"]);
+	});
+
 	it("returns an empty array for null, empty and unparseable JSON", () => {
 		expect(parseInputs(null)).toEqual([]);
 		expect(parseInputs("")).toEqual([]);

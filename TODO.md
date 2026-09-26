@@ -340,3 +340,75 @@ The way Outlook does signatures. Nothing to do with templates.
   Write the exception into docs/decisions.md in the same commit.
 - Every action a rule takes writes an audit row naming the rule, so "why did
   this message move" always has an answer.
+
+## 6. List screens, side panels and the walkthrough
+
+Asked for on 2026-09-27. Renderer work except where a service is missing, and
+built before the larger sections above.
+
+### 6a. The walkthrough card keeps its buttons inside it
+
+`src/features/onboarding/Walkthrough.tsx`. The card is 320px wide and its
+footer puts "Close the walkthrough", "Back" and "Next" on one row, so "Next"
+sticks out past the right edge (visible in `.smoke/walkthrough.png`).
+
+- Lay the footer out so every button stays inside the card at 320px: the step
+  count and the way out on one line, Back and Next on the right, or the way
+  out as a quieter text button. Nothing may overflow at any stop, in either
+  theme. Keep the 40px standalone hit target.
+- "Step 3 of 10" is `--ink-faint` at 11px, which styling.md section 1 forbids
+  for readable text. Use `--ink-muted`.
+- The stops must match the sidebar as it is now: its order (Today, Calendar,
+  Clients, Projects, Inbox, Mail templates, Documents, Document templates),
+  its labels ("Inbox", not "Mail"), a stop for Projects, which is missing, and
+  the Agent stop's target, which is `[data-tour="agent"]` and matches nothing;
+  the sidebar footer has `data-nav="agent"`. Reminders and Settings stay.
+- The smoke walk's walkthrough screenshot shows a card with every button
+  inside it.
+
+### 6b. A small search bar with filters and selection, on four list screens
+
+The mail list has the shape to copy (`MailSearchBar.tsx`, `ThreadToolbar.tsx`):
+a select-all checkbox button on the left, then a search field of limited
+width (not the full width of the list) with the filters folded behind a
+funnel inside it, and when rows are selected, the count and the bulk actions
+as icon buttons on the right. Build the shared parts once in
+`src/components/` rather than four copies.
+
+- **Mail templates** (`MailTemplatesScreen.tsx`). The full-width search and the
+  row of text buttons (Duplicate, Hide, Delete, Clear) become that shape.
+  Filters: unreviewed only, canvas or HTML, and showing hidden shipped
+  templates if the service offers them (`listAll`).
+- **Documents** (`DocumentsScreen.tsx`). Has no search or selection yet. Search
+  on title and client. Filters: status, client, specimen or not. Selection with
+  bulk delete, which is the same soft delete with undo the row menu uses.
+- **Document templates** (`DocumentTemplatesScreen.tsx`). Has no search or
+  selection yet. Search on name and description. Filters: unreviewed only.
+  Selection with the bulk actions the document templates service supports; add
+  none it does not.
+- Bulk actions go through the existing service functions, one call per row the
+  way mail templates already do it. Nothing new for an agent, since each is a
+  tool already.
+
+### 6c. A plus button for a new document template
+
+Document templates has no way to start one. Add the same control mail templates
+has (`InlineAdd` beside the heading): it asks for a name only, creates the
+template through `templates.create` with everything else empty or at its
+default, and opens it in the editor, where the rest is filled in. If the
+service refuses an empty body, the service gains a sensible empty default for
+it rather than the screen inventing one, with a test, so an agent's
+`templates.create` with only a name behaves the same.
+
+### 6d. A side panel closes on a click outside it
+
+`src/components/SidePanel.tsx`. Every right-edge panel (mail template, calendar
+event, client address, email, phone and note, project link and command) closes
+when the owner clicks outside it, the way it already closes on Escape.
+
+- A click on another row that opens a panel swaps what the panel shows, as now,
+  rather than closing it and reopening.
+- A click inside a menu, a dialog or a popover the panel opened is not outside,
+  even though those render elsewhere in the tree.
+- A panel holding unsaved field edits does what it does today on Escape.
+- Update the comment on `SidePanel` and styling.md section 5c.

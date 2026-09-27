@@ -68,9 +68,6 @@ Decided and ready to build, roughly smallest first.
   - Changes within 10 minutes of each other fold into one entry, from the
     first status to the last. If the last is the same as the first, the entry
     is removed, because nothing changed.
-- **The reader frame has a fixed height** with a taller and shorter toggle,
-  because a sandboxed frame cannot report its content height. A resize handle
-  would be nicer.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.

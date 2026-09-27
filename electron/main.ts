@@ -2062,6 +2062,25 @@ if (!app.requestSingleInstanceLock()) {
 									}
 									console.log(`SMOKE_DEMO mail frame=${mailFrame.url}`);
 									await new Promise((r) => setTimeout(r, 400));
+
+									// The reader frame has no way to report its own content
+									// height (decision 20), so its height is a resize handle
+									// rather than a measurement. Driven from the keyboard
+									// because a sandboxed frame swallows a pointer drag from
+									// this script the same way it would from a real one.
+									const resized = await window.webContents.executeJavaScript(
+										`(async () => {
+											const handle = document.querySelector('[role="separator"][aria-label="Resize message"]');
+											if (!handle) return "no handle";
+											const before = Number(handle.getAttribute("aria-valuenow"));
+											handle.focus();
+											handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 200));
+											const after = Number(handle.getAttribute("aria-valuenow"));
+											return after > before ? "ok" : \`did not grow: \${before} -> \${after}\`;
+										})()`,
+									);
+									if (resized !== "ok") throw new Error(`Smoke: mail reader resize handle ${resized}`);
 								}
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;

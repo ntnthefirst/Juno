@@ -22,7 +22,8 @@ function fields(args: Record<string, unknown>): Record<string, unknown> {
 const writableProperties: Record<string, unknown> = {
 	status_id: {
 		type: ["string", "null"],
-		description: "Id of an item in the client_status reference set.",
+		description:
+			"Id of an item in the client_status reference set, or null for no status. A change is recorded on the client's timeline.",
 	},
 	website: { type: ["string", "null"], description: "Full URL including the scheme." },
 	vat_number: { type: ["string", "null"], description: "VAT number in BE0123456789 format." },

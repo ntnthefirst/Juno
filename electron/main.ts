@@ -17,6 +17,7 @@ import { backupsDir, databasePath, documentsDir, mailDir, projectsDir, userDataD
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import { mcpStatus } from "./main/ipc/agent";
+import * as agentAudit from "./main/services/agent-audit";
 import { configureAgentInstall } from "./main/services/agent-install";
 import { startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
@@ -140,6 +141,18 @@ if (!app.requestSingleInstanceLock()) {
 		const reminderSeed = await ensureRemindersSeeded(db);
 		if (reminderSeed.created) {
 			console.log(`Reminders: ${reminderSeed.created} created`);
+		}
+
+		// Housekeeping on the log, not on data anything is built from. A failure
+		// here is a launch with a longer log, not a broken one, so it never stops
+		// boot.
+		try {
+			const purged = agentAudit.purgeOldEvents(db);
+			if (purged > 0) {
+				console.log(`Audit log: ${purged} row(s) purged`);
+			}
+		} catch (cause) {
+			console.error("Audit log purge failed:", cause instanceof Error ? cause.message : cause);
 		}
 
 		// Restoring a backup replaces the live file, which cannot happen while the
@@ -283,14 +296,12 @@ if (!app.requestSingleInstanceLock()) {
 								const synced = await b.mail.sync.run();
 								if (synced.some((s) => s.phase !== "done")) throw new Error("Smoke: mail sync did not finish: " + JSON.stringify(synced));
 
-								// Phase 4: a cover mail from a template with the document attached,
-								// sent by a person, and a second one an agent would have to wait on.
-								const coverTemplate = (await b.mail.templates.list()).find((t) => t.key === "contract_cover");
-								const rendered = await b.mail.templates.render({ templateId: coverTemplate.id, clientId: made[0].id, extras: { title: "de ontwikkelovereenkomst" } });
+								// Phase 4: the generated document sent as an attachment with an
+								// empty body, by a person, and a second message an agent would
+								// have to wait on.
 								const draft = await b.mail.outbox.createDraft({
-									accountId: mailAccount.id, to: [{ name: "Laura", address: "laura@obet.be" }], subject: rendered.subject,
-									bodyText: rendered.bodyText, bodyHtml: rendered.bodyHtml, clientId: made[0].id, templateId: coverTemplate.id,
-									documentIds: [gen.document.id],
+									accountId: mailAccount.id, to: [{ name: "Laura", address: "laura@obet.be" }], subject: "Ontwikkelovereenkomst",
+									bodyText: "", clientId: made[0].id, documentIds: [gen.document.id],
 								});
 								await b.mail.outbox.send(draft.id);
 								await b.mail.outbox.createDraft({
@@ -486,7 +497,7 @@ if (!app.requestSingleInstanceLock()) {
 							const sentCount = await mailSend.processQueue();
 							const outboxRows = await (await import("./main/services/mail-outbox")).list({ states: ["sent"] });
 							if (sentCount !== 1 || outboxRows.length !== 1 || outboxRows[0]!.attachments.length !== 1) {
-								throw new Error(`Smoke: the outbox did not send the cover mail: ${JSON.stringify(outboxRows)}`);
+								throw new Error(`Smoke: the outbox did not send the document mail: ${JSON.stringify(outboxRows)}`);
 							}
 							console.log(`SMOKE_DEMO outbox sent=${outboxRows[0]!.messageId}`);
 
@@ -717,7 +728,7 @@ if (!app.requestSingleInstanceLock()) {
 								// Two stops forward, checking the card actually changed each time
 								// rather than only that a click landed: a tour stuck on the first
 								// card would still answer every one of these clicks.
-								for (const expected of ["Clients", "Documents"]) {
+								for (const expected of ["Calendar", "Clients"]) {
 									const advanced = await window.webContents.executeJavaScript(
 										`(() => {
 											const card = document.querySelector("[role=dialog][aria-modal=true]");
@@ -931,6 +942,23 @@ if (!app.requestSingleInstanceLock()) {
 											if (!timeline) return "no timeline tab";
 											timeline.click();
 											await new Promise((r) => setTimeout(r, 700));
+
+											// The status beside the name is a button. Picking a status
+											// it is not on already changes it and writes a timeline entry.
+											const statusButton = main.querySelector("button[aria-label^='Change status for']");
+											if (!statusButton) return "no status button";
+											statusButton.click();
+											await new Promise((r) => setTimeout(r, 300));
+											const items = [...document.querySelectorAll("[role=menuitem]")];
+											if (items.length === 0) return "no status menu";
+											// An item with no check icon is not the current status.
+											const pick = items.find((el) => !el.querySelector("svg"));
+											if (!pick) return "every status is already picked";
+											pick.click();
+											await new Promise((r) => setTimeout(r, 700));
+											if (!main.textContent.includes("Status changed from")) {
+												return "no status change on the timeline";
+											}
 											return "ok";
 										})()`,
 									);
@@ -1017,6 +1045,39 @@ if (!app.requestSingleInstanceLock()) {
 										`(() => { const cancel = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel"); if (cancel) cancel.click(); })()`,
 									);
 									await new Promise((r) => setTimeout(r, 400));
+								}
+								if (screen === "Documents") {
+									// The search bar and the selection above the table: typed text
+									// narrows the rows, select-all ticks every one left, and both are
+									// cleared again so the screenshot below still shows the list at
+									// rest with everything in it.
+									const searched = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											const search = document.querySelector('input[aria-label="Search documents"]');
+											if (!search) return "no search field";
+											setValue.call(search, "zzz-nothing-matches-zzz");
+											search.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(250);
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Nothing matches")) return "the search did not filter the rows";
+											setValue.call(search, "");
+											search.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(250);
+											const selectAll = document.querySelector('input[aria-label="Select all"]');
+											if (!selectAll) return "no select-all checkbox";
+											selectAll.click();
+											await wait(200);
+											if (!main.textContent.includes("selected")) return "select-all did not select the rows";
+											const clear = document.querySelector('input[aria-label="Clear selection"]');
+											if (!clear) return "select-all left no way to clear the selection";
+											clear.click();
+											await wait(200);
+											return "ok";
+										})()`,
+									) as string;
+									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
 								}
 								if (screen === "Mail templates" || screen === "Document templates") {
 									// Opens the first template so the preview path runs for real: the
@@ -1154,6 +1215,89 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(400);
 										})()`,
 									);
+								}
+								if (screen === "Document templates") {
+									// The plus beside the heading: asks for a name, creates a
+									// template with one empty page as its body, and opens it straight
+									// into the page editor built on that page rather than the plain-HTML
+									// mode a template with no layout opens into.
+									const created = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											if (!back) return "no back action from the preview";
+											back.click();
+											await wait(500);
+											const plus = document.querySelector('button[aria-label="New document template"]');
+											if (!plus) return "no plus on the list";
+											plus.click();
+											await wait(400);
+											const field = document.querySelector('input[aria-label="New document template"]');
+											if (!field) return "the plus did not open into a name field";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											setValue.call(field, "Smoke document template");
+											field.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(200);
+											field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+											let canvas = null;
+											for (let tries = 0; tries < 20 && !canvas; tries++) {
+												await wait(150);
+												canvas = document.querySelector("button[aria-label^='Page 1']");
+											}
+											if (!canvas) {
+												const alert = document.querySelector("[role=alert]");
+												return "the new template did not open a page canvas" + (alert ? ": " + alert.textContent.trim() : "");
+											}
+											return "ok";
+										})()`,
+									) as string;
+									if (created !== "ok") throw new Error(`Smoke: creating a document template ${created}`);
+
+									// Leaves without editing further, back to that template's own
+									// preview, which is where the screenshots below expect to be.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
+											if (back) back.click();
+											await new Promise((r) => setTimeout(r, 400));
+										})()`,
+									);
+
+									// One more Back reaches the list, where the search bar and the
+									// selection live. Typed text narrows the rows, select-all ticks
+									// every one left, and both are cleared again so the screenshot
+									// below still shows the list at rest.
+									const searched = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											if (!back) return "no back action from the preview";
+											back.click();
+											await wait(500);
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											const search = document.querySelector('input[aria-label="Search document templates"]');
+											if (!search) return "no search field";
+											setValue.call(search, "zzz-nothing-matches-zzz");
+											search.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(250);
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Nothing matches")) return "the search did not filter the list";
+											setValue.call(search, "");
+											search.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(250);
+											const selectAll = document.querySelector('input[aria-label="Select all"]');
+											if (!selectAll) return "no select-all checkbox";
+											selectAll.click();
+											await wait(200);
+											if (!main.textContent.includes("selected")) return "select-all did not select the rows";
+											const clear = document.querySelector('input[aria-label="Clear selection"]');
+											if (!clear) return "select-all left no way to clear the selection";
+											clear.click();
+											await wait(200);
+											return "ok";
+										})()`,
+									) as string;
+									if (searched !== "ok") throw new Error(`Smoke: document templates list ${searched}`);
 								}
 								if (screen === "Mail templates") {
 									// One document underneath every view (docs/editors.md section 2):
@@ -1691,7 +1835,18 @@ if (!app.requestSingleInstanceLock()) {
 											const detail = document.querySelector("aside[aria-label]");
 											if (!detail) return "no side panel";
 											if (!detail.textContent.includes("Every week on Tuesday")) return "the side panel does not show the rule";
-											const edit = [...detail.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
+
+											// A click outside the panel closes it, the same way Escape
+											// does. Escape is the other path this walk checks below.
+											document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+											await new Promise((r) => setTimeout(r, 200));
+											if (document.querySelector("aside[aria-label]")) return "a click outside did not close the side panel";
+
+											chip.click();
+											await new Promise((r) => setTimeout(r, 400));
+											const reopened = document.querySelector("aside[aria-label]");
+											if (!reopened) return "the side panel did not reopen";
+											const edit = [...reopened.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
 											if (!edit) return "the side panel has no edit";
 											edit.click();
 											await new Promise((r) => setTimeout(r, 500));
@@ -1924,6 +2079,25 @@ if (!app.requestSingleInstanceLock()) {
 									}
 									console.log(`SMOKE_DEMO mail frame=${mailFrame.url}`);
 									await new Promise((r) => setTimeout(r, 400));
+
+									// The reader frame has no way to report its own content
+									// height (decision 20), so its height is a resize handle
+									// rather than a measurement. Driven from the keyboard
+									// because a sandboxed frame swallows a pointer drag from
+									// this script the same way it would from a real one.
+									const resized = await window.webContents.executeJavaScript(
+										`(async () => {
+											const handle = document.querySelector('[role="separator"][aria-label="Resize message"]');
+											if (!handle) return "no handle";
+											const before = Number(handle.getAttribute("aria-valuenow"));
+											handle.focus();
+											handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 200));
+											const after = Number(handle.getAttribute("aria-valuenow"));
+											return after > before ? "ok" : \`did not grow: \${before} -> \${after}\`;
+										})()`,
+									);
+									if (resized !== "ok") throw new Error(`Smoke: mail reader resize handle ${resized}`);
 								}
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;

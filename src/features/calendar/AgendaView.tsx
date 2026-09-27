@@ -121,6 +121,7 @@ export function AgendaView({
 								<button
 									key={p.key}
 									type="button"
+									data-opens-panel
 									onClick={() => onOpen(p.item)}
 									onContextMenu={(event) => openItemMenu(event, p.item)}
 									className="flex w-full items-center gap-3 border-b border-[var(--line)] px-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"

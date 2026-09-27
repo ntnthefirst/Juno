@@ -168,7 +168,11 @@ of taste.
 - The submit button lives in the page footer, outside the `<form>`, and reaches
   it with `form={id}` from `useId()`.
 - A side panel does not trap focus and does not block a click behind it. That is
-  the point: the grid it opened from stays usable.
+  the point: the grid it opened from stays usable. A click on that grid also
+  closes the panel, the same way Escape does, unless the click is on whatever
+  opens or swaps the panel's own content (a row, an "Add" or "Edit" button
+  marked `data-opens-panel`) or lands inside a menu, a dialog or another
+  popover the screen or the panel opened on top of everything.
 - The settings **window** is still modal, for the reason in decision 26. Reading
   a row changes nothing; changing a setting changes what every screen shows.
 

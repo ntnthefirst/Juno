@@ -19,12 +19,12 @@ npm run dev
 | --- | --- |
 | **Today** | What needs attention, suggestions worked out from the records, a counts line |
 | **Reminders** | Grouped by bucket, recurring, snooze and complete, one daily notification |
-| **Clients** | Clients, contacts and projects, with search and undo. A record opens on a card, with tabs and a timeline of everything that has happened with it |
+| **Clients** | Clients, contacts and projects, with search and undo. A record opens on a card, with tabs and a timeline of everything that has happened with it, including a status change made from the button beside the name |
 | **Projects** | A piece of work with its links, its files, the folder it is checked out into and the command that starts it. Cards, rows or a dense list. A project need not belong to a client |
 | **Documents** | Generated from a template or imported as a PDF, written to disk at generation, signed with an audit page |
 | **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. Filing that reaches the server, and an outbox that sends over SMTP behind a confirmation gate |
 | **Calendar** | Events and recurring series with an IANA zone each, month, week and agenda views, drag to move and resize, .ics in and out |
-| **Agent** | An MCP server over a local pipe, every side-effectful tool parked for approval. Automations, an audit log, briefings across every domain |
+| **Agent** | An MCP server over a local pipe, every side-effectful tool parked for approval. Automations, an audit log purged after six months, briefings across every domain |
 | **Templates** | Mail templates laid out on a canvas of sections and blocks in a Figma-shaped editor: layers on the left, a pannable sheet at three reading widths, a design panel on the right with fills, strokes, effects, typography and linked fonts, Figma's resizing, colour picker and keyboard with undo, breakpoints sent as media queries, a floating toolbar, text edited in place, and any block convertible to its own HTML and CSS. A canvas is sent with nothing around it. Compiled to the HTML a message is made of, with an editable code view back into it. Document templates edited as pages, compiled to the HTML the PDF pipeline takes |
 | **Settings** | Theme, lock, reference data, owner profile, accounting link, mail accounts, signature, backup |
 

@@ -173,6 +173,13 @@ the key must be held in memory while unlocked, a forgotten passphrase means the
 data is unrecoverable, and there is no reset. Turning it on must state that in
 those words and require the passphrase to be entered twice.
 
+**Database encryption is dropped, and not built.** What it protects against, a
+stolen laptop or a copied file, is what BitLocker and FileVault already cover
+for the whole disk, and they are on by default on most machines Juno runs on.
+Building it would also mean leaving `node:sqlite` (decision 18) for a SQLite
+that can do SQLCipher. The two layers that exist are the OS account and the
+lock screen. Revisit only if Juno ever syncs the file off the machine.
+
 **Unlock methods**, in order of how much work they are:
 
 - **Passphrase.** Argon2id, per-install random salt, parameters stored alongside.
@@ -489,6 +496,16 @@ a step needing approval stops the run and waits for a person, on a schedule as
 much as by hand. That is what keeps "an agent may prepare a send and may never
 fire it" true when the caller is a timer.
 
+The audit table this gate writes to is not kept forever. Rows older than six
+months are purged on launch (`purgeOldEvents` in
+`electron/main/services/agent-audit.ts`), except a row a still-open action
+still points at, which survives regardless of age until that action closes.
+This is the one hard delete in the app rather than a soft one
+(.claude/rules/data.md section 6): the log is not a record anything else is
+built from (the client timeline reads notes, status changes, documents and
+mail directly), so retention is the owner's call and runs unattended, with no
+IPC channel and no MCP tool.
+
 `@modelcontextprotocol/sdk` is used in the bridge only, as planned. It
 costs about 19 MB in the installer through dependencies the stdio path never
 loads (express, hono, jose and the rest are pulled in by other transports).
@@ -658,6 +675,12 @@ Consequences:
   and reaches it with `form={id}`.
 - Sections in the settings window own their padding, because a section that
   turns into a form page draws its header and footer against the window edges.
+- A side panel closes on a click outside it, the same way it closes on
+  Escape, since a modeless panel that only Escape can dismiss is halfway to
+  the shape it was chosen instead of. A click on the row that opens the next
+  one swaps the panel's content rather than closing and reopening it, and a
+  click inside a menu, a dialog or another popover the panel opened is not
+  outside it, even though that content renders elsewhere in the tree.
 
 ## 31. Server settings are guessed, and the MX record is the second guess
 

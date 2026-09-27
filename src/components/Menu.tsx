@@ -156,6 +156,7 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 			    whatever is underneath. Clicking a row behind an open menu should
 			    close the menu and do nothing else. */}
 			<div
+				data-popover-root
 				className="fixed inset-0 z-[60]"
 				onMouseDown={(event) => {
 					event.preventDefault();

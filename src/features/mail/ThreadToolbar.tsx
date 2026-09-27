@@ -1,5 +1,5 @@
 import type { IconName } from "../../components/Icon";
-import { IconAction } from "./IconAction";
+import { IconAction } from "../../components/IconAction";
 import type { MailFilters } from "./mail-filters";
 import { MailSearchBar } from "./MailSearchBar";
 import type { ThreadAction } from "./ThreadList";

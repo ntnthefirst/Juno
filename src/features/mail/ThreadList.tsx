@@ -1,11 +1,11 @@
 import { useRef, useState } from "react";
 import type { MailThreadSummary } from "@shared/types";
 import { Icon } from "../../components/Icon";
+import { IconAction } from "../../components/IconAction";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { startThreadDrag } from "./drag";
 import { formatWhen, participantsLine } from "./format";
-import { IconAction } from "./IconAction";
 
 export type ThreadAction =
 	| "open"

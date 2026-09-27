@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
-import { Icon } from "../../components/Icon";
+import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { activeFilterCount, NO_FILTERS, type MailFilters } from "./mail-filters";
 
 type MailSearchBarProps = {
@@ -12,88 +10,29 @@ type MailSearchBarProps = {
 };
 
 /**
- * One control: a search box with the filters folded into it.
- *
- * Every filter used to need a button of its own along the top, which spends the
- * width of the list on states nobody has switched on. They live behind the
- * funnel instead, and the funnel carries a count so a list filtered down to
- * nothing still says why.
+ * Mail's own filters, slotted into the shared search bar shape
+ * (`ListSearchBar.tsx`). It used to draw the search box and the popover
+ * itself; every list screen with a search and a funnel needed the same
+ * plumbing, so that part moved out and this is what is left: the three
+ * toggles, the address field and the date range that are specific to mail.
  */
 export function MailSearchBar({ search, onSearch, filters, onFilters }: MailSearchBarProps) {
-	const [open, setOpen] = useState(false);
-	const wrapper = useRef<HTMLDivElement>(null);
 	const count = activeFilterCount(filters);
-
-	// Closes on a click anywhere else and on Escape, like any popover.
-	useEffect(() => {
-		if (!open) return;
-		const onDown = (event: MouseEvent) => {
-			if (!(event.target instanceof Node)) return;
-			if (wrapper.current?.contains(event.target)) return;
-			setOpen(false);
-		};
-		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setOpen(false);
-		};
-		document.addEventListener("mousedown", onDown);
-		document.addEventListener("keydown", onKey);
-		return () => {
-			document.removeEventListener("mousedown", onDown);
-			document.removeEventListener("keydown", onKey);
-		};
-	}, [open]);
 
 	function toggle(key: "unreadOnly" | "flaggedOnly" | "withAttachments") {
 		onFilters({ ...filters, [key]: !filters[key] });
 	}
 
 	return (
-		<div ref={wrapper} className="relative">
-			<div className="flex items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pr-1 pl-2 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
-				<Icon name="search" size={14} />
-				<input
-					type="search"
-					value={search}
-					onChange={(event) => onSearch(event.target.value)}
-					placeholder="Search mail"
-					aria-label="Search mail"
-					className="min-w-0 flex-1 bg-transparent py-1.5 text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
-				/>
-				{search ? (
-					<button
-						type="button"
-						aria-label="Clear search"
-						title="Clear search"
-						onClick={() => onSearch("")}
-						className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
-					>
-						<Icon name="close" size={12} />
-					</button>
-				) : null}
-				<button
-					type="button"
-					aria-label="Filters"
-					title="Filters"
-					aria-expanded={open}
-					onClick={() => setOpen((current) => !current)}
-					className={[
-						"inline-flex h-[28px] shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5",
-						count > 0 || open
-							? "bg-[var(--accent-soft)] text-[var(--accent)]"
-							: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
-					].join(" ")}
-				>
-					<Icon name="filter" size={14} />
-					{count > 0 ? <span className="tabular text-[length:var(--text-micro)]">{count}</span> : null}
-				</button>
-			</div>
-
-			{open ? (
-				<div
-					role="group"
-					aria-label="Mail filters"
-					className="animate-pop absolute top-full right-0 left-0 z-20 mt-1 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-popover)]"
-				>
+		<ListSearchBar
+			search={search}
+			onSearch={onSearch}
+			placeholder="Search mail"
+			filtersAriaLabel="Mail filters"
+			filterCount={count}
+			onClearFilters={() => onFilters(NO_FILTERS)}
+			filters={
+				<>
 					<div className="flex flex-wrap gap-1">
 						<FilterToggle
 							label="Unread"
@@ -140,42 +79,8 @@ export function MailSearchBar({ search, onSearch, filters, onFilters }: MailSear
 							onChange={(value) => onFilters({ ...filters, until: value })}
 						/>
 					</div>
-					<div className="mt-3 flex justify-between">
-						<Button size="dense" disabled={count === 0} onClick={() => onFilters(NO_FILTERS)}>
-							Clear filters
-						</Button>
-						<Button size="dense" onClick={() => setOpen(false)}>
-							Done
-						</Button>
-					</div>
-				</div>
-			) : null}
-		</div>
-	);
-}
-
-type FilterToggleProps = {
-	label: string;
-	icon: Parameters<typeof Icon>[0]["name"];
-	on: boolean;
-	onClick: () => void;
-};
-
-function FilterToggle({ label, icon, on, onClick }: FilterToggleProps) {
-	return (
-		<button
-			type="button"
-			aria-pressed={on}
-			onClick={onClick}
-			className={[
-				"inline-flex h-[32px] items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)]",
-				on
-					? "bg-[var(--accent-soft)] text-[var(--accent)]"
-					: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
-			].join(" ")}
-		>
-			<Icon name={icon} size={14} />
-			{label}
-		</button>
+				</>
+			}
+		/>
 	);
 }

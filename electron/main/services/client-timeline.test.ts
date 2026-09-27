@@ -8,10 +8,12 @@
  * interface never has to.
  */
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
+import { referenceItems, referenceSets } from "../db/schema";
 import * as timeline from "./client-timeline";
 import * as clients from "./clients";
 import * as projects from "./projects";
@@ -29,6 +31,21 @@ async function withClient(): Promise<{ db: Db; clientId: string }> {
 	const db = freshDb();
 	const client = await clients.create({ name: "Jansen BV" }, db);
 	return { db, clientId: client.id };
+}
+
+/**
+ * A status item, without going through the seed machinery: a "client_status"
+ * set, created once per database, with one item in it.
+ */
+function createStatus(db: Db, label: string, tone: string | null = null) {
+	const set =
+		db.select({ id: referenceSets.id }).from(referenceSets).where(eq(referenceSets.key, "client_status")).get() ??
+		db.insert(referenceSets).values({ key: "client_status", label: "Client status" }).returning().get();
+	return db
+		.insert(referenceItems)
+		.values({ setId: set.id, key: label.toLowerCase(), label, tone })
+		.returning()
+		.get();
 }
 
 describe("notes", () => {
@@ -142,7 +159,7 @@ describe("the merged stream", () => {
 		const ids = entries.map((entry) => entry.id);
 
 		expect(new Set(ids).size).toBe(ids.length);
-		expect(ids.every((id) => /^(note|mail|document|event|reminder|project):/.test(id))).toBe(true);
+		expect(ids.every((id) => /^(note|mail|document|event|reminder|project|status):/.test(id))).toBe(true);
 	});
 
 	it("counts each kind for the tabs", async () => {
@@ -156,5 +173,61 @@ describe("the merged stream", () => {
 		expect(counts.note).toBe(1);
 		expect(counts.project).toBe(2);
 		expect(counts.mail).toBe(0);
+	});
+});
+
+describe("status entries", () => {
+	// The two updates are more than ten minutes apart, or the second would fold
+	// into the first instead of leaving a Lead-to-Active entry to resolve.
+	async function withLeadThenActive(clientId: string, db: Db) {
+		const lead = createStatus(db, "Lead", "accent");
+		const active = createStatus(db, "Active", "ok");
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(new Date("2026-03-14T09:00:00.000Z"));
+			await clients.update(clientId, { statusId: lead.id }, db);
+			vi.setSystemTime(new Date("2026-03-14T09:20:00.000Z"));
+			await clients.update(clientId, { statusId: active.id }, db);
+		} finally {
+			vi.useRealTimers();
+		}
+		return { lead, active };
+	}
+
+	it("shows a status entry with both ends resolved to a label and a tone", async () => {
+		const { db, clientId } = await withClient();
+		await withLeadThenActive(clientId, db);
+
+		const [entry] = await timeline.timeline({ clientId, kinds: ["status"] }, db);
+
+		expect(entry?.kind).toBe("status");
+		expect(entry?.statusChange).toEqual({
+			from: { label: "Lead", tone: "accent" },
+			to: { label: "Active", tone: "ok" },
+		});
+		expect(entry?.title).toBe("Status changed from Lead to Active");
+	});
+
+	it("resolves a status the picker no longer offers", async () => {
+		const { db, clientId } = await withClient();
+		const { lead } = await withLeadThenActive(clientId, db);
+
+		// The picker would no longer offer this, but the change that used it
+		// while it was live still has to render correctly (data.md section 9).
+		db.update(referenceItems).set({ hiddenAt: "2026-04-01T00:00:00.000Z" }).where(eq(referenceItems.id, lead.id)).run();
+
+		const [entry] = await timeline.timeline({ clientId, kinds: ["status"] }, db);
+		expect(entry?.statusChange?.from).toEqual({ label: "Lead", tone: "accent" });
+	});
+
+	it("shows No status for the end that had none", async () => {
+		const { db, clientId } = await withClient();
+		const lead = createStatus(db, "Lead");
+		await clients.update(clientId, { statusId: lead.id }, db);
+
+		const [entry] = await timeline.timeline({ clientId, kinds: ["status"] }, db);
+
+		expect(entry?.statusChange?.from).toBeNull();
+		expect(entry?.title).toBe("Status changed from No status to Lead");
 	});
 });

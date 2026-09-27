@@ -55,7 +55,16 @@ export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: Pr
 
 	return (
 		<>
-			<table className="w-full border-collapse">
+			<table className="w-full table-fixed border-collapse">
+				{/* Project is the only column with no width: table-layout fixed
+					gives it whatever the other four leave behind. */}
+				<colgroup>
+					<col />
+					<col className="w-44" />
+					<col className="w-32" />
+					<col className="w-28" />
+					<col className="w-32" />
+				</colgroup>
 				<thead>
 					<tr>
 						{HEADS.map((head) => (
@@ -128,10 +137,10 @@ export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: Pr
 									<StatusBadge label={row.status.label} tone={row.status.tone} />
 								) : null}
 							</td>
-							<td className="tabular whitespace-nowrap border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="tabular truncate border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 								{formatDate(row.dueOn)}
 							</td>
-							<td className="tabular whitespace-nowrap border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="tabular truncate border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 								{formatCents(row.agreedValueCents)}
 							</td>
 						</tr>

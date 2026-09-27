@@ -327,7 +327,7 @@ export function ProjectDetail({
 				<section className="mt-8">
 					<SectionHeading
 						action={
-							<Button size="dense" onClick={() => setLinkPanel({ link: null })}>
+							<Button size="dense" data-opens-panel onClick={() => setLinkPanel({ link: null })}>
 								<Icon name="add" />
 								Add a link
 							</Button>
@@ -492,7 +492,7 @@ export function ProjectDetail({
 				<section className="mt-8 mb-4">
 					<SectionHeading
 						action={
-							<Button size="dense" onClick={() => setCommandPanel({ command: null })}>
+							<Button size="dense" data-opens-panel onClick={() => setCommandPanel({ command: null })}>
 								<Icon name="add" />
 								Add a command
 							</Button>

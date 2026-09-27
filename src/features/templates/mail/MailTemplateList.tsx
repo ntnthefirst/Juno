@@ -128,6 +128,11 @@ export function MailTemplateList({
 								<button
 									type="button"
 									aria-current={active ? "true" : undefined}
+									// Only marked while a plain click still opens the panel: once a
+									// selection is running the same click ticks a box instead, and an
+									// outside click closing whatever panel is open is the right
+									// default for that.
+									data-opens-panel={hasSelection ? undefined : ""}
 									onClick={() => (hasSelection ? onToggle(template.id) : onOpen(template.id))}
 									onDoubleClick={() => onAction("use", [template.id])}
 									className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"

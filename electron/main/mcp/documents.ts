@@ -25,7 +25,8 @@ const templateProperties: Record<string, unknown> = {
 		type: "string",
 		description:
 			"The body as HTML with placeholders, for example {{ client.name }} and " +
-			"{{#if client.vatNumber}}...{{/if}}. Values are escaped; a missing one renders a visible marker.",
+			"{{#if client.vatNumber}}...{{/if}}. Values are escaped; a missing one renders a visible marker. " +
+			"Left out on create, the template gets one empty page, ready to be filled in in the editor.",
 	},
 };
 
@@ -66,13 +67,13 @@ export const templateTools: ToolDescriptor[] = [
 		inputSchema: {
 			type: "object",
 			properties: templateProperties,
-			required: ["name", "body_html"],
+			required: ["name"],
 			additionalProperties: false,
 		},
 		handler: async (args) =>
 			templates.create({
 				name: String(args.name),
-				bodyHtml: String(args.body_html),
+				...(args.body_html === undefined ? {} : { bodyHtml: String(args.body_html) }),
 				description: args.description === undefined ? null : (args.description as string | null),
 			}),
 	},

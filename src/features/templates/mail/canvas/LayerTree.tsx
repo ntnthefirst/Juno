@@ -4,6 +4,11 @@ import { Icon, type IconName } from "../../../../components/Icon";
 import { BLOCK_KIND_LABELS } from "./canvas-actions";
 import type { DropTarget, Selection } from "./CanvasView";
 
+/** A leaf: anything that is not a container or a columns table. */
+function isBlockNode(node: MailLayout["children"][number]): node is MailBlock {
+	return node.kind !== "container" && node.kind !== "columns";
+}
+
 type LayerTarget = { sectionId: string; blockId?: string };
 
 type LayerTreeProps = {
@@ -129,9 +134,12 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDropBlock, 
 
 	return (
 		<ul data-layers className="flex flex-col" onDragLeave={() => setOver(null)}>
-			{layout.sections.map((section) => {
+			{/* Phase 1's layers show every top-level section. A nested container or a
+			    columns table has no row of its own yet (docs/editors.md section 2,
+			    phase 2 and 3). */}
+			{layout.children.filter((node) => node.kind === "container").map((section) => {
 				const open = !closed.includes(section.id);
-				const sectionSelected = selection?.sectionId === section.id && !selection.blockId;
+				const sectionSelected = selection !== null && selection.sectionId === section.id && !selection.blockId;
 				const sectionOver = over?.kind === "section" && over.sectionId === section.id;
 				return (
 					<li key={section.id}>
@@ -179,7 +187,7 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDropBlock, 
 								<Icon name="tool-section" size={12} className="flex-none" />
 								<span className="truncate">{section.name}</span>
 								<span className="tabular ml-auto flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-									{section.blocks.length}
+									{section.children.length}
 								</span>
 							</button>
 							<Eye
@@ -191,7 +199,9 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDropBlock, 
 
 						{open ? (
 							<ul className="flex flex-col">
-								{section.blocks.map((block) => {
+								{/* A nested container or a columns table has no row of its own
+								    yet, so it is left out here rather than shown broken. */}
+								{section.children.filter(isBlockNode).map((block) => {
 									const blockSelected = selection?.blockId === block.id;
 									const label = blockLabel(block);
 									const blockOver = over?.kind === "block" && over.blockId === block.id;

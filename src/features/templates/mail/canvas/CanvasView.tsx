@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent, type HTMLAttributes } from "react";
-import type { MailBlock, MailFont, MailLayout, MailSection, TemplateInput } from "@shared/types";
+import type { MailBlock, MailContainer, MailFont, MailLayout, MailNode, TemplateInput } from "@shared/types";
 import { Icon } from "../../../../components/Icon";
 import {
 	boxCss,
@@ -14,6 +14,16 @@ import {
 } from "./box-style";
 import { codeMarkup } from "./code-markup";
 import { InlineText, type Caret } from "./InlineText";
+
+/** A container: what a section is, in the shapes this phase can build and draw. */
+function isContainer(node: MailNode): node is MailContainer {
+	return node.kind === "container";
+}
+
+/** A leaf: anything that is not a container or a columns table. */
+function isBlockNode(node: MailNode): node is MailBlock {
+	return node.kind !== "container" && node.kind !== "columns";
+}
 
 /** What the design panel is pointed at. A section on its own, or one block in it. */
 export type Selection = { sectionId: string; blockId?: string } | null;
@@ -77,7 +87,7 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 	const own = { ...host.attrs, "data-canvas-id": host.id };
 	switch (block.kind) {
 		case "heading": {
-			const Tag = `h${block.level}` as "h1" | "h2" | "h3";
+			const Tag = block.tag;
 			return (
 				<Tag
 					{...own}
@@ -360,9 +370,9 @@ export function CanvasView({
 		[onDrop],
 	);
 
-	const renderBlock = (section: MailSection, block: MailBlock) => {
+	const renderBlock = (section: MailContainer, block: MailBlock) => {
 		const selected = selection?.blockId === block.id;
-		const overThis = over?.sectionId === section.id && over.beforeBlockId === block.id;
+		const overThis = over !== null && over.sectionId === section.id && over.beforeBlockId === block.id;
 		const place: CSSProperties = {
 			...placeCss(block),
 			...(block.kind === "html" ? placementFromCss(block.css) : {}),
@@ -396,7 +406,7 @@ export function CanvasView({
 				<InlineText
 					key={block.id}
 					rich={false}
-					tag={`h${block.level}`}
+					tag={block.tag}
 					value={block.content}
 					style={editStyle(block, layout.fonts)}
 					caret={editing.caret}
@@ -460,11 +470,16 @@ export function CanvasView({
 		>
 			<style>{CLIENT_DEFAULTS}</style>
 			<div ref={content} data-canvas-content>
-				{layout.sections.map((section: MailSection) => {
+				{layout.children.filter(isContainer).map((section) => {
 					if (section.hidden) return null;
-					const sectionSelected = selection?.sectionId === section.id && !selection.blockId;
-					const overEnd = over?.sectionId === section.id && over.beforeBlockId === null;
-					const shown = section.blocks.filter((block) => !block.hidden);
+					const sectionSelected = selection !== null && selection.sectionId === section.id && !selection.blockId;
+					const overEnd = over !== null && over.sectionId === section.id && over.beforeBlockId === null;
+					// Phase 1 draws every block a section holds directly. A nested
+					// container or a columns table has no editing surface here yet
+					// (docs/editors.md section 2, phase 2 and 3): it is drawn as a
+					// labelled placeholder rather than dropped, so nothing an agent or
+					// the code view puts on the canvas disappears silently.
+					const shown = section.children.filter((node) => !node.hidden);
 					return (
 						<div
 							key={section.id}
@@ -502,7 +517,19 @@ export function CanvasView({
 									{section.name} is empty
 								</p>
 							) : null}
-							{shown.map((block) => renderBlock(section, block))}
+							{shown.map((node) =>
+								isBlockNode(node) ? (
+									renderBlock(section, node)
+								) : (
+									<p
+										key={node.id}
+										data-canvas-chrome
+										className="rounded-[var(--radius-sm)] border border-dashed border-[var(--canvas-line)] px-3 py-2 text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
+									>
+										{node.kind === "columns" ? "Columns" : "Section"}: {node.name} is not editable on the canvas yet
+									</p>
+								),
+							)}
 						</div>
 					);
 				})}

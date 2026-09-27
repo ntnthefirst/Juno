@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MailBlock, MailSection } from "@shared/types";
+import type { MailBlock, MailContainer } from "@shared/types";
 import { emptySection, newBlock, updateBlock } from "./canvas-actions";
 import {
 	acrossOf,
@@ -13,33 +13,34 @@ import {
 	widthSizing,
 } from "./sizing";
 
-function column(): MailSection {
+function column(): MailContainer {
 	return emptySection("Body");
 }
 
-function row(): MailSection {
+function row(): MailContainer {
 	const section = emptySection("Row");
 	return { ...section, layout: { kind: "flex", direction: "row", justify: "start", align: "stretch", gap: 8, wrap: false } };
 }
 
-function grid(): MailSection {
+function grid(): MailContainer {
 	return { ...emptySection("Grid"), layout: { kind: "grid", columns: 2, gap: 8, align: "stretch" } };
 }
 
 /** Applies a patch the way the editor does, through updateBlock. */
-function apply(block: MailBlock, section: MailSection, patch: Partial<MailBlock>): MailBlock {
+function apply(block: MailBlock, section: MailContainer, patch: Partial<MailBlock>): MailBlock {
 	const layout = {
-		version: 1 as const,
+		version: 2 as const,
 		width: 600,
 		widthMode: "fill" as const,
 		minHeight: 0,
 		fill: null,
 		fonts: [],
 		customCss: null,
-		sections: [{ ...section, blocks: [block] }],
+		children: [{ ...section, children: [block] }],
 		breakpoints: [],
 	};
-	return updateBlock(layout, section.id, block.id, patch).sections[0]!.blocks[0]!;
+	const updated = (updateBlock(layout, section.id, block.id, patch).children[0] as MailContainer).children[0]!;
+	return updated as MailBlock;
 }
 
 describe("resizing in a section that runs down", () => {

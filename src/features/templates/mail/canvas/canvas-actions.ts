@@ -13,15 +13,26 @@
 import type {
 	MailBlock,
 	MailBoxStyle,
+	MailContainer,
 	MailEffect,
 	MailFill,
 	MailLayout,
-	MailSection,
+	MailNode,
 	MailSectionLayout,
 	MailSides,
 	MailSpacing,
 	MailTextStyle,
 } from "@shared/types";
+
+/** A container is a section, in the shapes this phase can build: any node holding others. */
+function isContainer(node: MailNode): node is MailContainer {
+	return node.kind === "container";
+}
+
+/** A leaf: anything that is not a container or a columns table. */
+function isBlockNode(node: MailNode): node is MailBlock {
+	return node.kind !== "container" && node.kind !== "columns";
+}
 
 export function newId(): string {
 	return crypto.randomUUID();
@@ -90,8 +101,25 @@ export function stackLayout(): MailSectionLayout {
 	return { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 12, wrap: false };
 }
 
-export function emptySection(name = "Section"): MailSection {
-	return { id: newId(), name, hidden: false, alignSelf: "auto", layout: stackLayout(), box: emptyBox(), blocks: [] };
+/**
+ * A container with nothing in it: what every section is, generalised to every
+ * tag the toolbar can add. Phase 1 of the tool-per-element work
+ * (`docs/editors.md` section 2) only ever creates a `section`, which is what
+ * the current toolbar and layers still call one.
+ */
+export function emptySection(name = "Section"): MailContainer {
+	return {
+		id: newId(),
+		kind: "container",
+		tag: "section",
+		name,
+		hidden: false,
+		alignSelf: "auto",
+		grow: 0,
+		layout: stackLayout(),
+		box: emptyBox(),
+		children: [],
+	};
 }
 
 /**
@@ -100,7 +128,7 @@ export function emptySection(name = "Section"): MailSection {
  * what a section is reduced to when the last one is removed, and the room is
  * a choice somebody makes rather than something every section has.
  */
-export function newSection(name = "Section"): MailSection {
+export function newSection(name = "Section"): MailContainer {
 	return { ...emptySection(name), box: { ...emptyBox(), padding: { top: 24, right: 24, bottom: 24, left: 24 } } };
 }
 
@@ -110,14 +138,14 @@ export function newSection(name = "Section"): MailSection {
  */
 export function emptyLayout(): MailLayout {
 	return {
-		version: 1,
+		version: 2,
 		width: 600,
 		widthMode: "fill",
 		minHeight: 320,
 		fill: null,
 		fonts: [],
 		customCss: null,
-		sections: [newSection("Body")],
+		children: [newSection("Body")],
 		breakpoints: [],
 	};
 }
@@ -159,7 +187,7 @@ export function newBlock(kind: BlockKind): MailBlock {
 			return {
 				...common,
 				kind,
-				level: 2,
+				tag: "h2",
 				content: "Titel",
 				text: { ...defaultText(), weight: "semibold" },
 				box: emptyBox(),
@@ -178,7 +206,7 @@ export function newBlock(kind: BlockKind): MailBlock {
 				box: { ...emptyBox(), padding: { top: 10, right: 18, bottom: 10, left: 18 } },
 			};
 		case "image":
-			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", box: emptyBox() };
+			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", href: null, box: emptyBox() };
 		case "divider":
 			return { ...common, kind, color: "#e3e2ec", thickness: 1, box: emptyBox(), grow: 1 };
 		case "spacer":
@@ -189,35 +217,48 @@ export function newBlock(kind: BlockKind): MailBlock {
 			return { ...common, kind, html: "", css: "" };
 		case "text":
 		default:
-			return { ...common, kind: "text", html: "Tekst", text: defaultText(), box: emptyBox() };
+			return { ...common, kind: "text", tag: "p", html: "Tekst", text: defaultText(), box: emptyBox() };
 	}
 }
 
+/**
+ * Finds a top-level section by id and replaces it with `change`'s result.
+ *
+ * Phase 1 of the tool-per-element work only ever nests a section at the top
+ * level, so every editing action here still works one level deep, on
+ * `layout.children` and a section's own `children`. Real nesting, dragging
+ * into and out of a container, and editing a columns table are phase 2 and 3
+ * (`docs/editors.md` section 2).
+ */
 function mapSection(
 	layout: MailLayout,
 	sectionId: string,
-	change: (section: MailSection) => MailSection,
+	change: (section: MailContainer) => MailContainer,
 ): MailLayout {
 	return {
 		...layout,
-		sections: layout.sections.map((section) => (section.id === sectionId ? change(section) : section)),
+		children: layout.children.map((node) => (isContainer(node) && node.id === sectionId ? change(node) : node)),
 	};
 }
 
+function sections(layout: MailLayout): MailContainer[] {
+	return layout.children.filter(isContainer);
+}
+
 export function addSection(layout: MailLayout, after?: string): MailLayout {
-	const section = newSection(`Section ${layout.sections.length + 1}`);
-	if (!after) return { ...layout, sections: [...layout.sections, section] };
-	const index = layout.sections.findIndex((entry) => entry.id === after);
-	if (index < 0) return { ...layout, sections: [...layout.sections, section] };
-	const sections = [...layout.sections];
-	sections.splice(index + 1, 0, section);
-	return { ...layout, sections };
+	const section = newSection(`Section ${sections(layout).length + 1}`);
+	if (!after) return { ...layout, children: [...layout.children, section] };
+	const index = layout.children.findIndex((node) => node.id === after);
+	if (index < 0) return { ...layout, children: [...layout.children, section] };
+	const children = [...layout.children];
+	children.splice(index + 1, 0, section);
+	return { ...layout, children };
 }
 
 export function updateSection(
 	layout: MailLayout,
 	sectionId: string,
-	patch: Partial<Omit<MailSection, "id" | "blocks">>,
+	patch: Partial<Omit<MailContainer, "id" | "kind" | "children">>,
 ): MailLayout {
 	return mapSection(layout, sectionId, (section) => ({ ...section, ...patch }));
 }
@@ -228,18 +269,18 @@ export function updateSection(
  * as a broken editor rather than as an empty one.
  */
 export function removeSection(layout: MailLayout, sectionId: string): MailLayout {
-	if (layout.sections.length <= 1) return { ...layout, sections: [emptySection("Body")] };
-	return { ...layout, sections: layout.sections.filter((section) => section.id !== sectionId) };
+	if (sections(layout).length <= 1) return { ...layout, children: [emptySection("Body")] };
+	return { ...layout, children: layout.children.filter((node) => node.id !== sectionId) };
 }
 
 export function moveSection(layout: MailLayout, sectionId: string, by: -1 | 1): MailLayout {
-	const index = layout.sections.findIndex((section) => section.id === sectionId);
+	const index = layout.children.findIndex((node) => node.id === sectionId);
 	const target = index + by;
-	if (index < 0 || target < 0 || target >= layout.sections.length) return layout;
-	const sections = [...layout.sections];
-	const [moved] = sections.splice(index, 1);
-	if (moved) sections.splice(target, 0, moved);
-	return { ...layout, sections };
+	if (index < 0 || target < 0 || target >= layout.children.length) return layout;
+	const children = [...layout.children];
+	const [moved] = children.splice(index, 1);
+	if (moved) children.splice(target, 0, moved);
+	return { ...layout, children };
 }
 
 /**
@@ -248,16 +289,16 @@ export function moveSection(layout: MailLayout, sectionId: string, by: -1 | 1): 
  */
 export function moveSectionTo(layout: MailLayout, sectionId: string, beforeSectionId: string | null): MailLayout {
 	if (sectionId === beforeSectionId) return layout;
-	const moving = layout.sections.find((section) => section.id === sectionId);
+	const moving = layout.children.find((node) => node.id === sectionId);
 	if (!moving) return layout;
-	const rest = layout.sections.filter((section) => section.id !== sectionId);
-	const index = beforeSectionId === null ? -1 : rest.findIndex((section) => section.id === beforeSectionId);
-	if (index < 0) return { ...layout, sections: [...rest, moving] };
-	return { ...layout, sections: [...rest.slice(0, index), moving, ...rest.slice(index)] };
+	const rest = layout.children.filter((node) => node.id !== sectionId);
+	const index = beforeSectionId === null ? -1 : rest.findIndex((node) => node.id === beforeSectionId);
+	if (index < 0) return { ...layout, children: [...rest, moving] };
+	return { ...layout, children: [...rest.slice(0, index), moving, ...rest.slice(index)] };
 }
 
 export function addBlock(layout: MailLayout, sectionId: string, block: MailBlock): MailLayout {
-	return mapSection(layout, sectionId, (section) => ({ ...section, blocks: [...section.blocks, block] }));
+	return mapSection(layout, sectionId, (section) => ({ ...section, children: [...section.children, block] }));
 }
 
 export function updateBlock(
@@ -268,11 +309,11 @@ export function updateBlock(
 ): MailLayout {
 	return mapSection(layout, sectionId, (section) => ({
 		...section,
-		blocks: section.blocks.map((block) =>
+		children: section.children.map((node) =>
 			// The cast holds because a patch only ever carries fields of the block
 			// it came from: the inspector builds it from the selected block, so
-			// there is no path that puts a heading's level onto a spacer.
-			block.id === blockId ? ({ ...block, ...patch } as MailBlock) : block,
+			// there is no path that puts a heading's tag onto a spacer.
+			node.id === blockId && isBlockNode(node) ? ({ ...node, ...patch } as MailBlock) : node,
 		),
 	}));
 }
@@ -280,7 +321,7 @@ export function updateBlock(
 export function removeBlock(layout: MailLayout, sectionId: string, blockId: string): MailLayout {
 	return mapSection(layout, sectionId, (section) => ({
 		...section,
-		blocks: section.blocks.filter((block) => block.id !== blockId),
+		children: section.children.filter((node) => node.id !== blockId),
 	}));
 }
 
@@ -291,13 +332,13 @@ export function moveBlock(
 	by: -1 | 1,
 ): MailLayout {
 	return mapSection(layout, sectionId, (section) => {
-		const index = section.blocks.findIndex((block) => block.id === blockId);
+		const index = section.children.findIndex((node) => node.id === blockId);
 		const target = index + by;
-		if (index < 0 || target < 0 || target >= section.blocks.length) return section;
-		const blocks = [...section.blocks];
-		const [moved] = blocks.splice(index, 1);
-		if (moved) blocks.splice(target, 0, moved);
-		return { ...section, blocks };
+		if (index < 0 || target < 0 || target >= section.children.length) return section;
+		const children = [...section.children];
+		const [moved] = children.splice(index, 1);
+		if (moved) children.splice(target, 0, moved);
+		return { ...section, children };
 	});
 }
 
@@ -309,9 +350,9 @@ export function reparentBlock(
 	blockId: string,
 ): MailLayout {
 	if (fromSectionId === toSectionId) return layout;
-	const block = layout.sections
+	const block = sections(layout)
 		.find((section) => section.id === fromSectionId)
-		?.blocks.find((entry) => entry.id === blockId);
+		?.children.find((entry): entry is MailBlock => entry.id === blockId && isBlockNode(entry));
 	if (!block) return layout;
 	return addBlock(removeBlock(layout, fromSectionId, blockId), toSectionId, block);
 }
@@ -332,18 +373,18 @@ export function dropBlock(
 	beforeBlockId: string | null,
 ): MailLayout {
 	if (blockId === beforeBlockId) return layout;
-	const block = layout.sections
+	const block = sections(layout)
 		.find((section) => section.id === fromSectionId)
-		?.blocks.find((entry) => entry.id === blockId);
+		?.children.find((entry): entry is MailBlock => entry.id === blockId && isBlockNode(entry));
 	if (!block) return layout;
 	const without = removeBlock(layout, fromSectionId, blockId);
 	if (!beforeBlockId) return addBlock(without, toSectionId, block);
 	return mapSection(without, toSectionId, (section) => {
-		const index = section.blocks.findIndex((entry) => entry.id === beforeBlockId);
-		if (index < 0) return { ...section, blocks: [...section.blocks, block] };
-		const blocks = [...section.blocks];
-		blocks.splice(index, 0, block);
-		return { ...section, blocks };
+		const index = section.children.findIndex((entry) => entry.id === beforeBlockId);
+		if (index < 0) return { ...section, children: [...section.children, block] };
+		const children = [...section.children];
+		children.splice(index, 0, block);
+		return { ...section, children };
 	});
 }
 
@@ -352,10 +393,9 @@ export function findBlock(
 	sectionId: string,
 	blockId: string,
 ): MailBlock | null {
-	return (
-		layout.sections.find((section) => section.id === sectionId)?.blocks.find((block) => block.id === blockId) ??
-		null
-	);
+	const section = sections(layout).find((entry) => entry.id === sectionId);
+	const block = section?.children.find((entry) => entry.id === blockId);
+	return block && isBlockNode(block) ? block : null;
 }
 
 /* ------------------------------------------------ copying, pasting, stepping */
@@ -367,9 +407,36 @@ export function cloneBlock(block: MailBlock): MailBlock {
 	return { ...structuredClone(block), id: newId() };
 }
 
+/**
+ * A copy of a node and everything in it, every id new. Recurses through a
+ * container's or a columns table's children, so a copy of anything the model
+ * allows is safe to make even where phase 1 offers no way to build one.
+ */
+function cloneNode(node: MailNode): MailNode {
+	if (isContainer(node)) {
+		return { ...structuredClone(node), id: newId(), children: node.children.map(cloneNode) };
+	}
+	if (node.kind === "columns") {
+		return {
+			...structuredClone(node),
+			id: newId(),
+			rows: node.rows.map((row) => ({
+				...structuredClone(row),
+				id: newId(),
+				cells: row.cells.map((cell) => ({
+					...structuredClone(cell),
+					id: newId(),
+					children: cell.children.map(cloneNode),
+				})),
+			})),
+		};
+	}
+	return cloneBlock(node);
+}
+
 /** A copy of a section and everything in it, every id new. */
-export function cloneSection(section: MailSection): MailSection {
-	return { ...structuredClone(section), id: newId(), blocks: section.blocks.map(cloneBlock) };
+export function cloneSection(section: MailContainer): MailContainer {
+	return cloneNode(section) as MailContainer;
 }
 
 /**
@@ -384,29 +451,29 @@ export function insertBlockAfter(
 	block: MailBlock,
 ): MailLayout {
 	return mapSection(layout, sectionId, (section) => {
-		const index = afterBlockId ? section.blocks.findIndex((entry) => entry.id === afterBlockId) : -1;
-		if (index < 0) return { ...section, blocks: [...section.blocks, block] };
-		const blocks = [...section.blocks];
-		blocks.splice(index + 1, 0, block);
-		return { ...section, blocks };
+		const index = afterBlockId ? section.children.findIndex((entry) => entry.id === afterBlockId) : -1;
+		if (index < 0) return { ...section, children: [...section.children, block] };
+		const children = [...section.children];
+		children.splice(index + 1, 0, block);
+		return { ...section, children };
 	});
 }
 
 /** Puts a section straight after another, or at the end. */
-export function insertSectionAfter(layout: MailLayout, afterSectionId: string | null, section: MailSection): MailLayout {
-	const index = afterSectionId ? layout.sections.findIndex((entry) => entry.id === afterSectionId) : -1;
-	if (index < 0) return { ...layout, sections: [...layout.sections, section] };
-	const sections = [...layout.sections];
-	sections.splice(index + 1, 0, section);
-	return { ...layout, sections };
+export function insertSectionAfter(layout: MailLayout, afterSectionId: string | null, section: MailContainer): MailLayout {
+	const index = afterSectionId ? layout.children.findIndex((entry) => entry.id === afterSectionId) : -1;
+	if (index < 0) return { ...layout, children: [...layout.children, section] };
+	const children = [...layout.children];
+	children.splice(index + 1, 0, section);
+	return { ...layout, children };
 }
 
 /** Whether what is selected is still there, which an undo can change under it. */
 export function selectionIn(layout: MailLayout, scope: Scope): boolean {
 	if (!scope) return true;
-	const section = layout.sections.find((entry) => entry.id === scope.sectionId);
+	const section = sections(layout).find((entry) => entry.id === scope.sectionId);
 	if (!section) return false;
-	return !scope.blockId || section.blocks.some((block) => block.id === scope.blockId);
+	return !scope.blockId || section.children.some((node) => node.id === scope.blockId);
 }
 
 /**
@@ -415,17 +482,18 @@ export function selectionIn(layout: MailLayout, scope: Scope): boolean {
  * section, a section among the sections.
  */
 export function siblingOf(layout: MailLayout, scope: NonNullable<Scope>, by: -1 | 1): NonNullable<Scope> {
-	const section = layout.sections.find((entry) => entry.id === scope.sectionId);
+	const section = sections(layout).find((entry) => entry.id === scope.sectionId);
 	if (!section) return scope;
 	if (scope.blockId) {
-		const index = section.blocks.findIndex((block) => block.id === scope.blockId);
-		const count = section.blocks.length;
-		const next = section.blocks[(index + by + count) % count];
+		const index = section.children.findIndex((node) => node.id === scope.blockId);
+		const count = section.children.length;
+		const next = section.children[(index + by + count) % count];
 		return next ? { sectionId: section.id, blockId: next.id } : scope;
 	}
-	const index = layout.sections.findIndex((entry) => entry.id === section.id);
-	const count = layout.sections.length;
-	const next = layout.sections[(index + by + count) % count];
+	const siblings = sections(layout);
+	const index = siblings.findIndex((entry) => entry.id === section.id);
+	const count = siblings.length;
+	const next = siblings[(index + by + count) % count];
 	return next ? { sectionId: next.id } : scope;
 }
 
@@ -459,8 +527,17 @@ function blockColors(block: MailBlock): (string | null)[] {
 	}
 }
 
-function sectionColors(section: MailSection): (string | null)[] {
-	return [...boxColors(section.box), ...section.blocks.flatMap(blockColors)];
+/** A node's own colours, and everything nested under it: a container's or a columns table's children too. */
+function nodeColors(node: MailNode): (string | null)[] {
+	if (isContainer(node)) return [...boxColors(node.box), ...node.children.flatMap(nodeColors)];
+	if (node.kind === "columns") {
+		return [...boxColors(node.box), ...node.rows.flatMap((row) => row.cells.flatMap((cell) => cell.children.flatMap(nodeColors)))];
+	}
+	return blockColors(node);
+}
+
+function sectionColors(section: MailContainer): (string | null)[] {
+	return nodeColors(section);
 }
 
 /**
@@ -469,18 +546,19 @@ function sectionColors(section: MailSection): (string | null)[] {
  * swatch, and in the order they first appear.
  */
 export function colorsIn(layout: MailLayout, scope: Scope): string[] {
-	const section = scope ? layout.sections.find((entry) => entry.id === scope.sectionId) : undefined;
-	const block = section && scope?.blockId ? section.blocks.find((entry) => entry.id === scope.blockId) : undefined;
-	const found = block
-		? blockColors(block)
-		: section
-			? sectionColors(section)
-			: [
-					layout.fill?.kind === "solid" ? layout.fill.color : null,
-					layout.fill?.kind === "gradient" ? layout.fill.from : null,
-					layout.fill?.kind === "gradient" ? layout.fill.to : null,
-					...layout.sections.flatMap(sectionColors),
-				];
+	const section = scope ? sections(layout).find((entry) => entry.id === scope.sectionId) : undefined;
+	const block = section && scope?.blockId ? section.children.find((entry) => entry.id === scope.blockId) : undefined;
+	const found =
+		block && isBlockNode(block)
+			? blockColors(block)
+			: section
+				? sectionColors(section)
+				: [
+						layout.fill?.kind === "solid" ? layout.fill.color : null,
+						layout.fill?.kind === "gradient" ? layout.fill.from : null,
+						layout.fill?.kind === "gradient" ? layout.fill.to : null,
+						...layout.children.flatMap(nodeColors),
+					];
 	return [...new Set(found.filter((color): color is string => Boolean(color)).map((color) => color.toLowerCase()))];
 }
 
@@ -535,12 +613,29 @@ function recolorBlock(block: MailBlock, from: string, to: string): MailBlock {
 	}
 }
 
-function recolorSection(section: MailSection, from: string, to: string): MailSection {
-	return {
-		...section,
-		box: recolorBox(section.box, from, to),
-		blocks: section.blocks.map((block) => recolorBlock(block, from, to)),
-	};
+function recolorNode(node: MailNode, from: string, to: string): MailNode {
+	if (isContainer(node)) {
+		return { ...node, box: recolorBox(node.box, from, to), children: node.children.map((child) => recolorNode(child, from, to)) };
+	}
+	if (node.kind === "columns") {
+		return {
+			...node,
+			box: recolorBox(node.box, from, to),
+			rows: node.rows.map((row) => ({
+				...row,
+				cells: row.cells.map((cell) => ({
+					...cell,
+					box: recolorBox(cell.box, from, to),
+					children: cell.children.map((child) => recolorNode(child, from, to)),
+				})),
+			})),
+		};
+	}
+	return recolorBlock(node, from, to);
+}
+
+function recolorSection(section: MailContainer, from: string, to: string): MailContainer {
+	return recolorNode(section, from, to) as MailContainer;
 }
 
 /**
@@ -556,13 +651,13 @@ export function replaceColor(layout: MailLayout, scope: Scope, from: string, to:
 				: layout.fill?.kind === "gradient"
 					? { ...layout.fill, from: swap(layout.fill.from, match, to), to: swap(layout.fill.to, match, to) }
 					: null;
-		return { ...layout, fill, sections: layout.sections.map((section) => recolorSection(section, match, to)) };
+		return { ...layout, fill, children: layout.children.map((node) => recolorNode(node, match, to)) };
 	}
 	return mapSection(layout, scope.sectionId, (section) =>
 		scope.blockId
 			? {
 					...section,
-					blocks: section.blocks.map((block) => (block.id === scope.blockId ? recolorBlock(block, match, to) : block)),
+					children: section.children.map((node) => (node.id === scope.blockId ? recolorNode(node, match, to) : node)),
 				}
 			: recolorSection(section, match, to),
 	);

@@ -11,6 +11,16 @@
  * the row a person writes by hand. It carries `happened_at` separately from
  * `created_at`, because a call remembered on Friday still belongs on Tuesday.
  *
+ * `client_status_changes` is the other table with nothing to read back: a
+ * client's `status_id` only ever holds where it is now, not where it has
+ * been. The clients service writes one row per change, folding several close
+ * together into one, and this file only reads what it wrote (services/clients.ts).
+ *
+ * A status entry resolves both ends to a label and a tone at read time,
+ * hidden or not, because a status removed from the picker still has to render
+ * correctly on the change that used it while it was live
+ * (.claude/rules/data.md section 9).
+ *
  * Sorting: `at` is an instant and every source produces one. A record that is a
  * date with no time also fills `on`, and the interface shows that instead of
  * converting, which is what keeps a deadline off the wrong day in April
@@ -21,6 +31,7 @@
  * between two that meant something. The audit log is its own screen.
  */
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import type {
 	ClientNote,
 	ClientNoteInput,
@@ -35,6 +46,7 @@ import { now } from "../db/columns";
 import {
 	calendarEvents,
 	clientNotes,
+	clientStatusChanges,
 	clients,
 	documents,
 	mailThreads,
@@ -202,7 +214,7 @@ export async function timeline(
 	requireClient(query.clientId, db);
 	const limit = Math.min(Math.max(query.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 	const wanted = new Set<ClientTimelineKind>(
-		query.kinds ?? ["note", "mail", "document", "event", "reminder", "project"],
+		query.kinds ?? ["note", "mail", "document", "event", "reminder", "project", "status"],
 	);
 	const entries: ClientTimelineEntry[] = [];
 
@@ -367,6 +379,41 @@ export async function timeline(
 		}
 	}
 
+	if (wanted.has("status")) {
+		const fromStatus = alias(referenceItems, "from_status");
+		const toStatus = alias(referenceItems, "to_status");
+		for (const row of db
+			.select({
+				id: clientStatusChanges.id,
+				changedAt: clientStatusChanges.changedAt,
+				fromLabel: fromStatus.label,
+				fromTone: fromStatus.tone,
+				toLabel: toStatus.label,
+				toTone: toStatus.tone,
+			})
+			.from(clientStatusChanges)
+			.leftJoin(fromStatus, eq(fromStatus.id, clientStatusChanges.fromStatusId))
+			.leftJoin(toStatus, eq(toStatus.id, clientStatusChanges.toStatusId))
+			.where(and(eq(clientStatusChanges.clientId, query.clientId), isNull(clientStatusChanges.deletedAt)))
+			.orderBy(desc(clientStatusChanges.changedAt), desc(clientStatusChanges.id))
+			.limit(limit)
+			.all()) {
+			const from = row.fromLabel ? { label: row.fromLabel, tone: row.fromTone } : null;
+			const to = row.toLabel ? { label: row.toLabel, tone: row.toTone } : null;
+			entries.push({
+				id: `status:${row.id}`,
+				kind: "status",
+				at: row.changedAt,
+				on: null,
+				title: `Status changed from ${from?.label ?? "No status"} to ${to?.label ?? "No status"}`,
+				detail: null,
+				entityId: row.id,
+				variant: null,
+				statusChange: { from, to },
+			});
+		}
+	}
+
 	const before = query.before;
 	return entries
 		.filter((entry) => (before ? entry.at < before : true))
@@ -379,10 +426,10 @@ export async function timeline(
 /**
  * How many entries a client has, per kind, for the tab counts.
  *
- * Six explicit queries rather than one helper taking a table, because the six
- * table types do not unify and the helper that made them fit only did so by
- * widening to any, which turns a renamed column into a runtime surprise instead
- * of a typecheck failure. Repetition is the cheaper of the two.
+ * Seven explicit queries rather than one helper taking a table, because the
+ * seven table types do not unify and the helper that made them fit only did so
+ * by widening to any, which turns a renamed column into a runtime surprise
+ * instead of a typecheck failure. Repetition is the cheaper of the two.
  */
 export async function timelineCounts(
 	clientId: string,
@@ -432,6 +479,13 @@ export async function timelineCounts(
 				.select({ n: total })
 				.from(projects)
 				.where(and(eq(projects.clientId, clientId), isNull(projects.deletedAt)))
+				.get(),
+		),
+		status: n(
+			db
+				.select({ n: total })
+				.from(clientStatusChanges)
+				.where(and(eq(clientStatusChanges.clientId, clientId), isNull(clientStatusChanges.deletedAt)))
 				.get(),
 		),
 	};

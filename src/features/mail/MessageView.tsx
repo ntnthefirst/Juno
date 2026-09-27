@@ -1,4 +1,9 @@
-import { useEffect, useState } from "react";
+import {
+	useEffect,
+	useRef,
+	useState,
+	type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
 	MAIL_FRAME_ORIGIN,
 	type MailMessage,
@@ -22,6 +27,48 @@ type MessageViewProps = {
 };
 
 /**
+ * The frame's height, remembered per machine rather than per message: it is a
+ * habit about how somebody reads mail, not a property of one message. A
+ * sandboxed frame cannot report its content height (decision 20), so the
+ * height is a preference, not a measurement.
+ *
+ * The minimum keeps a short message from collapsing to a sliver. The maximum
+ * is a generous, fixed cap rather than the scroll container's available
+ * height: a thread opens several of these frames at once, each resizable on
+ * its own, so there is no single "available height" belonging to one of them,
+ * and a fixed cap is enough to stop a runaway drag or a held arrow key
+ * without adding a measurement nobody asked for.
+ */
+const MIN_HEIGHT = 200;
+const MAX_HEIGHT = 4000;
+const DEFAULT_HEIGHT = 520;
+const HEIGHT_STEP = 40;
+const HEIGHT_KEY = "juno.mail.readerHeight";
+
+function clampHeight(value: number): number {
+	return Math.min(Math.max(value, MIN_HEIGHT), MAX_HEIGHT);
+}
+
+function readStoredHeight(): number {
+	try {
+		const raw = localStorage.getItem(HEIGHT_KEY);
+		const parsed = raw === null ? NaN : Number(raw);
+		return Number.isFinite(parsed) ? clampHeight(parsed) : DEFAULT_HEIGHT;
+	} catch {
+		return DEFAULT_HEIGHT;
+	}
+}
+
+function storeHeight(value: number): void {
+	try {
+		localStorage.setItem(HEIGHT_KEY, String(value));
+	} catch {
+		// A private window or blocked site data. The frame still resizes, it
+		// just forgets the choice on the next launch.
+	}
+}
+
+/**
  * One message: a header line, then the body once opened. No card, no border
  * around the whole thing. Messages in a thread are told apart by a hairline
  * rule, the way a document separates paragraphs rather than boxing each one.
@@ -37,7 +84,9 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 	const [body, setBody] = useState<MailMessageBody | null>(null);
 	const [bodyError, setBodyError] = useState<string | null>(null);
 	const [remoteImages, setRemoteImages] = useState(false);
-	const [tall, setTall] = useState(false);
+	const [height, setHeight] = useState(readStoredHeight);
+	const [resizing, setResizing] = useState(false);
+	const drag = useRef<{ y: number; from: number } | null>(null);
 	const menu = useContextMenu();
 
 	useEffect(() => {
@@ -107,6 +156,35 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 		} catch {
 			onNotice("Could not copy the address.");
 		}
+	}
+
+	/** Sets and remembers a new height, from the keyboard or a double-click. */
+	function commitHeight(next: number) {
+		const clamped = clampHeight(next);
+		setHeight(clamped);
+		storeHeight(clamped);
+	}
+
+	function startResize(event: ReactPointerEvent<HTMLDivElement>) {
+		drag.current = { y: event.clientY, from: height };
+		setResizing(true);
+		event.currentTarget.setPointerCapture(event.pointerId);
+	}
+
+	function moveResize(event: ReactPointerEvent<HTMLDivElement>) {
+		const start = drag.current;
+		if (!start) return;
+		setHeight(clampHeight(start.from + (event.clientY - start.y)));
+	}
+
+	function endResize(event: ReactPointerEvent<HTMLDivElement>) {
+		if (!drag.current) return;
+		drag.current = null;
+		setResizing(false);
+		event.currentTarget.releasePointerCapture(event.pointerId);
+		// The last `moveResize` already committed the clamped value to state;
+		// this is the point to remember it, not every point along the drag.
+		storeHeight(height);
 	}
 
 	const from = message.from ? displayName(message.from) : "(unknown sender)";
@@ -253,13 +331,40 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 								src={frameSrc}
 								sandbox=""
 								referrerPolicy="no-referrer"
-								className="block w-full border-t border-[var(--line)] bg-[var(--surface)]"
-								style={{ height: tall ? 1600 : 520 }}
+								className={`block w-full border-t border-[var(--line)] bg-[var(--surface)] ${resizing ? "pointer-events-none" : ""}`}
+								style={{ height }}
 							/>
-							<div className="flex items-center justify-end border-t border-[var(--line)] py-2">
-								<Button size="dense" onClick={() => setTall((current) => !current)}>
-									{tall ? "Shorter" : "Taller"}
-								</Button>
+							{/*
+								A sandboxed frame swallows pointer events, which is why the
+								iframe above loses them for the length of the drag: without
+								that, the pointer crossing into the frame would end the resize
+								early. Pointer capture on this element keeps the drag going
+								regardless.
+							*/}
+							<div
+								role="separator"
+								aria-orientation="horizontal"
+								aria-valuenow={height}
+								aria-valuemin={MIN_HEIGHT}
+								aria-valuemax={MAX_HEIGHT}
+								aria-label="Resize message"
+								tabIndex={0}
+								onPointerDown={startResize}
+								onPointerMove={moveResize}
+								onPointerUp={endResize}
+								onPointerCancel={endResize}
+								onDoubleClick={() => commitHeight(DEFAULT_HEIGHT)}
+								onKeyDown={(event) => {
+									if (event.key === "ArrowDown") commitHeight(height + HEIGHT_STEP);
+									else if (event.key === "ArrowUp") commitHeight(height - HEIGHT_STEP);
+									else if (event.key === "Home") commitHeight(MIN_HEIGHT);
+									else if (event.key === "End") commitHeight(MAX_HEIGHT);
+									else return;
+									event.preventDefault();
+								}}
+								className="flex h-[12px] w-full flex-none cursor-row-resize items-center justify-center bg-[var(--surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+							>
+								<span className="h-[3px] w-[48px] rounded-[var(--radius-sm)] bg-[var(--line-strong)]" />
 							</div>
 						</>
 					)}

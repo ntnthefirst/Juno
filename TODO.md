@@ -68,13 +68,6 @@ Decided and ready to build, roughly smallest first.
   - Changes within 10 minutes of each other fold into one entry, from the
     first status to the last. If the last is the same as the first, the entry
     is removed, because nothing changed.
-- **Audit log purge.** The log under Agent gets one row per write and is never
-  emptied. Rows older than **6 months** are purged automatically. The client
-  timeline is not built from the log (it reads notes, documents, mail and the
-  rest directly), so nothing on a timeline disappears. A row an agent request
-  still points at (`actionId` on an open request) stays until that request is
-  closed. The purge is a service function run on launch, logged, and not an MCP
-  tool.
 - **The reader frame has a fixed height** with a taller and shorter toggle,
   because a sandboxed frame cannot report its content height. A resize handle
   would be nicer.

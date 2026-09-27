@@ -496,6 +496,16 @@ a step needing approval stops the run and waits for a person, on a schedule as
 much as by hand. That is what keeps "an agent may prepare a send and may never
 fire it" true when the caller is a timer.
 
+The audit table this gate writes to is not kept forever. Rows older than six
+months are purged on launch (`purgeOldEvents` in
+`electron/main/services/agent-audit.ts`), except a row a still-open action
+still points at, which survives regardless of age until that action closes.
+This is the one hard delete in the app rather than a soft one
+(.claude/rules/data.md section 6): the log is not a record anything else is
+built from (the client timeline reads notes, documents and mail directly), so
+retention is the owner's call and runs unattended, with no IPC channel and no
+MCP tool.
+
 `@modelcontextprotocol/sdk` is used in the bridge only, as planned. It
 costs about 19 MB in the installer through dependencies the stdio path never
 loads (express, hono, jose and the rest are pulled in by other transports).

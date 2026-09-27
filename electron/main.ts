@@ -17,6 +17,7 @@ import { backupsDir, databasePath, documentsDir, mailDir, projectsDir, userDataD
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import { mcpStatus } from "./main/ipc/agent";
+import * as agentAudit from "./main/services/agent-audit";
 import { configureAgentInstall } from "./main/services/agent-install";
 import { startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
@@ -140,6 +141,18 @@ if (!app.requestSingleInstanceLock()) {
 		const reminderSeed = await ensureRemindersSeeded(db);
 		if (reminderSeed.created) {
 			console.log(`Reminders: ${reminderSeed.created} created`);
+		}
+
+		// Housekeeping on the log, not on data anything is built from. A failure
+		// here is a launch with a longer log, not a broken one, so it never stops
+		// boot.
+		try {
+			const purged = agentAudit.purgeOldEvents(db);
+			if (purged > 0) {
+				console.log(`Audit log: ${purged} row(s) purged`);
+			}
+		} catch (cause) {
+			console.error("Audit log purge failed:", cause instanceof Error ? cause.message : cause);
 		}
 
 		// Restoring a backup replaces the live file, which cannot happen while the

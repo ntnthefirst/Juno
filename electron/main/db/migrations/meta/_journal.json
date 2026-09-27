@@ -99,6 +99,13 @@
       "when": 1790320916773,
       "tag": "0013_mail_template_canvas",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790471120605,
+      "tag": "0014_client_status_changes",
+      "breakpoints": true
     }
   ]
 }

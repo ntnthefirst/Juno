@@ -56,18 +56,6 @@ phase 6's done-when in PLAN.md.
 
 Decided and ready to build, roughly smallest first.
 
-- **Client detail quick status.** The status tag moves beside the client name
-  in the card header of `src/features/clients/ClientDetail.tsx` (it sits under
-  the name today) and becomes a button that opens a menu of the statuses. A
-  client with no status shows "No status" in the same place, so there is
-  always something to click. Picking one updates the client through the
-  service, so the agent can do the same.
-  - It writes a timeline entry that reads "Status changed from Lead to
-    Active". Only the two status names are coloured, each in its own status
-    colour as plain text: no tag, no box, no background.
-  - Changes within 10 minutes of each other fold into one entry, from the
-    first status to the last. If the last is the same as the first, the entry
-    is removed, because nothing changed.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.

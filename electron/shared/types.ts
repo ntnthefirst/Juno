@@ -812,6 +812,24 @@ export type MailTextDecoration = "none" | "underline" | "strike";
 export type MailTextCase = "none" | "upper" | "lower" | "title";
 
 /**
+ * Every element the Containers group in the toolbar can add. Each lays out
+ * what is in it the way a section always has: flow, gap, padding, alignment,
+ * breakpoints. A version 1 section becomes a `section` container; a `div`
+ * added from the toolbar stays a `div`. Every other tag is written as itself.
+ */
+export type MailContainerTag = "section" | "div" | "header" | "footer" | "main" | "article" | "aside" | "nav";
+
+/** Every level a heading's own tag can be. */
+export type MailHeadingTag = "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+
+/**
+ * Every tag the Text group can add, bar heading, which has its own list. `ul`
+ * and `ol` are a list: `html` holds its `<li>` items, sanitised for those tags
+ * and nothing else.
+ */
+export type MailTextTag = "p" | "blockquote" | "pre" | "address" | "span" | "ul" | "ol";
+
+/**
  * How a section arranges what is in it. Two choices, and there is deliberately
  * no third: nothing in a mail template is positioned absolutely, so a block is
  * placed by the rules of the section holding it or it is not placed at all.
@@ -989,8 +1007,8 @@ export interface MailBlockCommon {
 
 export type MailBlock = MailBlockCommon &
 	(
-		| { kind: "text"; html: string; text: MailTextStyle; box: MailBoxStyle }
-		| { kind: "heading"; level: 1 | 2 | 3; content: string; text: MailTextStyle; box: MailBoxStyle }
+		| { kind: "text"; tag: MailTextTag; html: string; text: MailTextStyle; box: MailBoxStyle }
+		| { kind: "heading"; tag: MailHeadingTag; content: string; text: MailTextStyle; box: MailBoxStyle }
 		| {
 				kind: "button";
 				label: string;
@@ -1009,6 +1027,8 @@ export type MailBlock = MailBlockCommon &
 				/** Pixels, or null for the picture's own width. */
 				width: number | null;
 				align: MailTextAlign;
+				/** A picture inside a link, compiled as `<a href><img></a>`. Null is a plain picture. */
+				href: string | null;
 				box: MailBoxStyle;
 		  }
 		| { kind: "divider"; color: MailColor; thickness: number; box: MailBoxStyle }
@@ -1024,22 +1044,70 @@ export type MailBlock = MailBlockCommon &
 		| { kind: "html"; html: string; css: string }
 	);
 
-export interface MailSection {
+/**
+ * A container: what a section always was, generalised to every tag the
+ * Containers group offers and to holding other containers and columns as well
+ * as blocks. A version 1 section is a container with `tag: "section"`,
+ * `grow: 0`, and its blocks as `children`.
+ */
+export interface MailContainer {
 	id: string;
+	kind: "container";
+	tag: MailContainerTag;
 	/** Left out of the message and kept on the canvas, like a hidden layer. */
 	hidden: boolean;
-	/** Shown on the section rail. Never rendered into the message. */
+	/** Shown in the layers. Never rendered into the message. */
 	name: string;
 	/**
-	 * Where a section narrower than the frame sits across it: at the start, in
-	 * the middle or at the end, written as auto margins. "auto" and "stretch"
-	 * are the start. A section that fills the frame has nowhere to go.
+	 * Where a container narrower than its parent sits across it: at the start,
+	 * in the middle or at the end, written as auto margins. "auto" and
+	 * "stretch" are the start. One that fills its parent has nowhere to go.
 	 */
 	alignSelf: MailSelfAlign;
+	/** Flex grow inside its parent, like a block's. 0 at the top level. */
+	grow: number;
 	layout: MailSectionLayout;
 	box: MailBoxStyle;
-	blocks: MailBlock[];
+	children: MailNode[];
 }
+
+/**
+ * One cell of a columns table. Widths are a percentage of the table, or null
+ * to share what none of the others claimed.
+ */
+export interface MailColumnsCell {
+	id: string;
+	/** Percent of the table's width, 1 to 100, or null to share what is left. */
+	width: number | null;
+	verticalAlign: MailVerticalAlign;
+	box: MailBoxStyle;
+	children: MailNode[];
+}
+
+export interface MailColumnsRow {
+	id: string;
+	cells: MailColumnsCell[];
+}
+
+/**
+ * Columns: a table laid out for mail, the one layout that stays side by side
+ * in Outlook on Windows ("the Outlook problem", docs/editors.md).
+ */
+export interface MailColumns {
+	id: string;
+	kind: "columns";
+	hidden: boolean;
+	name: string;
+	alignSelf: MailSelfAlign;
+	grow: number;
+	/** Pixels between cells, compiled as cell padding: `border-spacing` is unreliable in mail. */
+	gap: number;
+	box: MailBoxStyle;
+	rows: MailColumnsRow[];
+}
+
+/** Anything that can sit in the tree: a container, a columns table, or a leaf block. */
+export type MailNode = MailContainer | MailColumns | MailBlock;
 
 /**
  * What a breakpoint changes about one block. Only how it looks and where it
@@ -1065,10 +1133,12 @@ export interface MailBlockOverride {
 	height?: number;
 }
 
-/** What a breakpoint changes about one section. */
+/** What a breakpoint changes about one container, columns table or cell. */
 export interface MailSectionOverride {
 	hidden?: boolean;
 	alignSelf?: MailSelfAlign;
+	/** A container's or a columns table's share of the room in its own parent. */
+	grow?: number;
 	layout?: MailSectionLayout;
 	box?: Partial<MailBoxStyle>;
 }
@@ -1088,6 +1158,12 @@ export interface MailBreakpoint {
 	name: string;
 	/** The widest screen, in pixels, this applies to. */
 	maxWidth: number;
+	/**
+	 * Keyed by id, and the name stayed even though it now covers every
+	 * container, columns table and cell, not only a top-level section: the
+	 * stored shape a breakpoint already has, and every template that has one
+	 * keeps working with no data move.
+	 */
 	sections: Record<string, MailSectionOverride>;
 	blocks: Record<string, MailBlockOverride>;
 }
@@ -1163,9 +1239,12 @@ export interface MailFont {
  * `minHeight` is the canvas the author draws on, not a limit on the message.
  *
  * `version` is the shape of this object, not the template's version number.
+ * Version 1 was one level, sections holding blocks; version 2 is a tree, and
+ * `normaliseLayout` in services/mail-layout.ts reads a version 1 layout into
+ * one, each section becoming a `section` container holding its blocks.
  */
 export interface MailLayout {
-	version: 1;
+	version: 2;
 	width: number;
 	widthMode: "fill" | "fixed";
 	minHeight: number;
@@ -1173,7 +1252,8 @@ export interface MailLayout {
 	/** The typefaces the message links. Every text block can name one of these. */
 	fonts: MailFont[];
 	customCss: string | null;
-	sections: MailSection[];
+	/** The frame's children, top to bottom. Any node may sit at the top level. */
+	children: MailNode[];
 	/** Narrower widths the message changes at. The default is not in the list. */
 	breakpoints: MailBreakpoint[];
 }

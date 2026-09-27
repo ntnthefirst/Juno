@@ -13,7 +13,7 @@ import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { documentTemplates } from "../db/schema";
 import { DOCUMENT_TEMPLATES, DOCUMENT_TEMPLATE_SEED_VERSION } from "./document-templates-seed";
-import { compileLayout, parseLayout, serialiseLayout } from "./document-layout";
+import { compileLayout, emptyLayout, parseLayout, serialiseLayout } from "./document-layout";
 import { parseInputs, serialiseInputs, validateInputs } from "./template-inputs";
 import { placeholdersIn, render, type RenderResult, type TemplateContext } from "./template-render";
 
@@ -55,7 +55,8 @@ export interface TemplateInput {
 	key?: string;
 	name: string;
 	description?: string | null;
-	bodyHtml: string;
+	/** Left out, a fresh template gets one empty page, which the editor treats as blank. */
+	bodyHtml?: string;
 	language?: string;
 	/** Supplying a layout compiles the body from it and ignores `bodyHtml`. */
 	layout?: DocumentLayout | null;
@@ -128,15 +129,31 @@ export async function getByKey(key: string, db: Db = getDb()): Promise<DocumentT
 	return row ? toTemplate(row) : null;
 }
 
+/**
+ * Two templates may share a name: a second variant of the same contract is
+ * ordinary. The key is derived from the name, so a repeat counts up (`nda_2`)
+ * rather than refusing to create the second one.
+ */
+async function uniqueKey(base: string, db: Db): Promise<string> {
+	const slug = base.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+	if (!(await getByKey(slug, db))) return slug;
+	let n = 2;
+	while (await getByKey(`${slug}_${n}`, db)) n++;
+	return `${slug}_${n}`;
+}
+
 export async function create(input: TemplateInput, db: Db = getDb()): Promise<DocumentTemplate> {
 	const name = input.name.trim();
 	if (!name) throw new Error("A template needs a name.");
-	const body = bodyFor(input.layout, input.bodyHtml) ?? "";
-	if (!input.layout && !body.trim()) throw new Error("A template needs a body.");
+	// A caller with nothing to say yet, the plus button beside the heading or an
+	// agent's templates.create with a name only, gets the same blank page the
+	// editor already treats as an empty template rather than a body it has to
+	// invent.
+	const layout = input.layout ?? (input.bodyHtml?.trim() ? undefined : emptyLayout());
+	const body = bodyFor(layout, input.bodyHtml) ?? "";
 	if (input.inputs) validateInputs(input.inputs);
 
-	const key = (input.key ?? name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
-	if (await getByKey(key, db)) throw new Error(`A template with the key "${key}" already exists.`);
+	const key = await uniqueKey(input.key ?? name, db);
 
 	const [row] = db
 		.insert(documentTemplates)
@@ -146,7 +163,7 @@ export async function create(input: TemplateInput, db: Db = getDb()): Promise<Do
 			description: input.description ?? null,
 			language: input.language ?? "nl-BE",
 			bodyHtml: body,
-			layoutJson: input.layout ? serialiseLayout(input.layout) : null,
+			layoutJson: layout ? serialiseLayout(layout) : null,
 			inputsJson: serialiseInputs(input.inputs ?? []),
 			isSystem: false,
 			// A template someone wrote themselves is still unreviewed until they say

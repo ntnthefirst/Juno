@@ -3,6 +3,7 @@ import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import type { DocumentTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { Button } from "../../components/Button";
+import { InlineAdd } from "../../components/InlineAdd";
 import { messageOf } from "../../lib/errors";
 import { TemplateEditor } from "./TemplateEditor";
 import { UseDocumentTemplateScreen } from "./UseDocumentTemplateScreen";
@@ -21,6 +22,8 @@ type View =
 export function DocumentTemplatesScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [view, setView] = useState<View>({ status: "list" });
+	const [creating, setCreating] = useState(false);
+	const [createError, setCreateError] = useState<string | null>(null);
 
 	const fetchRows = useCallback(() => window.juno.templates.list(), []);
 
@@ -43,6 +46,29 @@ export function DocumentTemplatesScreen() {
 			.then((rows) => setLoad({ status: "ready", rows }))
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, [fetchRows]);
+
+	/**
+	 * A new template, from the one thing worth asking for before it exists.
+	 *
+	 * The body is left out: the service defaults it to one empty page, the same
+	 * one the editor already treats as blank, which is where the rest gets
+	 * filled in. The list is reloaded before the view switches, so the row the
+	 * editor opens on is already there to find.
+	 */
+	async function create(name: string): Promise<void> {
+		setCreateError(null);
+		setCreating(true);
+		try {
+			const created = await window.juno.templates.create({ name });
+			const rows = await fetchRows();
+			setLoad({ status: "ready", rows });
+			setView({ status: "edit", id: created.id });
+		} catch (cause: unknown) {
+			setCreateError(messageOf(cause));
+		} finally {
+			setCreating(false);
+		}
+	}
 
 	const selected = view.status !== "list" && load.status === "ready"
 		? load.rows.find((row) => row.id === view.id) ?? null
@@ -132,7 +158,7 @@ export function DocumentTemplatesScreen() {
 	return (
 		<div className="flex h-full flex-col p-8">
 			<div className="mx-auto mb-6 w-full max-w-[var(--content-width)]">
-				<div className="flex items-baseline gap-3">
+				<div className="flex items-center gap-3">
 					<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
 						Document templates
 					</h1>
@@ -141,12 +167,28 @@ export function DocumentTemplatesScreen() {
 							{load.rows.length} {load.rows.length === 1 ? "template" : "templates"}
 						</span>
 					) : null}
+					<span className="ml-auto" />
+					<InlineAdd
+						label="New document template"
+						placeholder="Template name"
+						busy={creating}
+						onSubmit={(name) => void create(name)}
+					/>
 				</div>
 				<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 					The contract texts that get rendered into the PDFs you send clients. The texts that ship
 					are invented, so read one, correct it, and mark it as reviewed before anything generated
 					from it goes out.
 				</p>
+				{createError ? (
+					<p
+						role="alert"
+						data-selectable
+						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					>
+						{createError}
+					</p>
+				) : null}
 			</div>
 
 			<div className="mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">

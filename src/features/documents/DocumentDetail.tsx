@@ -373,7 +373,7 @@ export function DocumentDetail({
 						clientId: record.clientId,
 						projectId: record.projectId,
 						documentIds: [record.id],
-						templateKey: "contract_cover",
+						subject: record.title,
 					}}
 					onClose={() => setSending(false)}
 					onDone={(_message, queued) => {

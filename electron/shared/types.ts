@@ -58,7 +58,14 @@ export interface ClientNotePatch {
 	body?: string | null;
 }
 
-export type ClientTimelineKind = "note" | "mail" | "document" | "event" | "reminder" | "project";
+export type ClientTimelineKind =
+	| "note"
+	| "mail"
+	| "document"
+	| "event"
+	| "reminder"
+	| "project"
+	| "status";
 
 /**
  * One line in a client's history, whichever table it came from.
@@ -85,6 +92,24 @@ export interface ClientTimelineEntry {
 	 * and nothing else, so a value nothing recognises is safe to ignore.
 	 */
 	variant: string | null;
+	/**
+	 * Set only on a "status" entry: both ends of the change, resolved to a
+	 * label and a tone at read time, hidden or not (.claude/rules/data.md
+	 * section 9). Null is "no status", which is a status a client can move to
+	 * or from. `title` already spells the change out in words, for anything
+	 * that reads the timeline as plain text; this is what lets the interface
+	 * colour just the two names.
+	 */
+	statusChange?: {
+		from: ClientTimelineStatusName | null;
+		to: ClientTimelineStatusName | null;
+	};
+}
+
+export interface ClientTimelineStatusName {
+	label: string;
+	/** A token name from brand/tokens.css, never a hex value. See StatusBadge. */
+	tone: string | null;
 }
 
 export interface ClientTimelineQuery {
@@ -1264,7 +1289,8 @@ export interface DocumentTemplate extends Standard {
 
 export type DocumentTemplateInput = {
 	name: string;
-	bodyHtml: string;
+	/** Left out, a fresh template gets one empty page. */
+	bodyHtml?: string;
 	key?: string;
 	description?: string | null;
 	language?: string;

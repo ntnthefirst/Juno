@@ -1,4 +1,4 @@
-import { Icon, type IconName } from "../../components/Icon";
+import { Icon, type IconName } from "./Icon";
 
 type IconActionProps = {
 	icon: IconName;

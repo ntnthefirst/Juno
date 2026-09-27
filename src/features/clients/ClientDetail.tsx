@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Client,
 	ClientAddress,
@@ -20,6 +20,7 @@ import { Icon, type IconName } from "../../components/Icon";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
 
 /** A non-breaking space, so an amount never wraps between its thousands. */
@@ -98,7 +99,18 @@ function iconForEntry(entry: ClientTimelineEntry): IconName {
 	if (entry.kind === "document") return "documents";
 	if (entry.kind === "event") return "calendar";
 	if (entry.kind === "reminder") return "reminders";
+	if (entry.kind === "status") return "move-right";
 	return "projects";
+}
+
+type StatusNameProps = {
+	name: { label: string; tone: string | null } | null;
+};
+
+/** A status name in a "Status changed from X to Y" line: its own colour, no
+ *  tag, no box, no background. "No status" reads in the muted ink. */
+function StatusName({ name }: StatusNameProps) {
+	return <span className={statusTextClass(name?.tone ?? null)}>{name?.label ?? "No status"}</span>;
 }
 
 /** First and last initial, for the card's monogram. Never a photo. */
@@ -122,6 +134,8 @@ function messageOf(error: unknown): string {
 type Detail = {
 	client: Client;
 	status: ReferenceItem | null;
+	/** Every status still offered in the picker, in the owner's own order. */
+	statusOptions: ReferenceItem[];
 	emails: ClientEmail[];
 	phones: ClientPhone[];
 	addresses: ClientAddress[];
@@ -214,6 +228,7 @@ export function ClientDetail({
 		return {
 			client,
 			status,
+			statusOptions: statusSet?.items.filter((item) => item.hiddenAt === null) ?? [],
 			emails,
 			phones,
 			addresses,
@@ -273,6 +288,15 @@ export function ClientDetail({
 			setLoad({ status: "error", message: messageOf(cause) });
 		} finally {
 			setBusy(false);
+		}
+	}
+
+	async function changeStatus(statusId: string | null) {
+		try {
+			await window.juno.clients.update(clientId, { statusId });
+			refresh();
+		} catch (cause: unknown) {
+			setLoad({ status: "error", message: messageOf(cause) });
 		}
 	}
 
@@ -376,6 +400,7 @@ export function ClientDetail({
 	const {
 		client,
 		status,
+		statusOptions,
 		emails,
 		phones,
 		addresses,
@@ -427,18 +452,19 @@ export function ClientDetail({
 
 					<div className="min-w-0 flex-1">
 						<div className="flex items-start justify-between gap-3">
-							<div className="min-w-0">
+							<div className="flex min-w-0 items-center gap-2">
 								<h2
 									data-selectable
 									className="truncate text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]"
 								>
 									{client.name}
 								</h2>
-								{status ? (
-									<div className="mt-1.5">
-										<StatusBadge label={status.label} tone={status.tone} />
-									</div>
-								) : null}
+								<StatusMenuButton
+									clientName={client.name}
+									status={status}
+									options={statusOptions}
+									onChange={(statusId) => void changeStatus(statusId)}
+								/>
 							</div>
 							<MenuButton ariaLabel={`${client.name} actions`} items={cardMenuItems} />
 						</div>
@@ -612,6 +638,80 @@ export function ClientDetail({
 	);
 }
 
+type StatusMenuButtonProps = {
+	clientName: string;
+	status: ReferenceItem | null;
+	/** The visible statuses, in the owner's own order. */
+	options: ReferenceItem[];
+	onChange: (statusId: string | null) => void;
+};
+
+/**
+ * The status beside the client's name: a badge, or "No status" when there
+ * isn't one, either way a button that opens a menu of every visible status
+ * plus "No status" to clear it. There is always something to click.
+ */
+function StatusMenuButton({ clientName, status, options, onChange }: StatusMenuButtonProps) {
+	const trigger = useRef<HTMLButtonElement>(null);
+	const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+
+	function open() {
+		const box = trigger.current?.getBoundingClientRect();
+		if (!box) return;
+		setAt({ x: box.left, y: box.bottom + 4 });
+	}
+
+	const close = () => setAt(null);
+
+	const items: MenuItem[] = [
+		{
+			id: "none",
+			label: "No status",
+			icon: status === null ? "check" : undefined,
+			onSelect: () => onChange(null),
+		},
+		...options.map((item) => ({
+			id: item.id,
+			label: item.label,
+			icon: status?.id === item.id ? ("check" as IconName) : undefined,
+			separatorBefore: item === options[0],
+			onSelect: () => onChange(item.id),
+		})),
+	];
+
+	return (
+		<>
+			<button
+				ref={trigger}
+				type="button"
+				aria-label={`Change status for ${clientName}`}
+				aria-haspopup="menu"
+				aria-expanded={at !== null}
+				onClick={open}
+				// Padded out to the 32px dense hit target without pushing the badge
+				// away from the name: the margin gives the padding back.
+				className="-mx-1.5 -my-1 flex h-[32px] shrink-0 items-center rounded-[var(--radius-sm)] px-1.5 hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+			>
+				{status ? (
+					<StatusBadge label={status.label} tone={status.tone} />
+				) : (
+					<span className="inline-block text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+						No status
+					</span>
+				)}
+			</button>
+			{at ? (
+				<ContextMenu
+					at={at}
+					items={items}
+					ariaLabel={`Change status for ${clientName}`}
+					onClose={close}
+				/>
+			) : null}
+		</>
+	);
+}
+
 type EmailsSectionProps = {
 	emails: ClientEmail[];
 	onAdd: () => void;
@@ -625,7 +725,7 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Emails</h3>
-				<Button size="dense" onClick={onAdd}>
+				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add email
 				</Button>
 			</div>
@@ -658,7 +758,7 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 										Make primary
 									</Button>
 								)}
-								<Button size="dense" onClick={() => onEdit(email)}>
+								<Button size="dense" data-opens-panel onClick={() => onEdit(email)}>
 									Edit
 								</Button>
 								<Button size="dense" variant="danger" onClick={() => onRemove(email)}>
@@ -686,7 +786,7 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Phone numbers</h3>
-				<Button size="dense" onClick={onAdd}>
+				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add phone number
 				</Button>
 			</div>
@@ -719,7 +819,7 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 										Make primary
 									</Button>
 								)}
-								<Button size="dense" onClick={() => onEdit(phone)}>
+								<Button size="dense" data-opens-panel onClick={() => onEdit(phone)}>
 									Edit
 								</Button>
 								<Button size="dense" variant="danger" onClick={() => onRemove(phone)}>
@@ -747,7 +847,7 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Addresses</h3>
-				<Button size="dense" onClick={onAdd}>
+				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add address
 				</Button>
 			</div>
@@ -786,7 +886,7 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 											Make primary
 										</Button>
 									)}
-									<Button size="dense" onClick={() => onEdit(address)}>
+									<Button size="dense" data-opens-panel onClick={() => onEdit(address)}>
 										Edit
 									</Button>
 									<Button size="dense" variant="danger" onClick={() => onRemove(address, line)}>
@@ -980,7 +1080,7 @@ function TimelineTab({
 		<div>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Timeline</h3>
-				<span className="flex gap-2">
+				<span data-opens-panel className="flex gap-2">
 					<Button size="dense" onClick={onLogCall}>
 						Log a call
 					</Button>
@@ -1029,7 +1129,14 @@ function TimelineTab({
 													data-selectable
 													className="block truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]"
 												>
-													{entry.title}
+													{entry.kind === "status" ? (
+														<>
+															Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
+															<StatusName name={entry.statusChange?.to ?? null} />
+														</>
+													) : (
+														entry.title
+													)}
 												</span>
 												{entry.detail ? (
 													<span

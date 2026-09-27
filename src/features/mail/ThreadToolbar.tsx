@@ -1,5 +1,6 @@
 import type { IconName } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
+import { SelectAllButton } from "../../components/SelectAllButton";
 import type { MailFilters } from "./mail-filters";
 import { MailSearchBar } from "./MailSearchBar";
 import type { ThreadAction } from "./ThreadList";
@@ -69,31 +70,20 @@ export function ThreadToolbar({
 
 	return (
 		<div className="flex flex-wrap items-center gap-2 px-4 pt-6 pb-3">
-			<label className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)] hover:bg-[var(--hover)] has-[:disabled]:hover:bg-transparent">
-				<input
-					type="checkbox"
-					checked={allSelected}
-					disabled={visibleIds.length === 0}
-					ref={(element) => {
-						// Some of the page, but not all of it, is the third state a
-						// checkbox only has through the DOM.
-						if (element) element.indeterminate = someSelected;
-					}}
-					onChange={() => (hasSelection ? onClearSelection() : onSelectAll())}
-					aria-label={hasSelection ? "Clear selection" : "Select all"}
-					title={hasSelection ? "Clear selection" : "Select all"}
-					className="h-3.5 w-3.5 rounded-[3px] border-[var(--line-strong)] accent-[var(--accent)] disabled:opacity-40"
-				/>
-			</label>
+			<SelectAllButton
+				checked={allSelected}
+				indeterminate={someSelected}
+				disabled={visibleIds.length === 0}
+				onSelectAll={onSelectAll}
+				onClearSelection={onClearSelection}
+			/>
 			{hasSelection ? (
 				<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
 					{selectedIds.length} selected
 				</span>
 			) : null}
 
-			<div className="min-w-[200px] max-w-[360px] flex-1">
-				<MailSearchBar search={search} onSearch={onSearch} filters={filters} onFilters={onFilters} />
-			</div>
+			<MailSearchBar search={search} onSearch={onSearch} filters={filters} onFilters={onFilters} />
 
 			{hasSelection ? (
 				<div className="ml-auto flex items-center gap-1">

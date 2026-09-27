@@ -1016,6 +1016,39 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									await new Promise((r) => setTimeout(r, 400));
 								}
+								if (screen === "Documents") {
+									// The search bar and the selection above the table: typed text
+									// narrows the rows, select-all ticks every one left, and both are
+									// cleared again so the screenshot below still shows the list at
+									// rest with everything in it.
+									const searched = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											const search = document.querySelector('input[aria-label="Search documents"]');
+											if (!search) return "no search field";
+											setValue.call(search, "zzz-nothing-matches-zzz");
+											search.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(250);
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Nothing matches")) return "the search did not filter the rows";
+											setValue.call(search, "");
+											search.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(250);
+											const selectAll = document.querySelector('input[aria-label="Select all"]');
+											if (!selectAll) return "no select-all checkbox";
+											selectAll.click();
+											await wait(200);
+											if (!main.textContent.includes("selected")) return "select-all did not select the rows";
+											const clear = document.querySelector('input[aria-label="Clear selection"]');
+											if (!clear) return "select-all left no way to clear the selection";
+											clear.click();
+											await wait(200);
+											return "ok";
+										})()`,
+									) as string;
+									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
+								}
 								if (screen === "Mail templates" || screen === "Document templates") {
 									// Opens the first template so the preview path runs for real: the
 									// list renders, the row opens a preview, and the preview asks the
@@ -1199,6 +1232,42 @@ if (!app.requestSingleInstanceLock()) {
 											await new Promise((r) => setTimeout(r, 400));
 										})()`,
 									);
+
+									// One more Back reaches the list, where the search bar and the
+									// selection live. Typed text narrows the rows, select-all ticks
+									// every one left, and both are cleared again so the screenshot
+									// below still shows the list at rest.
+									const searched = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											if (!back) return "no back action from the preview";
+											back.click();
+											await wait(500);
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											const search = document.querySelector('input[aria-label="Search document templates"]');
+											if (!search) return "no search field";
+											setValue.call(search, "zzz-nothing-matches-zzz");
+											search.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(250);
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Nothing matches")) return "the search did not filter the list";
+											setValue.call(search, "");
+											search.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(250);
+											const selectAll = document.querySelector('input[aria-label="Select all"]');
+											if (!selectAll) return "no select-all checkbox";
+											selectAll.click();
+											await wait(200);
+											if (!main.textContent.includes("selected")) return "select-all did not select the rows";
+											const clear = document.querySelector('input[aria-label="Clear selection"]');
+											if (!clear) return "select-all left no way to clear the selection";
+											clear.click();
+											await wait(200);
+											return "ok";
+										})()`,
+									) as string;
+									if (searched !== "ok") throw new Error(`Smoke: document templates list ${searched}`);
 								}
 								if (screen === "Mail templates") {
 									// One document underneath every view (docs/editors.md section 2):

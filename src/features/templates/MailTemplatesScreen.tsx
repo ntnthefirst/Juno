@@ -4,9 +4,16 @@ import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { InlineAdd } from "../../components/InlineAdd";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
-import { Icon } from "../../components/Icon";
+import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
+import { IconAction } from "../../components/IconAction";
+import { SelectAllButton } from "../../components/SelectAllButton";
 import { emptyLayout } from "./mail/canvas/canvas-actions";
 import { messageOf } from "../../lib/errors";
+import {
+	activeMailTemplateFilterCount,
+	NO_MAIL_TEMPLATE_FILTERS,
+	type MailTemplateFilters,
+} from "./mail-template-filters";
 import { MailTemplateEditor } from "./MailTemplateEditor";
 import { MailTemplateList, type TemplateAction } from "./mail/MailTemplateList";
 import { MailTemplatePanel } from "./mail/MailTemplatePanel";
@@ -42,6 +49,7 @@ export function MailTemplatesScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [view, setView] = useState<View>({ mode: "list" });
 	const [search, setSearch] = useState("");
+	const [filters, setFilters] = useState<MailTemplateFilters>(NO_MAIL_TEMPLATE_FILTERS);
 	const [openId, setOpenId] = useState<string | null>(null);
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
 	const [confirm, setConfirm] = useState<Confirm | null>(null);
@@ -74,10 +82,19 @@ export function MailTemplatesScreen() {
 	// fresh [] on every render would rebuild both on every keystroke.
 	const rows = useMemo(() => (load.status === "ready" ? load.rows : []), [load]);
 	const needle = search.trim().toLowerCase();
-	const shown = useMemo(
-		() => (needle ? rows.filter((row) => matches(row, needle)) : rows),
-		[rows, needle],
-	);
+	const filterCount = activeMailTemplateFilterCount(filters);
+	const shown = useMemo(() => {
+		let list = rows;
+		if (!filters.showHidden) list = list.filter((row) => row.hiddenAt === null);
+		if (filters.unreviewedOnly) list = list.filter((row) => row.isSystem && row.customisedAt === null);
+		if (filters.layout !== "all") {
+			list = list.filter((row) => (filters.layout === "canvas" ? row.layout !== null : row.layout === null));
+		}
+		if (needle) list = list.filter((row) => matches(row, needle));
+		return list;
+	}, [rows, needle, filters]);
+	const allSelected = shown.length > 0 && shown.every((row) => selectedIds.includes(row.id));
+	const someSelected = selectedIds.length > 0 && !allSelected;
 
 	const byId = useCallback((id: string) => rows.find((row) => row.id === id) ?? null, [rows]);
 	const opened = openId ? byId(openId) : null;
@@ -222,35 +239,71 @@ export function MailTemplatesScreen() {
 					</p>
 
 					<div className="mt-5 flex items-center gap-2">
-						<div className="flex min-w-0 flex-1 items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pr-1 pl-2 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
-							<Icon name="search" size={14} />
-							<input
-								type="search"
-								value={search}
-								onChange={(event) => setSearch(event.target.value)}
-								placeholder="Search templates"
-								aria-label="Search templates"
-								className="min-w-0 flex-1 bg-transparent py-1.5 text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
-							/>
-						</div>
+						<SelectAllButton
+							checked={allSelected}
+							indeterminate={someSelected}
+							disabled={shown.length === 0}
+							onSelectAll={() => setSelectedIds(shown.map((row) => row.id))}
+							onClearSelection={() => setSelectedIds([])}
+						/>
 						{selectedIds.length > 0 ? (
-							<>
-								<span className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-									{selectedIds.length} selected
-								</span>
-								<Button size="dense" onClick={() => onAction("duplicate", selectedIds)}>
-									Duplicate
-								</Button>
-								<Button size="dense" onClick={() => onAction("hide", selectedIds)}>
-									Hide
-								</Button>
-								<Button size="dense" variant="danger" onClick={() => onAction("remove", selectedIds)}>
-									Delete
-								</Button>
-								<Button size="dense" onClick={() => setSelectedIds([])}>
-									Clear
-								</Button>
-							</>
+							<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
+								{selectedIds.length} selected
+							</span>
+						) : null}
+
+						<ListSearchBar
+							search={search}
+							onSearch={setSearch}
+							placeholder="Search templates"
+							filtersAriaLabel="Mail template filters"
+							filterCount={filterCount}
+							onClearFilters={() => setFilters(NO_MAIL_TEMPLATE_FILTERS)}
+							filters={
+								<div className="flex flex-wrap gap-1">
+									<FilterToggle
+										label="Unreviewed"
+										icon="warning"
+										on={filters.unreviewedOnly}
+										onClick={() => setFilters({ ...filters, unreviewedOnly: !filters.unreviewedOnly })}
+									/>
+									<FilterToggle
+										label="Canvas"
+										icon="grid"
+										on={filters.layout === "canvas"}
+										onClick={() =>
+											setFilters({ ...filters, layout: filters.layout === "canvas" ? "all" : "canvas" })
+										}
+									/>
+									<FilterToggle
+										label="HTML"
+										icon="view-code"
+										on={filters.layout === "html"}
+										onClick={() =>
+											setFilters({ ...filters, layout: filters.layout === "html" ? "all" : "html" })
+										}
+									/>
+									<FilterToggle
+										label="Show hidden"
+										icon="hidden"
+										on={filters.showHidden}
+										onClick={() => setFilters({ ...filters, showHidden: !filters.showHidden })}
+									/>
+								</div>
+							}
+						/>
+
+						{selectedIds.length > 0 ? (
+							<div className="ml-auto flex items-center gap-1">
+								<IconAction icon="copy" label="Duplicate" onClick={() => onAction("duplicate", selectedIds)} />
+								<IconAction icon="archive" label="Hide" onClick={() => onAction("hide", selectedIds)} />
+								<IconAction
+									icon="remove"
+									label="Delete"
+									danger
+									onClick={() => onAction("remove", selectedIds)}
+								/>
+							</div>
 						) : null}
 					</div>
 
@@ -282,7 +335,7 @@ export function MailTemplatesScreen() {
 					) : (
 						<MailTemplateList
 							rows={shown}
-							searching={needle.length > 0}
+							searching={needle.length > 0 || filterCount > 0}
 							openId={openId}
 							selectedIds={selectedIds}
 							onOpen={setOpenId}

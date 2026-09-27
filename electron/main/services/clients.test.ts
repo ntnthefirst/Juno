@@ -9,10 +9,12 @@
  * where `__dirname` does not exist. `npx vitest run` runs from the repo root.
  */
 import { resolve } from "node:path";
+import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
+import { clientStatusChanges, referenceItems, referenceSets } from "../db/schema";
 import * as clientAddresses from "./client-addresses";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
@@ -26,6 +28,32 @@ function freshDb(): Db {
 	const connection = openDatabase(":memory:");
 	runMigrations(connection, MIGRATIONS);
 	return createDrizzle(connection);
+}
+
+/**
+ * A status item, without going through the seed machinery: a "client_status"
+ * set, created once per database, with one item in it. The tests below only
+ * need a status that exists, not the shipped set.
+ */
+function createStatus(db: Db, label: string, tone: string | null = null) {
+	const set =
+		db.select({ id: referenceSets.id }).from(referenceSets).where(eq(referenceSets.key, "client_status")).get() ??
+		db.insert(referenceSets).values({ key: "client_status", label: "Client status" }).returning().get();
+	return db
+		.insert(referenceItems)
+		.values({ setId: set.id, key: label.toLowerCase(), label, tone })
+		.returning()
+		.get();
+}
+
+/** Every non-deleted status change row for a client, oldest first. */
+function statusChangesFor(db: Db, clientId: string) {
+	return db
+		.select()
+		.from(clientStatusChanges)
+		.where(and(eq(clientStatusChanges.clientId, clientId), isNull(clientStatusChanges.deletedAt)))
+		.orderBy(clientStatusChanges.changedAt)
+		.all();
 }
 
 describe("clients", () => {
@@ -116,6 +144,124 @@ describe("clients", () => {
 		const rows = await clients.list({}, db);
 		expect(rows[0]?.city).toBe("Gent");
 		expect(rows[0]?.email).toBe("hallo@acme.example");
+	});
+});
+
+describe("status changes", () => {
+	it("writes one entry when the status changes", async () => {
+		const db = freshDb();
+		const lead = createStatus(db, "Lead", "accent");
+		const active = createStatus(db, "Active", "ok");
+		const client = await clients.create({ name: "Acme", statusId: lead.id }, db);
+
+		await clients.update(client.id, { statusId: active.id }, db);
+
+		const rows = statusChangesFor(db, client.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.fromStatusId).toBe(lead.id);
+		expect(rows[0]?.toStatusId).toBe(active.id);
+	});
+
+	it("writes no entry for the status a client is created with", async () => {
+		const db = freshDb();
+		const lead = createStatus(db, "Lead");
+		const client = await clients.create({ name: "Acme", statusId: lead.id }, db);
+
+		expect(statusChangesFor(db, client.id)).toHaveLength(0);
+	});
+
+	it("writes nothing when the status is set to what it already was", async () => {
+		const db = freshDb();
+		const lead = createStatus(db, "Lead");
+		const client = await clients.create({ name: "Acme", statusId: lead.id }, db);
+
+		await clients.update(client.id, { statusId: lead.id }, db);
+
+		expect(statusChangesFor(db, client.id)).toHaveLength(0);
+	});
+
+	it("folds two changes within ten minutes into one, from the first status to the last", async () => {
+		const db = freshDb();
+		const lead = createStatus(db, "Lead");
+		const active = createStatus(db, "Active");
+		const dormant = createStatus(db, "Dormant");
+		const client = await clients.create({ name: "Acme", statusId: lead.id }, db);
+
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(new Date("2026-03-14T09:00:00.000Z"));
+			await clients.update(client.id, { statusId: active.id }, db);
+			vi.setSystemTime(new Date("2026-03-14T09:05:00.000Z"));
+			await clients.update(client.id, { statusId: dormant.id }, db);
+		} finally {
+			vi.useRealTimers();
+		}
+
+		const rows = statusChangesFor(db, client.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.fromStatusId).toBe(lead.id);
+		expect(rows[0]?.toStatusId).toBe(dormant.id);
+		expect(rows[0]?.changedAt).toBe("2026-03-14T09:05:00.000Z");
+	});
+
+	it("starts a new entry when a change comes more than ten minutes after the last", async () => {
+		const db = freshDb();
+		const lead = createStatus(db, "Lead");
+		const active = createStatus(db, "Active");
+		const dormant = createStatus(db, "Dormant");
+		const client = await clients.create({ name: "Acme", statusId: lead.id }, db);
+
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(new Date("2026-03-14T09:00:00.000Z"));
+			await clients.update(client.id, { statusId: active.id }, db);
+			vi.setSystemTime(new Date("2026-03-14T09:11:00.000Z"));
+			await clients.update(client.id, { statusId: dormant.id }, db);
+		} finally {
+			vi.useRealTimers();
+		}
+
+		const rows = statusChangesFor(db, client.id);
+		expect(rows).toHaveLength(2);
+		expect(rows[0]).toMatchObject({ fromStatusId: lead.id, toStatusId: active.id });
+		expect(rows[1]).toMatchObject({ fromStatusId: active.id, toStatusId: dormant.id });
+	});
+
+	it("removes the entry when a fold brings the status back to where it started", async () => {
+		const db = freshDb();
+		const lead = createStatus(db, "Lead");
+		const active = createStatus(db, "Active");
+		const client = await clients.create({ name: "Acme", statusId: lead.id }, db);
+
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(new Date("2026-03-14T09:00:00.000Z"));
+			await clients.update(client.id, { statusId: active.id }, db);
+			vi.setSystemTime(new Date("2026-03-14T09:05:00.000Z"));
+			await clients.update(client.id, { statusId: lead.id }, db);
+		} finally {
+			vi.useRealTimers();
+		}
+
+		expect(statusChangesFor(db, client.id)).toHaveLength(0);
+	});
+
+	it("treats no status on both ends as a fold back to the start", async () => {
+		const db = freshDb();
+		const lead = createStatus(db, "Lead");
+		const client = await clients.create({ name: "Acme" }, db);
+
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(new Date("2026-03-14T09:00:00.000Z"));
+			await clients.update(client.id, { statusId: lead.id }, db);
+			vi.setSystemTime(new Date("2026-03-14T09:05:00.000Z"));
+			await clients.update(client.id, { statusId: null }, db);
+		} finally {
+			vi.useRealTimers();
+		}
+
+		expect(statusChangesFor(db, client.id)).toHaveLength(0);
 	});
 });
 

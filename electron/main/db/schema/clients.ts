@@ -244,3 +244,32 @@ export const clientNotes = sqliteTable(
 		index("client_notes_deleted_idx").on(t.deletedAt),
 	],
 );
+
+/**
+ * One line of a client's status history: it moved from one status to another
+ * at a point in time.
+ *
+ * A row is not written per click. Changes within ten minutes of each other
+ * fold into the same row, its `toStatusId` and `changedAt` moving forward each
+ * time, because a status corrected twice in a minute is one change, not three.
+ * `fromStatusId` and `toStatusId` are both nullable: "no status" is a status a
+ * client can move to or from, not the absence of a row.
+ */
+export const clientStatusChanges = sqliteTable(
+	"client_status_changes",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		fromStatusId: text("from_status_id").references(() => referenceItems.id),
+		toStatusId: text("to_status_id").references(() => referenceItems.id),
+		/** UTC ISO-8601. The latest change folded into this row, not when the row was first written. */
+		changedAt: text("changed_at").notNull(),
+	},
+	(t) => [
+		index("client_status_changes_client_idx").on(t.clientId),
+		index("client_status_changes_deleted_idx").on(t.deletedAt),
+		index("client_status_changes_client_deleted_changed_idx").on(t.clientId, t.deletedAt, t.changedAt),
+	],
+);

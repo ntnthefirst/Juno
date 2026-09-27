@@ -370,13 +370,3 @@ as icon buttons on the right. Build the shared parts once in
   way mail templates already do it. Nothing new for an agent, since each is a
   tool already.
 
-### 6c. A plus button for a new document template
-
-Document templates has no way to start one. Add the same control mail templates
-has (`InlineAdd` beside the heading): it asks for a name only, creates the
-template through `templates.create` with everything else empty or at its
-default, and opens it in the editor, where the rest is filled in. If the
-service refuses an empty body, the service gains a sensible empty default for
-it rather than the screen inventing one, with a test, so an agent's
-`templates.create` with only a name behaves the same.
-

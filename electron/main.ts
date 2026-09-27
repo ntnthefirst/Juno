@@ -942,6 +942,23 @@ if (!app.requestSingleInstanceLock()) {
 											if (!timeline) return "no timeline tab";
 											timeline.click();
 											await new Promise((r) => setTimeout(r, 700));
+
+											// The status beside the name is a button. Picking a status
+											// it is not on already changes it and writes a timeline entry.
+											const statusButton = main.querySelector("button[aria-label^='Change status for']");
+											if (!statusButton) return "no status button";
+											statusButton.click();
+											await new Promise((r) => setTimeout(r, 300));
+											const items = [...document.querySelectorAll("[role=menuitem]")];
+											if (items.length === 0) return "no status menu";
+											// An item with no check icon is not the current status.
+											const pick = items.find((el) => !el.querySelector("svg"));
+											if (!pick) return "every status is already picked";
+											pick.click();
+											await new Promise((r) => setTimeout(r, 700));
+											if (!main.textContent.includes("Status changed from")) {
+												return "no status change on the timeline";
+											}
 											return "ok";
 										})()`,
 									);

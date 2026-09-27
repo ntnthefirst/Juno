@@ -5,15 +5,29 @@
  * Every rule about a client lives in this file. The IPC and MCP adapters call
  * these functions and contain nothing else. See .claude/rules/architecture.md.
  */
-import { and, asc, eq, isNotNull, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { alias, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { ListClientsQuery } from "../../shared/api";
 import type { Client, ClientInput, ClientPatch, ClientSummary } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
-import { clientAddresses, clientEmails, clients, projects, referenceItems } from "../db/schema";
+import {
+	clientAddresses,
+	clientEmails,
+	clientStatusChanges,
+	clients,
+	projects,
+	referenceItems,
+} from "../db/schema";
 
 const DEFAULT_LIMIT = 200;
+
+/**
+ * Two status changes closer together than this fold into one entry, from the
+ * first status to the last, rather than leaving a line on the timeline for
+ * every click on the way to the one that stuck.
+ */
+const STATUS_CHANGE_FOLD_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LIMIT = 1000;
 
 /**
@@ -205,6 +219,54 @@ export async function create(input: ClientInput, db: Db = getDb()): Promise<Clie
 		.get();
 }
 
+/**
+ * Writes, or folds into, the client's status history. Called only when a
+ * status actually changed, in the same transaction as the client row itself.
+ *
+ * Folding looks at the most recent non-deleted change for this client: within
+ * the fold window, that row's `toStatusId` and `changedAt` move forward
+ * instead of a second row being added. If the fold brings `toStatusId` back to
+ * what `fromStatusId` already was, the row no longer describes a change at
+ * all and is soft deleted. `null` on both sides counts as equal, since "no
+ * status" is itself a status a client can return to.
+ */
+function recordStatusChange(
+	tx: Db,
+	clientId: string,
+	fromStatusId: string | null,
+	toStatusId: string | null,
+	at: string,
+): void {
+	const recent = tx
+		.select()
+		.from(clientStatusChanges)
+		.where(and(eq(clientStatusChanges.clientId, clientId), isNull(clientStatusChanges.deletedAt)))
+		.orderBy(desc(clientStatusChanges.changedAt), desc(clientStatusChanges.id))
+		.limit(1)
+		.get();
+
+	const foldsIntoRecent =
+		recent !== undefined && Date.parse(at) - Date.parse(recent.changedAt) <= STATUS_CHANGE_FOLD_WINDOW_MS;
+
+	if (recent && foldsIntoRecent) {
+		tx.update(clientStatusChanges)
+			.set({
+				toStatusId,
+				changedAt: at,
+				updatedAt: at,
+				// Back to where it started: the fold cancelled the change out.
+				deletedAt: recent.fromStatusId === toStatusId ? at : null,
+			})
+			.where(eq(clientStatusChanges.id, recent.id))
+			.run();
+		return;
+	}
+
+	tx.insert(clientStatusChanges)
+		.values({ clientId, fromStatusId, toStatusId, changedAt: at, createdAt: at, updatedAt: at })
+		.run();
+}
+
 export async function update(
 	id: string,
 	patch: ClientPatch,
@@ -212,21 +274,38 @@ export async function update(
 ): Promise<Client> {
 	if (patch.statusId !== undefined) checkStatus(patch.statusId, db);
 
-	const values: Partial<typeof clients.$inferInsert> = { ...patch, updatedAt: now() };
-	if (patch.name !== undefined) {
-		const name = requireName(patch.name);
-		values.name = name;
-		values.sortName = sortNameFor(name);
-	}
+	return db.transaction((tx) => {
+		const existing =
+			patch.statusId !== undefined
+				? tx
+						.select({ statusId: clients.statusId })
+						.from(clients)
+						.where(and(eq(clients.id, id), isNull(clients.deletedAt)))
+						.get()
+				: null;
 
-	const row = db
-		.update(clients)
-		.set(values)
-		.where(and(eq(clients.id, id), isNull(clients.deletedAt)))
-		.returning()
-		.get();
-	if (!row) throw new Error(`No client with id "${id}" to update. It may have been deleted.`);
-	return row;
+		const at = now();
+		const values: Partial<typeof clients.$inferInsert> = { ...patch, updatedAt: at };
+		if (patch.name !== undefined) {
+			const name = requireName(patch.name);
+			values.name = name;
+			values.sortName = sortNameFor(name);
+		}
+
+		const row = tx
+			.update(clients)
+			.set(values)
+			.where(and(eq(clients.id, id), isNull(clients.deletedAt)))
+			.returning()
+			.get();
+		if (!row) throw new Error(`No client with id "${id}" to update. It may have been deleted.`);
+
+		if (existing && existing.statusId !== row.statusId) {
+			recordStatusChange(tx, id, existing.statusId, row.statusId, at);
+		}
+
+		return row;
+	});
 }
 
 export async function remove(id: string, db: Db = getDb()): Promise<Client> {

@@ -41,15 +41,21 @@ import type {
 	MailBoxStyle,
 	MailBreakpoint,
 	MailColor,
+	MailColumns,
+	MailColumnsCell,
+	MailColumnsRow,
+	MailContainer,
+	MailContainerTag,
 	MailCorners,
 	MailDirection,
 	MailEffect,
 	MailFill,
 	MailFont,
 	MailFontFallback,
+	MailHeadingTag,
 	MailJustify,
 	MailLayout,
-	MailSection,
+	MailNode,
 	MailSectionLayout,
 	MailSectionOverride,
 	MailSelfAlign,
@@ -60,6 +66,7 @@ import type {
 	MailTextCase,
 	MailTextDecoration,
 	MailTextStyle,
+	MailTextTag,
 	MailVerticalAlign,
 	MailWeight,
 	TemplateInput,
@@ -72,6 +79,15 @@ const MIN_WIDTH = 280;
 /** Wide enough to design a message for a desktop client that is given the room. */
 const MAX_WIDTH = 1600;
 const MAX_HEIGHT = 20000;
+/**
+ * How deep a container, a columns table or a cell may nest inside another.
+ * Past this the parser refuses the node rather than keeping it: a layout that
+ * deep is not one anybody is laying out by hand, and an unbounded tree is a
+ * stack a hostile payload can blow.
+ */
+const MAX_DEPTH = 8;
+/** Every node a layout can hold: every container, columns table and block, at any depth. */
+const MAX_NODES = 400;
 
 /* ----------------------------------------------------------------- defaults */
 
@@ -128,15 +144,25 @@ export function stackLayout(): MailSectionLayout {
 	return { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 12, wrap: false };
 }
 
-export function emptySection(name = "Section"): MailSection {
+/**
+ * A container with nothing in it. A version 1 section is exactly this, with
+ * `tag: "section"`: `emptyContainer` replaces `emptySection` because every
+ * container the toolbar can add is now the same shape, whichever tag it is.
+ */
+export function emptyContainer(tag: MailContainerTag = "section", name = "Section"): MailContainer {
 	return {
 		id: randomUUID(),
-		name,
+		kind: "container",
+		tag,
 		hidden: false,
+		name,
 		alignSelf: "auto",
+		// 0 at the top level. A container placed inside a flex or grid parent
+		// takes a share of the room the same way a block does.
+		grow: 0,
 		layout: stackLayout(),
 		box: emptyBox(),
-		blocks: [],
+		children: [],
 	};
 }
 
@@ -147,14 +173,14 @@ export function emptySection(name = "Section"): MailSection {
  */
 export function emptyLayout(): MailLayout {
 	return {
-		version: 1,
+		version: 2,
 		width: DEFAULT_WIDTH,
 		widthMode: "fill",
 		minHeight: 320,
 		fill: null,
 		fonts: [],
 		customCss: null,
-		sections: [emptySection("Body")],
+		children: [emptyContainer("section", "Body")],
 		breakpoints: [],
 	};
 }
@@ -168,7 +194,7 @@ export function newBlock(kind: MailBlock["kind"]): MailBlock {
 	const common = { id: randomUUID(), grow: 0, alignSelf: "auto" as const, hidden: false };
 	switch (kind) {
 		case "heading":
-			return { ...common, kind, level: 2, content: "Titel", text: { ...defaultText(), weight: "semibold" }, box: emptyBox() };
+			return { ...common, kind, tag: "h2", content: "Titel", text: { ...defaultText(), weight: "semibold" }, box: emptyBox() };
 		case "button":
 			return {
 				...common,
@@ -183,7 +209,7 @@ export function newBlock(kind: MailBlock["kind"]): MailBlock {
 				box: { ...emptyBox(), padding: { top: 10, right: 18, bottom: 10, left: 18 } },
 			};
 		case "image":
-			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", box: emptyBox() };
+			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", href: null, box: emptyBox() };
 		case "divider":
 			return { ...common, kind, color: "#e3e2ec", thickness: 1, box: emptyBox(), grow: 1 };
 		case "spacer":
@@ -194,7 +220,7 @@ export function newBlock(kind: MailBlock["kind"]): MailBlock {
 			return { ...common, kind, html: "", css: "" };
 		case "text":
 		default:
-			return { ...common, kind: "text", html: "Tekst", text: defaultText(), box: emptyBox() };
+			return { ...common, kind: "text", tag: "p", html: "Tekst", text: defaultText(), box: emptyBox() };
 	}
 }
 
@@ -394,6 +420,33 @@ function toFallback(value: unknown): MailFontFallback {
 	return value === "serif" || value === "mono" ? value : "sans";
 }
 
+const CONTAINER_TAGS = new Set<MailContainerTag>(["section", "div", "header", "footer", "main", "article", "aside", "nav"]);
+const HEADING_TAGS = new Set<MailHeadingTag>(["h1", "h2", "h3", "h4", "h5", "h6"]);
+const TEXT_TAGS = new Set<MailTextTag>(["p", "blockquote", "pre", "address", "span", "ul", "ol"]);
+
+/** Every tag is checked against its group's list, the way a colour is checked. */
+function toContainerTag(value: unknown): MailContainerTag {
+	return typeof value === "string" && CONTAINER_TAGS.has(value as MailContainerTag) ? (value as MailContainerTag) : "div";
+}
+
+/** A version 1 `level: 1 | 2 | 3` normalises through this too: `h${level}`. */
+function toHeadingTag(value: unknown): MailHeadingTag {
+	return typeof value === "string" && HEADING_TAGS.has(value as MailHeadingTag) ? (value as MailHeadingTag) : "h2";
+}
+
+function toTextTag(value: unknown): MailTextTag {
+	return typeof value === "string" && TEXT_TAGS.has(value as MailTextTag) ? (value as MailTextTag) : "p";
+}
+
+/** `ul` and `ol` hold `<li>` items in their `html`, which nothing else may. */
+function textExtraTags(tag: MailTextTag): readonly string[] {
+	return tag === "ul" || tag === "ol" ? ["li"] : [];
+}
+
+function isListTag(tag: MailTextTag): boolean {
+	return tag === "ul" || tag === "ol";
+}
+
 function parseSpacing(raw: unknown): MailSpacing {
 	if (!isRecord(raw)) return noSpacing();
 	return {
@@ -589,8 +642,11 @@ function parseBlock(raw: unknown): MailBlock | null {
 
 	switch (raw.kind) {
 		case "heading": {
-			const level = raw.level === 1 || raw.level === 3 ? raw.level : 2;
-			return { ...common, kind: "heading", level, content: toStr(raw.content), text: parseTextStyle(raw.text), box };
+			// Version 2 carries its own tag; version 1's `level: 1 | 2 | 3`
+			// normalises to `h${level}` through the same check every tag gets.
+			const tag =
+				typeof raw.tag === "string" ? toHeadingTag(raw.tag) : toHeadingTag(typeof raw.level === "number" ? `h${raw.level}` : null);
+			return { ...common, kind: "heading", tag, content: toStr(raw.content), text: parseTextStyle(raw.text), box };
 		}
 		case "button":
 			return {
@@ -614,6 +670,8 @@ function parseBlock(raw: unknown): MailBlock | null {
 				alt: toStr(raw.alt),
 				width: toNullableNum(raw.width, 8, MAX_WIDTH),
 				align: toAlignText(raw.align),
+				// A picture inside a link. Version 1 never had one, so it is null.
+				href: safeHref(toStr(raw.href)),
 				// A picture has a width of its own, and the box's would be a second one.
 				box: { ...box, width: null },
 			};
@@ -642,27 +700,140 @@ function parseBlock(raw: unknown): MailBlock | null {
 			const html = sanitiseMarkup(toStr(raw.html));
 			return { ...common, kind: "html", html: css ? `<div>${html}</div>` : html, css };
 		}
-		case "text":
-			return { ...common, kind: "text", html: sanitiseFragment(toStr(raw.html)), text: parseTextStyle(raw.text), box };
+		case "text": {
+			// Version 1 text had no tag, and normalises to "p": the compiler keeps
+			// its current p-or-div choice for that tag, so a version 1 body
+			// compiles unchanged.
+			const tag = toTextTag(raw.tag);
+			return { ...common, kind: "text", tag, html: sanitiseFragment(toStr(raw.html), textExtraTags(tag)), text: parseTextStyle(raw.text), box };
+		}
 		default:
 			return null;
 	}
 }
 
-function parseSection(raw: unknown): MailSection | null {
+/**
+ * A version 1 section, read straight into a `section` container holding its
+ * blocks. Kept separate from `parseContainer` because a version 1 section
+ * never nested anything: its `blocks` were always leaves.
+ */
+function parseV1Section(raw: unknown, budget: { left: number }): MailContainer | null {
+	if (!isRecord(raw) || budget.left <= 0) return null;
+	budget.left--;
+	const rawBlocks = Array.isArray(raw.blocks) ? raw.blocks : [];
+	const children: MailBlock[] = [];
+	for (const entry of rawBlocks) {
+		if (budget.left <= 0) break;
+		const block = parseBlock(entry);
+		if (block) {
+			children.push(block);
+			budget.left--;
+		}
+	}
+	return {
+		id: toId(raw.id),
+		kind: "container",
+		tag: "section",
+		hidden: raw.hidden === true,
+		name: toStr(raw.name, "Section"),
+		alignSelf: toSelfAlign(raw.alignSelf),
+		grow: 0,
+		layout: parseSectionLayout(raw.layout),
+		box: parseBox(raw.box),
+		children,
+	};
+}
+
+/* ------------------------------------------------------------------- tree */
+
+function isContainer(node: MailNode): node is MailContainer {
+	return node.kind === "container";
+}
+
+function isColumns(node: MailNode): node is MailColumns {
+	return node.kind === "columns";
+}
+
+function isBlockNode(node: MailNode): node is MailBlock {
+	return !isContainer(node) && !isColumns(node);
+}
+
+function parseColumnsCell(raw: unknown, depth: number, budget: { left: number }): MailColumnsCell | null {
 	if (!isRecord(raw)) return null;
-	const blocks = Array.isArray(raw.blocks)
-		? raw.blocks.map(parseBlock).filter((block): block is MailBlock => block !== null)
+	return {
+		id: toId(raw.id),
+		width: toNullableNum(raw.width, 1, 100),
+		verticalAlign: toVerticalAlign(raw.verticalAlign),
+		box: parseBox(raw.box),
+		children: parseNodes(raw.children, depth, budget),
+	};
+}
+
+function parseColumnsRow(raw: unknown, depth: number, budget: { left: number }): MailColumnsRow | null {
+	if (!isRecord(raw)) return null;
+	const cells = Array.isArray(raw.cells)
+		? raw.cells.map((cell) => parseColumnsCell(cell, depth, budget)).filter((cell): cell is MailColumnsCell => cell !== null)
+		: [];
+	return { id: toId(raw.id), cells };
+}
+
+function parseColumns(raw: UnknownRecord, depth: number, budget: { left: number }): MailColumns {
+	const rows = Array.isArray(raw.rows)
+		? raw.rows.map((row) => parseColumnsRow(row, depth, budget)).filter((row): row is MailColumnsRow => row !== null)
 		: [];
 	return {
 		id: toId(raw.id),
-		name: toStr(raw.name, "Section"),
+		kind: "columns",
 		hidden: raw.hidden === true,
+		name: toStr(raw.name, "Columns"),
 		alignSelf: toSelfAlign(raw.alignSelf),
+		grow: toNum(raw.grow, 0, 0, 12),
+		gap: toNum(raw.gap, 12, 0, 120),
+		box: parseBox(raw.box),
+		rows,
+	};
+}
+
+function parseContainer(raw: UnknownRecord, depth: number, budget: { left: number }): MailContainer {
+	return {
+		id: toId(raw.id),
+		kind: "container",
+		tag: toContainerTag(raw.tag),
+		hidden: raw.hidden === true,
+		name: toStr(raw.name, "Section"),
+		alignSelf: toSelfAlign(raw.alignSelf),
+		grow: toNum(raw.grow, 0, 0, 12),
 		layout: parseSectionLayout(raw.layout),
 		box: parseBox(raw.box),
-		blocks,
+		children: parseNodes(raw.children, depth + 1, budget),
 	};
+}
+
+/**
+ * One node in the tree, checked against the budget and the depth limit.
+ * Past `MAX_DEPTH` a container or a columns table is refused outright rather
+ * than kept with its structure flattened, which is the simpler of the two
+ * choices the model allows and the one a test pins.
+ */
+function parseNode(raw: unknown, depth: number, budget: { left: number }): MailNode | null {
+	if (!isRecord(raw) || budget.left <= 0) return null;
+	if (raw.kind === "container") return depth >= MAX_DEPTH ? null : parseContainer(raw, depth, budget);
+	if (raw.kind === "columns") return depth >= MAX_DEPTH ? null : parseColumns(raw, depth, budget);
+	return parseBlock(raw);
+}
+
+function parseNodes(raw: unknown, depth: number, budget: { left: number }): MailNode[] {
+	if (!Array.isArray(raw)) return [];
+	const out: MailNode[] = [];
+	for (const entry of raw) {
+		if (budget.left <= 0) break;
+		const node = parseNode(entry, depth, budget);
+		if (node) {
+			out.push(node);
+			budget.left--;
+		}
+	}
+	return out;
 }
 
 /* -------------------------------------------------------------- breakpoints */
@@ -730,36 +901,81 @@ function parseBlockOverride(raw: unknown, block: MailBlock): MailBlockOverride |
 	return override as MailBlockOverride;
 }
 
-/** The same, for a section. Its layout is changed whole, the way the panel changes it. */
-function parseSectionOverride(raw: unknown, section: MailSection): MailSectionOverride | null {
+/** A parent something can override: a container, a columns table, or one cell of one. */
+type Parent = MailContainer | MailColumns | MailColumnsCell;
+
+const PARENT_STYLE = ["hidden", "alignSelf", "grow", "layout"] as const;
+
+/**
+ * What a breakpoint changes about one container, columns table or cell,
+ * checked the way the node itself is: a candidate is built with the change
+ * applied and re-parsed through the same validators the node's own kind
+ * uses, and the override keeps the parsed value of each field it named. A
+ * cell has none of `hidden`, `alignSelf`, `grow` or `layout`, so naming one
+ * for a cell simply keeps nothing, the way naming a field a block does not
+ * have already does for `parseBlockOverride`.
+ */
+function parseParentOverride(raw: unknown, node: Parent): MailSectionOverride | null {
 	if (!isRecord(raw)) return null;
-	const top = (["hidden", "alignSelf", "layout"] as const).filter((key) => key in raw);
-	const boxKeys = isRecord(raw.box) ? Object.keys(raw.box).filter((key) => key in section.box) : [];
+	const top = PARENT_STYLE.filter((key) => key in raw && key in node);
+	const boxKeys = isRecord(raw.box) ? Object.keys(raw.box).filter((key) => key in node.box) : [];
 	if (top.length === 0 && boxKeys.length === 0) return null;
 
-	const merged = parseSection({
-		...section,
-		blocks: [],
-		...Object.fromEntries(top.map((key) => [key, raw[key]])),
-		...(isRecord(raw.box) ? { box: { ...section.box, ...raw.box } } : {}),
-	});
-	if (!merged) return null;
+	const patch = Object.fromEntries(top.map((key) => [key, raw[key]]));
+	const box = isRecord(raw.box) ? { ...node.box, ...raw.box } : node.box;
+	const budget = { left: 1 };
+	const normalised: UnknownRecord =
+		"kind" in node && node.kind === "container"
+			? (parseContainer({ ...node, ...patch, box, children: [] }, 0, budget) as unknown as UnknownRecord)
+			: "kind" in node && node.kind === "columns"
+				? (parseColumns({ ...node, ...patch, box, rows: [] }, 0, budget) as unknown as UnknownRecord)
+				: ({ ...node, ...patch, box: parseBox(box) } as unknown as UnknownRecord);
 
 	const override: Record<string, unknown> = {};
-	const parsed = merged as unknown as Record<string, unknown>;
-	for (const key of top) override[key] = parsed[key];
+	for (const key of top) override[key] = normalised[key];
 	if (boxKeys.length > 0) {
-		override.box = Object.fromEntries(boxKeys.map((key) => [key, merged.box[key as keyof MailBoxStyle]]));
+		const normalisedBox = normalised.box as MailBoxStyle;
+		override.box = Object.fromEntries(boxKeys.map((key) => [key, normalisedBox[key as keyof MailBoxStyle]]));
 	}
-	return override as MailSectionOverride;
+	return Object.keys(override).length > 0 ? (override as MailSectionOverride) : null;
 }
 
 /**
- * The breakpoints, checked against the sections and blocks that are there: an
- * override for something that has gone is dropped rather than kept for a
- * block that might come back with the same id.
+ * Walks every container, columns table, cell and block in the tree, in
+ * compiled order. `visitParent` sees a container and a columns table (which
+ * share `sections` in a breakpoint); `visitCell` sees a cell, which has no
+ * `hidden` of its own and cannot be individually shown or hidden.
  */
-function parseBreakpoints(raw: unknown, sections: MailSection[]): MailBreakpoint[] {
+function walkTree(
+	nodes: MailNode[],
+	visitParent: (node: MailContainer | MailColumns) => void,
+	visitCell: (cell: MailColumnsCell) => void,
+	visitBlock: (block: MailBlock) => void,
+): void {
+	for (const node of nodes) {
+		if (isContainer(node)) {
+			visitParent(node);
+			walkTree(node.children, visitParent, visitCell, visitBlock);
+		} else if (isColumns(node)) {
+			visitParent(node);
+			for (const row of node.rows) {
+				for (const cell of row.cells) {
+					visitCell(cell);
+					walkTree(cell.children, visitParent, visitCell, visitBlock);
+				}
+			}
+		} else {
+			visitBlock(node);
+		}
+	}
+}
+
+/**
+ * The breakpoints, checked against the tree that is there: an override for
+ * something that has gone is dropped rather than kept for a node that might
+ * come back with the same id.
+ */
+function parseBreakpoints(raw: unknown, tree: MailNode[]): MailBreakpoint[] {
 	if (!Array.isArray(raw)) return [];
 	const out: MailBreakpoint[] = [];
 	for (const entry of raw) {
@@ -772,16 +988,24 @@ function parseBreakpoints(raw: unknown, sections: MailSection[]): MailBreakpoint
 			sections: {},
 			blocks: {},
 		};
-		for (const section of sections) {
-			if (unsafeKey(section.id)) continue;
-			const sectionOverride = parseSectionOverride(entryOf(entry.sections, section.id), section);
-			if (sectionOverride) breakpoint.sections[section.id] = sectionOverride;
-			for (const block of section.blocks) {
-				if (unsafeKey(block.id)) continue;
-				const blockOverride = parseBlockOverride(entryOf(entry.blocks, block.id), block);
-				if (blockOverride) breakpoint.blocks[block.id] = blockOverride;
-			}
-		}
+		walkTree(
+			tree,
+			(node) => {
+				if (unsafeKey(node.id)) return;
+				const override = parseParentOverride(entryOf(entry.sections, node.id), node);
+				if (override) breakpoint.sections[node.id] = override;
+			},
+			(cell) => {
+				if (unsafeKey(cell.id)) return;
+				const override = parseParentOverride(entryOf(entry.sections, cell.id), cell);
+				if (override) breakpoint.sections[cell.id] = override;
+			},
+			(block) => {
+				if (unsafeKey(block.id)) return;
+				const override = parseBlockOverride(entryOf(entry.blocks, block.id), block);
+				if (override) breakpoint.blocks[block.id] = override;
+			},
+		);
 		out.push(breakpoint);
 	}
 	return out.slice(0, MAX_BREAKPOINTS);
@@ -799,18 +1023,33 @@ export function applyBlockOverride(block: MailBlock, override: MailBlockOverride
 	} as MailBlock;
 }
 
-/** A section as a breakpoint draws it, blocks and all. */
-function applySectionOverride(section: MailSection, breakpoint: MailBreakpoint): MailSection {
-	const override = entryOf(breakpoint.sections, section.id) as MailSectionOverride | undefined;
+/** A container, a columns table or a cell as a breakpoint draws it, its own style only. */
+function applyParentOverride<T extends Parent>(node: T, breakpoint: MailBreakpoint): T {
+	const override = entryOf(breakpoint.sections, node.id) as MailSectionOverride | undefined;
 	const { box, ...top } = override ?? ({} as MailSectionOverride);
-	return {
-		...section,
-		...top,
-		box: box ? { ...section.box, ...box } : section.box,
-		blocks: section.blocks.map((block) =>
-			applyBlockOverride(block, entryOf(breakpoint.blocks, block.id) as MailBlockOverride | undefined),
-		),
-	};
+	return { ...node, ...top, box: box ? { ...node.box, ...box } : node.box } as T;
+}
+
+/** A node as a breakpoint draws it, and everything under it. */
+function applyNode(node: MailNode, breakpoint: MailBreakpoint): MailNode {
+	if (isContainer(node)) {
+		const applied = applyParentOverride(node, breakpoint);
+		return { ...applied, children: applied.children.map((child) => applyNode(child, breakpoint)) };
+	}
+	if (isColumns(node)) {
+		const applied = applyParentOverride(node, breakpoint);
+		return {
+			...applied,
+			rows: applied.rows.map((row) => ({
+				...row,
+				cells: row.cells.map((cell) => {
+					const appliedCell = applyParentOverride(cell, breakpoint);
+					return { ...appliedCell, children: appliedCell.children.map((child) => applyNode(child, breakpoint)) };
+				}),
+			})),
+		};
+	}
+	return applyBlockOverride(node, entryOf(breakpoint.blocks, node.id) as MailBlockOverride | undefined);
 }
 
 /** The breakpoints from the widest down, which is the order their media queries stack in. */
@@ -824,14 +1063,14 @@ export function widestFirst(breakpoints: MailBreakpoint[]): MailBreakpoint[] {
 /** The canvas as it is drawn at a breakpoint: the default, then every wider breakpoint, then this one. */
 export function layoutAt(layout: MailLayout, breakpointId: string | null): MailLayout {
 	if (!breakpointId || !layout.breakpoints.some((breakpoint) => breakpoint.id === breakpointId)) return layout;
-	let sections = layout.sections;
+	let children = layout.children;
 	let width = layout.width;
 	for (const breakpoint of widestFirst(layout.breakpoints)) {
-		sections = sections.map((section) => applySectionOverride(section, breakpoint));
+		children = children.map((node) => applyNode(node, breakpoint));
 		width = breakpoint.maxWidth;
 		if (breakpoint.id === breakpointId) break;
 	}
-	return { ...layout, width, sections };
+	return { ...layout, width, children };
 }
 
 /**
@@ -851,15 +1090,22 @@ export function parseLayout(json: string | null | undefined): MailLayout | null 
 	return normaliseLayout(raw);
 }
 
-/** The same checks, for a layout that arrived over IPC or from an agent. */
+/**
+ * The same checks, for a layout that arrived over IPC or from an agent.
+ *
+ * Reads version 1 and version 2 and always returns version 2: a version 1
+ * layout has `sections`, each of which becomes a `section` container holding
+ * its blocks; a version 2 layout has `children`, read as the tree it is.
+ */
 export function normaliseLayout(raw: unknown): MailLayout | null {
 	if (!isRecord(raw)) return null;
-	const sections = Array.isArray(raw.sections)
-		? raw.sections.map(parseSection).filter((section): section is MailSection => section !== null)
-		: [];
-	const kept = sections.length > 0 ? sections : [emptySection("Body")];
+	const budget = { left: MAX_NODES };
+	const children: MailNode[] = Array.isArray(raw.sections)
+		? raw.sections.map((section) => parseV1Section(section, budget)).filter((section): section is MailContainer => section !== null)
+		: parseNodes(raw.children, 0, budget);
+	const kept = children.length > 0 ? children : [emptyContainer("section", "Body")];
 	return {
-		version: 1,
+		version: 2,
 		width: toNum(raw.width, DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH),
 		// A canvas saved before the choice existed was sent 600 wide, and it
 		// keeps that until somebody says otherwise.
@@ -868,7 +1114,7 @@ export function normaliseLayout(raw: unknown): MailLayout | null {
 		fill: parseFill(raw.fill, raw.background),
 		fonts: parseFonts(raw.fonts),
 		customCss: sanitiseDeclarations(toStr(raw.customCss)) || null,
-		sections: kept,
+		children: kept,
 		breakpoints: parseBreakpoints(raw.breakpoints, kept),
 	};
 }
@@ -970,8 +1216,13 @@ function attribute(attrs: string, name: string): string | null {
  * than dropped, so a stray angle bracket in somebody's business name cannot be
  * mistaken for markup that survived on purpose. `{{ placeholder }}` tokens
  * contain none of the characters this looks for and pass through untouched.
+ *
+ * `extra` adds tags kept for one call only: a text block tagged `ul` or `ol`
+ * allows `li`, because its `html` holds the list items, and nothing else may
+ * carry one.
  */
-export function sanitiseFragment(html: string): string {
+export function sanitiseFragment(html: string, extra: readonly string[] = []): string {
+	const allowed = extra.length > 0 ? new Set([...ALLOWED_INLINE_TAGS, ...extra]) : ALLOWED_INLINE_TAGS;
 	let out = "";
 	let cursor = 0;
 
@@ -984,7 +1235,7 @@ export function sanitiseFragment(html: string): string {
 		const name = (match[2] ?? "").toLowerCase();
 		const attrs = match[3] ?? "";
 
-		if (!ALLOWED_INLINE_TAGS.has(name)) {
+		if (!allowed.has(name)) {
 			out += escapeHtml(match[0]);
 			continue;
 		}
@@ -1362,22 +1613,34 @@ function wrapVertical(text: MailTextStyle, inner: string): string {
 	return text.verticalAlign === "top" ? inner : `<span data-juno-inner="1" style="display:block">${inner}</span>`;
 }
 
-/** How a block takes its place in the section: its share of the room, and where it sits across. */
-function placeDeclarations(block: MailBlock): (string | null)[] {
+/**
+ * How something takes its place in a flex or grid parent: its share of the
+ * room, and where it sits across. A block, a container and a columns table
+ * all have `grow` and `alignSelf`, so this reaches all three.
+ */
+function placeDeclarations(node: { grow: number; alignSelf: MailSelfAlign }): (string | null)[] {
 	return [
-		block.grow > 0 ? `flex:${block.grow} 1 0%` : null,
-		block.alignSelf !== "auto" ? `align-self:${SELF_CSS[block.alignSelf]}` : null,
+		node.grow > 0 ? `flex:${node.grow} 1 0%` : null,
+		node.alignSelf !== "auto" ? `align-self:${SELF_CSS[node.alignSelf]}` : null,
 	];
 }
 
 /**
- * Where a section narrower than the frame sits across it. The frame lays its
- * sections one under the next, so this is margins, which every client reads.
+ * Where something narrower than its parent sits across it, at the top level:
+ * the frame lays its children one under the next in plain flow, so this is
+ * margins, which every client reads. A nested container or columns table
+ * takes `placeDeclarations` instead, the way a block does, because its
+ * parent is a flex or grid box that already has an alignment of its own.
  */
-function sectionPlaceDeclarations(section: MailSection): string[] {
-	if (section.alignSelf === "center") return ["margin-left:auto", "margin-right:auto"];
-	if (section.alignSelf === "end") return ["margin-left:auto"];
+function sectionPlaceDeclarations(node: { alignSelf: MailSelfAlign }): string[] {
+	if (node.alignSelf === "center") return ["margin-left:auto", "margin-right:auto"];
+	if (node.alignSelf === "end") return ["margin-left:auto"];
 	return [];
+}
+
+/** `sectionPlaceDeclarations` at the top level, `placeDeclarations` nested. */
+function placementDeclarations(node: { grow: number; alignSelf: MailSelfAlign }, topLevel: boolean): (string | null)[] {
+	return topLevel ? sectionPlaceDeclarations(node) : placeDeclarations(node);
 }
 
 const JUSTIFY_CSS: Record<MailJustify, string> = {
@@ -1459,7 +1722,10 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 			return [
 				"margin:0",
 				...textDeclarations(block.text, fonts),
-				...verticalDeclarations(block.text),
+				// A list's items are the block's `html`; pushing them down its box
+				// with a wrapping span would break the list, so a list block is
+				// always read as though its vertical alignment were "top".
+				...(isListTag(block.tag) ? [] : verticalDeclarations(block.text)),
 				...boxDeclarations(block.box),
 				...place,
 			];
@@ -1555,13 +1821,17 @@ function compileBlock(
 
 	switch (block.kind) {
 		case "heading": {
-			const tag = `h${block.level}`;
+			const tag = block.tag;
 			return `<${tag}${marker}${style}>${wrapVertical(block.text, escapeHtml(block.content))}</${tag}>`;
 		}
 		case "text": {
-			const html = sanitiseFragment(block.html);
-			const tag = textTag(html);
-			return `<${tag}${marker}${style}>${wrapVertical(block.text, html)}</${tag}>`;
+			const isList = isListTag(block.tag);
+			const html = sanitiseFragment(block.html, textExtraTags(block.tag));
+			// A version 1 tag of "p" keeps its p-or-div choice; every other tag is
+			// written as itself.
+			const tag = block.tag === "p" ? textTag(html) : block.tag;
+			const body = isList ? html : wrapVertical(block.text, html);
+			return `<${tag}${marker}${style}>${body}</${tag}>`;
 		}
 		case "button": {
 			const href = safeHref(block.href);
@@ -1575,7 +1845,12 @@ function compileBlock(
 		case "image": {
 			const src = safeImageSrc(block.src);
 			if (!src) return `<span${marker}${style}>${escapeHtml(block.alt || "Geen afbeelding")}</span>`;
-			return `<img${marker} src="${escapeHtml(src)}" alt="${escapeHtml(block.alt)}"${style}>`;
+			const img = `<img${marker} src="${escapeHtml(src)}" alt="${escapeHtml(block.alt)}"${style}>`;
+			// A picture inside a link: the img keeps its own markers and style, so
+			// the code view finds it exactly as it does one with no link, and the
+			// anchor round it is a thin wrapper with nothing else to carry.
+			const href = block.href ? safeHref(block.href) : null;
+			return href ? `<a href="${escapeHtml(href)}" data-juno-link="1" style="display:inline-block">${img}</a>` : img;
 		}
 		case "divider":
 			return `<hr${marker}${style}>`;
@@ -1612,22 +1887,111 @@ function compileBlock(
 	}
 }
 
-function sectionDeclarations(section: MailSection): (string | null)[] {
-	return [...layoutDeclarations(section.layout), ...boxDeclarations(section.box), ...sectionPlaceDeclarations(section)];
+/**
+ * A container's declarations. `display:block` is written first, and only for
+ * a tag that is not a `div`: a client that knows the HTML5 element but not
+ * flexbox keeps the block, and one that knows neither still gets a block
+ * rather than an inline box. A version 1 section, which is a `div` today,
+ * compiles to `<section style="display:block;display:flex;...">`, and that is
+ * the one difference a test pins between the two versions' output.
+ */
+function containerDeclarations(container: MailContainer, topLevel: boolean): (string | null)[] {
+	return [
+		container.tag !== "div" ? "display:block" : null,
+		...layoutDeclarations(container.layout),
+		...boxDeclarations(container.box),
+		...placementDeclarations(container, topLevel),
+	];
 }
 
-function compileSection(section: MailSection, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules): string {
-	const marks = marksFor(section.id, section.hidden, rules);
+/** A columns table's declarations. A `<table>` needs no `display:block` fallback: every client already treats it as one. */
+function columnsDeclarations(columns: MailColumns, topLevel: boolean): (string | null)[] {
+	return [...boxDeclarations(columns.box), ...placementDeclarations(columns, topLevel)];
+}
+
+/** Half the gap on each inner side, so the total between two cells is the gap and the outer edges carry none of it. */
+function cellGapDeclarations(index: number, count: number, gap: number, padding: MailSpacing): (string | null)[] {
+	const half = gap / 2;
+	return [
+		index > 0 ? `padding-left:${padding.left + half}px` : null,
+		index < count - 1 ? `padding-right:${padding.right + half}px` : null,
+	];
+}
+
+function compileColumnsCell(
+	cell: MailColumnsCell,
+	index: number,
+	count: number,
+	gap: number,
+	inputs: TemplateInput[],
+	fonts: MailFont[],
+	rules: BreakpointRules,
+): string {
+	const className = rules.classes.get(cell.id) ?? null;
+	const declarations = [
+		cell.width !== null ? `width:${cell.width}%` : null,
+		`vertical-align:${cell.verticalAlign}`,
+		...boxDeclarations(cell.box),
+		...cellGapDeclarations(index, count, gap, cell.box.padding),
+	];
+	const style = styleString(declarations);
+	const widthAttr = cell.width !== null ? ` width="${cell.width}%"` : "";
+	const children = compileNodes(cell.children, inputs, fonts, rules, false);
+	return `<td data-juno-id="${escapeHtml(cell.id)}"${widthAttr} valign="${cell.verticalAlign}"${
+		className ? ` class="${className}"` : ""
+	}${style}>${children}</td>`;
+}
+
+/**
+ * Columns: a table laid out for mail, written the way Outlook on Windows
+ * keeps side by side. `role="presentation"` and the zeroed attributes are
+ * what stop a screen reader announcing a layout table as data.
+ */
+function compileColumns(columns: MailColumns, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
+	const marks = marksFor(columns.id, columns.hidden, rules);
 	if (!marks) return "";
-	const declarations = sectionDeclarations(section);
+	const declarations = columnsDeclarations(columns, topLevel);
 	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
-	const children = section.blocks
-		.map((block) => {
-			const blockMarks = marksFor(block.id, block.hidden, rules);
-			return blockMarks ? compileBlock(block, inputs, fonts, blockMarks) : "";
-		})
+	const rows = columns.rows
+		.map(
+			(row) =>
+				`<tr data-juno-id="${escapeHtml(row.id)}">${row.cells
+					.map((cell, index) => compileColumnsCell(cell, index, row.cells.length, columns.gap, inputs, fonts, rules))
+					.join("")}</tr>`,
+		)
 		.join("");
-	return `<div data-juno-section="${escapeHtml(section.name)}" data-juno-id="${escapeHtml(section.id)}"${markAttributes(marks)}${style}>${children}</div>`;
+	return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" data-juno-columns="${escapeHtml(
+		columns.name,
+	)}" data-juno-id="${escapeHtml(columns.id)}"${markAttributes(marks)}${style}>${rows}</table>`;
+}
+
+function compileContainer(
+	container: MailContainer,
+	inputs: TemplateInput[],
+	fonts: MailFont[],
+	rules: BreakpointRules,
+	topLevel: boolean,
+): string {
+	const marks = marksFor(container.id, container.hidden, rules);
+	if (!marks) return "";
+	const declarations = containerDeclarations(container, topLevel);
+	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
+	const children = compileNodes(container.children, inputs, fonts, rules, false);
+	const tag = container.tag;
+	return `<${tag} data-juno-section="${escapeHtml(container.name)}" data-juno-id="${escapeHtml(container.id)}"${markAttributes(
+		marks,
+	)}${style}>${children}</${tag}>`;
+}
+
+function compileNode(node: MailNode, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
+	if (isContainer(node)) return compileContainer(node, inputs, fonts, rules, topLevel);
+	if (isColumns(node)) return compileColumns(node, inputs, fonts, rules, topLevel);
+	const marks = marksFor(node.id, node.hidden, rules);
+	return marks ? compileBlock(node, inputs, fonts, marks) : "";
+}
+
+function compileNodes(nodes: MailNode[], inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
+	return nodes.map((node) => compileNode(node, inputs, fonts, rules, topLevel)).join("");
 }
 
 /**
@@ -1655,8 +2019,8 @@ export function compileLayout(layout: MailLayout, inputs: TemplateInput[] = []):
 		...fillDeclarations(layout.fill),
 		layout.customCss,
 	]);
-	const sections = layout.sections.map((section) => compileSection(section, inputs, layout.fonts, rules)).join("");
-	return `<div data-juno-canvas="1"${style}>${sections}</div>`;
+	const body = compileNodes(layout.children, inputs, layout.fonts, rules, true);
+	return `<div data-juno-canvas="1"${style}>${body}</div>`;
 }
 
 /* ------------------------------------------------------ breakpoints, as CSS */
@@ -1782,14 +2146,103 @@ function classFor(id: string): string {
  * come after them and win. So each breakpoint is compared with what the wider
  * ones already made of the default, not with the default itself.
  */
+/** A block's own "natural" display, for the one case a breakpoint restores visibility with nothing else changed. */
+function naturalDisplayOf(block: MailBlock): string {
+	return block.kind === "html" && codeRoot(sanitiseMarkup(block.html))?.name === "table" ? "table" : "block";
+}
+
+/**
+ * Compares two parallel trees (before and after applying one breakpoint) and
+ * hands `add` the declarations that differ for every container, columns
+ * table, cell and block in them. `before` and `here` always have the same
+ * shape, because applying an override never adds, removes or reorders a node.
+ */
+function walkRulePair(
+	before: MailNode[],
+	here: MailNode[],
+	inputs: TemplateInput[],
+	fonts: MailFont[],
+	add: (id: string, declarations: string[]) => void,
+	shown: Set<string>,
+	topLevel: boolean,
+): void {
+	here.forEach((node, index) => {
+		const was = before[index];
+		if (!was || was.kind !== node.kind) return;
+		if (isContainer(node) && isContainer(was)) {
+			add(
+				node.id,
+				ruleDeclarations(
+					declarationMap(containerDeclarations(was, topLevel)),
+					declarationMap(containerDeclarations(node, topLevel)),
+					was.hidden,
+					node.hidden,
+					"block",
+				),
+			);
+			if (!node.hidden) shown.add(node.id);
+			walkRulePair(was.children, node.children, inputs, fonts, add, shown, false);
+			return;
+		}
+		if (isColumns(node) && isColumns(was)) {
+			add(
+				node.id,
+				ruleDeclarations(
+					declarationMap(columnsDeclarations(was, topLevel)),
+					declarationMap(columnsDeclarations(node, topLevel)),
+					was.hidden,
+					node.hidden,
+					"block",
+				),
+			);
+			if (!node.hidden) shown.add(node.id);
+			node.rows.forEach((row, rowIndex) => {
+				const wasRow = was.rows[rowIndex];
+				if (!wasRow) return;
+				row.cells.forEach((cell, cellIndex) => {
+					const wasCell = wasRow.cells[cellIndex];
+					if (!wasCell) return;
+					add(cell.id, ruleDeclarations(declarationMap(boxDeclarations(wasCell.box)), declarationMap(boxDeclarations(cell.box)), false, false, "table-cell"));
+					walkRulePair(wasCell.children, cell.children, inputs, fonts, add, shown, false);
+				});
+			});
+			return;
+		}
+		if (isBlockNode(node) && isBlockNode(was)) {
+			add(
+				node.id,
+				ruleDeclarations(
+					declarationMap(blockDeclarations(was, inputs, fonts)),
+					declarationMap(blockDeclarations(node, inputs, fonts)),
+					was.hidden,
+					node.hidden,
+					naturalDisplayOf(node),
+				),
+			);
+			if (!node.hidden) shown.add(node.id);
+		}
+	});
+}
+
+/** The default's own hidden elements are only "shown" when a breakpoint showed them, not merely because they were visible before one hid them. */
+function clearDefaultShown(nodes: MailNode[], shown: Set<string>): void {
+	for (const node of nodes) {
+		if (!node.hidden) shown.delete(node.id);
+		if (isContainer(node)) clearDefaultShown(node.children, shown);
+		else if (isColumns(node)) {
+			for (const row of node.rows) for (const cell of row.cells) clearDefaultShown(cell.children, shown);
+		}
+	}
+}
+
 function breakpointRules(layout: MailLayout, inputs: TemplateInput[]): BreakpointRules {
 	const classes = new Map<string, string>();
 	const shown = new Set<string>();
 	const queries: string[] = [];
-	let before = layout.sections;
+	let before = layout.children;
 
 	for (const breakpoint of widestFirst(layout.breakpoints)) {
-		const here = before.map((section) => applySectionOverride(section, breakpoint));
+		const here = before.map((node) => applyNode(node, breakpoint));
 		const rules: string[] = [];
 		const add = (id: string, declarations: string[]) => {
 			if (declarations.length === 0) return;
@@ -1798,47 +2251,13 @@ function breakpointRules(layout: MailLayout, inputs: TemplateInput[]): Breakpoin
 			rules.push(`.${className}{${declarations.map((declaration) => `${declaration} !important`).join(";")}}`);
 		};
 
-		here.forEach((section, sectionIndex) => {
-			const was = before[sectionIndex];
-			if (!was) return;
-			add(
-				section.id,
-				ruleDeclarations(
-					declarationMap(sectionDeclarations(was)),
-					declarationMap(sectionDeclarations(section)),
-					was.hidden,
-					section.hidden,
-					"block",
-				),
-			);
-			if (!section.hidden) shown.add(section.id);
-			section.blocks.forEach((block, blockIndex) => {
-				const previous = was.blocks[blockIndex];
-				if (!previous) return;
-				add(
-					block.id,
-					ruleDeclarations(
-						declarationMap(blockDeclarations(previous, inputs, layout.fonts)),
-						declarationMap(blockDeclarations(block, inputs, layout.fonts)),
-						previous.hidden,
-						block.hidden,
-						block.kind === "html" && codeRoot(sanitiseMarkup(block.html))?.name === "table" ? "table" : "block",
-					),
-				);
-				if (!block.hidden) shown.add(block.id);
-			});
-		});
+		walkRulePair(before, here, inputs, layout.fonts, add, shown, true);
 
 		if (rules.length > 0) queries.push(`@media only screen and (max-width:${breakpoint.maxWidth}px){${rules.join("")}}`);
 		before = here;
 	}
 
-	// The default's own hidden elements are only "shown" when a breakpoint
-	// showed them, not merely because they were visible before one hid them.
-	for (const section of layout.sections) {
-		if (!section.hidden) shown.delete(section.id);
-		for (const block of section.blocks) if (!block.hidden) shown.delete(block.id);
-	}
+	clearDefaultShown(layout.children, shown);
 
 	return { classes, shown, css: queries.join("").replace(/[<>]/g, "") };
 }
@@ -2325,24 +2744,31 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 
 	switch (kind) {
 		case "heading": {
-			const level = node.name === "h1" ? 1 : node.name === "h3" ? 3 : 2;
+			const tag = toHeadingTag(node.name);
 			return {
 				...common,
 				kind: "heading",
-				level,
+				tag,
 				content: unescapeAttr(unwrapVertical(node.inner).replace(/<[^>]+>/g, "")),
 				text: readTextStyle(map),
 				box: readBox(map, textOwned),
 			};
 		}
-		case "text":
+		case "text": {
+			// A version 1 "p" sometimes compiled to a div, by the same p-or-div
+			// choice the compiler still makes; a div is not a recognised text
+			// tag, so it reads back as the default, "p".
+			const tag = toTextTag(node.name);
+			const isList = isListTag(tag);
 			return {
 				...common,
 				kind: "text",
-				html: sanitiseFragment(unwrapVertical(node.inner)),
+				tag,
+				html: sanitiseFragment(isList ? node.inner : unwrapVertical(node.inner), textExtraTags(tag)),
 				text: readTextStyle(map),
 				box: readBox(map, textOwned),
 			};
+		}
 		case "button": {
 			const box = readBox(map, [...textOwned, "display", "text-decoration", "background"]);
 			const padding = box.padding;
@@ -2375,6 +2801,9 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 				alt: unescapeAttr(attribute(node.attrs, "alt") ?? ""),
 				width: px(map, "width"),
 				align: map.get("margin") === "0 auto" ? "center" : map.get("margin-left") === "auto" ? "right" : "left",
+				// A picture inside a link has its href attached by the caller, which
+				// is the one that saw the <a> this <img> sat inside.
+				href: null,
 				box: {
 					...readBox(map, ["display", "max-width", "width", "height", "margin", "margin-left", "flex"]),
 					width: null,
@@ -2481,45 +2910,142 @@ const SECTION_PROPERTIES = [
 	"grid-template-columns",
 ];
 
-function readSection(node: Extract<Node, { type: "element" }>): MailSection {
-	const marks = withoutHiddenMarks(node.attrs);
-	const map = readStyle(marks.attrs);
-	const blocks: MailBlock[] = [];
-	// Markup between two blocks is somebody's hand-written HTML. It becomes a
-	// raw block in the order it was written, which is what "editable, within
-	// what works" has to mean if an edit is never to lose anything.
+/** An `<img>` inside the thin `<a data-juno-link>` wrapper an image with a link compiles to, or null. */
+function unwrapLinked(node: Extract<Node, { type: "element" }>): Extract<Node, { type: "element" }> | null {
+	return (
+		splitTopLevel(node.inner).find((entry): entry is Extract<Node, { type: "element" }> => entry.type === "element") ?? null
+	);
+}
+
+/**
+ * One child of a container, a cell or the canvas itself, read back as the
+ * node it was: a nested container, a columns table, an image wrapped in its
+ * link, or a leaf block. Null for markup none of those recognise, which the
+ * caller keeps as the author's own rather than losing.
+ */
+function readChild(child: Node, depth: number): MailNode | null {
+	if (child.type !== "element" || depth >= MAX_DEPTH) return null;
+	if (attribute(child.attrs, "data-juno-section") !== null) return readContainer(child, depth);
+	if (attribute(child.attrs, "data-juno-columns") !== null) return readColumns(child, depth);
+	if (attribute(child.attrs, "data-juno-link") !== null) {
+		const inner = unwrapLinked(child);
+		if (!inner || !attribute(inner.attrs, "data-juno-block")) return null;
+		const block = readBlock(inner);
+		const href = safeHref(unescapeAttr(attribute(child.attrs, "href") ?? ""));
+		return block.kind === "image" ? { ...block, href } : block;
+	}
+	if (attribute(child.attrs, "data-juno-block") !== null) return readBlock(child);
+	return null;
+}
+
+/**
+ * Every child of one parent, in order. Markup none of them recognise is
+ * somebody's hand-written HTML, and becomes a raw block in the position it
+ * was written, which is what "editable, within what works" has to mean if an
+ * edit is never to lose anything.
+ */
+function readChildren(inner: string, depth: number): MailNode[] {
+	const nodes: MailNode[] = [];
 	let loose = "";
 	const flush = () => {
-		if (loose.trim()) blocks.push(rawBlock(loose));
+		if (loose.trim()) nodes.push(rawBlock(loose));
 		loose = "";
 	};
-
-	for (const child of splitTopLevel(node.inner)) {
+	for (const child of splitTopLevel(inner)) {
 		if (child.type === "text") {
 			loose += child.raw;
 			continue;
 		}
-		if (attribute(child.attrs, "data-juno-block")) {
+		const node = readChild(child, depth);
+		if (node) {
 			flush();
-			blocks.push(readBlock(child));
+			nodes.push(node);
 			continue;
 		}
 		loose += child.raw;
 	}
 	flush();
+	return nodes;
+}
 
+function readContainer(node: Extract<Node, { type: "element" }>, depth: number): MailContainer {
+	const marks = withoutHiddenMarks(node.attrs);
+	const map = readStyle(marks.attrs);
 	const left = map.get("margin-left") === "auto";
 	const right = map.get("margin-right") === "auto";
 	return {
 		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
+		kind: "container",
+		tag: toContainerTag(node.name),
 		name: unescapeAttr(attribute(node.attrs, "data-juno-section") || "Section"),
-		// A section hidden everywhere is never compiled. One that is here was
+		// A container hidden everywhere is never compiled. One that is here was
 		// showing, or was hidden by default for a breakpoint to show.
 		hidden: marks.hidden,
 		alignSelf: left && right ? "center" : left ? "end" : "auto",
+		grow: readGrow(map),
 		layout: readSectionLayout(map),
 		box: readBox(map, [...SECTION_PROPERTIES, "flex", "margin-left", "margin-right"]),
-		blocks,
+		children: readChildren(node.inner, depth + 1),
+	};
+}
+
+/** A cell's width, a percentage of the table's, from either the attribute or the CSS the compiler wrote. */
+function readCellWidth(map: Declarations, attrs: string): number | null {
+	const fromAttr = /^(\d+)%$/.exec(attribute(attrs, "width") ?? "");
+	const fromCss = /^(\d+(?:\.\d+)?)%$/.exec(map.get("width") ?? "");
+	const raw = fromAttr ?? fromCss;
+	return raw ? Math.min(100, Math.max(1, Math.round(Number.parseFloat(raw[1] ?? "0")))) : null;
+}
+
+function readCellVerticalAlign(map: Declarations, attrs: string): MailVerticalAlign {
+	const attr = attribute(attrs, "valign");
+	if (attr === "middle" || attr === "bottom" || attr === "top") return attr;
+	const css = map.get("vertical-align");
+	return css === "middle" ? "middle" : css === "bottom" ? "bottom" : "top";
+}
+
+function readColumnsCell(node: Extract<Node, { type: "element" }>, depth: number): MailColumnsCell {
+	const map = readStyle(node.attrs);
+	return {
+		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
+		width: readCellWidth(map, node.attrs),
+		verticalAlign: readCellVerticalAlign(map, node.attrs),
+		// The gap is written as extra padding on the sides between cells, on
+		// top of the cell's own, so the shorthand `padding` alone is what the
+		// cell was given: reading it back does not carry the gap along too.
+		box: readBox(map, ["width", "vertical-align", "padding-left", "padding-right"]),
+		children: readChildren(node.inner, depth),
+	};
+}
+
+function readColumns(node: Extract<Node, { type: "element" }>, depth: number): MailColumns {
+	const marks = withoutHiddenMarks(node.attrs);
+	const map = readStyle(marks.attrs);
+	const left = map.get("margin-left") === "auto";
+	const right = map.get("margin-right") === "auto";
+	const rows: MailColumnsRow[] = [];
+	for (const rowNode of splitTopLevel(node.inner)) {
+		if (rowNode.type !== "element" || rowNode.name !== "tr") continue;
+		const cells: MailColumnsCell[] = [];
+		for (const cellNode of splitTopLevel(rowNode.inner)) {
+			if (cellNode.type !== "element" || cellNode.name !== "td") continue;
+			cells.push(readColumnsCell(cellNode, depth + 1));
+		}
+		rows.push({ id: attribute(rowNode.attrs, "data-juno-id") ?? randomUUID(), cells });
+	}
+	return {
+		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
+		kind: "columns",
+		hidden: marks.hidden,
+		name: unescapeAttr(attribute(node.attrs, "data-juno-columns") || "Columns"),
+		alignSelf: left && right ? "center" : left ? "end" : readSelfAlign(map.get("align-self")),
+		grow: readGrow(map),
+		// Baked into the cells' padding rather than kept on its own, so a gap
+		// typed by hand in the code view is read as the padding it now is
+		// rather than guessed back into a number that may not be it.
+		gap: 0,
+		box: readBox(map, ["flex", "align-self", "margin-left", "margin-right"]),
+		rows,
 	};
 }
 
@@ -2528,10 +3054,11 @@ function readSection(node: Extract<Node, { type: "element" }>): MailSection {
  * rather than only read.
  *
  * It never refuses and it never drops: markup it recognises comes back as the
- * block it was, and markup it does not comes back as a raw `html` block in the
- * position it was written. An author can therefore hand-write a table in the
- * code view, switch to the canvas, and find it sitting there as a block they
- * can move, rather than finding it gone.
+ * node it was, nested exactly as it was nested, and markup it does not comes
+ * back as a raw `html` block in the position it was written. An author can
+ * therefore hand-write a table in the code view, switch to the canvas, and
+ * find it sitting there as a block they can move, rather than finding it
+ * gone.
  *
  * What it cannot promise is that a hand-written document round trips to
  * byte-identical HTML. A raw block is re-emitted inside the div that holds it,
@@ -2552,42 +3079,18 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 		// house frame used to give a hand-written body, so moving it onto a
 		// canvas, which sends it without that frame, does not push the words
 		// against the edge of the message.
-		const section = emptySection("Body");
+		const section = emptyContainer("section", "Body");
 		section.box = { ...section.box, padding: { top: 32, right: 36, bottom: 32, left: 36 } };
-		section.blocks = html.trim() ? [rawBlock(html)] : [];
-		return { ...base, sections: [section], breakpoints: parseBreakpoints(base.breakpoints, [section]) };
+		section.children = html.trim() ? [rawBlock(html)] : [];
+		return { ...base, children: [section], breakpoints: parseBreakpoints(base.breakpoints, [section]) };
 	}
 
 	const map = readStyle(canvas.attrs);
-	const sections: MailSection[] = [];
-	let loose = "";
-	const flush = () => {
-		if (loose.trim()) {
-			const section = emptySection("Section");
-			section.blocks = [rawBlock(loose)];
-			sections.push(section);
-		}
-		loose = "";
-	};
-
-	for (const child of splitTopLevel(canvas.inner)) {
-		if (child.type === "text") {
-			loose += child.raw;
-			continue;
-		}
-		if (attribute(child.attrs, "data-juno-section") !== null) {
-			flush();
-			sections.push(readSection(child));
-			continue;
-		}
-		loose += child.raw;
-	}
-	flush();
-
-	const kept = sections.length > 0 ? sections : [emptySection("Body")];
+	const children = readChildren(canvas.inner, 0);
+	const kept = children.length > 0 ? children : [emptyContainer("section", "Body")];
 	const maxWidth = px(map, "max-width");
 	return {
-		version: 1,
+		version: 2,
 		// A frame that fills writes no width of its own, so the width it is
 		// drawn at comes from the canvas the markup came from.
 		width: maxWidth ?? base.width,
@@ -2596,8 +3099,8 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 		fill: readFill(map),
 		// Fonts and breakpoints live in the head of the message, not in this
 		// fragment, so the canvas the markup came from is the only place to
-		// find them. A breakpoint keeps what it changes about the sections and
-		// blocks that are still there.
+		// find them. A breakpoint keeps what it changes about the nodes that
+		// are still there.
 		fonts: base.fonts,
 		customCss: leftoverCss(map, [
 			"max-width",
@@ -2608,7 +3111,7 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 			"background-color",
 			"background-image",
 		]),
-		sections: kept,
+		children: kept,
 		breakpoints: parseBreakpoints(base.breakpoints, kept),
 	};
 }
@@ -2637,6 +3140,59 @@ export function blockToCode(block: MailBlock, inputs: TemplateInput[], fonts: Ma
 }
 
 /**
+ * The children of one container or cell, found anywhere in the tree, or null
+ * when nothing there has that id. What `sectionId` in `MailBlockConversion`
+ * names now that a section is one kind of container among several: the id of
+ * the block's immediate parent.
+ */
+export function findChildren(nodes: MailNode[], parentId: string): MailNode[] | null {
+	for (const node of nodes) {
+		if (isContainer(node)) {
+			if (node.id === parentId) return node.children;
+			const found = findChildren(node.children, parentId);
+			if (found) return found;
+		} else if (isColumns(node)) {
+			for (const row of node.rows) {
+				for (const cell of row.cells) {
+					if (cell.id === parentId) return cell.children;
+					const found = findChildren(cell.children, parentId);
+					if (found) return found;
+				}
+			}
+		}
+	}
+	return null;
+}
+
+/**
+ * Replaces the children of one parent with `transform`'s result, wherever in
+ * the tree that parent is.
+ */
+function replaceChildren(nodes: MailNode[], parentId: string, transform: (children: MailNode[]) => MailNode[]): MailNode[] {
+	return nodes.map((node) => {
+		if (isContainer(node)) {
+			return node.id === parentId
+				? { ...node, children: transform(node.children) }
+				: { ...node, children: replaceChildren(node.children, parentId, transform) };
+		}
+		if (isColumns(node)) {
+			return {
+				...node,
+				rows: node.rows.map((row) => ({
+					...row,
+					cells: row.cells.map((cell) =>
+						cell.id === parentId
+							? { ...cell, children: transform(cell.children) }
+							: { ...cell, children: replaceChildren(cell.children, parentId, transform) },
+					),
+				})),
+			};
+		}
+		return node;
+	});
+}
+
+/**
  * Replaces one block with the code it compiles to. The placement it had is
  * part of that code now, so the new block carries none of its own.
  */
@@ -2648,25 +3204,20 @@ export function convertBlockToCode(
 ): MailLayout {
 	return {
 		...layout,
-		sections: layout.sections.map((section) =>
-			section.id !== sectionId
-				? section
-				: {
-						...section,
-						blocks: section.blocks.map((block) => {
-							if (block.id !== blockId || block.kind === "html") return block;
-							const code = blockToCode(block, inputs, layout.fonts);
-							return {
-								id: block.id,
-								kind: "html",
-								html: code.html,
-								css: code.css,
-								grow: 0,
-								alignSelf: "auto",
-								hidden: block.hidden,
-							};
-						}),
-					},
+		children: replaceChildren(layout.children, sectionId, (children) =>
+			children.map((node) => {
+				if (node.id !== blockId || !isBlockNode(node) || node.kind === "html") return node;
+				const code = blockToCode(node, inputs, layout.fonts);
+				return {
+					id: node.id,
+					kind: "html",
+					html: code.html,
+					css: code.css,
+					grow: 0,
+					alignSelf: "auto",
+					hidden: node.hidden,
+				};
+			}),
 		),
 		// What a breakpoint changed about the block was its style, which is code
 		// now. Whether it shows at a breakpoint is still the block's own.

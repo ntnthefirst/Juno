@@ -61,26 +61,36 @@ function addresses(value: unknown): MailAddress[] {
 const LAYOUT_SCHEMA = {
 	type: ["object", "null"],
 	description:
-		"The section and block canvas. { version: 1, width, widthMode: fill or fixed, minHeight, " +
-		"fill, fonts, customCss, sections: [{ id, name, hidden, alignSelf, layout, box, blocks }], " +
-		"breakpoints }. The message is sent with nothing around it: with widthMode fill it is as " +
-		"wide as the reader's mail client, with fixed it is at most width and centred. A section " +
-		"lays its blocks out with flex or grid; nothing is positioned absolutely and custom CSS " +
-		"that tries to is dropped. A box carries fill (solid or a two-stop gradient, each with " +
-		"hidden), stroke (borderWidth, borderColor, borderStyle, borderSides, strokeHidden), " +
-		"radius or four corners, opacity, effects (shadow or blur, each with hidden), width, " +
-		"minHeight and clip. An empty section with a minHeight and a fill or a one-sided stroke " +
-		"is a divider. A text style carries fontFamily, weight (thin to black), italic, " +
-		"decoration, transform, letterSpacing and both alignments. fonts: [{ family, source: " +
-		"google or link, href for a link, weights, italic, fallback: sans, serif or mono }]; a " +
-		"block names a font by its family. A code block is { kind: html, html, css }. " +
-		"breakpoints: [{ id, name, maxWidth, sections: { [sectionId]: { hidden, alignSelf, " +
-		"layout, box } }, blocks: { [blockId]: { hidden, grow, alignSelf, box, text, ... } } }], " +
-		"each holding only what changes at that width and narrower, as partial box and text " +
-		"styles; content is the same at every width. Colours are hex, #rrggbbaa for an opacity; " +
-		"images and links https only. Call mail.templates.get on an existing template to see the " +
-		"shape, and mail.templates.preview to check one before proposing it. Null drops the " +
-		"canvas and keeps the HTML it compiled to.",
+		"The canvas, a tree. { version: 2, width, widthMode: fill or fixed, minHeight, fill, " +
+		"fonts, customCss, children, breakpoints }. The message is sent with nothing around it: " +
+		"with widthMode fill it is as wide as the reader's mail client, with fixed it is at most " +
+		"width and centred. children is a list of nodes, each a container, a columns table or a " +
+		"block, and a container's own children are the same. A container is { kind: container, " +
+		"id, tag: section, div, header, footer, main, article, aside or nav, hidden, name, " +
+		"alignSelf, grow, layout, box, children }; it lays its children out with flex or grid, " +
+		"nothing is positioned absolutely, and custom CSS that tries to is dropped. A columns " +
+		"table is the one layout that stays side by side in Outlook on Windows: { kind: columns, " +
+		"id, hidden, name, alignSelf, grow, gap, box, rows: [{ id, cells: [{ id, width (percent " +
+		"or null), verticalAlign, box, children }] }] }. A block has a kind (text, heading, " +
+		"button, image, divider, spacer, field or html) and, for text, a tag (p, blockquote, " +
+		"pre, address, span, ul or ol, where ul and ol write their html as <li> items), and for " +
+		"heading, a tag (h1 to h6). An image may carry an href, a link round the picture; null is " +
+		"a plain picture. A box carries fill (solid or a two-stop gradient, each with hidden), " +
+		"stroke (borderWidth, borderColor, borderStyle, borderSides, strokeHidden), radius or " +
+		"four corners, opacity, effects (shadow or blur, each with hidden), width, minHeight and " +
+		"clip. An empty container with a minHeight and a fill or a one-sided stroke is a divider. " +
+		"A text style carries fontFamily, weight (thin to black), italic, decoration, transform, " +
+		"letterSpacing and both alignments. fonts: [{ family, source: google or link, href for a " +
+		"link, weights, italic, fallback: sans, serif or mono }]; a block names a font by its " +
+		"family. A code block is { kind: html, html, css }. breakpoints: [{ id, name, maxWidth, " +
+		"sections: { [id]: { hidden, alignSelf, grow, layout, box } }, blocks: { [id]: { hidden, " +
+		"grow, alignSelf, box, text, ... } } }], keyed by the id of any container, columns table, " +
+		"cell or block, each holding only what changes at that width and narrower, as partial box " +
+		"and text styles; content is the same at every width. Colours are hex, #rrggbbaa for an " +
+		"opacity; images and links https only. Version 1, one level of sections holding blocks, " +
+		"is still accepted and read as each section becoming a section container. Call " +
+		"mail.templates.get on an existing template to see the shape, and mail.templates.preview " +
+		"to check one before proposing it. Null drops the canvas and keeps the HTML it compiled to.",
 };
 
 export const mailOutboxTools: ToolDescriptor[] = [

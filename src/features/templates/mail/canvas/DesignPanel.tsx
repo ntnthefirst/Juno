@@ -3,10 +3,11 @@ import type {
 	MailAlign,
 	MailBlock,
 	MailBoxStyle,
+	MailContainer,
 	MailCorners,
 	MailFontFallback,
+	MailHeadingTag,
 	MailLayout,
-	MailSection,
 	MailSpacing,
 	MailTextStyle,
 	TemplateInput,
@@ -78,7 +79,7 @@ type DesignPanelProps = {
 	onLayout: (patch: Partial<Omit<MailLayout, "sections" | "version">>) => void;
 	/** A change that reaches across the whole canvas at once, like a selection colour. */
 	onReplace: (layout: MailLayout) => void;
-	onSection: (sectionId: string, patch: Partial<Omit<MailSection, "id" | "blocks">>) => void;
+	onSection: (sectionId: string, patch: Partial<Omit<MailContainer, "id" | "kind" | "children">>) => void;
 	onBlock: (sectionId: string, blockId: string, patch: Partial<MailBlock>) => void;
 	onRemoveSection: (sectionId: string) => void;
 	onRemoveBlock: (sectionId: string, blockId: string) => void;
@@ -120,8 +121,23 @@ const CAN: Record<Exclude<MailBlock["kind"], "html">, Capabilities> = {
 };
 
 /** The cross axis of a section, which is the one a block's own alignment moves it along. */
-function crossAxis(section: MailSection): Axis {
+function crossAxis(section: MailContainer): Axis {
 	return flowOf(section) === "column" ? "h" : "v";
+}
+
+/**
+ * The panel's heading control still offers 1 to 3, the way the level did: a
+ * fourth, fifth or sixth level is a tag to switch to from the toolbar's
+ * Containers group, not from here (docs/editors.md section 2, phase 2 and 3).
+ * A tag past 3 is read as 3, so the control never shows nothing pressed.
+ */
+function levelOfTag(tag: MailHeadingTag): 1 | 2 | 3 {
+	const level = Number.parseInt(tag.slice(1), 10);
+	return level === 1 || level === 3 ? level : level >= 4 ? 3 : 2;
+}
+
+function tagOfLevel(level: 1 | 2 | 3): MailHeadingTag {
+	return `h${level}` as MailHeadingTag;
 }
 
 const ALT = isMac ? "Option" : "Alt";
@@ -364,7 +380,7 @@ function RadiusFields({ radius, corners, onCorners }: RadiusFieldsProps) {
 
 type BlockLayoutProps = {
 	block: MailBlock;
-	section: MailSection;
+	section: MailContainer;
 	measured: Measured | null;
 	can: Capabilities | null;
 	/** The corners, when this block has them. */
@@ -714,9 +730,13 @@ export function DesignPanel({
 	onRemoveBlock,
 	onConvert,
 }: DesignPanelProps) {
-	const section = selection ? (layout.sections.find((entry) => entry.id === selection.sectionId) ?? null) : null;
+	const section = selection
+		? (layout.children.find((entry): entry is MailContainer => entry.kind === "container" && entry.id === selection.sectionId) ?? null)
+		: null;
 	const block =
-		section && selection?.blockId ? (section.blocks.find((entry) => entry.id === selection.blockId) ?? null) : null;
+		section && selection?.blockId
+			? (section.children.find((entry): entry is MailBlock => entry.kind !== "container" && entry.kind !== "columns" && entry.id === selection.blockId) ?? null)
+			: null;
 	const scope = section ? { sectionId: section.id, blockId: block?.id } : null;
 	const colors = colorsIn(layout, scope);
 	const recolor = (from: string, to: string) => onReplace(replaceColor(layout, scope, from, to));
@@ -858,7 +878,7 @@ export function DesignPanel({
 						}
 						level={
 							block.kind === "heading"
-								? { value: block.level, onChange: (level) => set({ level } as Partial<MailBlock>) }
+								? { value: levelOfTag(block.tag), onChange: (level) => set({ tag: tagOfLevel(level) } as Partial<MailBlock>) }
 								: undefined
 						}
 						showVertical={block.kind === "text" || block.kind === "heading"}

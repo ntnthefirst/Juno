@@ -1264,7 +1264,8 @@ export interface DocumentTemplate extends Standard {
 
 export type DocumentTemplateInput = {
 	name: string;
-	bodyHtml: string;
+	/** Left out, a fresh template gets one empty page. */
+	bodyHtml?: string;
 	key?: string;
 	description?: string | null;
 	language?: string;

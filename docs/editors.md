@@ -405,6 +405,11 @@ as HTML. That stays supported. Converting one is a deliberate act, because
 compiling a hand-written contract into blocks would lose whatever the author
 did by hand.
 
+A new template does not: the plus on the list opens into a name field, Enter
+creates the template with that name and one empty page as its layout, and it
+opens straight into the page editor on that page rather than into the
+plain-HTML mode above.
+
 ### What the editor must not pretend
 
 It is not Word. There is no text wrap around an image, no columns inside a

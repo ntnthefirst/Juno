@@ -1153,6 +1153,53 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 								}
+								if (screen === "Document templates") {
+									// The plus beside the heading: asks for a name, creates a
+									// template with one empty page as its body, and opens it straight
+									// into the page editor built on that page rather than the plain-HTML
+									// mode a template with no layout opens into.
+									const created = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											if (!back) return "no back action from the preview";
+											back.click();
+											await wait(500);
+											const plus = document.querySelector('button[aria-label="New document template"]');
+											if (!plus) return "no plus on the list";
+											plus.click();
+											await wait(400);
+											const field = document.querySelector('input[aria-label="New document template"]');
+											if (!field) return "the plus did not open into a name field";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											setValue.call(field, "Smoke document template");
+											field.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(200);
+											field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+											let canvas = null;
+											for (let tries = 0; tries < 20 && !canvas; tries++) {
+												await wait(150);
+												canvas = document.querySelector("button[aria-label^='Page 1']");
+											}
+											if (!canvas) {
+												const alert = document.querySelector("[role=alert]");
+												return "the new template did not open a page canvas" + (alert ? ": " + alert.textContent.trim() : "");
+											}
+											return "ok";
+										})()`,
+									) as string;
+									if (created !== "ok") throw new Error(`Smoke: creating a document template ${created}`);
+
+									// Leaves without editing further, back to that template's own
+									// preview, which is where the screenshots below expect to be.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
+											if (back) back.click();
+											await new Promise((r) => setTimeout(r, 400));
+										})()`,
+									);
+								}
 								if (screen === "Mail templates") {
 									// One document underneath every view (docs/editors.md section 2):
 									// switching to Code has to show the very text the body was

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent, type HTMLAttributes } from "react";
-import type { MailBlock, MailContainer, MailFont, MailLayout, MailNode, TemplateInput } from "@shared/types";
+import type { MailBlock, MailColumns, MailColumnsCell, MailContainer, MailFont, MailLayout, MailNode, TemplateInput } from "@shared/types";
 import { Icon } from "../../../../components/Icon";
+import { canMoveInto, firstChildOf } from "./canvas-actions";
 import {
 	boxCss,
+	cellCss,
 	CLIENT_DEFAULTS,
+	columnsCss,
 	fillCss,
 	MAIL_SHELL,
 	placeCss,
@@ -15,21 +18,19 @@ import {
 import { codeMarkup } from "./code-markup";
 import { InlineText, type Caret } from "./InlineText";
 
-/** A container: what a section is, in the shapes this phase can build and draw. */
 function isContainer(node: MailNode): node is MailContainer {
 	return node.kind === "container";
 }
 
-/** A leaf: anything that is not a container or a columns table. */
-function isBlockNode(node: MailNode): node is MailBlock {
-	return node.kind !== "container" && node.kind !== "columns";
+function isColumns(node: MailNode): node is MailColumns {
+	return node.kind === "columns";
 }
 
-/** What the design panel is pointed at. A section on its own, or one block in it. */
-export type Selection = { sectionId: string; blockId?: string } | null;
+/** What the design panel is pointed at: one node, wherever it sits in the tree. */
+export type Selection = { id: string } | null;
 
-/** Where a dragged block was let go: in front of a block, or at the end of a section. */
-export type DropTarget = { sectionId: string; beforeBlockId: string | null };
+/** Where a dragged node was let go: into `parentId`'s children (the frame's own top level for null), in front of `beforeId`, or at the end when that is null. */
+export type DropTarget = { parentId: string | null; beforeId: string | null };
 
 /** A text block or a heading being edited in place, and where its caret starts. */
 export type Editing = { blockId: string; caret: Caret };
@@ -44,9 +45,9 @@ type CanvasViewProps = {
 	width: number;
 	selection: Selection;
 	onSelect: (selection: Selection) => void;
-	onDrop: (fromSectionId: string, blockId: string, target: DropTarget) => void;
+	onDrop: (id: string, target: DropTarget) => void;
 	/** Text typed on the canvas itself, written back to the block it was typed in. */
-	onEdit: (sectionId: string, blockId: string, patch: Partial<MailBlock>) => void;
+	onEdit: (blockId: string, patch: Partial<MailBlock>) => void;
 	/** Held by the editor, so adding a block or pressing Enter can open it too. */
 	editing: Editing | null;
 	onEditing: (editing: Editing | null) => void;
@@ -57,8 +58,8 @@ type CanvasViewProps = {
 };
 
 /**
- * What the canvas adds to the element a block is drawn as: its handlers, its
- * marks, and its place in the section.
+ * What the canvas adds to the element a node is drawn as: its handlers, its
+ * marks, and its place in its parent.
  */
 type Host = {
 	id: string;
@@ -77,9 +78,9 @@ type BlockViewProps = {
 /**
  * One block, drawn as the element the compiler writes for it.
  *
- * That element is the section's flex item in the message, so it is the flex
+ * That element is its parent's flex item in the message, so it is the flex
  * item here too, with the canvas's handlers on it rather than on a box around
- * it. A box around it would be what the section stretches and aligns, and the
+ * it. A box around it would be what the parent stretches and aligns, and the
  * selection would outline the room the block was given rather than the block:
  * a text block fixed at 100 pixels would be drawn as a line across the frame.
  */
@@ -155,24 +156,33 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 				</span>
 			);
 		}
-		case "image":
-			return block.src ? (
+		case "image": {
+			const picture = block.src ? (
 				<img
-					{...own}
 					src={block.src}
 					alt={block.alt}
-					className={host.className}
 					style={{
 						display: "block",
 						maxWidth: "100%",
 						width: block.width ?? undefined,
 						height: "auto",
+					}}
+				/>
+			) : null;
+			return picture ? (
+				<span
+					{...own}
+					className={host.className}
+					style={{
+						display: "block",
 						marginLeft: block.align === "center" || block.align === "right" ? "auto" : undefined,
 						marginRight: block.align === "center" ? "auto" : undefined,
 						...boxCss({ ...block.box, width: null }),
 						...host.place,
 					}}
-				/>
+				>
+					{picture}
+				</span>
 			) : (
 				<span
 					{...own}
@@ -182,6 +192,7 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 					<Icon name="image" size={14} /> No image address yet
 				</span>
 			);
+		}
 		case "divider":
 			return (
 				<hr
@@ -243,8 +254,8 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 		case "html":
 			// The author's own code, cleaned the way code-markup.ts says and drawn
 			// with its CSS applied by the compiler's rule. The element around it
-			// is a column, so the code's root is stretched across it the way the
-			// section stretches that root in the message.
+			// is a column, so the code's root is stretched across it the way its
+			// parent stretches that root in the message.
 			return block.html.trim() ? (
 				<div
 					{...own}
@@ -273,8 +284,8 @@ function editStyle(block: Extract<MailBlock, { kind: "text" | "heading" }>, font
 	};
 }
 
-/** The outline a block is drawn with: selected, a drop landing in front of it, or hovered. */
-function blockMarks(selected: boolean, over: boolean): string {
+/** The outline a node is drawn with: selected, a drop landing in front of it, or hovered. */
+function marks(selected: boolean, over: boolean): string {
 	return `cursor-default outline-offset-[-1px] ${
 		selected
 			? "outline-2 outline-[var(--accent)]"
@@ -284,21 +295,38 @@ function blockMarks(selected: boolean, over: boolean): string {
 	}`;
 }
 
+/** Half the gap on each inner side, so the total between two cells is the gap and the outer edges carry none of it. Matches cellGapDeclarations. */
+function cellGapCss(index: number, count: number, gap: number, padding: { left: number; right: number }): CSSProperties {
+	const half = gap / 2;
+	return {
+		paddingLeft: index > 0 ? padding.left + half : undefined,
+		paddingRight: index < count - 1 ? padding.right + half : undefined,
+	};
+}
+
 /**
- * The frame, and what is in it.
+ * The frame, and what is in it, drawn as the tree it is.
  *
- * Nothing on this surface can be dragged to a coordinate. A block is dropped
- * in front of another block or at the end of a section, and where it lands is
- * then decided by that section's own flex or grid rules, which is the whole
- * point of the model.
+ * Nothing on this surface can be dragged to a coordinate. A node is dropped in
+ * front of a sibling, at the end of a container or a cell, or into a container
+ * or a cell as its only content, and where it lands from there is decided by
+ * that parent's own flex, grid or table rules, which is the whole point of the
+ * model. Dropping into a container, a columns table's cell, or the frame's own
+ * top level are the same operation at different addresses (canvas-actions.ts,
+ * moveNode); the address is all `onDrop` is ever given.
  *
- * A section and a block are each drawn as the element the message carries, so
- * the section's flex or grid lays them out exactly as a mail client will, and
- * the selection outline is the element's own box. A hidden layer is not drawn,
- * which is what Figma does and what the message does: it is still in the
- * layers panel, where it can be selected and shown again. A text block or a
- * heading is edited in place with a double click, with Enter, or straight
- * after it is added.
+ * A click selects the element directly under the pointer, at whatever depth
+ * that is: every node's own handler stops the event before it reaches an
+ * ancestor's, so clicking a block nested three containers deep selects that
+ * block in one click, never its parent first. A double click on a container,
+ * a columns table or a cell that is already selected steps into it and
+ * selects its first child, the way Figma's frame does when there is nothing
+ * exposed to click directly; a double click on a text block or a heading
+ * opens it for typing, as it always has.
+ *
+ * A hidden layer is not drawn, which is what Figma does and what the message
+ * does: it is still in the layers panel, where it can be selected and shown
+ * again.
  *
  * The width comes from the three preview buttons above the frame rather than
  * from the stored layout, so the same canvas can be looked at at phone width
@@ -320,6 +348,10 @@ export function CanvasView({
 }: CanvasViewProps) {
 	const content = useRef<HTMLDivElement>(null);
 	const [over, setOver] = useState<DropTarget | null>(null);
+	// The id being dragged, kept in state rather than read from dataTransfer
+	// during dragover: most browsers only hand the payload back on drop, and
+	// this is what lets the indicator skip a target the drop would refuse.
+	const [draggingId, setDraggingId] = useState<string | null>(null);
 
 	// The content's own height, which the height control reads to refuse
 	// anything shorter. Measured rather than calculated: a block's height
@@ -337,7 +369,7 @@ export function CanvasView({
 	// What is selected, measured the same way, so the panel's W and H say how
 	// big it is drawn even while it hugs or fills. offsetWidth is the layout
 	// size, before the stage's zoom scales it.
-	const selectedId = selection ? (selection.blockId ?? selection.sectionId) : null;
+	const selectedId = selection?.id ?? null;
 	useEffect(() => {
 		const root = content.current;
 		const element = root && selectedId ? root.querySelector<HTMLElement>(`[data-canvas-id="${CSS.escape(selectedId)}"]`) : null;
@@ -352,27 +384,66 @@ export function CanvasView({
 		return () => observer.disconnect();
 	}, [onMeasure, selectedId, layout, width, editing]);
 
-	const startDrag = useCallback((event: DragEvent, sectionId: string, blockId: string) => {
-		event.dataTransfer.setData("application/x-juno-section", sectionId);
-		event.dataTransfer.setData("application/x-juno-block", blockId);
+	const DATA_ID = "application/x-juno-node";
+
+	const startDrag = useCallback((event: DragEvent, id: string) => {
+		event.stopPropagation();
+		event.dataTransfer.setData(DATA_ID, id);
 		event.dataTransfer.effectAllowed = "move";
+		setDraggingId(id);
 	}, []);
+
+	const endDrag = useCallback(() => {
+		setDraggingId(null);
+		setOver(null);
+	}, []);
+
+	const dragOverTarget = useCallback(
+		(event: DragEvent, target: DropTarget) => {
+			event.preventDefault();
+			event.stopPropagation();
+			if (draggingId && !canMoveInto(layout, draggingId, target.parentId)) return;
+			setOver(target);
+		},
+		[draggingId, layout],
+	);
 
 	const finishDrag = useCallback(
 		(event: DragEvent, target: DropTarget) => {
 			event.preventDefault();
 			event.stopPropagation();
 			setOver(null);
-			const from = event.dataTransfer.getData("application/x-juno-section");
-			const blockId = event.dataTransfer.getData("application/x-juno-block");
-			if (from && blockId) onDrop(from, blockId, target);
+			const id = event.dataTransfer.getData(DATA_ID);
+			if (id) onDrop(id, target);
 		},
 		[onDrop],
 	);
 
-	const renderBlock = (section: MailContainer, block: MailBlock) => {
-		const selected = selection?.blockId === block.id;
-		const overThis = over !== null && over.sectionId === section.id && over.beforeBlockId === block.id;
+	const select = useCallback(
+		(event: { stopPropagation: () => void }, id: string) => {
+			event.stopPropagation();
+			onSelect({ id });
+		},
+		[onSelect],
+	);
+
+	/** A double click on a container, a columns table or a cell that is already selected: step into its first child. */
+	const enter = useCallback(
+		(event: { stopPropagation: () => void }, id: string) => {
+			event.stopPropagation();
+			if (selection?.id !== id) {
+				onSelect({ id });
+				return;
+			}
+			const first = firstChildOf(layout, id);
+			if (first) onSelect({ id: first });
+		},
+		[layout, onSelect, selection],
+	);
+
+	const renderBlock = (block: MailBlock, parentId: string | null) => {
+		const selected = selection?.id === block.id;
+		const overThis = over !== null && over.parentId === parentId && over.beforeId === block.id;
 		const place: CSSProperties = {
 			...placeCss(block),
 			...(block.kind === "html" ? placementFromCss(block.css) : {}),
@@ -388,7 +459,7 @@ export function CanvasView({
 					width: block.box.width ?? undefined,
 					maxWidth: block.box.width !== null ? "100%" : undefined,
 				},
-				className: blockMarks(true, false),
+				className: marks(true, false),
 			};
 			return block.kind === "text" ? (
 				<InlineText
@@ -399,7 +470,7 @@ export function CanvasView({
 					style={editStyle(block, layout.fonts)}
 					caret={editing.caret}
 					host={frame}
-					onCommit={(html) => onEdit(section.id, block.id, { html } as Partial<MailBlock>)}
+					onCommit={(html) => onEdit(block.id, { html } as Partial<MailBlock>)}
 					onClose={() => onEditing(null)}
 				/>
 			) : (
@@ -411,7 +482,7 @@ export function CanvasView({
 					style={editStyle(block, layout.fonts)}
 					caret={editing.caret}
 					host={frame}
-					onCommit={(content) => onEdit(section.id, block.id, { content } as Partial<MailBlock>)}
+					onCommit={(content) => onEdit(block.id, { content } as Partial<MailBlock>)}
 					onClose={() => onEditing(null)}
 				/>
 			);
@@ -422,22 +493,15 @@ export function CanvasView({
 			// A picture keeps its own role, so its alt text is still read out.
 			role: block.kind === "image" && block.src ? undefined : "presentation",
 			draggable: true,
-			onDragStart: (event) => startDrag(event, section.id, block.id),
-			onDragEnd: () => setOver(null),
-			onDragOver: (event) => {
-				event.preventDefault();
-				event.stopPropagation();
-				setOver({ sectionId: section.id, beforeBlockId: block.id });
-			},
-			onDrop: (event) => finishDrag(event, { sectionId: section.id, beforeBlockId: block.id }),
-			onClick: (event) => {
-				event.stopPropagation();
-				onSelect({ sectionId: section.id, blockId: block.id });
-			},
+			onDragStart: (event) => startDrag(event, block.id),
+			onDragEnd: endDrag,
+			onDragOver: (event) => dragOverTarget(event, { parentId, beforeId: block.id }),
+			onDrop: (event) => finishDrag(event, { parentId, beforeId: block.id }),
+			onClick: (event) => select(event, block.id),
 			onDoubleClick: (event) => {
 				if (!textual) return;
 				event.stopPropagation();
-				onSelect({ sectionId: section.id, blockId: block.id });
+				onSelect({ id: block.id });
 				onEditing({ blockId: block.id, caret: { x: event.clientX, y: event.clientY } });
 			},
 			title: textual ? "Double-click to edit the text" : undefined,
@@ -449,10 +513,123 @@ export function CanvasView({
 				block={block}
 				inputs={inputs}
 				fonts={layout.fonts}
-				host={{ id: block.id, attrs, place, className: blockMarks(selected, overThis) }}
+				host={{ id: block.id, attrs, place, className: marks(selected, overThis) }}
 			/>
 		);
 	};
+
+	/** A container: its own layout, and the tree recursively inside it. */
+	const renderContainer = (container: MailContainer, topLevel: boolean) => {
+		const selected = selection?.id === container.id;
+		const overEnd = over !== null && over.parentId === container.id && over.beforeId === null;
+		const shown = container.children.filter((node) => !node.hidden);
+		return (
+			<div
+				key={container.id}
+				data-canvas-id={container.id}
+				role="presentation"
+				onClick={(event) => select(event, container.id)}
+				onDoubleClick={(event) => enter(event, container.id)}
+				onDragOver={(event) => dragOverTarget(event, { parentId: container.id, beforeId: null })}
+				onDragLeave={() => setOver(null)}
+				onDrop={(event) => finishDrag(event, { parentId: container.id, beforeId: null })}
+				style={sectionCss(container, topLevel)}
+				className={`outline-offset-[-2px] ${
+					selected
+						? "outline-2 outline-[var(--accent)]"
+						: overEnd
+							? "outline-2 outline-dashed outline-[var(--accent)]"
+							: "hover:outline-1 hover:outline-[var(--line-strong)]"
+				}`}
+			>
+				{shown.length === 0 && container.box.minHeight === null ? (
+					// Only on the canvas: an empty container is sent as nothing, and
+					// this is what there is to click and to drop onto. One with a
+					// height of its own is drawn at that height, because it is a
+					// divider or a gap and the height is the point of it.
+					<p
+						data-canvas-chrome
+						style={{ gridColumn: "1 / -1" }}
+						className="flex-1 px-3 py-6 text-center text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
+					>
+						{container.name} is empty
+					</p>
+				) : null}
+				{shown.map((node) => renderNode(node, container.id, false))}
+			</div>
+		);
+	};
+
+	/** A columns table: a row of cells laid out the way the compiled table renders. */
+	const renderColumns = (columns: MailColumns, topLevel: boolean) => {
+		const selected = selection?.id === columns.id;
+		return (
+			<table
+				key={columns.id}
+				data-canvas-id={columns.id}
+				role="presentation"
+				cellPadding={0}
+				cellSpacing={0}
+				onClick={(event) => select(event, columns.id)}
+				style={{ width: "100%", borderCollapse: "collapse", ...columnsCss(columns, topLevel) }}
+				className={`outline-offset-[-2px] ${selected ? "outline-2 outline-[var(--accent)]" : "hover:outline-1 hover:outline-[var(--line-strong)]"}`}
+			>
+				<tbody>
+					{columns.rows.map((row) => (
+						<tr key={row.id} data-canvas-id={row.id}>
+							{row.cells.map((cell, index) => renderCell(cell, columns, index, row.cells.length))}
+						</tr>
+					))}
+				</tbody>
+			</table>
+		);
+	};
+
+	/** One cell of a columns table: its own drop target, and a parent for what it holds. */
+	const renderCell = (cell: MailColumnsCell, columns: MailColumns, index: number, count: number) => {
+		const selected = selection?.id === cell.id;
+		const overEnd = over !== null && over.parentId === cell.id && over.beforeId === null;
+		const shown = cell.children.filter((node) => !node.hidden);
+		return (
+			<td
+				key={cell.id}
+				data-canvas-id={cell.id}
+				role="presentation"
+				onClick={(event) => select(event, cell.id)}
+				onDoubleClick={(event) => enter(event, cell.id)}
+				onDragOver={(event) => dragOverTarget(event, { parentId: cell.id, beforeId: null })}
+				onDragLeave={() => setOver(null)}
+				onDrop={(event) => finishDrag(event, { parentId: cell.id, beforeId: null })}
+				style={{ ...cellCss(cell), ...cellGapCss(index, count, columns.gap, cell.box.padding) }}
+				className={`outline-offset-[-2px] ${
+					selected
+						? "outline-2 outline-[var(--accent)]"
+						: overEnd
+							? "outline-2 outline-dashed outline-[var(--accent)]"
+							: "hover:outline-1 hover:outline-[var(--line-strong)]"
+				}`}
+			>
+				{shown.length === 0 ? (
+					<span
+						data-canvas-chrome
+						className="block px-2 py-4 text-center text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
+					>
+						Empty
+					</span>
+				) : null}
+				{shown.map((node) => renderNode(node, cell.id, false))}
+			</td>
+		);
+	};
+
+	const renderNode = (node: MailNode, parentId: string | null, topLevel: boolean) => {
+		if (isContainer(node)) return renderContainer(node, topLevel);
+		if (isColumns(node)) return renderColumns(node, topLevel);
+		return renderBlock(node, parentId);
+	};
+
+	const topShown = layout.children.filter((node) => !node.hidden);
+	const overRootEnd = over !== null && over.parentId === null && over.beforeId === null;
 
 	return (
 		<div
@@ -466,73 +643,17 @@ export function CanvasView({
 			}}
 			className="shadow-[var(--shadow-popover)]"
 			onClick={() => onSelect(null)}
+			onDragOver={(event) => dragOverTarget(event, { parentId: null, beforeId: null })}
+			onDrop={(event) => finishDrag(event, { parentId: null, beforeId: null })}
 			role="presentation"
 		>
 			<style>{CLIENT_DEFAULTS}</style>
-			<div ref={content} data-canvas-content>
-				{layout.children.filter(isContainer).map((section) => {
-					if (section.hidden) return null;
-					const sectionSelected = selection !== null && selection.sectionId === section.id && !selection.blockId;
-					const overEnd = over !== null && over.sectionId === section.id && over.beforeBlockId === null;
-					// Phase 1 draws every block a section holds directly. A nested
-					// container or a columns table has no editing surface here yet
-					// (docs/editors.md section 2, phase 2 and 3): it is drawn as a
-					// labelled placeholder rather than dropped, so nothing an agent or
-					// the code view puts on the canvas disappears silently.
-					const shown = section.children.filter((node) => !node.hidden);
-					return (
-						<div
-							key={section.id}
-							data-canvas-id={section.id}
-							role="presentation"
-							onClick={(event) => {
-								event.stopPropagation();
-								onSelect({ sectionId: section.id });
-							}}
-							onDragOver={(event) => {
-								event.preventDefault();
-								setOver({ sectionId: section.id, beforeBlockId: null });
-							}}
-							onDragLeave={() => setOver(null)}
-							onDrop={(event) => finishDrag(event, { sectionId: section.id, beforeBlockId: null })}
-							style={sectionCss(section)}
-							className={`outline-offset-[-2px] ${
-								sectionSelected
-									? "outline-2 outline-[var(--accent)]"
-									: overEnd
-										? "outline-2 outline-dashed outline-[var(--accent)]"
-										: "hover:outline-1 hover:outline-[var(--line-strong)]"
-							}`}
-						>
-							{shown.length === 0 && section.box.minHeight === null ? (
-								// Only on the canvas: an empty section is sent as nothing, and
-								// this is what there is to click and to drop onto. One with a
-								// height of its own is drawn at that height, because it is a
-								// divider or a gap and the height is the point of it.
-								<p
-									data-canvas-chrome
-									style={{ gridColumn: "1 / -1" }}
-									className="flex-1 px-3 py-6 text-center text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
-								>
-									{section.name} is empty
-								</p>
-							) : null}
-							{shown.map((node) =>
-								isBlockNode(node) ? (
-									renderBlock(section, node)
-								) : (
-									<p
-										key={node.id}
-										data-canvas-chrome
-										className="rounded-[var(--radius-sm)] border border-dashed border-[var(--canvas-line)] px-3 py-2 text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
-									>
-										{node.kind === "columns" ? "Columns" : "Section"}: {node.name} is not editable on the canvas yet
-									</p>
-								),
-							)}
-						</div>
-					);
-				})}
+			<div
+				ref={content}
+				data-canvas-content
+				className={overRootEnd ? "outline-2 outline-dashed outline-[var(--accent)] outline-offset-[-2px]" : undefined}
+			>
+				{topShown.map((node) => renderNode(node, null, true))}
 			</div>
 		</div>
 	);

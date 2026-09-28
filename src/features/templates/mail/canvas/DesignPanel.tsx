@@ -3,6 +3,7 @@ import type {
 	MailAlign,
 	MailBlock,
 	MailBoxStyle,
+	MailColumns,
 	MailContainer,
 	MailCorners,
 	MailFontFallback,
@@ -15,7 +16,7 @@ import type {
 import { Button } from "../../../../components/Button";
 import { isMac } from "../../../../lib/platform";
 import { BreakpointsSection } from "./BreakpointsSection";
-import { BLOCK_KIND_LABELS, colorsIn, replaceColor, updateBlock } from "./canvas-actions";
+import { BLOCK_KIND_LABELS, colorsIn, findCell, findNode, parentOf, replaceColor, updateBlock } from "./canvas-actions";
 import type { Measured, Selection } from "./CanvasView";
 import { ColorRow } from "./ColorRow";
 import { EffectsSection } from "./EffectsSection";
@@ -76,15 +77,16 @@ type DesignPanelProps = {
 	measured: Measured | null;
 	/** The linked fonts' state on the canvas, for the Fonts section. */
 	fonts: CanvasFonts;
-	onLayout: (patch: Partial<Omit<MailLayout, "sections" | "version">>) => void;
+	onLayout: (patch: Partial<Omit<MailLayout, "children" | "version">>) => void;
 	/** A change that reaches across the whole canvas at once, like a selection colour. */
 	onReplace: (layout: MailLayout) => void;
-	onSection: (sectionId: string, patch: Partial<Omit<MailContainer, "id" | "kind" | "children">>) => void;
-	onBlock: (sectionId: string, blockId: string, patch: Partial<MailBlock>) => void;
-	onRemoveSection: (sectionId: string) => void;
-	onRemoveBlock: (sectionId: string, blockId: string) => void;
+	onSection: (id: string, patch: Partial<Omit<MailContainer, "id" | "kind" | "children">>) => void;
+	onColumns: (id: string, patch: Partial<Omit<MailColumns, "id" | "kind" | "rows">>) => void;
+	onBlock: (id: string, patch: Partial<MailBlock>) => void;
+	/** Removes a container, a columns table or a block, wherever it is. */
+	onRemove: (id: string) => void;
 	/** Turns a block into the HTML and CSS it compiles to. */
-	onConvert: (sectionId: string, blockId: string) => void;
+	onConvert: (blockId: string) => void;
 };
 
 type BoxPatch = (patch: Partial<MailBoxStyle>) => void;
@@ -725,24 +727,22 @@ export function DesignPanel({
 	onLayout,
 	onReplace,
 	onSection,
+	onColumns,
 	onBlock,
-	onRemoveSection,
-	onRemoveBlock,
+	onRemove,
 	onConvert,
 }: DesignPanelProps) {
-	const section = selection
-		? (layout.children.find((entry): entry is MailContainer => entry.kind === "container" && entry.id === selection.sectionId) ?? null)
-		: null;
-	const block =
-		section && selection?.blockId
-			? (section.children.find((entry): entry is MailBlock => entry.kind !== "container" && entry.kind !== "columns" && entry.id === selection.blockId) ?? null)
-			: null;
-	const scope = section ? { sectionId: section.id, blockId: block?.id } : null;
-	const colors = colorsIn(layout, scope);
-	const recolor = (from: string, to: string) => onReplace(replaceColor(layout, scope, from, to));
+	// A container, a columns table or a block, anywhere in the tree; a cell,
+	// which is none of those, separately. Both are found by id alone, so a
+	// row selected three levels deep in the layers shows the same panel a
+	// click on it in the canvas would.
+	const node = selection ? findNode(layout, selection.id) : null;
+	const cell = selection && !node ? findCell(layout, selection.id) : null;
+	const colors = colorsIn(layout, selection?.id ?? null);
+	const recolor = (from: string, to: string) => onReplace(replaceColor(layout, selection?.id ?? null, from, to));
 	const breakpoints = <BreakpointsSection layout={base} active={active} onActive={onActive} onLayout={onBase} />;
 
-	if (!section) {
+	if (!node && !cell) {
 		const floor = Math.ceil(contentHeight);
 		return (
 			<div className="flex flex-col">
@@ -787,8 +787,58 @@ export function DesignPanel({
 		);
 	}
 
+	// A cell has no row of its own in the layers to drag, and no styling here
+	// yet: its width, its vertical alignment and its box are a columns table
+	// design panel's job, which is phase 3's (docs/editors.md section 2). It
+	// is still selectable and still a drop target, which is what phase 2 asks.
+	if (cell) {
+		return (
+			<div className="flex flex-col">
+				{breakpoints}
+				<Header label="Cell" />
+				<PanelNote>Part of a columns table. Its own width, alignment and appearance are not editable here yet.</PanelNote>
+			</div>
+		);
+	}
+
+	if (node && node.kind === "columns") {
+		const onColumnsBox: BoxPatch = (patch) => onColumns(node.id, { box: { ...node.box, ...patch } });
+		return (
+			<div className="flex flex-col">
+				{breakpoints}
+				<Header
+					label="Columns"
+					name={{ value: node.name, onChange: (name) => onColumns(node.id, { name }) }}
+					deleteLabel="Delete columns"
+					onDelete={() => onRemove(node.id)}
+				/>
+				<AppearanceSection hidden={node.hidden} onHidden={(hidden) => onColumns(node.id, { hidden })} box={node.box} onBox={onColumnsBox} />
+				<FillSection fill={node.box.fill} onFill={(fill) => onColumnsBox({ fill })} />
+				<StrokeSection box={node.box} onBox={onColumnsBox} />
+				<EffectsSection box={node.box} onBox={onColumnsBox} />
+				<SelectionColors colors={colors} onReplace={recolor} />
+				<CustomCssSection css={node.box.customCss} onChange={(customCss) => onColumnsBox({ customCss })} />
+				<PanelNote>
+					Its rows, its cells and the gap between them are not editable here yet. A cell's own children still are, on
+					the canvas and in the layers.
+				</PanelNote>
+			</div>
+		);
+	}
+
+	const block = node && node.kind !== "container" ? node : null;
+	// The container the block actually sits in, at whatever depth: sizing.ts
+	// only ever looks at the one container a block is in, never at where that
+	// container itself sits, so a nested one works exactly like a top-level
+	// one here. A block sitting directly in a cell, or at the frame's own top
+	// level, has no such container yet, and gets a panel without the controls
+	// that need one (docs/editors.md section 2, phase 2 leaves that to phase 3).
+	const blockParentId = block ? parentOf(layout, block.id) : undefined;
+	const blockParent = block && blockParentId ? (findNode(layout, blockParentId) ?? null) : null;
+	const blockSection = blockParent && blockParent.kind === "container" ? blockParent : null;
+
 	if (block) {
-		const set = (patch: Partial<MailBlock>) => onBlock(section.id, block.id, patch);
+		const set = (patch: Partial<MailBlock>) => onBlock(block.id, patch);
 
 		if (block.kind === "html") {
 			return (
@@ -797,7 +847,7 @@ export function DesignPanel({
 					<Header
 						label={BLOCK_KIND_LABELS.html}
 						deleteLabel="Delete block"
-						onDelete={() => onRemoveBlock(section.id, block.id)}
+						onDelete={() => onRemove(block.id)}
 						hidden={{ value: block.hidden, onChange: (hidden) => set({ hidden } as Partial<MailBlock>) }}
 					/>
 					<CodeSection block={block} set={set} />
@@ -827,7 +877,7 @@ export function DesignPanel({
 							{ family, source: "google" as const, href: null, weights: [400, 700], italic: false, fallback },
 						],
 					};
-			onReplace(updateBlock(linked, section.id, block.id, { text: { ...block.text, fontFamily: family } } as Partial<MailBlock>));
+			onReplace(updateBlock(linked, block.id, { text: { ...block.text, fontFamily: family } } as Partial<MailBlock>));
 		};
 		const radius =
 			can.radius === "button" && block.kind === "button"
@@ -842,16 +892,25 @@ export function DesignPanel({
 				<Header
 					label={BLOCK_KIND_LABELS[block.kind]}
 					deleteLabel="Delete block"
-					onDelete={() => onRemoveBlock(section.id, block.id)}
+					onDelete={() => onRemove(block.id)}
 					// A spacer has no appearance section, so its eye is up here.
 					hidden={box ? undefined : { value: block.hidden, onChange: (hidden) => set({ hidden } as Partial<MailBlock>) }}
 				/>
-				<PositionSection
-					axis={crossAxis(section)}
-					value={acrossOf(block, section)}
-					onChange={(across) => set(alignAcross(block, section, across))}
-				/>
-				<BlockLayoutSection block={block} section={section} measured={measured} can={can} radius={radius} onBlock={set} />
+				{blockSection ? (
+					<>
+						<PositionSection
+							axis={crossAxis(blockSection)}
+							value={acrossOf(block, blockSection)}
+							onChange={(across) => set(alignAcross(block, blockSection, across))}
+						/>
+						<BlockLayoutSection block={block} section={blockSection} measured={measured} can={can} radius={radius} onBlock={set} />
+					</>
+				) : (
+					<PanelNote>
+						Position and layout are not editable here yet for a block placed straight in a columns cell or at the
+						frame's own top level.
+					</PanelNote>
+				)}
 				{box ? (
 					<AppearanceSection
 						hidden={block.hidden}
@@ -899,11 +958,22 @@ export function DesignPanel({
 				{can.effects && box ? <EffectsSection box={box} onBox={onBox} /> : null}
 				<SelectionColors colors={colors} onReplace={recolor} />
 				{box ? <CustomCssSection css={box.customCss} onChange={(customCss) => onBox({ customCss })} /> : null}
-				<ConvertSection onConvert={() => onConvert(section.id, block.id)} />
+				<ConvertSection onConvert={() => onConvert(block.id)} />
 			</div>
 		);
 	}
 
+	// Only a container is left by this point: the frame, a cell, a columns
+	// table and a block each returned their own panel above.
+	if (!node || node.kind !== "container") return null;
+	const section = node;
+	// A top-level container sits in the frame, which lays its children one
+	// under the next in plain flow, so "where it sits" is margins (Position,
+	// below). A nested one sits in a flex or grid parent that already has an
+	// alignment of its own, the way a block does, and gets that row from its
+	// own design panel once phase 3 gives every container one
+	// (docs/editors.md section 2).
+	const topLevel = parentOf(layout, section.id) === null;
 	const arrangement = section.layout;
 	const onSectionBox: BoxPatch = (patch) => onSection(section.id, { box: { ...section.box, ...patch } });
 	const flow = arrangement.kind === "grid" ? "grid" : arrangement.direction === "row" ? "across" : "down";
@@ -919,19 +989,23 @@ export function DesignPanel({
 				label="Section"
 				name={{ value: section.name, onChange: (name) => onSection(section.id, { name }) }}
 				deleteLabel="Delete section"
-				onDelete={() => onRemoveSection(section.id)}
+				onDelete={() => onRemove(section.id)}
 			/>
 
-			<PanelSection title="Position">
-				<Segmented
-					label="Where the section sits across the frame"
-					value={narrower ? (section.alignSelf === "center" || section.alignSelf === "end" ? section.alignSelf : "start") : null}
-					options={acrossOptions("h", false)}
-					onChange={(alignSelf) => onSection(section.id, { alignSelf })}
-					disabled={!narrower}
-				/>
-				{!narrower ? <PanelNote>A section that fills the frame has nowhere to move. Give it a fixed width.</PanelNote> : null}
-			</PanelSection>
+			{topLevel ? (
+				<PanelSection title="Position">
+					<Segmented
+						label="Where the section sits across the frame"
+						value={narrower ? (section.alignSelf === "center" || section.alignSelf === "end" ? section.alignSelf : "start") : null}
+						options={acrossOptions("h", false)}
+						onChange={(alignSelf) => onSection(section.id, { alignSelf })}
+						disabled={!narrower}
+					/>
+					{!narrower ? <PanelNote>A section that fills the frame has nowhere to move. Give it a fixed width.</PanelNote> : null}
+				</PanelSection>
+			) : (
+				<PanelNote>Nested. Its position in its own parent is not editable here yet.</PanelNote>
+			)}
 
 			<PanelSection
 				title="Layout"

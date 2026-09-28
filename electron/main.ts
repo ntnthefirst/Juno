@@ -1599,7 +1599,7 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const layerRows = () => [...document.querySelectorAll('button[title="Drag to reorder. Alt and an arrow move it too"]')];
-											const blockRows = () => layerRows().filter((el) => el.className.includes("pl-6"));
+											const blockRows = () => layerRows().filter((el) => el.dataset.layerKind === "block");
 											const press = async (key, code, mods = {}) => {
 												document.body.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
 												await wait(300);
@@ -1646,7 +1646,7 @@ if (!app.requestSingleInstanceLock()) {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											if (!document.querySelector('[role=toolbar][aria-label="Canvas tools"]')) return "no floating toolbar";
 											const layerRows = () => [...document.querySelectorAll('button[title="Drag to reorder. Alt and an arrow move it too"]')];
-											const blockRows = () => layerRows().filter((el) => el.className.includes("pl-6"));
+											const blockRows = () => layerRows().filter((el) => el.dataset.layerKind === "block");
 											if (document.querySelector('[role=region][aria-label="Keyboard shortcuts"]')) return "Escape did not close the list of shortcuts";
 											const tekst = blockRows().find((el) => el.textContent.trim() === "Welkom");
 											if (!tekst) return "no layer for the text block";
@@ -1687,6 +1687,99 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (converted !== "ok") throw new Error(`Smoke: mail template editor ${converted}`);
 									writeFileSync(joinPath(shotDir, `mail-template-code-block.png`), (await capture(window.webContents)).toPNG());
+
+									// A container nests inside another now (docs/editors.md section 2,
+									// phase 2): F while a container is selected lands the new one inside
+									// it, which is today's way to try nesting before the toolbar has
+									// groups for it. A block added the same way lands in the nested
+									// section, the layers show the nesting by depth, Alt and an arrow
+									// still moves a block within its own parent, and the compiled message
+									// carries the nesting through to a second `<section>`.
+									const nested = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code) => {
+												document.body.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }));
+												await wait(300);
+											};
+											const type = async (text) => {
+												const editor = document.querySelector('[role=textbox][aria-label="Text"]');
+												if (!editor) return false;
+												document.execCommand("insertText", false, text);
+												editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const containerRows = () => [...document.querySelectorAll('[data-layer-kind="container"]')];
+											const blockRows = () => [...document.querySelectorAll('[data-layer-kind="block"]')];
+
+											const top = containerRows().find((el) => el.dataset.layerDepth === "0");
+											if (!top) return "no top-level container in the layers";
+											top.click();
+											await wait(200);
+											const containersBefore = containerRows().length;
+											await press("f", "KeyF");
+											if (containerRows().length !== containersBefore + 1) return "F did not add a nested section";
+											const nestedRow = containerRows().find((el) => el !== top && el.dataset.layerDepth !== "0");
+											if (!nestedRow) return "the new section is not nested under the top-level one";
+
+											const blocksBefore = blockRows().length;
+											await press("t", "KeyT");
+											if (!(await type("Genest"))) return "T did not open a new text for typing";
+											if (blockRows().length !== blocksBefore + 1) return "T did not add a block";
+											const first = blockRows().find((el) => el.textContent.trim() === "Genest");
+											if (!first) return "the new block is not in the layers";
+											if (first.dataset.layerDepth !== String(Number(nestedRow.dataset.layerDepth) + 1)) {
+												return "the new block did not land inside the nested section";
+											}
+
+											// A second block beside the first, so Alt and an arrow has
+											// something to reorder within that same parent.
+											first.click();
+											await wait(200);
+											await press("t", "KeyT");
+											if (!(await type("Tweede"))) return "T did not open a second text for typing";
+											const second = blockRows().find((el) => el.textContent.trim() === "Tweede");
+											if (!second || second.dataset.layerDepth !== first.dataset.layerDepth) {
+												return "the second block did not land beside the first, in the same parent";
+											}
+											const siblings = () =>
+												blockRows()
+													.filter((el) => el.dataset.layerDepth === first.dataset.layerDepth)
+													.map((el) => el.textContent.trim());
+											const before = siblings();
+											second.focus();
+											second.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
+											await wait(300);
+											const after = siblings();
+											if (after.indexOf("Tweede") !== before.indexOf("Tweede") - 1) {
+												return "Alt and an arrow did not move the block within its nested parent";
+											}
+
+											const view = document.querySelector('button[title="The message as it will be sent"]');
+											if (!view) return "no preview view";
+											view.click();
+											let frame = null;
+											for (let tries = 0; tries < 30 && !frame; tries++) {
+												await wait(150);
+												frame = document.querySelector('iframe[title="Template preview"]');
+											}
+											if (!frame) return "the message did not render";
+											const html = frame.getAttribute("srcdoc") || "";
+											const firstSection = html.indexOf("<section");
+											const secondSection = firstSection === -1 ? -1 : html.indexOf("<section", firstSection + 1);
+											if (secondSection === -1) return "the compiled HTML has no section nested inside another";
+											if (!html.includes("Genest") || !html.includes("Tweede")) return "the compiled HTML does not carry the nested blocks";
+											const canvasView = document.querySelector('button[title="The canvas"]');
+											if (canvasView) {
+												canvasView.click();
+												await wait(300);
+											}
+											return "ok";
+										})()`,
+									) as string;
+									if (nested !== "ok") throw new Error(`Smoke: mail template editor ${nested}`);
+									writeFileSync(joinPath(shotDir, `mail-template-nested.png`), (await capture(window.webContents)).toPNG());
 
 									// Escape lets go of what is selected before it leaves, so the
 									// first one drops the block that was just inserted and the second

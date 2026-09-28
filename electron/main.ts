@@ -126,16 +126,12 @@ if (!app.requestSingleInstanceLock()) {
 
 		const templateSeed = await ensureTemplatesSeeded(db);
 		if (templateSeed.created || templateSeed.updated) {
-			console.log(
-				`Templates: ${templateSeed.created} created, ${templateSeed.updated} updated`,
-			);
+			console.log(`Templates: ${templateSeed.created} created, ${templateSeed.updated} updated`);
 		}
 
 		const mailTemplateSeed = await ensureMailTemplatesSeeded(db);
 		if (mailTemplateSeed.created || mailTemplateSeed.updated) {
-			console.log(
-				`Mail templates: ${mailTemplateSeed.created} created, ${mailTemplateSeed.updated} updated`,
-			);
+			console.log(`Mail templates: ${mailTemplateSeed.created} created, ${mailTemplateSeed.updated} updated`);
 		}
 
 		const reminderSeed = await ensureRemindersSeeded(db);
@@ -224,11 +220,12 @@ if (!app.requestSingleInstanceLock()) {
 						// interface against a mock would prove nothing about any of them.
 						if (process.env.JUNO_SMOKE_DEMO) {
 							// No server in a smoke run: the sync reads from a mailbox in memory.
-							const { openSmokeMailbox, smokeTransport, smokeAppender } = await import("./main/smoke-mailbox");
+							const { openSmokeMailbox, smokeTransport, smokeAppender } =
+								await import("./main/smoke-mailbox");
 							configureMailboxSource(openSmokeMailbox);
 							configureMailTransport(smokeTransport, smokeAppender);
 
-							const created = await window.webContents.executeJavaScript(`(async () => {
+							const created = (await window.webContents.executeJavaScript(`(async () => {
 								const b = window.juno;
 								const statuses = await b.reference.getSet("client_status");
 								const active = statuses.items.find((i) => i.key === "active") ?? statuses.items[0];
@@ -358,7 +355,7 @@ if (!app.requestSingleInstanceLock()) {
 								await b.projects.commands.create({ projectId: own.id, label: "Database", command: "docker compose up -d", kind: "docker" });
 
 								return { clients: (await b.clients.list()).length, projectId: own.id };
-							})()`) as { clients: number; projectId: string };
+							})()`)) as { clients: number; projectId: string };
 							console.log(`SMOKE_DEMO clients=${created.clients}`);
 
 							// Two files on the project, added through the service rather than
@@ -372,12 +369,21 @@ if (!app.requestSingleInstanceLock()) {
 								const projectsService = await import("./main/services/projects");
 								const icon = join(app.getAppPath(), "build", "icon.png");
 								if (existsSync(icon)) {
-									const cover = await projectAssets.add({ projectId: created.projectId, sourcePath: icon });
-									await projectAssets.add({ projectId: created.projectId, sourcePath: icon, storage: "linked" });
+									const cover = await projectAssets.add({
+										projectId: created.projectId,
+										sourcePath: icon,
+									});
+									await projectAssets.add({
+										projectId: created.projectId,
+										sourcePath: icon,
+										storage: "linked",
+									});
 									await projectsService.setCover(created.projectId, cover.id);
 									const where = await projectsService.storage(created.projectId);
 									if (where.fileCount !== 1) {
-										throw new Error(`Smoke: the project folder holds ${where.fileCount} files, not the one managed copy`);
+										throw new Error(
+											`Smoke: the project folder holds ${where.fileCount} files, not the one managed copy`,
+										);
 									}
 									console.log(`SMOKE_DEMO project files=${where.fileCount} at=${where.mode}`);
 								}
@@ -392,7 +398,11 @@ if (!app.requestSingleInstanceLock()) {
 							const clientService = await import("./main/services/clients");
 
 							const before = (await clientService.list()).length;
-							const parked = (await callTool("clients.create", { name: "parked-by-agent" }, { source: "mcp" })) as {
+							const parked = (await callTool(
+								"clients.create",
+								{ name: "parked-by-agent" },
+								{ source: "mcp" },
+							)) as {
 								status?: string;
 							};
 							if (parked.status !== "pending") {
@@ -424,8 +434,15 @@ if (!app.requestSingleInstanceLock()) {
 									const { spawn } = await import("node:child_process");
 									const bridge = spawn(
 										process.execPath,
-										[join(app.getAppPath(), "scripts", "mcp-bridge.mjs"), "--user-data-dir", userDataDir()],
-										{ env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["pipe", "pipe", "pipe"] },
+										[
+											join(app.getAppPath(), "scripts", "mcp-bridge.mjs"),
+											"--user-data-dir",
+											userDataDir(),
+										],
+										{
+											env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+											stdio: ["pipe", "pipe", "pipe"],
+										},
 									);
 									let out = "";
 									let stderr = "";
@@ -433,7 +450,8 @@ if (!app.requestSingleInstanceLock()) {
 										bridge.kill();
 										reject(new Error(`Smoke: the bridge did not answer. ${stderr}`));
 									}, 20_000);
-									const send = (message: unknown) => bridge.stdin.write(`${JSON.stringify(message)}\n`);
+									const send = (message: unknown) =>
+										bridge.stdin.write(`${JSON.stringify(message)}\n`);
 
 									bridge.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
 									bridge.stdout.on("data", (chunk: Buffer) => {
@@ -446,7 +464,11 @@ if (!app.requestSingleInstanceLock()) {
 											if (!line.trim()) continue;
 											const message = JSON.parse(line) as {
 												id?: number;
-												result?: { tools?: unknown[]; content?: { text: string }[]; isError?: boolean };
+												result?: {
+													tools?: unknown[];
+													content?: { text: string }[];
+													isError?: boolean;
+												};
 											};
 											if (message.id === 1) {
 												send({ jsonrpc: "2.0", method: "notifications/initialized" });
@@ -495,9 +517,13 @@ if (!app.requestSingleInstanceLock()) {
 							// The sender is not scheduled in a smoke run, so it is asked directly,
 							// and the row has to come out the other side as sent.
 							const sentCount = await mailSend.processQueue();
-							const outboxRows = await (await import("./main/services/mail-outbox")).list({ states: ["sent"] });
+							const outboxRows = await (
+								await import("./main/services/mail-outbox")
+							).list({ states: ["sent"] });
 							if (sentCount !== 1 || outboxRows.length !== 1 || outboxRows[0]!.attachments.length !== 1) {
-								throw new Error(`Smoke: the outbox did not send the document mail: ${JSON.stringify(outboxRows)}`);
+								throw new Error(
+									`Smoke: the outbox did not send the document mail: ${JSON.stringify(outboxRows)}`,
+								);
 							}
 							console.log(`SMOKE_DEMO outbox sent=${outboxRows[0]!.messageId}`);
 
@@ -533,7 +559,6 @@ if (!app.requestSingleInstanceLock()) {
 									if (b) b.click(); return Boolean(b); })()`,
 							);
 							await new Promise((r) => setTimeout(r, 900));
-
 						}
 
 						// A screenshot is the only part of this that can catch a window that
@@ -612,7 +637,7 @@ if (!app.requestSingleInstanceLock()) {
 								front(setup);
 								const flow = setup.webContents;
 
-								const setupPresent = await flow.executeJavaScript(
+								const setupPresent = (await flow.executeJavaScript(
 									`(() => {
 										const buttons = [...document.querySelectorAll("button")].map((el) => el.textContent.trim());
 										if (!buttons.includes("Set up Juno")) return "no first step";
@@ -620,7 +645,7 @@ if (!app.requestSingleInstanceLock()) {
 										// reappearing here is the regression this asserts against.
 										return buttons.includes("Skip setup") ? "still offers a skip" : "ok";
 									})()`,
-								) as string;
+								)) as string;
 
 								if (setupPresent !== "ok") throw new Error(`Smoke: the setup window ${setupPresent}`);
 
@@ -636,7 +661,9 @@ if (!app.requestSingleInstanceLock()) {
 								// Back to light, so the screens photographed after this start from
 								// the same place the loop below expects.
 								nativeTheme.themeSource = "light";
-								await flow.executeJavaScript(`document.documentElement.setAttribute("data-theme", "light")`);
+								await flow.executeJavaScript(
+									`document.documentElement.setAttribute("data-theme", "light")`,
+								);
 
 								// Walks the steps rather than skipping them, so each one is
 								// photographed and each one's own controls are proven to advance.
@@ -658,7 +685,7 @@ if (!app.requestSingleInstanceLock()) {
 									// insists on, so a run against an empty profile has to type
 									// them. Filling only what is empty means the demo run, which
 									// seeded a profile already, still walks the same path.
-									const advanced = await flow.executeJavaScript(
+									const advanced = (await flow.executeJavaScript(
 										`(async () => {
 											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
 											let typed = false;
@@ -675,16 +702,17 @@ if (!app.requestSingleInstanceLock()) {
 											next.click();
 											return true;
 										})()`,
-									) as boolean;
-									if (!advanced) throw new Error(`Smoke: setup step ${step} had nothing to continue with`);
+									)) as boolean;
+									if (!advanced)
+										throw new Error(`Smoke: setup step ${step} had nothing to continue with`);
 									// Pressing Continue on a step that refuses to be passed leaves
 									// the rail where it was, which is the failure worth catching:
 									// a required field nobody can satisfy is a dead end for every
 									// new install, and it looks like a click that did not land.
 									await new Promise((r) => setTimeout(r, 400));
-									const now = await flow.executeJavaScript(
+									const now = (await flow.executeJavaScript(
 										`(document.querySelector("[aria-current=step]")?.getAttribute("aria-label") ?? "")`,
-									) as string;
+									)) as string;
 									if (now === label) throw new Error(`Smoke: setup would not move past ${label}`);
 								}
 
@@ -696,15 +724,16 @@ if (!app.requestSingleInstanceLock()) {
 								// walkthrough is proven live at least once per run: it is the one
 								// screen this file otherwise has no way to reach, since it only ever
 								// offers itself on a first run or an unseen upgrade.
-								const startedTour = await flow.executeJavaScript(
+								const startedTour = (await flow.executeJavaScript(
 									`(() => {
 										const tour = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Take the walkthrough");
 										if (!tour) return false;
 										tour.click();
 										return true;
 									})()`,
-								) as boolean;
-								if (!startedTour) throw new Error("Smoke: the last setup step had no way into the walkthrough");
+								)) as boolean;
+								if (!startedTour)
+									throw new Error("Smoke: the last setup step had no way into the walkthrough");
 
 								// The window closes itself on the way out, and the main window is
 								// told so it can start the tour. Both have to happen, so wait for
@@ -712,7 +741,8 @@ if (!app.requestSingleInstanceLock()) {
 								for (let wait = 0; wait < 40 && getSetupWindow(); wait++) {
 									await new Promise((r) => setTimeout(r, 250));
 								}
-								if (getSetupWindow()) throw new Error("Smoke: the setup window stayed open after it finished");
+								if (getSetupWindow())
+									throw new Error("Smoke: the setup window stayed open after it finished");
 
 								await new Promise((r) => setTimeout(r, 700));
 								const cardTitle = () =>
@@ -729,7 +759,7 @@ if (!app.requestSingleInstanceLock()) {
 								// rather than only that a click landed: a tour stuck on the first
 								// card would still answer every one of these clicks.
 								for (const expected of ["Calendar", "Clients"]) {
-									const advanced = await window.webContents.executeJavaScript(
+									const advanced = (await window.webContents.executeJavaScript(
 										`(() => {
 											const card = document.querySelector("[role=dialog][aria-modal=true]");
 											const next = card ? [...card.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next") : null;
@@ -737,12 +767,14 @@ if (!app.requestSingleInstanceLock()) {
 											next.click();
 											return true;
 										})()`,
-									) as boolean;
+									)) as boolean;
 									if (!advanced) throw new Error("Smoke: the walkthrough had no way to step forward");
 									await new Promise((r) => setTimeout(r, 500));
 									const title = await cardTitle();
 									if (title !== expected) {
-										throw new Error(`Smoke: the walkthrough showed "${title}" where "${expected}" was expected`);
+										throw new Error(
+											`Smoke: the walkthrough showed "${title}" where "${expected}" was expected`,
+										);
 									}
 								}
 
@@ -758,13 +790,34 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								await new Promise((r) => setTimeout(r, 500));
 
-								const shellUp = await window.webContents.executeJavaScript(
+								const shellUp = (await window.webContents.executeJavaScript(
 									`Boolean(document.querySelector("nav button[data-nav]"))`,
-								) as boolean;
-								if (!shellUp) throw new Error("Smoke: closing the walkthrough did not reveal the application");
+								)) as boolean;
+								if (!shellUp)
+									throw new Error("Smoke: closing the walkthrough did not reveal the application");
 							}
 
-							const screens = process.env.JUNO_SMOKE_DEMO ? ["Today", "Reminders", "Clients", "Client record", "Projects", "Projects as a list", "Project record", "Calendar", "Week", "Event form", "Mail", "Drafts", "Documents", "Agent", "Connection", "Mail templates", "Document templates"] : ["Clients"];
+							const screens = process.env.JUNO_SMOKE_DEMO
+								? [
+										"Today",
+										"Reminders",
+										"Clients",
+										"Client record",
+										"Projects",
+										"Projects as a list",
+										"Project record",
+										"Calendar",
+										"Week",
+										"Event form",
+										"Mail",
+										"Drafts",
+										"Documents",
+										"Agent",
+										"Connection",
+										"Mail templates",
+										"Document templates",
+									]
+								: ["Clients"];
 							for (const screen of screens) {
 								// A dialog left open by the previous step would sit over this one.
 								await window.webContents.executeJavaScript(
@@ -805,7 +858,7 @@ if (!app.requestSingleInstanceLock()) {
 								// the title bar, which is also the only place that shows the count.
 								// Walking it the way a person does is what proves that path works.
 								if (screen === "Reminders") {
-									const reached = await window.webContents.executeJavaScript(
+									const reached = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const bell = document.querySelector("button[aria-label='Show reminders']");
 											if (!bell) return "no reminders button";
@@ -817,7 +870,7 @@ if (!app.requestSingleInstanceLock()) {
 											await new Promise((r) => setTimeout(r, 600));
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (reached !== "ok") throw new Error(`Smoke: reminders ${reached}`);
 								}
 
@@ -852,7 +905,7 @@ if (!app.requestSingleInstanceLock()) {
 									// would still draw, so this looks for the img rather than for
 									// the tile: the thumbnail is served over app://asset, and a
 									// policy that blocks it is exactly the failure worth catching.
-									const grid = await window.webContents.executeJavaScript(
+									const grid = (await window.webContents.executeJavaScript(
 										`(async () => {
 											await new Promise((r) => setTimeout(r, 400));
 											const main = document.querySelector("main");
@@ -866,14 +919,14 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.textContent.includes("Your own work")) return "the project with no client is not shown";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (grid !== "ok") throw new Error(`Smoke: projects ${grid}`);
 								}
 								if (screen === "Projects as a list") {
 									// The other two layouts, which is the whole point of the
 									// switcher. Going back to cards afterwards leaves the stored
 									// preference where the record shot below expects it.
-									const switched = await window.webContents.executeJavaScript(
+									const switched = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const main = document.querySelector("main");
@@ -890,11 +943,11 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector("main table img")) return "the rows layout draws no thumbnails";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (switched !== "ok") throw new Error(`Smoke: project layouts ${switched}`);
 								}
 								if (screen === "Project record") {
-									const opened = await window.webContents.executeJavaScript(
+									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const group = document.querySelector("main [role=group][aria-label=Layout]");
@@ -926,7 +979,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!dialog.textContent.includes("Choose a folder")) return "the storage dialog offers no way to move it";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: project record ${opened}`);
 								}
 								if (screen === "Client record") {
@@ -994,7 +1047,7 @@ if (!app.requestSingleInstanceLock()) {
 									// A notes field is CodeMirror now, not a textarea, and the only
 									// way to know typing into one still reaches the document is to
 									// type into one. The client form is the simplest place that has it.
-									const noted = await window.webContents.executeJavaScript(
+									const noted = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const newClient = document.querySelector("button[aria-label='New client']");
@@ -1033,7 +1086,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!shown.includes("Smoke run heading")) return "hiding the markup took the heading text with it";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (noted !== "ok") throw new Error(`Smoke: notes editor ${noted}`);
 
 									const notesImage = await capture(window.webContents);
@@ -1051,7 +1104,7 @@ if (!app.requestSingleInstanceLock()) {
 									// narrows the rows, select-all ticks every one left, and both are
 									// cleared again so the screenshot below still shows the list at
 									// rest with everything in it.
-									const searched = await window.webContents.executeJavaScript(
+									const searched = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
@@ -1076,7 +1129,7 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(200);
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
 								}
 								if (screen === "Mail templates" || screen === "Document templates") {
@@ -1084,7 +1137,7 @@ if (!app.requestSingleInstanceLock()) {
 									// list renders, the row opens a preview, and the preview asks the
 									// service to fill the template. A typecheck proves none of that,
 									// and the preview is where a template screen would throw.
-									const opened = await window.webContents.executeJavaScript(
+									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const row = document.querySelector("main ul li button");
 											if (!row) return "no template row";
@@ -1098,7 +1151,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.querySelector("iframe")) return "the preview has no frame";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: ${screen} ${opened}`);
 								}
 								if (screen === "Document templates") {
@@ -1107,7 +1160,7 @@ if (!app.requestSingleInstanceLock()) {
 									// on the canvas and reading it back is the only thing in this app
 									// that proves the page compiler's editor half, rather than only the
 									// renderer that turns a finished layout into a PDF.
-									const edited = await window.webContents.executeJavaScript(
+									const edited = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
@@ -1132,7 +1185,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector("button[aria-label='Paragraph block']")) return "the block did not appear on the canvas";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (edited !== "ok") throw new Error(`Smoke: document template editor ${edited}`);
 
 									for (const theme of ["light", "dark"] as const) {
@@ -1142,13 +1195,16 @@ if (!app.requestSingleInstanceLock()) {
 										);
 										await new Promise((r) => setTimeout(r, 400));
 										const image = await capture(window.webContents);
-										writeFileSync(joinPath(shotDir, `document-template-editor-${theme}.png`), image.toPNG());
+										writeFileSync(
+											joinPath(shotDir, `document-template-editor-${theme}.png`),
+											image.toPNG(),
+										);
 									}
 
 									// Leaves the block unsaved: the back arrow raises its own discard
 									// dialog because the draft now differs from what "Start a page
 									// layout" already wrote, and this is that path exercised for real.
-									const leftEditor = await window.webContents.executeJavaScript(
+									const leftEditor = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
@@ -1164,12 +1220,13 @@ if (!app.requestSingleInstanceLock()) {
 											}
 											return document.querySelector("main button") ? "ok" : "did not return to the preview";
 										})()`,
-									) as string;
-									if (leftEditor !== "ok") throw new Error(`Smoke: leaving the document template editor ${leftEditor}`);
+									)) as string;
+									if (leftEditor !== "ok")
+										throw new Error(`Smoke: leaving the document template editor ${leftEditor}`);
 
 									// Walks Fill (skipped, the seeded templates ask for nothing extra),
 									// Link and Review, stopping short of the generate button.
-									const usedDocument = await window.webContents.executeJavaScript(
+									const usedDocument = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
@@ -1193,11 +1250,15 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector('main iframe[title="Document preview"]')) return "no rendered review";
 											return "ok";
 										})()`,
-									) as string;
-									if (usedDocument !== "ok") throw new Error(`Smoke: using a document template ${usedDocument}`);
+									)) as string;
+									if (usedDocument !== "ok")
+										throw new Error(`Smoke: using a document template ${usedDocument}`);
 
 									const useDocumentImage = await capture(window.webContents);
-									writeFileSync(joinPath(shotDir, `use-document-template.png`), useDocumentImage.toPNG());
+									writeFileSync(
+										joinPath(shotDir, `use-document-template.png`),
+										useDocumentImage.toPNG(),
+									);
 
 									// One click undoes Review, landing back on Link; the same control,
 									// now reading "Cancel", is what actually leaves the sequence.
@@ -1221,7 +1282,7 @@ if (!app.requestSingleInstanceLock()) {
 									// template with one empty page as its body, and opens it straight
 									// into the page editor built on that page rather than the plain-HTML
 									// mode a template with no layout opens into.
-									const created = await window.webContents.executeJavaScript(
+									const created = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
@@ -1250,8 +1311,9 @@ if (!app.requestSingleInstanceLock()) {
 											}
 											return "ok";
 										})()`,
-									) as string;
-									if (created !== "ok") throw new Error(`Smoke: creating a document template ${created}`);
+									)) as string;
+									if (created !== "ok")
+										throw new Error(`Smoke: creating a document template ${created}`);
 
 									// Leaves without editing further, back to that template's own
 									// preview, which is where the screenshots below expect to be.
@@ -1267,7 +1329,7 @@ if (!app.requestSingleInstanceLock()) {
 									// selection live. Typed text narrows the rows, select-all ticks
 									// every one left, and both are cleared again so the screenshot
 									// below still shows the list at rest.
-									const searched = await window.webContents.executeJavaScript(
+									const searched = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
@@ -1296,8 +1358,9 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(200);
 											return "ok";
 										})()`,
-									) as string;
-									if (searched !== "ok") throw new Error(`Smoke: document templates list ${searched}`);
+									)) as string;
+									if (searched !== "ok")
+										throw new Error(`Smoke: document templates list ${searched}`);
 								}
 								if (screen === "Mail templates") {
 									// One document underneath every view (docs/editors.md section 2):
@@ -1305,7 +1368,7 @@ if (!app.requestSingleInstanceLock()) {
 									// rendering, not a blank editor or a stale one. Then onto a
 									// canvas, because the seeded templates are hand-written HTML and
 									// converting one is the only way the canvas is reached at all.
-									const edited = await window.webContents.executeJavaScript(
+									const edited = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
@@ -1401,15 +1464,18 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector('[role=textbox][aria-label="Text"]')) return "the text did not open for editing";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (edited !== "ok") throw new Error(`Smoke: mail template editor ${edited}`);
 
 									const inlineImage = await capture(window.webContents);
-									writeFileSync(joinPath(shotDir, `mail-template-inline-edit.png`), inlineImage.toPNG());
+									writeFileSync(
+										joinPath(shotDir, `mail-template-inline-edit.png`),
+										inlineImage.toPNG(),
+									);
 
 									// Escape in the text closes the text and nothing else: the block
 									// stays selected, so the panel is still pointed at it below.
-									const closedText = await window.webContents.executeJavaScript(
+									const closedText = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const editor = document.querySelector('[role=textbox][aria-label="Text"]');
 											if (!editor) return "the text editor went away early";
@@ -1419,8 +1485,9 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector('select[aria-label="Width resizing"]')) return "Escape in the text let go of the block";
 											return "ok";
 										})()`,
-									) as string;
-									if (closedText !== "ok") throw new Error(`Smoke: mail template editor ${closedText}`);
+									)) as string;
+									if (closedText !== "ok")
+										throw new Error(`Smoke: mail template editor ${closedText}`);
 
 									for (const theme of ["light", "dark"] as const) {
 										nativeTheme.themeSource = theme;
@@ -1429,14 +1496,17 @@ if (!app.requestSingleInstanceLock()) {
 										);
 										await new Promise((r) => setTimeout(r, 400));
 										const image = await capture(window.webContents);
-										writeFileSync(joinPath(shotDir, `mail-template-editor-${theme}.png`), image.toPNG());
+										writeFileSync(
+											joinPath(shotDir, `mail-template-editor-${theme}.png`),
+											image.toPNG(),
+										);
 									}
 
 									// Resizing is Figma's and it is what the canvas draws: the block is
 									// the element the section lays out, so a width of 100 is a box 100
 									// wide, outlined as one, not a line across the frame. Then the
 									// keyboard: duplicate, delete, undo, a tool key, and the list.
-									const resized = await window.webContents.executeJavaScript(
+									const resized = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const drawn = () => [...document.querySelectorAll('[title="Double-click to edit the text"]')].find((el) => el.textContent.trim() === "Welkom");
@@ -1472,11 +1542,14 @@ if (!app.requestSingleInstanceLock()) {
 											if (!getComputedStyle(drawn()).outlineStyle.includes("solid")) return "the selection is not outlined on the block itself";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (resized !== "ok") throw new Error(`Smoke: mail template editor ${resized}`);
-									writeFileSync(joinPath(shotDir, `mail-template-fixed-width.png`), (await capture(window.webContents)).toPNG());
+									writeFileSync(
+										joinPath(shotDir, `mail-template-fixed-width.png`),
+										(await capture(window.webContents)).toPNG(),
+									);
 
-									const filled = await window.webContents.executeJavaScript(
+									const filled = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const drawn = () => [...document.querySelectorAll('[title="Double-click to edit the text"]')].find((el) => el.textContent.trim() === "Welkom");
@@ -1488,12 +1561,12 @@ if (!app.requestSingleInstanceLock()) {
 											if (Math.abs(drawn().offsetWidth - (section.clientWidth - parseFloat(getComputedStyle(section).paddingLeft) - parseFloat(getComputedStyle(section).paddingRight))) > 1) return "fill did not stretch the block across its section";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (filled !== "ok") throw new Error(`Smoke: mail template editor ${filled}`);
 
 									// A breakpoint: the canvas is drawn at its width, a change made
 									// there stays there, and the default is untouched by it.
-									const narrowed = await window.webContents.executeJavaScript(
+									const narrowed = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const drawn = () => [...document.querySelectorAll('[title="Double-click to edit the text"]')].find((el) => el.textContent.trim() === "Welkom");
@@ -1527,13 +1600,16 @@ if (!app.requestSingleInstanceLock()) {
 											if (getComputedStyle(drawn()).fontSize !== "12px") return "the breakpoint lost its change";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (narrowed !== "ok") throw new Error(`Smoke: mail template editor ${narrowed}`);
-									writeFileSync(joinPath(shotDir, `mail-template-breakpoint.png`), (await capture(window.webContents)).toPNG());
+									writeFileSync(
+										joinPath(shotDir, `mail-template-breakpoint.png`),
+										(await capture(window.webContents)).toPNG(),
+									);
 
 									// What is sent: the canvas with nothing around it, and the
 									// breakpoint as a media query in its head.
-									const sent = await window.webContents.executeJavaScript(
+									const sent = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const view = document.querySelector('button[title="The message as it will be sent"]');
@@ -1552,12 +1628,15 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector('[role=group][aria-label="Preview width"]')) return "the preview has no breakpoints to look at";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (sent !== "ok") throw new Error(`Smoke: mail template editor ${sent}`);
-									writeFileSync(joinPath(shotDir, `mail-template-sent.png`), (await capture(window.webContents)).toPNG());
+									writeFileSync(
+										joinPath(shotDir, `mail-template-sent.png`),
+										(await capture(window.webContents)).toPNG(),
+									);
 
 									// A colour the way Figma picks one, on the default again.
-									const picked = await window.webContents.executeJavaScript(
+									const picked = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const canvas = document.querySelector('button[title="The canvas"]');
@@ -1581,10 +1660,13 @@ if (!app.requestSingleInstanceLock()) {
 											if (picker.querySelectorAll("[role=slider]").length !== 3) return "the picker has no square, hue and opacity";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (picked !== "ok") throw new Error(`Smoke: mail template editor ${picked}`);
-									writeFileSync(joinPath(shotDir, `mail-template-color-picker.png`), (await capture(window.webContents)).toPNG());
-									const closedPicker = await window.webContents.executeJavaScript(
+									writeFileSync(
+										joinPath(shotDir, `mail-template-color-picker.png`),
+										(await capture(window.webContents)).toPNG(),
+									);
+									const closedPicker = (await window.webContents.executeJavaScript(
 										`(async () => {
 											document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
 											await new Promise((r) => setTimeout(r, 300));
@@ -1592,10 +1674,11 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector('select[aria-label="Width resizing"]')) return "Escape in the picker let go of the block";
 											return "ok";
 										})()`,
-									) as string;
-									if (closedPicker !== "ok") throw new Error(`Smoke: mail template editor ${closedPicker}`);
+									)) as string;
+									if (closedPicker !== "ok")
+										throw new Error(`Smoke: mail template editor ${closedPicker}`);
 
-									const keyed = await window.webContents.executeJavaScript(
+									const keyed = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const layerRows = () => [...document.querySelectorAll('button[title="Drag to reorder. Alt and an arrow move it too"]')];
@@ -1630,9 +1713,12 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector('[role=region][aria-label="Keyboard shortcuts"]')) return "? did not open the list of shortcuts";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (keyed !== "ok") throw new Error(`Smoke: mail template editor ${keyed}`);
-									writeFileSync(joinPath(shotDir, `mail-template-shortcuts.png`), (await capture(window.webContents)).toPNG());
+									writeFileSync(
+										joinPath(shotDir, `mail-template-shortcuts.png`),
+										(await capture(window.webContents)).toPNG(),
+									);
 									await window.webContents.executeJavaScript(
 										`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 									);
@@ -1641,7 +1727,7 @@ if (!app.requestSingleInstanceLock()) {
 									// The toolbar floats over the canvas, a layer moves with Alt and an
 									// arrow, and "Convert to HTML" turns the block that was just styled
 									// into code the canvas draws exactly as it drew the block.
-									const converted = await window.webContents.executeJavaScript(
+									const converted = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											if (!document.querySelector('[role=toolbar][aria-label="Canvas tools"]')) return "no floating toolbar";
@@ -1684,9 +1770,12 @@ if (!app.requestSingleInstanceLock()) {
 											if (!style.fontFamily.includes("Georgia") || style.fontStyle !== "italic") return "the converted block does not look the same";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (converted !== "ok") throw new Error(`Smoke: mail template editor ${converted}`);
-									writeFileSync(joinPath(shotDir, `mail-template-code-block.png`), (await capture(window.webContents)).toPNG());
+									writeFileSync(
+										joinPath(shotDir, `mail-template-code-block.png`),
+										(await capture(window.webContents)).toPNG(),
+									);
 
 									// Escape lets go of what is selected before it leaves, so the
 									// first one drops the block that was just inserted and the second
@@ -1703,15 +1792,21 @@ if (!app.requestSingleInstanceLock()) {
 											const framePanel = await window.webContents.executeJavaScript(
 												`[...document.querySelectorAll("h3")].some((el) => el.textContent.trim() === "Fonts")`,
 											);
-											if (!framePanel) throw new Error("Smoke: mail template editor has no Fonts on the frame panel");
+											if (!framePanel)
+												throw new Error(
+													"Smoke: mail template editor has no Fonts on the frame panel",
+												);
 											const frameImage = await capture(window.webContents);
-											writeFileSync(joinPath(shotDir, `mail-template-frame.png`), frameImage.toPNG());
+											writeFileSync(
+												joinPath(shotDir, `mail-template-frame.png`),
+												frameImage.toPNG(),
+											);
 										}
 									}
 
 									// No Fill step either: the seeded mail templates ask for nothing
 									// beyond a client and a project, so one Next reaches Review.
-									const usedMail = await window.webContents.executeJavaScript(
+									const usedMail = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
@@ -1731,7 +1826,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.querySelector('iframe[title="Message preview"]')) return "no rendered body";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (usedMail !== "ok") throw new Error(`Smoke: using a mail template ${usedMail}`);
 
 									const useMailImage = await capture(window.webContents);
@@ -1748,7 +1843,7 @@ if (!app.requestSingleInstanceLock()) {
 									// a name, Enter creates it, and the editor opens on a canvas. This
 									// used to refuse outright, because it created with no subject and
 									// the service requires one.
-									const opened = await window.webContents.executeJavaScript(
+									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											// The template read earlier is still open beside the list.
@@ -1770,11 +1865,14 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(200);
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: creating a mail template ${opened}`);
-									writeFileSync(joinPath(shotDir, `mail-template-add.png`), (await capture(window.webContents)).toPNG());
+									writeFileSync(
+										joinPath(shotDir, `mail-template-add.png`),
+										(await capture(window.webContents)).toPNG(),
+									);
 
-									const created = await window.webContents.executeJavaScript(
+									const created = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const field = document.querySelector('input[aria-label="New mail template"]');
@@ -1798,20 +1896,23 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector('button[aria-label="Drag to change the height of the sheet"]')) return "a new template did not open on a canvas";
 											return "ok";
 										})()`,
-									) as string;
+									)) as string;
 									if (created !== "ok") throw new Error(`Smoke: creating a mail template ${created}`);
-									writeFileSync(joinPath(shotDir, `mail-template-new.png`), (await capture(window.webContents)).toPNG());
+									writeFileSync(
+										joinPath(shotDir, `mail-template-new.png`),
+										(await capture(window.webContents)).toPNG(),
+									);
 
 									// Nothing is selected on a new canvas, so one Escape leaves, and the
 									// template is on the list because creating it saved it.
-									const listed = await window.webContents.executeJavaScript(
+									const listed = (await window.webContents.executeJavaScript(
 										`(async () => {
 											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await new Promise((r) => setTimeout(r, 600));
 											const rows = [...document.querySelectorAll("main li")].map((el) => el.textContent);
 											return rows.some((text) => text.includes("Smoke nieuwsbrief")) ? "ok" : "the new template is not on the list";
 										})()`,
-									) as string;
+									)) as string;
 									if (listed !== "ok") throw new Error(`Smoke: creating a mail template ${listed}`);
 								}
 								if (screen === "Calendar") {
@@ -2050,9 +2151,12 @@ if (!app.requestSingleInstanceLock()) {
 									// Opens the newest thread, so the reader and its frame are in
 									// the picture, and checks the frame actually loaded a body.
 									const mailResponses: { url: string; statusCode: number }[] = [];
-									window.webContents.session.webRequest.onCompleted({ urls: ["app://mail/*"] }, (details) => {
-										mailResponses.push({ url: details.url, statusCode: details.statusCode });
-									});
+									window.webContents.session.webRequest.onCompleted(
+										{ urls: ["app://mail/*"] },
+										(details) => {
+											mailResponses.push({ url: details.url, statusCode: details.statusCode });
+										},
+									);
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
 											const row = document.querySelector("ul li button");
@@ -2069,35 +2173,27 @@ if (!app.requestSingleInstanceLock()) {
 									const mailFrame = window.webContents.mainFrame.framesInSubtree.find((f) =>
 										f.url.startsWith("app://mail/message/"),
 									);
-									if (!mailFrame) throw new Error("Smoke: the message frame did not load from app://mail");
-									// The frame is sandboxed, so nothing can be asked of its document,
-									// which is the point. The request log says whether the scheme
-									// host answered it with a body.
+									if (!mailFrame)
+										throw new Error("Smoke: the message frame did not load from app://mail");
+									// The frame remains opaque to the app. The request log says whether
+									// the scheme host answered it with a body.
 									const served = mailResponses.find((r) => r.url === mailFrame.url);
 									if (!served || served.statusCode !== 200) {
-										throw new Error(`Smoke: the message frame got ${served?.statusCode ?? "no response"}`);
+										throw new Error(
+											`Smoke: the message frame got ${served?.statusCode ?? "no response"}`,
+										);
 									}
 									console.log(`SMOKE_DEMO mail frame=${mailFrame.url}`);
 									await new Promise((r) => setTimeout(r, 400));
 
-									// The reader frame has no way to report its own content
-									// height (decision 20), so its height is a resize handle
-									// rather than a measurement. Driven from the keyboard
-									// because a sandboxed frame swallows a pointer drag from
-									// this script the same way it would from a real one.
-									const resized = await window.webContents.executeJavaScript(
+									const measured = await window.webContents.executeJavaScript(
 										`(async () => {
-											const handle = document.querySelector('[role="separator"][aria-label="Resize message"]');
-											if (!handle) return "no handle";
-											const before = Number(handle.getAttribute("aria-valuenow"));
-											handle.focus();
-											handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-											await new Promise((r) => setTimeout(r, 200));
-											const after = Number(handle.getAttribute("aria-valuenow"));
-											return after > before ? "ok" : \`did not grow: \${before} -> \${after}\`;
+											const frame = document.querySelector('iframe[title^="Message from"]');
+											if (!frame) return "no frame";
+											return frame.style.height ? "ok" : "no measured height";
 										})()`,
 									);
-									if (resized !== "ok") throw new Error(`Smoke: mail reader resize handle ${resized}`);
+									if (measured !== "ok") throw new Error(`Smoke: mail reader height ${measured}`);
 								}
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;
@@ -2129,9 +2225,7 @@ if (!app.requestSingleInstanceLock()) {
 										setTimeout(resolve, 900);
 										return;
 									}
-									settingsWindow.webContents.once("did-finish-load", () =>
-										setTimeout(resolve, 900),
-									);
+									settingsWindow.webContents.once("did-finish-load", () => setTimeout(resolve, 900));
 								});
 
 								const TABS = `document.querySelectorAll("nav[aria-label='Settings sections'] button")`;
@@ -2163,7 +2257,8 @@ if (!app.requestSingleInstanceLock()) {
 								// them, which is where the primary and the mail-account mark are.
 								{
 									const business = tabs.findIndex((tab) => tab === "Your business");
-									if (business === -1) throw new Error("Smoke: the settings window has no business section");
+									if (business === -1)
+										throw new Error("Smoke: the settings window has no business section");
 									await settingsWindow.webContents.executeJavaScript(`${TABS}[${business}].click()`);
 									await new Promise((r) => setTimeout(r, 300));
 									const listed = (await settingsWindow.webContents.executeJavaScript(
@@ -2174,7 +2269,9 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as boolean;
 									if (!listed) {
-										throw new Error("Smoke: the business section did not list the owner's addresses");
+										throw new Error(
+											"Smoke: the business section did not list the owner's addresses",
+										);
 									}
 									for (const theme of ["light", "dark"] as const) {
 										nativeTheme.themeSource = theme;
@@ -2183,7 +2280,10 @@ if (!app.requestSingleInstanceLock()) {
 										);
 										await new Promise((r) => setTimeout(r, 300));
 										const image = await capture(settingsWindow.webContents);
-										writeFileSync(joinPath(shotDir, `settings-your-contacts-${theme}.png`), image.toPNG());
+										writeFileSync(
+											joinPath(shotDir, `settings-your-contacts-${theme}.png`),
+											image.toPNG(),
+										);
 									}
 								}
 
@@ -2192,7 +2292,8 @@ if (!app.requestSingleInstanceLock()) {
 								// check found, and the automatic-install toggle.
 								{
 									const general = tabs.findIndex((tab) => tab === "General");
-									if (general === -1) throw new Error("Smoke: the settings window has no general section");
+									if (general === -1)
+										throw new Error("Smoke: the settings window has no general section");
 									await settingsWindow.webContents.executeJavaScript(`${TABS}[${general}].click()`);
 									await new Promise((r) => setTimeout(r, 300));
 									const shown = (await settingsWindow.webContents.executeJavaScript(
@@ -2212,7 +2313,10 @@ if (!app.requestSingleInstanceLock()) {
 										);
 										await new Promise((r) => setTimeout(r, 300));
 										const image = await capture(settingsWindow.webContents);
-										writeFileSync(joinPath(shotDir, `settings-updates-${theme}.png`), image.toPNG());
+										writeFileSync(
+											joinPath(shotDir, `settings-updates-${theme}.png`),
+											image.toPNG(),
+										);
 									}
 								}
 
@@ -2233,7 +2337,8 @@ if (!app.requestSingleInstanceLock()) {
 											return true;
 										})()`,
 									)) as boolean;
-									if (!switched) throw new Error("Smoke: the MCP section had no way to the manual route");
+									if (!switched)
+										throw new Error("Smoke: the MCP section had no way to the manual route");
 									await new Promise((r) => setTimeout(r, 350));
 									const pasted = (await settingsWindow.webContents.executeJavaScript(
 										`(document.querySelector("pre")?.textContent ?? "").includes("mcpServers")`,
@@ -2246,7 +2351,10 @@ if (!app.requestSingleInstanceLock()) {
 										);
 										await new Promise((r) => setTimeout(r, 300));
 										const image = await capture(settingsWindow.webContents);
-										writeFileSync(joinPath(shotDir, `settings-mcp-manual-${theme}.png`), image.toPNG());
+										writeFileSync(
+											joinPath(shotDir, `settings-mcp-manual-${theme}.png`),
+											image.toPNG(),
+										);
 									}
 								}
 								console.log(`SMOKE_DEMO settings tabs=${tabs.length}`);
@@ -2272,7 +2380,8 @@ if (!app.requestSingleInstanceLock()) {
 											);
 											await new Promise((r) => setTimeout(r, 300));
 										}
-										if ((await sidebarState()) !== "false") throw new Error("Smoke: the sidebar toggle did not open it");
+										if ((await sidebarState()) !== "false")
+											throw new Error("Smoke: the sidebar toggle did not open it");
 									};
 									const choose = async () => {
 										await window.webContents.executeJavaScript(
@@ -2299,7 +2408,8 @@ if (!app.requestSingleInstanceLock()) {
 									// Closing the window is what tells the main window.
 									openSettingsWindow("general");
 									const again = getSettingsWindow();
-									if (!again) throw new Error("Smoke: the settings window did not open a second time");
+									if (!again)
+										throw new Error("Smoke: the settings window did not open a second time");
 									await new Promise<void>((resolve) => {
 										if (!again.webContents.isLoading()) {
 											setTimeout(resolve, 900);

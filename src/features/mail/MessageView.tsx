@@ -11,15 +11,16 @@ import {
 	type MailReplyMode,
 } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Icon } from "../../components/Icon";
-import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
 import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 
 type MessageViewProps = {
 	message: MailMessage;
-	initiallyOpen: boolean;
+	/** Accordion: the thread shows one open message at a time. */
+	open: boolean;
+	onToggle: () => void;
 	onNotice: (message: string) => void;
 	onReply: (messageId: string, mode: MailReplyMode) => void;
 	/** A file action on this message changed it (read, flagged): reload the thread. */
@@ -27,21 +28,18 @@ type MessageViewProps = {
 };
 
 /**
- * The frame's height, remembered per machine rather than per message: it is a
- * habit about how somebody reads mail, not a property of one message. A
- * sandboxed frame cannot report its content height (decision 20), so the
- * height is a preference, not a measurement.
- *
- * The minimum keeps a short message from collapsing to a sliver. The maximum
- * is a generous, fixed cap rather than the scroll container's available
- * height: a thread opens several of these frames at once, each resizable on
- * its own, so there is no single "available height" belonging to one of them,
- * and a fixed cap is enough to stop a runaway drag or a held arrow key
- * without adding a measurement nobody asked for.
+ * An explicit override, in pixels, remembered per machine rather than per
+ * message: it is a habit about how somebody reads mail, not a property of one
+ * message. With no override the frame fills whatever room is left below the
+ * header, down to the bottom of the window, which is the right size for most
+ * mail. A longer message is the exception, and dragging the handle once sets
+ * an explicit height that then applies everywhere, because there is no way to
+ * know a message is long before its sandboxed frame has been dragged open: the
+ * frame's own document is a different origin on purpose (decision 20), so this
+ * page can never measure what is inside it.
  */
 const MIN_HEIGHT = 200;
 const MAX_HEIGHT = 4000;
-const DEFAULT_HEIGHT = 520;
 const HEIGHT_STEP = 40;
 const HEIGHT_KEY = "juno.mail.readerHeight";
 
@@ -49,19 +47,20 @@ function clampHeight(value: number): number {
 	return Math.min(Math.max(value, MIN_HEIGHT), MAX_HEIGHT);
 }
 
-function readStoredHeight(): number {
+function readStoredHeight(): number | null {
 	try {
 		const raw = localStorage.getItem(HEIGHT_KEY);
 		const parsed = raw === null ? NaN : Number(raw);
-		return Number.isFinite(parsed) ? clampHeight(parsed) : DEFAULT_HEIGHT;
+		return Number.isFinite(parsed) ? clampHeight(parsed) : null;
 	} catch {
-		return DEFAULT_HEIGHT;
+		return null;
 	}
 }
 
-function storeHeight(value: number): void {
+function storeHeight(value: number | null): void {
 	try {
-		localStorage.setItem(HEIGHT_KEY, String(value));
+		if (value === null) localStorage.removeItem(HEIGHT_KEY);
+		else localStorage.setItem(HEIGHT_KEY, String(value));
 	} catch {
 		// A private window or blocked site data. The frame still resizes, it
 		// just forgets the choice on the next launch.
@@ -78,14 +77,14 @@ function storeHeight(value: number): void {
  * images unless this message's button is pressed. Links are listed below the
  * frame with their real targets, because a click inside goes nowhere.
  */
-export function MessageView({ message, initiallyOpen, onNotice, onReply, onChanged }: MessageViewProps) {
-	const [open, setOpen] = useState(initiallyOpen);
+export function MessageView({ message, open, onToggle, onNotice, onReply, onChanged }: MessageViewProps) {
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [body, setBody] = useState<MailMessageBody | null>(null);
 	const [bodyError, setBodyError] = useState<string | null>(null);
 	const [remoteImages, setRemoteImages] = useState(false);
-	const [height, setHeight] = useState(readStoredHeight);
+	const [overrideHeight, setOverrideHeight] = useState<number | null>(readStoredHeight);
 	const [resizing, setResizing] = useState(false);
+	const frame = useRef<HTMLIFrameElement>(null);
 	const drag = useRef<{ y: number; from: number } | null>(null);
 	const menu = useContextMenu();
 
@@ -139,15 +138,6 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 		}
 	}
 
-	async function toggleFlag() {
-		try {
-			await window.juno.mail.file.setFlagged([message.id], !message.isFlagged);
-			onChanged();
-		} catch (cause: unknown) {
-			onNotice(messageOf(cause));
-		}
-	}
-
 	async function copyAddress() {
 		if (!message.from) return;
 		try {
@@ -158,15 +148,19 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 		}
 	}
 
-	/** Sets and remembers a new height, from the keyboard or a double-click. */
-	function commitHeight(next: number) {
-		const clamped = clampHeight(next);
-		setHeight(clamped);
+	/** Sets and remembers an explicit height, from the keyboard or a double-click. */
+	function commitHeight(next: number | null) {
+		const clamped = next === null ? null : clampHeight(next);
+		setOverrideHeight(clamped);
 		storeHeight(clamped);
 	}
 
+	function currentHeight(): number {
+		return overrideHeight ?? frame.current?.getBoundingClientRect().height ?? MIN_HEIGHT;
+	}
+
 	function startResize(event: ReactPointerEvent<HTMLDivElement>) {
-		drag.current = { y: event.clientY, from: height };
+		drag.current = { y: event.clientY, from: currentHeight() };
 		setResizing(true);
 		event.currentTarget.setPointerCapture(event.pointerId);
 	}
@@ -174,7 +168,7 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 	function moveResize(event: ReactPointerEvent<HTMLDivElement>) {
 		const start = drag.current;
 		if (!start) return;
-		setHeight(clampHeight(start.from + (event.clientY - start.y)));
+		setOverrideHeight(clampHeight(start.from + (event.clientY - start.y)));
 	}
 
 	function endResize(event: ReactPointerEvent<HTMLDivElement>) {
@@ -184,34 +178,13 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 		event.currentTarget.releasePointerCapture(event.pointerId);
 		// The last `moveResize` already committed the clamped value to state;
 		// this is the point to remember it, not every point along the drag.
-		storeHeight(height);
+		storeHeight(overrideHeight);
 	}
 
 	const from = message.from ? displayName(message.from) : "(unknown sender)";
 	const visibleAttachments = message.attachments.filter((a) => !a.isInline);
 	const frameSrc = `${MAIL_FRAME_ORIGIN}/message/${message.id}${remoteImages ? "?images=1" : ""}`;
 	const ariaLabel = `Actions for message from ${from}`;
-
-	const menuItems: MenuItem[] = [
-		{ id: "reply", label: "Reply", icon: "reply", onSelect: () => onReply(message.id, "reply") },
-		{ id: "reply-all", label: "Reply all", icon: "reply", onSelect: () => onReply(message.id, "reply_all") },
-		{ id: "forward", label: "Forward", icon: "forward", onSelect: () => onReply(message.id, "forward") },
-		{ id: "mark-unread", label: "Mark unread", icon: "unread", separatorBefore: true, onSelect: () => void markUnread() },
-		{
-			id: "flag",
-			label: message.isFlagged ? "Remove flag" : "Flag",
-			icon: "flag",
-			onSelect: () => void toggleFlag(),
-		},
-		{
-			id: "copy-address",
-			label: "Copy address",
-			icon: "copy",
-			disabled: !message.from,
-			separatorBefore: true,
-			onSelect: () => void copyAddress(),
-		},
-	];
 
 	const contextItems: MenuItem[] = [
 		{ id: "reply", label: "Reply", icon: "reply", onSelect: () => onReply(message.id, "reply") },
@@ -228,12 +201,15 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 	];
 
 	return (
-		<article className="border-t border-[var(--line)] first:border-t-0" onContextMenu={menu.open}>
+		<article
+			className={`border-t border-[var(--line)] px-8 first:border-t-0 ${open ? "flex flex-1 flex-col" : ""}`}
+			onContextMenu={menu.open}
+		>
 			<button
 				type="button"
-				onClick={() => setOpen((current) => !current)}
+				onClick={onToggle}
 				aria-expanded={open}
-				className="flex w-full items-start gap-3 py-3 text-left hover:bg-[var(--hover)]"
+				className="flex w-full shrink-0 items-start gap-3 py-3 text-left hover:bg-[var(--hover)]"
 			>
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
@@ -263,8 +239,8 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 			</button>
 
 			{open ? (
-				<div>
-					<div className="flex items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<div className="flex flex-1 flex-col">
+					<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 						<span className="min-w-0 flex-1 truncate">To {participantsLine(message.to, "(nobody)")}</span>
 						<button
 							type="button"
@@ -273,11 +249,10 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 						>
 							{detailsOpen ? "Hide" : "Details"}
 						</button>
-						<MenuButton items={menuItems} ariaLabel={ariaLabel} />
 					</div>
 
 					{detailsOpen ? (
-						<dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 pb-3 text-[length:var(--text-sm)]">
+						<dl className="grid shrink-0 grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 pb-3 text-[length:var(--text-sm)]">
 							<dt className="text-[var(--ink-muted)]">From</dt>
 							<dd data-selectable className="truncate">
 								{message.from ? `${from} <${message.from.address}>` : "(unknown sender)"}
@@ -303,74 +278,8 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 						</dl>
 					) : null}
 
-					{!message.bodyFetched ? (
-						<p className="border-t border-[var(--line)] py-6 text-[var(--ink-muted)]">
-							{message.bodyError
-								? `This message could not be fetched. ${message.bodyError}`
-								: "The body has not been fetched yet. It arrives with the next sync."}
-						</p>
-					) : bodyError ? (
-						<p data-selectable className="border-t border-[var(--line)] py-6 text-[var(--risk)]">
-							{bodyError}
-						</p>
-					) : (
-						<>
-							{body && body.remoteImages > 0 && !remoteImages ? (
-								<div className="flex items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-sm)]">
-									<span className="text-[var(--ink-muted)]">
-										{body.remoteImages} remote {body.remoteImages === 1 ? "image" : "images"} not
-										loaded. Loading them tells the sender you opened this.
-									</span>
-									<Button size="dense" onClick={() => setRemoteImages(true)}>
-										Load images
-									</Button>
-								</div>
-							) : null}
-							<iframe
-								title={`Message from ${from}`}
-								src={frameSrc}
-								sandbox=""
-								referrerPolicy="no-referrer"
-								className={`block w-full border-t border-[var(--line)] bg-[var(--surface)] ${resizing ? "pointer-events-none" : ""}`}
-								style={{ height }}
-							/>
-							{/*
-								A sandboxed frame swallows pointer events, which is why the
-								iframe above loses them for the length of the drag: without
-								that, the pointer crossing into the frame would end the resize
-								early. Pointer capture on this element keeps the drag going
-								regardless.
-							*/}
-							<div
-								role="separator"
-								aria-orientation="horizontal"
-								aria-valuenow={height}
-								aria-valuemin={MIN_HEIGHT}
-								aria-valuemax={MAX_HEIGHT}
-								aria-label="Resize message"
-								tabIndex={0}
-								onPointerDown={startResize}
-								onPointerMove={moveResize}
-								onPointerUp={endResize}
-								onPointerCancel={endResize}
-								onDoubleClick={() => commitHeight(DEFAULT_HEIGHT)}
-								onKeyDown={(event) => {
-									if (event.key === "ArrowDown") commitHeight(height + HEIGHT_STEP);
-									else if (event.key === "ArrowUp") commitHeight(height - HEIGHT_STEP);
-									else if (event.key === "Home") commitHeight(MIN_HEIGHT);
-									else if (event.key === "End") commitHeight(MAX_HEIGHT);
-									else return;
-									event.preventDefault();
-								}}
-								className="flex h-[12px] w-full flex-none cursor-row-resize items-center justify-center bg-[var(--surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-							>
-								<span className="h-[3px] w-[48px] rounded-[var(--radius-sm)] bg-[var(--line-strong)]" />
-							</div>
-						</>
-					)}
-
 					{visibleAttachments.length > 0 ? (
-						<div className="border-t border-[var(--line)] py-3">
+						<div className="shrink-0 border-t border-[var(--line)] py-3">
 							<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 								Attachments
 							</h3>
@@ -402,50 +311,96 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply, onChang
 						</div>
 					) : null}
 
-					{/*
-						Answering is the point of reading, so it is a row of buttons rather
-						than three items behind a menu.
-					*/}
-					<div className="flex items-center gap-2 border-t border-[var(--line)] py-3">
-						<Button variant="primary" size="dense" onClick={() => onReply(message.id, "reply")}>
-							<Icon name="reply" size={14} />
-							Reply
-						</Button>
-						{message.to.length + message.cc.length > 1 ? (
-							<Button size="dense" onClick={() => onReply(message.id, "reply_all")}>
-								<Icon name="reply" size={14} />
-								Reply all
-							</Button>
-						) : null}
-						<Button size="dense" onClick={() => onReply(message.id, "forward")}>
-							<Icon name="forward" size={14} />
-							Forward
-						</Button>
-					</div>
+					{!message.bodyFetched ? (
+						<p className="shrink-0 border-t border-[var(--line)] py-6 text-[var(--ink-muted)]">
+							{message.bodyError
+								? `This message could not be fetched. ${message.bodyError}`
+								: "The body has not been fetched yet. It arrives with the next sync."}
+						</p>
+					) : bodyError ? (
+						<p data-selectable className="shrink-0 border-t border-[var(--line)] py-6 text-[var(--risk)]">
+							{bodyError}
+						</p>
+					) : (
+						<div className="-mx-8 flex flex-1 flex-col">
+							{body && body.remoteImages > 0 && !remoteImages ? (
+								<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-[length:var(--text-sm)]">
+									<span className="text-[var(--ink-muted)]">
+										{body.remoteImages} remote {body.remoteImages === 1 ? "image" : "images"} not
+										loaded. Loading them tells the sender you opened this.
+									</span>
+									<Button size="dense" onClick={() => setRemoteImages(true)}>
+										Load images
+									</Button>
+								</div>
+							) : null}
+							<iframe
+								ref={frame}
+								title={`Message from ${from}`}
+								src={frameSrc}
+								sandbox=""
+								referrerPolicy="no-referrer"
+								className={`block w-full border-t border-[var(--line)] bg-[var(--surface)] ${overrideHeight === null ? "min-h-0 flex-1" : "shrink-0"} ${resizing ? "pointer-events-none" : ""}`}
+								style={overrideHeight === null ? undefined : { height: overrideHeight }}
+							/>
+							{/*
+								A sandboxed frame swallows pointer events, which is why the
+								iframe above loses them for the length of the drag: without
+								that, the pointer crossing into the frame would end the resize
+								early. Pointer capture on this element keeps the drag going
+								regardless.
+							*/}
+							<div
+								role="separator"
+								aria-orientation="horizontal"
+								aria-valuenow={overrideHeight ?? undefined}
+								aria-valuemin={MIN_HEIGHT}
+								aria-valuemax={MAX_HEIGHT}
+								aria-label="Resize message"
+								tabIndex={0}
+								onPointerDown={startResize}
+								onPointerMove={moveResize}
+								onPointerUp={endResize}
+								onPointerCancel={endResize}
+								onDoubleClick={() => commitHeight(null)}
+								onKeyDown={(event) => {
+									if (event.key === "ArrowDown") commitHeight(currentHeight() + HEIGHT_STEP);
+									else if (event.key === "ArrowUp") commitHeight(currentHeight() - HEIGHT_STEP);
+									else if (event.key === "Home") commitHeight(MIN_HEIGHT);
+									else if (event.key === "End") commitHeight(MAX_HEIGHT);
+									else return;
+									event.preventDefault();
+								}}
+								className="flex h-[12px] w-full shrink-0 cursor-row-resize items-center justify-center bg-[var(--surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+							>
+								<span className="h-[3px] w-[48px] rounded-[var(--radius-sm)] bg-[var(--line-strong)]" />
+							</div>
 
-					{body && body.links.length > 0 ? (
-						<div className="border-t border-[var(--line)] py-3">
-							<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
-								Links in this message
-							</h3>
-							<ul className="mt-2 flex flex-col gap-1">
-								{body.links.slice(0, 40).map((link) => (
-									<li key={link.href} className="flex min-w-0 items-baseline gap-2 text-[length:var(--text-sm)]">
-										<button
-											type="button"
-											onClick={() => void openLink(link.href)}
-											className="shrink-0 text-[var(--accent)] hover:underline"
-										>
-											{link.text || "Open"}
-										</button>
-										<span data-selectable className="min-w-0 truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-											{link.href}
-										</span>
-									</li>
-								))}
-							</ul>
+							{body && body.links.length > 0 ? (
+								<div className="shrink-0 border-t border-[var(--line)] px-8 py-3">
+									<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+										Links in this message
+									</h3>
+									<ul className="mt-2 flex flex-col gap-1">
+										{body.links.slice(0, 40).map((link) => (
+											<li key={link.href} className="flex min-w-0 items-baseline gap-2 text-[length:var(--text-sm)]">
+												<button
+													type="button"
+													onClick={() => void openLink(link.href)}
+													className="shrink-0 text-[var(--accent)] hover:underline"
+												>
+													{link.text || "Open"}
+												</button>
+												<span data-selectable className="min-w-0 truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+													{link.href}
+												</span>
+											</li>
+										))}
+									</ul>
+								</div>
+							) : null}
 						</div>
-					) : null}
+					)}
 				</div>
 			) : null}
 

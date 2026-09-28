@@ -1,26 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MailBlock, MailContainer, MailLayout, MailTemplate, MailTextStyle, TemplateInput } from "@shared/types";
+import type { MailBlock, MailContainer, MailLayout, MailNode, MailTemplate, MailTextStyle, TemplateInput } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { FONT_WEIGHTS } from "./mail/canvas/box-style";
 import { absorb, copyOverrides, layoutAt, widestFirst } from "./mail/canvas/breakpoints";
 import {
-	addSection,
-	cloneBlock,
-	cloneSection,
-	dropBlock,
-	insertBlockAfter,
-	insertSectionAfter,
-	moveBlock,
-	moveSection,
-	moveSectionTo,
+	cloneNode,
+	duplicateNode,
+	emptySection,
+	findNode,
+	firstChildOf,
+	insertNode,
+	moveNode,
+	moveWithinParent,
 	newBlock,
-	removeBlock,
-	removeSection,
+	parentOf,
+	removeNode,
 	selectionIn,
 	siblingOf,
 	updateBlock,
+	updateColumns,
 	updateSection,
 	type BlockKind,
 } from "./mail/canvas/canvas-actions";
@@ -83,25 +83,26 @@ const TOOL_KINDS: Partial<Record<ShortcutAction, BlockKind>> = {
 };
 
 /**
- * What Ctrl+C last copied. Kept for the session rather than per editor, so a
- * block copied in one template pastes into the next one opened, the way a
- * copy works everywhere else.
+ * What Ctrl+C last copied: one node, wherever it came from. Kept for the
+ * session rather than per editor, so a block copied in one template pastes
+ * into the next one opened, the way a copy works everywhere else.
  */
-let copied: { kind: "block"; block: MailBlock } | { kind: "section"; section: MailContainer } | null = null;
+let copied: MailNode | null = null;
 
-/** A container is a section, in the shapes this phase can build. */
-function isContainer(node: MailLayout["children"][number]): node is MailContainer {
-	return node.kind === "container";
-}
-
-/** A leaf: anything that is not a container or a columns table. */
-function isBlockNode(node: MailLayout["children"][number]): node is MailBlock {
-	return node.kind !== "container" && node.kind !== "columns";
-}
-
-/** Which blocks are in which sections, and in what order: what a structural edit changes. */
+/** Every id in the tree and the order its parent holds it in, one level at a time: what a structural edit changes. */
 function shapeOf(layout: MailLayout): string {
-	return layout.children.map((node) => `${node.id}:${"children" in node ? node.children.map((child) => child.id).join(",") : ""}`).join("|");
+	function walk(nodes: MailNode[]): string {
+		return nodes
+			.map((node) => {
+				if (node.kind === "container") return `${node.id}:[${walk(node.children)}]`;
+				if (node.kind === "columns") {
+					return `${node.id}:{${node.rows.map((row) => `${row.id}[${row.cells.map((cell) => `${cell.id}(${walk(cell.children)})`).join(",")}]`).join(",")}}`;
+				}
+				return node.id;
+			})
+			.join(",");
+	}
+	return walk(layout.children);
 }
 
 /**
@@ -296,25 +297,21 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	const shown = layout ? layoutAt(layout, active) : null;
 	const canvasFonts = useCanvasFonts(layout?.fonts ?? []);
 	// An undo can take away what was selected. What is gone is not selected.
-	const live = layout && selection && selectionIn(layout, selection) ? selection : null;
-	const selectedSection =
-		layout && live ? (layout.children.find((node): node is MailContainer => isContainer(node) && node.id === live.sectionId) ?? null) : null;
-	const selectedBlock =
-		selectedSection && live?.blockId
-			? (selectedSection.children.find((node): node is MailBlock => isBlockNode(node) && node.id === live.blockId) ?? null)
-			: null;
-	const shownSection =
-		shown && live ? (shown.children.find((node): node is MailContainer => isContainer(node) && node.id === live.sectionId) ?? null) : null;
-	const shownBlock =
-		shownSection && live?.blockId
-			? (shownSection.children.find((node): node is MailBlock => isBlockNode(node) && node.id === live.blockId) ?? null)
-			: null;
-	// With nothing selected a new block lands in the last section that is
-	// showing, which is where an author is usually working. A hidden one would
-	// swallow the block where nobody can see it land.
-	const allSections = layout ? layout.children.filter(isContainer) : [];
-	const shownSections = allSections.filter((section) => !section.hidden);
-	const lastSectionId = shownSections[shownSections.length - 1]?.id ?? (allSections[allSections.length - 1]?.id ?? null);
+	const liveId = layout && selection && selectionIn(layout, selection.id) ? selection.id : null;
+	const live: Selection = liveId ? { id: liveId } : null;
+	// The selected node as the stored layout has it (structure: order, content,
+	// what it holds) and as the active breakpoint draws it (look: size,
+	// position, appearance). A structural change goes through `onLayout`
+	// against the first; a change to how something looks goes through
+	// `restyleLayout` against the second.
+	const liveNode = layout && liveId ? findNode(layout, liveId) : null;
+	const shownNode = shown && liveId ? findNode(shown, liveId) : null;
+	// With nothing selected a new block lands in the last top-level container
+	// that is showing, which is where an author is usually working. A hidden
+	// one would swallow the block where nobody can see it land.
+	const topContainers = layout ? layout.children.filter((node): node is MailContainer => node.kind === "container") : [];
+	const shownContainers = topContainers.filter((section) => !section.hidden);
+	const lastSectionId = shownContainers[shownContainers.length - 1]?.id ?? (topContainers[topContainers.length - 1]?.id ?? null);
 	const onCanvas = mode === "canvas" && layout !== null;
 
 	/**
@@ -374,127 +371,128 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	}
 
 	/** Where a new block goes: after the selected one, or at the end of the selected or last section. */
-	function landing(): { sectionId: string; afterBlockId: string | null } | null {
-		if (selectedSection && !selectedSection.hidden) {
-			return { sectionId: selectedSection.id, afterBlockId: selectedBlock?.id ?? null };
+	/**
+	 * Where a new node lands: inside the selected container, at the end, or
+	 * straight after the selected node, in its own parent. A hidden container
+	 * is skipped, the way a hidden section always was, so a block never lands
+	 * where nobody can see it.
+	 */
+	function landing(): { parentId: string | null; afterId: string | null } | null {
+		if (layout && liveId) {
+			const target =
+				liveNode && liveNode.kind === "container"
+					? { parentId: liveNode.id, afterId: null }
+					: (() => {
+							const parentId = parentOf(layout, liveId);
+							return parentId !== undefined ? { parentId, afterId: liveId } : null;
+						})();
+			if (target) {
+				const parent = target.parentId ? findNode(layout, target.parentId) : null;
+				if (!target.parentId || !parent?.hidden) return target;
+			}
 		}
-		return lastSectionId ? { sectionId: lastSectionId, afterBlockId: null } : null;
+		return lastSectionId ? { parentId: lastSectionId, afterId: null } : null;
 	}
 
 	function insert(kind: BlockKind): void {
 		const at = landing();
 		if (!layout || !at) return;
 		const block = newBlock(kind);
-		onLayout(insertBlockAfter(layout, at.sectionId, at.afterBlockId, block));
-		setSelection({ sectionId: at.sectionId, blockId: block.id });
+		onLayout(insertNode(layout, at.parentId, block, at.afterId));
+		setSelection({ id: block.id });
 		// Figma's text tool: the new text is open with its words selected, so
 		// what is typed next replaces them.
 		setEditing(kind === "text" || kind === "heading" ? { blockId: block.id, caret: "all" } : null);
 	}
 
+	/**
+	 * F, the toolbar's section tool: a new section, landing the same way any
+	 * other element does. That is also today's way to try nesting one
+	 * container inside another before the toolbar has groups for it.
+	 */
 	function insertSection(): void {
-		if (!layout) return;
-		const next = addSection(layout, selectedSection?.id);
-		onLayout(next);
-		const added = next.children.filter(isContainer).find((section) => !layout.children.some((old) => old.id === section.id));
-		if (added) setSelection({ sectionId: added.id });
+		const at = landing();
+		if (!layout || !at) return;
+		const section = emptySection(`Section ${topContainers.length + 1}`);
+		onLayout(insertNode(layout, at.parentId, section, at.afterId));
+		setSelection({ id: section.id });
 	}
 
 	/** Figma's eye. At a breakpoint it hides or shows at that width and narrower. */
-	function setHidden(target: { sectionId: string; blockId?: string }, hidden: boolean): void {
+	function setHidden(id: string, hidden: boolean): void {
 		if (!shown) return;
-		restyleLayout(
-			target.blockId
-				? updateBlock(shown, target.sectionId, target.blockId, { hidden })
-				: updateSection(shown, target.sectionId, { hidden }),
-		);
+		const node = findNode(shown, id);
+		if (!node) return;
+		if (node.kind === "container") return restyleLayout(updateSection(shown, id, { hidden }));
+		if (node.kind === "columns") return restyleLayout(updateColumns(shown, id, { hidden }));
+		restyleLayout(updateBlock(shown, id, { hidden } as Partial<MailBlock>));
 	}
 
-	/** Alt and an arrow on a layer, or an arrow on the canvas: one place earlier or later. */
-	function stepLayer(target: { sectionId: string; blockId?: string }, by: -1 | 1): void {
+	/** Alt and an arrow on a layer, or an arrow on the canvas: one place earlier or later, in its own parent. */
+	function stepLayer(id: string, by: -1 | 1): void {
 		if (!layout) return;
-		onLayout(
-			target.blockId
-				? moveBlock(layout, target.sectionId, target.blockId, by)
-				: moveSection(layout, target.sectionId, by),
-		);
+		onLayout(moveWithinParent(layout, id, by));
 	}
 
-	/** Deleting what is selected lets go of it, so a second Delete does not take its section too. */
+	/** Deleting what is selected lets go of it, so a second Delete does not take its parent too. */
 	function remove(): void {
-		if (!layout || !live) return;
-		onLayout(live.blockId ? removeBlock(layout, live.sectionId, live.blockId) : removeSection(layout, live.sectionId));
+		if (!layout || !liveId) return;
+		onLayout(removeNode(layout, liveId));
 		setSelection(null);
 		setEditing(null);
 	}
 
 	function copy(): boolean {
-		if (selectedBlock) copied = { kind: "block", block: structuredClone(selectedBlock) };
-		else if (selectedSection) copied = { kind: "section", section: structuredClone(selectedSection) };
-		else return false;
+		if (!liveNode) return false;
+		copied = structuredClone(liveNode);
 		return true;
 	}
 
 	function paste(): void {
 		if (!layout || !copied) return;
-		if (copied.kind === "block") {
-			const at = landing();
-			if (!at) return;
-			const block = cloneBlock(copied.block);
-			onLayout(insertBlockAfter(layout, at.sectionId, at.afterBlockId, block));
-			setSelection({ sectionId: at.sectionId, blockId: block.id });
-			return;
-		}
-		const section = cloneSection(copied.section);
-		onLayout(insertSectionAfter(layout, selectedSection?.id ?? null, section));
-		setSelection({ sectionId: section.id });
+		const at = landing();
+		if (!at) return;
+		const clone = cloneNode(copied);
+		onLayout(insertNode(layout, at.parentId, clone, at.afterId));
+		setSelection({ id: clone.id });
 	}
 
+	/** A copy right after the original, in the same parent, every id under it new. It looks at every breakpoint the way its original does. */
 	function duplicate(): void {
-		if (!layout || !selectedSection) return;
-		// A copy looks at every breakpoint the way its original does.
-		if (selectedBlock) {
-			const block = cloneBlock(selectedBlock);
-			onLayout(
-				copyOverrides(insertBlockAfter(layout, selectedSection.id, selectedBlock.id, block), [[selectedBlock.id, block.id]]),
-			);
-			setSelection({ sectionId: selectedSection.id, blockId: block.id });
-			return;
-		}
-		const section = cloneSection(selectedSection);
-		const pairs: [string, string][] = [
-			[selectedSection.id, section.id],
-			...selectedSection.children.map((original, index): [string, string] => [original.id, section.children[index]?.id ?? original.id]),
-		];
-		onLayout(copyOverrides(insertSectionAfter(layout, selectedSection.id, section), pairs));
-		setSelection({ sectionId: section.id });
+		if (!layout || !liveId) return;
+		const result = duplicateNode(layout, liveId);
+		if (!result) return;
+		onLayout(copyOverrides(result.layout, result.pairs));
+		setSelection({ id: result.id });
 	}
 
-	/** Enter: open a text for typing, or step into a section's first block. */
+	/** Enter: open a text for typing, or step into a container's, a columns table's or a cell's first child. */
 	function enter(): void {
-		if (selectedBlock) {
-			if ((selectedBlock.kind === "text" || selectedBlock.kind === "heading") && !selectedBlock.hidden) {
-				setEditing({ blockId: selectedBlock.id, caret: "all" });
-			}
+		if (!layout || !liveId) return;
+		if (liveNode && (liveNode.kind === "text" || liveNode.kind === "heading")) {
+			if (!liveNode.hidden) setEditing({ blockId: liveNode.id, caret: "all" });
 			return;
 		}
-		const first = selectedSection?.children.find(isBlockNode);
-		if (selectedSection && first) setSelection({ sectionId: selectedSection.id, blockId: first.id });
+		const first = firstChildOf(layout, liveId);
+		if (first) setSelection({ id: first });
 	}
 
 	/** A change to the selected block's type, from the keyboard. */
 	function restyle(change: (text: MailTextStyle) => Partial<MailTextStyle>): void {
-		if (!shown || !shownSection || !shownBlock || !("text" in shownBlock)) return;
-		const text = { ...shownBlock.text, ...change(shownBlock.text) };
-		restyleLayout(updateBlock(shown, shownSection.id, shownBlock.id, { text } as Partial<MailBlock>));
+		if (!shown || !shownNode || !("text" in shownNode)) return;
+		const text = { ...shownNode.text, ...change(shownNode.text) };
+		restyleLayout(updateBlock(shown, shownNode.id, { text } as Partial<MailBlock>));
 	}
 
-	/** Alt with a letter: across the section, and only along the way the section lets a block move. */
+	/** Alt with a letter: across the block's own parent, and only along the way that parent lets it move. Only a block has an alignment of its own to change this way. */
 	function alignSelected(across: Across, axis: "h" | "v"): void {
-		if (!shown || !shownSection || !shownBlock) return;
-		const free = flowOf(shownSection) === "column" ? "h" : "v";
+		if (!shown || !shownNode || shownNode.kind === "container" || shownNode.kind === "columns" || !liveId) return;
+		const parentId = parentOf(shown, liveId);
+		const parent = parentId ? findNode(shown, parentId) : null;
+		if (!parent || parent.kind !== "container") return;
+		const free = flowOf(parent) === "column" ? "h" : "v";
 		if (axis !== free) return;
-		restyleLayout(updateBlock(shown, shownSection.id, shownBlock.id, alignAcross(shownBlock, shownSection, across)));
+		restyleLayout(updateBlock(shown, shownNode.id, alignAcross(shownNode, parent, across)));
 	}
 
 	/**
@@ -502,11 +500,13 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	 * compiling, so the code is exactly what the message would have carried,
 	 * and the result is part of the draft like any other edit.
 	 */
-	function convertBlock(sectionId: string, blockId: string): void {
+	function convertBlock(blockId: string): void {
 		if (!draft?.layout) return;
+		const parentId = parentOf(draft.layout, blockId);
+		if (parentId === undefined) return;
 		setError(null);
 		void window.juno.mail.templates
-			.convertBlock({ layout: draft.layout, sectionId, blockId, inputs: draft.inputs })
+			.convertBlock({ layout: draft.layout, sectionId: parentId ?? "", blockId, inputs: draft.inputs })
 			.then((next) => onLayout(next))
 			.catch((cause: unknown) => setError(messageOf(cause)));
 	}
@@ -614,8 +614,8 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 				return run(duplicate);
 			case "hide":
 				return run(() => {
-					const hidden = shownBlock ? shownBlock.hidden : Boolean(shownSection?.hidden);
-					setHidden(live, !hidden);
+					if (!shownNode) return;
+					setHidden(live.id, !shownNode.hidden);
 				});
 			case "bold":
 				return run(() => restyle((text) => ({ weight: FONT_WEIGHTS[text.weight] >= 600 ? "normal" : "bold" })));
@@ -653,19 +653,23 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 			case "edit":
 				return run(enter);
 			case "parent":
-				return run(() => setSelection(live.blockId ? { sectionId: live.sectionId } : null));
+				return run(() => {
+					if (!layout) return;
+					const parentId = parentOf(layout, live.id);
+					setSelection(parentId ? { id: parentId } : null);
+				});
 			case "next":
 				return run(() => {
-					if (layout) setSelection(siblingOf(layout, live, 1));
+					if (layout) setSelection({ id: siblingOf(layout, live.id, 1) });
 				});
 			case "previous":
 				return run(() => {
-					if (layout) setSelection(siblingOf(layout, live, -1));
+					if (layout) setSelection({ id: siblingOf(layout, live.id, -1) });
 				});
 			case "earlier":
-				return run(() => stepLayer(live, -1));
+				return run(() => stepLayer(live.id, -1));
 			case "later":
-				return run(() => stepLayer(live, 1));
+				return run(() => stepLayer(live.id, 1));
 		}
 	}
 
@@ -709,11 +713,8 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 						selection={live}
 						onSelect={setSelection}
 						onHidden={setHidden}
-						onDropBlock={(from, blockId, target) => {
-							if (layout) onLayout(dropBlock(layout, from, target.sectionId, blockId, target.beforeBlockId));
-						}}
-						onDropSection={(sectionId, beforeSectionId) => {
-							if (layout) onLayout(moveSectionTo(layout, sectionId, beforeSectionId));
+						onDrop={(id, target) => {
+							if (layout) onLayout(moveNode(layout, id, target.parentId, target.beforeId));
 						}}
 						onStep={stepLayer}
 						onConvert={convert}
@@ -769,12 +770,8 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 							inputs={draft.inputs}
 							selection={live}
 							onSelect={setSelection}
-							onDrop={(from, blockId, target) =>
-								onLayout(dropBlock(layout, from, target.sectionId, blockId, target.beforeBlockId))
-							}
-							onEdit={(sectionId, blockId, blockPatch) =>
-								onLayout(updateBlock(layout, sectionId, blockId, blockPatch))
-							}
+							onDrop={(id, target) => onLayout(moveNode(layout, id, target.parentId, target.beforeId))}
+							onEdit={(blockId, blockPatch) => onLayout(updateBlock(layout, blockId, blockPatch))}
 							editing={editing}
 							onEditing={setEditing}
 							onMeasure={onMeasure}
@@ -977,16 +974,11 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 							fonts={canvasFonts}
 							onLayout={(next) => restyleLayout({ ...(shown ?? layout), ...next })}
 							onReplace={restyleLayout}
-							onSection={(sectionId, sectionPatch) => restyleLayout(updateSection(shown ?? layout, sectionId, sectionPatch))}
-							onBlock={(sectionId, blockId, blockPatch) =>
-								restyleLayout(updateBlock(shown ?? layout, sectionId, blockId, blockPatch))
-							}
-							onRemoveSection={(sectionId) => {
-								onLayout(removeSection(layout, sectionId));
-								setSelection(null);
-							}}
-							onRemoveBlock={(sectionId, blockId) => {
-								onLayout(removeBlock(layout, sectionId, blockId));
+							onSection={(id, sectionPatch) => restyleLayout(updateSection(shown ?? layout, id, sectionPatch))}
+							onColumns={(id, columnsPatch) => restyleLayout(updateColumns(shown ?? layout, id, columnsPatch))}
+							onBlock={(id, blockPatch) => restyleLayout(updateBlock(shown ?? layout, id, blockPatch))}
+							onRemove={(id) => {
+								onLayout(removeNode(layout, id));
 								setSelection(null);
 							}}
 							onConvert={convertBlock}

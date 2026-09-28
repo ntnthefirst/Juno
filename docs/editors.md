@@ -52,25 +52,53 @@ with `FormPage`'s header, because a bar over a canvas is room the canvas needs.
 
 ### The model
 
-The model is sections holding blocks:
+The model is a tree (`MailNode` in `electron/shared/types.ts`, version 2). A
+container holds an ordered list of children, each one a container, a columns
+table or a leaf block, so a section can hold another section, and any of them
+can hold a columns table. A columns table holds rows of cells, and a cell
+holds children the same way a container does. Ids stay stable through all of
+this, which is what lets breakpoints and drags address a node at any depth.
 
 | | |
 | --- | --- |
-| **Frame** | The whole message. It **fills** the reader's mail client, or is **fixed**: never wider than its width and in the middle of a wider client. The width is also what the default is drawn at, 600 until somebody changes it. Its height is the sheet the author draws on, and content past it just makes the message longer |
-| **Section** | A row down the frame that arranges what is in it with **flexbox** or **grid**: flow (down, across or a grid), distribution, alignment, gap, wrap, column count. One narrower than the frame sits at its start, in its middle or at its end, by its margins. An empty one with a height and a fill, or a stroke on one side, is a divider or a gap |
-| **Block** | Text, sent as a paragraph; heading, button, image, a declared input placed as a block, and code. There is no divider or spacer to add, because a section is both; the ones older templates have still load and still send |
-| **Sizing** | Figma's three, for the width and the height each: **fixed**, **hug** and **fill**. A fixed width is compiled with `max-width:100%` so it still gives way on a phone, and a fixed height is a least height the content can grow past. Clip content |
-| **Alignment** | Where a block sits across its section, start, middle or end, overriding the section's own alignment. It moves a block across the flow and nowhere else. Stretching is not an alignment: it is a fill |
-| **Hidden** | Figma's eye. A hidden block or section stays in the layers and is left out of the message |
+| **Frame** | The whole message. It **fills** the reader's mail client, or is **fixed**: never wider than its width and in the middle of a wider client. The width is also what the default is drawn at, 600 until somebody changes it. Its height is the sheet the author draws on, and content past it just makes the message longer. Any node may sit at its own top level |
+| **Container** | What every section has always been, generalised to nest: it arranges what is in it with **flexbox** or **grid**, flow (down, across or a grid), distribution, alignment, gap, wrap, column count. One narrower than its parent sits at its start, in its middle or at its end, by margins at the frame's own top level and by `grow`/`alignSelf` when it is nested inside another container's flex or grid, the way a block sits in a section. An empty one with a height and a fill, or a stroke on one side, is a divider or a gap. A version 1 section loads as a container tagged `section` |
+| **Columns** | A table laid out for mail, the one layout that stays side by side in Outlook on Windows ("The Outlook problem" below). Its cells hold children the way a container does; a cell has no eye of its own, because it is fixed in place by its row rather than something that is added or removed |
+| **Block** | Text, sent as a paragraph; heading, button, image, a declared input placed as a block, and code. There is no divider or spacer to add, because a container is both; the ones older templates have still load and still send |
+| **Sizing** | Figma's three, for the width and the height each: **fixed**, **hug** and **fill**. A fixed width is compiled with `max-width:100%` so it still gives way on a phone, and a fixed height is a least height the content can grow past. Clip content. `sizing.ts` only ever looks at the one container a block actually sits in, never at where that container itself sits, so a block nested three levels deep resizes exactly the way a top-level one does |
+| **Alignment** | Where a block sits across its own parent, start, middle or end, overriding that parent's own alignment. It moves a block across the flow and nowhere else. Stretching is not an alignment: it is a fill |
+| **Hidden** | Figma's eye. A hidden container, columns table or block stays in the layers and is left out of the message |
 
 **Nothing is positioned.** There is no `position`, no coordinate, no rotation
-and no drag to a point on the frame. A block is placed by the rules of the
-section holding it or it is not placed at all. Order is changed by dragging, on
-the canvas or in the layers, where a section can be dragged too, and Alt with an
-arrow moves the focused layer one place. Custom CSS is allowed per block,
-per section and per canvas, and `sanitiseDeclarations` strips the positioning
-properties and `transform` out of it, because the escape hatch must not
-reintroduce what the model refuses.
+and no drag to a point on the frame. A node is placed by the rules of the
+parent holding it or it is not placed at all. Order is changed by dragging, on
+the canvas or in the layers: into a container or a cell, in front of a sibling,
+or out of one into its own parent, and Alt with an arrow moves the focused
+layer one place within its parent. Custom CSS is allowed per block, per
+container, per columns table and per canvas, and `sanitiseDeclarations` strips
+the positioning properties and `transform` out of it, because the escape hatch
+must not reintroduce what the model refuses. A move that would nest a
+container into itself, into its own descendant, or past the parser's own
+depth limit is refused outright (`canMoveInto` in `canvas/canvas-actions.ts`),
+the same way the parser refuses to read a layout that deep.
+
+**Selecting and entering.** A click selects whatever element is directly under
+the pointer, at whatever depth that is: every node's own handler stops the
+click before it reaches an ancestor's, so a block nested inside two containers
+is selected in one click, never its parent first. A double click on a
+container, a columns table or a cell that is already selected steps into it
+and selects its first child, the way Figma's frame does when there is nothing
+exposed to click directly; a double click on a text block or a heading opens
+it for typing, as it always has.
+
+**What the design panel does not yet do.** The panel gives a top-level
+container the full position, layout, appearance, fill, stroke and effects
+controls it always has. A nested container, a columns table, a cell, and a
+block sitting directly in a cell or at the frame's own top level are all
+selectable, draggable where dragging applies, and hideable, but the panel does
+not yet offer every control for them: that is toolbar groups, tag switching
+and a container, columns and cell design panel, and it is TODO.md section 4a's
+next phase.
 
 `bodyHtml` is compiled from the layout on every save, so the renderer, the
 placeholder substitution and the outbox below them never learn that a canvas

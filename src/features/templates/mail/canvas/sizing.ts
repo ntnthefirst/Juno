@@ -3,10 +3,15 @@
  *
  * Figma gives every layer in an auto layout a width and a height that are each
  * fixed, hug or fill. The model has no such field: it has what the CSS has, a
- * block's own width and least height, its share of the room along the section
- * (`grow`), and where it sits across it (`alignSelf`). Which of those a mode
- * means depends on which way the section runs, so it is worked out here, once,
- * and the panel and the shortcuts both ask:
+ * block's own width and least height, its share of the room along its parent
+ * (`grow`), and where it sits across it (`alignSelf`). "Section" below names
+ * whatever container a block sits directly in: the model is a tree now
+ * (docs/editors.md section 2), so a block's parent can be nested as deeply as
+ * the frame allows, and every function here works the same regardless, since
+ * they only ever look at the one container a block is actually in and never at
+ * where that container itself sits. Which of those a mode means depends on
+ * which way the parent runs, so it is worked out here, once, and the panel and
+ * the shortcuts both ask:
  *
  * | Section runs | Width fill | Width hug | Height fill | Height hug |
  * | --- | --- | --- | --- | --- |

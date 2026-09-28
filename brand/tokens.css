@@ -255,7 +255,6 @@
 	--shadow-panel: -12px 0 40px -12px rgb(0 0 0 / 0.7), -1px 0 0 0 rgb(255 255 255 / 0.05);
 }
 
-
 /* A range of days replacing the one before it, entering from the side it was
  * pulled in from: forward comes up from below, back comes down from above.
  *
@@ -288,14 +287,6 @@
 @keyframes juno-pop {
 	from {
 		transform: translateY(-4px);
-		opacity: 0;
-	}
-}
-
-/* Content replacing content in place: a thread opening in the reader. No
- * movement, because the pane it lands in has not moved. */
-@keyframes juno-fade {
-	from {
 		opacity: 0;
 	}
 }
@@ -377,7 +368,6 @@
 	--animate-page-forward: juno-page-forward var(--duration-base) var(--ease);
 	--animate-page-back: juno-page-back var(--duration-base) var(--ease);
 	--animate-pop: juno-pop var(--duration-fast) var(--ease);
-	--animate-fade: juno-fade var(--duration-base) var(--ease);
 	--duration-fast: var(--duration-fast);
 	--duration-base: var(--duration-base);
 }

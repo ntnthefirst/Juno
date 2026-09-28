@@ -20,7 +20,7 @@ import type {
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
-import { sanitiseHtml, textDocument } from "./mail-sanitise";
+import { sanitiseHtml, textDocumentBody } from "./mail-sanitise";
 
 function escapeLike(value: string): string {
 	return value.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -424,7 +424,7 @@ export function renderBody(
 	id: string,
 	options: { allowRemoteImages?: boolean } = {},
 	db: Db = getDb(),
-): { document: string; remoteImages: number } | null {
+): { document: string; scriptNonce: string; remoteImages: number } | null {
 	const row = db
 		.select()
 		.from(mailMessages)
@@ -436,9 +436,10 @@ export function renderBody(
 			allowRemoteImages: options.allowRemoteImages ?? false,
 			inlineImages: inlineImages(db, id),
 		});
-		return { document: result.document, remoteImages: result.remoteImages };
+		return { document: result.document, scriptNonce: result.scriptNonce, remoteImages: result.remoteImages };
 	}
-	return { document: textDocument(row.bodyText ?? ""), remoteImages: 0 };
+	const result = textDocumentBody(row.bodyText ?? "");
+	return { document: result.document, scriptNonce: result.scriptNonce, remoteImages: 0 };
 }
 
 /** What the reader needs beside the frame. See MailMessageBody. */

@@ -14,9 +14,12 @@
  *   could fetch (`url(`, `@import`) or run (`expression(`, `behavior`) is cut.
  *
  * The output is a complete document with its own CSP meta tag, served on its
- * own origin with the same policy as a header, in a frame with an empty
- * sandbox. Four layers, each of which would be enough on its own.
+ * own origin with the same policy as a header. The only script is a
+ * nonce-authorized height reporter; the opaque sandbox gives it no application
+ * origin or navigation access. Four layers, each of which would be enough on
+ * its own.
  */
+import { randomBytes } from "node:crypto";
 import sanitizeHtml from "sanitize-html";
 
 export interface SanitiseOptions {
@@ -29,6 +32,8 @@ export interface SanitiseOptions {
 export interface SanitisedBody {
 	/** A full HTML document, ready for a sandboxed frame. */
 	document: string;
+	/** The nonce used by the trusted height-measurement script. */
+	scriptNonce: string;
 	/** How many http(s) images were replaced by a placeholder. */
 	remoteImages: number;
 	links: { href: string; text: string }[];
@@ -156,7 +161,7 @@ export function extractStyles(html: string): { css: string; html: string } {
 
 const BASE_CSS = `
 html, body { margin: 0; padding: 0; }
-body { font: 15px/1.65 Inter, -apple-system, "Segoe UI", sans-serif; color: #1c1b19; background: #ffffff; padding: 24px 28px; word-wrap: break-word; overflow-wrap: anywhere; }
+body { font: 15px/1.65 Inter, -apple-system, "Segoe UI", sans-serif; color: #1c1b19; background: #ffffff; padding: 24px 28px; word-wrap: break-word; overflow-wrap: anywhere; overflow-x: auto; overflow-y: hidden; }
 h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin: 1.2em 0 0.55em; }
 h1:first-child, h2:first-child, h3:first-child, h4:first-child, h5:first-child, h6:first-child { margin-top: 0; }
 p { margin: 0 0 1em; }
@@ -171,14 +176,28 @@ function escapeAttribute(value: string): string {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
-export function frameCsp(allowRemoteImages: boolean): string {
+export function frameCsp(allowRemoteImages: boolean, scriptNonce: string): string {
 	return [
 		"default-src 'none'",
+		`script-src 'nonce-${scriptNonce}'`,
 		"style-src 'unsafe-inline'",
 		allowRemoteImages ? "img-src data: https:" : "img-src data:",
 		"form-action 'none'",
 		"base-uri 'none'",
 	].join("; ");
+}
+
+const HEIGHT_SCRIPT =
+	"(() => {" +
+	"const send = () => parent.postMessage({ type: 'juno.mail.height', height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) }, '*');" +
+	"new ResizeObserver(send).observe(document.documentElement);" +
+	"new ResizeObserver(send).observe(document.body);" +
+	"window.addEventListener('load', send);" +
+	"send();" +
+	"})();";
+
+function createNonce(): string {
+	return randomBytes(18).toString("base64");
 }
 
 function decodeEntities(value: string): string {
@@ -212,6 +231,7 @@ function collectLinks(body: string): { href: string; text: string }[] {
 /** Sanitises an HTML body into a self-contained document. */
 export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): SanitisedBody {
 	const { css, html } = extractStyles(raw);
+	const scriptNonce = createNonce();
 	let remoteImages = 0;
 
 	const body = sanitizeHtml(html, {
@@ -284,10 +304,11 @@ export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): Saniti
 
 	const document =
 		'<!doctype html><html><head><meta charset="utf-8">' +
-		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(Boolean(options.allowRemoteImages)))}">` +
-		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body></html>`;
+		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(Boolean(options.allowRemoteImages), scriptNonce))}">` +
+		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body>` +
+		`<script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
 
-	return { document, remoteImages, links };
+	return { document, scriptNonce, remoteImages, links };
 }
 
 function escapeText(value: string): string {
@@ -306,14 +327,19 @@ const TEXT_DARK_CSS =
 	"@media (prefers-color-scheme: dark) { body { background: #1c1b19; color: #e8e6e1; } .q { color: #9a978f; } a[data-href] { color: #8fb0dc; } }";
 
 export function textDocument(text: string): string {
+	return textDocumentBody(text).document;
+}
+
+export function textDocumentBody(text: string): SanitisedBody {
+	const scriptNonce = createNonce();
 	const body = text
 		.split(/\r?\n/)
 		.map((line) => (/^\s*>/.test(line) ? `<span class="q">${escapeText(line)}</span>` : escapeText(line)))
 		.join("\n");
-	return (
+	const document =
 		'<!doctype html><html><head><meta charset="utf-8">' +
-		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false))}">` +
+		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false, scriptNonce))}">` +
 		`<style>${BASE_CSS} body { white-space: pre-wrap; } .q { color: #5c5a55; } ${TEXT_DARK_CSS}</style></head>` +
-		`<body>${body}</body></html>`
-	);
+		`<body>${body}</body><script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
+	return { document, scriptNonce, remoteImages: 0, links: [] };
 }

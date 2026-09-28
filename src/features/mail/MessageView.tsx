@@ -129,7 +129,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 				type="button"
 				onClick={onToggle}
 				aria-expanded={open}
-				className="flex w-full shrink-0 items-start gap-3 px-8 py-3 text-left hover:bg-[var(--hover)]"
+				className={`flex w-full shrink-0 items-start gap-3 px-8 py-3 text-left ${open ? "bg-[var(--hover)]" : "hover:bg-[var(--hover)]"}`}
 			>
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
@@ -160,52 +160,56 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 
 			{open ? (
 				<div className="flex flex-1 flex-col px-8">
-					<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						<span className="min-w-0 flex-1 truncate">To {participantsLine(message.to, "(nobody)")}</span>
-						<button
-							type="button"
-							onClick={() => setDetailsOpen((current) => !current)}
-							className="shrink-0 hover:text-[var(--ink)] hover:underline"
-						>
-							{detailsOpen ? "Hide" : "Details"}
-						</button>
-					</div>
-
-					{detailsOpen ? (
-						<dl className="grid shrink-0 grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 pb-3 text-[length:var(--text-sm)]">
-							<dt className="text-[var(--ink-muted)]">From</dt>
-							<dd
-								data-selectable
-								className="truncate"
+					<div className="-mx-8 bg-[var(--hover)] px-8">
+						<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="min-w-0 flex-1 truncate">
+								To {participantsLine(message.to, "(nobody)")}
+							</span>
+							<button
+								type="button"
+								onClick={() => setDetailsOpen((current) => !current)}
+								className="shrink-0 hover:text-[var(--ink)] hover:underline"
 							>
-								{message.from ? `${from} <${message.from.address}>` : "(unknown sender)"}
-							</dd>
-							{message.to.length > 0 ? (
-								<>
-									<dt className="text-[var(--ink-muted)]">To</dt>
-									<dd
-										data-selectable
-										className="truncate"
-									>
-										{message.to.map((a) => a.address).join(", ")}
-									</dd>
-								</>
-							) : null}
-							{message.cc.length > 0 ? (
-								<>
-									<dt className="text-[var(--ink-muted)]">Cc</dt>
-									<dd
-										data-selectable
-										className="truncate"
-									>
-										{message.cc.map((a) => a.address).join(", ")}
-									</dd>
-								</>
-							) : null}
-							<dt className="text-[var(--ink-muted)]">Date</dt>
-							<dd className="tabular">{formatFull(message.sentAt ?? message.internalDate)}</dd>
-						</dl>
-					) : null}
+								{detailsOpen ? "Hide" : "Details"}
+							</button>
+						</div>
+
+						{detailsOpen ? (
+							<dl className="grid shrink-0 grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 pb-3 text-[length:var(--text-sm)]">
+								<dt className="text-[var(--ink-muted)]">From</dt>
+								<dd
+									data-selectable
+									className="truncate"
+								>
+									{message.from ? `${from} <${message.from.address}>` : "(unknown sender)"}
+								</dd>
+								{message.to.length > 0 ? (
+									<>
+										<dt className="text-[var(--ink-muted)]">To</dt>
+										<dd
+											data-selectable
+											className="truncate"
+										>
+											{message.to.map((a) => a.address).join(", ")}
+										</dd>
+									</>
+								) : null}
+								{message.cc.length > 0 ? (
+									<>
+										<dt className="text-[var(--ink-muted)]">Cc</dt>
+										<dd
+											data-selectable
+											className="truncate"
+										>
+											{message.cc.map((a) => a.address).join(", ")}
+										</dd>
+									</>
+								) : null}
+								<dt className="text-[var(--ink-muted)]">Date</dt>
+								<dd className="tabular">{formatFull(message.sentAt ?? message.internalDate)}</dd>
+							</dl>
+						) : null}
+					</div>
 
 					{visibleAttachments.length > 0 ? (
 						<div className="shrink-0 border-t border-[var(--line)] py-3">

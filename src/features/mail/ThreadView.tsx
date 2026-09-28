@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { MailReplyMode, MailThread } from "@shared/types";
 import { Icon, type IconName } from "../../components/Icon";
-import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { MessageView } from "./MessageView";
@@ -21,10 +21,7 @@ type ThreadViewProps = {
 	onAction: (action: ThreadAction) => void;
 };
 
-type Load =
-	| { status: "loading" }
-	| { status: "ready"; thread: MailThread }
-	| { status: "error"; message: string };
+type Load = { status: "loading" } | { status: "ready"; thread: MailThread } | { status: "error"; message: string };
 
 export function ThreadView({
 	threadId,
@@ -94,7 +91,10 @@ export function ThreadView({
 	if (load.status === "error") {
 		return (
 			<div className="p-8">
-				<p data-selectable className="text-[var(--risk)]">
+				<p
+					data-selectable
+					className="text-[var(--risk)]"
+				>
 					{load.message}
 				</p>
 			</div>
@@ -115,7 +115,6 @@ export function ThreadView({
 
 	const openMessage = messages.find((m) => m.id === openId) ?? null;
 	const senderAddress = summary.participants[0]?.address ?? null;
-	const showReplyAll = openMessage ? openMessage.to.length + openMessage.cc.length > 1 : false;
 
 	const moreItems: MenuItem[] = [
 		{ id: "mark-unread", label: "Mark unread", icon: "unread", onSelect: () => onAction("markUnread") },
@@ -149,7 +148,10 @@ export function ThreadView({
 					onClick={onBack}
 					className="-ml-1.5 inline-flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-sm)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 				>
-					<Icon name="chevron-left" size={12} />
+					<Icon
+						name="chevron-left"
+						size={12}
+					/>
 					Back
 				</button>
 
@@ -159,21 +161,39 @@ export function ThreadView({
 					</h2>
 					<div className="flex shrink-0 items-center gap-1">
 						{openMessage ? (
-							<ReplyButton onReply={(mode) => onReply(openMessage.id, mode)} showReplyAll={showReplyAll} />
+							<>
+								<ToolbarAction
+									icon="reply"
+									label="Reply"
+									onClick={() => onReply(openMessage.id, "reply")}
+								/>
+								<ToolbarAction
+									icon="forward"
+									label="Forward"
+									onClick={() => onReply(openMessage.id, "forward")}
+								/>
+							</>
 						) : null}
 						<ToolbarAction
 							icon="flag"
 							label={summary.isFlagged ? "Clear flag" : "Flag"}
 							onClick={() => onAction(summary.isFlagged ? "unflag" : "flag")}
 						/>
-						<ToolbarAction icon="archive" label="Archive" onClick={() => onAction("archive")} />
+						<ToolbarAction
+							icon="archive"
+							label="Archive"
+							onClick={() => onAction("archive")}
+						/>
 						<ToolbarAction
 							icon="remove"
 							label={inTrash ? "Delete forever" : "Move to trash"}
 							danger
 							onClick={() => onAction(inTrash ? "deleteForever" : "trash")}
 						/>
-						<MenuButton items={moreItems} ariaLabel="More options" />
+						<MenuButton
+							items={moreItems}
+							ariaLabel="More options"
+						/>
 					</div>
 				</div>
 
@@ -245,61 +265,10 @@ function ToolbarAction({ icon, label, danger = false, onClick }: ToolbarActionPr
 					: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 			].join(" ")}
 		>
-			<Icon name={icon} size={14} />
+			<Icon
+				name={icon}
+				size={14}
+			/>
 		</button>
-	);
-}
-
-type ReplyButtonProps = {
-	onReply: (mode: MailReplyMode) => void;
-	/** Whether more than one person other than the sender is on this message. */
-	showReplyAll: boolean;
-};
-
-/**
- * Reply, plus a chevron for reply all and forward. Answering is the point of
- * reading a message, so it is one click rather than something behind a menu;
- * the chevron holds the two modes that are not the common case.
- */
-function ReplyButton({ onReply, showReplyAll }: ReplyButtonProps) {
-	const trigger = useRef<HTMLButtonElement>(null);
-	const [at, setAt] = useState<{ x: number; y: number } | null>(null);
-
-	function open() {
-		const box = trigger.current?.getBoundingClientRect();
-		if (!box) return;
-		setAt({ x: box.left, y: box.bottom + 4 });
-	}
-
-	const items: MenuItem[] = [
-		...(showReplyAll
-			? [{ id: "reply-all", label: "Reply all", icon: "reply" as const, onSelect: () => onReply("reply_all") }]
-			: []),
-		{ id: "forward", label: "Forward", icon: "forward", onSelect: () => onReply("forward") },
-	];
-
-	return (
-		<div className="inline-flex h-[32px] shrink-0 items-stretch overflow-hidden rounded-[var(--radius-md)]">
-			<button
-				type="button"
-				onClick={() => onReply("reply")}
-				className="inline-flex items-center gap-1.5 bg-[var(--accent)] px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--accent-ink)] hover:bg-[var(--accent-hover)]"
-			>
-				<Icon name="reply" size={14} />
-				Reply
-			</button>
-			<button
-				ref={trigger}
-				type="button"
-				aria-label="More reply options"
-				aria-haspopup="menu"
-				aria-expanded={at !== null}
-				onClick={() => (at ? setAt(null) : open())}
-				className={`inline-flex w-[22px] items-center justify-center border-l border-[var(--accent-ink)]/25 bg-[var(--accent)] text-[var(--accent-ink)] hover:bg-[var(--accent-hover)] ${at !== null ? "bg-[var(--accent-hover)]" : ""}`}
-			>
-				<Icon name="chevron-down" size={12} />
-			</button>
-			{at ? <ContextMenu at={at} items={items} onClose={() => setAt(null)} ariaLabel="More reply options" /> : null}
-		</div>
 	);
 }

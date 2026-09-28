@@ -21,7 +21,10 @@ type ThreadViewProps = {
 	onAction: (action: ThreadAction) => void;
 };
 
-type Load = { status: "loading" } | { status: "ready"; thread: MailThread } | { status: "error"; message: string };
+type Load =
+	| { status: "loading" }
+	| { status: "ready"; thread: MailThread; threadId: string }
+	| { status: "error"; message: string; threadId: string };
 
 export function ThreadView({
 	threadId,
@@ -50,10 +53,14 @@ export function ThreadView({
 			.get(threadId)
 			.then((thread) => {
 				if (cancelled) return;
-				setLoad(thread ? { status: "ready", thread } : { status: "error", message: "That thread is gone." });
+				setLoad(
+					thread
+						? { status: "ready", thread, threadId }
+						: { status: "error", message: "That thread is gone.", threadId },
+				);
 			})
 			.catch((cause: unknown) => {
-				if (!cancelled) setLoad({ status: "error", message: messageOf(cause) });
+				if (!cancelled) setLoad({ status: "error", message: messageOf(cause), threadId });
 			});
 		return () => {
 			cancelled = true;
@@ -85,7 +92,7 @@ export function ThreadView({
 		}
 	}
 
-	if (load.status === "loading") {
+	if (load.status === "loading" || load.threadId !== threadId) {
 		return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
 	}
 	if (load.status === "error") {
@@ -103,11 +110,11 @@ export function ThreadView({
 
 	const { summary, messages } = load.thread;
 
-	// Newest unseen message first, else the newest message, the same rule a
-	// person reading top to bottom would end up at. Keeps the current choice
-	// across a refresh as long as it still exists in the thread.
+	// Start with the first message in the thread, so opening a conversation shows
+	// the message represented by the clicked row rather than a later reply.
+	// Keep the current choice across a refresh as long as it still exists.
 	if (load.thread !== derivedFrom) {
-		const fallback = messages.find((m) => !m.isSeen) ?? messages[messages.length - 1] ?? null;
+		const fallback = messages[0] ?? null;
 		const next = openId && messages.some((m) => m.id === openId) ? openId : (fallback?.id ?? null);
 		setDerivedFrom(load.thread);
 		if (next !== openId) setOpenId(next);

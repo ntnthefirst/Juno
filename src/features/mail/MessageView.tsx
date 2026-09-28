@@ -122,14 +122,14 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 
 	return (
 		<article
-			className={`border-t border-[var(--line)] px-8 first:border-t-0 ${open ? "flex flex-1 flex-col" : ""}`}
+			className={`border-t border-[var(--line)] first:border-t-0 ${open ? "flex flex-1 flex-col" : ""}`}
 			onContextMenu={menu.open}
 		>
 			<button
 				type="button"
 				onClick={onToggle}
 				aria-expanded={open}
-				className="flex w-full shrink-0 items-start gap-3 py-3 text-left hover:bg-[var(--hover)]"
+				className="flex w-full shrink-0 items-start gap-3 px-8 py-3 text-left hover:bg-[var(--hover)]"
 			>
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
@@ -159,7 +159,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 			</button>
 
 			{open ? (
-				<div className="flex flex-1 flex-col">
+				<div className="flex flex-1 flex-col px-8">
 					<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 						<span className="min-w-0 flex-1 truncate">To {participantsLine(message.to, "(nobody)")}</span>
 						<button

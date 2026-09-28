@@ -59,6 +59,10 @@ export function MailScreen() {
 	const [outboxRows, setOutboxRows] = useState<MailOutboxMessage[] | null>(null);
 	const [listError, setListError] = useState<string | null>(null);
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+	// Kept apart from selectedThreadId, which also drives the highlight in the
+	// list: going back closes the reader but leaves the row you read marked, so
+	// it stays clear which one that was.
+	const [readerOpen, setReaderOpen] = useState(false);
 	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [lastPicked, setLastPicked] = useState<string | null>(null);
 	const [selectedOutboxId, setSelectedOutboxId] = useState<string | null>(null);
@@ -317,6 +321,7 @@ export function MailScreen() {
 	function afterFile(ids: string[]) {
 		setSelectedThreadIds((current) => current.filter((id) => !ids.includes(id)));
 		setSelectedThreadId((current) => (current && ids.includes(current) ? null : current));
+		if (selectedThreadId && ids.includes(selectedThreadId)) setReaderOpen(false);
 		setAccountsVersion((v) => v + 1);
 	}
 
@@ -413,6 +418,7 @@ export function MailScreen() {
 		switch (action) {
 			case "open":
 				setSelectedThreadId(ids[0] ?? null);
+				setReaderOpen(true);
 				break;
 			case "markRead":
 				void setThreadsReadState(ids, true);
@@ -503,6 +509,7 @@ export function MailScreen() {
 		try {
 			const count = await window.juno.mail.file.emptyFolder(folderEmpty.id);
 			setSelectedThreadId(null);
+			setReaderOpen(false);
 			clearThreadSelection();
 			setAccountsVersion((v) => v + 1);
 			setNotice(`${count} ${count === 1 ? "message" : "messages"} deleted from ${folderEmpty.name}.`);
@@ -633,6 +640,7 @@ export function MailScreen() {
 						onSelect={(next) => {
 							setSelection(next);
 							setSelectedThreadId(null);
+							setReaderOpen(false);
 							setSelectedOutboxId(null);
 							clearThreadSelection();
 							setRowLimit(PAGE);
@@ -648,11 +656,11 @@ export function MailScreen() {
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
-				{selectedThreadId && !showingDrafts ? (
+				{selectedThreadId && readerOpen && !showingDrafts ? (
 					<ThreadView
 						key={selectedThreadId}
 						threadId={selectedThreadId}
-						onBack={() => setSelectedThreadId(null)}
+						onBack={() => setReaderOpen(false)}
 						inTrash={inTrash}
 						onChanged={() => setAccountsVersion((v) => v + 1)}
 						onNotice={setNotice}
@@ -721,7 +729,10 @@ export function MailScreen() {
 									inTrash={inTrash}
 									selectedId={selectedThreadId}
 									selectedIds={selectedThreadIds}
-									onSelect={setSelectedThreadId}
+									onSelect={(id) => {
+										setSelectedThreadId(id);
+										setReaderOpen(true);
+									}}
 									onToggleSelect={toggleThreadSelection}
 									onAction={handleThreadAction}
 								/>

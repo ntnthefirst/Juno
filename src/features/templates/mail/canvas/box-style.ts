@@ -15,13 +15,15 @@
  */
 import type { CSSProperties } from "react";
 import type {
-	MailBlock,
 	MailBoxStyle,
+	MailColumns,
+	MailColumnsCell,
 	MailEffect,
 	MailFill,
 	MailFont,
 	MailFontFallback,
 	MailContainer,
+	MailSelfAlign,
 	MailTextStyle,
 	MailWeight,
 } from "@shared/types";
@@ -326,7 +328,7 @@ export function verticalCss(text: MailTextStyle): CSSProperties {
 	};
 }
 
-const SELF: Record<MailBlock["alignSelf"], CSSProperties["alignSelf"]> = {
+const SELF: Record<MailSelfAlign, CSSProperties["alignSelf"]> = {
 	auto: undefined,
 	start: "flex-start",
 	center: "center",
@@ -334,23 +336,45 @@ const SELF: Record<MailBlock["alignSelf"], CSSProperties["alignSelf"]> = {
 	stretch: "stretch",
 };
 
-/** How a block takes its place in its section: its share of the room, and where it sits across. */
-export function placeCss(block: MailBlock): CSSProperties {
+/**
+ * How something takes its place in a flex or grid parent: its share of the
+ * room, and where it sits across. A block, a container and a columns table
+ * all have `grow` and `alignSelf`, so this reaches all three (matches
+ * placeDeclarations in services/mail-layout.ts).
+ */
+export function placeCss(node: { grow: number; alignSelf: MailSelfAlign }): CSSProperties {
 	return {
-		flex: block.grow > 0 ? `${block.grow} 1 0%` : undefined,
-		alignSelf: SELF[block.alignSelf],
+		flex: node.grow > 0 ? `${node.grow} 1 0%` : undefined,
+		alignSelf: SELF[node.alignSelf],
 	};
 }
 
-/** Matches sectionPlaceDeclarations: a section narrower than the frame, moved by its margins. */
-function sectionPlaceCss(section: MailContainer): CSSProperties {
-	if (section.alignSelf === "center") return { marginLeft: "auto", marginRight: "auto" };
-	if (section.alignSelf === "end") return { marginLeft: "auto" };
+/**
+ * Where something narrower than its parent sits across it, at the top level:
+ * the frame lays its children one under the next in plain flow, so this is
+ * margins. A nested container or columns table takes `placeCss` instead, the
+ * way a block does, because its parent is a flex or grid box that already has
+ * an alignment of its own (matches sectionPlaceDeclarations).
+ */
+function sectionPlaceCss(node: { alignSelf: MailSelfAlign }): CSSProperties {
+	if (node.alignSelf === "center") return { marginLeft: "auto", marginRight: "auto" };
+	if (node.alignSelf === "end") return { marginLeft: "auto" };
 	return {};
 }
 
-export function sectionCss(section: MailContainer): CSSProperties {
-	const box = { ...boxCss(section.box), ...sectionPlaceCss(section) };
+/** `sectionPlaceCss` at the top level, `placeCss` nested. Matches placementDeclarations. */
+function placementCss(node: { grow: number; alignSelf: MailSelfAlign }, topLevel: boolean): CSSProperties {
+	return topLevel ? sectionPlaceCss(node) : placeCss(node);
+}
+
+/**
+ * A container's own declarations: its layout, its box, and its place in
+ * whatever parent it sits in. `topLevel` is true only for a child of the
+ * frame's own top level; a container nested inside another container or a
+ * cell is never top level, whatever the ones above it are.
+ */
+export function sectionCss(section: MailContainer, topLevel: boolean): CSSProperties {
+	const box = { ...boxCss(section.box), ...placementCss(section, topLevel) };
 	if (section.layout.kind === "grid") {
 		return {
 			...box,
@@ -375,5 +399,19 @@ export function sectionCss(section: MailContainer): CSSProperties {
 		alignItems: section.layout.align === "stretch" ? "stretch" : section.layout.align,
 		gap: section.layout.gap,
 		flexWrap: section.layout.wrap ? "wrap" : "nowrap",
+	};
+}
+
+/** A columns table's own declarations: its box and its place. No display of its own; it is a table already. */
+export function columnsCss(columns: MailColumns, topLevel: boolean): CSSProperties {
+	return { ...boxCss(columns.box), ...placementCss(columns, topLevel) };
+}
+
+/** A cell's own declarations: matches compileColumnsCell, bar the gap padding, which the caller adds (it depends on the cell's position in its row). */
+export function cellCss(cell: MailColumnsCell): CSSProperties {
+	return {
+		...boxCss(cell.box),
+		width: cell.width !== null ? `${cell.width}%` : undefined,
+		verticalAlign: cell.verticalAlign,
 	};
 }

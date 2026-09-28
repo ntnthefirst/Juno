@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MailContainer, MailLayout } from "@shared/types";
 import { addBreakpoint, absorb, copyOverrides, layoutAt, removeBreakpoint, renameBreakpoint, resizeBreakpoint } from "./breakpoints";
-import { addBlock, emptyLayout, newBlock, updateBlock, updateSection } from "./canvas-actions";
+import { emptyLayout, insertNode, newBlock, updateBlock, updateSection } from "./canvas-actions";
 
 /** Every top-level child in these tests is a section: the only shape this phase builds. */
 function asSection(node: { id: string }): MailContainer {
@@ -12,7 +12,7 @@ function withText(): { layout: MailLayout; sectionId: string; blockId: string } 
 	const layout = emptyLayout();
 	const sectionId = layout.children[0]!.id;
 	const block = newBlock("text");
-	return { layout: addBlock(layout, sectionId, block), sectionId, blockId: block.id };
+	return { layout: insertNode(layout, sectionId, block, null), sectionId, blockId: block.id };
 }
 
 function fontSize(layout: MailLayout, blockId: string): number | null {
@@ -35,12 +35,12 @@ describe("breakpoints on the canvas", () => {
 	});
 
 	it("keeps a change made at a breakpoint to that breakpoint", () => {
-		const { layout, sectionId, blockId } = withText();
+		const { layout, blockId } = withText();
 		const added = addBreakpoint(layout)!;
 		const drawn = layoutAt(added.layout, added.id);
 		const firstBlock = asSection(drawn.children[0]!).children[0];
 		if (firstBlock?.kind !== "text") throw new Error("not text");
-		const edited = updateBlock(drawn, sectionId, blockId, {
+		const edited = updateBlock(drawn, blockId, {
 			text: { ...firstBlock.text, fontSize: 13 },
 		});
 		const next = absorb(added.layout, added.id, edited);
@@ -50,9 +50,9 @@ describe("breakpoints on the canvas", () => {
 	});
 
 	it("sends what a block says to the default, because the words are the same at every width", () => {
-		const { layout, sectionId, blockId } = withText();
+		const { layout, blockId } = withText();
 		const added = addBreakpoint(layout)!;
-		const edited = updateBlock(layoutAt(added.layout, added.id), sectionId, blockId, { html: "Hallo" } as never);
+		const edited = updateBlock(layoutAt(added.layout, added.id), blockId, { html: "Hallo" } as never);
 		const next = absorb(added.layout, added.id, edited);
 		const block = asSection(next.children[0]!).children[0]!;
 		expect(block.kind === "text" ? block.html : null).toBe("Hallo");
@@ -60,14 +60,14 @@ describe("breakpoints on the canvas", () => {
 	});
 
 	it("lets a narrower breakpoint put back what a wider one changed", () => {
-		const { layout, sectionId, blockId } = withText();
+		const { layout, blockId } = withText();
 		const phone = addBreakpoint(layout)!;
 		const small = addBreakpoint(phone.layout)!;
 		const at = (current: MailLayout, id: string, size: number | null) => {
 			const drawn = layoutAt(current, id);
 			const block = asSection(drawn.children[0]!).children[0]!;
 			if (block.kind !== "text") throw new Error("not text");
-			return absorb(current, id, updateBlock(drawn, sectionId, blockId, { text: { ...block.text, fontSize: size } }));
+			return absorb(current, id, updateBlock(drawn, blockId, { text: { ...block.text, fontSize: size } }));
 		};
 		const narrowed = at(small.layout, phone.id, 13);
 		expect(fontSize(layoutAt(narrowed, small.id), blockId)).toBe(13);

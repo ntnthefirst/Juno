@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { MailBlock, MailContainer } from "@shared/types";
-import { emptySection, newBlock, updateBlock } from "./canvas-actions";
+import type { MailBlock, MailContainer, MailLayout } from "@shared/types";
+import { emptySection, insertNode, newBlock, updateBlock } from "./canvas-actions";
 import {
 	acrossOf,
 	alignAcross,
@@ -39,9 +39,36 @@ function apply(block: MailBlock, section: MailContainer, patch: Partial<MailBloc
 		children: [{ ...section, children: [block] }],
 		breakpoints: [],
 	};
-	const updated = (updateBlock(layout, section.id, block.id, patch).children[0] as MailContainer).children[0]!;
+	const updated = (updateBlock(layout, block.id, patch).children[0] as MailContainer).children[0]!;
 	return updated as MailBlock;
 }
+
+describe("resizing in a container nested inside another", () => {
+	it("works the same for a block in a nested container as for one at the top level: sizing.ts only looks at the one container the block is actually in", () => {
+		const outer = emptySection("Outer");
+		const inner = row();
+		const withInner: MailContainer = { ...outer, children: [inner] };
+		const text = newBlock("text");
+		const layout: MailLayout = {
+			version: 2,
+			width: 600,
+			widthMode: "fill",
+			minHeight: 0,
+			fill: null,
+			fonts: [],
+			customCss: null,
+			children: [withInner],
+			breakpoints: [],
+		};
+		const placed = insertNode(layout, inner.id, text, null);
+		const nested = (placed.children[0] as MailContainer).children[0] as MailContainer;
+		expect(widthSizing(text, nested)).toBe("hug");
+		const filled = updateBlock(placed, text.id, sizeWidth(text, nested, "fill", null));
+		const grown = ((filled.children[0] as MailContainer).children[0] as MailContainer).children[0] as MailBlock;
+		expect(grown.grow).toBe(1);
+		expect(widthSizing(grown, nested)).toBe("fill");
+	});
+});
 
 describe("resizing in a section that runs down", () => {
 	it("reads a stretched text block as filling the width and hugging the height", () => {

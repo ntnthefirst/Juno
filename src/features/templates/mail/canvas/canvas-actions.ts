@@ -9,10 +9,19 @@
  * still the only thing that turns any of this into HTML, so a value that
  * drifts here shows up as a preview that does not match, not as output nobody
  * checked.
+ *
+ * The layout is a tree now (docs/editors.md section 2): a container or a
+ * columns table can hold other containers, columns tables and blocks, and a
+ * columns table holds its blocks one level further down, in a cell. Every
+ * function below that finds, inserts, removes or moves a node works at any
+ * depth, addressed by id alone, because a caller on the canvas or in the
+ * layers never knows in advance how deep the thing it is pointing at sits.
  */
 import type {
 	MailBlock,
 	MailBoxStyle,
+	MailColumns,
+	MailColumnsCell,
 	MailContainer,
 	MailEffect,
 	MailFill,
@@ -24,14 +33,15 @@ import type {
 	MailTextStyle,
 } from "@shared/types";
 
-/** A container is a section, in the shapes this phase can build: any node holding others. */
+/** Matches MAX_DEPTH in services/mail-layout.ts: a container nests one level deeper than its parent; a columns table's cells do not, the way the parser counts it. */
+const MAX_DEPTH = 8;
+
 function isContainer(node: MailNode): node is MailContainer {
 	return node.kind === "container";
 }
 
-/** A leaf: anything that is not a container or a columns table. */
-function isBlockNode(node: MailNode): node is MailBlock {
-	return node.kind !== "container" && node.kind !== "columns";
+function isColumns(node: MailNode): node is MailColumns {
+	return node.kind === "columns";
 }
 
 export function newId(): string {
@@ -101,12 +111,7 @@ export function stackLayout(): MailSectionLayout {
 	return { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 12, wrap: false };
 }
 
-/**
- * A container with nothing in it: what every section is, generalised to every
- * tag the toolbar can add. Phase 1 of the tool-per-element work
- * (`docs/editors.md` section 2) only ever creates a `section`, which is what
- * the current toolbar and layers still call one.
- */
+/** A container with nothing in it, tagged `section`: what every section has always been. */
 export function emptySection(name = "Section"): MailContainer {
 	return {
 		id: newId(),
@@ -221,186 +226,423 @@ export function newBlock(kind: BlockKind): MailBlock {
 	}
 }
 
+/* -------------------------------------------------------------- the tree */
+
 /**
- * Finds a top-level section by id and replaces it with `change`'s result.
+ * Where a node's children live: a container's and a cell's own `children`, or
+ * the frame's own top level for `null`. A columns table is not one of these:
+ * its blocks sit one level further down, in a cell, which is why moving into
+ * a columns table itself is never offered, only into one of its cells.
+ */
+export type ParentId = string | null;
+
+/** Every id under a node, itself included: a container's and a cell's own id count, because a cell is a valid drop target. */
+function idsIn(node: MailNode): string[] {
+	if (isContainer(node)) return [node.id, ...node.children.flatMap(idsIn)];
+	if (isColumns(node)) {
+		return [
+			node.id,
+			...node.rows.flatMap((row) => [row.id, ...row.cells.flatMap((cell) => [cell.id, ...cell.children.flatMap(idsIn)])]),
+		];
+	}
+	return [node.id];
+}
+
+/**
+ * The ids of every container and columns table a node passes through on the
+ * way down to `id`, root first, not including `id` itself. Null when `id`
+ * is not in the tree at all.
+ */
+export function pathTo(layout: MailLayout, id: string): string[] | null {
+	function walk(nodes: MailNode[], trail: string[]): string[] | null {
+		for (const node of nodes) {
+			if (node.id === id) return trail;
+			if (isContainer(node)) {
+				const found = walk(node.children, [...trail, node.id]);
+				if (found) return found;
+			} else if (isColumns(node)) {
+				for (const row of node.rows) {
+					for (const cell of row.cells) {
+						if (cell.id === id) return [...trail, node.id];
+						const found = walk(cell.children, [...trail, node.id, cell.id]);
+						if (found) return found;
+					}
+				}
+			}
+		}
+		return null;
+	}
+	return walk(layout.children, []);
+}
+
+/** The container or cell holding `id` directly, or null for the frame's own top level. Undefined when `id` is nowhere in the tree. */
+export function parentOf(layout: MailLayout, id: string): ParentId | undefined {
+	const path = pathTo(layout, id);
+	if (path === null) return undefined;
+	return path.length > 0 ? path[path.length - 1]! : null;
+}
+
+/** A container, a columns table or a block, found anywhere in the tree. Never a cell: findCell is that search. */
+export function findNode(layout: MailLayout, id: string): MailNode | null {
+	function walk(nodes: MailNode[]): MailNode | null {
+		for (const node of nodes) {
+			if (node.id === id) return node;
+			if (isContainer(node)) {
+				const found = walk(node.children);
+				if (found) return found;
+			} else if (isColumns(node)) {
+				for (const row of node.rows) {
+					for (const cell of row.cells) {
+						const found = walk(cell.children);
+						if (found) return found;
+					}
+				}
+			}
+		}
+		return null;
+	}
+	return walk(layout.children);
+}
+
+export function findCell(layout: MailLayout, id: string): MailColumnsCell | null {
+	function walk(nodes: MailNode[]): MailColumnsCell | null {
+		for (const node of nodes) {
+			if (isContainer(node)) {
+				const found = walk(node.children);
+				if (found) return found;
+			} else if (isColumns(node)) {
+				for (const row of node.rows) {
+					for (const cell of row.cells) {
+						if (cell.id === id) return cell;
+						const found = walk(cell.children);
+						if (found) return found;
+					}
+				}
+			}
+		}
+		return null;
+	}
+	return walk(layout.children);
+}
+
+/** The children of a container or a cell, or the frame's own top level for null. Null when `parentId` names neither. */
+export function childrenOf(layout: MailLayout, parentId: ParentId): MailNode[] | null {
+	if (parentId === null) return layout.children;
+	function walk(nodes: MailNode[]): MailNode[] | null {
+		for (const node of nodes) {
+			if (isContainer(node)) {
+				if (node.id === parentId) return node.children;
+				const found = walk(node.children);
+				if (found) return found;
+			} else if (isColumns(node)) {
+				for (const row of node.rows) {
+					for (const cell of row.cells) {
+						if (cell.id === parentId) return cell.children;
+						const found = walk(cell.children);
+						if (found) return found;
+					}
+				}
+			}
+		}
+		return null;
+	}
+	return walk(layout.children);
+}
+
+/**
+ * The first child of a container, of a columns table (its first row's first
+ * cell), or of a cell: what Enter steps into, and what a double click on a
+ * parent opens.
+ */
+export function firstChildOf(layout: MailLayout, id: string): string | null {
+	const node = findNode(layout, id);
+	if (node && isContainer(node)) return node.children[0]?.id ?? null;
+	if (node && isColumns(node)) return node.rows[0]?.cells[0]?.id ?? null;
+	const cell = !node ? findCell(layout, id) : null;
+	return cell ? (cell.children[0]?.id ?? null) : null;
+}
+
+/** Rewrites the children of the container or cell `parentId` (or the frame's own top level, for null). A no-op, same reference back, when `parentId` names neither. */
+function withChildrenOf(nodes: MailNode[], parentId: string, updater: (children: MailNode[]) => MailNode[]): MailNode[] {
+	let changed = false;
+	const next = nodes.map((node) => {
+		if (changed) return node;
+		if (isContainer(node)) {
+			if (node.id === parentId) {
+				changed = true;
+				return { ...node, children: updater(node.children) };
+			}
+			const children = withChildrenOf(node.children, parentId, updater);
+			if (children !== node.children) {
+				changed = true;
+				return { ...node, children };
+			}
+			return node;
+		}
+		if (isColumns(node)) {
+			let rowsChanged = false;
+			const rows = node.rows.map((row) => {
+				let cellsChanged = false;
+				const cells = row.cells.map((cell) => {
+					if (cell.id === parentId) {
+						cellsChanged = true;
+						return { ...cell, children: updater(cell.children) };
+					}
+					const children = withChildrenOf(cell.children, parentId, updater);
+					if (children !== cell.children) {
+						cellsChanged = true;
+						return { ...cell, children };
+					}
+					return cell;
+				});
+				if (cellsChanged) rowsChanged = true;
+				return cellsChanged ? { ...row, cells } : row;
+			});
+			if (rowsChanged) {
+				changed = true;
+				return { ...node, rows };
+			}
+			return node;
+		}
+		return node;
+	});
+	return changed ? next : nodes;
+}
+
+export function withChildren(layout: MailLayout, parentId: ParentId, updater: (children: MailNode[]) => MailNode[]): MailLayout {
+	if (parentId === null) return { ...layout, children: updater(layout.children) };
+	const children = withChildrenOf(layout.children, parentId, updater);
+	return children === layout.children ? layout : { ...layout, children };
+}
+
+/** Finds a node by id anywhere in the tree and replaces it with `fn`'s result. A no-op when `id` is not there, or names a cell rather than a node. */
+function mapNode(layout: MailLayout, id: string, fn: (node: MailNode) => MailNode): MailLayout {
+	function walk(nodes: MailNode[]): MailNode[] {
+		let changed = false;
+		const next = nodes.map((node) => {
+			if (changed) return node;
+			if (node.id === id) {
+				changed = true;
+				return fn(node);
+			}
+			if (isContainer(node)) {
+				const children = walk(node.children);
+				if (children !== node.children) {
+					changed = true;
+					return { ...node, children };
+				}
+				return node;
+			}
+			if (isColumns(node)) {
+				let rowsChanged = false;
+				const rows = node.rows.map((row) => {
+					let cellsChanged = false;
+					const cells = row.cells.map((cell) => {
+						const children = walk(cell.children);
+						if (children !== cell.children) {
+							cellsChanged = true;
+							return { ...cell, children };
+						}
+						return cell;
+					});
+					if (cellsChanged) rowsChanged = true;
+					return cellsChanged ? { ...row, cells } : row;
+				});
+				if (rowsChanged) {
+					changed = true;
+					return { ...node, rows };
+				}
+				return node;
+			}
+			return node;
+		});
+		return changed ? next : nodes;
+	}
+	const children = walk(layout.children);
+	return children === layout.children ? layout : { ...layout, children };
+}
+
+/** Finds a cell by id anywhere in the tree and replaces it with `fn`'s result. */
+function mapCell(layout: MailLayout, id: string, fn: (cell: MailColumnsCell) => MailColumnsCell): MailLayout {
+	function walk(nodes: MailNode[]): MailNode[] {
+		let changed = false;
+		const next = nodes.map((node) => {
+			if (changed) return node;
+			if (isContainer(node)) {
+				const children = walk(node.children);
+				if (children !== node.children) {
+					changed = true;
+					return { ...node, children };
+				}
+				return node;
+			}
+			if (isColumns(node)) {
+				let rowsChanged = false;
+				const rows = node.rows.map((row) => {
+					let cellsChanged = false;
+					const cells = row.cells.map((cell) => {
+						if (cell.id === id) {
+							cellsChanged = true;
+							return fn(cell);
+						}
+						const children = walk(cell.children);
+						if (children !== cell.children) {
+							cellsChanged = true;
+							return { ...cell, children };
+						}
+						return cell;
+					});
+					if (cellsChanged) rowsChanged = true;
+					return cellsChanged ? { ...row, cells } : row;
+				});
+				if (rowsChanged) {
+					changed = true;
+					return { ...node, rows };
+				}
+				return node;
+			}
+			return node;
+		});
+		return changed ? next : nodes;
+	}
+	const children = walk(layout.children);
+	return children === layout.children ? layout : { ...layout, children };
+}
+
+/**
+ * The depth a node dropped into `parentId`'s children would be parsed at,
+ * matching the parser's own counter exactly (services/mail-layout.ts): a
+ * container's children are one deeper than the container itself, a columns
+ * table's cells are not deeper than the columns table. Null when `parentId`
+ * is not a container or a cell.
+ */
+function depthForChildrenOf(layout: MailLayout, parentId: ParentId): number | null {
+	if (parentId === null) return 0;
+	const path = pathTo(layout, parentId);
+	if (path === null) return null;
+	const containerDepth = path.filter((ancestorId) => {
+		const ancestor = findNode(layout, ancestorId);
+		return ancestor !== null && isContainer(ancestor);
+	}).length;
+	const node = findNode(layout, parentId);
+	if (node && isContainer(node)) return containerDepth + 1;
+	if (!node && findCell(layout, parentId)) return containerDepth;
+	return null;
+}
+
+/** Whether `node` and every container or columns table under it fits starting at `depth`, the way the parser refuses anything past MAX_DEPTH outright. */
+function fits(node: MailNode, depth: number): boolean {
+	if (isContainer(node)) return depth < MAX_DEPTH && node.children.every((child) => fits(child, depth + 1));
+	if (isColumns(node)) return depth < MAX_DEPTH && node.rows.every((row) => row.cells.every((cell) => cell.children.every((child) => fits(child, depth))));
+	return true;
+}
+
+/**
+ * Whether `id` can be moved into `toParentId`'s children: not into itself,
+ * not into its own descendant (a cell of its own columns table included), and
+ * not past the nesting the parser allows.
+ */
+export function canMoveInto(layout: MailLayout, id: string, toParentId: ParentId): boolean {
+	if (id === toParentId) return false;
+	const node = findNode(layout, id);
+	if (!node) return false;
+	if (toParentId !== null && (isContainer(node) || isColumns(node)) && idsIn(node).includes(toParentId)) return false;
+	const depth = depthForChildrenOf(layout, toParentId);
+	if (depth === null) return false;
+	return fits(node, depth);
+}
+
+/** A node removed from wherever it lives, with no guarantee the frame still has anything in it. */
+function withoutNode(layout: MailLayout, id: string): MailLayout {
+	const parentId = parentOf(layout, id);
+	if (parentId === undefined) return layout;
+	return withChildren(layout, parentId, (children) => children.filter((node) => node.id !== id));
+}
+
+/**
+ * Removes a container, a columns table or a block, wherever it is. A cell or
+ * an id nothing in the tree has is left alone: a cell is structural, fixed by
+ * its table, and is not something Delete takes away on its own.
  *
- * Phase 1 of the tool-per-element work only ever nests a section at the top
- * level, so every editing action here still works one level deep, on
- * `layout.children` and a section's own `children`. Real nesting, dragging
- * into and out of a container, and editing a columns table are phase 2 and 3
- * (`docs/editors.md` section 2).
+ * A canvas always has something at the top level: taking the last one away
+ * would leave nowhere to select and nowhere to drop a block on, which reads as
+ * a broken editor rather than as an empty one.
  */
-function mapSection(
-	layout: MailLayout,
-	sectionId: string,
-	change: (section: MailContainer) => MailContainer,
-): MailLayout {
-	return {
-		...layout,
-		children: layout.children.map((node) => (isContainer(node) && node.id === sectionId ? change(node) : node)),
-	};
+export function removeNode(layout: MailLayout, id: string): MailLayout {
+	if (!findNode(layout, id)) return layout;
+	const next = withoutNode(layout, id);
+	return next.children.length === 0 ? { ...next, children: [emptySection("Body")] } : next;
 }
 
-function sections(layout: MailLayout): MailContainer[] {
-	return layout.children.filter(isContainer);
-}
-
-export function addSection(layout: MailLayout, after?: string): MailLayout {
-	const section = newSection(`Section ${sections(layout).length + 1}`);
-	if (!after) return { ...layout, children: [...layout.children, section] };
-	const index = layout.children.findIndex((node) => node.id === after);
-	if (index < 0) return { ...layout, children: [...layout.children, section] };
-	const children = [...layout.children];
-	children.splice(index + 1, 0, section);
-	return { ...layout, children };
-}
-
-export function updateSection(
-	layout: MailLayout,
-	sectionId: string,
-	patch: Partial<Omit<MailContainer, "id" | "kind" | "children">>,
-): MailLayout {
-	return mapSection(layout, sectionId, (section) => ({ ...section, ...patch }));
+/** Puts `node` into `parentId`'s children, straight after `afterId`, or at the end when that is null or not there. */
+export function insertNode(layout: MailLayout, parentId: ParentId, node: MailNode, afterId: string | null): MailLayout {
+	return withChildren(layout, parentId, (children) => {
+		const index = afterId ? children.findIndex((entry) => entry.id === afterId) : -1;
+		if (index < 0) return [...children, node];
+		const next = [...children];
+		next.splice(index + 1, 0, node);
+		return next;
+	});
 }
 
 /**
- * A canvas always has at least one section. Removing the last one would leave
- * nowhere to put a block and no control that puts a section back, which reads
- * as a broken editor rather than as an empty one.
+ * Moves `id` into `toParentId`'s children, in front of `beforeId`, or at the
+ * end when that is null or not found there. Refuses the move outright
+ * (returns the layout unchanged) when it would nest the node into itself, into
+ * its own descendant, or past the depth the parser allows.
  */
-export function removeSection(layout: MailLayout, sectionId: string): MailLayout {
-	if (sections(layout).length <= 1) return { ...layout, children: [emptySection("Body")] };
-	return { ...layout, children: layout.children.filter((node) => node.id !== sectionId) };
-}
-
-export function moveSection(layout: MailLayout, sectionId: string, by: -1 | 1): MailLayout {
-	const index = layout.children.findIndex((node) => node.id === sectionId);
-	const target = index + by;
-	if (index < 0 || target < 0 || target >= layout.children.length) return layout;
-	const children = [...layout.children];
-	const [moved] = children.splice(index, 1);
-	if (moved) children.splice(target, 0, moved);
-	return { ...layout, children };
+export function moveNode(layout: MailLayout, id: string, toParentId: ParentId, beforeId: string | null): MailLayout {
+	if (id === beforeId) return layout;
+	if (!canMoveInto(layout, id, toParentId)) return layout;
+	const node = findNode(layout, id);
+	if (!node) return layout;
+	const without = withoutNode(layout, id);
+	const moved = withChildren(without, toParentId, (children) => {
+		const index = beforeId ? children.findIndex((entry) => entry.id === beforeId) : -1;
+		const next = [...children];
+		if (index < 0) next.push(node);
+		else next.splice(index, 0, node);
+		return next;
+	});
+	return moved.children.length === 0 ? { ...moved, children: [emptySection("Body")] } : moved;
 }
 
 /**
- * Moves a section to in front of another, or to the end when that is null.
- * What dragging a section in the layers does.
+ * Alt with an arrow: one place earlier or later among its own siblings, in the
+ * same parent. Refuses at either end, the way it always has: nothing happens
+ * at the first child on Alt+Up, or at the last on Alt+Down.
  */
-export function moveSectionTo(layout: MailLayout, sectionId: string, beforeSectionId: string | null): MailLayout {
-	if (sectionId === beforeSectionId) return layout;
-	const moving = layout.children.find((node) => node.id === sectionId);
-	if (!moving) return layout;
-	const rest = layout.children.filter((node) => node.id !== sectionId);
-	const index = beforeSectionId === null ? -1 : rest.findIndex((node) => node.id === beforeSectionId);
-	if (index < 0) return { ...layout, children: [...rest, moving] };
-	return { ...layout, children: [...rest.slice(0, index), moving, ...rest.slice(index)] };
-}
-
-export function addBlock(layout: MailLayout, sectionId: string, block: MailBlock): MailLayout {
-	return mapSection(layout, sectionId, (section) => ({ ...section, children: [...section.children, block] }));
-}
-
-export function updateBlock(
-	layout: MailLayout,
-	sectionId: string,
-	blockId: string,
-	patch: Partial<MailBlock>,
-): MailLayout {
-	return mapSection(layout, sectionId, (section) => ({
-		...section,
-		children: section.children.map((node) =>
-			// The cast holds because a patch only ever carries fields of the block
-			// it came from: the inspector builds it from the selected block, so
-			// there is no path that puts a heading's tag onto a spacer.
-			node.id === blockId && isBlockNode(node) ? ({ ...node, ...patch } as MailBlock) : node,
-		),
-	}));
-}
-
-export function removeBlock(layout: MailLayout, sectionId: string, blockId: string): MailLayout {
-	return mapSection(layout, sectionId, (section) => ({
-		...section,
-		children: section.children.filter((node) => node.id !== blockId),
-	}));
-}
-
-export function moveBlock(
-	layout: MailLayout,
-	sectionId: string,
-	blockId: string,
-	by: -1 | 1,
-): MailLayout {
-	return mapSection(layout, sectionId, (section) => {
-		const index = section.children.findIndex((node) => node.id === blockId);
+export function moveWithinParent(layout: MailLayout, id: string, by: -1 | 1): MailLayout {
+	const parentId = parentOf(layout, id);
+	if (parentId === undefined) return layout;
+	return withChildren(layout, parentId, (children) => {
+		const index = children.findIndex((node) => node.id === id);
 		const target = index + by;
-		if (index < 0 || target < 0 || target >= section.children.length) return section;
-		const children = [...section.children];
-		const [moved] = children.splice(index, 1);
-		if (moved) children.splice(target, 0, moved);
-		return { ...section, children };
+		if (index < 0 || target < 0 || target >= children.length) return children;
+		const next = [...children];
+		const [moved] = next.splice(index, 1);
+		if (moved) next.splice(target, 0, moved);
+		return next;
 	});
-}
-
-/** Moves a block into another section, at the end of it. */
-export function reparentBlock(
-	layout: MailLayout,
-	fromSectionId: string,
-	toSectionId: string,
-	blockId: string,
-): MailLayout {
-	if (fromSectionId === toSectionId) return layout;
-	const block = sections(layout)
-		.find((section) => section.id === fromSectionId)
-		?.children.find((entry): entry is MailBlock => entry.id === blockId && isBlockNode(entry));
-	if (!block) return layout;
-	return addBlock(removeBlock(layout, fromSectionId, blockId), toSectionId, block);
 }
 
 /**
- * Drops a block where it was let go: in front of `beforeBlockId`, or at the
- * end of the section when that is null.
- *
- * `reparentBlock` is the same move with nowhere in particular to land, and it
- * stays, because appending is exactly what a drop onto a section's empty space
- * means.
+ * The next or the previous layer among `id`'s own siblings, going round at the
+ * ends: Tab and Shift+Tab. Stays put when `id` has no siblings to step to.
  */
-export function dropBlock(
-	layout: MailLayout,
-	fromSectionId: string,
-	toSectionId: string,
-	blockId: string,
-	beforeBlockId: string | null,
-): MailLayout {
-	if (blockId === beforeBlockId) return layout;
-	const block = sections(layout)
-		.find((section) => section.id === fromSectionId)
-		?.children.find((entry): entry is MailBlock => entry.id === blockId && isBlockNode(entry));
-	if (!block) return layout;
-	const without = removeBlock(layout, fromSectionId, blockId);
-	if (!beforeBlockId) return addBlock(without, toSectionId, block);
-	return mapSection(without, toSectionId, (section) => {
-		const index = section.children.findIndex((entry) => entry.id === beforeBlockId);
-		if (index < 0) return { ...section, children: [...section.children, block] };
-		const children = [...section.children];
-		children.splice(index, 0, block);
-		return { ...section, children };
-	});
+export function siblingOf(layout: MailLayout, id: string, by: -1 | 1): string {
+	const parentId = parentOf(layout, id);
+	if (parentId === undefined) return id;
+	const children = childrenOf(layout, parentId);
+	if (!children) return id;
+	const index = children.findIndex((node) => node.id === id);
+	if (index < 0) return id;
+	const count = children.length;
+	const next = children[(index + by + count) % count];
+	return next ? next.id : id;
 }
 
-export function findBlock(
-	layout: MailLayout,
-	sectionId: string,
-	blockId: string,
-): MailBlock | null {
-	const section = sections(layout).find((entry) => entry.id === sectionId);
-	const block = section?.children.find((entry) => entry.id === blockId);
-	return block && isBlockNode(block) ? block : null;
-}
-
-/* ------------------------------------------------ copying, pasting, stepping */
-
-type Scope = { sectionId: string; blockId?: string } | null;
+/* ------------------------------------------------ copying, duplicating */
 
 /** A copy of a block with an id of its own, which is what a paste or a duplicate puts down. */
 export function cloneBlock(block: MailBlock): MailBlock {
@@ -408,15 +650,14 @@ export function cloneBlock(block: MailBlock): MailBlock {
 }
 
 /**
- * A copy of a node and everything in it, every id new. Recurses through a
- * container's or a columns table's children, so a copy of anything the model
- * allows is safe to make even where phase 1 offers no way to build one.
+ * A copy of a node and everything in it, every id new: a container's or a
+ * columns table's children, and a columns table's rows and cells too.
  */
-function cloneNode(node: MailNode): MailNode {
+export function cloneNode(node: MailNode): MailNode {
 	if (isContainer(node)) {
 		return { ...structuredClone(node), id: newId(), children: node.children.map(cloneNode) };
 	}
-	if (node.kind === "columns") {
+	if (isColumns(node)) {
 		return {
 			...structuredClone(node),
 			id: newId(),
@@ -434,67 +675,82 @@ function cloneNode(node: MailNode): MailNode {
 	return cloneBlock(node);
 }
 
-/** A copy of a section and everything in it, every id new. */
+/** A copy of a container, kept for callers that know they have one (pasting a copied section). */
 export function cloneSection(section: MailContainer): MailContainer {
 	return cloneNode(section) as MailContainer;
 }
 
 /**
- * Puts a block straight after another in its section, or at the end of the
- * section when that is null or not there, which is where Figma pastes: next to
- * what is selected, inside the same parent.
+ * Every id an original and its clone share a position for, original first:
+ * the node itself, and everything nested under it, rows and cells included.
+ * What `copyOverrides` (breakpoints.ts) needs to give a duplicate what its
+ * original changes at each breakpoint.
  */
-export function insertBlockAfter(
-	layout: MailLayout,
-	sectionId: string,
-	afterBlockId: string | null,
-	block: MailBlock,
-): MailLayout {
-	return mapSection(layout, sectionId, (section) => {
-		const index = afterBlockId ? section.children.findIndex((entry) => entry.id === afterBlockId) : -1;
-		if (index < 0) return { ...section, children: [...section.children, block] };
-		const children = [...section.children];
-		children.splice(index + 1, 0, block);
-		return { ...section, children };
-	});
-}
-
-/** Puts a section straight after another, or at the end. */
-export function insertSectionAfter(layout: MailLayout, afterSectionId: string | null, section: MailContainer): MailLayout {
-	const index = afterSectionId ? layout.children.findIndex((entry) => entry.id === afterSectionId) : -1;
-	if (index < 0) return { ...layout, children: [...layout.children, section] };
-	const children = [...layout.children];
-	children.splice(index + 1, 0, section);
-	return { ...layout, children };
-}
-
-/** Whether what is selected is still there, which an undo can change under it. */
-export function selectionIn(layout: MailLayout, scope: Scope): boolean {
-	if (!scope) return true;
-	const section = sections(layout).find((entry) => entry.id === scope.sectionId);
-	if (!section) return false;
-	return !scope.blockId || section.children.some((node) => node.id === scope.blockId);
+export function pairIds(original: MailNode, copy: MailNode): [string, string][] {
+	const pairs: [string, string][] = [[original.id, copy.id]];
+	if (isContainer(original) && isContainer(copy)) {
+		original.children.forEach((child, index) => {
+			const other = copy.children[index];
+			if (other) pairs.push(...pairIds(child, other));
+		});
+	} else if (isColumns(original) && isColumns(copy)) {
+		original.rows.forEach((row, rowIndex) => {
+			const otherRow = copy.rows[rowIndex];
+			if (!otherRow) return;
+			row.cells.forEach((cell, cellIndex) => {
+				const otherCell = otherRow.cells[cellIndex];
+				if (!otherCell) return;
+				pairs.push([cell.id, otherCell.id]);
+				cell.children.forEach((child, index) => {
+					const otherChild = otherCell.children[index];
+					if (otherChild) pairs.push(...pairIds(child, otherChild));
+				});
+			});
+		});
+	}
+	return pairs;
 }
 
 /**
- * The next or the previous layer beside what is selected, going round at the
- * ends: Tab and Shift+Tab in Figma. A block steps among the blocks of its
- * section, a section among the sections.
+ * A copy of `id`, dropped straight after the original in the same parent,
+ * every id in the copied subtree new. Null when `id` names a cell or nothing
+ * in the tree: neither is a node Ctrl+D can duplicate on its own.
  */
-export function siblingOf(layout: MailLayout, scope: NonNullable<Scope>, by: -1 | 1): NonNullable<Scope> {
-	const section = sections(layout).find((entry) => entry.id === scope.sectionId);
-	if (!section) return scope;
-	if (scope.blockId) {
-		const index = section.children.findIndex((node) => node.id === scope.blockId);
-		const count = section.children.length;
-		const next = section.children[(index + by + count) % count];
-		return next ? { sectionId: section.id, blockId: next.id } : scope;
-	}
-	const siblings = sections(layout);
-	const index = siblings.findIndex((entry) => entry.id === section.id);
-	const count = siblings.length;
-	const next = siblings[(index + by + count) % count];
-	return next ? { sectionId: next.id } : scope;
+export function duplicateNode(layout: MailLayout, id: string): { layout: MailLayout; id: string; pairs: [string, string][] } | null {
+	const node = findNode(layout, id);
+	const parentId = parentOf(layout, id);
+	if (!node || parentId === undefined) return null;
+	const copy = cloneNode(node);
+	return { layout: insertNode(layout, parentId, copy, id), id: copy.id, pairs: pairIds(node, copy) };
+}
+
+/* --------------------------------------------------------------- editing */
+
+export function updateSection(layout: MailLayout, id: string, patch: Partial<Omit<MailContainer, "id" | "kind" | "children">>): MailLayout {
+	return mapNode(layout, id, (node) => (node.kind === "container" ? { ...node, ...patch } : node));
+}
+
+export function updateColumns(layout: MailLayout, id: string, patch: Partial<Omit<MailColumns, "id" | "kind" | "rows">>): MailLayout {
+	return mapNode(layout, id, (node) => (node.kind === "columns" ? { ...node, ...patch } : node));
+}
+
+export function updateCell(layout: MailLayout, id: string, patch: Partial<Omit<MailColumnsCell, "id" | "children">>): MailLayout {
+	return mapCell(layout, id, (cell) => ({ ...cell, ...patch }));
+}
+
+export function updateBlock(layout: MailLayout, id: string, patch: Partial<MailBlock>): MailLayout {
+	return mapNode(layout, id, (node) =>
+		// The cast holds because a patch only ever carries fields of the block it
+		// came from: the inspector builds it from the selected block, so there is
+		// no path that puts a heading's tag onto a spacer.
+		node.kind !== "container" && node.kind !== "columns" ? ({ ...node, ...patch } as MailBlock) : node,
+	);
+}
+
+/** Whether what is selected is still there, which an undo can change under it. */
+export function selectionIn(layout: MailLayout, id: string | null): boolean {
+	if (!id) return true;
+	return findNode(layout, id) !== null || findCell(layout, id) !== null;
 }
 
 /* --------------------------------------------------------- selection colours */
@@ -530,14 +786,14 @@ function blockColors(block: MailBlock): (string | null)[] {
 /** A node's own colours, and everything nested under it: a container's or a columns table's children too. */
 function nodeColors(node: MailNode): (string | null)[] {
 	if (isContainer(node)) return [...boxColors(node.box), ...node.children.flatMap(nodeColors)];
-	if (node.kind === "columns") {
-		return [...boxColors(node.box), ...node.rows.flatMap((row) => row.cells.flatMap((cell) => cell.children.flatMap(nodeColors)))];
+	if (isColumns(node)) {
+		return [...boxColors(node.box), ...node.rows.flatMap((row) => row.cells.flatMap(cellColors))];
 	}
 	return blockColors(node);
 }
 
-function sectionColors(section: MailContainer): (string | null)[] {
-	return nodeColors(section);
+function cellColors(cell: MailColumnsCell): (string | null)[] {
+	return [...boxColors(cell.box), ...cell.children.flatMap(nodeColors)];
 }
 
 /**
@@ -545,20 +801,19 @@ function sectionColors(section: MailContainer): (string | null)[] {
  * is: Figma's selection colours. Lowercased, so `#FFF` and `#fff` are one
  * swatch, and in the order they first appear.
  */
-export function colorsIn(layout: MailLayout, scope: Scope): string[] {
-	const section = scope ? sections(layout).find((entry) => entry.id === scope.sectionId) : undefined;
-	const block = section && scope?.blockId ? section.children.find((entry) => entry.id === scope.blockId) : undefined;
-	const found =
-		block && isBlockNode(block)
-			? blockColors(block)
-			: section
-				? sectionColors(section)
-				: [
-						layout.fill?.kind === "solid" ? layout.fill.color : null,
-						layout.fill?.kind === "gradient" ? layout.fill.from : null,
-						layout.fill?.kind === "gradient" ? layout.fill.to : null,
-						...layout.children.flatMap(nodeColors),
-					];
+export function colorsIn(layout: MailLayout, id: string | null): string[] {
+	const node = id ? findNode(layout, id) : null;
+	const cell = id && !node ? findCell(layout, id) : null;
+	const found = node
+		? nodeColors(node)
+		: cell
+			? cellColors(cell)
+			: [
+					layout.fill?.kind === "solid" ? layout.fill.color : null,
+					layout.fill?.kind === "gradient" ? layout.fill.from : null,
+					layout.fill?.kind === "gradient" ? layout.fill.to : null,
+					...layout.children.flatMap(nodeColors),
+				];
 	return [...new Set(found.filter((color): color is string => Boolean(color)).map((color) => color.toLowerCase()))];
 }
 
@@ -581,9 +836,7 @@ function recolorBox(box: MailBoxStyle, from: string, to: string): MailBoxStyle {
 		...box,
 		fill,
 		borderColor: swapNullable(box.borderColor, from, to),
-		effects: box.effects.map((effect) =>
-			effect.kind === "shadow" ? { ...effect, color: swap(effect.color, from, to) } : effect,
-		),
+		effects: box.effects.map((effect) => (effect.kind === "shadow" ? { ...effect, color: swap(effect.color, from, to) } : effect)),
 	};
 }
 
@@ -617,34 +870,27 @@ function recolorNode(node: MailNode, from: string, to: string): MailNode {
 	if (isContainer(node)) {
 		return { ...node, box: recolorBox(node.box, from, to), children: node.children.map((child) => recolorNode(child, from, to)) };
 	}
-	if (node.kind === "columns") {
+	if (isColumns(node)) {
 		return {
 			...node,
 			box: recolorBox(node.box, from, to),
-			rows: node.rows.map((row) => ({
-				...row,
-				cells: row.cells.map((cell) => ({
-					...cell,
-					box: recolorBox(cell.box, from, to),
-					children: cell.children.map((child) => recolorNode(child, from, to)),
-				})),
-			})),
+			rows: node.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => recolorCell(cell, from, to)) })),
 		};
 	}
 	return recolorBlock(node, from, to);
 }
 
-function recolorSection(section: MailContainer, from: string, to: string): MailContainer {
-	return recolorNode(section, from, to) as MailContainer;
+function recolorCell(cell: MailColumnsCell, from: string, to: string): MailColumnsCell {
+	return { ...cell, box: recolorBox(cell.box, from, to), children: cell.children.map((child) => recolorNode(child, from, to)) };
 }
 
 /**
  * Changes one colour to another everywhere in what is selected, the way
  * Figma's selection colours do. Nothing outside the selection is touched.
  */
-export function replaceColor(layout: MailLayout, scope: Scope, from: string, to: string): MailLayout {
+export function replaceColor(layout: MailLayout, id: string | null, from: string, to: string): MailLayout {
 	const match = from.toLowerCase();
-	if (!scope) {
+	if (!id) {
 		const fill =
 			layout.fill?.kind === "solid"
 				? { ...layout.fill, color: swap(layout.fill.color, match, to) }
@@ -653,12 +899,7 @@ export function replaceColor(layout: MailLayout, scope: Scope, from: string, to:
 					: null;
 		return { ...layout, fill, children: layout.children.map((node) => recolorNode(node, match, to)) };
 	}
-	return mapSection(layout, scope.sectionId, (section) =>
-		scope.blockId
-			? {
-					...section,
-					children: section.children.map((node) => (node.id === scope.blockId ? recolorNode(node, match, to) : node)),
-				}
-			: recolorSection(section, match, to),
-	);
+	if (findNode(layout, id)) return mapNode(layout, id, (node) => recolorNode(node, match, to));
+	if (findCell(layout, id)) return mapCell(layout, id, (cell) => recolorCell(cell, match, to));
+	return layout;
 }

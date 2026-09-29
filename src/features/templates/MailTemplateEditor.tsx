@@ -266,6 +266,10 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 					bodyHtml: draft.bodyHtml,
 					layout: draft.layout,
 					inputs: draft.inputs,
+					// What the template offers as a starting value is what it is
+					// previewed with, so a picture it asks for is drawn in place of
+					// a marker where its address should be.
+					extras: Object.fromEntries(draft.inputs.filter((input) => input.defaultValue).map((input) => [input.key, input.defaultValue ?? ""])),
 					clientId: null,
 				})
 				.then((result) => {

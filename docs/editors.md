@@ -690,6 +690,19 @@ Content that overruns its page is shown as overrunning, with a warning saying
 which page. Silently clipping it would put a clause off the bottom of a signed
 contract, and silently reflowing it would move the signature block.
 
+### What ships
+
+Nothing is seeded into the list of document templates any more, bar one example
+on a first install. The five that used to ship (`nda`, `development_agreement`,
+`hosting_agreement`, `project_scope`, `addendum`) are gone from the code. An
+install that has them keeps them as they are; a new install never gets them.
+
+The example is one page-model template in Dutch with "u", laid out on two pages:
+headings, a list, a table, the client's address pinned to the paper, and both
+signature blocks pinned side by side at the foot of the second. It asks for
+three inputs, a textarea, a choice and a number. It is unreviewed, so a document
+made from it carries the specimen banner.
+
 ## 4. Declared inputs, and using a template
 
 A template asks for what the records cannot answer. An input is a key, a

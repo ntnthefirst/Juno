@@ -83,6 +83,15 @@ Needs your hands rather than code:
   real bridge and speaks MCP to it, but Claude Desktop and Claude Code have
   not. Try both, and check that a tool list cached while Juno was closed
   recovers when it opens.
+- **The example mail template has not been read in a real mail client yet.**
+  Use it on a client whose address is yours (Mail templates, the example,
+  Use), create the draft and send it to yourself. Put a real logo and a real
+  photo address in first: the two at example.com will not load. Then open it in
+  Gmail on a phone and in Outlook on Windows, and write down what each shows.
+  Expect Gmail to show Arial for the heading, since it loads no web fonts, and
+  no hover colour on the button; expect Outlook on Windows to stack the two
+  columns, keep the comparison table side by side, and paint no gradient,
+  shadow, rounded corner or transparent colour. Anything else is a finding.
 
 Not tasks, written down so nobody builds them by accident:
 
@@ -93,59 +102,6 @@ Not tasks, written down so nobody builds them by accident:
 - **An automation cannot pass one step's result to the next.** Anything that
   needs the output of a previous step is a job for an agent, which can read and
   then decide, rather than for a recording.
-
-## 4. Mail template editor
-
-One piece of work, 4c. Read docs/editors.md section 2 (the Actions part
-included, since the example uses them) and decisions 36 and 37 first; every
-rule there still holds. It is its own set of commits, and it keeps the four
-checks green: `npm run check`,
-`JUNO_SMOKE_DEMO=1 JUNO_SMOKE_FRONT=1 npm run smoke`, both themes looked at, and
-the copy sweep in writing.md section 7.
-
-### 4c. Stop seeding the shipped mail templates, and ship one example on first install
-
-**Decided.**
-
-- The four shipped mail templates (`contract_cover`, `project_kickoff`,
-  `invoice_due`, `hosting_renewal` in
-  `electron/main/services/mail-templates-seed.ts`) are **no longer seeded**. A
-  new install does not get them. An existing install keeps them exactly as
-  they are, and an upgrade neither hides nor deletes them, so no reference
-  breaks and the seeding rules (data.md section 9) are not touched.
-- Nothing in the code may point at `contract_cover` by key any more, because
-  a new install will not have it. The two callers went when sending a document
-  became an attachment with an empty body.
-- **One example ships in their place, only on a first install.** A single
-  canvas template that uses every part of the editor, so opening it teaches
-  the canvas. It is seeded into an empty database and never added by an
-  upgrade. After that it is the owner's to edit or delete. Written in Dutch,
-  "u", by writing.md section 1, and native, not translated. `reviewedAt` stays
-  null like every shipped text.
-
-What the example has to show, one of each:
-
-- A header container with a logo picture (an https address) and a linked
-  Google font on the heading.
-- Rich text with bold, italic, a link and a placeholder (`{{client.firstName}}`).
-- A picture input the template asks for, in the Asks view.
-- Two columns across that stack into one at a Phone breakpoint, and a Columns
-  table for comparison.
-- A divider: an empty section with a height and a bottom stroke.
-- A gradient fill, a drop shadow, rounded corners, a colour with opacity.
-- A text element with an on-click action, styled as a button, with a hover
-  action.
-- A code block.
-- A footer container with the business details, which the house frame used to
-  add and a canvas no longer does (decision 37).
-
-**Done when.** A test seeds the old version, runs the new seed, and checks
-the four are still there and unchanged and no example was added to an install
-that already had data. A second test seeds an empty database and finds the
-example with a canvas and none of the four. The smoke walk opens the example, and its
-preview renders with no missing values against the demo client. Send the
-example to yourself once and read it in Gmail on a phone and in Outlook on
-Windows, and write down what each shows.
 
 ## 5. Mail rules: greetings for every message, automation per mailbox
 

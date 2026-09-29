@@ -11,7 +11,7 @@
  * drawn as a box, the way the canvas draws one (remote-image.ts).
  */
 import { cleanDeclarations } from "./box-style";
-import { escapeAttribute, isDrawable, remotePlaceholder } from "./remote-image";
+import { escapeAttribute, isDrawable, remotePlaceholder } from "../../../../lib/remote-image";
 
 const DROPPED = "script,style,iframe,object,embed,form,svg,noscript,template,head,title,link,meta,base";
 

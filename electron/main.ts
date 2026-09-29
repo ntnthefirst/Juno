@@ -235,14 +235,14 @@ if (!app.requestSingleInstanceLock()) {
 								const lead = statuses.items.find((i) => i.key === "lead") ?? statuses.items[0];
 								const made = [];
 								for (const c of [
-									{ name: "obet", city: "Gent", email: "hallo@obet.be", statusId: active.id },
-									{ name: "bodhi", city: "Brugge", email: "info@bodhi.be", statusId: active.id },
-									{ name: "noir", city: "Antwerpen", statusId: active.id },
-									{ name: "hyge", city: "Leuven", statusId: lead.id },
+									{ name: "obet", city: "Gent", postalCode: "9000", email: "hallo@obet.be", statusId: active.id },
+									{ name: "bodhi", city: "Brugge", postalCode: "8000", email: "info@bodhi.be", statusId: active.id },
+									{ name: "noir", city: "Antwerpen", postalCode: "2000", statusId: active.id },
+									{ name: "hyge", city: "Leuven", postalCode: "3000", statusId: lead.id },
 								]) {
 									const client = await b.clients.create({ name: c.name, statusId: c.statusId });
 									if (c.email) await b.clientEmails.create({ clientId: client.id, email: c.email });
-									await b.clientAddresses.create({ clientId: client.id, addressLine1: "Kerkstraat 1", city: c.city });
+									await b.clientAddresses.create({ clientId: client.id, addressLine1: "Kerkstraat 1", postalCode: c.postalCode, city: c.city });
 									made.push(client);
 								}
 								await b.contacts.create({ clientId: made[0].id, name: "Laura", role: "Zaakvoerder", email: "laura@obet.be", isPrimary: true });
@@ -250,11 +250,34 @@ if (!app.requestSingleInstanceLock()) {
 								const running = ps.items.find((i) => i.key === "active") ?? ps.items[0];
 								await b.projects.create({ clientId: made[0].id, name: "Ontwikkelovereenkomst site", statusId: running.id, dueOn: "2026-11-14", agreedValueCents: 210000 });
 								await b.projects.create({ clientId: made[1].id, name: "Project scope", statusId: running.id, dueOn: "2026-10-03", agreedValueCents: 125000 });
+								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", addressLine1: "Kerkstraat 1", postalCode: "9000", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
 								// Phase 1: generate a document through the same bridge the
 								// interface uses, so the smoke run covers it too.
-								const tpl = (await b.templates.list()).find((t) => t.key === "development_agreement");
+								// A first install holds one document template and no other: the
+								// example, written as an ordinary template. Nothing here may look it
+								// up by key, because that is not how anyone finds it.
+								const seededTemplates = await b.templates.list();
+								if (seededTemplates.length !== 1) throw new Error("Smoke: a first install should hold exactly one document template, found " + seededTemplates.length);
+								const tpl = seededTemplates[0];
+								if (tpl.isSystem || tpl.reviewedAt !== null || !tpl.layout || tpl.layout.pages.length < 2 || tpl.inputs.length === 0) {
+									throw new Error("Smoke: the example is not an unreviewed, paged template that asks for inputs: " + JSON.stringify({ isSystem: tpl.isSystem, reviewedAt: tpl.reviewedAt, pages: tpl.layout?.pages.length, inputs: tpl.inputs.length }));
+								}
+								const exampleValues = Object.fromEntries(tpl.inputs.map((input) => [input.key, input.defaultValue ?? "het ontwerp en de bouw van een website"]));
 								const gen = await b.documents.generate({
 									clientId: made[0].id, templateId: tpl.id, projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
+									extras: exampleValues,
+								});
+								// Every placeholder answered by the records and the inputs above. A
+								// marker left in the example would be printed in the first document
+								// anyone makes from it.
+								if (gen.missing.length !== 0) throw new Error("Smoke: the example left placeholders unresolved: " + gen.missing.join(", "));
+								if (!gen.document.isSpecimen) throw new Error("Smoke: a document from an unreviewed template is not marked as a specimen");
+								// A hand-written document template, HTML only, for the same reason as
+								// the mail one further down: the walk reads it in the code view and starts a
+								// page layout on it, and the example is already laid out.
+								await b.templates.create({
+									name: "Handgeschreven overeenkomst",
+									bodyHtml: "<h1>Overeenkomst</h1><p>Tussen {{ owner.businessName }} en {{ client.name }}.</p>",
 								});
 								// Generating writes the PDF now, so this call is only here to
 								// prove the explicit path still works. What generating produced is
@@ -285,7 +308,6 @@ if (!app.requestSingleInstanceLock()) {
 								// in-memory mailbox the main process swapped in above. This is
 								// what exercises the credential store, the scheme host and the
 								// reader's frame policy.
-								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", addressLine1: "Kerkstraat 1", postalCode: "9000", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
 								// A hand-written template of the walk's own. A fresh install ships
 								// none of the old ones, and the walk below still needs one that is
 								// HTML only, to read in the code view and to lay out on a canvas.
@@ -533,7 +555,13 @@ if (!app.requestSingleInstanceLock()) {
 								if (head !== "%PDF-") {
 									throw new Error(`Smoke: the generated file starts with ${head}, not a PDF header`);
 								}
-								console.log(`SMOKE_DEMO generated pdf=${size}`);
+								// The example is two pages, and the specimen banner sits above them. A
+								// page that spills onto a third sheet is a layout fault the bytes above
+								// would never show.
+								const { PDFDocument } = await import("pdf-lib");
+								const sheets = (await PDFDocument.load(readPdfBytes(generated.pdfPath))).getPageCount();
+								if (sheets !== 2) throw new Error(`Smoke: the example printed on ${sheets} sheets, not its two pages`);
+								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheets}`);
 							}
 							window.webContents.reload();
 							await new Promise((r) => {
@@ -1093,6 +1121,73 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
 								}
+								if (screen === "Document templates") {
+									// The example first. It is the one template every first install has and
+									// the only one laid out on more than one page, so its preview and its
+									// editor are the first things a new owner opens.
+									const inspected = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
+											if (!row) return "no row for the example";
+											row.click();
+											await wait(900);
+											const frame = document.querySelector("main iframe");
+											if (!frame) return "the example has no preview";
+											return "ok";
+										})()`,
+									) as string;
+									if (inspected !== "ok") throw new Error(`Smoke: the example document template ${inspected}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-example-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									// Into the page editor, where both pages have to be there to click on.
+									const laidOut = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											await wait(800);
+											if (!document.querySelector("button[aria-label^='Page 1']")) return "no first page on the canvas";
+											if (!document.querySelector("button[aria-label^='Page 2']")) return "no second page on the canvas";
+											return "ok";
+										})()`,
+									) as string;
+									if (laidOut !== "ok") throw new Error(`Smoke: the example document template editor ${laidOut}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-example-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									// Back out without a change, to the preview and then to the list, so the
+									// steps after this start where they always did.
+									const returned = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											if (!back()) return "no back action from the editor";
+											back().click();
+											await wait(400);
+											const dialog = document.querySelector("[role=dialog]");
+											if (dialog) {
+												const discard = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
+												if (!discard) return "the editor asked to discard a change nobody made";
+												discard.click();
+												await wait(500);
+											}
+											if (!back()) return "no back action from the preview";
+											back().click();
+											await wait(500);
+											return document.querySelector("main ul li button") ? "ok" : "did not return to the list";
+										})()`,
+									) as string;
+									if (returned !== "ok") throw new Error(`Smoke: leaving the example document template ${returned}`);
+								}
 								if (screen === "Mail templates" || screen === "Document templates") {
 									// Opens a template so the preview path runs for real: the
 									// list renders, the row opens a preview, and the preview asks the
@@ -1102,7 +1197,7 @@ if (!app.requestSingleInstanceLock()) {
 									// the steps after this need.
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											const wanted = ${JSON.stringify(screen === "Mail templates" ? "Herinnering betaling" : "")};
+											const wanted = ${JSON.stringify(screen === "Mail templates" ? "Herinnering betaling" : "Handgeschreven overeenkomst")};
 											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes(wanted));
 											if (!row) return "no template row";
 											row.click();

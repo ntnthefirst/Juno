@@ -12,7 +12,7 @@ export const documentTemplates = sqliteTable(
 	{
 		...standardColumns,
 		...seededColumns,
-		/** Stable machine key: nda, development_agreement, hosting_agreement. */
+		/** Derived from the name and made unique. Nothing looks a template up by it. */
 		key: text("key").notNull(),
 		name: text("name").notNull(),
 		description: text("description"),

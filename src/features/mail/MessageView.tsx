@@ -17,17 +17,45 @@ type MessageViewProps = {
 	onChanged: () => void;
 };
 
+const TRUSTED_EMAILS_KEY = "juno.mail.trustedEmails";
+const TRUSTED_SENDERS_KEY = "juno.mail.trustedSenders";
+
+function readTrust(key: string): string[] {
+	try {
+		const value: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+		return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+	} catch {
+		return [];
+	}
+}
+
+function addTrust(key: string, value: string): void {
+	try {
+		const values = new Set(readTrust(key));
+		values.add(value);
+		localStorage.setItem(key, JSON.stringify([...values]));
+	} catch {
+		// Trust still applies for this open message when site data is unavailable.
+	}
+}
+
 export function MessageView({ message, open, onToggle, onNotice, onReply, onChanged }: MessageViewProps) {
+	const senderAddress = message.from?.address.toLowerCase() ?? null;
+	const isNew = !message.isSeen;
+	const emailTrusted = readTrust(TRUSTED_EMAILS_KEY).includes(message.id);
+	const senderTrusted = senderAddress !== null && readTrust(TRUSTED_SENDERS_KEY).includes(senderAddress);
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [body, setBody] = useState<MailMessageBody | null>(null);
 	const [bodyError, setBodyError] = useState<string | null>(null);
-	const [remoteImages, setRemoteImages] = useState(false);
+	const [trusted, setTrusted] = useState(!isNew || emailTrusted || senderTrusted);
+	const [remoteImages, setRemoteImages] = useState(emailTrusted || senderTrusted);
+	const [linksOpen, setLinksOpen] = useState(false);
 	const [measuredFrame, setMeasuredFrame] = useState<{ messageId: string; height: number } | null>(null);
 	const frame = useRef<HTMLIFrameElement>(null);
 	const menu = useContextMenu();
 
 	useEffect(() => {
-		if (!open || !message.bodyFetched) return;
+		if (!open || !message.bodyFetched || (isNew && !trusted)) return;
 		let cancelled = false;
 		window.juno.mail.messages
 			.body(message.id)
@@ -40,7 +68,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		return () => {
 			cancelled = true;
 		};
-	}, [open, message.id, message.bodyFetched]);
+	}, [open, message.id, message.bodyFetched, isNew, trusted]);
 
 	useEffect(() => {
 		function receiveHeight(event: MessageEvent<unknown>) {
@@ -55,6 +83,19 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		window.addEventListener("message", receiveHeight);
 		return () => window.removeEventListener("message", receiveHeight);
 	}, [message.id]);
+
+	function trustEmail() {
+		addTrust(TRUSTED_EMAILS_KEY, message.id);
+		setTrusted(true);
+		setRemoteImages(true);
+	}
+
+	function trustSender() {
+		if (!senderAddress) return;
+		addTrust(TRUSTED_SENDERS_KEY, senderAddress);
+		setTrusted(true);
+		setRemoteImages(true);
+	}
 
 	async function openLink(href: string) {
 		try {
@@ -268,59 +309,90 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 						</p>
 					) : (
 						<div className="-mx-8 flex flex-1 flex-col">
-							{body && body.remoteImages > 0 && !remoteImages ? (
-								<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-[length:var(--text-sm)]">
-									<span className="text-[var(--ink-muted)]">
-										{body.remoteImages} remote {body.remoteImages === 1 ? "image" : "images"} not
-										loaded. Loading them tells the sender you opened this.
+							{isNew && !trusted ? (
+								<div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-3">
+									<span className="mr-auto text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										This is a new email. Trust it before loading the content.
 									</span>
 									<Button
 										size="dense"
-										onClick={() => setRemoteImages(true)}
+										onClick={trustEmail}
 									>
-										Load images
+										Trust email
+									</Button>
+									<Button
+										size="dense"
+										onClick={trustSender}
+										disabled={!senderAddress}
+									>
+										Trust sender
 									</Button>
 								</div>
-							) : null}
-							<iframe
-								ref={frame}
-								title={`Message from ${from}`}
-								src={frameSrc}
-								sandbox="allow-scripts"
-								referrerPolicy="no-referrer"
-								className="block min-h-full w-full shrink-0 overflow-x-auto overflow-y-hidden border-t border-[var(--line)] bg-[var(--surface)]"
-								style={frameHeight === null ? undefined : { height: frameHeight }}
-							/>
-
-							{body && body.links.length > 0 ? (
-								<div className="shrink-0 border-t border-[var(--line)] px-8 py-3">
-									<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
-										Links in this message
-									</h3>
-									<ul className="mt-2 flex flex-col gap-1">
-										{body.links.slice(0, 40).map((link) => (
-											<li
-												key={link.href}
-												className="flex min-w-0 items-baseline gap-2 text-[length:var(--text-sm)]"
+							) : (
+								<>
+									{body && body.remoteImages > 0 && !remoteImages ? (
+										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-[length:var(--text-sm)]">
+											<span className="text-[var(--ink-muted)]">
+												{body.remoteImages} remote{" "}
+												{body.remoteImages === 1 ? "image" : "images"} not loaded. Loading them
+												tells the sender you opened this.
+											</span>
+											<Button
+												size="dense"
+												onClick={() => setRemoteImages(true)}
 											>
-												<button
-													type="button"
-													onClick={() => void openLink(link.href)}
-													className="shrink-0 text-[var(--accent)] hover:underline"
-												>
-													{link.text || "Open"}
-												</button>
-												<span
-													data-selectable
-													className="min-w-0 truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]"
-												>
-													{link.href}
-												</span>
-											</li>
-										))}
-									</ul>
-								</div>
-							) : null}
+												Load images
+											</Button>
+										</div>
+									) : null}
+									<iframe
+										ref={frame}
+										title={`Message from ${from}`}
+										src={frameSrc}
+										sandbox="allow-scripts"
+										referrerPolicy="no-referrer"
+										className="block min-h-full w-full shrink-0 overflow-x-auto overflow-y-hidden border-t border-[var(--line)] bg-[var(--surface)]"
+										style={frameHeight === null ? undefined : { height: frameHeight }}
+									/>
+
+									{body && body.links.length > 0 ? (
+										<div className="shrink-0 border-t border-[var(--line)] px-8 py-3">
+											<button
+												type="button"
+												aria-expanded={linksOpen}
+												onClick={() => setLinksOpen((current) => !current)}
+												className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+											>
+												Links ({body.links.length})
+											</button>
+											{linksOpen ? (
+												<ul className="mt-2 flex max-h-[180px] flex-col gap-1 overflow-y-auto">
+													{body.links.slice(0, 40).map((link) => (
+														<li
+															key={link.href}
+															className="flex min-w-0 items-baseline gap-2 text-[length:var(--text-sm)]"
+														>
+															<button
+																type="button"
+																onClick={() => void openLink(link.href)}
+																className="shrink-0 text-[var(--accent)] hover:underline"
+															>
+																{link.text || "Open"}
+															</button>
+															<span
+																data-selectable
+																className="min-w-0 truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]"
+															>
+																{link.href}
+															</span>
+														</li>
+													))}
+												</ul>
+											) : null}
+										</div>
+									) : null}
+								</>
+							)}
 						</div>
 					)}
 				</div>

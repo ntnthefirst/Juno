@@ -58,14 +58,7 @@ export interface ClientNotePatch {
 	body?: string | null;
 }
 
-export type ClientTimelineKind =
-	| "note"
-	| "mail"
-	| "document"
-	| "event"
-	| "reminder"
-	| "project"
-	| "status";
+export type ClientTimelineKind = "note" | "mail" | "document" | "event" | "reminder" | "project" | "status";
 
 /**
  * One line in a client's history, whichever table it came from.
@@ -1753,6 +1746,7 @@ export interface MailMessageBody {
 	text: string | null;
 	hasHtml: boolean;
 	remoteImages: number;
+	suspicious: boolean;
 	links: { href: string; text: string }[];
 }
 
@@ -1870,10 +1864,7 @@ export interface MailTemplateInput {
 }
 
 export type MailTemplatePatch = Partial<
-	Pick<
-		MailTemplateInput,
-		"name" | "subject" | "bodyHtml" | "description" | "register" | "inputs" | "layout"
-	>
+	Pick<MailTemplateInput, "name" | "subject" | "bodyHtml" | "description" | "register" | "inputs" | "layout">
 >;
 
 /**

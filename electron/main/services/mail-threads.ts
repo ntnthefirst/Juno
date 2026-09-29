@@ -457,10 +457,11 @@ export async function getBody(id: string, db: Db = getDb()): Promise<MailMessage
 			text: row.bodyText,
 			hasHtml: true,
 			remoteImages: result.remoteImages,
+			suspicious: result.suspicious,
 			links: result.links,
 		};
 	}
-	return { messageId: id, text: row.bodyText, hasHtml: false, remoteImages: 0, links: [] };
+	return { messageId: id, text: row.bodyText, hasHtml: false, remoteImages: 0, suspicious: false, links: [] };
 }
 
 async function requireThread(id: string, db: Db): Promise<MailThreadSummary> {

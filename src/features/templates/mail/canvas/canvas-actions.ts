@@ -64,6 +64,7 @@ export function emptyBox(): MailBoxStyle {
 	return {
 		fill: null,
 		padding: noSpacing(),
+		margin: noSpacing(),
 		borderWidth: 0,
 		borderColor: null,
 		borderStyle: "solid",

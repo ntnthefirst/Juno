@@ -1,16 +1,15 @@
 import { useState } from "react";
 import type {
-	MailAlign,
 	MailBlock,
 	MailBoxStyle,
 	MailColumns,
 	MailColumnsCell,
 	MailContainer,
 	MailContainerTag,
-	MailCorners,
 	MailFontFallback,
 	MailHeadingTag,
 	MailLayout,
+	MailSectionLayout,
 	MailSelfAlign,
 	MailSpacing,
 	MailTextStyle,
@@ -19,7 +18,22 @@ import type {
 	MailVerticalAlign,
 } from "@shared/types";
 import { Button } from "../../../../components/Button";
+import type { IconName } from "../../../../components/Icon";
 import { isMac } from "../../../../lib/platform";
+import {
+	flowNameOf,
+	isStretched,
+	litAt,
+	place,
+	setSpread,
+	setStretch,
+	spreadOf,
+	stretchAxes,
+	withFlow,
+	type Axis as PageAxis,
+	type LayoutFlow,
+} from "./alignment";
+import { flowAutoSides, pictureAutoSides, type AutoSides } from "./box-style";
 import { BreakpointsSection } from "./BreakpointsSection";
 import {
 	addCell,
@@ -49,7 +63,9 @@ import { elementInfo, groupInfo } from "./elements";
 import { FillSection } from "./FillSection";
 import { FontsSection } from "./FontsSection";
 import {
+	AlignmentBox,
 	DimensionInput,
+	GapInput,
 	NumberInput,
 	PanelButton,
 	PanelCheckbox,
@@ -59,6 +75,7 @@ import {
 	PanelSelect,
 	Segmented,
 	TextInput,
+	type GapMode,
 	type SegmentedOption,
 } from "./panel-controls";
 import {
@@ -138,19 +155,20 @@ type Capabilities = {
 	radius: "box" | "button" | null;
 	opacity: boolean;
 	padding: boolean;
-	clip: boolean;
+	margin: boolean;
 };
 
-const BOXED: Capabilities = { fill: true, stroke: true, effects: true, radius: "box", opacity: true, padding: true, clip: true };
+// Clip content is not here: it is for containers and cells, and never for text.
+const BOXED: Capabilities = { fill: true, stroke: true, effects: true, radius: "box", opacity: true, padding: true, margin: true };
 
 const CAN: Record<Exclude<MailBlock["kind"], "html">, Capabilities> = {
 	text: BOXED,
 	heading: BOXED,
 	field: BOXED,
-	button: { ...BOXED, fill: false, radius: "button", clip: false },
-	image: { ...BOXED, clip: false },
-	divider: { fill: false, stroke: false, effects: false, radius: null, opacity: true, padding: true, clip: false },
-	spacer: { fill: false, stroke: false, effects: false, radius: null, opacity: false, padding: false, clip: false },
+	button: { ...BOXED, fill: false, radius: "button" },
+	image: BOXED,
+	divider: { fill: false, stroke: false, effects: false, radius: null, opacity: true, padding: true, margin: true },
+	spacer: { fill: false, stroke: false, effects: false, radius: null, opacity: false, padding: false, margin: false },
 };
 
 /** The cross axis of a section, which is the one a block's own alignment moves it along. */
@@ -198,6 +216,12 @@ function placementOf(patch: Partial<MailBlock>): { grow?: number; alignSelf?: Ma
 	};
 }
 
+/** The stretch toggles beside the alignment box, by the axis they stretch along. */
+const STRETCH: Record<PageAxis, { label: string; icon: IconName }> = {
+	horizontal: { label: "Stretch across", icon: "self-h-stretch" },
+	vertical: { label: "Stretch down", icon: "self-v-stretch" },
+};
+
 /** What each text tag and heading level is called in the Element list. */
 function textOptions(): { value: string; label: string }[] {
 	return groupInfo("text").elements.map((element) => ({ value: element.id, label: `${element.label} (${element.tag})` }));
@@ -218,16 +242,6 @@ function acrossOptions(axis: Axis, keys = true): SegmentedOption<Across>[] {
 				{ value: "center", label: "Middle", icon: "self-v-center", title: withKey("Align middle", "V") },
 				{ value: "end", label: "Bottom", icon: "self-v-end", title: withKey("Align bottom", "S") },
 			];
-}
-
-/** The same, and stretching, for where a section puts everything in it. */
-function alignOptions(axis: Axis): SegmentedOption<MailAlign>[] {
-	return [
-		...acrossOptions(axis, false),
-		axis === "h"
-			? { value: "stretch", label: "Stretch", icon: "self-h-stretch", title: "Stretch across" }
-			: { value: "stretch", label: "Stretch", icon: "self-v-stretch", title: "Stretch down" },
-	];
 }
 
 /* ------------------------------------------------------------------ pieces */
@@ -270,7 +284,7 @@ function Header({ label, name, deleteLabel, onDelete, hidden }: HeaderProps) {
 	);
 }
 
-type PositionSectionProps = {
+type AcrossRowsProps = {
 	axis: Axis;
 	value: Across | null;
 	onChange: (value: Across | null) => void;
@@ -283,92 +297,103 @@ type PositionSectionProps = {
  * layout. There is no X and no Y, because nothing in a message is placed at a
  * point. Pressing the pressed one goes back to what the section says.
  */
-function PositionSection({ axis, value, onChange }: PositionSectionProps) {
+function AcrossRows({ axis, value, onChange }: AcrossRowsProps) {
 	return (
-		<PanelSection title="Position">
-			<PanelPair>
-				<Segmented
-					label="Align across"
-					value={axis === "h" ? value : null}
-					options={acrossOptions("h")}
-					onChange={onChange}
-					onClear={() => onChange(null)}
-					disabled={axis !== "h"}
-				/>
-				<Segmented
-					label="Align down"
-					value={axis === "v" ? value : null}
-					options={acrossOptions("v")}
-					onChange={onChange}
-					onClear={() => onChange(null)}
-					disabled={axis !== "v"}
-				/>
-			</PanelPair>
-		</PanelSection>
+		<PanelPair>
+			<Segmented
+				label="Align across"
+				value={axis === "h" ? value : null}
+				options={acrossOptions("h")}
+				onChange={onChange}
+				onClear={() => onChange(null)}
+				disabled={axis !== "h"}
+			/>
+			<Segmented
+				label="Align down"
+				value={axis === "v" ? value : null}
+				options={acrossOptions("v")}
+				onChange={onChange}
+				onClear={() => onChange(null)}
+				disabled={axis !== "v"}
+			/>
+		</PanelPair>
 	);
 }
 
-type PaddingFieldsProps = { padding: MailSpacing; onChange: (padding: MailSpacing) => void };
+const NO_AUTO: AutoSides = { left: false, right: false };
+
+type SpacingFieldsProps = {
+	kind: "Padding" | "Margin";
+	value: MailSpacing;
+	onChange: (value: MailSpacing) => void;
+	/** Sides the element's own alignment keeps in `auto`: shown as Auto, and not typed into. */
+	auto?: AutoSides;
+};
 
 /**
- * Figma's padding: across and down as two numbers, or each side on its own
- * behind the button beside them. Sides that differ open on their own.
+ * Figma's padding, and margin the same way: across and down as two numbers, or
+ * each side on its own behind the button beside them. Sides that differ open
+ * on their own, and so do sides of which only one is Auto.
  */
-function PaddingFields({ padding, onChange }: PaddingFieldsProps) {
-	const even = padding.left === padding.right && padding.top === padding.bottom;
+function SpacingFields({ kind, value, onChange, auto = NO_AUTO }: SpacingFieldsProps) {
+	const even = value.left === value.right && value.top === value.bottom;
 	const [split, setSplit] = useState(!even);
-	const apart = split || !even;
+	const apart = split || !even || auto.left !== auto.right;
+	const lower = kind.toLowerCase();
+	const field = (side: keyof MailSpacing, prefix: string, label: string, isAuto = false) => (
+		<NumberInput
+			key={side}
+			label={label}
+			prefix={prefix}
+			value={isAuto ? null : value[side]}
+			unset={isAuto ? { label: "Auto", onClear: () => undefined } : undefined}
+			disabled={isAuto}
+			min={0}
+			max={200}
+			onChange={(next) => onChange({ ...value, [side]: next })}
+		/>
+	);
 	return (
 		<div className="flex items-start gap-0.5">
 			<div className="min-w-0 flex-1">
 				{apart ? (
 					<PanelPair>
-						{(
-							[
-								["top", "T", "Padding top"],
-								["right", "R", "Padding right"],
-								["bottom", "B", "Padding bottom"],
-								["left", "L", "Padding left"],
-							] as const
-						).map(([side, prefix, label]) => (
-							<NumberInput
-								key={side}
-								label={label}
-								prefix={prefix}
-								value={padding[side]}
-								min={0}
-								max={200}
-								onChange={(next) => onChange({ ...padding, [side]: next })}
-							/>
-						))}
+						{field("top", "T", `${kind} top`)}
+						{field("right", "R", `${kind} right`, auto.right)}
+						{field("bottom", "B", `${kind} bottom`)}
+						{field("left", "L", `${kind} left`, auto.left)}
 					</PanelPair>
 				) : (
 					<PanelPair>
+						{auto.left && auto.right ? (
+							field("left", "↔", `${kind} left and right`, true)
+						) : (
+							<NumberInput
+								label={`${kind} left and right`}
+								prefix="↔"
+								value={value.left}
+								min={0}
+								max={200}
+								onChange={(next) => onChange({ ...value, left: next, right: next })}
+							/>
+						)}
 						<NumberInput
-							label="Padding left and right"
-							prefix="↔"
-							value={padding.left}
-							min={0}
-							max={200}
-							onChange={(next) => onChange({ ...padding, left: next, right: next })}
-						/>
-						<NumberInput
-							label="Padding top and bottom"
+							label={`${kind} top and bottom`}
 							prefix="↕"
-							value={padding.top}
+							value={value.top}
 							min={0}
 							max={200}
-							onChange={(next) => onChange({ ...padding, top: next, bottom: next })}
+							onChange={(next) => onChange({ ...value, top: next, bottom: next })}
 						/>
 					</PanelPair>
 				)}
 			</div>
 			<PanelButton
-				label={apart ? "The same padding on opposite sides" : "Padding for each side"}
+				label={apart ? `The same ${lower} on opposite sides` : `${kind} for each side`}
 				icon="corners"
 				active={apart}
 				onClick={() => {
-					if (apart && !even) onChange({ ...padding, right: padding.left, bottom: padding.top });
+					if (apart && !even) onChange({ ...value, right: value.left, bottom: value.top });
 					setSplit(!apart);
 				}}
 			/>
@@ -378,68 +403,6 @@ function PaddingFields({ padding, onChange }: PaddingFieldsProps) {
 
 /** A corner radius and where it is kept: a box's own, or a button's. */
 type Radius = { value: number; onChange: (value: number) => void };
-
-type RadiusFieldsProps = {
-	radius: Radius;
-	corners: MailCorners | null;
-	onCorners: (corners: MailCorners | null) => void;
-};
-
-/**
- * The corner radius, one for every corner or one each, beside the size it
- * rounds. Outlook on Windows draws every corner square.
- */
-function RadiusFields({ radius, corners, onCorners }: RadiusFieldsProps) {
-	return (
-		<div className="flex items-center gap-0.5">
-			<div className="min-w-0 flex-1">
-				{corners ? (
-					<PanelPair>
-						{(
-							[
-								["topLeft", "TL", "Top left radius"],
-								["topRight", "TR", "Top right radius"],
-								["bottomLeft", "BL", "Bottom left radius"],
-								["bottomRight", "BR", "Bottom right radius"],
-							] as const
-						).map(([corner, prefix, label]) => (
-							<NumberInput
-								key={corner}
-								label={label}
-								prefix={prefix}
-								value={corners[corner]}
-								min={0}
-								max={80}
-								onChange={(next) => onCorners({ ...corners, [corner]: next })}
-							/>
-						))}
-					</PanelPair>
-				) : (
-					<NumberInput
-						label="Corner radius"
-						prefix="Radius"
-						value={radius.value}
-						min={0}
-						max={80}
-						onChange={radius.onChange}
-					/>
-				)}
-			</div>
-			<PanelButton
-				label={corners ? "One radius for every corner" : "A radius for each corner"}
-				icon="corners"
-				active={corners !== null}
-				onClick={() =>
-					onCorners(
-						corners
-							? null
-							: { topLeft: radius.value, topRight: radius.value, bottomRight: radius.value, bottomLeft: radius.value },
-					)
-				}
-			/>
-		</div>
-	);
-}
 
 type SizeFieldsProps = {
 	/** The block, or a container or columns table read as one (asSized). */
@@ -518,45 +481,75 @@ function SizeFields({ node, placer, measured, onPatch, height = true }: SizeFiel
 	);
 }
 
-type BlockLayoutProps = {
-	block: MailBlock;
-	placer: Placer;
-	measured: Measured | null;
-	can: Capabilities | null;
-	/** The corners, when this block has them. */
-	radius: Radius | null;
-	onBlock: (patch: Partial<MailBlock>) => void;
+type TextLayoutSectionProps = {
+	text: MailTextStyle;
+	onText: (patch: Partial<MailTextStyle>) => void;
+	/** Only a text block or a heading can sit lower in a taller box; a list, a button and an input cannot. */
+	vertical: boolean;
 };
 
 /**
- * Figma's layout for one block: its size, then how round its corners are, the
- * room inside it, and whether what reaches past it is cut off.
+ * What a text lays out is words, not children, so its Layout is how they sit:
+ * across their line and, where the box is taller than they are, down it.
  */
-function BlockLayoutSection({ block, placer, measured, can, radius, onBlock }: BlockLayoutProps) {
-	const box = "box" in block ? block.box : null;
-
+function TextLayoutSection({ text, onText, vertical }: TextLayoutSectionProps) {
 	return (
 		<PanelSection title="Layout">
-			<SizeFields node={block} placer={placer} measured={measured} onPatch={onBlock} />
-
-			{radius && box ? (
-				<RadiusFields
-					radius={radius}
-					corners={box.corners}
-					onCorners={(corners) => onBlock({ box: { ...box, corners } } as Partial<MailBlock>)}
+			<Segmented
+				label="Horizontal alignment"
+				value={text.align}
+				options={[
+					{ value: "left", label: "Left", icon: "align-left", title: "Align left" },
+					{ value: "center", label: "Centre", icon: "align-center", title: "Align centre" },
+					{ value: "right", label: "Right", icon: "align-right", title: "Align right" },
+					{ value: "justify", label: "Justify", icon: "align-justify", title: "Justify" },
+				]}
+				onChange={(align) => onText({ align })}
+			/>
+			{vertical ? (
+				<Segmented
+					label="Vertical alignment"
+					value={text.verticalAlign}
+					options={[
+						{ value: "top", label: "Top", icon: "text-top", title: "Text at the top" },
+						{ value: "middle", label: "Middle", icon: "text-middle", title: "Text in the middle" },
+						{ value: "bottom", label: "Bottom", icon: "text-bottom", title: "Text at the bottom" },
+					]}
+					onChange={(verticalAlign) => onText({ verticalAlign })}
 				/>
 			) : null}
+		</PanelSection>
+	);
+}
 
-			{can?.padding && box ? (
-				<PaddingFields padding={box.padding} onChange={(padding) => onBlock({ box: { ...box, padding } } as Partial<MailBlock>)} />
+type SpacingSectionProps = {
+	padding: { value: MailSpacing; onChange: (value: MailSpacing) => void } | null;
+	margin: { value: MailSpacing; onChange: (value: MailSpacing) => void; auto: AutoSides } | null;
+};
+
+/**
+ * Figma's padding, the room inside the box, and the margin Figma leaves out,
+ * the room round it. A side of the margin that the element's alignment already
+ * sets to auto says so and takes no number.
+ */
+function SpacingSection({ padding, margin }: SpacingSectionProps) {
+	if (!padding && !margin) return null;
+	const anyAuto = margin !== null && (margin.auto.left || margin.auto.right);
+	return (
+		<PanelSection title="Spacing">
+			{padding ? (
+				<>
+					<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">Padding</span>
+					<SpacingFields kind="Padding" value={padding.value} onChange={padding.onChange} />
+				</>
 			) : null}
-
-			{can?.clip && box ? (
-				<PanelCheckbox
-					label="Clip content"
-					checked={box.clip}
-					onChange={(clip) => onBlock({ box: { ...box, clip } } as Partial<MailBlock>)}
-				/>
+			{margin ? (
+				<>
+					<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">Margin</span>
+					<SpacingFields kind="Margin" value={margin.value} onChange={margin.onChange} auto={margin.auto} />
+					{anyAuto ? <PanelNote>A side in Auto is set by where it sits, under Position.</PanelNote> : null}
+					<PanelNote tone="warn">Outlook on Windows ignores margins on a div in some versions.</PanelNote>
+				</>
 			) : null}
 		</PanelSection>
 	);
@@ -569,14 +562,30 @@ type AppearanceSectionProps = {
 	box: MailBoxStyle;
 	onBox: BoxPatch;
 	showOpacity?: boolean;
+	/** The corner radius, when this has corners. */
+	radius?: Radius | null;
 };
 
 /**
- * Figma's appearance: whether the thing shows, and how see-through it is.
- * Blend modes are left out, because no mail client on the list applies one,
- * and the corners are with the size, under Layout.
+ * Figma's appearance: whether the thing shows, how round its corners are and
+ * how see-through it is, the radius and the opacity on one row. The button
+ * beside them gives every corner a radius of its own. Blend modes are left
+ * out, because no mail client on the list applies one.
  */
-function AppearanceSection({ hidden, onHidden, box, onBox, showOpacity = true }: AppearanceSectionProps) {
+function AppearanceSection({ hidden, onHidden, box, onBox, showOpacity = true, radius = null }: AppearanceSectionProps) {
+	const corners = box.corners;
+	const opacity = showOpacity ? (
+		<NumberInput
+			label="Opacity"
+			prefix="Opacity"
+			value={Math.round(box.opacity * 100)}
+			min={0}
+			max={100}
+			onChange={(next) => onBox({ opacity: next / 100 })}
+		/>
+	) : (
+		<span />
+	);
 	return (
 		<PanelSection
 			title="Appearance"
@@ -592,16 +601,76 @@ function AppearanceSection({ hidden, onHidden, box, onBox, showOpacity = true }:
 			}
 		>
 			{hidden ? <PanelNote>Hidden. It stays in the layers and is left out of the message.</PanelNote> : null}
-			{showOpacity ? (
-				<NumberInput
-					label="Opacity"
-					prefix="Opacity"
-					suffix="%"
-					value={Math.round(box.opacity * 100)}
-					min={0}
-					max={100}
-					onChange={(next) => onBox({ opacity: next / 100 })}
-				/>
+			{radius || showOpacity ? (
+				<div className="flex items-start gap-0.5">
+					<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+						{radius && corners ? (
+							<>
+								<PanelPair>
+									{(
+										[
+											["topLeft", "TL", "Top left radius"],
+											["topRight", "TR", "Top right radius"],
+											["bottomLeft", "BL", "Bottom left radius"],
+											["bottomRight", "BR", "Bottom right radius"],
+										] as const
+									).map(([corner, prefix, label]) => (
+										<NumberInput
+											key={corner}
+											label={label}
+											prefix={prefix}
+											value={corners[corner]}
+											min={0}
+											max={80}
+											onChange={(next) => onBox({ corners: { ...corners, [corner]: next } })}
+										/>
+									))}
+								</PanelPair>
+								{showOpacity ? (
+									<PanelPair>
+										{opacity}
+										<span />
+									</PanelPair>
+								) : null}
+							</>
+						) : (
+							<PanelPair>
+								{radius ? (
+									<NumberInput
+										label="Corner radius"
+										prefix="Radius"
+										value={radius.value}
+										min={0}
+										max={80}
+										onChange={radius.onChange}
+									/>
+								) : (
+									<span />
+								)}
+								{opacity}
+							</PanelPair>
+						)}
+					</div>
+					{radius ? (
+						<PanelButton
+							label={corners ? "One radius for every corner" : "A radius for each corner"}
+							icon="corners"
+							active={corners !== null}
+							onClick={() =>
+								onBox({
+									corners: corners
+										? null
+										: {
+												topLeft: radius.value,
+												topRight: radius.value,
+												bottomRight: radius.value,
+												bottomLeft: radius.value,
+											},
+								})
+							}
+						/>
+					) : null}
+				</div>
 			) : null}
 		</PanelSection>
 	);
@@ -824,7 +893,7 @@ function ElementSection({ label, value, options, onChange }: ElementSectionProps
 	);
 }
 
-type PlacementSectionProps = {
+type PlacementRowsProps = {
 	node: MailContainer | MailColumns;
 	placer: Placer;
 	onPatch: (patch: { grow?: number; alignSelf?: MailSelfAlign; box?: MailBoxStyle }) => void;
@@ -836,11 +905,11 @@ type PlacementSectionProps = {
  * it; in the frame or a table cell, which lay things out in plain flow, it is
  * margins, and there is nowhere to move until it is narrower than its parent.
  */
-function PlacementSection({ node, placer, onPatch }: PlacementSectionProps) {
+function PlacementRows({ node, placer, onPatch }: PlacementRowsProps) {
 	if (placer) {
 		const sized = asSized(node);
 		return (
-			<PositionSection
+			<AcrossRows
 				axis={crossAxis(placer)}
 				value={acrossOf(sized, placer)}
 				onChange={(across) => onPatch(placementOf(alignAcross(sized, placer, across)))}
@@ -849,7 +918,7 @@ function PlacementSection({ node, placer, onPatch }: PlacementSectionProps) {
 	}
 	const narrower = node.box.width !== null;
 	return (
-		<PanelSection title="Position">
+		<>
 			<Segmented
 				label="Where it sits across what holds it"
 				value={narrower ? (node.alignSelf === "center" || node.alignSelf === "end" ? node.alignSelf : "start") : null}
@@ -858,7 +927,7 @@ function PlacementSection({ node, placer, onPatch }: PlacementSectionProps) {
 				disabled={!narrower}
 			/>
 			{!narrower ? <PanelNote>Something that fills what holds it has nowhere to move. Give it a fixed width.</PanelNote> : null}
-		</PanelSection>
+		</>
 	);
 }
 
@@ -868,8 +937,12 @@ function PlacementSection({ node, placer, onPatch }: PlacementSectionProps) {
  * The properties of whatever is selected: the frame, a container, a columns
  * table, one of its cells or a block, in Figma's order. Breakpoints first,
  * because they decide which width every control below is changing; then the
- * element it is written as, position, layout with the size and the corners,
- * appearance, type, fill, stroke and effects.
+ * element it is written as, and then the same order for every kind: position
+ * (where it sits in its parent, and its size), layout (how it arranges what is
+ * in it, or for a text how its words sit), spacing (padding and margin),
+ * appearance (the eye, radius and opacity), type, fill, stroke and effects,
+ * then what only that kind has. A section an element has nothing for is left
+ * out.
  *
  * There is no X, no Y and no rotation, because nothing in a message is placed
  * or turned: a node sits where the flex, grid or plain flow of what holds it
@@ -960,9 +1033,9 @@ export function DesignPanel({
 		);
 	}
 
-	// A cell is fixed in place by its row: it has no eye, no position and no
-	// layers row of its own to drag. Its width and alignment are the table's
-	// structure and are the same at every width; how it looks is not.
+	// A cell is fixed in place by its row: it has no eye, no position to move
+	// in and no layers row of its own to drag. Its width and alignment are the
+	// table's structure and are the same at every width; how it looks is not.
 	if (cell) {
 		const at = locateCell(base, cell.id);
 		const onCellBox: BoxPatch = (patch) => onCell(cell.id, { box: { ...cell.box, ...patch } });
@@ -982,7 +1055,7 @@ export function DesignPanel({
 							: undefined
 					}
 				/>
-				<PanelSection title="Layout">
+				<PanelSection title="Position">
 					<NumberInput
 						label="Width"
 						prefix="W"
@@ -993,6 +1066,9 @@ export function DesignPanel({
 						unset={{ label: "Auto", onClear: () => structure((canvas) => updateCell(canvas, cell.id, { width: null })) }}
 						onChange={(width) => structure((canvas) => updateCell(canvas, cell.id, { width: Math.round(width) }))}
 					/>
+					<PanelNote>A percentage of the table, or empty to share what is left. It is the same at every width.</PanelNote>
+				</PanelSection>
+				<PanelSection title="Layout">
 					<Segmented
 						label="Align down"
 						value={cell.verticalAlign}
@@ -1005,19 +1081,19 @@ export function DesignPanel({
 						}
 						onChange={(verticalAlign) => structure((canvas) => updateCell(canvas, cell.id, { verticalAlign }))}
 					/>
-					<PanelNote>
-						A percentage of the table, or empty to share what is left. The width and the alignment are the same at every
-						width.
-					</PanelNote>
-					<RadiusFields
-						radius={{ value: cell.box.borderRadius, onChange: (next) => onCellBox({ borderRadius: next }) }}
-						corners={cell.box.corners}
-						onCorners={(corners) => onCellBox({ corners })}
-					/>
-					<PaddingFields padding={cell.box.padding} onChange={(padding) => onCellBox({ padding })} />
 					<PanelCheckbox label="Clip content" checked={cell.box.clip} onChange={(clip) => onCellBox({ clip })} />
+					<PanelNote>The alignment is the same at every width.</PanelNote>
 				</PanelSection>
-				<AppearanceSection box={cell.box} onBox={onCellBox} />
+				<SpacingSection
+					padding={{ value: cell.box.padding, onChange: (padding) => onCellBox({ padding }) }}
+					// A td ignores a margin, so a cell has none.
+					margin={null}
+				/>
+				<AppearanceSection
+					box={cell.box}
+					onBox={onCellBox}
+					radius={{ value: cell.box.borderRadius, onChange: (next) => onCellBox({ borderRadius: next }) }}
+				/>
 				<FillSection fill={cell.box.fill} onFill={(fill) => onCellBox({ fill })} />
 				<StrokeSection box={cell.box} onBox={onCellBox} />
 				<EffectsSection box={cell.box} onBox={onCellBox} />
@@ -1040,8 +1116,8 @@ export function DesignPanel({
 					deleteLabel="Delete columns"
 					onDelete={() => onRemove(columns.id)}
 				/>
-				<PlacementSection node={columns} placer={placer} onPatch={(patch) => onColumns(columns.id, patch)} />
-				<PanelSection title="Layout">
+				<PanelSection title="Position">
+					<PlacementRows node={columns} placer={placer} onPatch={(patch) => onColumns(columns.id, patch)} />
 					<SizeFields
 						node={asSized(columns)}
 						placer={placer}
@@ -1049,6 +1125,8 @@ export function DesignPanel({
 						height={false}
 						onPatch={(patch) => onColumns(columns.id, placementOf(patch))}
 					/>
+				</PanelSection>
+				<PanelSection title="Layout">
 					<NumberInput
 						label="Gap between cells"
 						prefix="Gap"
@@ -1058,17 +1136,29 @@ export function DesignPanel({
 						onChange={(gap) => structure((canvas) => updateColumns(canvas, columns.id, { gap: Math.round(gap) }))}
 					/>
 					{active ? <PanelNote>The gap is the same at every width.</PanelNote> : null}
-					<RadiusFields
-						radius={{ value: columns.box.borderRadius, onChange: (next) => onColumnsBox({ borderRadius: next }) }}
-						corners={columns.box.corners}
-						onCorners={(corners) => onColumnsBox({ corners })}
-					/>
-					<PaddingFields padding={columns.box.padding} onChange={(padding) => onColumnsBox({ padding })} />
 					<PanelNote>
 						Cells stay side by side in Outlook on Windows. A table's own padding and corners are drawn by fewer clients
 						than a cell's.
 					</PanelNote>
 				</PanelSection>
+				<SpacingSection
+					padding={{ value: columns.box.padding, onChange: (padding) => onColumnsBox({ padding }) }}
+					margin={{
+						value: columns.box.margin,
+						onChange: (margin) => onColumnsBox({ margin }),
+						auto: flowAutoSides(columns, placer === null),
+					}}
+				/>
+				<AppearanceSection
+					hidden={columns.hidden}
+					onHidden={(hidden) => onColumns(columns.id, { hidden })}
+					box={columns.box}
+					onBox={onColumnsBox}
+					radius={{ value: columns.box.borderRadius, onChange: (next) => onColumnsBox({ borderRadius: next }) }}
+				/>
+				<FillSection fill={columns.box.fill} onFill={(fill) => onColumnsBox({ fill })} />
+				<StrokeSection box={columns.box} onBox={onColumnsBox} />
+				<EffectsSection box={columns.box} onBox={onColumnsBox} />
 				<PanelSection
 					title="Rows"
 					action={
@@ -1105,10 +1195,6 @@ export function DesignPanel({
 						</div>
 					))}
 				</PanelSection>
-				<AppearanceSection hidden={columns.hidden} onHidden={(hidden) => onColumns(columns.id, { hidden })} box={columns.box} onBox={onColumnsBox} />
-				<FillSection fill={columns.box.fill} onFill={(fill) => onColumnsBox({ fill })} />
-				<StrokeSection box={columns.box} onBox={onColumnsBox} />
-				<EffectsSection box={columns.box} onBox={onColumnsBox} />
 				<SelectionColors colors={colors} onReplace={recolor} />
 				<CustomCssSection css={columns.box.customCss} onChange={(customCss) => onColumnsBox({ customCss })} />
 				<ConvertSection what="group" onConvert={() => onConvert(columns.id)} />
@@ -1174,6 +1260,8 @@ export function DesignPanel({
 		// A picture in plain flow can still be moved across by its margins; nothing
 		// else in plain flow has anywhere to go.
 		const positioned = blockPlacer !== null || block.kind === "image";
+		// The margin sides a picture's alignment already sets to auto.
+		const marginAuto = block.kind === "image" ? pictureAutoSides(block.align) : NO_AUTO;
 
 		return (
 			<div className="flex flex-col">
@@ -1193,14 +1281,33 @@ export function DesignPanel({
 						onChange={(tag) => structure((canvas) => setTextTag(canvas, textBlock.id, tag as MailTextTag | MailHeadingTag))}
 					/>
 				) : null}
-				{positioned ? (
-					<PositionSection
-						axis={blockPlacer ? crossAxis(blockPlacer) : "h"}
-						value={acrossOf(block, blockPlacer)}
-						onChange={(across) => set(alignAcross(block, blockPlacer, across))}
+				<PanelSection title="Position">
+					{positioned ? (
+						<AcrossRows
+							axis={blockPlacer ? crossAxis(blockPlacer) : "h"}
+							value={acrossOf(block, blockPlacer)}
+							onChange={(across) => set(alignAcross(block, blockPlacer, across))}
+						/>
+					) : null}
+					<SizeFields node={block} placer={blockPlacer} measured={measured} onPatch={set} />
+				</PanelSection>
+				{"text" in block ? (
+					<TextLayoutSection
+						text={block.text}
+						onText={onText}
+						vertical={textBlock !== null && !(textBlock.kind === "text" && (textBlock.tag === "ul" || textBlock.tag === "ol"))}
 					/>
 				) : null}
-				<BlockLayoutSection block={block} placer={blockPlacer} measured={measured} can={can} radius={radius} onBlock={set} />
+				<SpacingSection
+					padding={
+						can.padding && box ? { value: box.padding, onChange: (padding) => onBox({ padding }) } : null
+					}
+					margin={
+						can.margin && box
+							? { value: box.margin, onChange: (margin) => onBox({ margin }), auto: marginAuto }
+							: null
+					}
+				/>
 				{box ? (
 					<AppearanceSection
 						hidden={block.hidden}
@@ -1208,6 +1315,7 @@ export function DesignPanel({
 						box={box}
 						onBox={onBox}
 						showOpacity={can.opacity}
+						radius={radius}
 					/>
 				) : null}
 				{"text" in block ? (
@@ -1225,10 +1333,8 @@ export function DesignPanel({
 									}
 								: { value: block.text.color, onChange: (color) => onText({ color }), clearable: true }
 						}
-						showVertical={textBlock !== null && !(textBlock.kind === "text" && (textBlock.tag === "ul" || textBlock.tag === "ol"))}
 					/>
 				) : null}
-				<ContentSection block={block} inputs={inputs} set={set} />
 				{block.kind === "button" ? (
 					<PanelSection title="Fill">
 						<ColorRow
@@ -1241,6 +1347,7 @@ export function DesignPanel({
 				{can.fill && box ? <FillSection fill={box.fill} onFill={(fill) => onBox({ fill })} /> : null}
 				{can.stroke && box ? <StrokeSection box={box} onBox={onBox} /> : null}
 				{can.effects && box ? <EffectsSection box={box} onBox={onBox} /> : null}
+				<ContentSection block={block} inputs={inputs} set={set} />
 				<SelectionColors colors={colors} onReplace={recolor} />
 				{box ? <CustomCssSection css={box.customCss} onChange={(customCss) => onBox({ customCss })} /> : null}
 				<ConvertSection what="block" onConvert={() => onConvert(block.id)} />
@@ -1255,10 +1362,8 @@ export function DesignPanel({
 	const placer = placerOf(layout, section.id);
 	const arrangement = section.layout;
 	const onSectionBox: BoxPatch = (patch) => onSection(section.id, { box: { ...section.box, ...patch } });
-	const flow = arrangement.kind === "grid" ? "grid" : arrangement.direction === "row" ? "across" : "down";
-	const axis = crossAxis(section);
-	// The distribution drawings run across; down a column they are turned.
-	const turned = arrangement.kind === "flex" && arrangement.direction === "column" ? "rotate-90" : undefined;
+	const patchLayout = (next: MailSectionLayout) => onSection(section.id, { layout: next });
+	const spread = spreadOf(arrangement);
 	const label = CONTAINER_TAG_LABELS[section.tag];
 
 	return (
@@ -1281,7 +1386,19 @@ export function DesignPanel({
 				onChange={(tag) => structure((canvas) => setContainerTag(canvas, section.id, tag as MailContainerTag))}
 			/>
 
-			<PlacementSection node={section} placer={placer} onPatch={(patch) => onSection(section.id, patch)} />
+			{/* In the frame or a cell a container fills the width or has its own, and
+			    hugs what is in it or has a height; in a flex or grid parent it is
+			    sized the way a block is. An empty one with a height is a divider or
+			    a gap. */}
+			<PanelSection title="Position">
+				<PlacementRows node={section} placer={placer} onPatch={(patch) => onSection(section.id, patch)} />
+				<SizeFields
+					node={asSized(section)}
+					placer={placer}
+					measured={measured}
+					onPatch={(patch) => onSection(section.id, placementOf(patch))}
+				/>
+			</PanelSection>
 
 			<PanelSection
 				title="Layout"
@@ -1291,77 +1408,54 @@ export function DesignPanel({
 							label={arrangement.wrap ? "Stop wrapping onto the next line" : "Wrap onto the next line"}
 							icon="wrap"
 							active={arrangement.wrap}
-							onClick={() => onSection(section.id, { layout: { ...arrangement, wrap: !arrangement.wrap } })}
+							onClick={() => patchLayout({ ...arrangement, wrap: !arrangement.wrap })}
 						/>
 					) : null
 				}
 			>
 				<Segmented
 					label="Flow"
-					value={flow}
+					value={flowNameOf(arrangement)}
 					options={[
 						{ value: "down", label: "Down", icon: "move-down", title: "Down the page" },
 						{ value: "across", label: "Across", icon: "move-right", title: "Across the page" },
 						{ value: "grid", label: "Grid", icon: "grid", title: "In a grid" },
 					]}
-					onChange={(next) =>
-						onSection(section.id, {
-							layout:
-								next === "grid"
-									? { kind: "grid", columns: 2, gap: arrangement.gap, align: arrangement.align }
-									: {
-											kind: "flex",
-											direction: next === "across" ? "row" : "column",
-											justify: arrangement.kind === "flex" ? arrangement.justify : "start",
-											align: arrangement.align,
-											gap: arrangement.gap,
-											wrap: arrangement.kind === "flex" ? arrangement.wrap : false,
-										},
-						})
-					}
+					onChange={(next: LayoutFlow) => patchLayout(withFlow(arrangement, next))}
 				/>
 
-				{/* In the frame or a cell a container fills the width or has its own, and
-				    hugs what is in it or has a height; in a flex or grid parent it is
-				    sized the way a block is. An empty one with a height is a divider or
-				    a gap. */}
-				<SizeFields
-					node={asSized(section)}
-					placer={placer}
-					measured={measured}
-					onPatch={(patch) => onSection(section.id, placementOf(patch))}
-				/>
-
-				<Segmented
-					label="Align items"
-					value={arrangement.align}
-					options={alignOptions(axis)}
-					onChange={(next) => onSection(section.id, { layout: { ...arrangement, align: next } })}
-				/>
-
-				{arrangement.kind === "flex" ? (
-					<Segmented
-						label="Distribute"
-						value={arrangement.justify}
-						options={[
-							{ value: "start", label: "Start", icon: "justify-start", title: "Packed at the start", iconClass: turned },
-							{ value: "center", label: "Centre", icon: "justify-center", title: "Packed in the middle", iconClass: turned },
-							{ value: "end", label: "End", icon: "justify-end", title: "Packed at the end", iconClass: turned },
-							{ value: "between", label: "Space between", icon: "justify-between", title: "Space between", iconClass: turned },
-							{ value: "around", label: "Space around", icon: "justify-around", title: "Space around", iconClass: turned },
-						]}
-						onChange={(next) => onSection(section.id, { layout: { ...arrangement, justify: next } })}
+				<div className="flex items-start gap-2">
+					<AlignmentBox
+						label="Alignment"
+						lit={(column, row) => litAt(arrangement, column, row)}
+						onPlace={(column, row) => patchLayout(place(arrangement, column, row))}
 					/>
-				) : null}
+					<div className="flex min-w-0 flex-1 flex-col gap-1">
+						{stretchAxes(arrangement).map((axis) => (
+							<div key={axis} className="flex items-center gap-1">
+								<PanelButton
+									label={STRETCH[axis].label}
+									icon={STRETCH[axis].icon}
+									active={isStretched(arrangement, axis)}
+									onClick={() => patchLayout(setStretch(arrangement, axis, !isStretched(arrangement, axis)))}
+								/>
+								<span className="min-w-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">{STRETCH[axis].label}</span>
+							</div>
+						))}
+					</div>
+				</div>
 
 				<PanelPair>
-					<NumberInput
+					<GapInput
 						label="Gap between blocks"
-						prefix="Gap"
 						value={arrangement.gap}
-						min={0}
-						max={120}
-						onChange={(next) => onSection(section.id, { layout: { ...arrangement, gap: next } })}
+						onValue={(gap) => patchLayout({ ...arrangement, gap })}
+						mode={spread ?? "fixed"}
+						onMode={
+							arrangement.kind === "flex"
+								? (mode: GapMode) => patchLayout(setSpread(arrangement, mode === "fixed" ? null : mode))
+								: undefined
+						}
 					/>
 					{arrangement.kind === "grid" ? (
 						<NumberInput
@@ -1370,19 +1464,21 @@ export function DesignPanel({
 							value={arrangement.columns}
 							min={1}
 							max={6}
-							onChange={(next) => onSection(section.id, { layout: { ...arrangement, columns: Math.round(next) } })}
+							onChange={(next) => patchLayout({ ...arrangement, columns: Math.round(next) })}
 						/>
 					) : (
 						<span />
 					)}
 				</PanelPair>
+				{spread ? (
+					<PanelNote>
+						{spread === "between"
+							? "The blocks are spread apart, with the same space between each."
+							: "The blocks are spread out, with the same space around each."}{" "}
+						The gap is the least space between them.
+					</PanelNote>
+				) : null}
 
-				<RadiusFields
-					radius={{ value: section.box.borderRadius, onChange: (next) => onSectionBox({ borderRadius: next }) }}
-					corners={section.box.corners}
-					onCorners={(corners) => onSectionBox({ corners })}
-				/>
-				<PaddingFields padding={section.box.padding} onChange={(padding) => onSectionBox({ padding })} />
 				<PanelCheckbox label="Clip content" checked={section.box.clip} onChange={(clip) => onSectionBox({ clip })} />
 
 				<PanelNote tone="warn">
@@ -1390,11 +1486,20 @@ export function DesignPanel({
 				</PanelNote>
 			</PanelSection>
 
+			<SpacingSection
+				padding={{ value: section.box.padding, onChange: (padding) => onSectionBox({ padding }) }}
+				margin={{
+					value: section.box.margin,
+					onChange: (margin) => onSectionBox({ margin }),
+					auto: flowAutoSides(section, placer === null),
+				}}
+			/>
 			<AppearanceSection
 				hidden={section.hidden}
 				onHidden={(hidden) => onSection(section.id, { hidden })}
 				box={section.box}
 				onBox={onSectionBox}
+				radius={{ value: section.box.borderRadius, onChange: (next) => onSectionBox({ borderRadius: next }) }}
 			/>
 			<FillSection fill={section.box.fill} onFill={(fill) => onSectionBox({ fill })} />
 			<StrokeSection box={section.box} onBox={onSectionBox} />

@@ -850,7 +850,18 @@ export type MailSectionLayout =
 			gap: number;
 			wrap: boolean;
 	  }
-	| { kind: "grid"; columns: number; gap: number; align: MailAlign };
+	| {
+			kind: "grid";
+			columns: number;
+			gap: number;
+			/** Down the cell: `align-items`. */
+			align: MailAlign;
+			/**
+			 * Across the cell: `justify-items`. Stretch is the grid's own default and
+			 * writes nothing, which is what a grid saved before this field had.
+			 */
+			justify: MailAlign;
+	  };
 
 /**
  * A fill: one flat colour, or a two-stop linear gradient.
@@ -926,6 +937,13 @@ export type MailEffect = (
 export interface MailBoxStyle {
 	fill: MailFill | null;
 	padding: MailSpacing;
+	/**
+	 * Room outside the box, in pixels, zero on every side. A side the element's
+	 * own alignment already sets to `auto` (centring, or pushing to an end) keeps
+	 * that and takes no number; a table cell takes none at all, since a `td`
+	 * ignores one.
+	 */
+	margin: MailSpacing;
 	borderWidth: number;
 	borderColor: MailColor | null;
 	borderStyle: MailStrokeStyle;

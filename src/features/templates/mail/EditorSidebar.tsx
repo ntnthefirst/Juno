@@ -152,7 +152,7 @@ export function EditorSidebar({
 						Layers
 					</h2>
 				</div>
-				<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
+				<div className="relative min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
 					{layout ? (
 						<LayerTree
 							layout={layout}

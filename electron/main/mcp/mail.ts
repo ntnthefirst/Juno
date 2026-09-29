@@ -139,6 +139,8 @@ export const mailTools: ToolDescriptor[] = [
 		},
 		handler: async (args) => accounts.remove(String(args.id)),
 	},
+	// There is no purge tool, on purpose: deleting a removed account's stored mail
+	// is a person's confirmed decision in Settings, never an agent's (data.md section 6).
 	{
 		name: "mail.accounts.guess",
 		title: "Guess mail server settings",

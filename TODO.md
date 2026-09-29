@@ -54,12 +54,6 @@ phase 6's done-when in PLAN.md.
 
 ## 3. Smaller things
 
-Decided and ready to build, roughly smallest first.
-
-- **Purging a removed mail account.** Removing an account forgets its password
-  and soft-deletes the row; its messages and attachments stay on disk until a
-  purge exists. That purge is a confirmed action, never an MCP tool.
-
 Needs your hands rather than code:
 
 - **No real mail server has been used yet.** Reading and sending are proven

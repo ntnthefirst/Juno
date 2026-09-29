@@ -1688,10 +1688,9 @@ if (!app.requestSingleInstanceLock()) {
 									if (converted !== "ok") throw new Error(`Smoke: mail template editor ${converted}`);
 									writeFileSync(joinPath(shotDir, `mail-template-code-block.png`), (await capture(window.webContents)).toPNG());
 
-									// A container nests inside another now (docs/editors.md section 2,
-									// phase 2): F while a container is selected lands the new one inside
-									// it, which is today's way to try nesting before the toolbar has
-									// groups for it. A block added the same way lands in the nested
+									// A container nests inside another (docs/editors.md section 2): F
+									// while a container is selected lands the new one inside it. A
+									// block added the same way lands in the nested
 									// section, the layers show the nesting by depth, Alt and an arrow
 									// still moves a block within its own parent, and the compiled message
 									// carries the nesting through to a second `<section>`.
@@ -1759,17 +1758,22 @@ if (!app.requestSingleInstanceLock()) {
 											const view = document.querySelector('button[title="The message as it will be sent"]');
 											if (!view) return "no preview view";
 											view.click();
-											let frame = null;
-											for (let tries = 0; tries < 30 && !frame; tries++) {
+											// The frame may already exist from an earlier look at the
+											// preview, so wait for its document to carry these edits
+											// rather than for the frame itself.
+											let html = "";
+											for (let tries = 0; tries < 40; tries++) {
 												await wait(150);
-												frame = document.querySelector('iframe[title="Template preview"]');
+												const frame = document.querySelector('iframe[title="Template preview"]');
+												html = frame ? frame.getAttribute("srcdoc") || "" : "";
+												if (html.includes("Genest") && html.includes("Tweede")) break;
 											}
-											if (!frame) return "the message did not render";
-											const html = frame.getAttribute("srcdoc") || "";
-											const firstSection = html.indexOf("<section");
-											const secondSection = firstSection === -1 ? -1 : html.indexOf("<section", firstSection + 1);
-											if (secondSection === -1) return "the compiled HTML has no section nested inside another";
+											if (!html) return "the message did not render";
 											if (!html.includes("Genest") || !html.includes("Tweede")) return "the compiled HTML does not carry the nested blocks";
+											// A section opened inside another before that one closes.
+											if (!/<section[^>]*>(?:(?!<\\/section>)[\\s\\S])*<section/.test(html)) {
+												return "the compiled HTML has no section nested inside another";
+											}
 											const canvasView = document.querySelector('button[title="The canvas"]');
 											if (canvasView) {
 												canvasView.click();

@@ -561,6 +561,12 @@ export interface AppSettings {
 	lock: LockSettings;
 	owner: OwnerProfile;
 	seedVersion: number;
+	/**
+	 * The version of the mail templates set this install has been through, 0 for
+	 * never. It sits beside the reference data's version because it describes
+	 * the installation, and it is what tells a first install from an upgrade.
+	 */
+	mailTemplateSeedVersion: number;
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
 	/**

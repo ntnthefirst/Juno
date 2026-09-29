@@ -20,6 +20,7 @@ import type {
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
+import { outgoingForThread } from "./mail-outbox";
 import { sanitiseHtml, textDocument } from "./mail-sanitise";
 
 function escapeLike(value: string): string {
@@ -364,6 +365,9 @@ export async function getThread(id: string, db: Db = getDb()): Promise<MailThrea
 	return {
 		summary: summary!,
 		messages: messages.map((m) => toMessage(m, attachments.get(m.id) ?? [])),
+		// The reader shows a reply from the moment it is sent, not from the next
+		// sync of Sent (see outgoingForThread).
+		outgoing: outgoingForThread(id, db),
 	};
 }
 

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import type { MailReplyMode, MailThread } from "@shared/types";
+import type { MailMessage, MailReplyMode, MailThread, MailThreadOutgoing } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon, type IconName } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { MessageView } from "./MessageView";
+import { OutgoingMessageView } from "./OutgoingMessageView";
 import type { ThreadAction } from "./ThreadList";
 
 type ThreadViewProps = {
@@ -20,6 +21,33 @@ type ThreadViewProps = {
 	/** Filing the whole thread. The screen owns it, the same as from a list row. */
 	onAction: (action: ThreadAction) => void;
 };
+
+type Entry =
+	| { kind: "message"; message: MailMessage }
+	| { kind: "outgoing"; message: MailThreadOutgoing };
+
+/**
+ * Synced messages and the replies still waiting for their Sent copy, in date
+ * order. Both lists arrive oldest first, so this is a merge, and on a tie the
+ * synced message goes first because it is the record.
+ */
+function interleave(messages: MailMessage[], outgoing: MailThreadOutgoing[]): Entry[] {
+	const out: Entry[] = [];
+	let m = 0;
+	let o = 0;
+	while (m < messages.length || o < outgoing.length) {
+		const message = messages[m];
+		const sent = outgoing[o];
+		if (message && (!sent || message.internalDate <= sent.date)) {
+			out.push({ kind: "message", message });
+			m += 1;
+		} else if (sent) {
+			out.push({ kind: "outgoing", message: sent });
+			o += 1;
+		}
+	}
+	return out;
+}
 
 type Load =
 	| { status: "loading" }
@@ -55,6 +83,16 @@ export function ThreadView({
 		};
 	}, [threadId, version]);
 
+	// A reply to this thread moving from queued to sent, or being sent from
+	// another window, changes what the reader lists as outgoing.
+	useEffect(
+		() =>
+			window.juno.mail.outbox.onChange((message) => {
+				if (message.threadId === threadId) setVersion((v) => v + 1);
+			}),
+		[threadId],
+	);
+
 	// A file action on one message (read, flag) or a client link change both
 	// mean the thread and the list behind it are out of date.
 	function refresh() {
@@ -84,7 +122,8 @@ export function ThreadView({
 		);
 	}
 
-	const { summary, messages } = load.thread;
+	const { summary, messages, outgoing } = load.thread;
+	const entries = interleave(messages, outgoing);
 	// Everything read is collapsed except the newest, which is what a person
 	// opened the thread for. Unread ones stay open too.
 	const openByDefault = new Set(
@@ -153,20 +192,24 @@ export function ThreadView({
 				</div>
 			</div>
 			<p className="tabular mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-				{messages.length} {messages.length === 1 ? "message" : "messages"}
+				{entries.length} {entries.length === 1 ? "message" : "messages"}
 			</p>
 
 			<div className="mt-6 flex flex-col">
-				{messages.map((message) => (
-					<MessageView
-						key={message.id}
-						message={message}
-						initiallyOpen={openByDefault.has(message.id)}
-						onNotice={onNotice}
-						onReply={onReply}
-						onChanged={refresh}
-					/>
-				))}
+				{entries.map((entry) =>
+					entry.kind === "message" ? (
+						<MessageView
+							key={entry.message.id}
+							message={entry.message}
+							initiallyOpen={openByDefault.has(entry.message.id)}
+							onNotice={onNotice}
+							onReply={onReply}
+							onChanged={refresh}
+						/>
+					) : (
+						<OutgoingMessageView key={entry.message.id} message={entry.message} />
+					),
+				)}
 			</div>
 
 			{linking ? (

@@ -26,6 +26,7 @@ import {
 	serialiseLayout,
 	toColor,
 } from "./mail-layout";
+import { render } from "./template-render";
 
 function sectionWith(children: MailBlock[], layout?: Partial<MailContainer["layout"]>): MailContainer {
 	const section = emptyContainer("section", "Body");
@@ -1914,5 +1915,150 @@ describe("no script in a message", () => {
 		const layout = normaliseLayout(stored);
 		if (!layout) throw new Error("the fixture did not parse");
 		expect(compileLayout(layout)).not.toMatch(/alert|script|onclick/i);
+	});
+});
+
+describe("apostrophes and ampersands in text", () => {
+	function heading(content: string): MailBlock {
+		return { ...(newBlock("heading") as Extract<MailBlock, { kind: "heading" }>), id: "h1", tag: "h2", content };
+	}
+
+	/** One trip through a save: normalise what is stored, compile it, read the markup back. */
+	function save(layout: MailLayout): MailLayout {
+		const stored = normaliseLayout(JSON.parse(JSON.stringify(layout)));
+		if (!stored) throw new Error("not a layout");
+		return layoutFromHtml(compileLayout(stored), stored);
+	}
+
+	function firstBlock(layout: MailLayout): MailBlock {
+		const block = blocksOf(layout.children[0])[0];
+		if (!block) throw new Error("no block");
+		return block;
+	}
+
+	it("escapes a literal apostrophe and ampersand once", () => {
+		expect(sanitiseFragment("foto's")).toBe("foto&#39;s");
+		expect(sanitiseFragment("A & B")).toBe("A &amp; B");
+		expect(sanitiseFragment('zij zei "ja" <maar>')).toBe("zij zei &quot;ja&quot; &lt;maar&gt;");
+	});
+
+	it("keeps an entity that is already there as it is", () => {
+		expect(sanitiseFragment("foto&#39;s")).toBe("foto&#39;s");
+		expect(sanitiseFragment("A &amp; B")).toBe("A &amp; B");
+		expect(sanitiseFragment("1 &lt; 2 &gt; 0")).toBe("1 &lt; 2 &gt; 0");
+		expect(sanitiseFragment("&#x27;&#8364;&copy;")).toBe("&#x27;&#8364;&copy;");
+		expect(sanitiseFragment("<strong>foto&#39;s &amp; meer</strong>")).toBe("<strong>foto&#39;s &amp; meer</strong>");
+	});
+
+	it("escapes an ampersand that only looks like the start of an entity", () => {
+		expect(sanitiseFragment("Q&A en R&D; 5 & 6")).toBe("Q&amp;A en R&D; 5 &amp; 6");
+		expect(sanitiseFragment("&amp")).toBe("&amp;amp");
+	});
+
+	it("compiles a text block to single-escaped html", () => {
+		for (const html of ["foto's & meer", "foto&#39;s &amp; meer", "foto's &amp; meer"]) {
+			const out = compileLayout(layoutWith([sectionWith([text(html)])]));
+			expect(out).toContain(">foto&#39;s &amp; meer</p>");
+			expect(out).not.toMatch(/&amp;#|&amp;amp;/);
+		}
+	});
+
+	it("compiles a heading's plain content to single-escaped html", () => {
+		const out = compileLayout(layoutWith([sectionWith([heading("Foto's & meer")])]));
+		expect(out).toContain(">Foto&#39;s &amp; meer</h2>");
+		expect(out).not.toMatch(/&amp;#|&amp;amp;/);
+	});
+
+	it("does not grow the escaping over repeated saves", () => {
+		let layout = layoutWith([sectionWith([text("foto's & meer &lt;x&gt;"), heading("Foto's & meer")])]);
+		const first = save(layout);
+		layout = first;
+		for (let i = 0; i < 5; i++) layout = save(layout);
+		const block = firstBlock(layout);
+		expect(block.kind === "text" ? block.html : null).toBe("foto&#39;s &amp; meer &lt;x&gt;");
+		expect(compileLayout(layout)).toBe(compileLayout(first));
+		expect(compileLayout(layout)).not.toMatch(/&amp;#|&amp;amp;/);
+		const heading2 = blocksOf(layout.children[0])[1];
+		expect(heading2?.kind === "heading" ? heading2.content : null).toBe("Foto's & meer");
+	});
+
+	it("keeps the words of a text block through a save", () => {
+		const layout = save(layoutWith([sectionWith([text("foto's & meer")])]));
+		const block = firstBlock(layout);
+		expect(block.kind === "text" ? block.html : null).toBe("foto&#39;s &amp; meer");
+	});
+
+	it("escapes an ampersand and a quote in a link and a style once, and keeps them on a resave", () => {
+		const html = '<a href="https://example.be/a?x=1&amp;y=2">link</a> <span style="font-family:\'Inter\',sans-serif;color:#112233">x</span>';
+		const once = sanitiseFragment(html);
+		expect(once).toContain('href="https://example.be/a?x=1&amp;y=2"');
+		expect(once).toContain("font-family:&#39;Inter&#39;,sans-serif");
+		expect(once).not.toMatch(/&amp;#|&amp;amp;/);
+		expect(sanitiseFragment(once)).toBe(once);
+		expect(sanitiseFragment('<a href="https://example.be/a?x=1&y=2">link</a>')).toContain('href="https://example.be/a?x=1&amp;y=2"');
+	});
+
+	it("keeps a placeholder working beside an apostrophe", () => {
+		const out = compileLayout(layoutWith([sectionWith([text("Dag {{ client.name }}, foto's van u")])]));
+		expect(out).toContain("Dag {{ client.name }}, foto&#39;s van u");
+	});
+
+	it("escapes the value a placeholder is filled with once, and the words around it once", () => {
+		const html = compileLayout(layoutWith([sectionWith([text("Dag {{ client.name }}, foto's & meer"), heading("Voor {{ client.name }}'s zaak")])]));
+		const out = render(html, { client: { name: "O'Neil & Co" } }).html;
+		expect(out).toContain("Dag O&#39;Neil &amp; Co, foto&#39;s &amp; meer");
+		expect(out).toContain("Voor O&#39;Neil &amp; Co&#39;s zaak");
+		expect(out).not.toMatch(/&amp;#|&amp;amp;/);
+	});
+
+	it("survives the code view and back", () => {
+		const layout = layoutWith([sectionWith([text("foto's & meer"), heading("Foto's & meer")])]);
+		const html = compileLayout(layout);
+		const back = layoutFromHtml(html, layout);
+		expect(compileLayout(back)).toBe(html);
+		expect(compileLayout(layoutFromHtml(compileLayout(back), back))).toBe(html);
+		const words = firstBlock(back);
+		expect(words.kind === "text" ? words.html : null).toBe("foto&#39;s &amp; meer");
+	});
+
+	it("reads text typed into the code view as the same words", () => {
+		const html =
+			'<div data-juno-canvas="1"><section data-juno-section="Body" data-juno-id="s1">' +
+			'<p data-juno-block="text" data-juno-id="t1">foto\'s & meer</p>' +
+			"</section></div>";
+		const back = layoutFromHtml(html);
+		const block = firstBlock(back);
+		expect(block.kind === "text" ? block.html : null).toBe("foto&#39;s &amp; meer");
+		expect(compileLayout(back)).toContain(">foto&#39;s &amp; meer</p>");
+	});
+
+	it("converts to html without growing the escaping", () => {
+		const layout = layoutWith([{ ...sectionWith([text("foto's & meer"), heading("Foto's & meer")]), id: "kop" }]);
+		const converted = convertNodeToCode(layout, null, "kop", []);
+		const block = converted.children[0] as MailBlock;
+		if (block.kind !== "html") throw new Error("not code");
+		expect(block.html).toContain(">foto&#39;s &amp; meer</p>");
+		expect(block.html).toContain(">Foto&#39;s &amp; meer</h2>");
+		expect(block.html).not.toMatch(/&amp;#|&amp;amp;/);
+		const again = compileLayout(save(converted));
+		expect(again).toBe(compileLayout(converted));
+	});
+});
+
+describe("a layout without apostrophes or ampersands", () => {
+	it("compiles to the same bytes it always has", () => {
+		const golden = "<div data-juno-canvas=\"1\" style=\"width:100%;min-height:320px\"><section data-juno-section=\"Body\" data-juno-id=\"s1\" style=\"display:block;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:12px;flex-wrap:nowrap\"><h2 data-juno-block=\"heading\" data-juno-id=\"h1\" style=\"margin:0;font-weight:600\">Beste {{ client.name }}</h2><p data-juno-block=\"text\" data-juno-id=\"t1\" style=\"margin:0\">Dag <strong>{{ client.name }}</strong>, <em>hier</em> is uw <a href=\"https://example.be/a\">voorstel</a>.<br>Groet</p><ul data-juno-block=\"text\" data-juno-id=\"t2\" style=\"margin:0;padding-left:24px\"><li>Een</li><li>Twee</li></ul><a data-juno-block=\"button\" data-juno-id=\"b1\" href=\"https://\" style=\"display:inline-block;text-decoration:none;background:#4a3fa0;color:#ffffff;font-weight:600;text-align:center;padding:10px 18px 10px 18px;border-radius:4px;align-self:flex-start\">Bekijk</a></section></div>";
+		const words = (id: string, tag: "p" | "ul", html: string): MailBlock => ({ ...text(html), id, tag });
+		const section = emptyContainer("section", "Body");
+		section.id = "s1";
+		section.children = [
+			{ ...(newBlock("heading") as Extract<MailBlock, { kind: "heading" }>), id: "h1", tag: "h2", content: "Beste {{ client.name }}" },
+			words("t1", "p", 'Dag <strong>{{ client.name }}</strong>, <em>hier</em> is uw <a href="https://example.be/a">voorstel</a>.<br>Groet'),
+			words("t2", "ul", "<li>Een</li><li>Twee</li>"),
+			{ ...(newBlock("button") as Extract<MailBlock, { kind: "button" }>), id: "b1" },
+		];
+		const layout = normaliseLayout(JSON.parse(JSON.stringify(layoutWith([section]))));
+		if (!layout) throw new Error("not a layout");
+		expect(compileLayout(layout)).toBe(golden);
 	});
 });

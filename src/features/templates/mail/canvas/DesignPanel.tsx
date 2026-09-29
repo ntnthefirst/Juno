@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type {
+	MailAction,
 	MailBlock,
 	MailBoxStyle,
 	MailColumns,
@@ -33,12 +34,14 @@ import {
 	type Axis as PageAxis,
 	type LayoutFlow,
 } from "./alignment";
+import { ActionsSection } from "./ActionsSection";
 import { flowAutoSides, pictureAutoSides, type AutoSides } from "./box-style";
 import { BreakpointsSection } from "./BreakpointsSection";
 import {
 	addCell,
 	addRow,
 	BLOCK_KIND_LABELS,
+	clickBlockedReason,
 	colorsIn,
 	CONTAINER_TAG_LABELS,
 	defaultText,
@@ -49,7 +52,7 @@ import {
 	removeCell,
 	removeRow,
 	replaceColor,
-	safeLink,
+	setActions,
 	setContainerTag,
 	setTextTag,
 	updateBlock,
@@ -204,6 +207,7 @@ function asSized(node: MailContainer | MailColumns): MailBlock {
 		grow: node.grow,
 		alignSelf: node.alignSelf,
 		hidden: node.hidden,
+		actions: node.actions,
 	};
 }
 
@@ -746,7 +750,7 @@ function ContentSection({ block, inputs, set }: ContentProps) {
 						placeholder="https://"
 						onChange={(next) => set({ href: next } as Partial<MailBlock>)}
 					/>
-					<PanelNote>https or mailto. An http link would leak the reader's address, so it renders as words.</PanelNote>
+					<PanelNote>https, mailto or tel. An http link would leak the reader's address, so it renders as words.</PanelNote>
 				</PanelSection>
 			);
 		case "image":
@@ -766,18 +770,6 @@ function ContentSection({ block, inputs, set }: ContentProps) {
 						onChange={(next) => set({ alt: next } as Partial<MailBlock>)}
 					/>
 					<PanelNote>A hosted https address. A picture carried inside the message gets it filed as spam.</PanelNote>
-					<TextInput
-						label="Link address"
-						type="url"
-						value={block.href ?? ""}
-						placeholder="https:// (no link)"
-						onChange={(next) => set({ href: next || null } as Partial<MailBlock>)}
-					/>
-					{block.href && !safeLink(block.href) ? (
-						<PanelNote tone="warn">Refused. Only https and mailto links are kept, so the picture is sent without one.</PanelNote>
-					) : (
-						<PanelNote>https or mailto. Empty is a plain picture, with no link round it.</PanelNote>
-					)}
 				</PanelSection>
 			);
 		case "field":
@@ -987,6 +979,16 @@ export function DesignPanel({
 	const recolor = (from: string, to: string) => onReplace(replaceColor(layout, selection?.id ?? null, from, to));
 	const breakpoints = <BreakpointsSection layout={base} active={active} onActive={onActive} onLayout={onBase} />;
 	const structure = (change: (canvas: MailLayout) => MailLayout) => onBase(change(base));
+	// Actions are content: a link or a hover is the same at every width, so they
+	// go to the stored canvas like a tag does and never to a breakpoint.
+	const actionsFor = (id: string, actions: MailAction[], wholeBox = true) => (
+		<ActionsSection
+			actions={actions}
+			clickBlocked={clickBlockedReason(layout, id)}
+			wholeBox={wholeBox}
+			onActions={(next) => structure((canvas) => setActions(canvas, id, next))}
+		/>
+	);
 
 	if (!node && !cell) {
 		const floor = Math.ceil(contentHeight);
@@ -1097,6 +1099,7 @@ export function DesignPanel({
 				<FillSection fill={cell.box.fill} onFill={(fill) => onCellBox({ fill })} />
 				<StrokeSection box={cell.box} onBox={onCellBox} />
 				<EffectsSection box={cell.box} onBox={onCellBox} />
+				{actionsFor(cell.id, cell.actions)}
 				<SelectionColors colors={colors} onReplace={recolor} />
 				<CustomCssSection css={cell.box.customCss} onChange={(customCss) => onCellBox({ customCss })} />
 			</div>
@@ -1159,6 +1162,7 @@ export function DesignPanel({
 				<FillSection fill={columns.box.fill} onFill={(fill) => onColumnsBox({ fill })} />
 				<StrokeSection box={columns.box} onBox={onColumnsBox} />
 				<EffectsSection box={columns.box} onBox={onColumnsBox} />
+				{actionsFor(columns.id, columns.actions)}
 				<PanelSection
 					title="Rows"
 					action={
@@ -1222,6 +1226,7 @@ export function DesignPanel({
 						hidden={{ value: block.hidden, onChange: (hidden) => set({ hidden } as Partial<MailBlock>) }}
 					/>
 					<CodeSection block={block} set={set} />
+					{actionsFor(block.id, block.actions)}
 				</div>
 			);
 		}
@@ -1347,6 +1352,7 @@ export function DesignPanel({
 				{can.fill && box ? <FillSection fill={box.fill} onFill={(fill) => onBox({ fill })} /> : null}
 				{can.stroke && box ? <StrokeSection box={box} onBox={onBox} /> : null}
 				{can.effects && box ? <EffectsSection box={box} onBox={onBox} /> : null}
+				{actionsFor(block.id, block.actions, block.kind !== "image" && !(block.kind === "text" && block.tag === "span"))}
 				<ContentSection block={block} inputs={inputs} set={set} />
 				<SelectionColors colors={colors} onReplace={recolor} />
 				{box ? <CustomCssSection css={box.customCss} onChange={(customCss) => onBox({ customCss })} /> : null}
@@ -1504,6 +1510,7 @@ export function DesignPanel({
 			<FillSection fill={section.box.fill} onFill={(fill) => onSectionBox({ fill })} />
 			<StrokeSection box={section.box} onBox={onSectionBox} />
 			<EffectsSection box={section.box} onBox={onSectionBox} />
+			{actionsFor(section.id, section.actions)}
 			<SelectionColors colors={colors} onReplace={recolor} />
 			<CustomCssSection css={section.box.customCss} onChange={(customCss) => onSectionBox({ customCss })} />
 			<ConvertSection what="group" onConvert={() => onConvert(section.id)} />

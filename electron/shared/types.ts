@@ -920,6 +920,51 @@ export type MailEffect = (
 };
 
 /**
+ * What a click on an element does. One target, one of three shapes: `link`
+ * opens an https address, `mail` starts a message to an address and `call`
+ * dials a number. The compiler builds `https://...`, `mailto:...` or `tel:...`
+ * from `target` and runs the result through `safeHref`, so nothing else can be
+ * written, and an element with no usable target is sent without a link.
+ */
+export interface MailClickAction {
+	id: string;
+	trigger: "click";
+	kind: "link" | "mail" | "call";
+	/** The address after `https://`, the email address, or the phone number. */
+	target: string;
+	/** Figma's eye: kept in the panel, left out of the message. */
+	hidden: boolean;
+}
+
+/**
+ * What the pointer resting on an element changes, one change per row. It is
+ * written as a `:hover` rule in the head of the message, which Apple Mail, iOS
+ * and Outlook on the web apply and Gmail and Outlook on Windows do not, so it
+ * is only ever a nicety on top of a design that already works without it.
+ */
+export interface MailHoverAction {
+	id: string;
+	trigger: "hover";
+	change: "fill" | "color" | "underline" | "opacity";
+	/** For `fill`. */
+	fill?: MailFill;
+	/** For `color`: the text colour. */
+	color?: MailColor;
+	/** For `underline`: whether the text is underlined while the pointer is over it. */
+	underline?: boolean;
+	/** For `opacity`: 0 to 1. */
+	opacity?: number;
+	hidden: boolean;
+}
+
+/**
+ * An action on an element: a click that opens something, or a hover that
+ * changes how it looks. Nothing else, because focus, scroll and timed triggers
+ * need a script, and every mail client removes scripts (docs/editors.md).
+ */
+export type MailAction = MailClickAction | MailHoverAction;
+
+/**
  * The box around anything: a section or a single block.
  *
  * This is the appearance panel, and it is deliberately the set of Figma
@@ -1021,6 +1066,8 @@ export interface MailBlockCommon {
 	alignSelf: MailSelfAlign;
 	/** Figma's eye. A hidden block stays on the canvas and is left out of the message. */
 	hidden: boolean;
+	/** At most one on-click action and one hover action per kind of change. Empty by default. */
+	actions: MailAction[];
 }
 
 export type MailBlock = MailBlockCommon &
@@ -1030,6 +1077,7 @@ export type MailBlock = MailBlockCommon &
 		| {
 				kind: "button";
 				label: string;
+				/** A button block is its own link. Every other element links through an on-click action. */
 				href: string;
 				background: MailColor;
 				/** The label's colour. The rest of its type is `text`, whose own colour is not used. */
@@ -1045,8 +1093,6 @@ export type MailBlock = MailBlockCommon &
 				/** Pixels, or null for the picture's own width. */
 				width: number | null;
 				align: MailTextAlign;
-				/** A picture inside a link, compiled as `<a href><img></a>`. Null is a plain picture. */
-				href: string | null;
 				box: MailBoxStyle;
 		  }
 		| { kind: "divider"; color: MailColor; thickness: number; box: MailBoxStyle }
@@ -1086,6 +1132,7 @@ export interface MailContainer {
 	grow: number;
 	layout: MailSectionLayout;
 	box: MailBoxStyle;
+	actions: MailAction[];
 	children: MailNode[];
 }
 
@@ -1099,6 +1146,7 @@ export interface MailColumnsCell {
 	width: number | null;
 	verticalAlign: MailVerticalAlign;
 	box: MailBoxStyle;
+	actions: MailAction[];
 	children: MailNode[];
 }
 
@@ -1121,6 +1169,7 @@ export interface MailColumns {
 	/** Pixels between cells, compiled as cell padding: `border-spacing` is unreliable in mail. */
 	gap: number;
 	box: MailBoxStyle;
+	actions: MailAction[];
 	rows: MailColumnsRow[];
 }
 

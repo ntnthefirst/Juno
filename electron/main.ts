@@ -1909,7 +1909,9 @@ if (!app.requestSingleInstanceLock()) {
 
 											// Text: the chevron and its menu, and the button that remembers.
 											if (!(await openMenu("Text"))) return "the Text chevron did not open its menu";
-											if (document.querySelectorAll("[role=menuitem]").length !== 13) return "the Text menu does not list its thirteen elements";
+											if (document.querySelectorAll("[role=menuitem]").length !== 14) return "the Text menu does not list its fourteen elements";
+											if (!document.querySelector('[role=menuitem][data-element="button"]')) return "the Text menu has no Button";
+											if (document.querySelector('button[aria-label="Add button"]')) return "the toolbar still has a Button tool of its own";
 											if (!(await pick("h3"))) return "no Heading 3 in the Text menu";
 											if (!(await type("Kopje"))) return "a new heading did not open for typing";
 											const remembered = document.querySelector('[data-tool-group="text"] button').getAttribute("aria-label");
@@ -2131,14 +2133,16 @@ if (!app.requestSingleInstanceLock()) {
 											const remembered = document.querySelector('[data-tool-group="media"] button').getAttribute("aria-label");
 											if (remembered !== "Add linked picture") return "the Media button did not take the last-used element: " + remembered;
 
-											// A link with a scheme the message refuses is said to be refused,
-											// and a safe one is not. The picture has no address of its own here:
-											// the canvas would try to load one, and its content policy refuses
-											// every address that is not the app's own.
+											// The picture links through an on-click action in the Actions
+											// section. A link with a scheme the message refuses is said to be
+											// refused, and a safe one is not. The picture has no address of its
+											// own here: the canvas would try to load one, and its content policy
+											// refuses every address that is not the app's own.
 											if (!(await setText("Link address", "http://insecure.example"))) return "no link address field on a picture";
-											if (![...document.querySelectorAll("p")].some((el) => el.textContent.startsWith("Refused"))) return "an http link was not shown as refused";
+											if (![...document.querySelectorAll("p")].some((el) => el.textContent.startsWith("Only https addresses are kept"))) return "an http link was not shown as refused";
 											if (!(await setText("Link address", "https://example.be"))) return "the link field went away";
-											if ([...document.querySelectorAll("p")].some((el) => el.textContent.startsWith("Refused"))) return "an https link was shown as refused";
+											if ([...document.querySelectorAll("p")].some((el) => el.textContent.startsWith("Only https addresses are kept"))) return "an https link was shown as refused";
+											if (!document.querySelector("[data-layer-linked]")) return "a linked picture has no link glyph in the layers";
 											const sent = await compiled((html) => /<hr /.test(html));
 											if (sent.includes("insecure.example")) return "an http link reached the message";
 											if (!/<hr[^>]*>/.test(sent)) return "the divider is not in the compiled HTML";
@@ -2262,8 +2266,8 @@ if (!app.requestSingleInstanceLock()) {
 
 											// The sections, in the order every element has them.
 											const titles = [...document.querySelectorAll("h3")].map((el) => el.textContent.trim());
-											const order = ["Position", "Layout", "Spacing", "Appearance", "Fill", "Stroke", "Effects"].map((title) => titles.indexOf(title));
-											if (order.some((at, index) => at < 0 || (index > 0 && at < order[index - 1]))) return "the container's sections are not Position, Layout, Spacing, Appearance, Fill, Stroke, Effects: " + titles.join(", ");
+											const order = ["Position", "Layout", "Spacing", "Appearance", "Fill", "Stroke", "Effects", "Actions"].map((title) => titles.indexOf(title));
+											if (order.some((at, index) => at < 0 || (index > 0 && at < order[index - 1]))) return "the container's sections are not Position, Layout, Spacing, Appearance, Fill, Stroke, Effects, Actions: " + titles.join(", ");
 											const position = panel("Position");
 											const layoutSection = panel("Layout");
 											const spacing = panel("Spacing");
@@ -2396,6 +2400,154 @@ if (!app.requestSingleInstanceLock()) {
 									if (lowered !== "ok") throw new Error(`Smoke: mail template editor ${lowered}`);
 									await new Promise((r) => setTimeout(r, 300));
 									await shootBoth("mail-template-spacing-lower");
+
+									// Actions (TODO 4b): the section after Effects, with an on-click link
+									// and a hover fill added from the real panel on a text, checked in the
+									// message that is sent, and the Button in the Text menu.
+									const actioned = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const panel = (title) => {
+												const heading = [...document.querySelectorAll("h3")].find((el) => el.textContent.trim() === title);
+												return heading ? heading.closest("section") : null;
+											};
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setText = async (labelText, value) => {
+												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === labelText);
+												const field = label ? document.getElementById(label.htmlFor) : null;
+												if (!field) return false;
+												Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const addAction = async (label) => {
+												const add = panel("Actions").querySelector('button[aria-label="Add action"]');
+												if (!add) return "no way to add an action";
+												add.click();
+												await wait(200);
+												const item = [...panel("Actions").querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === label);
+												if (!item) return "the Add action menu does not offer " + label;
+												item.click();
+												await wait(300);
+												return "ok";
+											};
+
+											// A text block to work on.
+											let found = false;
+											for (const candidate of rows("block")) {
+												candidate.click();
+												await wait(250);
+												if ([...document.querySelectorAll("label")].some((el) => el.textContent.trim() === "Text element")) {
+													found = true;
+													break;
+												}
+											}
+											if (!found) return "no text block to give an action";
+
+											// After Effects, before anything of the kind's own.
+											const titles = [...document.querySelectorAll("h3")].map((el) => el.textContent.trim());
+											if (titles.indexOf("Actions") < 0 || titles.indexOf("Actions") < titles.indexOf("Effects")) return "Actions does not follow Effects: " + titles.join(", ");
+											if (panel("Actions").querySelector("[role=menu]")) return "the Add menu is open before it was asked for";
+
+											// On click: an address typed into the row is a link in the message.
+											let step = await addAction("On click");
+											if (step !== "ok") return step;
+											const again = panel("Actions").querySelector('button[aria-label="Add action"]');
+											again.click();
+											await wait(200);
+											if ([...panel("Actions").querySelectorAll("[role=menuitem]")].some((el) => el.textContent.trim() === "On click")) return "a second on-click action is still offered";
+											again.click();
+											await wait(200);
+											if (!(await setText("Link address", "example.be/aanbod"))) return "the click row has no address field";
+											if (!panel("Actions").textContent.includes("Outlook on Windows makes only the text inside a link clickable")) return "a linked block does not say what Outlook on Windows does";
+											if (!document.querySelector("[data-layer-linked]")) return "a linked layer has no link glyph";
+
+											// On hover: a fill.
+											step = await addAction("On hover: fill");
+											if (step !== "ok") return step;
+											if (!panel("Actions").textContent.includes("Works in Apple Mail")) return "a hover row does not say where it works";
+											if (!panel("Actions").textContent.includes("Not in Gmail or Outlook on Windows")) return "a hover row does not say where it does not work";
+
+											const html = await compiled((h) => h.includes("https://example.be/aanbod") && h.includes(":hover"));
+											const wrapped = /<a href="https:\\/\\/example.be\\/aanbod" data-juno-link="1" style="display:block;text-decoration:none;color:inherit[^"]*"><p[^>]*data-juno-id="([^"]+)"/.exec(html);
+											if (!wrapped) return "the sent message has no link round the text: " + html.slice(0, 600);
+											const id = wrapped[1];
+											if (!html.includes('class="jb-' + id + '"')) return "the text has no class for its hover rule";
+											if (!new RegExp("\\\\.jb-" + id + ":hover\\\\{background-color:#[0-9a-f]{6} !important;background-image:none !important\\\\}").test(html)) return "the head has no hover rule for the text";
+
+											// The scripts stay out: the section offers a link and a hover, nothing else.
+											const offered = [];
+											panel("Actions").querySelector('button[aria-label="Add action"]').click();
+											await wait(200);
+											for (const item of panel("Actions").querySelectorAll("[role=menuitem]")) offered.push(item.textContent.trim());
+											panel("Actions").querySelector('button[aria-label="Add action"]').click();
+											await wait(200);
+											if (offered.join("|") !== "On hover: text colour|On hover: underline|On hover: opacity") return "the Add action menu offers " + offered.join("|");
+											if (/script|focus|scroll|timer/i.test(panel("Actions").textContent)) return "the Actions section mentions a trigger a message cannot have";
+
+											// The Button is in the Text menu, and adds a linked, filled text.
+											if (document.querySelector('button[aria-label="Add button"]')) return "the toolbar still has a Button tool";
+											const countBefore = rows("block").length;
+											await press("b", "KeyB");
+											if (rows("block").length !== countBefore) return "B on its own still adds something";
+											await press("T", "KeyT", { shiftKey: true });
+											if (!document.querySelector('[role=menu][aria-label="Text menu"]')) return "Shift+T did not open the Text menu";
+											await press("B", "KeyB", { shiftKey: true }, document.activeElement);
+											if (rows("block").length !== countBefore + 1) return "B in the Text menu did not add the Button";
+											const typing = document.querySelector('[role=textbox][aria-label="Text"]');
+											if (!typing) return "the new Button did not open for typing";
+											typing.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											const clickRow = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Link address");
+											if (!clickRow) return "the Button has no empty on-click link row";
+											if (!panel("Actions").textContent.includes("Empty, so it is sent without a link")) return "an empty link does not say it is sent without one";
+											if (!(await setText("Link address", "example.be/boek"))) return "no address field on the Button";
+											const buttonHtml = await compiled((h) => h.includes("example.be/boek"));
+											if (!/<a href="https:\\/\\/example.be\\/boek" data-juno-link="1"[^>]*><p[^>]*style="[^"]*background-color:#4a3fa0[^"]*border-radius:4px/.test(buttonHtml)) return "the Button is not a filled, rounded text inside its link: " + buttonHtml.slice(0, 800);
+											return "ok";
+										})()`,
+									) as string;
+									if (actioned !== "ok") throw new Error(`Smoke: mail template editor ${actioned}`);
+
+									// Back on the linked text, with the section scrolled into view for the photograph.
+									const shown = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const link = document.querySelector("[data-layer-linked]");
+											const row = link ? link.closest("button") : null;
+											if (!row) return "no linked layer to select";
+											row.click();
+											await wait(300);
+											const heading = [...document.querySelectorAll("h3")].find((el) => el.textContent.trim() === "Actions");
+											if (!heading) return "no Actions section on the linked text";
+											let scroller = heading.parentElement;
+											while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+											if (!scroller) return "the design panel does not scroll";
+											scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 8;
+											await wait(300);
+											return "ok";
+										})()`,
+									) as string;
+									if (shown !== "ok") throw new Error(`Smoke: mail template editor ${shown}`);
+									await shootBoth("mail-template-actions");
 
 									// Escape lets go of what is selected before it leaves, so the
 									// first one drops the block that was just inserted and the second

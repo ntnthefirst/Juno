@@ -26,6 +26,16 @@ describe("the editor's keyboard", () => {
 		expect(shortcutFor(press("d", "KeyD", { ctrlKey: true }))).toBe("duplicate");
 	});
 
+	it("has no key for a button of its own: the Button is an element in the Text menu", () => {
+		expect(shortcutFor(press("b", "KeyB"))).toBeNull();
+		expect(ADD_KEYS.map(([key]) => key)).not.toContain("b");
+		expect(elementForKey("text", { code: "KeyB", ctrlKey: false, metaKey: false, altKey: false })).toBe("button");
+		expect(elementInfo("button").group.id).toBe("text");
+		const listed = SHORTCUT_GROUPS.flatMap((group) => group.items);
+		expect(listed.some((item) => item.label === "Button" && item.keys === "Shift+T, B")).toBe(true);
+		expect(listed.some((item) => item.label === "Button" && item.keys === "B")).toBe(false);
+	});
+
 	it("adds a block with a bare letter, and only a bare one", () => {
 		expect(shortcutFor(press("t", "KeyT"))).toBe("add-text");
 		expect(shortcutFor(press("f", "KeyF"))).toBe("add-containers");
@@ -86,7 +96,7 @@ describe("the toolbar's groups on the keyboard", () => {
 	/** TODO.md section 4a's table, element by element: the toolbar offers exactly these. */
 	const ELEMENTS = [
 		...["section", "div", "header", "footer", "main", "article", "aside", "nav"],
-		...["h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "pre", "address", "span", "ul", "ol"],
+		...["h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "pre", "address", "span", "ul", "ol", "button"],
 		...["columns", "image", "linked-image", "divider", "field"],
 	];
 

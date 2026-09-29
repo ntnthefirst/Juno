@@ -74,8 +74,18 @@ const LAYOUT_SCHEMA = {
 		"or null), verticalAlign, box, children }] }] }. A block has a kind (text, heading, " +
 		"button, image, divider, spacer, field or html) and, for text, a tag (p, blockquote, " +
 		"pre, address, span, ul or ol, where ul and ol write their html as <li> items), and for " +
-		"heading, a tag (h1 to h6). An image may carry an href, a link round the picture; null is " +
-		"a plain picture. A box carries fill (solid or a two-stop gradient, each with hidden), " +
+		"heading, a tag (h1 to h6). Every container, columns table, cell and block carries " +
+		"actions, empty by default: at most one on click, { id, trigger: click, kind: link, mail or " +
+		"call, target, hidden }, where target is the address after https://, the email address or " +
+		"the phone number and the message is sent with a link to it, and any number on hover, at " +
+		"most one for each change, { id, trigger: hover, change: fill, color, underline or opacity, " +
+		"hidden } plus the value the change needs (fill, a colour, underline as true or false, or " +
+		"opacity from 0 to 1). An element that sits in a link, or " +
+		"holds one, cannot have a click of its own, a link cannot hold a link, so the inner one is " +
+		"dropped; a button block has its own href instead of a click. A picture links through a click " +
+		"action, not an href. Hover is sent as a :hover rule in the head, which Apple Mail, iOS Mail " +
+		"and Outlook on the web apply and Gmail and Outlook on Windows do not, and it is the same at " +
+		"every width. There is no script and no other trigger: every mail client removes them. A box carries fill (solid or a two-stop gradient, each with hidden), " +
 		"stroke (borderWidth, borderColor, borderStyle, borderSides, strokeHidden), radius or " +
 		"four corners, opacity, effects (shadow or blur, each with hidden), padding and margin " +
 		"(pixels on each side; a margin on a side the element's alignment already sets to auto is " +
@@ -92,7 +102,7 @@ const LAYOUT_SCHEMA = {
 		"cell or block, each holding only what changes at that width and narrower, as partial box " +
 		"and text styles (a cell can change only its box, and its width, vertical alignment and " +
 		"the table's gap are the same at every width); content is the same at every width. Colours are hex, #rrggbbaa for an " +
-		"opacity; images and links https only. Version 1, one level of sections holding blocks, " +
+		"opacity; images and links https only (a link may also be mailto or tel). Version 1, one level of sections holding blocks, " +
 		"is still accepted and read as each section becoming a section container. Call " +
 		"mail.templates.get on an existing template to see the shape, and mail.templates.preview " +
 		"to check one before proposing it. Null drops the canvas and keeps the HTML it compiled to.",

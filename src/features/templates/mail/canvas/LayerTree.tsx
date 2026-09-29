@@ -1,7 +1,7 @@
 import { useState, type DragEvent, type ReactNode } from "react";
 import type { MailBlock, MailColumns, MailColumnsCell, MailContainer, MailLayout, MailNode } from "@shared/types";
 import { Icon, type IconName } from "../../../../components/Icon";
-import { BLOCK_KIND_LABELS } from "./canvas-actions";
+import { BLOCK_KIND_LABELS, hasClick } from "./canvas-actions";
 import type { DropTarget, Selection } from "./CanvasView";
 
 function isContainer(node: MailNode): node is MailContainer {
@@ -108,6 +108,8 @@ type RowProps = {
 	/** The HTML it is written as, when that says more than its name: a container's tag, a heading's level. */
 	tag?: string;
 	count?: number;
+	/** Whether a click on it goes somewhere, shown as a link glyph. */
+	linked?: boolean;
 	selected: boolean;
 	over: Over;
 	hidden?: { value: boolean; onChange: () => void };
@@ -129,7 +131,7 @@ type RowProps = {
  * would then see a different row type on every selection change and remount
  * the whole row, which drops a drag already in flight.
  */
-function Row({ id, kind, depth, icon, label, tag, count, selected, over, hidden, draggable, expanded, onSelect, onStep, onDragStart, onDragOver, onDrop, onDragEnd }: RowProps) {
+function Row({ id, kind, depth, icon, label, tag, count, linked, selected, over, hidden, draggable, expanded, onSelect, onStep, onDragStart, onDragOver, onDrop, onDragEnd }: RowProps) {
 	const overBefore = over?.id === id && over.edge === "before";
 	const overInside = over?.id === id && over.edge === "inside";
 	return (
@@ -177,6 +179,11 @@ function Row({ id, kind, depth, icon, label, tag, count, selected, over, hidden,
 				<span className="truncate">{label}</span>
 				{tag ? (
 					<span className="flex-none font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">{tag}</span>
+				) : null}
+				{linked ? (
+					<span data-layer-linked title="Has an on-click action" className="flex-none text-[var(--ink-muted)]">
+						<Icon name="link" size={11} />
+					</span>
 				) : null}
 				{count !== undefined ? (
 					<span className="tabular ml-auto flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">{count}</span>
@@ -262,6 +269,7 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDrop, onSte
 						label={node.name}
 						tag={node.tag}
 						count={node.children.length}
+						linked={hasClick(node.actions)}
 						selected={selection?.id === node.id}
 						over={over}
 						hidden={{ value: node.hidden, onChange: () => onHidden(node.id, !node.hidden) }}
@@ -291,6 +299,7 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDrop, onSte
 						label={node.name}
 						tag="table"
 						count={node.rows.reduce((total, row) => total + row.cells.length, 0)}
+						linked={hasClick(node.actions)}
 						selected={selection?.id === node.id}
 						over={over}
 						hidden={{ value: node.hidden, onChange: () => onHidden(node.id, !node.hidden) }}
@@ -326,6 +335,7 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDrop, onSte
 					icon={blockIcon(node)}
 					label={label}
 					tag={node.kind === "heading" || (node.kind === "text" && node.tag !== "p") ? node.tag : undefined}
+					linked={hasClick(node.actions)}
 					selected={selection?.id === node.id}
 					over={over}
 					hidden={{ value: node.hidden, onChange: () => onHidden(node.id, !node.hidden) }}
@@ -355,6 +365,7 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDrop, onSte
 					icon="grid"
 					label={label}
 					count={cell.children.length}
+					linked={hasClick(cell.actions)}
 					selected={selection?.id === cell.id}
 					over={over}
 					draggable={false}

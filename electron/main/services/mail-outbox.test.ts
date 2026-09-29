@@ -34,6 +34,24 @@ function freshDb(): Db {
 	return createDrizzle(connection);
 }
 
+/**
+ * A cover mail of the test's own. No install is promised any template by key,
+ * so a test that needs one writes it, the way the owner would.
+ */
+async function coverTemplate() {
+	return templates.create(
+		{
+			name: "Contract ter ondertekening",
+			subject: "{{ document.title }} ter ondertekening",
+			bodyHtml:
+				"<p>Beste {{ client.contactName }},</p>" +
+				"<p>In bijlage vindt u {{ document.title }}.</p>" +
+				"<p>Met vriendelijke groeten,<br>{{ owner.contactName }}</p>",
+		},
+		db,
+	);
+}
+
 let db: Db;
 let dir: string;
 let accountId: string;
@@ -69,7 +87,6 @@ beforeEach(async () => {
 		},
 	);
 	sender.resetForTests();
-	await templates.ensureMailTemplatesSeeded(db);
 
 	const account = await accounts.create(
 		{
@@ -212,7 +229,7 @@ describe("the gate", () => {
 
 	it("refuses to send a template gap to a client", async () => {
 		const client = await clientsService.create({ name: "obet" }, db);
-		const cover = (await templates.list(db)).find((t) => t.key === "contract_cover")!;
+		const cover = await coverTemplate();
 		// No contact and no owner profile: the greeting and the sign-off are gaps.
 		const rendered = await templates.renderTemplate({ templateId: cover.id, clientId: client.id, extras: { title: "de NDA" } }, db);
 		expect(rendered.missing).toContain("client.contactName");
@@ -353,13 +370,10 @@ describe("replies", () => {
 });
 
 describe("templates", () => {
-	it("seeds the four templates in Dutch and renders one against a client", async () => {
-		const list = await templates.list(db);
-		expect(list.map((t) => t.key)).toEqual(["contract_cover", "project_kickoff", "invoice_due", "hosting_renewal"]);
-
+	it("renders a template in Dutch against a client", async () => {
 		const client = await clientsService.create({ name: "obet" }, db);
 		await contactsService.create({ clientId: client.id, name: "Laura", email: "laura@obet.be", isPrimary: true }, db);
-		const cover = list.find((t) => t.key === "contract_cover")!;
+		const cover = await coverTemplate();
 		const rendered = await templates.renderTemplate(
 			{ templateId: cover.id, clientId: client.id, extras: { title: "de ontwikkelovereenkomst" } },
 			db,
@@ -374,8 +388,8 @@ describe("templates", () => {
 	});
 
 	it("keeps an edited template through a re-seed", async () => {
-		const list = await templates.list(db);
-		const edited = await templates.update(list[0]!.id, { subject: "Mijn onderwerp" }, db);
+		const cover = await coverTemplate();
+		const edited = await templates.update(cover.id, { subject: "Mijn onderwerp" }, db);
 		expect(edited.customisedAt).not.toBeNull();
 		const result = await templates.ensureMailTemplatesSeeded(db);
 		expect(result.updated).toBe(0);

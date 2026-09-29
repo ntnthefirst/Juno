@@ -36,6 +36,8 @@ export interface SanitisedBody {
 	scriptNonce: string;
 	/** How many http(s) images were replaced by a placeholder. */
 	remoteImages: number;
+	/** Whether dangerous or unusual markup was removed before rendering. */
+	suspicious: boolean;
 	links: { href: string; text: string }[];
 }
 
@@ -232,6 +234,8 @@ function collectLinks(body: string): { href: string; text: string }[] {
 export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): SanitisedBody {
 	const { css, html } = extractStyles(raw);
 	const scriptNonce = createNonce();
+	const suspicious =
+		/<(script|iframe|object|embed|form|svg|noscript)\b|\bon[a-z][\w-]*\s*=|javascript:|data:text\/html/i.test(raw);
 	let remoteImages = 0;
 
 	const body = sanitizeHtml(html, {
@@ -308,7 +312,7 @@ export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): Saniti
 		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body>` +
 		`<script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
 
-	return { document, scriptNonce, remoteImages, links };
+	return { document, scriptNonce, remoteImages, suspicious, links };
 }
 
 function escapeText(value: string): string {
@@ -341,5 +345,5 @@ export function textDocumentBody(text: string): SanitisedBody {
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false, scriptNonce))}">` +
 		`<style>${BASE_CSS} body { white-space: pre-wrap; } .q { color: #5c5a55; } ${TEXT_DARK_CSS}</style></head>` +
 		`<body>${body}</body><script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
-	return { document, scriptNonce, remoteImages: 0, links: [] };
+	return { document, scriptNonce, remoteImages: 0, suspicious: false, links: [] };
 }

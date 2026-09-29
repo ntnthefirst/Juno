@@ -59,8 +59,6 @@ Decided and ready to build, roughly smallest first.
 - **Sent messages show in the reader only after the Sent folder is synced.**
   Until then the outbox is the record. Showing outbox rows inside a thread
   would close the gap.
-- **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
-  is the phase 4 promise not yet kept.
 - **Unsent drafts are not merged into the Drafts folder.** Juno's own drafts
   live in the outbox and the server's live in its Drafts folder, and the
   Drafts view says so in a line pointing at the outbox rather than showing
@@ -69,6 +67,7 @@ Decided and ready to build, roughly smallest first.
 - **Purging a removed mail account.** Removing an account forgets its password
   and soft-deletes the row; its messages and attachments stay on disk until a
   purge exists. That purge is a confirmed action, never an MCP tool.
+
 Needs your hands rather than code:
 
 - **No real mail server has been used yet.** Reading and sending are proven

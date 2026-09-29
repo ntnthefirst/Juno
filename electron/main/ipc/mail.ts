@@ -28,6 +28,7 @@ import * as folders from "../services/mail-folders";
 import * as fonts from "../services/mail-fonts";
 import type { MailFolderInput } from "../services/mail-folders";
 import * as outbox from "../services/mail-outbox";
+import * as purgeMail from "../services/mail-purge";
 import * as recipients from "../services/mail-recipients";
 import * as sender from "../services/mail-send";
 import * as sync from "../services/mail-sync";
@@ -44,6 +45,10 @@ export function registerMailIpc(): void {
 		accounts.update(id, patch),
 	);
 	ipcMain.handle("mail.accounts.remove", (_event, id: string) => accounts.remove(id));
+	ipcMain.handle("mail.accounts.removed", () => purgeMail.removedAccounts());
+	ipcMain.handle("mail.accounts.purge", (_event, id: string, confirmEmail: string) =>
+		purgeMail.purge(id, confirmEmail),
+	);
 	ipcMain.handle("mail.accounts.test", (_event, input: Parameters<typeof accounts.test>[0]) =>
 		accounts.test(input),
 	);

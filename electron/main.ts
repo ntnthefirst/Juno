@@ -3313,6 +3313,17 @@ if (!app.requestSingleInstanceLock()) {
 								const { closeSettingsWindow, getSettingsWindow, openSettingsWindow } =
 									await import("./main/windows");
 
+								// An account that was set up, synced and then removed, so Mail accounts
+								// has a removed account with mail on disk to photograph and purge.
+								const oldAccountId = (await window.webContents.executeJavaScript(`(async () => {
+									const b = window.juno;
+									const old = await b.mail.accounts.create({ email: "oud@juno.test", label: "Oud", imapHost: "imap.juno.test", password: "smoke" });
+									const runs = await b.mail.sync.run(old.id);
+									if (runs.some((r) => r.phase !== "done")) throw new Error("Smoke: the second account did not sync: " + JSON.stringify(runs));
+									await b.mail.accounts.remove(old.id);
+									return old.id;
+								})()`)) as string;
+
 								openSettingsWindow();
 								const settingsWindow = getSettingsWindow();
 								if (!settingsWindow) throw new Error("Smoke: the settings window did not open");
@@ -3441,6 +3452,53 @@ if (!app.requestSingleInstanceLock()) {
 										const image = await capture(settingsWindow.webContents);
 										writeFileSync(joinPath(shotDir, `settings-mcp-manual-${theme}.png`), image.toPNG());
 									}
+								}
+								// The removed account's mail is deleted the way a person does it: the
+								// button, the dialog, the confirm. The tab loop above photographed the
+								// section with the account still in it.
+								{
+									const { existsSync: exists } = await import("node:fs");
+									const mailTab = tabs.findIndex((tab) => tab === "Mail accounts");
+									if (mailTab === -1) throw new Error("Smoke: the settings window has no mail section");
+									await settingsWindow.webContents.executeJavaScript(`${TABS}[${mailTab}].click()`);
+									await new Promise((r) => setTimeout(r, 400));
+									const listed = (await settingsWindow.webContents.executeJavaScript(
+										`(() => { const text = document.querySelector("main").textContent; return text.includes("Removed accounts") && text.includes("oud@juno.test") && text.includes("Delete stored mail"); })()`,
+									)) as boolean;
+									if (!listed) throw new Error("Smoke: the mail section did not list the removed account");
+									if (!exists(join(mailDir(), oldAccountId))) throw new Error("Smoke: the removed account has no mail on disk to purge");
+									const opened = (await settingsWindow.webContents.executeJavaScript(
+										`(() => { const button = [...document.querySelectorAll("main button")].find((b) => b.textContent.trim() === "Delete stored mail"); if (!button) return false; button.click(); return true; })()`,
+									)) as boolean;
+									if (!opened) throw new Error("Smoke: there was no button to delete the stored mail");
+									await new Promise((r) => setTimeout(r, 400));
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await settingsWindow.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 350));
+										const image = await capture(settingsWindow.webContents);
+										writeFileSync(joinPath(shotDir, `settings-purge-dialog-${theme}.png`), image.toPNG());
+									}
+									const confirmed = (await settingsWindow.webContents.executeJavaScript(
+										`(() => { const button = [...document.querySelectorAll("[role='dialog'] button")].find((b) => b.textContent.trim() === "Delete"); if (!button) return false; button.click(); return true; })()`,
+									)) as boolean;
+									if (!confirmed) throw new Error("Smoke: the purge dialog had no Delete button");
+									await new Promise((r) => setTimeout(r, 800));
+									const after = (await settingsWindow.webContents.executeJavaScript(
+										`({ section: document.querySelector("main").textContent.includes("Removed accounts"), notice: document.body.textContent.includes("Stored mail deleted.") })`,
+									)) as { section: boolean; notice: boolean };
+									if (after.section || !after.notice) {
+										throw new Error(`Smoke: after the purge the section showed=${after.section} and the notice showed=${after.notice}`);
+									}
+									const remaining = (await window.webContents.executeJavaScript(
+										`window.juno.mail.accounts.removed().then((rows) => rows.length)`,
+									)) as number;
+									if (remaining !== 0 || exists(join(mailDir(), oldAccountId))) {
+										throw new Error("Smoke: the purge left the removed account's mail behind");
+									}
+									console.log("SMOKE_DEMO removed account purged");
 								}
 								console.log(`SMOKE_DEMO settings tabs=${tabs.length}`);
 								closeSettingsWindow();

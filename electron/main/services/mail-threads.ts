@@ -49,6 +49,11 @@ function mailDir(): string {
 	return mailDirectory;
 }
 
+/** The directory attachments live in, for the purge, which deletes inside it. */
+export function mailRoot(): string {
+	return mailDir();
+}
+
 type MessageRow = typeof mailMessages.$inferSelect;
 type ThreadRow = typeof mailThreads.$inferSelect;
 

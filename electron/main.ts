@@ -316,6 +316,12 @@ if (!app.requestSingleInstanceLock()) {
 									accountId: mailAccount.id, to: [{ name: null, address: "info@noir.be" }], subject: "Even navragen",
 									bodyText: "Dag,\\n\\nIs de offerte goed ontvangen?\\n\\nGroeten", clientId: made[2].id,
 								});
+								// A draft with a picture at a web address, which the window
+								// may not fetch. The Drafts step checks it is drawn as a box.
+								await b.mail.outbox.createDraft({
+									accountId: mailAccount.id, to: [{ name: null, address: "info@noir.be" }], subject: "Met logo",
+									bodyText: "Dag", bodyHtml: '<p>Dag</p><img src="https://www.example.com/logo.png" alt="Logo" style="width:96px">', clientId: made[2].id,
+								});
 
 								// Phase 5: a weekly call anchored to this week's Tuesday, one
 								// occurrence moved, an all-day offsite, and the range read back
@@ -3000,6 +3006,44 @@ if (!app.requestSingleInstanceLock()) {
 									if (switched !== "ok") throw new Error(`Smoke: calendar week view ${switched}`);
 								}
 								if (screen === "Drafts") {
+									// A draft with a picture at a web address: the frame draws a
+									// box for it and the composer parks it, so the window fetches
+									// nothing, and saving from the composer puts the address back.
+									const pictured = await window.webContents.executeJavaScript(
+										`(async () => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
+											if (!nav) return "no drafts entry";
+											nav.click();
+											await new Promise((r) => setTimeout(r, 600));
+											const row = [...document.querySelectorAll("ul li button")].find((el) => el.textContent.includes("Met logo"));
+											if (!row) return "no draft with a picture";
+											row.click();
+											await new Promise((r) => setTimeout(r, 600));
+											const frame = document.querySelector("iframe[title='Message as it will be sent']");
+											if (!frame) return "no frame";
+											const doc = frame.getAttribute("srcdoc") || "";
+											if (/<img[^>]*https:/.test(doc) || !doc.includes("data-juno-remote-image")) return "the frame loads the picture: " + doc.slice(0, 200);
+											const edit = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit button";
+											edit.click();
+											await new Promise((r) => setTimeout(r, 900));
+											const host = document.querySelector("[contenteditable][aria-label=Message]");
+											if (!host) return "no editor";
+											if (host.querySelector("img[src]") || !host.querySelector("img[data-juno-src]")) return "the editor loads the picture: " + host.innerHTML.slice(0, 200);
+											host.append(document.createTextNode(" Tot dan."));
+											host.dispatchEvent(new Event("input", { bubbles: true }));
+											await new Promise((r) => setTimeout(r, 1500));
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 900));
+											return "ok";
+										})()`,
+									);
+									if (pictured !== "ok") throw new Error(`Smoke: drafts picture ${pictured}`);
+									const saved = (await (await import("./main/services/mail-outbox")).list({ states: ["draft"] })).find((m) => m.subject === "Met logo");
+									if (!saved?.bodyHtml?.includes('src="https://www.example.com/logo.png"') || saved.bodyHtml.includes("data-juno-src") || !saved.bodyText.includes("Tot dan.")) {
+										throw new Error(`Smoke: the composer did not save the picture's address: ${saved?.bodyHtml}`);
+									}
+									console.log("SMOKE_DEMO draft picture parked and restored");
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
 											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));

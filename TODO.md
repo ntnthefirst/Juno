@@ -69,15 +69,6 @@ Decided and ready to build, roughly smallest first.
 - **Purging a removed mail account.** Removing an account forgets its password
   and soft-deletes the row; its messages and attachments stay on disk until a
   purge exists. That purge is a confirmed action, never an MCP tool.
-- **Remote pictures in a draft outside the template editor.** The mail
-  template canvas and its preview draw a picture from an https address as a
-  placeholder, because the window's content policy blocks it
-  (`src/features/templates/mail/canvas/remote-image.ts`). The outbox detail
-  (`OutboxDetail.tsx`) and the composer still load such a picture directly
-  when a draft was made from a template, which shows it broken and logs an
-  error. Use the same placeholder there. Two features then share it, so it
-  moves to `src/lib/` or `src/components/`, and the move is its own commit.
-
 Needs your hands rather than code:
 
 - **No real mail server has been used yet.** Reading and sending are proven

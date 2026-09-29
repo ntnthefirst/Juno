@@ -3015,6 +3015,11 @@ if (!app.requestSingleInstanceLock()) {
 											if (!nav) return "no drafts entry";
 											nav.click();
 											await new Promise((r) => setTimeout(r, 600));
+											// One list, both kinds of row: Juno's own unsent messages and the
+											// threads in the server's Drafts folder.
+											const kinds = new Set([...document.querySelectorAll("li[data-draft-kind]")].map((el) => el.getAttribute("data-draft-kind")));
+											if (!kinds.has("outbox")) return "no unsent message in the list";
+											if (!kinds.has("thread")) return "no server draft in the list";
 											const row = [...document.querySelectorAll("ul li button")].find((el) => el.textContent.includes("Met logo"));
 											if (!row) return "no draft with a picture";
 											row.click();
@@ -3044,6 +3049,42 @@ if (!app.requestSingleInstanceLock()) {
 										throw new Error(`Smoke: the composer did not save the picture's address: ${saved?.bodyHtml}`);
 									}
 									console.log("SMOKE_DEMO draft picture parked and restored");
+									// The merged list itself, in both themes, before a row takes the pane.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
+											if (nav) nav.click();
+											await new Promise((r) => setTimeout(r, 600));
+										})()`,
+									);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										const shot = await capture(window.webContents);
+										writeFileSync(joinPath(shotDir, `drafts-list-${theme}.png`), shot.toPNG());
+									}
+									// A server draft opens as a thread, like any other folder's.
+									const server = await window.webContents.executeJavaScript(
+										`(async () => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
+											if (!nav) return "no drafts entry";
+											nav.click();
+											await new Promise((r) => setTimeout(r, 600));
+											const row = document.querySelector("li[data-draft-kind=thread] button");
+											if (!row) return "no server draft row";
+											row.click();
+											await new Promise((r) => setTimeout(r, 800));
+											if (document.querySelector("li[data-draft-kind]")) return "the list stayed over the thread";
+											const text = document.body.textContent;
+											if (!text.includes("Offerte website") && !text.includes("Nieuw dit najaar")) return "the thread did not open";
+											return "ok";
+										})()`,
+									);
+									if (server !== "ok") throw new Error(`Smoke: server draft ${server}`);
+									console.log("SMOKE_DEMO drafts list both kinds, server draft opens as a thread");
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
 											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));

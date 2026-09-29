@@ -48,7 +48,7 @@ with `FormPage`'s header, because a bar over a canvas is room the canvas needs.
 | **Left** | The name, the description and the subject, each edited where it is written rather than in a box; the subject wraps and Enter leaves it. The layers, which are also where order is changed. Autosave and Save at the foot. It folds away to a bar over the canvas with the name in it |
 | **Middle** | The sheet, drawn at the width of the breakpoint being edited, with its name and size over it, on a surface that scrolls and pans (space or the middle button) and zooms (Ctrl and the wheel, the buttons, or the keys below). It opens zoomed to fit, and a click on the empty surface round it lets go of what is selected. Below it, a handle that makes the sheet taller and never shorter than its content |
 | **Bottom** | A toolbar floating over the canvas, the way Figma's does. On the left, the five groups of everything that can go in a message (Containers, Text, Columns, Media, Other) and the button block, as glyphs with their names and keys in the tooltips. A group is a button that adds the element it added last, with a chevron beside it that opens the group's menu ("The toolbar's groups" below). A new element lands inside the selected container or cell, or straight after the selected element; with nothing selected, a container or columns table goes at the end of the frame and anything else at the end of the last container showing. On the right, in a group of their own, the four views: the canvas, the message as it will be sent, the HTML, and what the template asks for. At the end, the list of keyboard shortcuts |
-| **Right** | The design panel, in Figma's order, for the frame, a section or a block: breakpoints, position, layout, appearance, typography, fill, stroke, effects. Its choices are icons with the words in the tooltips, its colours are Figma's rows with a picker behind the swatch, and its controls are Figma's size, 28 pixels |
+| **Right** | The design panel, in Figma's order, for the frame, a container, a columns table, a cell or a block: breakpoints, position, layout, spacing, appearance, typography, fill, stroke, effects. Its choices are icons with the words in the tooltips, its colours are Figma's rows with a picker behind the swatch, and its controls are Figma's size, 28 pixels |
 
 ### The toolbar's groups
 
@@ -151,10 +151,10 @@ it for typing, as it always has.
 
 | | |
 | --- | --- |
-| **Container** | Its element (the tag), position, layout (flow, size, alignment, distribution, gap, corners, padding, clip), appearance, fill, stroke, effects, breakpoints, and conversion to HTML. Inside a flex or grid parent its position is that parent's cross axis and its share of the room is a block's, worked out by `sizing.ts`; in the frame or a table cell, which lay things out in plain flow, it is margins, and there is nowhere to move until it is narrower than what holds it |
-| **Columns** | Its name, position, width, the gap, its rows and the cells in each (add and remove), corners, padding, appearance with the eye, fill, stroke, effects, and conversion to HTML |
-| **Cell** | Width (a percentage, or empty), vertical alignment, corners, padding, clip, opacity, fill, stroke and effects. No eye of its own, no position and nothing to drag, because its row fixes it in the table. Removing it is in its header |
-| **Block** | As before, and for a text or heading its element (any tag of the Text group), for a picture its link. In the frame or a cell a block is sized fixed or filling (a picture or a button fixes or hugs instead), with no share of the room and no alignment but a picture's |
+| **Container** | Its element (the tag), position (where it sits and its size), layout (flow, alignment, gap, wrap, columns of a grid, clip), spacing (padding and margin), appearance (the eye, radius, opacity), fill, stroke, effects, breakpoints, and conversion to HTML. Inside a flex or grid parent its position is that parent's cross axis and its share of the room is a block's, worked out by `sizing.ts`; in the frame or a table cell, which lay things out in plain flow, it is margins, and there is nowhere to move until it is narrower than what holds it |
+| **Columns** | Its name, position and width, layout (the gap), spacing, appearance with the eye, fill, stroke, effects, then its rows and the cells in each (add and remove), and conversion to HTML |
+| **Cell** | Position (its width, a percentage or empty), layout (vertical alignment and clip), padding, radius and opacity, fill, stroke and effects. No eye of its own, no margin (a `td` ignores one) and nothing to drag, because its row fixes it in the table. Removing it is in its header |
+| **Block** | As before, and for a text or heading its element (any tag of the Text group), for a picture its link. In the frame or a cell a block is sized fixed or filling (a picture or a button fixes or hugs instead), with no share of the room and no alignment but a picture's. A text, heading, button or input has a Layout of its own: how its words sit (see below). No block has Clip content |
 
 What something is written as and what a table holds are the same at every
 width: a tag, a row, a cell, a cell's width and alignment, and the gap change
@@ -169,15 +169,59 @@ placeholder substitution and the outbox below them never learn that a canvas
 exists. The layout is the source; the HTML is output. They cannot disagree,
 because one write produces both.
 
-The panel's order is Figma's. **Position** is the alignment row, the three
-across and the three down, with the ones that do not apply in the section
-greyed out as Figma greys them in an auto layout; there is no X or Y because
-nothing is placed at a point. **Layout** is W and H, each with fixed, hug or
-fill in the field beside the number, then the corner radius, one or four, the
-padding, as two numbers or four, and clip content. **Appearance** is whether it
-shows and its opacity. Then **Typography** for anything with words,
-what a button links to or a picture shows, and **Fill**, **Stroke** and
-**Effects** as rows, each with its eye and its minus.
+The panel's order is Figma's, and it is the same for every kind of element. A
+section an element has nothing for is left out, never shown empty.
+
+| Section | Holds |
+| --- | --- |
+| **Position** | Where the element sits in its parent, and how big it is. The alignment row, the three across and the three down, with the ones that do not apply in the parent greyed out as Figma greys them in an auto layout; there is no X or Y because nothing is placed at a point. Then W and H, each with fixed, hug or fill in the field beside the number: sitting and sizing in the parent are one question |
+| **Layout** | Only how the element arranges what is in it. For a container: the flow (down, across or a grid), Figma's 3 by 3 alignment box, the gap with its Auto, wrap for a row or a column and the column count for a grid, and Clip content. For a columns table: the gap between cells. For a cell: its vertical alignment and Clip content. For a text, heading, button or input, which lay out words rather than children: the horizontal alignment (left, centre, right, justify) and, for a text or a heading that is not a list, the vertical one |
+| **Spacing** | Padding, then margin. Each is across and down as two numbers, or each side on its own behind the button beside them. A cell has padding only |
+| **Appearance** | The eye, then the corner radius and the opacity on one row, with the button that gives each corner a radius of its own |
+| **Typography** | For anything with words: family, weight, size, line height, letter spacing, italic, underline, strikethrough, case and the colour |
+| **Fill**, **Stroke**, **Effects** | As rows, each with its eye and its minus |
+| The kind's own | What a button links to, what a picture shows, which input an input is, a columns table's rows. Then the selection colours and the custom CSS |
+
+**The alignment box** is two questions asked with one click: where the content
+sits across the page (left, centre, right) and where down it (top, middle,
+bottom). The model asks them the way CSS does, along the flow and across it, so
+`alignment.ts` maps the box on to the fields by the way the container runs: in
+a row, left to right is `justify` and top to bottom is `align`; in a column it
+is the other way round; in a grid, across is `justify` (which writes
+`justify-items`) and down is `align`. Four values are not a place in the box
+and stay reachable:
+
+- **Stretch** is a toggle beside the box, "Stretch across" and "Stretch down".
+  A flex container can stretch across its flow, a grid both ways. A stretched
+  axis lights the line of places the other axis picks, and a click on the box
+  takes the container out of stretch, since the click chooses a place.
+- **Space between and space around** are the gap's Auto. The gap field has a
+  choice beside it, Fixed, Auto (space between) and Around (space around), the
+  way W and H have theirs. Around is Juno's own; Figma has no name for it. While
+  the gap is Auto or Around a click on the box changes only the other axis,
+  the way Figma's box does. Choosing Fixed packs the content at the start.
+
+Opening the panel never rewrites anything: the box is read from the fields and
+only a click writes.
+
+A grid used to have only `align`. It now has `justify` as well, stretch by
+default, which is what a grid without it always did and writes nothing, so a
+saved grid compiles to the same bytes. Where a grid does not stretch its items
+across their cells they are as wide as their content, so a block in it can be
+fixed or hug there and not fill.
+
+**Margin** is new in the model: `box.margin`, zero on every side, so every saved
+template reads as it did (the parser gives a missing one zeros, and no version
+bump was needed). The compiler writes it after the element's own placement, one
+side at a time and only where it is set, as `margin-top` and the others, since a
+text already carries `margin:0` and a picture `margin:0 auto`. A side the
+element's alignment already sets to `auto` keeps that: a container or columns
+table in the frame or a cell that is centred or pushed to the end, and a picture
+that is centred or pushed right. The panel shows that side as Auto and takes no
+number there. A cell takes no margin, because a `td` ignores one. Breakpoints
+override it like any other box field, `RESET` puts a side back to zero, and the
+code view reads it back. Outlook on Windows drops margins on a `div` in some
+versions, and the Spacing section says so.
 
 The model has no field called fill or hug. It has what CSS has, a block's own
 width and least height, its share of the room along the section (`grow`) and
@@ -189,7 +233,7 @@ the keyboard both:
 | --- | --- | --- | --- | --- |
 | Down | Stretched across | Not stretched | A share of the room | No share |
 | Across | A share of the room | No share | Stretched down | Not stretched |
-| Grid | The cell's width | Not offered | Stretched down | Not stretched |
+| Grid | The cell's width | Not offered, unless the grid does not stretch across its cells; then hug and not fill | Stretched down | Not stretched |
 
 A container or a columns table sizes the same way, by the parent it sits in.
 The frame and a table cell are not flex or grid boxes: they lay what is in them
@@ -299,8 +343,9 @@ and would not be what the recipient opens.
 
 Figma's type panel, bar the OpenType features, which no mail client applies:
 family, nine weights from thin to black, size, line height, letter spacing,
-horizontal and vertical alignment, italic, underline, strikethrough, and case.
-An empty size or line height is the message's own, 15 and 1.65.
+italic, underline, strikethrough, and case. How the words sit in their block,
+across and down, is in Layout. An empty size or line height is the message's
+own, 15 and 1.65.
 
 Bold, italic, underline, strikethrough and links inside a text block are edited
 on the canvas: a double click opens the block in place, in its own type, with a

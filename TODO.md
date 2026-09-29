@@ -69,13 +69,6 @@ Decided and ready to build, roughly smallest first.
 - **Purging a removed mail account.** Removing an account forgets its password
   and soft-deletes the row; its messages and attachments stay on disk until a
   purge exists. That purge is a confirmed action, never an MCP tool.
-- **`npm run db:migrate` runs a script that does not exist.** `package.json`
-  points it at `scripts/migrate.mjs`, and verify.md, the migration-new skill
-  and the ship-check skill all call it as `npm run db:migrate -- --db <path>`
-  to try migrations on a copy. It needs building: take `--db`, refuse to run
-  without it, run the compiled `db/migrate.ts` from `dist-electron` under
-  `ELECTRON_RUN_AS_NODE=1 electron` (verify.md: never write to a database with
-  a different SQLite than the app's), and print what it applied.
 - **Remote pictures in a draft outside the template editor.** The mail
   template canvas and its preview draw a picture from an https address as a
   placeholder, because the window's content policy blocks it

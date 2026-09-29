@@ -86,6 +86,18 @@ li { margin: 0 0 1mm; }
 	font-weight: 600;
 }
 
+/* A page-model document is made of full sheets, so a banner in the flow would
+   push the first sheet down and spill its foot onto a sheet of its own. Pinned
+   into the top margin instead, where the sheet has nothing on it. */
+.juno-specimen:has(~ .juno-page) {
+	position: absolute;
+	z-index: 1;
+	top: 4mm;
+	left: 20mm;
+	right: 20mm;
+	margin: 0;
+}
+
 .juno-signatures {
 	margin-top: 10mm;
 	display: flex;

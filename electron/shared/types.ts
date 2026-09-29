@@ -567,6 +567,8 @@ export interface AppSettings {
 	 * the installation, and it is what tells a first install from an upgrade.
 	 */
 	mailTemplateSeedVersion: number;
+	/** The same for document templates: 0 is never, and it tells a first install from an upgrade. */
+	documentTemplateSeedVersion: number;
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
 	/**
@@ -1426,8 +1428,8 @@ export interface DocumentTemplate extends Standard {
 	language: string;
 	bodyHtml: string;
 	/**
-	 * Null means nobody has checked the text is sound. Every template that ships
-	 * starts null, because the shipped ones are invented. See docs/templates.md.
+	 * Null means nobody has checked the text is sound. Every template starts null,
+	 * the example that ships included. See docs/templates.md.
 	 */
 	reviewedAt: Iso | null;
 	version: number;

@@ -5,26 +5,13 @@ a **you** tag needs Nathan rather than a session.
 
 ---
 
-## 1. One example document template, and your own real ones
+## 1. Your own real document templates - **you**
 
-Phase 1 ships five **invented** contract templates (`nda`,
-`development_agreement`, `hosting_agreement`, `project_scope`, `addendum` in
-`electron/main/services/document-templates-seed.ts`) so the machinery could be
-built and tested. They are structurally plausible and legally worthless.
-
-**Decided.** New installs stop getting them, and one example ships in their place.
-
-- The example is a single document template that shows every part of the
-  document editor: every kind of placeholder, an input the template asks for,
-  pages, headings, a table, and the signature block. Written in Dutch with "u",
-  by writing.md section 1, and native rather than translated.
-- It is seeded **only on a first install**, into an empty database, and after
-  that it is an ordinary template the owner can edit or delete. An upgrade
-  never adds it to an existing install and never brings it back.
-- **Existing installs keep the five exactly as they are.** They are simply no
-  longer seeded: a new install gets the example and nothing else, and an
-  upgrade neither adds, hides nor deletes anything. No row is removed, so the
-  hide-don't-delete rule (data.md section 9) is not touched.
+Nothing that ships is fit to send to a client. A new install gets one example
+document template and it is a specimen. An install that still has the five
+invented templates from phase 1 (`nda`, `development_agreement`,
+`hosting_agreement`, `project_scope`, `addendum`) keeps them as they are, and
+they are specimens too.
 
 **Still yours.** Write your real contract templates in the app, from the
 example or from nothing. The placeholder syntax and the fields are in

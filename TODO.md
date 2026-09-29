@@ -96,71 +96,12 @@ Not tasks, written down so nobody builds them by accident:
 
 ## 4. Mail template editor
 
-Three pieces of work, in this order: 4d first, then 4b, because 4b changes the
+Two pieces of work, in this order: 4b first, then 4c, because 4b changes the
 model 4c's example builds on. Read docs/editors.md section 2 and decisions
 36 and 37 first; every rule there still holds. Each piece is its own set of
 commits, and each keeps the four checks green: `npm run check`,
 `JUNO_SMOKE_DEMO=1 JUNO_SMOKE_FRONT=1 npm run smoke`, both themes looked at, and
 the copy sweep in writing.md section 7.
-
-### 4d. The design panel's sections, reorganised
-
-Asked for on 2026-09-29. Today the Layout section of the design panel
-(`src/features/templates/mail/canvas/DesignPanel.tsx`) mixes four things: the
-width and height, the radius, the padding, and clip content. Each moves to
-where Figma people expect it, and Layout keeps only how the element lays out
-what is inside it.
-
-- **Appearance** holds the radius next to the opacity, on one row, with the
-  four-corner expander as it has now, plus the eye it already has. The radius
-  leaves Layout.
-- **Spacing** is a new section of its own, after Layout, with **Padding** and
-  **Margin**. Each is the horizontal and vertical pair it is now (the arrows),
-  with the expander to four sides, the way Figma's padding works. Padding is
-  the existing `box.padding`.
-- **Margin is new in the model.** `MailBoxStyle` gains `margin: MailSpacing`,
-  zero on every side by default, so every saved template reads as it did
-  (the parser gives a missing margin zeros; no version bump is needed, as with
-  every box field added before). The compiler writes `margin` after the
-  element's own placement, except on a side the element's alignment already
-  sets to `auto` (centring or pushing to an end): that side stays `auto`, and
-  the panel shows it as "Auto" and does not take a number there. A cell takes
-  no margin (a `td` ignores one), so a cell's Spacing shows padding only.
-  Breakpoints override it like any box field (`RESET` gains the margin
-  sides). The code view reads it back. The MCP layout description names it.
-  Outlook on Windows drops margins on a `div` in some versions: the Spacing
-  section says so in one line, the way the Layout section warns about flexbox.
-- **Layout** holds only how the element arranges its children:
-  - the kind: flex or grid, as now;
-  - for flex, the direction and wrap;
-  - for grid, the column count;
-  - the gap;
-  - **alignment as Figma's 3 by 3 box**: left, centre and right against top,
-    middle and bottom, one click setting both the distribution along the flow
-    and the alignment across it. "Space between" stays available the way Figma
-    offers it, as an Auto option on the gap. A container whose alignment is
-    `stretch` today must still show and keep it: every value the model can
-    hold now stays reachable, and nothing saved changes when the panel is
-    opened;
-  - **Clip content**, a checkbox, for everything that is not text.
-- **Text elements get their own Layout**, since they lay out words rather than
-  children: the horizontal text alignment (left, centre, right, justify) and
-  the vertical alignment (top, middle, bottom), which move here from
-  Typography.
-- **Width and height** (the W and H fields with fixed, hug and fill) leave
-  Layout and move to **Position**, which already says where the element sits
-  in its parent: sitting and sizing in the parent are one question.
-- Every element kind gets the same order of sections: Position, Layout,
-  Spacing, Appearance, Typography (text), Fill, Stroke, Effects, then the
-  kind's own sections, Selection colours and Custom CSS. A section an element
-  has nothing for is left out, never shown empty.
-- The breakpoint behaviour of every moved field stays as it is: changed while
-  a breakpoint is selected, it applies at that width and narrower.
-- Done when: tests cover margin parsing, compiling (including an `auto` side
-  kept), breakpoints and the code view round trip; the smoke walk sets a
-  margin and a padding from the Spacing section and a 3 by 3 alignment and
-  checks the compiled HTML; the editor screenshots show the new sections in
-  both themes; docs/editors.md section 2 describes the panel's sections.
 
 ### 4b. Actions instead of a button block
 

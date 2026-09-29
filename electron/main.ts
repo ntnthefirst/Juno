@@ -1767,6 +1767,13 @@ if (!app.requestSingleInstanceLock()) {
 												return "Alt and an arrow did not move the block within its nested parent";
 											}
 
+											// An apostrophe and an ampersand typed into a text go into the
+											// message escaped once, and read as the same words again.
+											second.click();
+											await wait(200);
+											await press("t", "KeyT");
+											if (!(await type("Apostrof's & meer"))) return "T did not open a third text for typing";
+
 											const view = document.querySelector('button[title="The message as it will be sent"]');
 											if (!view) return "no preview view";
 											view.click();
@@ -1778,10 +1785,11 @@ if (!app.requestSingleInstanceLock()) {
 												await wait(150);
 												const frame = document.querySelector('iframe[title="Template preview"]');
 												html = frame ? frame.getAttribute("srcdoc") || "" : "";
-												if (html.includes("Genest") && html.includes("Tweede")) break;
+												if (html.includes("Genest") && html.includes("Tweede") && html.includes("Apostrof")) break;
 											}
 											if (!html) return "the message did not render";
 											if (!html.includes("Genest") || !html.includes("Tweede")) return "the compiled HTML does not carry the nested blocks";
+											if (!html.includes("Apostrof&#39;s &amp; meer") || /&amp;#|&amp;amp;/.test(html)) return "an apostrophe or an ampersand was not escaped exactly once";
 											// A section opened inside another before that one closes.
 											if (!/<section[^>]*>(?:(?!<\\/section>)[\\s\\S])*<section/.test(html)) {
 												return "the compiled HTML has no section nested inside another";

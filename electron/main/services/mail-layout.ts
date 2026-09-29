@@ -1402,7 +1402,7 @@ export function sanitiseFragment(html: string, extra: readonly string[] = []): s
 
 	for (const match of html.matchAll(TAG_RE)) {
 		const start = match.index ?? 0;
-		out += escapeHtml(html.slice(cursor, start));
+		out += escapeText(html.slice(cursor, start));
 		cursor = start + match[0].length;
 
 		const closing = Boolean(match[1]);
@@ -1422,22 +1422,35 @@ export function sanitiseFragment(html: string, extra: readonly string[] = []): s
 			continue;
 		}
 		if (name === "a") {
-			const href = safeHref(attribute(attrs, "href") ?? "");
+			const href = safeHref(unescapeAttr(attribute(attrs, "href") ?? ""));
 			// A link with no usable target keeps its words and loses its anchor,
 			// rather than shipping an <a> that goes nowhere.
 			out += href ? `<a href="${escapeHtml(href)}">` : "";
 			continue;
 		}
 		if (name === "span" || name === "p") {
-			const style = sanitiseDeclarations(attribute(attrs, "style") ?? "");
+			const style = sanitiseDeclarations(unescapeAttr(attribute(attrs, "style") ?? ""));
 			out += style ? `<${name} style="${escapeHtml(style)}">` : `<${name}>`;
 			continue;
 		}
 		out += `<${name}>`;
 	}
 
-	out += escapeHtml(html.slice(cursor));
+	out += escapeText(html.slice(cursor));
 	return out;
+}
+
+/**
+ * Words between tags, escaped for markup that has already been through this
+ * once. A text block keeps html, so an entity in it (`&#39;`, `&amp;`) is
+ * already the escaped form of a character; escaping its ampersand again would
+ * grow it on every save (`&amp;#39;`, then `&amp;amp;#39;`). A bare
+ * ampersand is still escaped, so `A & B` is written once as `A &amp; B`.
+ */
+function escapeText(text: string): string {
+	return text.replace(/(&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);)|[&<>"']/gi, (char, entity: string | undefined) =>
+		entity ?? escapeHtml(char),
+	);
 }
 
 /** What a code block may carry: an email's worth of structure, and nothing that runs. */

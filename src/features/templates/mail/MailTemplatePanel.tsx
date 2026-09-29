@@ -3,7 +3,7 @@ import type { MailTemplate } from "@shared/types";
 import { Button } from "../../../components/Button";
 import { SidePanel } from "../../../components/SidePanel";
 import { messageOf } from "../../../lib/errors";
-import { framed } from "./canvas/framed-preview";
+import { framed } from "../../../lib/framed-preview";
 import { useCanvasFonts } from "./canvas/use-canvas-fonts";
 
 type MailTemplatePanelProps = {

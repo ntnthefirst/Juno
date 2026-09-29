@@ -56,9 +56,6 @@ phase 6's done-when in PLAN.md.
 
 Decided and ready to build, roughly smallest first.
 
-- **Sent messages show in the reader only after the Sent folder is synced.**
-  Until then the outbox is the record. Showing outbox rows inside a thread
-  would close the gap.
 - **Unsent drafts are not merged into the Drafts folder.** Juno's own drafts
   live in the outbox and the server's live in its Drafts folder, and the
   Drafts view says so in a line pointing at the outbox rather than showing

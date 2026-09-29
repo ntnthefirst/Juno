@@ -6,6 +6,7 @@
  * the table can be tested without a window.
  */
 import { isMac } from "../../../../lib/platform";
+import { BUTTON_KEY, GROUPS, HEADING_KEY, type GroupId } from "./elements";
 
 export type ShortcutAction =
 	| "delete"
@@ -37,12 +38,18 @@ export type ShortcutAction =
 	| "align-top"
 	| "align-middle"
 	| "align-bottom"
-	| "add-section"
+	| "add-containers"
 	| "add-text"
+	| "add-columns"
+	| "add-media"
+	| "add-other"
 	| "add-heading"
 	| "add-button"
-	| "add-image"
-	| "add-field"
+	| "menu-containers"
+	| "menu-text"
+	| "menu-columns"
+	| "menu-media"
+	| "menu-other"
 	| "zoom-in"
 	| "zoom-out"
 	| "zoom-reset"
@@ -57,14 +64,32 @@ function letter(press: KeyPress): string | null {
 	return /^Key[A-Z]$/.test(press.code) ? press.code.slice(3).toLowerCase() : null;
 }
 
-const TOOLS: Record<string, ShortcutAction> = {
-	f: "add-section",
-	t: "add-text",
-	h: "add-heading",
-	b: "add-button",
-	i: "add-image",
-	e: "add-field",
+/** What each group's letter does alone, and with Shift. */
+export const GROUP_ACTIONS: Record<GroupId, { add: ShortcutAction; menu: ShortcutAction }> = {
+	containers: { add: "add-containers", menu: "menu-containers" },
+	text: { add: "add-text", menu: "menu-text" },
+	columns: { add: "add-columns", menu: "menu-columns" },
+	media: { add: "add-media", menu: "menu-media" },
+	other: { add: "add-other", menu: "menu-other" },
 };
+
+/**
+ * Every bare letter that adds something, as [letter, action]. A list rather
+ * than an object literal so a test can see that no letter is used twice: an
+ * object would quietly keep the last of two.
+ */
+export const ADD_KEYS: [string, ShortcutAction][] = [
+	...GROUPS.map((group): [string, ShortcutAction] => [group.key.toLowerCase(), GROUP_ACTIONS[group.id].add]),
+	[HEADING_KEY.toLowerCase(), "add-heading"],
+	[BUTTON_KEY.toLowerCase(), "add-button"],
+];
+
+const TOOLS: Record<string, ShortcutAction> = Object.fromEntries(ADD_KEYS);
+
+/** Shift with a group's letter opens its menu. */
+const MENUS: Record<string, ShortcutAction> = Object.fromEntries(
+	GROUPS.map((group) => [group.key.toLowerCase(), GROUP_ACTIONS[group.id].menu]),
+);
 
 const ALIGN: Record<string, ShortcutAction> = {
 	a: "align-left",
@@ -132,7 +157,7 @@ export function shortcutFor(press: KeyPress): ShortcutAction | null {
 		if (press.code === "Digit1") return "zoom-fit";
 		if (press.key === "?") return "help";
 		if (press.key === "+") return "zoom-in";
-		return null;
+		return key ? (MENUS[key] ?? null) : null;
 	}
 
 	switch (press.key) {
@@ -188,14 +213,23 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 	{
 		title: "Add",
 		items: [
-			{ label: "Section", keys: "F" },
-			{ label: "Text", keys: "T" },
+			{ label: "Last used container", keys: "F" },
+			{ label: "Last used text", keys: "T" },
 			{ label: "Heading", keys: "H" },
+			{ label: "Columns", keys: "C" },
+			{ label: "Last used media", keys: "I" },
+			{ label: "Last used other", keys: "E" },
 			{ label: "Button", keys: "B" },
-			{ label: "Image", keys: "I" },
-			{ label: "Input", keys: "E" },
+			{ label: "Open a group's menu", keys: "Shift+F, T, C, I, E" },
+			{ label: "Pick from an open menu", keys: "The key beside it" },
 		],
 	},
+	// Each group's menu, in the words its rows use: Shift and the group's
+	// letter, then the element's own.
+	...GROUPS.map((group) => ({
+		title: `${group.label} menu`,
+		items: group.elements.map((element) => ({ label: element.label, keys: `Shift+${group.key}, ${element.key}` })),
+	})),
 	{
 		title: "Edit",
 		items: [

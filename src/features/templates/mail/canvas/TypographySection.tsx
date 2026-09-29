@@ -29,8 +29,6 @@ type TypographySectionProps = {
 	 * message's ink; a button's label always has one.
 	 */
 	color: { value: string | null; onChange: (value: string | null) => void; clearable: boolean };
-	/** A heading's level, which is set here with the rest of its type. */
-	level?: { value: 1 | 2 | 3; onChange: (level: 1 | 2 | 3) => void };
 	/** Only a text block or a heading can sit lower in a taller box. */
 	showVertical: boolean;
 };
@@ -54,7 +52,7 @@ function cleanFamily(value: string): string | null {
  * because that is where somebody is when they want one. Everything else is the
  * set Figma shows, bar the OpenType features, which no mail client applies.
  */
-export function TypographySection({ text, onText, fonts, onLinkAndUse, color, level, showVertical }: TypographySectionProps) {
+export function TypographySection({ text, onText, fonts, onLinkAndUse, color, showVertical }: TypographySectionProps) {
 	const [linking, setLinking] = useState(false);
 	const [name, setName] = useState("");
 	const [fallback, setFallback] = useState<MailFontFallback>("sans");
@@ -76,18 +74,6 @@ export function TypographySection({ text, onText, fonts, onLinkAndUse, color, le
 
 	return (
 		<PanelSection title="Typography">
-			{level ? (
-				<Segmented
-					label="Heading level"
-					value={String(level.value)}
-					options={[
-						{ value: "1", label: "Heading 1", icon: "h1", title: "Heading 1" },
-						{ value: "2", label: "Heading 2", icon: "h2", title: "Heading 2" },
-						{ value: "3", label: "Heading 3", icon: "h3", title: "Heading 3" },
-					]}
-					onChange={(next) => level.onChange(Number.parseInt(next, 10) as 1 | 2 | 3)}
-				/>
-			) : null}
 			<div className="flex items-center gap-1">
 				<div className="min-w-0 flex-1">
 					<PanelSelect

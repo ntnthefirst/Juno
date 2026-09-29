@@ -1785,6 +1785,414 @@ if (!app.requestSingleInstanceLock()) {
 									if (nested !== "ok") throw new Error(`Smoke: mail template editor ${nested}`);
 									writeFileSync(joinPath(shotDir, `mail-template-nested.png`), (await capture(window.webContents)).toPNG());
 
+									// The toolbar's groups (TODO 4a). Every group has a button that adds
+									// its last-used element and a chevron that opens its menu; both are
+									// used here on the real toolbar, and so are the keys: a group's letter,
+									// Shift with it for the menu, and an element's own key inside it. A
+									// text is nested in a header, and the compiled message follows what
+									// is added and what is changed in the design panel.
+									// A screenshot in the theme the walk is in (dark, after the two
+									// above) and in light, and back to dark: the new controls have to be
+									// looked at in both.
+									const shootBoth = async (name: string) => {
+										writeFileSync(joinPath(shotDir, `${name}.png`), (await capture(window.webContents)).toPNG());
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											if (theme === "light") writeFileSync(joinPath(shotDir, `${name}-light.png`), (await capture(window.webContents)).toPNG());
+										}
+									};
+
+									const grouped = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const named = (kind, start) => rows(kind).find((el) => el.textContent.trim().startsWith(start));
+											const type = async (text) => {
+												const editor = document.querySelector("[role=textbox]");
+												if (!editor) return false;
+												document.execCommand("insertText", false, text);
+												editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setSelect = async (labelText, value) => {
+												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === labelText);
+												const select = label ? document.getElementById(label.htmlFor) : null;
+												if (!select) return false;
+												Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, value);
+												select.dispatchEvent(new Event("change", { bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const openMenu = async (group) => {
+												const chevron = document.querySelector('button[aria-label="' + group + ' menu"]');
+												if (!chevron) return false;
+												chevron.click();
+												await wait(300);
+												return document.querySelector('[role=menu][aria-label="' + group + ' menu"]') !== null;
+											};
+											const pick = async (id) => {
+												const item = document.querySelector('[role=menuitem][data-element="' + id + '"]');
+												if (!item) return false;
+												item.click();
+												await wait(300);
+												return true;
+											};
+
+											for (const [group, name] of [["containers", "Containers"], ["text", "Text"], ["columns", "Columns"], ["media", "Media"], ["other", "Other"]]) {
+												if (!document.querySelector('[data-tool-group="' + group + '"] button')) return "the toolbar has no " + name + " group";
+												if (!document.querySelector('button[aria-label="' + name + ' menu"]')) return "the " + name + " group has no chevron";
+											}
+
+											// Containers: the key adds the last-used one, and Shift and F opens
+											// the menu, where H is a header.
+											const top = rows("container").find((el) => el.dataset.layerDepth === "0");
+											if (!top) return "no top-level container to start from";
+											top.click();
+											await wait(200);
+											const containers = rows("container").length;
+											await press("f", "KeyF");
+											if (rows("container").length !== containers + 1) return "F did not add a container";
+											await press("F", "KeyF", { shiftKey: true });
+											const menu = document.querySelector('[role=menu][aria-label="Containers menu"]');
+											if (!menu) return "Shift+F did not open the Containers menu";
+											if (!menu.contains(document.activeElement)) return "the menu did not take the focus";
+											if (menu.querySelectorAll("[role=menuitem]").length !== 8) return "the Containers menu does not list its eight elements";
+											const keys = [...menu.querySelectorAll("kbd")].map((el) => el.textContent.trim()).join("");
+											if (keys !== "SDHFMAIN") return "the rows of the Containers menu do not show their keys: " + keys;
+											await press("H", "KeyH", { shiftKey: true }, document.activeElement);
+											if (document.querySelector("[role=menu]")) return "picking an element did not close the menu";
+											if (rows("container").length !== containers + 2) return "H in the Containers menu did not add a header";
+											const header = named("container", "Header");
+											if (!header) return "the new header is not in the layers under its name";
+											if (!header.textContent.includes("header")) return "the layers do not show the header tag";
+
+											// A text in the header. A letter typed into the open text belongs to
+											// the text, not to the toolbar.
+											const blocks = () => rows("block");
+											await press("t", "KeyT");
+											const typing = document.querySelector('[role=textbox][aria-label="Text"]');
+											if (!typing || document.activeElement !== typing) return "T did not add a text open for typing";
+											const beforeTyping = rows("container").length;
+											typing.dispatchEvent(new KeyboardEvent("keydown", { key: "f", code: "KeyF", bubbles: true, cancelable: true }));
+											await wait(300);
+											if (rows("container").length !== beforeTyping) return "a letter typed into a text added a container";
+											if (!(await type("In de kop"))) return "the text closed early";
+											const kop = blocks().find((el) => el.textContent.trim().startsWith("In de kop"));
+											if (!kop) return "the text is not in the layers";
+											if (kop.dataset.layerDepth !== String(Number(named("container", "Header").dataset.layerDepth) + 1)) {
+												return "the text is not nested in the header";
+											}
+											const nestedHtml = await compiled((html) => html.includes("In de kop"));
+											if (!/<header[^>]*>(?:(?!<\\/header>)[\\s\\S])*In de kop/.test(nestedHtml)) return "the compiled HTML has no header holding the text";
+
+											// Text: the chevron and its menu, and the button that remembers.
+											if (!(await openMenu("Text"))) return "the Text chevron did not open its menu";
+											if (document.querySelectorAll("[role=menuitem]").length !== 13) return "the Text menu does not list its thirteen elements";
+											if (!(await pick("h3"))) return "no Heading 3 in the Text menu";
+											if (!(await type("Kopje"))) return "a new heading did not open for typing";
+											const remembered = document.querySelector('[data-tool-group="text"] button').getAttribute("aria-label");
+											if (remembered !== "Add heading 3") return "the Text button did not take the last-used element: " + remembered;
+											const headingHtml = await compiled((html) => html.includes("Kopje"));
+											if (!/<h3[^>]*>Kopje<\\/h3>/.test(headingHtml)) return "the compiled HTML has no h3";
+											let stored = "";
+											try { stored = window.localStorage.getItem("juno.mailTemplates.lastElements") || ""; } catch { stored = ""; }
+											if (!stored.includes('"text":"h3"')) return "the last-used element was not remembered on this machine";
+
+											// A tag changed in the design panel, within its group.
+											blocks().find((el) => el.textContent.trim().startsWith("In de kop")).click();
+											await wait(300);
+											if (!(await setSelect("Text element", "blockquote"))) return "no Text element list in the design panel";
+											const quote = await compiled((html) => html.includes("<blockquote"));
+											if (!/<blockquote[^>]*>In de kop<\\/blockquote>/.test(quote)) return "changing the tag to blockquote did not reach the compiled HTML";
+											if (!(await setSelect("Text element", "h4"))) return "no Text element list after the first change";
+											const asHeading = await compiled((html) => html.includes("<h4"));
+											if (!/<h4[^>]*>In de kop<\\/h4>/.test(asHeading)) return "a text turned into a heading did not compile as one";
+											if (!(await setSelect("Text element", "ul"))) return "no Text element list after the second change";
+											const asList = await compiled((html) => html.includes("<ul"));
+											if (!/<ul[^>]*><li>In de kop<\\/li><\\/ul>/.test(asList)) return "a heading turned into a list did not compile as one";
+											const kept = blocks().filter((el) => el.textContent.trim().startsWith("In de kop")).length;
+											if (kept !== 1) return "changing the tag lost or copied the element";
+
+											named("container", "Header").click();
+											await wait(300);
+											if (!(await setSelect("Container element", "footer"))) return "no Container element list in the design panel";
+											const footerHtml = await compiled((html) => html.includes("<footer"));
+											if (!/<footer[^>]*>(?:(?!<\\/footer>)[\\s\\S])*In de kop/.test(footerHtml)) return "changing the container to a footer did not reach the compiled HTML";
+											if (/<header/.test(footerHtml)) return "the header is still sent as a header";
+											if (!named("container", "Footer")) return "the layers still call the footer a header";
+
+											// A list opens for typing like a text does, and what is typed stays
+											// an item of it.
+											await press("T", "KeyT", { shiftKey: true });
+											if (!document.querySelector('[role=menu][aria-label="Text menu"]')) return "Shift+T did not open the Text menu";
+											await press("U", "KeyU", { shiftKey: true }, document.activeElement);
+											if (!(await type("Eerste punt"))) return "a new list did not open for typing";
+											const listHtml = await compiled((html) => html.includes("Eerste punt"));
+											if (!/<ul[^>]*><li>Eerste punt<\\/li><\\/ul>/.test(listHtml)) return "what was typed into a new list is not an item of it";
+											return "ok";
+										})()`,
+									) as string;
+									if (grouped !== "ok") throw new Error(`Smoke: mail template editor ${grouped}`);
+									await shootBoth("mail-template-grouped");
+
+									// Columns: added from the key and from the menu, with a cell chosen
+									// as the place a new text lands, and rows and cells changed in the
+									// design panel.
+									const columned = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const type = async (text) => {
+												const editor = document.querySelector("[role=textbox]");
+												if (!editor) return false;
+												document.execCommand("insertText", false, text);
+												editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setNumber = async (title, value) => {
+												const label = document.querySelector('label[title="' + title + '"]');
+												const field = label ? document.getElementById(label.htmlFor) : null;
+												if (!field) return false;
+												field.focus();
+												Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+												field.blur();
+												await wait(300);
+												return true;
+											};
+
+											await press("c", "KeyC");
+											if (rows("columns").length !== 1) return "C did not add a columns table";
+											if (rows("cell").length !== 2) return "a new columns table does not have two cells";
+											const chevron = document.querySelector('button[aria-label="Columns menu"]');
+											chevron.click();
+											await wait(300);
+											const item = document.querySelector('[role=menuitem][data-element="columns"]');
+											if (!item) return "the Columns menu has no columns";
+											item.click();
+											await wait(300);
+											if (rows("columns").length !== 2 || rows("cell").length !== 4) return "the Columns menu did not add a second table";
+											const tables = await compiled((html) => (html.match(/data-juno-columns/g) || []).length === 2);
+											if (!/<table[^>]*role="presentation"[^>]*data-juno-columns/.test(tables)) return "the compiled HTML has no presentation table";
+
+											// A cell: its width, and a text that lands in it.
+											const cell = rows("cell")[0];
+											cell.click();
+											await wait(300);
+											if (!(await setNumber("Width", "30"))) return "no width field for a cell";
+											const cellHtml = await compiled((html) => html.includes('width="30%"'));
+											if (!cellHtml.includes('width="30%"')) return "a cell width set in the design panel is not in the compiled HTML";
+											const cellDepth = Number(rows("cell")[0].dataset.layerDepth);
+											rows("cell")[0].click();
+											await wait(300);
+											await press("t", "KeyT");
+											if (!(await type("In de cel"))) return "T with a cell selected did not open a text";
+											const inCell = rows("block").find((el) => el.textContent.trim().startsWith("In de cel"));
+											if (!inCell || Number(inCell.dataset.layerDepth) !== cellDepth + 1) return "a text added with a cell selected did not land in the cell";
+
+											// Rows and cells of the table itself.
+											rows("columns")[0].click();
+											await wait(300);
+											const before = rows("cell").length;
+											document.querySelector('button[aria-label="Add row"]').click();
+											await wait(300);
+											if (rows("cell").length !== before + 2) return "Add row did not add a row of cells";
+											document.querySelector('button[aria-label="Remove row 2"]').click();
+											await wait(300);
+											if (rows("cell").length !== before) return "Remove row did not take the row out";
+											document.querySelector('button[aria-label="Add a cell to row 1"]').click();
+											await wait(300);
+											if (rows("cell").length !== before + 1) return "Add a cell did not add a cell";
+											return "ok";
+										})()`,
+									) as string;
+									if (columned !== "ok") throw new Error(`Smoke: mail template editor ${columned}`);
+									await shootBoth("mail-template-columns");
+
+									// Media and the rest, then the menu photographed open.
+									const media = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const footer = rows("container").find((el) => el.textContent.trim().startsWith("Footer"));
+											if (!footer) return "the footer went away";
+											footer.click();
+											await wait(300);
+											const blocks = rows("block").length;
+											await press("i", "KeyI");
+											if (rows("block").length !== blocks + 1) return "I did not add a picture";
+											await press("e", "KeyE");
+											if (rows("block").length !== blocks + 2) return "E did not add an input";
+											await press("E", "KeyE", { shiftKey: true });
+											const other = document.querySelector('[role=menu][aria-label="Other menu"]');
+											if (!other) return "Shift+E did not open the Other menu";
+											await press("D", "KeyD", { shiftKey: true }, document.activeElement);
+											if (rows("block").length !== blocks + 3) return "D in the Other menu did not add a divider";
+											const chevron = document.querySelector('button[aria-label="Media menu"]');
+											chevron.click();
+											await wait(300);
+											const menu = document.querySelector('[role=menu][aria-label="Media menu"]');
+											if (!menu) return "the Media chevron did not open its menu";
+											if (menu.querySelectorAll("[role=menuitem]").length !== 2) return "the Media menu offers more than a picture and a linked picture";
+											if (!/no client that matters/.test(menu.textContent)) return "the Media menu does not say why there is no video";
+											if (/video|audio|embed/i.test([...menu.querySelectorAll("[role=menuitem]")].map((el) => el.textContent).join(" "))) return "the Media menu offers video, audio or an embed";
+											return "ok";
+										})()`,
+									) as string;
+									if (media !== "ok") throw new Error(`Smoke: mail template editor ${media}`);
+									await shootBoth("mail-template-groups");
+
+									const linked = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setText = async (labelText, value) => {
+												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === labelText);
+												const field = label ? document.getElementById(label.htmlFor) : null;
+												if (!field) return false;
+												Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												await wait(300);
+												return true;
+											};
+
+											// Escape closes a menu and nothing else.
+											await press("Escape", "Escape", {}, document.activeElement);
+											if (document.querySelector("[role=menu]")) return "Escape did not close the menu";
+											if (!document.querySelector('button[aria-label="Delete block"]')) return "Escape in the menu let go of the selection";
+
+											const blocks = rows("block").length;
+											await press("I", "KeyI", { shiftKey: true });
+											if (!document.querySelector('[role=menu][aria-label="Media menu"]')) return "Shift+I did not open the Media menu";
+											await press("L", "KeyL", { shiftKey: true }, document.activeElement);
+											if (rows("block").length !== blocks + 1) return "L in the Media menu did not add a linked picture";
+											const remembered = document.querySelector('[data-tool-group="media"] button').getAttribute("aria-label");
+											if (remembered !== "Add linked picture") return "the Media button did not take the last-used element: " + remembered;
+
+											// A link with a scheme the message refuses is said to be refused,
+											// and a safe one is not. The picture has no address of its own here:
+											// the canvas would try to load one, and its content policy refuses
+											// every address that is not the app's own.
+											if (!(await setText("Link address", "http://insecure.example"))) return "no link address field on a picture";
+											if (![...document.querySelectorAll("p")].some((el) => el.textContent.startsWith("Refused"))) return "an http link was not shown as refused";
+											if (!(await setText("Link address", "https://example.be"))) return "the link field went away";
+											if ([...document.querySelectorAll("p")].some((el) => el.textContent.startsWith("Refused"))) return "an https link was shown as refused";
+											const sent = await compiled((html) => /<hr /.test(html));
+											if (sent.includes("insecure.example")) return "an http link reached the message";
+											if (!/<hr[^>]*>/.test(sent)) return "the divider is not in the compiled HTML";
+
+											// What the compiler makes of a picture with an address, through the
+											// real bridge: inside its link when the link is safe, and a plain
+											// picture when it is not.
+											const viaBridge = await window.juno.mail.templates.preview({
+												subject: "x",
+												bodyHtml: "",
+												inputs: [],
+												clientId: null,
+												layout: {
+													version: 2,
+													children: [
+														{
+															kind: "container",
+															tag: "header",
+															children: [
+																{ kind: "image", src: "https://example.be/logo.png", alt: "Logo", href: "https://example.be" },
+																{ kind: "image", src: "https://example.be/other.png", alt: "Other", href: "javascript:alert(1)" },
+																{ kind: "image", src: "https://example.be/plain.png", alt: "Plain", href: "" },
+															],
+														},
+													],
+												},
+											});
+											const pictures = viaBridge.bodyHtml;
+											if ((pictures.match(/data-juno-link/g) || []).length !== 1) return "only the picture with a safe link should be inside a link";
+											if (!/<a href="https:\\/\\/example.be" data-juno-link="1"[^>]*><img[^>]*logo.png/.test(pictures)) return "the picture is not inside its link in the compiled HTML";
+											if (pictures.includes("javascript")) return "an unsafe link reached the message";
+											if (!/<header[^>]*>/.test(pictures)) return "the header container is not written as a header";
+
+											// Convert to HTML for a container: the footer and everything in
+											// it become one block that is sent as it was.
+											const footer = rows("container").find((el) => el.textContent.trim().startsWith("Footer"));
+											footer.click();
+											await wait(300);
+											const containers = rows("container").length;
+											const convert = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Convert to HTML");
+											if (!convert) return "a container has no Convert to HTML";
+											convert.click();
+											for (let tries = 0; tries < 20 && rows("container").length === containers; tries++) await wait(150);
+											if (rows("container").length !== containers - 1) return "converting the footer left it in the layers as a container";
+											if (rows("columns").length !== 0) return "the tables it held are still in the layers";
+											const converted = await compiled((html) => html.includes("<footer data-juno-block=\\"html\\""));
+											if (!/<footer data-juno-block="html"[^>]*>(?:(?!<\\/footer>)[\\s\\S])*<table[^>]*role="presentation"/.test(converted)) return "the converted footer is not sent as the footer with its table";
+											if (!converted.includes("In de kop") || !converted.includes("In de cel")) return "converting lost what was in the footer";
+											return "ok";
+										})()`,
+									) as string;
+									if (linked !== "ok") throw new Error(`Smoke: mail template editor ${linked}`);
+									writeFileSync(joinPath(shotDir, `mail-template-converted.png`), (await capture(window.webContents)).toPNG());
+
 									// Escape lets go of what is selected before it leaves, so the
 									// first one drops the block that was just inserted and the second
 									// one walks out. Nothing is saved on the way: the template in the

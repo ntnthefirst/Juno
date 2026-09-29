@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import type { MailHeadingTag } from "@shared/types";
 import { Icon } from "../../../../components/Icon";
-import { normaliseEditedHtml } from "./inline-html";
+import { normaliseEditedHtml, type InlineTag } from "./inline-html";
 
 /**
  * Where the caret starts: where a double click landed, or with everything
@@ -14,7 +13,7 @@ type InlineTextProps = {
 	/** Rich text keeps bold, italic, underline, strikethrough and links. A heading is plain. */
 	rich: boolean;
 	value: string;
-	tag: "div" | MailHeadingTag;
+	tag: InlineTag;
 	style: CSSProperties;
 	caret: Caret;
 	/**
@@ -104,7 +103,10 @@ export function InlineText({ rich, value, tag, style, caret, host: frame, onComm
 				selection.addRange(at);
 			} else {
 				const whole = document.createRange();
-				whole.selectNodeContents(element);
+				// A list with one item selects the item, not the list round it, so what
+				// is typed stays an item.
+				const items = element.matches("ul, ol") ? element.querySelectorAll("li") : null;
+				whole.selectNodeContents(items && items.length === 1 ? items[0]! : element);
 				// A click that missed the text puts the caret at the end.
 				if (caret !== "all") whole.collapse(false);
 				selection.addRange(whole);

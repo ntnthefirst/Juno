@@ -175,3 +175,48 @@ describe("placing a block across its section", () => {
 		expect(widthSizing(filled, section)).toBe("fill");
 	});
 });
+
+describe("in plain flow, in the frame or a table cell", () => {
+	it("offers a text a fixed width or the full width, and a picture or a button fixed or hugging", () => {
+		expect(widthModes(newBlock("text"), null)).toEqual(["fixed", "fill"]);
+		expect(widthModes(newBlock("image"), null)).toEqual(["fixed", "hug"]);
+		expect(widthModes(newBlock("button"), null)).toEqual(["fixed", "hug"]);
+		expect(widthModes(newBlock("html"), null)).toEqual([]);
+		expect(widthModes(newBlock("spacer"), null)).toEqual([]);
+	});
+
+	it("offers a height that is fixed or hugs, never a share of room there is none of", () => {
+		expect(heightModes(newBlock("text"), null)).toEqual(["fixed", "hug"]);
+		expect(heightModes(newBlock("text"), column())).toEqual(["fixed", "hug", "fill"]);
+	});
+
+	it("reads a block as filling the width until it has a width of its own", () => {
+		const text = newBlock("text");
+		expect(widthSizing(text, null)).toBe("fill");
+		expect(heightSizing(text, null)).toBe("hug");
+		const fixed = { ...text, box: { ...(text as Extract<MailBlock, { kind: "text" }>).box, width: 200 } } as MailBlock;
+		expect(widthSizing(fixed, null)).toBe("fixed");
+	});
+
+	it("writes only the size, with no share of the room and no alignment", () => {
+		const text = newBlock("text");
+		const fixed = sizeWidth(text, null, "fixed", 320.4);
+		expect(fixed).toEqual({ box: { ...(text as Extract<MailBlock, { kind: "text" }>).box, width: 320 } });
+		expect("grow" in fixed || "alignSelf" in fixed).toBe(false);
+		const filled = sizeWidth({ ...text, ...fixed } as MailBlock, null, "fill", null);
+		expect((filled as { box: { width: number | null } }).box.width).toBeNull();
+		const taller = sizeHeight(text, null, "fixed", 90);
+		expect((taller as { box: { minHeight: number | null } }).box.minHeight).toBe(90);
+		expect("grow" in taller).toBe(false);
+	});
+
+	it("moves only a picture across, by its margins", () => {
+		const image = newBlock("image");
+		expect(acrossOf(image, null)).toBe("start");
+		expect(alignAcross(image, null, "center")).toEqual({ align: "center" });
+		expect(acrossOf({ ...image, align: "center" } as MailBlock, null)).toBe("center");
+		const text = newBlock("text");
+		expect(acrossOf(text, null)).toBeNull();
+		expect(alignAcross(text, null, "center")).toEqual({});
+	});
+});

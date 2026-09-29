@@ -1168,11 +1168,16 @@ export interface MailBreakpoint {
 	blocks: Record<string, MailBlockOverride>;
 }
 
-/** One block of a canvas in hand, to be turned into the HTML and CSS it compiles to. */
+/**
+ * One node of a canvas in hand, to be turned into the HTML and CSS it compiles
+ * to: a block, or a container or columns table with everything under it as one
+ * code block.
+ */
 export interface MailBlockConversion {
 	layout: MailLayout;
-	sectionId: string;
-	blockId: string;
+	/** The container or cell holding the node directly, or null for the frame's own top level. */
+	parentId: string | null;
+	nodeId: string;
 	/** What the template asks for, which decides how an input block compiles. */
 	inputs?: TemplateInput[];
 }

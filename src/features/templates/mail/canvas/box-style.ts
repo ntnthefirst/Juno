@@ -24,6 +24,7 @@ import type {
 	MailFontFallback,
 	MailContainer,
 	MailSelfAlign,
+	MailSpacing,
 	MailTextStyle,
 	MailWeight,
 } from "@shared/types";
@@ -273,6 +274,14 @@ function strokeCss(box: MailBoxStyle): CSSProperties {
 	};
 }
 
+/** Pixels of left padding a list keeps for its bullets, as LIST_INDENT in services/mail-layout.ts. */
+export const LIST_INDENT = 24;
+
+/** No padding on any side: when the compiler writes no padding for a box at all. */
+export function noPadding(padding: MailSpacing): boolean {
+	return !padding.top && !padding.right && !padding.bottom && !padding.left;
+}
+
 export function boxCss(box: MailBoxStyle): CSSProperties {
 	const sized = box.width !== null || box.minHeight !== null;
 	return {
@@ -350,11 +359,11 @@ export function placeCss(node: { grow: number; alignSelf: MailSelfAlign }): CSSP
 }
 
 /**
- * Where something narrower than its parent sits across it, at the top level:
- * the frame lays its children one under the next in plain flow, so this is
- * margins. A nested container or columns table takes `placeCss` instead, the
- * way a block does, because its parent is a flex or grid box that already has
- * an alignment of its own (matches sectionPlaceDeclarations).
+ * Where something narrower than its parent sits across it when that parent
+ * lays its children out in plain flow, as the frame and a table cell do: this
+ * is margins. A container or columns table inside a flex or grid box takes
+ * `placeCss` instead, the way a block does, because that parent already has an
+ * alignment of its own (matches sectionPlaceDeclarations).
  */
 function sectionPlaceCss(node: { alignSelf: MailSelfAlign }): CSSProperties {
 	if (node.alignSelf === "center") return { marginLeft: "auto", marginRight: "auto" };
@@ -362,16 +371,16 @@ function sectionPlaceCss(node: { alignSelf: MailSelfAlign }): CSSProperties {
 	return {};
 }
 
-/** `sectionPlaceCss` at the top level, `placeCss` nested. Matches placementDeclarations. */
+/** `sectionPlaceCss` in plain flow, `placeCss` in a flex or grid parent. Matches placementDeclarations. */
 function placementCss(node: { grow: number; alignSelf: MailSelfAlign }, topLevel: boolean): CSSProperties {
 	return topLevel ? sectionPlaceCss(node) : placeCss(node);
 }
 
 /**
  * A container's own declarations: its layout, its box, and its place in
- * whatever parent it sits in. `topLevel` is true only for a child of the
- * frame's own top level; a container nested inside another container or a
- * cell is never top level, whatever the ones above it are.
+ * whatever parent it sits in. `topLevel` is true for a child of the frame or of
+ * a table cell, which lay their children out in plain flow; a container
+ * inside another container is placed by that container's flex or grid.
  */
 export function sectionCss(section: MailContainer, topLevel: boolean): CSSProperties {
 	const box = { ...boxCss(section.box), ...placementCss(section, topLevel) };

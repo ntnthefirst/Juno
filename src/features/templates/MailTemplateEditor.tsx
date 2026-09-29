@@ -28,7 +28,7 @@ import { PREVIEW_WIDTHS, type PreviewWidth } from "./mail/canvas/preview-width";
 import { WidthSwitch } from "./mail/canvas/WidthSwitch";
 import type { Editing, Measured, Selection } from "./mail/canvas/CanvasView";
 import { DesignPanel } from "./mail/canvas/DesignPanel";
-import { framed } from "./mail/canvas/framed-preview";
+import { framed } from "../../lib/framed-preview";
 import { CanvasToolbar } from "./mail/canvas/CanvasToolbar";
 import {
 	elementInfo,

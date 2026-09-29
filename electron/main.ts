@@ -285,7 +285,15 @@ if (!app.requestSingleInstanceLock()) {
 								// in-memory mailbox the main process swapped in above. This is
 								// what exercises the credential store, the scheme host and the
 								// reader's frame policy.
-								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
+								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", addressLine1: "Kerkstraat 1", postalCode: "9000", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
+								// A hand-written template of the walk's own. A fresh install ships
+								// none of the old ones, and the walk below still needs one that is
+								// HTML only, to read in the code view and to lay out on a canvas.
+								await b.mail.templates.create({
+									name: "Herinnering betaling",
+									subject: "Herinnering: {{ document.title }}",
+									bodyHtml: "<p>Beste {{ client.contactName }},</p><p>Volgens mijn administratie staat {{ document.title }} nog open. Mogelijk is de betaling al onderweg.</p><p>Met vriendelijke groeten,<br>{{ owner.contactName }}</p>",
+								});
 								// Two addresses and a number, so the lists under Your business are
 								// photographed with something in them. The second one is the case
 								// the lists exist for: an address that is kept and never read.
@@ -1080,13 +1088,16 @@ if (!app.requestSingleInstanceLock()) {
 									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
 								}
 								if (screen === "Mail templates" || screen === "Document templates") {
-									// Opens the first template so the preview path runs for real: the
+									// Opens a template so the preview path runs for real: the
 									// list renders, the row opens a preview, and the preview asks the
 									// service to fill the template. A typecheck proves none of that,
-									// and the preview is where a template screen would throw.
+									// and the preview is where a template screen would throw. For the
+									// mail templates it is the hand-written one the walk made, which
+									// the steps after this need.
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											const row = document.querySelector("main ul li button");
+											const wanted = ${JSON.stringify(screen === "Mail templates" ? "Herinnering betaling" : "")};
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes(wanted));
 											if (!row) return "no template row";
 											row.click();
 											await new Promise((r) => setTimeout(r, 900));
@@ -1303,8 +1314,9 @@ if (!app.requestSingleInstanceLock()) {
 									// One document underneath every view (docs/editors.md section 2):
 									// switching to Code has to show the very text the body was
 									// rendering, not a blank editor or a stale one. Then onto a
-									// canvas, because the seeded templates are hand-written HTML and
-									// converting one is the only way the canvas is reached at all.
+									// canvas, because the template the walk made is hand-written HTML and
+									// converting one is the only way the canvas is reached at all: a
+									// fresh install ships only the example, and that one is a canvas.
 									const edited = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -2570,7 +2582,7 @@ if (!app.requestSingleInstanceLock()) {
 										}
 									}
 
-									// No Fill step either: the seeded mail templates ask for nothing
+									// No Fill step either: the hand-written template asks for nothing
 									// beyond a client and a project, so one Next reaches Review.
 									const usedMail = await window.webContents.executeJavaScript(
 										`(async () => {
@@ -2674,6 +2686,203 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									) as string;
 									if (listed !== "ok") throw new Error(`Smoke: creating a mail template ${listed}`);
+
+									// The example a first install is given. This database is
+									// fresh, so it is here and none of the four retired templates are,
+									// and against the demo client it fills in with nothing missing.
+									// Every picture in it is at a web address, which this window refuses
+									// to load, so the steps below also prove that neither the canvas
+									// nor a preview tries: a refused load fails the run.
+									const exampleFacts = await window.webContents.executeJavaScript(
+										`(async () => {
+											const b = window.juno;
+											const all = await b.mail.templates.listAll();
+											const example = all.find((t) => t.key === "voorbeeld");
+											if (!example) return "a fresh install has no example";
+											if (all.some((t) => ["contract_cover", "project_kickoff", "invoice_due", "hosting_renewal"].includes(t.key))) return "a fresh install was given a retired template";
+											if (!example.layout) return "the example has no canvas";
+											if (example.isSystem) return "the example is a system row";
+											const clients = await b.clients.list({ limit: 50 });
+											const obet = clients.find((c) => c.name === "obet");
+											if (!obet) return "no demo client";
+											const extras = Object.fromEntries(example.inputs.map((input) => [input.key, input.defaultValue || ""]));
+											const filled = await b.mail.templates.preview({ subject: example.subject, layout: example.layout, inputs: example.inputs, clientId: obet.id, extras });
+											if (filled.missing.length > 0) return "the example has no value for " + filled.missing.join(", ");
+											if (!filled.bodyHtml.includes("Beste Laura,")) return "the example does not greet the demo client";
+											if (!filled.bodyHtml.includes("Kerkstraat 1, 9000 Gent")) return "the example does not carry the business address";
+											return "ok:" + example.updatedAt;
+										})()`,
+									) as string;
+									if (!exampleFacts.startsWith("ok:")) throw new Error(`Smoke: the example ${exampleFacts}`);
+									const exampleUpdatedAt = exampleFacts.slice(3);
+
+									// Used the way a person would: the picture it asks for, a client,
+									// and the review. The review is the example filled in against the
+									// demo client, and it must say nothing is missing.
+									const exampleReview = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
+											if (!row) return "no row for the example";
+											row.click();
+											await wait(900);
+											const panel = document.querySelector("main");
+											if (!panel || !panel.querySelector("iframe")) return "the example opens no preview";
+											if (!panel.querySelector("iframe").getAttribute("srcdoc").includes("data-juno-remote-image")) return "the preview does not stand a box in for a picture at a web address";
+											const use = [...panel.querySelectorAll("button")].find((el) => el.textContent.trim() === "Use");
+											if (!use) return "no use action";
+											use.click();
+											await wait(700);
+											const ask = [...document.querySelectorAll("main label")].find((el) => el.textContent.trim().startsWith("Foto"));
+											const field = ask ? document.getElementById(ask.htmlFor) : null;
+											if (!field) return "the Fill step does not ask for the picture";
+											if (!field.value.startsWith("https://")) return "the picture starts without an address";
+											const next = () => [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
+											next().click();
+											await wait(500);
+											const clientLabel = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Client");
+											const select = clientLabel ? document.getElementById(clientLabel.htmlFor) : null;
+											if (!select) return "no client to pick";
+											const obet = [...select.options].find((option) => option.textContent.trim() === "obet");
+											if (!obet) return "the demo client is not offered";
+											Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, obet.value);
+											select.dispatchEvent(new Event("change", { bubbles: true }));
+											await wait(500);
+											next().click();
+											let frame = null;
+											for (let tries = 0; tries < 30 && !frame; tries++) {
+												await wait(200);
+												frame = document.querySelector('main iframe[title="Message preview"]');
+											}
+											if (!frame) return "the review shows no message";
+											await wait(600);
+											const main = document.querySelector("main");
+											const gap = main.textContent.indexOf("No value for");
+											if (gap >= 0) return "the review says a value is missing: " + main.textContent.slice(gap, gap + 120);
+											if (!main.textContent.includes("Voorbeeld: bericht voor obet")) return "the subject did not fill in for the demo client";
+											const html = frame.getAttribute("srcdoc") || "";
+											if (!html.includes("Beste Laura,")) return "the review does not greet the demo client";
+											if (/<img[^>]+src="https:/.test(html)) return "the review still asks for a picture at a web address";
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleReview !== "ok") throw new Error(`Smoke: using the example ${exampleReview}`);
+									await shootBoth("mail-template-example-review");
+									await window.webContents.executeJavaScript(
+										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									);
+									await new Promise((r) => setTimeout(r, 500));
+
+									// Opened in the editor: the layers name its parts, the picture at a
+									// web address is a box that says who loads it, and what it asks for
+									// is in the Asks view.
+									const exampleOpen = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
+											if (!row) return "no row for the example";
+											row.click();
+											await wait(900);
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											let ready = null;
+											for (let tries = 0; tries < 30 && !ready; tries++) {
+												await wait(150);
+												ready = document.querySelector('button[aria-label="Hide the panel"]');
+											}
+											if (!ready) return "no editor panel";
+											await wait(1500);
+											const layers = [...document.querySelectorAll("[data-layer-kind]")].map((el) => el.textContent.trim());
+											for (const name of ["Kop", "Inhoud", "Twee kolommen", "Vergelijking", "Scheidingslijn", "Voettekst"]) {
+												if (!layers.some((text) => text.startsWith(name))) return "no layer named " + name;
+											}
+											if (!document.body.textContent.includes("not by Juno.")) return "the canvas does not say who loads the logo";
+											if (document.querySelector('img[src^="http"]')) return "the canvas is drawing a picture at a web address";
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleOpen !== "ok") throw new Error(`Smoke: the example in the editor ${exampleOpen}`);
+									// Nothing is selected on opening, so the frame's panel is showing.
+									await shootBoth("mail-template-example");
+
+									// The other half of it: the table, the button, the code and the footer.
+									const exampleLower = await window.webContents.executeJavaScript(
+										`(async () => {
+											const footer = document.querySelector('[data-canvas-id="voorbeeld-voet"]');
+											if (!footer) return "the footer is not on the canvas";
+											footer.scrollIntoView({ block: "end" });
+											await new Promise((r) => setTimeout(r, 400));
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleLower !== "ok") throw new Error(`Smoke: the example in the editor ${exampleLower}`);
+									await shootBoth("mail-template-example-lower");
+
+									const exampleViews = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const asks = document.querySelector('button[title="What this template asks for"]');
+											if (!asks) return "no asks view";
+											asks.click();
+											await wait(500);
+											if (![...document.querySelectorAll("input")].some((el) => el.value === "foto")) return "the Asks view does not list the picture";
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleViews !== "ok") throw new Error(`Smoke: the example in the editor ${exampleViews}`);
+									writeFileSync(joinPath(shotDir, `mail-template-example-asks.png`), (await capture(window.webContents)).toPNG());
+
+									const exampleSent = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const view = document.querySelector('button[title="The message as it will be sent"]');
+											if (!view) return "no preview view";
+											view.click();
+											let frame = null;
+											for (let tries = 0; tries < 30 && !frame; tries++) {
+												await wait(150);
+												frame = document.querySelector('iframe[title="Template preview"]');
+											}
+											if (!frame) return "the message did not render";
+											const html = frame.getAttribute("srcdoc") || "";
+											if (!html.includes("data-juno-remote-image")) return "the preview does not stand a box in for the logo";
+											if (/<img[^>]+src="https:/.test(html)) return "the preview still asks for a picture at a web address";
+											if (html.includes("[ontbreekt: document.foto]")) return "the preview does not use the picture the template offers";
+											if (!html.includes("@media only screen and (max-width:480px)")) return "the phone breakpoint is not in the message";
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleSent !== "ok") throw new Error(`Smoke: the example in the editor ${exampleSent}`);
+									await shootBoth("mail-template-example-view");
+
+									const examplePhone = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const phone = [...document.querySelectorAll('[role=group][aria-label="Preview width"] button')].find((el) => el.textContent.trim().startsWith("Phone"));
+											if (!phone) return "the preview has no Phone width";
+											phone.click();
+											await wait(600);
+											return phone.getAttribute("aria-pressed") === "true" ? "ok" : "the Phone width did not take";
+										})()`,
+									) as string;
+									if (examplePhone !== "ok") throw new Error(`Smoke: the example in the editor ${examplePhone}`);
+									await shootBoth("mail-template-example-phone");
+
+									// Looking at it changes nothing: leaving writes no save.
+									const exampleLeft = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											for (let press = 0; press < 3 && document.querySelector('button[aria-label="Hide the panel"]'); press++) {
+												document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(500);
+											}
+											if (document.querySelector('button[aria-label="Hide the panel"]')) return "Escape did not leave the editor";
+											const example = (await window.juno.mail.templates.listAll()).find((t) => t.key === "voorbeeld");
+											return example ? example.updatedAt : "the example went away";
+										})()`,
+									) as string;
+									if (exampleLeft !== exampleUpdatedAt) throw new Error(`Smoke: opening the example wrote to it (${exampleLeft})`);
 								}
 								if (screen === "Calendar") {
 									// Opens a recurring occurrence, asks to edit it, answers the

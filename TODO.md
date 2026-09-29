@@ -96,49 +96,12 @@ Not tasks, written down so nobody builds them by accident:
 
 ## 4. Mail template editor
 
-Two pieces of work, in this order: 4b first, then 4c, because 4b changes the
-model 4c's example builds on. Read docs/editors.md section 2 and decisions
-36 and 37 first; every rule there still holds. Each piece is its own set of
-commits, and each keeps the four checks green: `npm run check`,
+One piece of work, 4c. Read docs/editors.md section 2 (the Actions part
+included, since the example uses them) and decisions 36 and 37 first; every
+rule there still holds. It is its own set of commits, and it keeps the four
+checks green: `npm run check`,
 `JUNO_SMOKE_DEMO=1 JUNO_SMOKE_FRONT=1 npm run smoke`, both themes looked at, and
 the copy sweep in writing.md section 7.
-
-### 4b. Actions instead of a button block
-
-**What it does.** The button leaves the toolbar. Every element gets an
-**Actions** section in the design panel, after Effects, listing actions as rows
-like the effects: a trigger, what it does, an eye and a minus.
-
-| Trigger | What it can do | Compiles to | Where it works |
-| --- | --- | --- | --- |
-| **On click** | Open a link (https), start a mail (mailto), call (tel) | The element wrapped in an `<a>`, or an `<a>` itself for inline text | Every client |
-| **On hover** | Change the fill, text colour, underline or opacity | A `:hover` rule in the head, next to the breakpoints, `!important` like them | Apple Mail, iOS, Outlook on the web. Not Gmail, not Outlook on Windows; the panel says so on the row |
-
-Nothing else: focus, scroll and timed triggers need a script.
-
-- A button becomes a text element with a fill, a radius and an on-click
-  action. Existing `button` blocks keep loading and compiling, the way
-  dividers and spacers do now; they are simply not offered.
-- `safeHref` already refuses anything but https and mailto; add tel there,
-  with a test, and refuse everything else as it does now.
-- The hover rules come out of the same place as the breakpoints
-  (`breakpointRules` in `mail-layout.ts`), so the class names and the
-  sanitising are shared, and a rule can never contain an angle bracket.
-- A link on a whole block must not wrap block elements in a way clients
-  break: an `<a>` around a `div` is valid HTML5 and Gmail keeps it, but test it
-  in the preview and in the Outlook note.
-
-**No custom JavaScript.** Not a choice Juno gets to make: every mail client
-removes `<script>` and every `on*` handler before the reader sees the message,
-Gmail and Outlook drop the whole element, and mail with scripts in it scores
-as spam. `sanitiseMarkup` strips them for that reason. The two triggers above
-are the whole of what an email can do when somebody interacts with it. Do not
-add a script field, and do not let a code block carry one.
-
-**Done when.** Tests: an on-click action compiles to a link and reads back from
-the code view; a hover action writes one rule with the element's class; tel,
-mailto and https pass and javascript, data and http do not. The smoke walk adds
-an on-click action to a text block and checks the sent HTML has the link.
 
 ### 4c. Stop seeding the shipped mail templates, and ship one example on first install
 

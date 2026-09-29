@@ -112,8 +112,8 @@ is what a fresh install does, and it is the check people skip.
 Then verify on **real-shaped data**, against a copy, never the original:
 
 ```bash
-cp "<userData>/juno.db" ".tmp/juno-copy.db"
-npm run db:migrate -- --db .tmp/juno-copy.db
+cp "<userData>/juno.sqlite" ".tmp/juno-copy.sqlite"
+npm run db:migrate -- --db .tmp/juno-copy.sqlite
 ```
 
 - [ ] Row counts before and after match on every table you did not intend to

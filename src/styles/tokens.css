@@ -169,6 +169,7 @@
 	--canvas-ink: #16161d;
 	--canvas-ink-muted: #5d5e70;
 	--canvas-line: #e3e2ec;
+	--canvas-line-strong: #cbcad8;
 }
 
 :root:not([data-theme="light"]) {
@@ -325,6 +326,7 @@
 	--color-canvas-ink: var(--canvas-ink);
 	--color-canvas-ink-muted: var(--canvas-ink-muted);
 	--color-canvas-line: var(--canvas-line);
+	--color-canvas-line-strong: var(--canvas-line-strong);
 	--color-accent: var(--accent);
 	--color-accent-hover: var(--accent-hover);
 	--color-accent-ink: var(--accent-ink);

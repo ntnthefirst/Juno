@@ -22,15 +22,19 @@ import type {
 	MailBoxStyle,
 	MailColumns,
 	MailColumnsCell,
+	MailColumnsRow,
 	MailContainer,
+	MailContainerTag,
 	MailEffect,
 	MailFill,
+	MailHeadingTag,
 	MailLayout,
 	MailNode,
 	MailSectionLayout,
 	MailSides,
 	MailSpacing,
 	MailTextStyle,
+	MailTextTag,
 } from "@shared/types";
 
 /** Matches MAX_DEPTH in services/mail-layout.ts: a container nests one level deeper than its parent; a columns table's cells do not, the way the parser counts it. */
@@ -155,18 +159,76 @@ export function emptyLayout(): MailLayout {
 	};
 }
 
+/** What a container of each tag is called in the layers until somebody names it. */
+export const CONTAINER_TAG_LABELS: Record<MailContainerTag, string> = {
+	section: "Section",
+	div: "Div",
+	header: "Header",
+	footer: "Footer",
+	main: "Main",
+	article: "Article",
+	aside: "Aside",
+	nav: "Nav",
+};
+
+/** Every name a container or a columns table has in the tree, so a new one can be told apart in the layers. */
+function namesIn(nodes: MailNode[], except: string | null): string[] {
+	return nodes.flatMap((node) => {
+		if (isContainer(node)) return [...(node.id === except ? [] : [node.name]), ...namesIn(node.children, except)];
+		if (isColumns(node)) {
+			return [
+				...(node.id === except ? [] : [node.name]),
+				...node.rows.flatMap((row) => row.cells.flatMap((cell) => namesIn(cell.children, except))),
+			];
+		}
+		return [];
+	});
+}
+
+/** `base`, or `base 2`, `base 3` and so on when the layers already have one of that name. */
+export function nameFor(layout: MailLayout, base: string, except: string | null = null): string {
+	const taken = new Set(namesIn(layout.children, except));
+	if (!taken.has(base)) return base;
+	for (let n = 2; ; n++) {
+		if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
+	}
+}
+
+/** A container of one tag as the toolbar adds it: room round what goes in it, like a section. */
+export function newContainer(layout: MailLayout, tag: MailContainerTag): MailContainer {
+	return { ...newSection(nameFor(layout, CONTAINER_TAG_LABELS[tag])), tag };
+}
+
+/** A cell as one is added: holding one text, so there is something to type into. */
+export function newCell(width: number | null): MailColumnsCell {
+	return { id: newId(), width, verticalAlign: "top", box: emptyBox(), children: [newBlock("text")] };
+}
+
+/** Columns as the toolbar adds them: one row of two cells, half each, each holding a text. */
+export function newColumns(layout: MailLayout): MailColumns {
+	return {
+		id: newId(),
+		kind: "columns",
+		hidden: false,
+		name: nameFor(layout, "Columns"),
+		alignSelf: "auto",
+		grow: 0,
+		gap: 16,
+		box: emptyBox(),
+		rows: [{ id: newId(), cells: [newCell(50), newCell(50)] }],
+	};
+}
+
 export type BlockKind = MailBlock["kind"];
 
 /**
- * What the toolbar inserts. A code block is not on the list: it is what any
- * block becomes with "Convert to HTML", and what the code view puts anything
- * it could not place into, rather than something started empty. Neither is a
- * divider or a spacer: a section with a height, a fill or a stroke on one side
- * is both, and it is one thing to learn instead of three. The two still load
- * and still compile, so a template that has them keeps them.
+ * What each kind of block is called when nothing better names it. What the
+ * toolbar adds is in elements.ts. A code block is not there: it is what any
+ * element becomes with "Convert to HTML", and what the code view puts anything
+ * it could not place into, rather than something started empty. Nor is a
+ * spacer: a container with a height, a fill or a stroke on one side is one.
+ * It still loads and still compiles, so a template that has one keeps it.
  */
-export const BLOCK_KINDS: BlockKind[] = ["text", "heading", "button", "image", "field"];
-
 export const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
 	text: "Text",
 	heading: "Heading",
@@ -314,6 +376,29 @@ export function findCell(layout: MailLayout, id: string): MailColumnsCell | null
 				for (const row of node.rows) {
 					for (const cell of row.cells) {
 						if (cell.id === id) return cell;
+						const found = walk(cell.children);
+						if (found) return found;
+					}
+				}
+			}
+		}
+		return null;
+	}
+	return walk(layout.children);
+}
+
+/** The columns table and the row a cell is in, with its place in the row. Null when `id` is not a cell. */
+export function locateCell(layout: MailLayout, id: string): { columns: MailColumns; row: MailColumnsRow; index: number } | null {
+	function walk(nodes: MailNode[]): { columns: MailColumns; row: MailColumnsRow; index: number } | null {
+		for (const node of nodes) {
+			if (isContainer(node)) {
+				const found = walk(node.children);
+				if (found) return found;
+			} else if (isColumns(node)) {
+				for (const row of node.rows) {
+					const index = row.cells.findIndex((cell) => cell.id === id);
+					if (index >= 0) return { columns: node, row, index };
+					for (const cell of row.cells) {
 						const found = walk(cell.children);
 						if (found) return found;
 					}
@@ -574,6 +659,44 @@ export function removeNode(layout: MailLayout, id: string): MailLayout {
 	return next.children.length === 0 ? { ...next, children: [emptySection("Body")] } : next;
 }
 
+/** Whether something dropped into `parentId` would land where nobody can see it: in a hidden container or table, or under one. */
+function hiddenAt(layout: MailLayout, parentId: ParentId): boolean {
+	if (parentId === null) return false;
+	return [...(pathTo(layout, parentId) ?? []), parentId].some((id) => findNode(layout, id)?.hidden === true);
+}
+
+/**
+ * Where a new element lands. Inside the selected container or cell, at the
+ * end; otherwise straight after the selected element, in its own parent. With
+ * nothing selected, a container or a columns table (`structural`) goes at the
+ * frame's own top level, at the end, and anything else into the last top-level
+ * container that is showing, which is where an author is usually working. A
+ * hidden parent is skipped, so nothing lands where nobody can see it.
+ */
+export function insertTarget(
+	layout: MailLayout,
+	selectedId: string | null,
+	structural: boolean,
+): { parentId: ParentId; afterId: string | null } {
+	if (selectedId) {
+		const cell = findCell(layout, selectedId);
+		const node = cell ? null : findNode(layout, selectedId);
+		const parentId = cell || !node ? null : parentOf(layout, selectedId);
+		const target = cell
+			? { parentId: cell.id, afterId: null }
+			: node && isContainer(node)
+				? { parentId: node.id, afterId: null }
+				: node && parentId !== undefined
+					? { parentId, afterId: selectedId }
+					: null;
+		if (target && !hiddenAt(layout, target.parentId)) return target;
+	}
+	if (structural) return { parentId: null, afterId: null };
+	const containers = layout.children.filter(isContainer);
+	const last = containers.filter((container) => !container.hidden).pop() ?? containers[containers.length - 1];
+	return { parentId: last ? last.id : null, afterId: null };
+}
+
 /** Puts `node` into `parentId`'s children, straight after `afterId`, or at the end when that is null or not there. */
 export function insertNode(layout: MailLayout, parentId: ParentId, node: MailNode, afterId: string | null): MailLayout {
 	return withChildren(layout, parentId, (children) => {
@@ -745,6 +868,194 @@ export function updateBlock(layout: MailLayout, id: string, patch: Partial<MailB
 		// no path that puts a heading's tag onto a spacer.
 		node.kind !== "container" && node.kind !== "columns" ? ({ ...node, ...patch } as MailBlock) : node,
 	);
+}
+
+/**
+ * Whether a link would be kept: https or mailto, or a placeholder filled in
+ * later. Matches safeHref in services/mail-layout.ts, which is what actually
+ * decides; this only lets the panel say so while it is being typed.
+ */
+export function safeLink(raw: string): boolean {
+	const trimmed = raw.trim();
+	return /^\{\{[^{}]+\}\}$/.test(trimmed) || /^(https:|mailto:)/i.test(trimmed);
+}
+
+/* ------------------------------------------------------- tags, in a group */
+
+const HEADING_TAG = /^h[1-6]$/;
+
+export function isHeadingTag(tag: string): tag is MailHeadingTag {
+	return HEADING_TAG.test(tag);
+}
+
+export function isListTag(tag: MailTextTag): boolean {
+	return tag === "ul" || tag === "ol";
+}
+
+function escapeText(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function unescapeText(html: string): string {
+	return html
+		.replace(/&nbsp;/g, " ")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;|&#x27;/g, "'")
+		.replace(/&amp;/g, "&");
+}
+
+/** The words of some inline html on one line: what a heading, which is plain text, can keep of it. */
+export function plainTextOf(html: string): string {
+	return unescapeText(
+		html
+			.replace(/<br\s*\/?>/gi, " ")
+			.replace(/<\/(li|p)>/gi, " ")
+			.replace(/<[^>]+>/g, ""),
+	)
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/** Lines of inline html, split at its line breaks, as the items of a list. */
+function linesToList(html: string): string {
+	const items = html
+		.split(/<br\s*\/?>/i)
+		.map((line) => line.trim())
+		.filter((line) => line !== "");
+	return items.length > 0 ? items.map((line) => `<li>${line}</li>`).join("") : "<li></li>";
+}
+
+/**
+ * What a list keeps after it was typed in. Typing over everything in a list can
+ * take its only item with it and leave bare words, which a list does not
+ * render as items, so words with no `<li>` are put back into one.
+ */
+export function asListItems(html: string): string {
+	return /<li[\s>]/i.test(html) ? html : linesToList(html);
+}
+
+/** The items of a list as lines of inline html. */
+function listToLines(html: string): string {
+	const items = [...html.matchAll(/<li>([\s\S]*?)<\/li>/gi)].map((match) => match[1] ?? "");
+	return items.length > 0 ? items.join("<br>") : html.replace(/<\/?li>/gi, "");
+}
+
+/**
+ * Changes what a text element is written as, within the Text group: any of
+ * its tags, headings included. Between two text tags the words stay as they
+ * are, except that a list keeps its lines as `<li>` items and a plain text
+ * keeps them as line breaks, so switching to a list and back loses nothing.
+ * Between a text tag and a heading level the element changes kind: a heading
+ * is plain text, so the words lose their bold, italic and links on the way in,
+ * and a text made from a heading gets its words back escaped.
+ */
+export function setTextTag(layout: MailLayout, id: string, tag: MailTextTag | MailHeadingTag): MailLayout {
+	return mapNode(layout, id, (node) => {
+		if (node.kind !== "text" && node.kind !== "heading") return node;
+		if (isHeadingTag(tag)) {
+			if (node.kind === "heading") return { ...node, tag };
+			return {
+				id: node.id,
+				grow: node.grow,
+				alignSelf: node.alignSelf,
+				hidden: node.hidden,
+				kind: "heading",
+				tag,
+				content: plainTextOf(node.html),
+				text: node.text,
+				box: node.box,
+			};
+		}
+		if (node.kind === "text") {
+			if (isListTag(node.tag) === isListTag(tag)) return { ...node, tag };
+			return { ...node, tag, html: isListTag(tag) ? linesToList(node.html) : listToLines(node.html) };
+		}
+		const words = escapeText(node.content);
+		return {
+			id: node.id,
+			grow: node.grow,
+			alignSelf: node.alignSelf,
+			hidden: node.hidden,
+			kind: "text",
+			tag,
+			html: isListTag(tag) ? `<li>${words}</li>` : words,
+			text: node.text,
+			box: node.box,
+		};
+	});
+}
+
+/**
+ * Changes a container's tag within the Containers group. A name that is only
+ * the old tag's (`Header`, `Header 2`) follows it, so the layers do not call a
+ * `div` a header; a name somebody chose is left alone.
+ */
+export function setContainerTag(layout: MailLayout, id: string, tag: MailContainerTag): MailLayout {
+	const node = findNode(layout, id);
+	if (!node || !isContainer(node) || node.tag === tag) return layout;
+	const stem = CONTAINER_TAG_LABELS[node.tag];
+	const generic = node.name === stem || new RegExp(`^${stem} \\d+$`).test(node.name);
+	const name = generic ? nameFor(layout, CONTAINER_TAG_LABELS[tag], id) : node.name;
+	return updateSection(layout, id, { tag, name });
+}
+
+/* ------------------------------------------------- columns: rows and cells */
+
+/** Whether every cell of a row has the same width, set: how a row starts, and what adding or removing a cell keeps even. */
+function evenWidths(cells: MailColumnsCell[]): boolean {
+	const first = cells[0]?.width ?? null;
+	return first !== null && cells.every((cell) => cell.width === first);
+}
+
+function withColumns(layout: MailLayout, columnsId: string, change: (columns: MailColumns) => MailColumns): MailLayout {
+	return mapNode(layout, columnsId, (node) => (node.kind === "columns" ? change(node) : node));
+}
+
+/** A row under the last one, with as many cells as it has, each holding a text. */
+export function addRow(layout: MailLayout, columnsId: string): MailLayout {
+	return withColumns(layout, columnsId, (columns) => {
+		const last = columns.rows[columns.rows.length - 1];
+		const widths = last && last.cells.length > 0 ? last.cells.map((cell) => cell.width) : [50, 50];
+		const row: MailColumnsRow = { id: newId(), cells: widths.map((width) => newCell(width)) };
+		return { ...columns, rows: [...columns.rows, row] };
+	});
+}
+
+/** Takes a row out. A table keeps at least one. */
+export function removeRow(layout: MailLayout, columnsId: string, rowId: string): MailLayout {
+	return withColumns(layout, columnsId, (columns) =>
+		columns.rows.length <= 1 ? columns : { ...columns, rows: columns.rows.filter((row) => row.id !== rowId) },
+	);
+}
+
+/** A cell at the end of a row. A row of even widths stays even; any other row leaves the new cell to share what is left. */
+export function addCell(layout: MailLayout, columnsId: string, rowId: string): MailLayout {
+	return withColumns(layout, columnsId, (columns) => ({
+		...columns,
+		rows: columns.rows.map((row) => {
+			if (row.id !== rowId) return row;
+			const even = row.cells.length > 0 && evenWidths(row.cells);
+			const width = even ? Math.max(1, Math.floor(100 / (row.cells.length + 1))) : null;
+			const cells = [...row.cells, newCell(width)];
+			return { ...row, cells: even ? cells.map((cell) => ({ ...cell, width })) : cells };
+		}),
+	}));
+}
+
+/** Takes a cell out, and what is in it. A row keeps at least one. */
+export function removeCell(layout: MailLayout, columnsId: string, rowId: string, cellId: string): MailLayout {
+	return withColumns(layout, columnsId, (columns) => ({
+		...columns,
+		rows: columns.rows.map((row) => {
+			if (row.id !== rowId || row.cells.length <= 1) return row;
+			const even = evenWidths(row.cells);
+			const kept = row.cells.filter((cell) => cell.id !== cellId);
+			const width = even ? Math.max(1, Math.floor(100 / kept.length)) : null;
+			return { ...row, cells: even ? kept.map((cell) => ({ ...cell, width })) : kept };
+		}),
+	}));
 }
 
 /** Whether what is selected is still there, which an undo can change under it. */

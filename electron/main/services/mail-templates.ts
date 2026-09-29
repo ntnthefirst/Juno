@@ -28,8 +28,8 @@ import { canvasShell, htmlToText, mailShell } from "./mail-html";
 import {
 	breakpointCss,
 	compileLayout,
-	convertBlockToCode,
-	findChildren,
+	convertNodeToCode,
+	findParent,
 	fontLinks,
 	layoutFromHtml,
 	normaliseLayout,
@@ -383,8 +383,9 @@ export async function parseBody(html: string): Promise<MailLayout> {
 }
 
 /**
- * One block of a canvas in hand turned into the HTML and CSS it compiles to,
- * which is what "Convert to HTML" does in the editor.
+ * One node of a canvas in hand turned into the HTML and CSS it compiles to,
+ * which is what "Convert to HTML" does in the editor: a block as itself, a
+ * container or a columns table with everything in it as one code block.
  *
  * A pure read like `parseBody`: it answers with the changed canvas and stores
  * nothing, so the conversion is part of the draft and is saved, or not, with
@@ -394,11 +395,11 @@ export async function parseBody(html: string): Promise<MailLayout> {
 export async function convertBlock(input: MailBlockConversion): Promise<MailLayout> {
 	const layout = normaliseLayout(input.layout);
 	if (!layout) throw new Error("That layout could not be read. Nothing was converted.");
-	const siblings = findChildren(layout.children, input.sectionId);
-	if (!siblings?.some((node) => node.id === input.blockId)) {
-		throw new Error("That block is not on the canvas any more. Select it again and convert it.");
+	const siblings = findParent(layout.children, input.parentId);
+	if (!siblings?.children.some((node) => node.id === input.nodeId)) {
+		throw new Error("That element is not on the canvas any more. Select it again and convert it.");
 	}
-	return convertBlockToCode(layout, input.sectionId, input.blockId, input.inputs ?? []);
+	return convertNodeToCode(layout, input.parentId, input.nodeId, input.inputs ?? []);
 }
 
 export async function previewDraft(draft: MailTemplateDraft, db: Db = getDb()): Promise<MailTemplateRender> {

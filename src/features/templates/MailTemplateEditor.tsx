@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MailBlock, MailContainer, MailLayout, MailNode, MailTemplate, MailTextStyle, TemplateInput } from "@shared/types";
+import type { MailBlock, MailLayout, MailNode, MailTemplate, MailTextStyle, TemplateInput } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
@@ -8,10 +8,10 @@ import { absorb, copyOverrides, layoutAt, widestFirst } from "./mail/canvas/brea
 import {
 	cloneNode,
 	duplicateNode,
-	emptySection,
 	findNode,
 	firstChildOf,
 	insertNode,
+	insertTarget,
 	moveNode,
 	moveWithinParent,
 	newBlock,
@@ -20,9 +20,9 @@ import {
 	selectionIn,
 	siblingOf,
 	updateBlock,
+	updateCell,
 	updateColumns,
 	updateSection,
-	type BlockKind,
 } from "./mail/canvas/canvas-actions";
 import { CanvasStage } from "./mail/canvas/CanvasStage";
 import { PREVIEW_WIDTHS, type PreviewWidth } from "./mail/canvas/preview-width";
@@ -31,7 +31,16 @@ import type { Editing, Measured, Selection } from "./mail/canvas/CanvasView";
 import { DesignPanel } from "./mail/canvas/DesignPanel";
 import { framed } from "./mail/canvas/framed-preview";
 import { CanvasToolbar } from "./mail/canvas/CanvasToolbar";
-import { isControl, isTyping, shortcutFor, type ShortcutAction } from "./mail/canvas/shortcuts";
+import {
+	elementInfo,
+	newElement,
+	readLastUsed,
+	writeLastUsed,
+	type ElementId,
+	type GroupId,
+	type LastUsed,
+} from "./mail/canvas/elements";
+import { GROUP_ACTIONS, isControl, isTyping, shortcutFor, type ShortcutAction } from "./mail/canvas/shortcuts";
 import { alignAcross, flowOf, type Across } from "./mail/canvas/sizing";
 import { useCanvasFonts } from "./mail/canvas/use-canvas-fonts";
 import { EditorSidebar, type EditorMode } from "./mail/EditorSidebar";
@@ -73,14 +82,13 @@ const HISTORY_DEPTH = 100;
  */
 const MERGE_MS = 800;
 
-/** The keys the toolbar's letters add, as the kinds they add. */
-const TOOL_KINDS: Partial<Record<ShortcutAction, BlockKind>> = {
-	"add-text": "text",
-	"add-heading": "heading",
-	"add-button": "button",
-	"add-image": "image",
-	"add-field": "field",
-};
+/** The keys that add what a group added last, and the keys that open its menu, as the groups they belong to. */
+const ADD_GROUPS = Object.fromEntries(
+	(Object.keys(GROUP_ACTIONS) as GroupId[]).map((group) => [GROUP_ACTIONS[group].add, group]),
+) as Partial<Record<ShortcutAction, GroupId>>;
+const MENU_GROUPS = Object.fromEntries(
+	(Object.keys(GROUP_ACTIONS) as GroupId[]).map((group) => [GROUP_ACTIONS[group].menu, group]),
+) as Partial<Record<ShortcutAction, GroupId>>;
 
 /**
  * What Ctrl+C last copied: one node, wherever it came from. Kept for the
@@ -141,6 +149,10 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	const [breakpoint, setBreakpoint] = useState<string | null>(null);
 	const [sidebar, setSidebar] = useState(true);
 	const [help, setHelp] = useState(false);
+	// What each toolbar group adds when its button, or its letter, is pressed.
+	const [last, setLast] = useState<LastUsed>(readLastUsed);
+	// The group whose menu is open, from the chevron or from Shift and its letter.
+	const [groupMenu, setGroupMenu] = useState<GroupId | null>(null);
 
 	const [history, setHistory] = useState<History>(NO_HISTORY);
 	// The last change to the layout that could be merged with the next one:
@@ -306,12 +318,6 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	// `restyleLayout` against the second.
 	const liveNode = layout && liveId ? findNode(layout, liveId) : null;
 	const shownNode = shown && liveId ? findNode(shown, liveId) : null;
-	// With nothing selected a new block lands in the last top-level container
-	// that is showing, which is where an author is usually working. A hidden
-	// one would swallow the block where nobody can see it land.
-	const topContainers = layout ? layout.children.filter((node): node is MailContainer => node.kind === "container") : [];
-	const shownContainers = topContainers.filter((section) => !section.hidden);
-	const lastSectionId = shownContainers[shownContainers.length - 1]?.id ?? (topContainers[topContainers.length - 1]?.id ?? null);
 	const onCanvas = mode === "canvas" && layout !== null;
 
 	/**
@@ -370,52 +376,42 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 		patch({ layout: next });
 	}
 
-	/** Where a new block goes: after the selected one, or at the end of the selected or last section. */
-	/**
-	 * Where a new node lands: inside the selected container, at the end, or
-	 * straight after the selected node, in its own parent. A hidden container
-	 * is skipped, the way a hidden section always was, so a block never lands
-	 * where nobody can see it.
-	 */
-	function landing(): { parentId: string | null; afterId: string | null } | null {
-		if (layout && liveId) {
-			const target =
-				liveNode && liveNode.kind === "container"
-					? { parentId: liveNode.id, afterId: null }
-					: (() => {
-							const parentId = parentOf(layout, liveId);
-							return parentId !== undefined ? { parentId, afterId: liveId } : null;
-						})();
-			if (target) {
-				const parent = target.parentId ? findNode(layout, target.parentId) : null;
-				if (!target.parentId || !parent?.hidden) return target;
-			}
-		}
-		return lastSectionId ? { parentId: lastSectionId, afterId: null } : null;
+	/** Where a new element lands: see insertTarget. */
+	function landing(structural: boolean): { parentId: string | null; afterId: string | null } | null {
+		return layout ? insertTarget(layout, liveId, structural) : null;
 	}
 
-	function insert(kind: BlockKind): void {
-		const at = landing();
-		if (!layout || !at) return;
-		const block = newBlock(kind);
-		onLayout(insertNode(layout, at.parentId, block, at.afterId));
-		setSelection({ id: block.id });
+	/** Remembers what a group added, so its button and its letter add that next time. */
+	function remember(id: ElementId): void {
+		const { group } = elementInfo(id);
+		const next = { ...last, [group.id]: id };
+		setLast(next);
+		writeLastUsed(next);
+	}
+
+	/** Adds one element of the toolbar, from its group's button or menu or from a key. */
+	function insertElement(id: ElementId): void {
+		if (!layout) return;
+		const node = newElement(layout, id);
+		const at = landing(node.kind === "container" || node.kind === "columns");
+		if (!at) return;
+		onLayout(insertNode(layout, at.parentId, node, at.afterId));
+		setSelection({ id: node.id });
 		// Figma's text tool: the new text is open with its words selected, so
 		// what is typed next replaces them.
-		setEditing(kind === "text" || kind === "heading" ? { blockId: block.id, caret: "all" } : null);
+		setEditing(node.kind === "text" || node.kind === "heading" ? { blockId: node.id, caret: "all" } : null);
+		remember(id);
 	}
 
-	/**
-	 * F, the toolbar's section tool: a new section, landing the same way any
-	 * other element does. That is also today's way to try nesting one
-	 * container inside another before the toolbar has groups for it.
-	 */
-	function insertSection(): void {
-		const at = landing();
-		if (!layout || !at) return;
-		const section = emptySection(`Section ${topContainers.length + 1}`);
-		onLayout(insertNode(layout, at.parentId, section, at.afterId));
-		setSelection({ id: section.id });
+	/** The button block, which stays on the toolbar until actions replace it. */
+	function insertButton(): void {
+		if (!layout) return;
+		const at = landing(false);
+		if (!at) return;
+		const block = newBlock("button");
+		onLayout(insertNode(layout, at.parentId, block, at.afterId));
+		setSelection({ id: block.id });
+		setEditing(null);
 	}
 
 	/** Figma's eye. At a breakpoint it hides or shows at that width and narrower. */
@@ -450,7 +446,7 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 
 	function paste(): void {
 		if (!layout || !copied) return;
-		const at = landing();
+		const at = landing(copied.kind === "container" || copied.kind === "columns");
 		if (!at) return;
 		const clone = cloneNode(copied);
 		onLayout(insertNode(layout, at.parentId, clone, at.afterId));
@@ -500,13 +496,13 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	 * compiling, so the code is exactly what the message would have carried,
 	 * and the result is part of the draft like any other edit.
 	 */
-	function convertBlock(blockId: string): void {
+	function convertNode(nodeId: string): void {
 		if (!draft?.layout) return;
-		const parentId = parentOf(draft.layout, blockId);
+		const parentId = parentOf(draft.layout, nodeId);
 		if (parentId === undefined) return;
 		setError(null);
 		void window.juno.mail.templates
-			.convertBlock({ layout: draft.layout, sectionId: parentId ?? "", blockId, inputs: draft.inputs })
+			.convertBlock({ layout: draft.layout, parentId, nodeId, inputs: draft.inputs })
 			.then((next) => onLayout(next))
 			.catch((cause: unknown) => setError(messageOf(cause)));
 	}
@@ -559,7 +555,8 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 		}
 
 		if (event.key === "Escape") {
-			if (help) setHelp(false);
+			if (groupMenu) setGroupMenu(null);
+			else if (help) setHelp(false);
 			else if (live) setSelection(null);
 			else onBack();
 			return;
@@ -583,12 +580,16 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 			event.preventDefault();
 			fn();
 		};
-		const tool = TOOL_KINDS[action];
-		if (tool) return run(() => insert(tool));
+		const addGroup = ADD_GROUPS[action];
+		if (addGroup) return run(() => insertElement(last[addGroup]));
+		const menuGroup = MENU_GROUPS[action];
+		if (menuGroup) return run(() => setGroupMenu((open) => (open === menuGroup ? null : menuGroup)));
 
 		switch (action) {
-			case "add-section":
-				return run(insertSection);
+			case "add-heading":
+				return run(() => insertElement("h2"));
+			case "add-button":
+				return run(insertButton);
 			case "undo":
 				return run(undo);
 			case "redo":
@@ -948,8 +949,11 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 
 					<CanvasToolbar
 						insertable={onCanvas}
-						onInsert={insert}
-						onAddSection={insertSection}
+						last={last}
+						menu={groupMenu}
+						onMenu={setGroupMenu}
+						onInsert={insertElement}
+						onAddButton={insertButton}
 						mode={mode}
 						onMode={setMode}
 						hasLayout={layout !== null}
@@ -976,12 +980,14 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 							onReplace={restyleLayout}
 							onSection={(id, sectionPatch) => restyleLayout(updateSection(shown ?? layout, id, sectionPatch))}
 							onColumns={(id, columnsPatch) => restyleLayout(updateColumns(shown ?? layout, id, columnsPatch))}
+							onCell={(id, cellPatch) => restyleLayout(updateCell(shown ?? layout, id, cellPatch))}
 							onBlock={(id, blockPatch) => restyleLayout(updateBlock(shown ?? layout, id, blockPatch))}
 							onRemove={(id) => {
 								onLayout(removeNode(layout, id));
 								setSelection(null);
 							}}
-							onConvert={convertBlock}
+							onConvert={convertNode}
+							onSelect={setSelection}
 						/>
 					</aside>
 				) : null}

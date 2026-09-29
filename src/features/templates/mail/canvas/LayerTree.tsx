@@ -38,6 +38,13 @@ const BLOCK_ICONS: Record<MailBlock["kind"], IconName> = {
 	html: "view-code",
 };
 
+/** A list has its own glyph, and a heading of the first three levels the one that says which. */
+function blockIcon(block: MailBlock): IconName {
+	if (block.kind === "text" && (block.tag === "ul" || block.tag === "ol")) return "list";
+	if (block.kind === "heading" && (block.tag === "h1" || block.tag === "h2" || block.tag === "h3")) return block.tag;
+	return BLOCK_ICONS[block.kind];
+}
+
 /** What a block is called in the tree: what it says, or what it is. */
 function blockLabel(block: MailBlock): string {
 	switch (block.kind) {
@@ -98,6 +105,8 @@ type RowProps = {
 	depth: number;
 	icon: IconName;
 	label: string;
+	/** The HTML it is written as, when that says more than its name: a container's tag, a heading's level. */
+	tag?: string;
 	count?: number;
 	selected: boolean;
 	over: Over;
@@ -120,7 +129,7 @@ type RowProps = {
  * would then see a different row type on every selection change and remount
  * the whole row, which drops a drag already in flight.
  */
-function Row({ id, kind, depth, icon, label, count, selected, over, hidden, draggable, expanded, onSelect, onStep, onDragStart, onDragOver, onDrop, onDragEnd }: RowProps) {
+function Row({ id, kind, depth, icon, label, tag, count, selected, over, hidden, draggable, expanded, onSelect, onStep, onDragStart, onDragOver, onDrop, onDragEnd }: RowProps) {
 	const overBefore = over?.id === id && over.edge === "before";
 	const overInside = over?.id === id && over.edge === "inside";
 	return (
@@ -166,6 +175,9 @@ function Row({ id, kind, depth, icon, label, count, selected, over, hidden, drag
 			>
 				<Icon name={icon} size={12} className="flex-none" />
 				<span className="truncate">{label}</span>
+				{tag ? (
+					<span className="flex-none font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">{tag}</span>
+				) : null}
 				{count !== undefined ? (
 					<span className="tabular ml-auto flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">{count}</span>
 				) : null}
@@ -248,6 +260,7 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDrop, onSte
 						depth={depth}
 						icon="tool-section"
 						label={node.name}
+						tag={node.tag}
 						count={node.children.length}
 						selected={selection?.id === node.id}
 						over={over}
@@ -274,8 +287,9 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDrop, onSte
 						id={node.id}
 						kind="columns"
 						depth={depth}
-						icon="grid"
+						icon="tool-columns"
 						label={node.name}
+						tag="table"
 						count={node.rows.reduce((total, row) => total + row.cells.length, 0)}
 						selected={selection?.id === node.id}
 						over={over}
@@ -309,8 +323,9 @@ export function LayerTree({ layout, selection, onSelect, onHidden, onDrop, onSte
 					id={node.id}
 					kind="block"
 					depth={depth}
-					icon={BLOCK_ICONS[node.kind]}
+					icon={blockIcon(node)}
 					label={label}
+					tag={node.kind === "heading" || (node.kind === "text" && node.tag !== "p") ? node.tag : undefined}
 					selected={selection?.id === node.id}
 					over={over}
 					hidden={{ value: node.hidden, onChange: () => onHidden(node.id, !node.hidden) }}

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { MailBlock, MailContainer, MailFont, MailLayout, MailTextStyle, TemplateInput } from "../../shared/types";
+import type { MailBlock, MailContainer, MailFont, MailLayout, MailNode, MailTextStyle, TemplateInput } from "../../shared/types";
 import {
 	blockToCode,
 	breakpointCss,
 	compileLayout,
 	layoutAt,
-	convertBlockToCode,
+	convertNodeToCode,
 	fontLinks,
 	sanitiseMarkup,
 	googleFontHref,
@@ -567,7 +567,7 @@ describe("code blocks", () => {
 			box: { ...emptyBox(), fill: { kind: "solid" as const, color: "#f6f6fa" }, borderRadius: 6 },
 		} as MailBlock;
 		const before = layoutWith([sectionWith([heading])]);
-		const after = convertBlockToCode(before, (before.children[0] as MailContainer).id, "h1", []);
+		const after = convertNodeToCode(before, (before.children[0] as MailContainer).id, "h1", []);
 		const converted = blocksOf(after.children[0])[0];
 		expect(converted?.kind).toBe("html");
 		// The placement is part of the code now, so the block carries none of its own.
@@ -579,7 +579,7 @@ describe("code blocks", () => {
 	it("keeps a hidden block hidden when it is converted", () => {
 		const hidden = { ...newBlock("text"), id: "t9", hidden: true } as MailBlock;
 		const layout = layoutWith([sectionWith([hidden])]);
-		const converted = convertBlockToCode(layout, (layout.children[0] as MailContainer).id, "t9", []);
+		const converted = convertNodeToCode(layout, (layout.children[0] as MailContainer).id, "t9", []);
 		expect(blocksOf(converted.children[0])[0]?.hidden).toBe(true);
 		expect(blockToCode(hidden, [], []).html).toBe("<p>Tekst</p>");
 	});
@@ -865,7 +865,7 @@ describe("breakpoints", () => {
 			...withBreakpoints(),
 			breakpoints: [{ id: "b", name: "Phone", maxWidth: 480, sections: {}, blocks: { t1: { hidden: true, text: { fontSize: 12 } } } }],
 		};
-		const converted = convertBlockToCode(layout, "s1", "t1", []);
+		const converted = convertNodeToCode(layout, "s1", "t1", []);
 		expect(converted.breakpoints[0]?.blocks.t1).toEqual({ hidden: true });
 	});
 
@@ -1162,6 +1162,16 @@ describe("columns", () => {
 });
 
 describe("text tags", () => {
+	it("keeps a list's bullets inside its box, unless the box sets its own padding", () => {
+		const list: MailBlock = { ...newBlock("text"), id: "l1", tag: "ul", html: "<li>Een</li>" } as MailBlock;
+		const bare = compileLayout(layoutWith([sectionWith([list])]));
+		expect(bare).toMatch(/<ul[^>]*style="margin:0;padding-left:24px/);
+		const padded = compileLayout(
+			layoutWith([sectionWith([{ ...list, box: { ...list.box, padding: { top: 0, right: 0, bottom: 0, left: 8 } } } as MailBlock])]),
+		);
+		expect(padded).toMatch(/<ul[^>]*style="[^"]*padding-left:24px[^"]*padding:0px 0px 0px 8px/);
+	});
+
 	it("writes every text tag as itself, and reads it back", () => {
 		const tags = ["p", "blockquote", "pre", "address", "span"] as const;
 		for (const tag of tags) {
@@ -1232,5 +1242,196 @@ describe("a linked picture", () => {
 		const html = compileLayout(layoutWith([sectionWith([image])]));
 		expect(html).not.toContain("data-juno-link");
 		expect(html).not.toContain("javascript");
+	});
+});
+
+describe("converting a container or columns table to HTML", () => {
+	/** What the client sees: the markup with the compiler's own markers taken out. */
+	function bare(html: string): string {
+		return html.replace(/ data-juno-[a-z-]+="[^"]*"/g, "");
+	}
+
+	function header(): MailContainer {
+		const heading = { ...(newBlock("heading") as Extract<MailBlock, { kind: "heading" }>), id: "h3", tag: "h3" as const, content: "Titel" };
+		const inner: MailContainer = { ...emptyContainer("div", "Inner"), id: "inner", children: [heading] };
+		return { ...emptyContainer("header", "Kop"), id: "kop", children: [{ ...text("Boven"), id: "t1" }, inner] };
+	}
+
+	function table(): Extract<MailNode, { kind: "columns" }> {
+		return {
+			id: "cols",
+			kind: "columns",
+			hidden: false,
+			name: "Twee",
+			alignSelf: "auto",
+			grow: 0,
+			gap: 16,
+			box: emptyBox(),
+			rows: [
+				{
+					id: "row1",
+					cells: [
+						{ id: "cell1", width: 50, verticalAlign: "top", box: emptyBox(), children: [{ ...text("Links"), id: "l1" }] },
+						{ id: "cell2", width: 50, verticalAlign: "middle", box: emptyBox(), children: [{ ...text("Rechts"), id: "r1" }] },
+					],
+				},
+			],
+		};
+	}
+
+	it("turns a container and everything in it into one code block that looks the same", () => {
+		const before = layoutWith([header()]);
+		const after = convertNodeToCode(before, null, "kop", []);
+		const converted = after.children[0] as MailBlock;
+		expect(converted.kind).toBe("html");
+		expect(converted.id).toBe("kop");
+		expect(converted.grow).toBe(0);
+		if (converted.kind !== "html") throw new Error("not code");
+		expect(converted.html).toContain("<h3");
+		expect(converted.html).toContain("Titel");
+		expect(converted.html).toContain("<p");
+		expect(converted.css).toContain("display:flex");
+		expect(bare(compileLayout(after))).toBe(bare(compileLayout(before)));
+		// It compiles as the header it was, not as a div around one.
+		expect(compileLayout(after)).toContain('<header data-juno-block="html" data-juno-id="kop"');
+	});
+
+	it("turns a columns table into one code block, table, rows and cells kept", () => {
+		const before: MailLayout = { ...emptyLayout(), children: [sectionWith([]), table()] };
+		const after = convertNodeToCode(before, null, "cols", []);
+		const converted = after.children[1] as MailBlock;
+		if (converted.kind !== "html") throw new Error("not code");
+		expect(converted.html).toContain("<table");
+		expect(converted.html).toContain("<tr>");
+		expect(converted.html).toContain('width="50%" valign="top"');
+		expect(converted.html).toContain("Rechts");
+		// The sanitiser writes a table's attributes in its own order, so the cells'
+		// styles are what say it looks the same.
+		const html = compileLayout(after);
+		expect(html).toContain("width:50%;vertical-align:top;padding-right:8px");
+		expect(html).toContain("width:50%;vertical-align:middle;padding-left:8px");
+		expect(html).toContain('<p style="margin:0">Links</p>');
+	});
+
+	it("converts a node inside a container and a node inside a cell", () => {
+		const nested: MailContainer = { ...emptyContainer("aside", "Kant"), id: "kant", children: [{ ...text("Zij"), id: "z1" }] };
+		const inContainer = layoutWith([{ ...sectionWith([]), id: "outer", children: [nested] }]);
+		const a = convertNodeToCode(inContainer, "outer", "kant", []);
+		expect(((a.children[0] as MailContainer).children[0] as MailBlock).kind).toBe("html");
+
+		const cols = table();
+		cols.rows[0]!.cells[0]!.children = [nested];
+		const b = convertNodeToCode({ ...emptyLayout(), children: [cols] }, "cell1", "kant", []);
+		const converted = b.children[0];
+		if (converted?.kind !== "columns") throw new Error("not columns");
+		expect(converted.rows[0]?.cells[0]?.children[0]?.kind).toBe("html");
+	});
+
+	it("places a container in a cell by margins, since a cell is not a flex parent", () => {
+		const centred: MailContainer = { ...emptyContainer("aside", "Kant"), id: "kant", alignSelf: "center", box: { ...emptyBox(), width: 200 } };
+		const cols = table();
+		cols.rows[0]!.cells[0]!.children = [centred];
+		const html = compileLayout({ ...emptyLayout(), children: [cols] });
+		expect(html).toContain("margin-left:auto;margin-right:auto");
+		expect(html).not.toContain("align-self");
+	});
+
+	it("leaves out a hidden child, which is not in the message", () => {
+		const container = header();
+		container.children.push({ ...text("Weg"), id: "gone", hidden: true });
+		const after = convertNodeToCode(layoutWith([container]), null, "kop", []);
+		const converted = after.children[0] as MailBlock;
+		expect(converted.kind === "html" ? converted.html : "").not.toContain("Weg");
+	});
+
+	it("drops what a breakpoint changed under the node and keeps whether it shows", () => {
+		const layout: MailLayout = {
+			...layoutWith([header()]),
+			breakpoints: [
+				{
+					id: "b",
+					name: "Phone",
+					maxWidth: 480,
+					sections: { kop: { hidden: true }, inner: { hidden: true } },
+					blocks: { t1: { hidden: true }, h3: { text: { fontSize: 12 } } },
+				},
+			],
+		};
+		const after = convertNodeToCode(layout, null, "kop", []);
+		const breakpoint = after.breakpoints[0];
+		expect(breakpoint?.sections).toEqual({});
+		expect(breakpoint?.blocks).toEqual({ kop: { hidden: true } });
+		expect(breakpointCss(after)).toContain(".jb-kop{display:none !important}");
+	});
+
+	it("reads the converted code back from the code view, and writes it out again unchanged", () => {
+		const after = convertNodeToCode(layoutWith([header()]), null, "kop", []);
+		const html = compileLayout(after);
+		const back = layoutFromHtml(html);
+		expect(back.children[0]?.kind).toBe("html");
+		expect(compileLayout(back)).toBe(html);
+	});
+
+	it("does nothing for an element that is not there, or is code already", () => {
+		const before = layoutWith([header()]);
+		expect(convertNodeToCode(before, null, "nope", [])).toBe(before);
+		const once = convertNodeToCode(before, null, "kop", []);
+		expect(convertNodeToCode(once, null, "kop", [])).toBe(once);
+	});
+});
+
+describe("hidden at a breakpoint, for every kind of element", () => {
+	it("hides a columns table and a block inside a cell, and styles the cell", () => {
+		const cols: MailNode = {
+			id: "cols",
+			kind: "columns",
+			hidden: false,
+			name: "Twee",
+			alignSelf: "auto",
+			grow: 0,
+			gap: 0,
+			box: emptyBox(),
+			rows: [{ id: "row1", cells: [{ id: "cell1", width: null, verticalAlign: "top", box: emptyBox(), children: [{ ...text("Cel"), id: "c1" }] }] }],
+		};
+		const layout: MailLayout = {
+			...emptyLayout(),
+			children: [cols],
+			breakpoints: [
+				{
+					id: "b",
+					name: "Phone",
+					maxWidth: 480,
+					sections: { cols: { hidden: true }, cell1: { box: { padding: { top: 8, right: 8, bottom: 8, left: 8 } } } },
+					blocks: { c1: { hidden: true } },
+				},
+			],
+		};
+		const kept = normaliseLayout(JSON.parse(serialiseLayout(layout) ?? "null"));
+		expect(kept?.breakpoints[0]?.sections.cols).toEqual({ hidden: true });
+		const css = breakpointCss(layout);
+		expect(css).toContain(".jb-cols{display:none !important}");
+		expect(css).toContain(".jb-c1{display:none !important}");
+		expect(css).toContain(".jb-cell1{padding:8px 8px 8px 8px !important}");
+		const html = compileLayout(layout);
+		expect(html).toContain('data-juno-id="cols" class="jb-cols"');
+		expect(html).toContain('<td data-juno-id="cell1" valign="top" class="jb-cell1"');
+	});
+
+	it("shows a container that is hidden by default at a breakpoint that unhides it", () => {
+		const layout: MailLayout = {
+			...layoutWith([{ ...sectionWith([text("Mobiel")]), id: "s1", hidden: true }]),
+			breakpoints: [{ id: "b", name: "Phone", maxWidth: 480, sections: { s1: { hidden: false } }, blocks: {} }],
+		};
+		const html = compileLayout(layout);
+		expect(html).toContain("display:none;mso-hide:all");
+		expect(breakpointCss(layout)).toContain(".jb-s1{display:flex !important}");
+	});
+});
+
+describe("markup a converted container is made of", () => {
+	it("keeps the section elements and the text elements a container and a text are written as", () => {
+		const html =
+			'<header><nav><a href="https://example.be">Menu</a></nav></header><main><article><aside>Kant</aside></article></main><section><pre>Een\nTwee</pre><address>Straat 1</address></section><footer>Voet</footer>';
+		expect(sanitiseMarkup(html)).toBe(html);
 	});
 });

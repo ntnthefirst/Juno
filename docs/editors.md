@@ -446,6 +446,17 @@ A family is one of three kinds:
 
 The canvas shows a Google font and not a linked one, and decision 36 says why.
 
+**A picture at a web address is treated the same way.** The window loads images
+from Juno and nowhere else (`img-src` in `windows/chrome.ts`), and that is not
+loosened for a logo, so the canvas does not try. It draws a box at the picture's
+width with its alt text and a line saying that the reader's mail client loads it
+and Juno does not (`RemoteImage.tsx`); only a `data:` or Juno's own address is
+drawn as a picture. A code block on the canvas gets the same box in place of an
+`img`, and every preview frame does too: `framed` in `canvas/framed-preview.ts`
+swaps each remote `img` in the rendered message for a box that keeps its style
+(`remote-image.ts`), the way received mail is shown without its remote images
+(security.md section 4). It changes what is shown and never what is sent.
+
 ### The keyboard
 
 Figma's keys, from one table in `canvas/shortcuts.ts` that the editor, the
@@ -554,7 +565,7 @@ to. That is the whole template; "Convert to HTML" in the design panel is one
 block.
 
 The register (u or je) is no longer offered in the editor. The column stays on
-the row, the shipped templates carry one, and nothing reads it to decide
+the row, the older templates carry one, and nothing reads it to decide
 anything.
 
 ### The code view stays editable
@@ -598,6 +609,37 @@ recipient's address and IP to anyone on the path. The same rule applies to a
 button's target, to an on-click link and to a link typed on the canvas, which
 may also be `mailto:` or `tel:`, and an element with no usable target renders
 as words rather than as a link that goes nowhere.
+
+### What ships
+
+Nothing is seeded into the list of mail templates any more, bar one example on
+a first install. The four that used to ship (`contract_cover`,
+`project_kickoff`, `invoice_due`, `hosting_renewal`) are gone from the code. An
+install that has them keeps them as they are; a new install never gets them, and
+nothing may look a template up by key, since most installs will not have it.
+
+The example is one canvas template, in Dutch with "u", that shows one of each
+part of this editor, so opening it teaches the canvas: a header with a logo at
+a web address and a Google font on its heading, rich text with bold, italic, a
+link and a placeholder, a picture the template asks for (a declared image input
+placed as a field block), two columns across that stack at the Phone
+breakpoint, a columns table, a divider, a gradient, a drop shadow, rounded
+corners, a colour with an opacity, a text set up as a button with an on-click
+link and a hover colour, a code block, and a footer with the business details
+as placeholders. Its first paragraph says it is an example to adapt.
+
+It is written once, by `ensureMailTemplatesSeeded`, on a first install: the
+settings file has never seeded the set and the table has no row in it at all,
+deleted and hidden rows included. It goes through `create`, so it is an
+ordinary template and not a system row. Editing it stamps nothing that an
+upgrade reads, deleting it is a delete, and no upgrade or launch brings it back.
+Because a canvas is sent with nothing around it, the footer is the business
+details the house shell used to add; conditionals do not nest in the template
+syntax, so each optional line has its own.
+
+The example's picture input declares an address as its starting value, and both
+the editor's preview and the Use screen start an input from the value its
+template declares, so the picture has an address before anyone types one.
 
 ### What an agent can do
 

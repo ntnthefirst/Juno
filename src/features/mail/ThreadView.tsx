@@ -224,6 +224,7 @@ export function ThreadView({
 					<MessageView
 						key={message.id}
 						message={message}
+						clientLinked={summary.clientId !== null}
 						open={message.id === openId}
 						onToggle={() => setOpenId((current) => (current === message.id ? null : message.id))}
 						onNotice={onNotice}

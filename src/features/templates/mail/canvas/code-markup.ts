@@ -6,7 +6,7 @@
  * any it carries; anything more gets a div with the CSS around it. The saved
  * message is cleaned by the compiler's sanitiser. This is the draft, still
  * being typed, so it is cleaned here with the browser's own parser: nothing
- * that runs, no handler, no address that is not https, mailto or a
+ * that runs, no handler, no address that is not https, mailto, tel or a
  * placeholder.
  */
 import { cleanDeclarations } from "./box-style";
@@ -14,7 +14,7 @@ import { cleanDeclarations } from "./box-style";
 const DROPPED = "script,style,iframe,object,embed,form,svg,noscript,template,head,title,link,meta,base";
 
 function safeAddress(value: string): boolean {
-	return /^(https:|mailto:|\{\{)/i.test(value.trim());
+	return /^(https:|mailto:|tel:|\{\{)/i.test(value.trim());
 }
 
 export function codeMarkup(html: string, css: string): string {

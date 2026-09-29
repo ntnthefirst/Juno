@@ -6,7 +6,7 @@
  * the table can be tested without a window.
  */
 import { isMac } from "../../../../lib/platform";
-import { BUTTON_KEY, GROUPS, HEADING_KEY, type GroupId } from "./elements";
+import { GROUPS, HEADING_KEY, type GroupId } from "./elements";
 
 export type ShortcutAction =
 	| "delete"
@@ -44,7 +44,6 @@ export type ShortcutAction =
 	| "add-media"
 	| "add-other"
 	| "add-heading"
-	| "add-button"
 	| "menu-containers"
 	| "menu-text"
 	| "menu-columns"
@@ -81,7 +80,6 @@ export const GROUP_ACTIONS: Record<GroupId, { add: ShortcutAction; menu: Shortcu
 export const ADD_KEYS: [string, ShortcutAction][] = [
 	...GROUPS.map((group): [string, ShortcutAction] => [group.key.toLowerCase(), GROUP_ACTIONS[group.id].add]),
 	[HEADING_KEY.toLowerCase(), "add-heading"],
-	[BUTTON_KEY.toLowerCase(), "add-button"],
 ];
 
 const TOOLS: Record<string, ShortcutAction> = Object.fromEntries(ADD_KEYS);
@@ -219,7 +217,6 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ label: "Columns", keys: "C" },
 			{ label: "Last used media", keys: "I" },
 			{ label: "Last used other", keys: "E" },
-			{ label: "Button", keys: "B" },
 			{ label: "Open a group's menu", keys: "Shift+F, T, C, I, E" },
 			{ label: "Pick from an open menu", keys: "The key beside it" },
 		],

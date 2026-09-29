@@ -23,7 +23,6 @@ type CanvasToolbarProps = {
 	menu: GroupId | null;
 	onMenu: (group: GroupId | null) => void;
 	onInsert: (id: ElementId) => void;
-	onAddButton: () => void;
 	mode: EditorMode;
 	onMode: (mode: EditorMode) => void;
 	/** A template without a canvas calls its first view the body. */
@@ -36,29 +35,6 @@ type CanvasToolbarProps = {
 
 const TOOL =
 	"flex h-[34px] flex-none items-center justify-center text-[var(--ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus";
-
-type ToolButtonProps = {
-	label: string;
-	icon: IconName;
-	/** The key that does the same, shown in the tooltip. */
-	keys: string | null;
-	onClick: () => void;
-};
-
-/** One tool: a glyph, with its name and its key in the tooltip, and its name for a screen reader. */
-function ToolButton({ label, icon, keys, onClick }: ToolButtonProps) {
-	return (
-		<button
-			type="button"
-			aria-label={label}
-			title={keys ? `${label} (${keys})` : label}
-			onClick={onClick}
-			className={`${TOOL} w-[34px] rounded-[var(--radius-md)]`}
-		>
-			<Icon name={icon} size={18} />
-		</button>
-	);
-}
 
 type GroupMenuProps = {
 	group: GroupInfo;
@@ -289,7 +265,6 @@ export function CanvasToolbar({
 	menu,
 	onMenu,
 	onInsert,
-	onAddButton,
 	mode,
 	onMode,
 	hasLayout,
@@ -318,7 +293,6 @@ export function CanvasToolbar({
 									onInsert={onInsert}
 								/>
 							))}
-							<ToolButton label="Add button" icon="tool-button" keys="B" onClick={onAddButton} />
 							<span aria-hidden className="mx-1 h-[24px] w-px flex-none bg-[var(--line)]" />
 						</>
 					) : null}

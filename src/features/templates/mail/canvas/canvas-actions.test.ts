@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { MailBlock, MailColumns, MailContainer, MailNode } from "@shared/types";
+import type { MailAction, MailBlock, MailColumns, MailContainer, MailNode } from "@shared/types";
 import {
+	actionsOf,
 	addCell,
 	addRow,
 	asListItems,
 	canMoveInto,
 	childrenOf,
+	clickBlockedReason,
+	clickProblem,
 	cloneBlock,
 	cloneNode,
 	cloneSection,
@@ -23,7 +26,10 @@ import {
 	moveWithinParent,
 	nameFor,
 	newBlock,
+	newButtonText,
+	newClick,
 	newColumns as makeColumns,
+	newHover,
 	pairIds,
 	parentOf,
 	pathTo,
@@ -33,6 +39,7 @@ import {
 	replaceColor,
 	safeLink,
 	selectionIn,
+	setActions,
 	setContainerTag,
 	setTextTag,
 	siblingOf,
@@ -71,12 +78,13 @@ function newColumns(name = "Columns"): MailColumns {
 			clip: false,
 			customCss: null,
 		},
+		actions: [],
 		rows: [
 			{
 				id: crypto.randomUUID(),
 				cells: [
-					{ id: crypto.randomUUID(), width: 50, verticalAlign: "top", box: emptyBoxLike(), children: [] },
-					{ id: crypto.randomUUID(), width: null, verticalAlign: "top", box: emptyBoxLike(), children: [] },
+					{ id: crypto.randomUUID(), width: 50, verticalAlign: "top", box: emptyBoxLike(), actions: [], children: [] },
+					{ id: crypto.randomUUID(), width: null, verticalAlign: "top", box: emptyBoxLike(), actions: [], children: [] },
 				],
 			},
 		],
@@ -506,12 +514,13 @@ describe("adding every element of the toolbar", () => {
 		expect(text.kind === "text" ? text.html : "").toBe("Tekst");
 	});
 
-	it("makes a linked picture with an empty link, and a plain one with none", () => {
+	it("makes a linked picture with an empty on-click link, and a plain one with none", () => {
 		const layout = emptyLayout();
 		const linked = newElement(layout, "linked-image");
 		const plain = newElement(layout, "image");
-		expect(linked.kind === "image" ? linked.href : "x").toBe("");
-		expect(plain.kind === "image" ? plain.href : "x").toBeNull();
+		expect(linked.kind).toBe("image");
+		expect(linked.actions).toMatchObject([{ trigger: "click", kind: "link", target: "", hidden: false }]);
+		expect(plain.actions).toEqual([]);
 	});
 
 	it("makes columns of one row and two cells, each holding a text", () => {
@@ -762,9 +771,11 @@ describe("columns: rows and cells", () => {
 });
 
 describe("a link on a picture", () => {
-	it("keeps https and mailto and placeholders, and refuses anything else", () => {
+	it("keeps https, mailto, tel and placeholders, and refuses anything else", () => {
 		expect(safeLink("https://example.be")).toBe(true);
 		expect(safeLink("mailto:jan@example.be")).toBe(true);
+		expect(safeLink("tel:+32 470 12 34 56")).toBe(true);
+		expect(safeLink("tel:0470abc")).toBe(false);
 		expect(safeLink("{{document.link}}")).toBe(true);
 		expect(safeLink("http://example.be")).toBe(false);
 		expect(safeLink("javascript:alert(1)")).toBe(false);
@@ -778,5 +789,131 @@ describe("a list after it was typed in", () => {
 		expect(asListItems("<li>Een</li><li>Twee</li>")).toBe("<li>Een</li><li>Twee</li>");
 		expect(asListItems("Een<br>Twee")).toBe("<li>Een</li><li>Twee</li>");
 		expect(asListItems("")).toBe("<li></li>");
+	});
+});
+
+describe("actions", () => {
+	/** A section holding a text, with a text inside a second section inside it. */
+	function nested() {
+		const inner = { ...newBlock("text"), id: "inner" } as MailBlock;
+		const deep = { ...emptySection("Diep"), id: "deep", children: [inner] };
+		const first = { ...newBlock("text"), id: "first" } as MailBlock;
+		const outer = { ...emptySection("Buiten"), id: "outer", children: [first, deep] };
+		const table = makeColumns(emptyLayout());
+		const cell = table.rows[0]!.cells[0]!;
+		return { layout: { ...emptyLayout(), children: [outer, table] }, outer, deep, inner, first, table, cell };
+	}
+
+	it("starts every kind of node with none", () => {
+		const { layout, outer, table, cell, first } = nested();
+		expect(outer.actions).toEqual([]);
+		expect(table.actions).toEqual([]);
+		expect(cell.actions).toEqual([]);
+		expect(newBlock("text").actions).toEqual([]);
+		expect(actionsOf(layout, first.id)).toEqual([]);
+	});
+
+	it("sets and removes the actions of a block, a container, a columns table and a cell alike", () => {
+		const { layout, outer, first, table, cell } = nested();
+		const click = newClick();
+		const fill = newHover("fill");
+		let next = setActions(layout, first.id, [click, fill]);
+		expect(actionsOf(next, first.id)).toEqual([click, fill]);
+		next = setActions(next, outer.id, [newHover("opacity")]);
+		next = setActions(next, table.id, [newHover("color")]);
+		next = setActions(next, cell.id, [newHover("underline")]);
+		expect(actionsOf(next, outer.id)).toHaveLength(1);
+		expect(actionsOf(next, table.id)).toHaveLength(1);
+		expect(findCell(next, cell.id)?.actions).toHaveLength(1);
+		// Removing is setting what is left, and nothing else moves.
+		next = setActions(next, first.id, [fill]);
+		expect(actionsOf(next, first.id)).toEqual([fill]);
+		expect(actionsOf(next, outer.id)).toHaveLength(1);
+		expect(setActions(layout, "nope", [click])).toBe(layout);
+	});
+
+	it("starts a click as an empty link and each hover with a value the change needs", () => {
+		expect(newClick()).toMatchObject({ trigger: "click", kind: "link", target: "", hidden: false });
+		expect(newHover("fill")).toMatchObject({ trigger: "hover", change: "fill", fill: { kind: "solid" }, hidden: false });
+		expect(newHover("color")).toMatchObject({ change: "color", color: expect.stringMatching(/^#/) });
+		expect(newHover("underline")).toMatchObject({ change: "underline", underline: true });
+		expect(newHover("opacity")).toMatchObject({ change: "opacity", opacity: 0.8 });
+		expect(new Set([newClick().id, newClick().id]).size).toBe(2);
+	});
+
+	it("offers a click on an element that nothing around or in it links", () => {
+		const { layout, outer, deep, inner, first, table, cell } = nested();
+		for (const node of [outer, deep, inner, first, table, cell]) expect(clickBlockedReason(layout, node.id)).toBeNull();
+	});
+
+	it("refuses a click on what sits inside a link, and on what has a link inside it", () => {
+		const { layout, outer, deep, inner, first, table, cell } = nested();
+		const linkedDeep = setActions(layout, deep.id, [newClick()]);
+		expect(clickBlockedReason(linkedDeep, inner.id)).toMatch(/around this is already a link/);
+		expect(clickBlockedReason(linkedDeep, outer.id)).toMatch(/in this is already a link/);
+		// A sibling is neither around nor in it.
+		expect(clickBlockedReason(linkedDeep, first.id)).toBeNull();
+		expect(clickBlockedReason(linkedDeep, deep.id)).toBeNull();
+
+		const linkedTable = setActions(layout, table.id, [newClick()]);
+		expect(clickBlockedReason(linkedTable, cell.id)).toMatch(/around this/);
+		const linkedCellText = setActions(layout, cell.children[0]!.id, [newClick()]);
+		expect(clickBlockedReason(linkedCellText, cell.id)).toMatch(/in this/);
+		expect(clickBlockedReason(linkedCellText, table.id)).toMatch(/in this/);
+	});
+
+	it("does not count a hover as a link", () => {
+		const { layout, outer, inner } = nested();
+		const hovering = setActions(layout, inner.id, [newHover("color")]);
+		expect(clickBlockedReason(hovering, outer.id)).toBeNull();
+	});
+
+	it("counts a button block as a link of its own, and gives it no click", () => {
+		const { layout, outer, first } = nested();
+		const button = { ...newBlock("button"), id: "knop" } as MailBlock;
+		const withButton = insertNode(layout, outer.id, button, first.id);
+		expect(clickBlockedReason(withButton, "knop")).toMatch(/own link field/);
+		expect(clickBlockedReason(withButton, outer.id)).toMatch(/in this is already a link/);
+		// A button with no address links nowhere, so it does not block anything.
+		const empty = updateBlock(withButton, "knop", { href: "" } as Partial<MailBlock>);
+		expect(clickBlockedReason(empty, outer.id)).toBeNull();
+	});
+
+	it("keeps the actions when a text becomes a heading and back", () => {
+		const { layout, first } = nested();
+		const action: MailAction = newClick();
+		const linked = setActions(layout, first.id, [action]);
+		const heading = setTextTag(linked, first.id, "h2");
+		expect(actionsOf(heading, first.id)).toEqual([action]);
+		expect(actionsOf(setTextTag(heading, first.id, "p"), first.id)).toEqual([action]);
+	});
+
+	it("says why a typed target would be sent without a link, and stays quiet otherwise", () => {
+		const link = (target: string) => ({ ...newClick(), target });
+		expect(clickProblem(link(""))).toBeNull();
+		expect(clickProblem(link("example.be/nieuws"))).toBeNull();
+		expect(clickProblem(link("https://example.be"))).toBeNull();
+		expect(clickProblem(link("example.be:8080"))).toBeNull();
+		expect(clickProblem(link("{{client.website}}"))).toBeNull();
+		expect(clickProblem(link("http://example.be"))).toMatch(/Only https/);
+		expect(clickProblem(link("javascript:alert(1)"))).toMatch(/Only https/);
+		expect(clickProblem({ ...link("+32 470 12 34 56"), kind: "call" })).toBeNull();
+		expect(clickProblem({ ...link("0470abc"), kind: "call" })).toMatch(/digits/);
+		expect(clickProblem({ ...link("jan@example.be"), kind: "mail" })).toBeNull();
+		expect(clickProblem({ ...link("jan"), kind: "mail" })).toMatch(/@/);
+	});
+
+	it("makes the Button a text with a fill, a radius, padding and an empty link", () => {
+		const button = newButtonText();
+		expect(button.kind).toBe("text");
+		if (button.kind !== "text") return;
+		expect(button.box.fill).toMatchObject({ kind: "solid", hidden: false });
+		expect(button.box.borderRadius).toBeGreaterThan(0);
+		expect(button.box.padding).toEqual({ top: 10, right: 18, bottom: 10, left: 18 });
+		expect(button.actions).toMatchObject([{ trigger: "click", kind: "link", target: "" }]);
+		// The old button's look: hugging, centred and bold in white.
+		expect(button.alignSelf).toBe("start");
+		expect(button.text).toMatchObject({ align: "center", weight: "semibold", color: "#ffffff" });
+		expect(newElement(emptyLayout(), "button").kind).toBe("text");
 	});
 });

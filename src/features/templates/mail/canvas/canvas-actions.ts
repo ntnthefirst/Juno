@@ -18,6 +18,7 @@
  * layers never knows in advance how deep the thing it is pointing at sits.
  */
 import type {
+	MailAction,
 	MailBlock,
 	MailBoxStyle,
 	MailColumns,
@@ -25,9 +26,11 @@ import type {
 	MailColumnsRow,
 	MailContainer,
 	MailContainerTag,
+	MailClickAction,
 	MailEffect,
 	MailFill,
 	MailHeadingTag,
+	MailHoverAction,
 	MailLayout,
 	MailNode,
 	MailSectionLayout,
@@ -128,6 +131,7 @@ export function emptySection(name = "Section"): MailContainer {
 		grow: 0,
 		layout: stackLayout(),
 		box: emptyBox(),
+		actions: [],
 		children: [],
 	};
 }
@@ -202,7 +206,7 @@ export function newContainer(layout: MailLayout, tag: MailContainerTag): MailCon
 
 /** A cell as one is added: holding one text, so there is something to type into. */
 export function newCell(width: number | null): MailColumnsCell {
-	return { id: newId(), width, verticalAlign: "top", box: emptyBox(), children: [newBlock("text")] };
+	return { id: newId(), width, verticalAlign: "top", box: emptyBox(), actions: [], children: [newBlock("text")] };
 }
 
 /** Columns as the toolbar adds them: one row of two cells, half each, each holding a text. */
@@ -216,6 +220,7 @@ export function newColumns(layout: MailLayout): MailColumns {
 		grow: 0,
 		gap: 16,
 		box: emptyBox(),
+		actions: [],
 		rows: [{ id: newId(), cells: [newCell(50), newCell(50)] }],
 	};
 }
@@ -249,7 +254,7 @@ export const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
  * a bar the width of the message and a picture blown up to it.
  */
 export function newBlock(kind: BlockKind): MailBlock {
-	const common = { id: newId(), grow: 0, alignSelf: "auto" as const, hidden: false };
+	const common = { id: newId(), grow: 0, alignSelf: "auto" as const, hidden: false, actions: [] };
 	switch (kind) {
 		case "heading":
 			return {
@@ -274,7 +279,7 @@ export function newBlock(kind: BlockKind): MailBlock {
 				box: { ...emptyBox(), padding: { top: 10, right: 18, bottom: 10, left: 18 } },
 			};
 		case "image":
-			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", href: null, box: emptyBox() };
+			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", box: emptyBox() };
 		case "divider":
 			return { ...common, kind, color: "#e3e2ec", thickness: 1, box: emptyBox(), grow: 1 };
 		case "spacer":
@@ -872,13 +877,134 @@ export function updateBlock(layout: MailLayout, id: string, patch: Partial<MailB
 }
 
 /**
- * Whether a link would be kept: https or mailto, or a placeholder filled in
- * later. Matches safeHref in services/mail-layout.ts, which is what actually
- * decides; this only lets the panel say so while it is being typed.
+ * Whether a link would be kept: https, mailto or tel, or a placeholder filled
+ * in later. Matches safeHref in services/mail-layout.ts, which is what
+ * actually decides; this only lets the panel say so while it is being typed.
  */
 export function safeLink(raw: string): boolean {
 	const trimmed = raw.trim();
-	return /^\{\{[^{}]+\}\}$/.test(trimmed) || /^(https:|mailto:)/i.test(trimmed);
+	if (/^\{\{[^{}]+\}\}$/.test(trimmed)) return true;
+	if (/^tel:/i.test(trimmed)) return /^[0-9 +()-]+$/.test(trimmed.slice(4));
+	return /^(https:|mailto:)/i.test(trimmed);
+}
+
+/* --------------------------------------------------------------- actions */
+
+/** A click that opens a link, empty until an address is typed: an empty one is sent as no link at all. */
+export function newClick(): MailClickAction {
+	return { id: newId(), trigger: "click", kind: "link", target: "", hidden: false };
+}
+
+export type HoverChange = MailHoverAction["change"];
+
+/** A hover row at values that are visible on a button and do no harm anywhere else. */
+export function newHover(change: HoverChange): MailHoverAction {
+	const base = { id: newId(), trigger: "hover" as const, hidden: false };
+	switch (change) {
+		case "fill":
+			return { ...base, change, fill: solidFill("#3a3182") };
+		case "color":
+			return { ...base, change, color: "#ffffff" };
+		case "underline":
+			return { ...base, change, underline: true };
+		case "opacity":
+			return { ...base, change, opacity: 0.8 };
+	}
+}
+
+/** What a node's or a cell's actions are, or nothing when the id is nowhere in the tree. */
+export function actionsOf(layout: MailLayout, id: string): MailAction[] {
+	return findNode(layout, id)?.actions ?? findCell(layout, id)?.actions ?? [];
+}
+
+/**
+ * Replaces the actions of a container, a columns table, a block or a cell.
+ * Actions are content, the same at every width, so this changes the stored
+ * canvas and never a breakpoint's copy of it.
+ */
+export function setActions(layout: MailLayout, id: string, actions: MailAction[]): MailLayout {
+	if (findCell(layout, id)) return mapCell(layout, id, (cell) => ({ ...cell, actions }));
+	return mapNode(layout, id, (node) => ({ ...node, actions }));
+}
+
+export function hasClick(actions: MailAction[]): boolean {
+	return actions.some((action) => action.trigger === "click");
+}
+
+/** Whether anything at or under a node is a link: an on-click action, or a button block that has an address. */
+function linksWithin(node: MailNode | MailColumnsCell): boolean {
+	if (hasClick(node.actions)) return true;
+	if ("kind" in node && node.kind === "button") return node.href.trim() !== "";
+	if ("children" in node) return node.children.some(linksWithin);
+	if ("rows" in node) return node.rows.some((row) => row.cells.some(linksWithin));
+	return false;
+}
+
+/**
+ * Why an element cannot be given an on-click action, or null when it can. A
+ * link cannot hold a link, so it is refused when something around it or
+ * something in it already links, and a button block is a link of its own.
+ * The panel says this in one line instead of offering the action; the parser
+ * and the compiler drop the inner one if a stored layout has both.
+ */
+export function clickBlockedReason(layout: MailLayout, id: string): string | null {
+	const node = findNode(layout, id);
+	const cell = node ? null : findCell(layout, id);
+	const target = node ?? cell;
+	if (!target) return null;
+	if (node?.kind === "button") return "A button links through its own link field.";
+	if (hasClick(target.actions)) return null;
+	const around = (pathTo(layout, id) ?? []).some((ancestorId) => {
+		const ancestor = findNode(layout, ancestorId) ?? findCell(layout, ancestorId);
+		return ancestor !== null && hasClick(ancestor.actions);
+	});
+	if (around) return "Something around this is already a link, and a link cannot hold a link.";
+	const children = node
+		? node.kind === "container"
+			? node.children
+			: node.kind === "columns"
+				? node.rows.flatMap((row) => row.cells)
+				: []
+		: (cell?.children ?? []);
+	if (children.some(linksWithin)) return "Something in this is already a link, and a link cannot hold a link.";
+	return null;
+}
+
+/**
+ * Why a typed target would be sent without a link, or null when it would be
+ * kept or is still empty. Matches clickHref in services/mail-layout.ts, which
+ * is what actually decides; this only lets the panel say so while it is typed.
+ */
+export function clickProblem(action: MailClickAction): string | null {
+	const target = action.target.trim();
+	if (!target || /^\{\{[^{}]+\}\}$/.test(target)) return null;
+	if (action.kind === "call") {
+		const number = target.replace(/^tel:/i, "").replace(/\s+/g, "");
+		return /^[0-9+()-]+$/.test(number) ? null : "A phone number takes digits, spaces and + - ( ) only.";
+	}
+	if (action.kind === "mail") {
+		return target.replace(/^mailto:/i, "").includes("@") ? null : "An email address has an @ in it.";
+	}
+	const bare = target.replace(/^https:\/\//i, "").replace(/\s+/g, "");
+	return /^[a-z][a-z0-9+.-]*:(?!\d+(?:\/|$))/i.test(bare) ? "Only https addresses are kept, so this is sent without a link." : null;
+}
+
+/**
+ * A text that is a button: filled, rounded, padded, and linked to an address
+ * still to be typed. What the Button entry of the Text group adds, in the
+ * place of the button block, which existing templates keep.
+ */
+export function newButtonText(): MailBlock {
+	const text = newBlock("text");
+	if (text.kind !== "text") return text;
+	return {
+		...text,
+		html: "Bekijk",
+		alignSelf: "start",
+		text: { ...defaultText(), color: "#ffffff", weight: "semibold", align: "center" },
+		box: { ...emptyBox(), fill: solidFill("#4a3fa0"), borderRadius: 4, padding: { top: 10, right: 18, bottom: 10, left: 18 } },
+		actions: [newClick()],
+	};
 }
 
 /* ------------------------------------------------------- tags, in a group */
@@ -962,6 +1088,7 @@ export function setTextTag(layout: MailLayout, id: string, tag: MailTextTag | Ma
 				grow: node.grow,
 				alignSelf: node.alignSelf,
 				hidden: node.hidden,
+				actions: node.actions,
 				kind: "heading",
 				tag,
 				content: plainTextOf(node.html),
@@ -979,6 +1106,7 @@ export function setTextTag(layout: MailLayout, id: string, tag: MailTextTag | Ma
 			grow: node.grow,
 			alignSelf: node.alignSelf,
 			hidden: node.hidden,
+			actions: node.actions,
 			kind: "text",
 			tag,
 			html: isListTag(tag) ? `<li>${words}</li>` : words,

@@ -20,12 +20,18 @@ import { LinkClientDialog } from "./LinkClientDialog";
 import { NO_FILTERS, type MailFilters } from "./mail-filters";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { OutboxDetail } from "./OutboxDetail";
-import { OutboxList } from "./OutboxList";
 import { ThreadList, type ThreadAction } from "./ThreadList";
 import { ThreadToolbar } from "./ThreadToolbar";
 import { ThreadView } from "./ThreadView";
 
 type LinkTarget = { threadId: string; currentClientId: string | null; senderAddress: string | null };
+
+/**
+ * The one thing open in the reading pane. Drafts lists two kinds of row, a
+ * message Juno has not sent and a thread in the server's Drafts folder, and
+ * only one of them is ever open, so the two cannot be set together.
+ */
+type Opened = { kind: "thread"; id: string } | { kind: "outbox"; id: string };
 
 /** The widest horizon mail-accounts.ts accepts, which is ten years of mail. */
 const EVERYTHING_DAYS = 3650;
@@ -41,8 +47,8 @@ const PAGE = 100;
 const MAX_ROWS = 500;
 
 /**
- * Three panes: where (accounts and folders), what (threads or, inside
- * Drafts, whatever an account has not sent yet), and the thing itself. Search
+ * Three panes: where (accounts and folders), what (threads, and inside Drafts
+ * also whatever an account has not sent yet), and the thing itself. Search
  * replaces the folder with a ranked list across the account.
  *
  * Writing a message and making a folder take the screen over rather than
@@ -58,10 +64,10 @@ export function MailScreen() {
 	const [threads, setThreads] = useState<MailThreadSummary[] | null>(null);
 	const [outboxRows, setOutboxRows] = useState<MailOutboxMessage[] | null>(null);
 	const [listError, setListError] = useState<string | null>(null);
-	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+	const [outboxError, setOutboxError] = useState<string | null>(null);
+	const [opened, setOpened] = useState<Opened | null>(null);
 	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [lastPicked, setLastPicked] = useState<string | null>(null);
-	const [selectedOutboxId, setSelectedOutboxId] = useState<string | null>(null);
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});
 	const [notice, setNotice] = useState<string | null>(null);
 	const [compose, setCompose] = useState<ComposeSeed | null>(null);
@@ -139,15 +145,25 @@ export function MailScreen() {
 		};
 	}, []);
 
-	const term = search.trim();
-	// Drafts is where a draft, a pending approval, a queued or failed send all
-	// show: everything not sent yet, for the account it belongs to. A sent
-	// message drops out of this list on its own and shows up in Sent instead.
+	// Drafts lists the server's own drafts and, beside them, everything Juno has
+	// not sent yet: a draft, a pending approval, a queued or failed send, for
+	// the account it belongs to. A sent message drops out of the outbox rows on
+	// its own and shows up in Sent instead.
 	const showingDrafts = selection?.view === "drafts";
 	const inTrash = selection?.view === "trash";
+	// The list there is the folder as it is, so neither a search nor a filter
+	// reaches it: a search would leave the folder for the whole account.
+	const term = showingDrafts ? "" : search.trim();
+	const selectedThreadId = opened?.kind === "thread" ? opened.id : null;
+	const selectedOutboxId = opened?.kind === "outbox" ? opened.id : null;
+
+	function openThread(id: string | null) {
+		setOpened(id ? { kind: "thread", id } : null);
+	}
 
 	const fetchThreads = useCallback(() => {
-		if (!selection || selection.view === "drafts") return Promise.resolve<MailThreadSummary[]>([]);
+		if (!selection) return Promise.resolve<MailThreadSummary[]>([]);
+		const active = showingDrafts ? NO_FILTERS : filters;
 		return window.juno.mail.threads.list({
 			...(selection.accountId ? { accountId: selection.accountId } : {}),
 			...(term
@@ -155,18 +171,17 @@ export function MailScreen() {
 				: selection.folderId
 					? { folderId: selection.folderId }
 					: { folderSpecialUse: selection.view }),
-			unreadOnly: filters.unreadOnly,
-			flaggedOnly: filters.flaggedOnly,
-			withAttachments: filters.withAttachments,
-			...(filters.fromAddress.trim() ? { fromAddress: filters.fromAddress.trim() } : {}),
-			...(filters.since ? { since: filters.since } : {}),
-			...(filters.until ? { until: filters.until } : {}),
+			unreadOnly: active.unreadOnly,
+			flaggedOnly: active.flaggedOnly,
+			withAttachments: active.withAttachments,
+			...(active.fromAddress.trim() ? { fromAddress: active.fromAddress.trim() } : {}),
+			...(active.since ? { since: active.since } : {}),
+			...(active.until ? { until: active.until } : {}),
 			limit: rowLimit,
 		});
-	}, [selection, term, filters, rowLimit]);
+	}, [selection, showingDrafts, term, filters, rowLimit]);
 
 	useEffect(() => {
-		if (showingDrafts) return;
 		let cancelled = false;
 		const id = setTimeout(
 			() => {
@@ -186,7 +201,7 @@ export function MailScreen() {
 			cancelled = true;
 			clearTimeout(id);
 		};
-	}, [fetchThreads, term, accountsVersion, showingDrafts]);
+	}, [fetchThreads, term, accountsVersion]);
 
 	useEffect(() => {
 		if (!showingDrafts || !selection) return;
@@ -203,10 +218,10 @@ export function MailScreen() {
 			.then((rows) => {
 				if (cancelled) return;
 				setOutboxRows(rows);
-				setListError(null);
+				setOutboxError(null);
 			})
 			.catch((cause: unknown) => {
-				if (!cancelled) setListError(messageOf(cause));
+				if (!cancelled) setOutboxError(messageOf(cause));
 			});
 		return () => {
 			cancelled = true;
@@ -316,7 +331,7 @@ export function MailScreen() {
 	// and the list itself.
 	function afterFile(ids: string[]) {
 		setSelectedThreadIds((current) => current.filter((id) => !ids.includes(id)));
-		setSelectedThreadId((current) => (current && ids.includes(current) ? null : current));
+		setOpened((current) => (current?.kind === "thread" && ids.includes(current.id) ? null : current));
 		setAccountsVersion((v) => v + 1);
 	}
 
@@ -412,7 +427,7 @@ export function MailScreen() {
 		if (ids.length === 0) return;
 		switch (action) {
 			case "open":
-				setSelectedThreadId(ids[0] ?? null);
+				openThread(ids[0] ?? null);
 				break;
 			case "markRead":
 				void setThreadsReadState(ids, true);
@@ -502,7 +517,7 @@ export function MailScreen() {
 		setFolderBusy(true);
 		try {
 			const count = await window.juno.mail.file.emptyFolder(folderEmpty.id);
-			setSelectedThreadId(null);
+			openThread(null);
 			clearThreadSelection();
 			setAccountsVersion((v) => v + 1);
 			setNotice(`${count} ${count === 1 ? "message" : "messages"} deleted from ${folderEmpty.name}.`);
@@ -578,7 +593,7 @@ export function MailScreen() {
 					setOutboxVersion((v) => v + 1);
 					const draftsFolderId = folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
 					setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
-					setSelectedOutboxId(message.id);
+					setOpened({ kind: "outbox", id: message.id });
 				}}
 			/>
 		);
@@ -631,9 +646,11 @@ export function MailScreen() {
 						sync={sync}
 						selection={selection}
 						onSelect={(next) => {
+							// The list is about to be a different one, and threads left over
+							// from the last folder would show for a beat among the drafts.
+							if ((next.view === "drafts") !== showingDrafts) setThreads(null);
 							setSelection(next);
-							setSelectedThreadId(null);
-							setSelectedOutboxId(null);
+							setOpened(null);
 							clearThreadSelection();
 							setRowLimit(PAGE);
 						}}
@@ -648,11 +665,11 @@ export function MailScreen() {
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
-				{selectedThreadId && !showingDrafts ? (
+				{selectedThreadId ? (
 					<ThreadView
 						key={selectedThreadId}
 						threadId={selectedThreadId}
-						onBack={() => setSelectedThreadId(null)}
+						onBack={() => openThread(null)}
 						inTrash={inTrash}
 						onChanged={() => setAccountsVersion((v) => v + 1)}
 						onNotice={setNotice}
@@ -669,32 +686,28 @@ export function MailScreen() {
 					/>
 				) : (
 					<div className="flex h-full min-h-0 flex-col">
-						{showingDrafts ? (
-							<div className="px-4 pt-6 pb-3">
-								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Drafts</h2>
-							</div>
-						) : (
-							<ThreadToolbar
-								search={search}
-								onSearch={(value) => {
-									setSearch(value);
-									setRowLimit(PAGE);
-								}}
-								filters={filters}
-								onFilters={(next) => {
-									setFilters(next);
-									setRowLimit(PAGE);
-								}}
-								inTrash={inTrash}
-								visibleIds={(threads ?? []).map((thread) => thread.id)}
-								selectedIds={selectedThreadIds}
-								onSelectAll={selectEveryThread}
-								onClearSelection={clearThreadSelection}
-								onAction={handleThreadAction}
-							/>
-						)}
+						{/* Only the threads take part in selecting; the unsent messages open on a click. */}
+						<ThreadToolbar
+							search={search}
+							onSearch={(value) => {
+								setSearch(value);
+								setRowLimit(PAGE);
+							}}
+							filters={filters}
+							onFilters={(next) => {
+								setFilters(next);
+								setRowLimit(PAGE);
+							}}
+							inTrash={inTrash}
+							visibleIds={(threads ?? []).map((thread) => thread.id)}
+							selectedIds={selectedThreadIds}
+							onSelectAll={selectEveryThread}
+							onClearSelection={clearThreadSelection}
+							onAction={handleThreadAction}
+							heading={showingDrafts ? "Drafts" : undefined}
+						/>
 
-						{!showingDrafts && selectedFolder && !selectedFolder.syncEnabled ? (
+						{selectedFolder && !selectedFolder.syncEnabled ? (
 							<div className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2">
 								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 									This folder is not synced, so nothing here reflects the server yet.
@@ -706,27 +719,27 @@ export function MailScreen() {
 						) : null}
 
 						<div className="min-h-0 flex-1 overflow-y-auto">
-							{showingDrafts ? (
-								<OutboxList
-									messages={outboxRows}
-									error={listError}
-									selectedId={selectedOutboxId}
-									onSelect={setSelectedOutboxId}
-								/>
-							) : (
-								<ThreadList
-									threads={threads}
-									error={listError}
-									searching={term.length > 0}
-									inTrash={inTrash}
-									selectedId={selectedThreadId}
-									selectedIds={selectedThreadIds}
-									onSelect={setSelectedThreadId}
-									onToggleSelect={toggleThreadSelection}
-									onAction={handleThreadAction}
-								/>
-							)}
-							{!showingDrafts && threads !== null && threads.length >= rowLimit && rowLimit < MAX_ROWS ? (
+							<ThreadList
+								threads={threads}
+								{...(showingDrafts
+									? {
+											outbox: {
+												messages: outboxRows,
+												selectedId: selectedOutboxId,
+												onSelect: (id: string) => setOpened({ kind: "outbox", id }),
+											},
+										}
+									: {})}
+								error={showingDrafts ? (listError ?? outboxError) : listError}
+								searching={term.length > 0}
+								inTrash={inTrash}
+								selectedId={selectedThreadId}
+								selectedIds={selectedThreadIds}
+								onSelect={openThread}
+								onToggleSelect={toggleThreadSelection}
+								onAction={handleThreadAction}
+							/>
+							{threads !== null && threads.length >= rowLimit && rowLimit < MAX_ROWS ? (
 								<div className="flex justify-center px-4 py-3">
 									<Button
 										size="dense"

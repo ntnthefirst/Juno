@@ -56,11 +56,6 @@ phase 6's done-when in PLAN.md.
 
 Decided and ready to build, roughly smallest first.
 
-- **Unsent drafts are not merged into the Drafts folder.** Juno's own drafts
-  live in the outbox and the server's live in its Drafts folder, and the
-  Drafts view says so in a line pointing at the outbox rather than showing
-  both. Merging them means reconciling two row types through one list, its
-  selection and its menu.
 - **Purging a removed mail account.** Removing an account forgets its password
   and soft-deletes the row; its messages and attachments stay on disk until a
   purge exists. That purge is a confirmed action, never an MCP tool.

@@ -126,3 +126,25 @@ and internal documents.
 It is **not** a qualified electronic signature under eIDAS, the audit page says
 so in plain Dutch, and anything where that distinction matters should go through
 a provider that offers one. See decision 8.
+
+## Mail templates
+
+A mail template uses the same syntax and the same values, plus whatever it
+declares as an input, which arrives as `document.<key>`. The canvas it is laid
+out on is in [editors.md](editors.md) section 2.
+
+**What ships.** One example on a first install, and nothing else. An install
+that already has the four old mail templates keeps them; a new one never gets
+them, and no code looks a mail template up by key.
+
+Three things to know when writing one:
+
+- There is no `client.firstName`. A greeting uses `client.contactName`, the
+  name of the primary contact, and `client.name` is the business.
+- A footer uses `owner.businessName`, `owner.contactName`, `owner.addressLine1`,
+  `owner.postalCode`, `owner.city`, `owner.vatNumber`, `owner.email` and
+  `owner.phone`. Only the first two are always filled in, so wrap the rest in
+  `{{#if …}}`.
+- Conditionals do not nest. The first closing tag ends the conditional it
+  meets, so an `if` inside an `if` leaves the outer one open. Give each
+  optional line its own.

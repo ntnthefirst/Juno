@@ -36,6 +36,7 @@ exports/
 
 # Test and tooling artefacts
 .smoke/
+.tmp/
 coverage/
 *.log
 npm-debug.log*

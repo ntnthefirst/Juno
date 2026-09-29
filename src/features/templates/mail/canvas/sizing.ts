@@ -21,6 +21,13 @@
  *
  * Fixed is always the block's own number, a width that still gives way on a
  * narrow screen and a height the content can grow past.
+ *
+ * The frame and a table cell are not flex or grid boxes: they lay what is in
+ * them out in plain flow, one under the next. That is a `null` parent below
+ * (a `Placer`). Nothing there has a share of the room or an alignment of its
+ * own, so a width is fixed or fills (the way a block level element does by
+ * default), a height is a least height, and a picture or a button, which do
+ * not stretch, hug instead of filling.
  */
 import type { MailAlign, MailBlock, MailContainer } from "@shared/types";
 
@@ -32,6 +39,9 @@ export type Flow = "column" | "row" | "grid";
 export type Across = "start" | "center" | "end";
 
 type Patch = Partial<MailBlock>;
+
+/** What lays a node out: a container's flex or grid, or null for plain flow (the frame, a table cell). */
+export type Placer = MailContainer | null;
 
 export function flowOf(section: MailContainer): Flow {
 	if (section.layout.kind === "grid") return "grid";
@@ -62,7 +72,19 @@ export function fixedHeight(block: MailBlock): number | null {
  * spans what it is given, so it cannot hug; a spacer only has a width in a row,
  * where filling is what pushes its neighbours apart; code is sized by its code.
  */
-export function widthModes(block: MailBlock, section: MailContainer): Sizing[] {
+export function widthModes(block: MailBlock, section: Placer): Sizing[] {
+	if (!section) {
+		switch (block.kind) {
+			case "html":
+			case "spacer":
+				return [];
+			case "image":
+			case "button":
+				return ["fixed", "hug"];
+			default:
+				return ["fixed", "fill"];
+		}
+	}
 	const flow = flowOf(section);
 	switch (block.kind) {
 		case "html":
@@ -77,7 +99,7 @@ export function widthModes(block: MailBlock, section: MailContainer): Sizing[] {
 }
 
 /** The height modes. A picture keeps its proportions and a rule is its thickness. */
-export function heightModes(block: MailBlock): Sizing[] {
+export function heightModes(block: MailBlock, section?: Placer): Sizing[] {
 	switch (block.kind) {
 		case "html":
 		case "image":
@@ -86,13 +108,15 @@ export function heightModes(block: MailBlock): Sizing[] {
 		case "spacer":
 			return ["fixed"];
 		default:
-			return ["fixed", "hug", "fill"];
+			// In plain flow there is no room to take a share of.
+			return section === null ? ["fixed", "hug"] : ["fixed", "hug", "fill"];
 	}
 }
 
-export function widthSizing(block: MailBlock, section: MailContainer): Sizing {
-	const flow = flowOf(section);
+export function widthSizing(block: MailBlock, section: Placer): Sizing {
 	if (fixedWidth(block) !== null) return "fixed";
+	if (!section) return block.kind === "image" || block.kind === "button" ? "hug" : "fill";
+	const flow = flowOf(section);
 	// A rule with no width of its own is written at 100%.
 	if (block.kind === "divider") return "fill";
 	if (flow === "row") return block.grow > 0 ? "fill" : "hug";
@@ -104,8 +128,9 @@ export function widthSizing(block: MailBlock, section: MailContainer): Sizing {
 	return alignOf(block, section) === "stretch" ? "fill" : "hug";
 }
 
-export function heightSizing(block: MailBlock, section: MailContainer): Sizing {
+export function heightSizing(block: MailBlock, section: Placer): Sizing {
 	if (fixedHeight(block) !== null) return "fixed";
+	if (!section) return "hug";
 	if (flowOf(section) === "column") return block.grow > 0 ? "fill" : "hug";
 	return alignOf(block, section) === "stretch" ? "fill" : "hug";
 }
@@ -137,9 +162,12 @@ function stretched(section: MailContainer): Patch {
  * drawn right now, which is what fixed starts from, the way Figma keeps a
  * layer the size it was when it is switched to fixed.
  */
-export function sizeWidth(block: MailBlock, section: MailContainer, mode: Sizing, measured: number | null): Patch {
-	const flow = flowOf(section);
+export function sizeWidth(block: MailBlock, section: Placer, mode: Sizing, measured: number | null): Patch {
 	const px = Math.max(1, Math.round(measured ?? (block.kind === "image" ? 300 : 240)));
+	// Plain flow: the width is the block's own or nothing, and nothing is how
+	// it fills, so there is no share and no alignment to give up or take.
+	if (!section) return withWidth(block, mode === "fixed" ? px : null);
+	const flow = flowOf(section);
 	if (mode === "fixed") {
 		return {
 			...withWidth(block, px),
@@ -165,9 +193,10 @@ export function sizeWidth(block: MailBlock, section: MailContainer, mode: Sizing
 	} as Patch;
 }
 
-export function sizeHeight(block: MailBlock, section: MailContainer, mode: Sizing, measured: number | null): Patch {
-	const flow = flowOf(section);
+export function sizeHeight(block: MailBlock, section: Placer, mode: Sizing, measured: number | null): Patch {
 	const px = Math.max(1, Math.round(measured ?? 80));
+	if (!section) return withHeight(block, mode === "fixed" ? px : null);
+	const flow = flowOf(section);
 	if (mode === "fixed") {
 		return {
 			...withHeight(block, px),
@@ -185,12 +214,12 @@ export function sizeHeight(block: MailBlock, section: MailContainer, mode: Sizin
 }
 
 /** A width typed into the W field: the block becomes fixed at it. */
-export function setWidth(block: MailBlock, section: MailContainer, px: number): Patch {
+export function setWidth(block: MailBlock, section: Placer, px: number): Patch {
 	return sizeWidth(block, section, "fixed", px);
 }
 
 /** A height typed into the H field. */
-export function setHeight(block: MailBlock, section: MailContainer, px: number): Patch {
+export function setHeight(block: MailBlock, section: Placer, px: number): Patch {
 	return sizeHeight(block, section, "fixed", px);
 }
 
@@ -204,7 +233,9 @@ const PICTURE_ALIGN = { start: "left", center: "center", end: "right" } as const
  * a client without flexbox reads: Outlook centres a picture on `margin:0 auto`
  * and ignores `align-self` entirely.
  */
-export function alignAcross(block: MailBlock, section: MailContainer, across: Across | null): Patch {
+export function alignAcross(block: MailBlock, section: Placer, across: Across | null): Patch {
+	// In plain flow only a picture can be moved across, by its margins.
+	if (!section) return block.kind === "image" ? ({ align: PICTURE_ALIGN[across ?? "start"] } as Patch) : {};
 	const alignSelf = across ?? "auto";
 	if (block.kind === "image" && flowOf(section) === "column") {
 		const resolved = across ?? (section.layout.align === "stretch" ? "start" : section.layout.align);
@@ -214,10 +245,11 @@ export function alignAcross(block: MailBlock, section: MailContainer, across: Ac
 }
 
 /** What the alignment row shows as pressed: nothing while the block is stretched. */
-export function acrossOf(block: MailBlock, section: MailContainer): Across | null {
-	if (block.kind === "image" && flowOf(section) === "column" && block.align !== "left" && block.align !== "justify") {
+export function acrossOf(block: MailBlock, section: Placer): Across | null {
+	if (block.kind === "image" && (!section || flowOf(section) === "column") && block.align !== "left" && block.align !== "justify") {
 		return block.align === "center" ? "center" : "end";
 	}
+	if (!section) return block.kind === "image" ? "start" : null;
 	const align = alignOf(block, section);
 	return align === "stretch" ? null : align;
 }

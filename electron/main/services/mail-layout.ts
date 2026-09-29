@@ -443,6 +443,9 @@ function textExtraTags(tag: MailTextTag): readonly string[] {
 	return tag === "ul" || tag === "ol" ? ["li"] : [];
 }
 
+/** Pixels of left padding a list keeps for its bullets or numbers. */
+export const LIST_INDENT = 24;
+
 function isListTag(tag: MailTextTag): boolean {
 	return tag === "ul" || tag === "ol";
 }
@@ -1282,6 +1285,15 @@ const MARKUP_TAGS = new Set([
 	"br",
 	"p",
 	"div",
+	"section",
+	"header",
+	"footer",
+	"main",
+	"article",
+	"aside",
+	"nav",
+	"pre",
+	"address",
 	"center",
 	"h1",
 	"h2",
@@ -1626,11 +1638,11 @@ function placeDeclarations(node: { grow: number; alignSelf: MailSelfAlign }): (s
 }
 
 /**
- * Where something narrower than its parent sits across it, at the top level:
- * the frame lays its children one under the next in plain flow, so this is
- * margins, which every client reads. A nested container or columns table
- * takes `placeDeclarations` instead, the way a block does, because its
- * parent is a flex or grid box that already has an alignment of its own.
+ * Where something narrower than its parent sits across it when that parent
+ * lays its children out in plain flow, as the frame and a table cell do: this
+ * is margins, which every client reads. A container or columns table inside a
+ * flex or grid box takes `placeDeclarations` instead, the way a block does,
+ * because that parent already has an alignment of its own.
  */
 function sectionPlaceDeclarations(node: { alignSelf: MailSelfAlign }): string[] {
 	if (node.alignSelf === "center") return ["margin-left:auto", "margin-right:auto"];
@@ -1638,9 +1650,9 @@ function sectionPlaceDeclarations(node: { alignSelf: MailSelfAlign }): string[] 
 	return [];
 }
 
-/** `sectionPlaceDeclarations` at the top level, `placeDeclarations` nested. */
-function placementDeclarations(node: { grow: number; alignSelf: MailSelfAlign }, topLevel: boolean): (string | null)[] {
-	return topLevel ? sectionPlaceDeclarations(node) : placeDeclarations(node);
+/** `sectionPlaceDeclarations` in plain flow, `placeDeclarations` in a flex or grid parent. */
+function placementDeclarations(node: { grow: number; alignSelf: MailSelfAlign }, inFlow: boolean): (string | null)[] {
+	return inFlow ? sectionPlaceDeclarations(node) : placeDeclarations(node);
 }
 
 const JUSTIFY_CSS: Record<MailJustify, string> = {
@@ -1721,6 +1733,10 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 		case "text":
 			return [
 				"margin:0",
+				// A list's bullets sit in its left padding. Written out, because a
+				// client's own default differs from one to the next and the
+				// canvas resets it to nothing; the box's padding, when set, wins.
+				isListTag(block.tag) ? `padding-left:${LIST_INDENT}px` : null,
 				...textDeclarations(block.text, fonts),
 				// A list's items are the block's `html`; pushing them down its box
 				// with a wrapping span would break the list, so a list block is
@@ -1895,18 +1911,18 @@ function compileBlock(
  * compiles to `<section style="display:block;display:flex;...">`, and that is
  * the one difference a test pins between the two versions' output.
  */
-function containerDeclarations(container: MailContainer, topLevel: boolean): (string | null)[] {
+function containerDeclarations(container: MailContainer, inFlow: boolean): (string | null)[] {
 	return [
 		container.tag !== "div" ? "display:block" : null,
 		...layoutDeclarations(container.layout),
 		...boxDeclarations(container.box),
-		...placementDeclarations(container, topLevel),
+		...placementDeclarations(container, inFlow),
 	];
 }
 
 /** A columns table's declarations. A `<table>` needs no `display:block` fallback: every client already treats it as one. */
-function columnsDeclarations(columns: MailColumns, topLevel: boolean): (string | null)[] {
-	return [...boxDeclarations(columns.box), ...placementDeclarations(columns, topLevel)];
+function columnsDeclarations(columns: MailColumns, inFlow: boolean): (string | null)[] {
+	return [...boxDeclarations(columns.box), ...placementDeclarations(columns, inFlow)];
 }
 
 /** Half the gap on each inner side, so the total between two cells is the gap and the outer edges carry none of it. */
@@ -1936,7 +1952,7 @@ function compileColumnsCell(
 	];
 	const style = styleString(declarations);
 	const widthAttr = cell.width !== null ? ` width="${cell.width}%"` : "";
-	const children = compileNodes(cell.children, inputs, fonts, rules, false);
+	const children = compileNodes(cell.children, inputs, fonts, rules, true);
 	return `<td data-juno-id="${escapeHtml(cell.id)}"${widthAttr} valign="${cell.verticalAlign}"${
 		className ? ` class="${className}"` : ""
 	}${style}>${children}</td>`;
@@ -1947,10 +1963,10 @@ function compileColumnsCell(
  * keeps side by side. `role="presentation"` and the zeroed attributes are
  * what stop a screen reader announcing a layout table as data.
  */
-function compileColumns(columns: MailColumns, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
+function compileColumns(columns: MailColumns, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, inFlow: boolean): string {
 	const marks = marksFor(columns.id, columns.hidden, rules);
 	if (!marks) return "";
-	const declarations = columnsDeclarations(columns, topLevel);
+	const declarations = columnsDeclarations(columns, inFlow);
 	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
 	const rows = columns.rows
 		.map(
@@ -1970,11 +1986,11 @@ function compileContainer(
 	inputs: TemplateInput[],
 	fonts: MailFont[],
 	rules: BreakpointRules,
-	topLevel: boolean,
+	inFlow: boolean,
 ): string {
 	const marks = marksFor(container.id, container.hidden, rules);
 	if (!marks) return "";
-	const declarations = containerDeclarations(container, topLevel);
+	const declarations = containerDeclarations(container, inFlow);
 	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
 	const children = compileNodes(container.children, inputs, fonts, rules, false);
 	const tag = container.tag;
@@ -1983,15 +1999,20 @@ function compileContainer(
 	)}${style}>${children}</${tag}>`;
 }
 
-function compileNode(node: MailNode, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
-	if (isContainer(node)) return compileContainer(node, inputs, fonts, rules, topLevel);
-	if (isColumns(node)) return compileColumns(node, inputs, fonts, rules, topLevel);
+function compileNode(node: MailNode, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, inFlow: boolean): string {
+	if (isContainer(node)) return compileContainer(node, inputs, fonts, rules, inFlow);
+	if (isColumns(node)) return compileColumns(node, inputs, fonts, rules, inFlow);
 	const marks = marksFor(node.id, node.hidden, rules);
 	return marks ? compileBlock(node, inputs, fonts, marks) : "";
 }
 
-function compileNodes(nodes: MailNode[], inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
-	return nodes.map((node) => compileNode(node, inputs, fonts, rules, topLevel)).join("");
+/**
+ * `inFlow` is true when the parent lays its children out in plain flow, as the
+ * frame and a table cell do, and false inside a container's flex or grid: it
+ * decides how a container or columns table is placed in it.
+ */
+function compileNodes(nodes: MailNode[], inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, inFlow: boolean): string {
+	return nodes.map((node) => compileNode(node, inputs, fonts, rules, inFlow)).join("");
 }
 
 /**
@@ -2164,7 +2185,7 @@ function walkRulePair(
 	fonts: MailFont[],
 	add: (id: string, declarations: string[]) => void,
 	shown: Set<string>,
-	topLevel: boolean,
+	inFlow: boolean,
 ): void {
 	here.forEach((node, index) => {
 		const was = before[index];
@@ -2173,8 +2194,8 @@ function walkRulePair(
 			add(
 				node.id,
 				ruleDeclarations(
-					declarationMap(containerDeclarations(was, topLevel)),
-					declarationMap(containerDeclarations(node, topLevel)),
+					declarationMap(containerDeclarations(was, inFlow)),
+					declarationMap(containerDeclarations(node, inFlow)),
 					was.hidden,
 					node.hidden,
 					"block",
@@ -2188,8 +2209,8 @@ function walkRulePair(
 			add(
 				node.id,
 				ruleDeclarations(
-					declarationMap(columnsDeclarations(was, topLevel)),
-					declarationMap(columnsDeclarations(node, topLevel)),
+					declarationMap(columnsDeclarations(was, inFlow)),
+					declarationMap(columnsDeclarations(node, inFlow)),
 					was.hidden,
 					node.hidden,
 					"block",
@@ -2203,7 +2224,7 @@ function walkRulePair(
 					const wasCell = wasRow.cells[cellIndex];
 					if (!wasCell) return;
 					add(cell.id, ruleDeclarations(declarationMap(boxDeclarations(wasCell.box)), declarationMap(boxDeclarations(cell.box)), false, false, "table-cell"));
-					walkRulePair(wasCell.children, cell.children, inputs, fonts, add, shown, false);
+					walkRulePair(wasCell.children, cell.children, inputs, fonts, add, shown, true);
 				});
 			});
 			return;
@@ -2401,6 +2422,16 @@ function leftoverCss(map: Declarations, owned: string[]): string | null {
 	}
 	const css = sanitiseDeclarations(rest.join(";"));
 	return css || null;
+}
+
+/** An element's style as declarations in the order they were written, repeats included, bar the properties named. */
+function declarationsOf(attrs: string, skip: string[]): string {
+	const style = attribute(attrs, "style");
+	if (!style) return "";
+	const kept = unescapeAttr(style)
+		.split(";")
+		.filter((part) => !skip.includes(part.slice(0, Math.max(part.indexOf(":"), 0)).trim().toLowerCase()));
+	return sanitiseDeclarations(kept.join(";"));
 }
 
 const BOX_PROPERTIES = [
@@ -2834,8 +2865,11 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 		}
 		case "html": {
 			// The CSS is what the style says, bar the flex and alignment that
-			// `common` has already read into the block's own placement.
-			const css = leftoverCss(map, ["flex", "align-self"]) ?? "";
+			// `common` has already read into the block's own placement. Read from
+			// the style itself rather than from `map`, which keeps only the last of a
+			// repeated property: a container converted to code writes
+			// `display:block` and then `display:flex` on purpose.
+			const css = declarationsOf(marks.attrs, ["flex", "align-self"]);
 			const wrapped = attribute(node.attrs, "data-juno-wrap") !== null;
 			return {
 				...common,
@@ -3118,17 +3152,8 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 
 /* ------------------------------------------------------------ convert to code */
 
-/**
- * A block as the HTML and CSS it compiles to: the element, and its style as
- * declarations. Compiling the result gives the same markup back, which is
- * what makes "Convert to HTML" a change of how a block is edited rather than
- * of what it looks like.
- */
-export function blockToCode(block: MailBlock, inputs: TemplateInput[], fonts: MailFont[]): { html: string; css: string } {
-	if (block.kind === "html") return { html: block.html, css: block.css };
-	// Compiled as showing, whatever the eye says: a hidden block converts to
-	// the code it would be if it were shown, and stays hidden.
-	const compiled = compileBlock({ ...block, hidden: false }, inputs, fonts);
+/** The one element a compiled node came to, as the HTML and CSS it is edited as. */
+function codeOfCompiled(compiled: string): { html: string; css: string } {
 	const node = splitTopLevel(compiled).find(
 		(entry): entry is Extract<Node, { type: "element" }> => entry.type === "element",
 	);
@@ -3140,22 +3165,57 @@ export function blockToCode(block: MailBlock, inputs: TemplateInput[], fonts: Ma
 }
 
 /**
- * The children of one container or cell, found anywhere in the tree, or null
- * when nothing there has that id. What `sectionId` in `MailBlockConversion`
- * names now that a section is one kind of container among several: the id of
- * the block's immediate parent.
+ * A block as the HTML and CSS it compiles to: the element, and its style as
+ * declarations. Compiling the result gives the same markup back, which is
+ * what makes "Convert to HTML" a change of how a block is edited rather than
+ * of what it looks like.
  */
-export function findChildren(nodes: MailNode[], parentId: string): MailNode[] | null {
+export function blockToCode(block: MailBlock, inputs: TemplateInput[], fonts: MailFont[]): { html: string; css: string } {
+	if (block.kind === "html") return { html: block.html, css: block.css };
+	// Compiled as showing, whatever the eye says: a hidden block converts to
+	// the code it would be if it were shown, and stays hidden.
+	return codeOfCompiled(compileBlock({ ...block, hidden: false }, inputs, fonts));
+}
+
+/**
+ * A container or a columns table, with everything under it, as the one
+ * element of HTML and CSS it compiles to. `inFlow` is whether its parent lays
+ * out in plain flow (the frame, a table cell) rather than with flex or grid,
+ * which decides how the element is placed in it.
+ *
+ * It is compiled with no breakpoints, so it carries no class for a media
+ * query to find, and a descendant that is hidden is left out, because hidden
+ * is "not in the message" and this is the message. What the descendants
+ * looked like at a narrower width is lost with the structure it was keyed to.
+ */
+export function nodeToCode(
+	node: MailContainer | MailColumns,
+	inputs: TemplateInput[],
+	fonts: MailFont[],
+	inFlow: boolean,
+): { html: string; css: string } {
+	const rules: BreakpointRules = { classes: new Map(), shown: new Set(), css: "" };
+	return codeOfCompiled(compileNode({ ...node, hidden: false }, inputs, fonts, rules, inFlow));
+}
+
+/**
+ * The children of one container or cell, found anywhere in the tree, or of the
+ * frame itself for null, together with whether that parent lays them out in
+ * plain flow (the frame, a cell) or with flex or grid (a container). Null when
+ * nothing there has that id. What `parentId` in `MailBlockConversion` names.
+ */
+export function findParent(nodes: MailNode[], parentId: string | null): { children: MailNode[]; inFlow: boolean } | null {
+	if (parentId === null) return { children: nodes, inFlow: true };
 	for (const node of nodes) {
 		if (isContainer(node)) {
-			if (node.id === parentId) return node.children;
-			const found = findChildren(node.children, parentId);
+			if (node.id === parentId) return { children: node.children, inFlow: false };
+			const found = findParent(node.children, parentId);
 			if (found) return found;
 		} else if (isColumns(node)) {
 			for (const row of node.rows) {
 				for (const cell of row.cells) {
-					if (cell.id === parentId) return cell.children;
-					const found = findChildren(cell.children, parentId);
+					if (cell.id === parentId) return { children: cell.children, inFlow: true };
+					const found = findParent(cell.children, parentId);
 					if (found) return found;
 				}
 			}
@@ -3166,9 +3226,10 @@ export function findChildren(nodes: MailNode[], parentId: string): MailNode[] | 
 
 /**
  * Replaces the children of one parent with `transform`'s result, wherever in
- * the tree that parent is.
+ * the tree that parent is, or at the frame's own top level for null.
  */
-function replaceChildren(nodes: MailNode[], parentId: string, transform: (children: MailNode[]) => MailNode[]): MailNode[] {
+function replaceChildren(nodes: MailNode[], parentId: string | null, transform: (children: MailNode[]) => MailNode[]): MailNode[] {
+	if (parentId === null) return transform(nodes);
 	return nodes.map((node) => {
 		if (isContainer(node)) {
 			return node.id === parentId
@@ -3192,41 +3253,67 @@ function replaceChildren(nodes: MailNode[], parentId: string, transform: (childr
 	});
 }
 
+/** Every id under a node, itself, its rows, its cells and everything in them included. */
+function idsUnder(node: MailNode): string[] {
+	if (isContainer(node)) return [node.id, ...node.children.flatMap(idsUnder)];
+	if (isColumns(node)) {
+		return [
+			node.id,
+			...node.rows.flatMap((row) => [row.id, ...row.cells.flatMap((cell) => [cell.id, ...cell.children.flatMap(idsUnder)])]),
+		];
+	}
+	return [node.id];
+}
+
 /**
- * Replaces one block with the code it compiles to. The placement it had is
- * part of that code now, so the new block carries none of its own.
+ * Replaces one node with the code it compiles to: a block as itself, a
+ * container or a columns table with everything in it as one code block. The
+ * placement it had is part of that code now, so the new block carries none of
+ * its own.
  */
-export function convertBlockToCode(
+export function convertNodeToCode(
 	layout: MailLayout,
-	sectionId: string,
-	blockId: string,
+	parentId: string | null,
+	nodeId: string,
 	inputs: TemplateInput[],
 ): MailLayout {
+	const parent = findParent(layout.children, parentId);
+	const target = parent?.children.find((node) => node.id === nodeId);
+	if (!parent || !target || (isBlockNode(target) && target.kind === "html")) return layout;
+	const code = isBlockNode(target)
+		? blockToCode(target, inputs, layout.fonts)
+		: nodeToCode(target, inputs, layout.fonts, parent.inFlow);
+	const gone = new Set(idsUnder(target));
+	gone.delete(nodeId);
+	const converted: MailBlock = {
+		id: target.id,
+		kind: "html",
+		html: code.html,
+		css: code.css,
+		grow: 0,
+		alignSelf: "auto",
+		hidden: target.hidden,
+	};
 	return {
 		...layout,
-		children: replaceChildren(layout.children, sectionId, (children) =>
-			children.map((node) => {
-				if (node.id !== blockId || !isBlockNode(node) || node.kind === "html") return node;
-				const code = blockToCode(node, inputs, layout.fonts);
-				return {
-					id: node.id,
-					kind: "html",
-					html: code.html,
-					css: code.css,
-					grow: 0,
-					alignSelf: "auto",
-					hidden: node.hidden,
-				};
-			}),
-		),
-		// What a breakpoint changed about the block was its style, which is code
-		// now. Whether it shows at a breakpoint is still the block's own.
+		children: replaceChildren(layout.children, parentId, (children) => children.map((node) => (node.id === nodeId ? converted : node))),
+		// What a breakpoint changed about the node was its style, which is code
+		// now, and what it changed about anything under it is gone with that
+		// structure. Whether the node shows at a breakpoint is still its own.
 		breakpoints: layout.breakpoints.map((breakpoint) => {
-			const override = entryOf(breakpoint.blocks, blockId) as MailBlockOverride | undefined;
-			if (!override) return breakpoint;
-			const blocks = Object.fromEntries(Object.entries(breakpoint.blocks).filter(([id]) => id !== blockId));
-			if (override.hidden !== undefined) blocks[blockId] = { hidden: override.hidden };
-			return { ...breakpoint, blocks };
+			const blocks: Record<string, MailBlockOverride> = {};
+			for (const [id, override] of Object.entries(breakpoint.blocks)) {
+				if (id !== nodeId && !gone.has(id)) blocks[id] = override;
+			}
+			const sections: Record<string, MailSectionOverride> = {};
+			for (const [id, override] of Object.entries(breakpoint.sections)) {
+				if (id !== nodeId && !gone.has(id)) sections[id] = override;
+			}
+			const own = (entryOf(breakpoint.blocks, nodeId) ?? entryOf(breakpoint.sections, nodeId)) as
+				| { hidden?: boolean }
+				| undefined;
+			if (own?.hidden !== undefined) blocks[nodeId] = { hidden: own.hidden };
+			return { ...breakpoint, sections, blocks };
 		}),
 	};
 }

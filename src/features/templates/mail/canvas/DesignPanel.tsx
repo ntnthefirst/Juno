@@ -4,22 +4,48 @@ import type {
 	MailBlock,
 	MailBoxStyle,
 	MailColumns,
+	MailColumnsCell,
 	MailContainer,
+	MailContainerTag,
 	MailCorners,
 	MailFontFallback,
 	MailHeadingTag,
 	MailLayout,
+	MailSelfAlign,
 	MailSpacing,
 	MailTextStyle,
+	MailTextTag,
 	TemplateInput,
+	MailVerticalAlign,
 } from "@shared/types";
 import { Button } from "../../../../components/Button";
 import { isMac } from "../../../../lib/platform";
 import { BreakpointsSection } from "./BreakpointsSection";
-import { BLOCK_KIND_LABELS, colorsIn, findCell, findNode, parentOf, replaceColor, updateBlock } from "./canvas-actions";
+import {
+	addCell,
+	addRow,
+	BLOCK_KIND_LABELS,
+	colorsIn,
+	CONTAINER_TAG_LABELS,
+	defaultText,
+	findCell,
+	findNode,
+	locateCell,
+	parentOf,
+	removeCell,
+	removeRow,
+	replaceColor,
+	safeLink,
+	setContainerTag,
+	setTextTag,
+	updateBlock,
+	updateCell,
+	updateColumns,
+} from "./canvas-actions";
 import type { Measured, Selection } from "./CanvasView";
 import { ColorRow } from "./ColorRow";
 import { EffectsSection } from "./EffectsSection";
+import { elementInfo, groupInfo } from "./elements";
 import { FillSection } from "./FillSection";
 import { FontsSection } from "./FontsSection";
 import {
@@ -50,6 +76,7 @@ import {
 	widthModes,
 	widthSizing,
 	type Across,
+	type Placer,
 } from "./sizing";
 import { StrokeSection } from "./StrokeSection";
 import { TypographySection } from "./TypographySection";
@@ -82,11 +109,15 @@ type DesignPanelProps = {
 	onReplace: (layout: MailLayout) => void;
 	onSection: (id: string, patch: Partial<Omit<MailContainer, "id" | "kind" | "children">>) => void;
 	onColumns: (id: string, patch: Partial<Omit<MailColumns, "id" | "kind" | "rows">>) => void;
+	/** How a cell looks. Its width and alignment are structure, and go through `onBase`. */
+	onCell: (id: string, patch: Partial<Pick<MailColumnsCell, "box">>) => void;
 	onBlock: (id: string, patch: Partial<MailBlock>) => void;
 	/** Removes a container, a columns table or a block, wherever it is. */
 	onRemove: (id: string) => void;
-	/** Turns a block into the HTML and CSS it compiles to. */
-	onConvert: (blockId: string) => void;
+	/** Turns a block, or a container or columns table with everything in it, into the HTML and CSS it compiles to. */
+	onConvert: (nodeId: string) => void;
+	/** Points the panel at another node, which a cell removed from its table needs to hand back to the table. */
+	onSelect: (selection: Selection) => void;
 };
 
 type BoxPatch = (patch: Partial<MailBoxStyle>) => void;
@@ -128,18 +159,48 @@ function crossAxis(section: MailContainer): Axis {
 }
 
 /**
- * The panel's heading control still offers 1 to 3, the way the level did: a
- * fourth, fifth or sixth level is a tag to switch to from the toolbar's
- * Containers group, not from here (docs/editors.md section 2, phase 2 and 3).
- * A tag past 3 is read as 3, so the control never shows nothing pressed.
+ * What lays a node out, as sizing.ts wants it: the container it sits in, or
+ * null when it sits in the frame or a table cell, which lay what is in them
+ * out in plain flow and have no share of the room or alignment to give.
  */
-function levelOfTag(tag: MailHeadingTag): 1 | 2 | 3 {
-	const level = Number.parseInt(tag.slice(1), 10);
-	return level === 1 || level === 3 ? level : level >= 4 ? 3 : 2;
+function placerOf(layout: MailLayout, id: string): Placer {
+	const parentId = parentOf(layout, id);
+	if (!parentId) return null;
+	const parent = findNode(layout, parentId);
+	return parent && parent.kind === "container" ? parent : null;
 }
 
-function tagOfLevel(level: 1 | 2 | 3): MailHeadingTag {
-	return `h${level}` as MailHeadingTag;
+/**
+ * A container or a columns table read as the block sizing.ts works on. They
+ * share what it looks at: a box with a width and a least height, a share of
+ * the room, and where they sit across their parent.
+ */
+function asSized(node: MailContainer | MailColumns): MailBlock {
+	return {
+		id: node.id,
+		kind: "text",
+		tag: "p",
+		html: "",
+		text: defaultText(),
+		box: node.box,
+		grow: node.grow,
+		alignSelf: node.alignSelf,
+		hidden: node.hidden,
+	};
+}
+
+/** The part of a sizing patch a container or a columns table has of its own. */
+function placementOf(patch: Partial<MailBlock>): { grow?: number; alignSelf?: MailSelfAlign; box?: MailBoxStyle } {
+	return {
+		...(patch.grow !== undefined ? { grow: patch.grow } : {}),
+		...(patch.alignSelf !== undefined ? { alignSelf: patch.alignSelf } : {}),
+		...("box" in patch && patch.box ? { box: patch.box } : {}),
+	};
+}
+
+/** What each text tag and heading level is called in the Element list. */
+function textOptions(): { value: string; label: string }[] {
+	return groupInfo("text").elements.map((element) => ({ value: element.id, label: `${element.label} (${element.tag})` }));
 }
 
 const ALT = isMac ? "Option" : "Alt";
@@ -380,9 +441,86 @@ function RadiusFields({ radius, corners, onCorners }: RadiusFieldsProps) {
 	);
 }
 
+type SizeFieldsProps = {
+	/** The block, or a container or columns table read as one (asSized). */
+	node: MailBlock;
+	placer: Placer;
+	measured: Measured | null;
+	onPatch: (patch: Partial<MailBlock>) => void;
+	/** A columns table has no height of its own: a least height on a table is ignored by mail clients. */
+	height?: boolean;
+};
+
+/**
+ * Figma's W and H, each with whether it is fixed, hugs or fills, worked out
+ * by sizing.ts for the parent the node sits in; then its share of the room,
+ * when it has one.
+ *
+ * W and H always say how big the node is drawn, so one that fills shows the
+ * width it fills to, and typing a number fixes that side at it. A fixed width
+ * still gives way on a narrow screen, and a height is the least the node will
+ * be: content longer than it makes the node taller.
+ */
+function SizeFields({ node, placer, measured, onPatch, height = true }: SizeFieldsProps) {
+	const across = widthModes(node, placer);
+	const down = heightModes(node, placer);
+	const width = fixedWidth(node) ?? (measured ? Math.round(measured.width) : null);
+	const tall = fixedHeight(node) ?? (measured ? Math.round(measured.height) : null);
+	const heightMode = heightSizing(node, placer);
+
+	return (
+		<>
+			<PanelPair>
+				<DimensionInput
+					prefix="W"
+					label="Width"
+					value={width}
+					editable={across.includes("fixed")}
+					onValue={(next) => onPatch(setWidth(node, placer, next))}
+					mode={widthSizing(node, placer)}
+					modes={across}
+					onMode={(mode) => onPatch(sizeWidth(node, placer, mode, measured?.width ?? null))}
+					max={1600}
+				/>
+				{height ? (
+					<DimensionInput
+						prefix="H"
+						label="Height"
+						value={tall}
+						editable={down.includes("fixed")}
+						onValue={(next) => onPatch(setHeight(node, placer, next))}
+						mode={heightMode}
+						modes={down}
+						onMode={(mode) => onPatch(sizeHeight(node, placer, mode, measured?.height ?? null))}
+						min={1}
+						max={4000}
+					/>
+				) : (
+					<span />
+				)}
+			</PanelPair>
+
+			{node.grow > 0 ? (
+				<NumberInput
+					label="Share of the room left"
+					prefix="x"
+					value={node.grow}
+					min={1}
+					max={12}
+					onChange={(next) => onPatch({ grow: next })}
+				/>
+			) : null}
+
+			{height && heightMode === "fixed" && node.kind !== "spacer" ? (
+				<PanelNote>The least it will be. Anything longer makes it taller.</PanelNote>
+			) : null}
+		</>
+	);
+}
+
 type BlockLayoutProps = {
 	block: MailBlock;
-	section: MailContainer;
+	placer: Placer;
 	measured: Measured | null;
 	can: Capabilities | null;
 	/** The corners, when this block has them. */
@@ -391,60 +529,15 @@ type BlockLayoutProps = {
 };
 
 /**
- * Figma's layout for one block: W and H, each with whether it is fixed, hugs
- * or fills, what that means in this section worked out by sizing.ts; then
- * how round its corners are, the room inside it, and whether what reaches past
- * it is cut off.
- *
- * W and H always say how big the block is drawn, so a block that fills shows
- * the width it fills to, and typing a number fixes that side at it. A fixed
- * width still gives way on a narrow screen, and a height is the least the
- * block will be: text longer than it makes the block taller.
+ * Figma's layout for one block: its size, then how round its corners are, the
+ * room inside it, and whether what reaches past it is cut off.
  */
-function BlockLayoutSection({ block, section, measured, can, radius, onBlock }: BlockLayoutProps) {
-	const across = widthModes(block, section);
-	const down = heightModes(block);
-	const width = fixedWidth(block) ?? (measured ? Math.round(measured.width) : null);
-	const height = fixedHeight(block) ?? (measured ? Math.round(measured.height) : null);
+function BlockLayoutSection({ block, placer, measured, can, radius, onBlock }: BlockLayoutProps) {
 	const box = "box" in block ? block.box : null;
-	const heightMode = heightSizing(block, section);
 
 	return (
 		<PanelSection title="Layout">
-			<PanelPair>
-				<DimensionInput
-					prefix="W"
-					label="Width"
-					value={width}
-					editable={across.includes("fixed")}
-					onValue={(next) => onBlock(setWidth(block, section, next))}
-					mode={widthSizing(block, section)}
-					modes={across}
-					onMode={(mode) => onBlock(sizeWidth(block, section, mode, measured?.width ?? null))}
-					max={1600}
-				/>
-				<DimensionInput
-					prefix="H"
-					label="Height"
-					value={height}
-					editable={down.includes("fixed")}
-					onValue={(next) => onBlock(setHeight(block, section, next))}
-					mode={heightMode}
-					modes={down}
-					onMode={(mode) => onBlock(sizeHeight(block, section, mode, measured?.height ?? null))}
-				/>
-			</PanelPair>
-
-			{block.grow > 0 ? (
-				<NumberInput
-					label="Share of the room left"
-					prefix="x"
-					value={block.grow}
-					min={1}
-					max={12}
-					onChange={(next) => onBlock({ grow: next } as Partial<MailBlock>)}
-				/>
-			) : null}
+			<SizeFields node={block} placer={placer} measured={measured} onPatch={onBlock} />
 
 			{radius && box ? (
 				<RadiusFields
@@ -465,17 +558,14 @@ function BlockLayoutSection({ block, section, measured, can, radius, onBlock }: 
 					onChange={(clip) => onBlock({ box: { ...box, clip } } as Partial<MailBlock>)}
 				/>
 			) : null}
-
-			{heightMode === "fixed" && block.kind !== "spacer" ? (
-				<PanelNote>The least it will be. Anything longer makes it taller.</PanelNote>
-			) : null}
 		</PanelSection>
 	);
 }
 
 type AppearanceSectionProps = {
-	hidden: boolean;
-	onHidden: (hidden: boolean) => void;
+	/** Left out for a cell, which is fixed in place by its row and has no eye of its own. */
+	hidden?: boolean;
+	onHidden?: (hidden: boolean) => void;
 	box: MailBoxStyle;
 	onBox: BoxPatch;
 	showOpacity?: boolean;
@@ -491,12 +581,14 @@ function AppearanceSection({ hidden, onHidden, box, onBox, showOpacity = true }:
 		<PanelSection
 			title="Appearance"
 			action={
-				<PanelButton
-					label={hidden ? "Show in the message" : "Hide from the message"}
-					icon={hidden ? "hidden" : "visible"}
-					active={hidden}
-					onClick={() => onHidden(!hidden)}
-				/>
+				onHidden ? (
+					<PanelButton
+						label={hidden ? "Show in the message" : "Hide from the message"}
+						icon={hidden ? "hidden" : "visible"}
+						active={hidden}
+						onClick={() => onHidden(!hidden)}
+					/>
+				) : null
 			}
 		>
 			{hidden ? <PanelNote>Hidden. It stays in the layers and is left out of the message.</PanelNote> : null}
@@ -605,6 +697,18 @@ function ContentSection({ block, inputs, set }: ContentProps) {
 						onChange={(next) => set({ alt: next } as Partial<MailBlock>)}
 					/>
 					<PanelNote>A hosted https address. A picture carried inside the message gets it filed as spam.</PanelNote>
+					<TextInput
+						label="Link address"
+						type="url"
+						value={block.href ?? ""}
+						placeholder="https:// (no link)"
+						onChange={(next) => set({ href: next || null } as Partial<MailBlock>)}
+					/>
+					{block.href && !safeLink(block.href) ? (
+						<PanelNote tone="warn">Refused. Only https and mailto links are kept, so the picture is sent without one.</PanelNote>
+					) : (
+						<PanelNote>https or mailto. Empty is a plain picture, with no link round it.</PanelNote>
+					)}
 				</PanelSection>
 			);
 		case "field":
@@ -683,18 +787,77 @@ function CodeSection({ block, set }: CodeSectionProps) {
 	);
 }
 
-type ConvertSectionProps = { onConvert: () => void };
+type ConvertSectionProps = { onConvert: () => void; what: "block" | "group" };
 
-function ConvertSection({ onConvert }: ConvertSectionProps) {
+function ConvertSection({ onConvert, what }: ConvertSectionProps) {
 	return (
 		<PanelSection title="Code">
 			<Button size="dense" onClick={onConvert}>
 				Convert to HTML
 			</Button>
 			<PanelNote>
-				The block becomes its own HTML and CSS, edited as code here, and looks exactly as it does now. The controls
-				above do not come back.
+				{what === "block"
+					? "The block becomes its own HTML and CSS, edited as code here, and looks exactly as it does now. The controls above do not come back."
+					: "It and everything in it become one block of HTML and CSS, edited as code here, and look exactly as they do now. Its layers and the controls above do not come back."}
 			</PanelNote>
+		</PanelSection>
+	);
+}
+
+type ElementSectionProps = {
+	label: string;
+	value: string;
+	options: { value: string; label: string }[];
+	onChange: (value: string) => void;
+};
+
+/**
+ * The tag something is written as, changed within its group: a container's
+ * among the container tags, a text's among the text tags and heading levels.
+ * It is the way a heading's level was changed, for every tag the group has.
+ */
+function ElementSection({ label, value, options, onChange }: ElementSectionProps) {
+	return (
+		<PanelSection title="Element">
+			<PanelSelect label={label} value={value} options={options} onChange={onChange} />
+		</PanelSection>
+	);
+}
+
+type PlacementSectionProps = {
+	node: MailContainer | MailColumns;
+	placer: Placer;
+	onPatch: (patch: { grow?: number; alignSelf?: MailSelfAlign; box?: MailBoxStyle }) => void;
+};
+
+/**
+ * Where a container or a columns table sits across what holds it. In a flex or
+ * grid parent that is the parent's own cross axis, the way a block sits in
+ * it; in the frame or a table cell, which lay things out in plain flow, it is
+ * margins, and there is nowhere to move until it is narrower than its parent.
+ */
+function PlacementSection({ node, placer, onPatch }: PlacementSectionProps) {
+	if (placer) {
+		const sized = asSized(node);
+		return (
+			<PositionSection
+				axis={crossAxis(placer)}
+				value={acrossOf(sized, placer)}
+				onChange={(across) => onPatch(placementOf(alignAcross(sized, placer, across)))}
+			/>
+		);
+	}
+	const narrower = node.box.width !== null;
+	return (
+		<PanelSection title="Position">
+			<Segmented
+				label="Where it sits across what holds it"
+				value={narrower ? (node.alignSelf === "center" || node.alignSelf === "end" ? node.alignSelf : "start") : null}
+				options={acrossOptions("h", false)}
+				onChange={(alignSelf) => onPatch({ alignSelf })}
+				disabled={!narrower}
+			/>
+			{!narrower ? <PanelNote>Something that fills what holds it has nowhere to move. Give it a fixed width.</PanelNote> : null}
 		</PanelSection>
 	);
 }
@@ -702,16 +865,23 @@ function ConvertSection({ onConvert }: ConvertSectionProps) {
 /* ------------------------------------------------------------------- panel */
 
 /**
- * The properties of whatever is selected: the frame, a section or a block,
- * in Figma's order. Breakpoints first, because they decide which width every
- * control below is changing; then position, layout with the size and the
- * corners, appearance, type, fill, stroke and effects.
+ * The properties of whatever is selected: the frame, a container, a columns
+ * table, one of its cells or a block, in Figma's order. Breakpoints first,
+ * because they decide which width every control below is changing; then the
+ * element it is written as, position, layout with the size and the corners,
+ * appearance, type, fill, stroke and effects.
  *
  * There is no X, no Y and no rotation, because nothing in a message is placed
- * or turned: a block sits where its section's flex or grid puts it, and the
- * position row moves it across that and nowhere else. There is no blend mode
- * and no export. A control that a common mail client ignores says so where it
- * is set. A block converted to HTML shows its code and nothing else.
+ * or turned: a node sits where the flex, grid or plain flow of what holds it
+ * puts it, and the position row moves it across that and nowhere else. There
+ * is no blend mode and no export. A control that a common mail client ignores
+ * says so where it is set. A block converted to HTML shows its code and
+ * nothing else.
+ *
+ * What something is written as and what it holds are the same at every width,
+ * so changing a tag, a row or a cell goes to the stored canvas (`onBase`)
+ * whichever breakpoint is being looked at, and only how something looks goes
+ * to the breakpoint.
  */
 export function DesignPanel({
 	base,
@@ -728,9 +898,11 @@ export function DesignPanel({
 	onReplace,
 	onSection,
 	onColumns,
+	onCell,
 	onBlock,
 	onRemove,
 	onConvert,
+	onSelect,
 }: DesignPanelProps) {
 	// A container, a columns table or a block, anywhere in the tree; a cell,
 	// which is none of those, separately. Both are found by id alone, so a
@@ -741,6 +913,7 @@ export function DesignPanel({
 	const colors = colorsIn(layout, selection?.id ?? null);
 	const recolor = (from: string, to: string) => onReplace(replaceColor(layout, selection?.id ?? null, from, to));
 	const breakpoints = <BreakpointsSection layout={base} active={active} onActive={onActive} onLayout={onBase} />;
+	const structure = (change: (canvas: MailLayout) => MailLayout) => onBase(change(base));
 
 	if (!node && !cell) {
 		const floor = Math.ceil(contentHeight);
@@ -787,55 +960,167 @@ export function DesignPanel({
 		);
 	}
 
-	// A cell has no row of its own in the layers to drag, and no styling here
-	// yet: its width, its vertical alignment and its box are a columns table
-	// design panel's job, which is phase 3's (docs/editors.md section 2). It
-	// is still selectable and still a drop target, which is what phase 2 asks.
+	// A cell is fixed in place by its row: it has no eye, no position and no
+	// layers row of its own to drag. Its width and alignment are the table's
+	// structure and are the same at every width; how it looks is not.
 	if (cell) {
+		const at = locateCell(base, cell.id);
+		const onCellBox: BoxPatch = (patch) => onCell(cell.id, { box: { ...cell.box, ...patch } });
+		const removable = at !== null && at.row.cells.length > 1;
 		return (
 			<div className="flex flex-col">
 				{breakpoints}
-				<Header label="Cell" />
-				<PanelNote>Part of a columns table. Its own width, alignment and appearance are not editable here yet.</PanelNote>
+				<Header
+					label="Cell"
+					deleteLabel="Remove cell"
+					onDelete={
+						at && removable
+							? () => {
+									structure((canvas) => removeCell(canvas, at.columns.id, at.row.id, cell.id));
+									onSelect({ id: at.columns.id });
+								}
+							: undefined
+					}
+				/>
+				<PanelSection title="Layout">
+					<NumberInput
+						label="Width"
+						prefix="W"
+						suffix="%"
+						value={cell.width}
+						min={1}
+						max={100}
+						unset={{ label: "Auto", onClear: () => structure((canvas) => updateCell(canvas, cell.id, { width: null })) }}
+						onChange={(width) => structure((canvas) => updateCell(canvas, cell.id, { width: Math.round(width) }))}
+					/>
+					<Segmented
+						label="Align down"
+						value={cell.verticalAlign}
+						options={
+							[
+								{ value: "top", label: "Top", icon: "self-v-start", title: "Align top" },
+								{ value: "middle", label: "Middle", icon: "self-v-center", title: "Align middle" },
+								{ value: "bottom", label: "Bottom", icon: "self-v-end", title: "Align bottom" },
+							] satisfies SegmentedOption<MailVerticalAlign>[]
+						}
+						onChange={(verticalAlign) => structure((canvas) => updateCell(canvas, cell.id, { verticalAlign }))}
+					/>
+					<PanelNote>
+						A percentage of the table, or empty to share what is left. The width and the alignment are the same at every
+						width.
+					</PanelNote>
+					<RadiusFields
+						radius={{ value: cell.box.borderRadius, onChange: (next) => onCellBox({ borderRadius: next }) }}
+						corners={cell.box.corners}
+						onCorners={(corners) => onCellBox({ corners })}
+					/>
+					<PaddingFields padding={cell.box.padding} onChange={(padding) => onCellBox({ padding })} />
+					<PanelCheckbox label="Clip content" checked={cell.box.clip} onChange={(clip) => onCellBox({ clip })} />
+				</PanelSection>
+				<AppearanceSection box={cell.box} onBox={onCellBox} />
+				<FillSection fill={cell.box.fill} onFill={(fill) => onCellBox({ fill })} />
+				<StrokeSection box={cell.box} onBox={onCellBox} />
+				<EffectsSection box={cell.box} onBox={onCellBox} />
+				<SelectionColors colors={colors} onReplace={recolor} />
+				<CustomCssSection css={cell.box.customCss} onChange={(customCss) => onCellBox({ customCss })} />
 			</div>
 		);
 	}
 
 	if (node && node.kind === "columns") {
-		const onColumnsBox: BoxPatch = (patch) => onColumns(node.id, { box: { ...node.box, ...patch } });
+		const columns = node;
+		const placer = placerOf(layout, columns.id);
+		const onColumnsBox: BoxPatch = (patch) => onColumns(columns.id, { box: { ...columns.box, ...patch } });
 		return (
 			<div className="flex flex-col">
 				{breakpoints}
 				<Header
 					label="Columns"
-					name={{ value: node.name, onChange: (name) => onColumns(node.id, { name }) }}
+					name={{ value: columns.name, onChange: (name) => onColumns(columns.id, { name }) }}
 					deleteLabel="Delete columns"
-					onDelete={() => onRemove(node.id)}
+					onDelete={() => onRemove(columns.id)}
 				/>
-				<AppearanceSection hidden={node.hidden} onHidden={(hidden) => onColumns(node.id, { hidden })} box={node.box} onBox={onColumnsBox} />
-				<FillSection fill={node.box.fill} onFill={(fill) => onColumnsBox({ fill })} />
-				<StrokeSection box={node.box} onBox={onColumnsBox} />
-				<EffectsSection box={node.box} onBox={onColumnsBox} />
+				<PlacementSection node={columns} placer={placer} onPatch={(patch) => onColumns(columns.id, patch)} />
+				<PanelSection title="Layout">
+					<SizeFields
+						node={asSized(columns)}
+						placer={placer}
+						measured={measured}
+						height={false}
+						onPatch={(patch) => onColumns(columns.id, placementOf(patch))}
+					/>
+					<NumberInput
+						label="Gap between cells"
+						prefix="Gap"
+						value={columns.gap}
+						min={0}
+						max={120}
+						onChange={(gap) => structure((canvas) => updateColumns(canvas, columns.id, { gap: Math.round(gap) }))}
+					/>
+					{active ? <PanelNote>The gap is the same at every width.</PanelNote> : null}
+					<RadiusFields
+						radius={{ value: columns.box.borderRadius, onChange: (next) => onColumnsBox({ borderRadius: next }) }}
+						corners={columns.box.corners}
+						onCorners={(corners) => onColumnsBox({ corners })}
+					/>
+					<PaddingFields padding={columns.box.padding} onChange={(padding) => onColumnsBox({ padding })} />
+					<PanelNote>
+						Cells stay side by side in Outlook on Windows. A table's own padding and corners are drawn by fewer clients
+						than a cell's.
+					</PanelNote>
+				</PanelSection>
+				<PanelSection
+					title="Rows"
+					action={
+						<PanelButton label="Add row" icon="add" onClick={() => structure((canvas) => addRow(canvas, columns.id))} />
+					}
+				>
+					{columns.rows.map((row, index) => (
+						<div key={row.id} className="flex h-[28px] items-center gap-1">
+							<span className="flex-1 truncate text-[length:var(--text-sm)] text-[var(--ink)]">Row {index + 1}</span>
+							<span className="tabular flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+								{row.cells.length} {row.cells.length === 1 ? "cell" : "cells"}
+							</span>
+							<PanelButton
+								label={`Remove the last cell of row ${index + 1}`}
+								icon="minus"
+								disabled={row.cells.length <= 1}
+								onClick={() => {
+									const lastCell = row.cells[row.cells.length - 1];
+									if (lastCell) structure((canvas) => removeCell(canvas, columns.id, row.id, lastCell.id));
+								}}
+							/>
+							<PanelButton
+								label={`Add a cell to row ${index + 1}`}
+								icon="add"
+								onClick={() => structure((canvas) => addCell(canvas, columns.id, row.id))}
+							/>
+							<PanelButton
+								label={`Remove row ${index + 1}`}
+								icon="remove"
+								tone="danger"
+								disabled={columns.rows.length <= 1}
+								onClick={() => structure((canvas) => removeRow(canvas, columns.id, row.id))}
+							/>
+						</div>
+					))}
+				</PanelSection>
+				<AppearanceSection hidden={columns.hidden} onHidden={(hidden) => onColumns(columns.id, { hidden })} box={columns.box} onBox={onColumnsBox} />
+				<FillSection fill={columns.box.fill} onFill={(fill) => onColumnsBox({ fill })} />
+				<StrokeSection box={columns.box} onBox={onColumnsBox} />
+				<EffectsSection box={columns.box} onBox={onColumnsBox} />
 				<SelectionColors colors={colors} onReplace={recolor} />
-				<CustomCssSection css={node.box.customCss} onChange={(customCss) => onColumnsBox({ customCss })} />
-				<PanelNote>
-					Its rows, its cells and the gap between them are not editable here yet. A cell's own children still are, on
-					the canvas and in the layers.
-				</PanelNote>
+				<CustomCssSection css={columns.box.customCss} onChange={(customCss) => onColumnsBox({ customCss })} />
+				<ConvertSection what="group" onConvert={() => onConvert(columns.id)} />
 			</div>
 		);
 	}
 
 	const block = node && node.kind !== "container" ? node : null;
-	// The container the block actually sits in, at whatever depth: sizing.ts
-	// only ever looks at the one container a block is in, never at where that
-	// container itself sits, so a nested one works exactly like a top-level
-	// one here. A block sitting directly in a cell, or at the frame's own top
-	// level, has no such container yet, and gets a panel without the controls
-	// that need one (docs/editors.md section 2, phase 2 leaves that to phase 3).
-	const blockParentId = block ? parentOf(layout, block.id) : undefined;
-	const blockParent = block && blockParentId ? (findNode(layout, blockParentId) ?? null) : null;
-	const blockSection = blockParent && blockParent.kind === "container" ? blockParent : null;
+	// What lays the block out: the container it sits in, at whatever depth, or
+	// nothing when it sits in the frame or a table cell, which lay their
+	// children out in plain flow. sizing.ts only ever looks at the one parent.
+	const blockPlacer = block ? placerOf(layout, block.id) : null;
 
 	if (block) {
 		const set = (patch: Partial<MailBlock>) => onBlock(block.id, patch);
@@ -885,32 +1170,37 @@ export function DesignPanel({
 				: can.radius === "box" && box
 					? { value: box.borderRadius, onChange: (next: number) => onBox({ borderRadius: next }) }
 					: null;
+		const textBlock = block.kind === "text" || block.kind === "heading" ? block : null;
+		// A picture in plain flow can still be moved across by its margins; nothing
+		// else in plain flow has anywhere to go.
+		const positioned = blockPlacer !== null || block.kind === "image";
 
 		return (
 			<div className="flex flex-col">
 				{breakpoints}
 				<Header
-					label={BLOCK_KIND_LABELS[block.kind]}
+					label={textBlock ? elementInfo(textBlock.tag).element.label : BLOCK_KIND_LABELS[block.kind]}
 					deleteLabel="Delete block"
 					onDelete={() => onRemove(block.id)}
 					// A spacer has no appearance section, so its eye is up here.
 					hidden={box ? undefined : { value: block.hidden, onChange: (hidden) => set({ hidden } as Partial<MailBlock>) }}
 				/>
-				{blockSection ? (
-					<>
-						<PositionSection
-							axis={crossAxis(blockSection)}
-							value={acrossOf(block, blockSection)}
-							onChange={(across) => set(alignAcross(block, blockSection, across))}
-						/>
-						<BlockLayoutSection block={block} section={blockSection} measured={measured} can={can} radius={radius} onBlock={set} />
-					</>
-				) : (
-					<PanelNote>
-						Position and layout are not editable here yet for a block placed straight in a columns cell or at the
-						frame's own top level.
-					</PanelNote>
-				)}
+				{textBlock ? (
+					<ElementSection
+						label="Text element"
+						value={textBlock.tag}
+						options={textOptions()}
+						onChange={(tag) => structure((canvas) => setTextTag(canvas, textBlock.id, tag as MailTextTag | MailHeadingTag))}
+					/>
+				) : null}
+				{positioned ? (
+					<PositionSection
+						axis={blockPlacer ? crossAxis(blockPlacer) : "h"}
+						value={acrossOf(block, blockPlacer)}
+						onChange={(across) => set(alignAcross(block, blockPlacer, across))}
+					/>
+				) : null}
+				<BlockLayoutSection block={block} placer={blockPlacer} measured={measured} can={can} radius={radius} onBlock={set} />
 				{box ? (
 					<AppearanceSection
 						hidden={block.hidden}
@@ -935,12 +1225,7 @@ export function DesignPanel({
 									}
 								: { value: block.text.color, onChange: (color) => onText({ color }), clearable: true }
 						}
-						level={
-							block.kind === "heading"
-								? { value: levelOfTag(block.tag), onChange: (level) => set({ tag: tagOfLevel(level) } as Partial<MailBlock>) }
-								: undefined
-						}
-						showVertical={block.kind === "text" || block.kind === "heading"}
+						showVertical={textBlock !== null && !(textBlock.kind === "text" && (textBlock.tag === "ul" || textBlock.tag === "ol"))}
 					/>
 				) : null}
 				<ContentSection block={block} inputs={inputs} set={set} />
@@ -958,7 +1243,7 @@ export function DesignPanel({
 				{can.effects && box ? <EffectsSection box={box} onBox={onBox} /> : null}
 				<SelectionColors colors={colors} onReplace={recolor} />
 				{box ? <CustomCssSection css={box.customCss} onChange={(customCss) => onBox({ customCss })} /> : null}
-				<ConvertSection onConvert={() => onConvert(block.id)} />
+				<ConvertSection what="block" onConvert={() => onConvert(block.id)} />
 			</div>
 		);
 	}
@@ -967,45 +1252,36 @@ export function DesignPanel({
 	// table and a block each returned their own panel above.
 	if (!node || node.kind !== "container") return null;
 	const section = node;
-	// A top-level container sits in the frame, which lays its children one
-	// under the next in plain flow, so "where it sits" is margins (Position,
-	// below). A nested one sits in a flex or grid parent that already has an
-	// alignment of its own, the way a block does, and gets that row from its
-	// own design panel once phase 3 gives every container one
-	// (docs/editors.md section 2).
-	const topLevel = parentOf(layout, section.id) === null;
+	const placer = placerOf(layout, section.id);
 	const arrangement = section.layout;
 	const onSectionBox: BoxPatch = (patch) => onSection(section.id, { box: { ...section.box, ...patch } });
 	const flow = arrangement.kind === "grid" ? "grid" : arrangement.direction === "row" ? "across" : "down";
 	const axis = crossAxis(section);
 	// The distribution drawings run across; down a column they are turned.
 	const turned = arrangement.kind === "flex" && arrangement.direction === "column" ? "rotate-90" : undefined;
-	const narrower = section.box.width !== null;
+	const label = CONTAINER_TAG_LABELS[section.tag];
 
 	return (
 		<div className="flex flex-col">
 			{breakpoints}
 			<Header
-				label="Section"
+				label={label}
 				name={{ value: section.name, onChange: (name) => onSection(section.id, { name }) }}
-				deleteLabel="Delete section"
+				deleteLabel={`Delete ${label.toLowerCase()}`}
 				onDelete={() => onRemove(section.id)}
 			/>
 
-			{topLevel ? (
-				<PanelSection title="Position">
-					<Segmented
-						label="Where the section sits across the frame"
-						value={narrower ? (section.alignSelf === "center" || section.alignSelf === "end" ? section.alignSelf : "start") : null}
-						options={acrossOptions("h", false)}
-						onChange={(alignSelf) => onSection(section.id, { alignSelf })}
-						disabled={!narrower}
-					/>
-					{!narrower ? <PanelNote>A section that fills the frame has nowhere to move. Give it a fixed width.</PanelNote> : null}
-				</PanelSection>
-			) : (
-				<PanelNote>Nested. Its position in its own parent is not editable here yet.</PanelNote>
-			)}
+			<ElementSection
+				label="Container element"
+				value={section.tag}
+				options={(Object.keys(CONTAINER_TAG_LABELS) as MailContainerTag[]).map((tag) => ({
+					value: tag,
+					label: CONTAINER_TAG_LABELS[tag],
+				}))}
+				onChange={(tag) => structure((canvas) => setContainerTag(canvas, section.id, tag as MailContainerTag))}
+			/>
+
+			<PlacementSection node={section} placer={placer} onPatch={(patch) => onSection(section.id, patch)} />
 
 			<PanelSection
 				title="Layout"
@@ -1045,36 +1321,16 @@ export function DesignPanel({
 					}
 				/>
 
-				{/* A section sits in the frame, which lays its sections one under the
-				    next: it fills the width or has its own, and hugs what is in it or
-				    has a height. An empty one with a height is a divider or a gap. */}
-				<PanelPair>
-					<DimensionInput
-						prefix="W"
-						label="Width"
-						value={section.box.width ?? (measured ? Math.round(measured.width) : null)}
-						editable
-						onValue={(width) => onSectionBox({ width })}
-						mode={narrower ? "fixed" : "fill"}
-						modes={["fixed", "fill"]}
-						onMode={(mode) => onSectionBox({ width: mode === "fixed" ? Math.round(measured?.width ?? layout.width) : null })}
-						max={1600}
-					/>
-					<DimensionInput
-						prefix="H"
-						label="Height"
-						value={section.box.minHeight ?? (measured ? Math.round(measured.height) : null)}
-						editable
-						onValue={(minHeight) => onSectionBox({ minHeight })}
-						mode={section.box.minHeight !== null ? "fixed" : "hug"}
-						modes={["fixed", "hug"]}
-						onMode={(mode) =>
-							onSectionBox({ minHeight: mode === "fixed" ? Math.round(measured?.height ?? 120) : null })
-						}
-						min={1}
-						max={4000}
-					/>
-				</PanelPair>
+				{/* In the frame or a cell a container fills the width or has its own, and
+				    hugs what is in it or has a height; in a flex or grid parent it is
+				    sized the way a block is. An empty one with a height is a divider or
+				    a gap. */}
+				<SizeFields
+					node={asSized(section)}
+					placer={placer}
+					measured={measured}
+					onPatch={(patch) => onSection(section.id, placementOf(patch))}
+				/>
 
 				<Segmented
 					label="Align items"
@@ -1130,7 +1386,7 @@ export function DesignPanel({
 				<PanelCheckbox label="Clip content" checked={section.box.clip} onChange={(clip) => onSectionBox({ clip })} />
 
 				<PanelNote tone="warn">
-					Outlook on Windows stacks this section into one column and drops the gap and the alignment.
+					Outlook on Windows stacks this container into one column and drops the gap and the alignment.
 				</PanelNote>
 			</PanelSection>
 
@@ -1145,6 +1401,7 @@ export function DesignPanel({
 			<EffectsSection box={section.box} onBox={onSectionBox} />
 			<SelectionColors colors={colors} onReplace={recolor} />
 			<CustomCssSection css={section.box.customCss} onChange={(customCss) => onSectionBox({ customCss })} />
+			<ConvertSection what="group" onConvert={() => onConvert(section.id)} />
 		</div>
 	);
 }

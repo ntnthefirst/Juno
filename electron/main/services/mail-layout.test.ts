@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MailBlock, MailContainer, MailFont, MailLayout, MailNode, MailTextStyle, TemplateInput } from "../../shared/types";
+import type { MailAction, MailBlock, MailContainer, MailFont, MailLayout, MailNode, MailTextStyle, TemplateInput } from "../../shared/types";
 import {
 	blockToCode,
 	breakpointCss,
@@ -39,7 +39,7 @@ function layoutWith(children: MailContainer[]): MailLayout {
 }
 
 function text(html: string): MailBlock {
-	return { id: "t1", kind: "text", tag: "p", html, text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false };
+	return { id: "t1", kind: "text", tag: "p", html, text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false, actions: [] };
 }
 
 /** The children of a container, narrowed for tests that already know they hold only blocks. */
@@ -129,8 +129,8 @@ describe("compileLayout", () => {
 			{ key: "scope", label: "Scope", kind: "text", required: false },
 		];
 		const blocks: MailBlock[] = [
-			{ id: "f1", kind: "field", inputKey: "banner", text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false },
-			{ id: "f2", kind: "field", inputKey: "scope", text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false },
+			{ id: "f1", kind: "field", inputKey: "banner", text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false, actions: [] },
+			{ id: "f2", kind: "field", inputKey: "scope", text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false, actions: [] },
 		];
 		const html = compileLayout(layoutWith([sectionWith(blocks)]), inputs);
 		expect(html).toContain('<img data-juno-block="field"');
@@ -161,6 +161,7 @@ describe("layoutFromHtml", () => {
 						grow: 0,
 						alignSelf: "auto",
 						hidden: false,
+						actions: [],
 					},
 					text("Hier is uw voorstel."),
 				],
@@ -262,12 +263,31 @@ describe("sanitiseFragment", () => {
 });
 
 describe("addresses and colours", () => {
-	it("allows https and mailto and refuses plain http", () => {
+	it("allows https, mailto and tel and refuses plain http", () => {
 		expect(safeHref("https://example.be")).toBe("https://example.be");
 		expect(safeHref("mailto:hallo@example.be")).toBe("mailto:hallo@example.be");
+		expect(safeHref("tel:+32 470 12 34 56")).toBe("tel:+32 470 12 34 56");
 		// http leaks the recipient's address to anyone on the path.
 		expect(safeHref("http://example.be")).toBeNull();
 		expect(safeImageSrc("http://example.be/a.png")).toBeNull();
+	});
+
+	it("refuses javascript, data and every other scheme", () => {
+		expect(safeHref("javascript:alert(1)")).toBeNull();
+		expect(safeHref("JavaScript:alert(1)")).toBeNull();
+		expect(safeHref("data:text/html,<b>x</b>")).toBeNull();
+		expect(safeHref("file:///etc/passwd")).toBeNull();
+		expect(safeHref("ftp://example.be")).toBeNull();
+		expect(safeHref("//example.be")).toBeNull();
+	});
+
+	it("keeps a phone number to digits, spaces and + - ( ), and nothing else", () => {
+		expect(safeHref("tel:(016) 12-34-56")).toBe("tel:(016) 12-34-56");
+		expect(safeHref("tel:")).toBeNull();
+		expect(safeHref("tel:0470abc")).toBeNull();
+		expect(safeHref("tel:+32470123456;ext=1")).toBeNull();
+		expect(safeHref("tel:javascript:alert(1)")).toBeNull();
+		expect(safeHref("tel:{{client.phone}}")).toBe("tel:{{client.phone}}");
 	});
 
 	it("lets a placeholder through as a target, because it is resolved later", () => {
@@ -516,7 +536,7 @@ describe("placing and showing", () => {
 
 describe("code blocks", () => {
 	function code(html: string, css = ""): MailBlock {
-		return { id: "c1", kind: "html", html, css, grow: 0, alignSelf: "auto", hidden: false };
+		return { id: "c1", kind: "html", html, css, grow: 0, alignSelf: "auto", hidden: false, actions: [] };
 	}
 
 	it("keeps an email's structure and drops everything that runs", () => {
@@ -976,7 +996,7 @@ describe("version migration", () => {
 		const paragraph = blocksOf(normalised.children[0])[1];
 		expect(paragraph?.kind === "text" ? paragraph.tag : null).toBe("p");
 		const picture = blocksOf(normalised.children[0])[3];
-		expect(picture?.kind === "image" ? picture.href : "not image").toBeNull();
+		expect(picture?.kind === "image" ? picture.actions : "not image").toEqual([]);
 	});
 
 	it("sends the same body as before, except a section is a <section> with display:block first", () => {
@@ -1099,12 +1119,13 @@ describe("columns", () => {
 					grow: 0,
 					gap: 16,
 					box: emptyBox(),
+					actions: [],
 					rows: [
 						{
 							id: "row1",
 							cells: [
-								{ id: "cell1", width: 50, verticalAlign: "top", box: emptyBox(), children: [{ ...text("Links"), id: "l1" }] },
-								{ id: "cell2", width: 50, verticalAlign: "middle", box: emptyBox(), children: [{ ...text("Rechts"), id: "r1" }] },
+								{ id: "cell1", width: 50, verticalAlign: "top", box: emptyBox(), actions: [], children: [{ ...text("Links"), id: "l1" }] },
+								{ id: "cell2", width: 50, verticalAlign: "middle", box: emptyBox(), actions: [], children: [{ ...text("Rechts"), id: "r1" }] },
 							],
 						},
 					],
@@ -1143,12 +1164,13 @@ describe("columns", () => {
 					grow: 0,
 					gap: 20,
 					box: emptyBox(),
+					actions: [],
 					rows: [
 						{
 							id: "row1",
 							cells: [
-								{ id: "cell1", width: null, verticalAlign: "top", box: emptyBox(), children: [] },
-								{ id: "cell2", width: null, verticalAlign: "top", box: emptyBox(), children: [] },
+								{ id: "cell1", width: null, verticalAlign: "top", box: emptyBox(), actions: [], children: [] },
+								{ id: "cell2", width: null, verticalAlign: "top", box: emptyBox(), actions: [], children: [] },
 							],
 						},
 					],
@@ -1218,14 +1240,18 @@ describe("heading tags", () => {
 });
 
 describe("a linked picture", () => {
-	it("compiles a picture with an href inside a thin link, and reads it back", () => {
-		const image = { ...newBlock("image"), id: "pic", src: "https://example.be/a.png", alt: "Logo", href: "https://example.be" } as MailBlock;
+	function click(target: string, kind: "link" | "mail" | "call" = "link"): MailAction {
+		return { id: "a1", trigger: "click", kind, target, hidden: false };
+	}
+
+	it("compiles a picture with an on-click action inside a thin link, and reads it back", () => {
+		const image = { ...newBlock("image"), id: "pic", src: "https://example.be/a.png", alt: "Logo", actions: [click("example.be")] } as MailBlock;
 		const html = compileLayout(layoutWith([sectionWith([image])]));
-		expect(html).toContain('<a href="https://example.be" data-juno-link="1" style="display:inline-block">');
+		expect(html).toContain('<a href="https://example.be" data-juno-link="1" style="display:inline-block;text-decoration:none;color:inherit;align-self:flex-start">');
 		expect(html).toContain('<img data-juno-block="image" data-juno-id="pic" src="https://example.be/a.png" alt="Logo"');
 
 		const back = blocksOf(layoutFromHtml(html).children[0])[0];
-		expect(back?.kind === "image" ? back.href : "not image").toBe("https://example.be");
+		expect(back?.actions).toMatchObject([{ trigger: "click", kind: "link", target: "example.be", hidden: false }]);
 		expect(back?.kind === "image" ? back.src : null).toBe("https://example.be/a.png");
 		expect(compileLayout(layoutFromHtml(html))).toBe(html);
 	});
@@ -1237,8 +1263,63 @@ describe("a linked picture", () => {
 		expect(html).not.toContain("<a ");
 	});
 
+	it("reads the href a picture was stored with into an on-click action, and drops the field", () => {
+		const stored = {
+			version: 2,
+			children: [
+				{
+					kind: "container",
+					tag: "section",
+					children: [
+						{ id: "p1", kind: "image", src: "https://example.be/a.png", href: "https://example.be/over" },
+						{ id: "p2", kind: "image", src: "https://example.be/b.png", href: "mailto:hallo@example.be" },
+						{ id: "p3", kind: "image", src: "https://example.be/c.png", href: "javascript:alert(1)" },
+						{ id: "p4", kind: "image", src: "https://example.be/d.png", href: "" },
+					],
+				},
+			],
+		};
+		const layout = normaliseLayout(stored)!;
+		const [first, second, third, fourth] = blocksOf(layout.children[0]);
+		expect(first?.actions).toMatchObject([{ trigger: "click", kind: "link", target: "example.be/over" }]);
+		expect(second?.actions).toMatchObject([{ trigger: "click", kind: "mail", target: "hallo@example.be" }]);
+		expect(third?.actions).toEqual([]);
+		expect(fourth?.actions).toEqual([]);
+		expect(first && "href" in first).toBe(false);
+		const html = compileLayout(layout);
+		expect(html).toContain('<a href="https://example.be/over" data-juno-link="1"');
+		expect(html).toContain('<a href="mailto:hallo@example.be" data-juno-link="1"');
+		expect(html).not.toContain("javascript");
+	});
+
+	it("keeps the action a picture already has over the href beside it", () => {
+		const stored = {
+			version: 2,
+			children: [
+				{
+					kind: "container",
+					children: [
+						{
+							id: "p1",
+							kind: "image",
+							src: "https://example.be/a.png",
+							href: "https://example.be/oud",
+							actions: [{ id: "a1", trigger: "click", kind: "link", target: "example.be/nieuw", hidden: false }],
+						},
+					],
+				},
+			],
+		};
+		const [picture] = blocksOf(normaliseLayout(stored)!.children[0]);
+		expect(picture?.actions).toMatchObject([{ target: "example.be/nieuw" }]);
+	});
+
 	it("refuses an unsafe target for the link round a picture", () => {
-		const image = { ...newBlock("image"), src: "https://example.be/a.png", href: "javascript:alert(1)" } as MailBlock;
+		const image = {
+			...newBlock("image"),
+			src: "https://example.be/a.png",
+			actions: [click("javascript:alert(1)")],
+		} as MailBlock;
 		const html = compileLayout(layoutWith([sectionWith([image])]));
 		expect(html).not.toContain("data-juno-link");
 		expect(html).not.toContain("javascript");
@@ -1267,12 +1348,13 @@ describe("converting a container or columns table to HTML", () => {
 			grow: 0,
 			gap: 16,
 			box: emptyBox(),
+			actions: [],
 			rows: [
 				{
 					id: "row1",
 					cells: [
-						{ id: "cell1", width: 50, verticalAlign: "top", box: emptyBox(), children: [{ ...text("Links"), id: "l1" }] },
-						{ id: "cell2", width: 50, verticalAlign: "middle", box: emptyBox(), children: [{ ...text("Rechts"), id: "r1" }] },
+						{ id: "cell1", width: 50, verticalAlign: "top", box: emptyBox(), actions: [], children: [{ ...text("Links"), id: "l1" }] },
+						{ id: "cell2", width: 50, verticalAlign: "middle", box: emptyBox(), actions: [], children: [{ ...text("Rechts"), id: "r1" }] },
 					],
 				},
 			],
@@ -1391,7 +1473,8 @@ describe("hidden at a breakpoint, for every kind of element", () => {
 			grow: 0,
 			gap: 0,
 			box: emptyBox(),
-			rows: [{ id: "row1", cells: [{ id: "cell1", width: null, verticalAlign: "top", box: emptyBox(), children: [{ ...text("Cel"), id: "c1" }] }] }],
+			actions: [],
+			rows: [{ id: "row1", cells: [{ id: "cell1", width: null, verticalAlign: "top", box: emptyBox(), actions: [], children: [{ ...text("Cel"), id: "c1" }] }] }],
 		};
 		const layout: MailLayout = {
 			...emptyLayout(),
@@ -1433,5 +1516,403 @@ describe("markup a converted container is made of", () => {
 		const html =
 			'<header><nav><a href="https://example.be">Menu</a></nav></header><main><article><aside>Kant</aside></article></main><section><pre>Een\nTwee</pre><address>Straat 1</address></section><footer>Voet</footer>';
 		expect(sanitiseMarkup(html)).toBe(html);
+	});
+});
+
+/* ------------------------------------------------------------------ actions */
+
+function click(target: string, kind: "link" | "mail" | "call" = "link", extra: Partial<MailAction> = {}): MailAction {
+	return { id: "click1", trigger: "click", kind, target, hidden: false, ...extra } as MailAction;
+}
+
+function hover(change: "fill" | "color" | "underline" | "opacity", value: Partial<MailAction> = {}): MailAction {
+	const base = { id: `hover-${change}`, trigger: "hover" as const, hidden: false };
+	switch (change) {
+		case "fill":
+			return { ...base, change, fill: { kind: "solid", color: "#3a3182", hidden: false }, ...value } as MailAction;
+		case "color":
+			return { ...base, change, color: "#ffffff", ...value } as MailAction;
+		case "underline":
+			return { ...base, change, underline: true, ...value } as MailAction;
+		case "opacity":
+			return { ...base, change, opacity: 0.8, ...value } as MailAction;
+	}
+}
+
+function withActions(block: MailBlock, actions: MailAction[]): MailBlock {
+	return { ...block, actions } as MailBlock;
+}
+
+describe("on-click actions", () => {
+	it("wraps a text in a link that resets the client's own link look, and reads it back", () => {
+		const linked = withActions(text("Lees meer"), [click("example.be/nieuws")]);
+		const html = compileLayout(layoutWith([sectionWith([linked])]));
+		expect(html).toContain(
+			'<a href="https://example.be/nieuws" data-juno-link="1" style="display:block;text-decoration:none;color:inherit"><p data-juno-block="text" data-juno-id="t1"',
+		);
+
+		const back = layoutFromHtml(html);
+		const block = blocksOf(back.children[0])[0];
+		expect(block?.kind).toBe("text");
+		expect(block?.actions).toMatchObject([{ trigger: "click", kind: "link", target: "example.be/nieuws", hidden: false }]);
+		expect(compileLayout(back)).toBe(html);
+	});
+
+	it("builds https, mailto and tel from the target, and keeps a phone number to a number", () => {
+		const links = (target: string, kind: "link" | "mail" | "call") =>
+			compileLayout(layoutWith([sectionWith([withActions(text("x"), [click(target, kind)])])]));
+		expect(links("https://example.be/a", "link")).toContain('href="https://example.be/a"');
+		expect(links("example.be:8080/a", "link")).toContain('href="https://example.be:8080/a"');
+		expect(links("info@example.be", "mail")).toContain('href="mailto:info@example.be"');
+		expect(links("+32 470 12 34 56", "call")).toContain('href="tel:+32470123456"');
+		expect(links("{{client.phone}}", "call")).toContain('href="tel:{{client.phone}}"');
+		expect(links("{{document.url}}", "link")).toContain('href="{{document.url}}"');
+		expect(links("06-abc", "call")).not.toContain("<a ");
+		expect(links("javascript:alert(1)", "link")).not.toContain("<a ");
+		expect(links("http://example.be", "link")).not.toContain("<a ");
+		expect(links("data:text/html,x", "link")).not.toContain("<a ");
+		expect(links("", "link")).not.toContain("<a ");
+	});
+
+	it("sends an element with a hidden action without the link, and keeps the action for the panel", () => {
+		const layout = layoutWith([sectionWith([withActions(text("x"), [click("example.be", "link", { hidden: true })])])]);
+		expect(compileLayout(layout)).not.toContain("<a ");
+		const kept = blocksOf(normaliseLayout(JSON.parse(serialiseLayout(layout) ?? "null"))?.children[0])[0];
+		expect(kept?.actions).toMatchObject([{ hidden: true }]);
+		// The markup cannot carry it, so the code view gets it back from the canvas it came from.
+		const back = layoutFromHtml(compileLayout(layout), layout);
+		expect(blocksOf(back.children[0])[0]?.actions).toMatchObject([{ id: "click1", trigger: "click", hidden: true }]);
+	});
+
+	it("sends an inline text as the link itself, with the span's markers and style", () => {
+		const span = withActions({ ...text("Klik hier"), tag: "span" } as MailBlock, [click("example.be")]);
+		const html = compileLayout(layoutWith([sectionWith([span])]));
+		expect(html).toMatch(
+			/<a data-juno-block="text" data-juno-id="t1" href="https:\/\/example.be" style="text-decoration:none;color:inherit;margin:0[^"]*">Klik hier<\/a>/,
+		);
+		expect(html).not.toContain("data-juno-link");
+
+		const back = layoutFromHtml(html);
+		const block = blocksOf(back.children[0])[0];
+		expect(block?.kind === "text" ? block.tag : null).toBe("span");
+		expect(block?.actions).toMatchObject([{ trigger: "click", kind: "link", target: "example.be" }]);
+		expect(compileLayout(back)).toBe(html);
+	});
+
+	it("drops the links a text has of its own when the text as a whole is the link", () => {
+		const linked = withActions(text('Zie <a href="https://andere.be">dit</a> en <b>dat</b>'), [click("example.be")]);
+		const html = compileLayout(layoutWith([sectionWith([linked])]));
+		expect(html.match(/<a /g)).toHaveLength(1);
+		expect(html).toContain("Zie dit en <b>dat</b>");
+	});
+
+	it("wraps a container, a columns table and a cell, and reads each back", () => {
+		const inner = { ...emptyContainer("div", "Kaart"), id: "kaart", actions: [click("example.be/kaart")], children: [text("In de kaart")] };
+		const table = (id: string, actions: MailAction[], cellActions: MailAction[]): MailNode => ({
+			id,
+			kind: "columns",
+			hidden: false,
+			name: "Twee",
+			alignSelf: "auto",
+			grow: 0,
+			gap: 0,
+			box: emptyBox(),
+			actions,
+			rows: [
+				{
+					id: `${id}-row`,
+					cells: [
+						{
+							id: `${id}-cell`,
+							width: 50,
+							verticalAlign: "top",
+							box: emptyBox(),
+							actions: cellActions,
+							children: [{ ...text("Links"), id: `${id}-l` }],
+						},
+					],
+				},
+			],
+		});
+		// A link cannot hold a link, so the table and the cell are two tables.
+		const layout: MailLayout = {
+			...emptyLayout(),
+			children: [
+				inner,
+				table("cols", [click("example.be/tabel", "link", { id: "click2" })], []),
+				table("cel", [], [click("+32 470 12 34 56", "call", { id: "click3" })]),
+			],
+		};
+		const html = compileLayout(layout);
+		expect(html).toMatch(
+			/<a href="https:\/\/example.be\/kaart" data-juno-link="1" style="display:block;text-decoration:none;color:inherit"><div data-juno-section="Kaart"/,
+		);
+		expect(html).toMatch(/<a href="https:\/\/example.be\/tabel" data-juno-link="1"[^>]*><table role="presentation"/);
+		expect(html).toMatch(/<td data-juno-id="cel-cell"[^>]*><a href="tel:\+32470123456" data-juno-link="cell"[^>]*><p data-juno-block="text"/);
+
+		const back = layoutFromHtml(html);
+		const [kaart, cols, cel] = back.children;
+		expect(kaart?.actions).toMatchObject([{ kind: "link", target: "example.be/kaart" }]);
+		expect(cols?.kind === "columns" ? cols.actions : null).toMatchObject([{ kind: "link", target: "example.be/tabel" }]);
+		const cell = cel?.kind === "columns" ? cel.rows[0]?.cells[0] : undefined;
+		expect(cell?.actions).toMatchObject([{ kind: "call", target: "+32470123456" }]);
+		expect(cell?.children).toHaveLength(1);
+		expect(compileLayout(back)).toBe(html);
+	});
+
+	it("takes the place of what it wraps in a flex parent, so the wrapper is what is laid out", () => {
+		const button = withActions({ ...text("Bekijk"), grow: 1, alignSelf: "end" } as MailBlock, [click("example.be")]);
+		const html = compileLayout(layoutWith([sectionWith([button])]));
+		expect(html).toContain('style="display:block;text-decoration:none;color:inherit;flex:1 1 0%;align-self:flex-end"');
+	});
+
+	it("keeps only the outer link when a stored layout has one inside another", () => {
+		const stored = {
+			version: 2,
+			children: [
+				{
+					kind: "container",
+					id: "outer",
+					actions: [{ id: "a1", trigger: "click", kind: "link", target: "buiten.be" }],
+					children: [
+						{
+							kind: "text",
+							id: "inner",
+							html: "Binnen",
+							actions: [
+								{ id: "a2", trigger: "click", kind: "link", target: "binnen.be" },
+								{ id: "h1", trigger: "hover", change: "underline" },
+							],
+						},
+						{
+							kind: "columns",
+							id: "cols",
+							actions: [{ id: "a3", trigger: "click", kind: "mail", target: "x@y.be" }],
+							rows: [{ id: "r", cells: [{ id: "c", actions: [{ id: "a4", trigger: "click", kind: "link", target: "cel.be" }], children: [] }] }],
+						},
+					],
+				},
+			],
+		};
+		const layout = normaliseLayout(stored);
+		if (!layout) throw new Error("the fixture did not parse");
+		const outer = layout.children[0];
+		expect(outer?.actions).toHaveLength(1);
+		const [inner, cols] = outer?.kind === "container" ? outer.children : [];
+		// The hover row stays: it is not a link.
+		expect(inner?.actions).toMatchObject([{ trigger: "hover", change: "underline" }]);
+		expect(cols?.actions).toEqual([]);
+		const cell = cols?.kind === "columns" ? cols.rows[0]?.cells[0] : undefined;
+		expect(cell?.actions).toEqual([]);
+		const html = compileLayout(layout);
+		expect(html.match(/<a /g)).toHaveLength(1);
+		expect(html).toContain("buiten.be");
+		expect(html).not.toContain("binnen.be");
+	});
+
+	it("keeps the compiler from nesting links even when it is handed a layout that has them", () => {
+		const nested: MailLayout = layoutWith([
+			{ ...sectionWith([withActions(text("Binnen"), [click("binnen.be", "link", { id: "b" })])]), id: "buiten", actions: [click("buiten.be")] },
+		]);
+		const html = compileLayout(nested);
+		expect(html.match(/<a /g)).toHaveLength(1);
+		expect(html).toContain("buiten.be");
+	});
+
+	it("gives a button block no click action, because its own href is its link", () => {
+		const stored = {
+			version: 2,
+			children: [
+				{
+					kind: "container",
+					children: [
+						{
+							kind: "button",
+							id: "b1",
+							label: "Ga",
+							href: "https://example.be",
+							actions: [
+								{ id: "a", trigger: "click", kind: "link", target: "anders.be" },
+								{ id: "h", trigger: "hover", change: "opacity", opacity: 0.5 },
+							],
+						},
+					],
+				},
+			],
+		};
+		const layout = normaliseLayout(stored);
+		if (!layout) throw new Error("the fixture did not parse");
+		expect(blocksOf(layout.children[0])[0]?.actions).toMatchObject([{ trigger: "hover", change: "opacity" }]);
+		const html = compileLayout(layout);
+		expect(html.match(/<a /g)).toHaveLength(1);
+		expect(html).toContain('href="https://example.be"');
+	});
+
+	it("keeps at most one click, and one hover row for each change", () => {
+		const stored = {
+			version: 2,
+			children: [
+				{
+					kind: "container",
+					children: [
+						{
+							kind: "text",
+							id: "t",
+							html: "x",
+							actions: [
+								{ id: "1", trigger: "click", kind: "link", target: "een.be" },
+								{ id: "2", trigger: "click", kind: "mail", target: "twee@een.be" },
+								{ id: "3", trigger: "hover", change: "color", color: "#ffffff" },
+								{ id: "4", trigger: "hover", change: "color", color: "#000000" },
+								{ id: "5", trigger: "hover", change: "shake" },
+								{ id: "6", trigger: "focus" },
+							],
+						},
+					],
+				},
+			],
+		};
+		const block = blocksOf(normaliseLayout(stored)?.children[0])[0];
+		expect(block?.actions.map((action) => action.id)).toEqual(["1", "3"]);
+	});
+
+	it("reads a canvas saved before actions existed as having none", () => {
+		const stored = { version: 2, children: [{ kind: "container", tag: "section", children: [{ kind: "text", id: "t", html: "x" }] }] };
+		const layout = normaliseLayout(stored);
+		if (!layout) throw new Error("the fixture did not parse");
+		expect(layout.children[0]?.actions).toEqual([]);
+		expect(blocksOf(layout.children[0])[0]?.actions).toEqual([]);
+		expect(compileLayout(layout)).not.toContain("<a ");
+	});
+});
+
+describe("on-hover actions", () => {
+	function hoverLayout(actions: MailAction[], extra: Partial<MailLayout> = {}): MailLayout {
+		return { ...layoutWith([sectionWith([withActions(text("Knop"), actions)])]), ...extra };
+	}
+
+	it("writes one :hover rule with the element's class, !important like the breakpoints", () => {
+		const layout = hoverLayout([hover("fill"), hover("color"), hover("underline"), hover("opacity")]);
+		expect(breakpointCss(layout)).toBe(
+			".jb-t1:hover{background-color:#3a3182 !important;background-image:none !important;color:#ffffff !important;text-decoration:underline !important;opacity:0.8 !important}",
+		);
+		const html = compileLayout(layout);
+		expect(html).toContain('data-juno-id="t1" class="jb-t1"');
+		expect(html.match(/class="/g)).toHaveLength(1);
+	});
+
+	it("clears the underline, writes a gradient as the fill compiler does, and a colour with opacity as rgba", () => {
+		const layout = hoverLayout([
+			hover("underline", { underline: false }),
+			hover("fill", { fill: { kind: "gradient", angle: 90, from: "#ffffff", to: "#4a3fa0", hidden: false } }),
+			hover("color", { color: "#4a3fa080" }),
+		]);
+		const css = breakpointCss(layout);
+		expect(css).toContain("text-decoration:none !important");
+		expect(css).toContain("background-color:#ffffff !important;background-image:linear-gradient(90deg,#ffffff,#4a3fa0) !important");
+		expect(css).toContain("color:#4a3fa0 !important;color:rgba(74,63,160,0.502) !important");
+		expect(css).not.toContain("background-image:none");
+	});
+
+	it("writes nothing for a hidden row, for an element that is left out, or for a canvas with no hover", () => {
+		expect(breakpointCss(hoverLayout([hover("fill", { hidden: true })]))).toBe("");
+		expect(compileLayout(hoverLayout([hover("fill", { hidden: true })]))).not.toContain("class=");
+		expect(breakpointCss(hoverLayout([]))).toBe("");
+		const hiddenBlock = { ...withActions(text("Weg"), [hover("fill")]), hidden: true } as MailBlock;
+		expect(breakpointCss(layoutWith([sectionWith([hiddenBlock])]))).toBe("");
+	});
+
+	it("is the same at every width: it sits after the media queries, not inside one", () => {
+		const layout = hoverLayout([hover("color")], {
+			breakpoints: [{ id: "b", name: "Phone", maxWidth: 480, sections: {}, blocks: { t1: { text: { fontSize: 12 } } } }],
+		});
+		expect(breakpointCss(layout)).toBe("@media only screen and (max-width:480px){.jb-t1{font-size:12px !important}}.jb-t1:hover{color:#ffffff !important}");
+		// One class for the media query and the hover rule both.
+		expect(compileLayout(layout).match(/class="jb-t1"/g)).toHaveLength(1);
+	});
+
+	it("covers a container, a columns table and a cell as well as a block", () => {
+		const cell = { id: "cel", width: null, verticalAlign: "top" as const, box: emptyBox(), actions: [hover("opacity")], children: [] };
+		const table: MailNode = {
+			id: "tab",
+			kind: "columns",
+			hidden: false,
+			name: "T",
+			alignSelf: "auto",
+			grow: 0,
+			gap: 0,
+			box: emptyBox(),
+			actions: [hover("color")],
+			rows: [{ id: "row", cells: [cell] }],
+		};
+		const container = { ...emptyContainer("div", "D"), id: "con", actions: [hover("fill")] };
+		const layout: MailLayout = { ...emptyLayout(), children: [container, table] };
+		const css = breakpointCss(layout);
+		expect(css).toContain(".jb-con:hover{");
+		expect(css).toContain(".jb-tab:hover{color:#ffffff !important}");
+		expect(css).toContain(".jb-cel:hover{opacity:0.8 !important}");
+		const html = compileLayout(layout);
+		expect(html).toContain('data-juno-id="con" class="jb-con"');
+		expect(html).toContain('data-juno-id="tab" class="jb-tab"');
+		expect(html).toContain('<td data-juno-id="cel" valign="top" class="jb-cel"');
+	});
+
+	it("never lets an angle bracket into a rule, whatever the id or the value carries", () => {
+		const evil = { ...withActions(text("x"), [hover("color", { color: "#fff</style><script>" })]), id: 'a<b>c"d' } as MailBlock;
+		const css = breakpointCss(layoutWith([sectionWith([evil])]));
+		expect(css).not.toMatch(/[<>]/);
+		expect(css).toContain(".jb-abcd:hover{");
+		// Stored, it is a colour or it is the default, so it never gets that far.
+		const stored = normaliseLayout({
+			version: 2,
+			children: [
+				{
+					kind: "container",
+					children: [{ kind: "text", id: "t", html: "x", actions: [{ id: "h", trigger: "hover", change: "color", color: "red;}</style>" }] }],
+				},
+			],
+		});
+		expect(blocksOf(stored?.children[0])[0]?.actions).toMatchObject([{ change: "color", color: "#4a3fa0" }]);
+	});
+
+	it("comes back from the canvas the code view came from, because the markup cannot carry it", () => {
+		const layout = hoverLayout([hover("fill"), click("example.be")]);
+		const html = compileLayout(layout);
+		const back = layoutFromHtml(html, layout);
+		const block = blocksOf(back.children[0])[0];
+		expect(block?.actions.map((action) => `${action.trigger}:${action.id}`)).toEqual(["click:click1", "hover:hover-fill"]);
+		// With nothing to come back from, the link is all the markup says.
+		expect(blocksOf(layoutFromHtml(html).children[0])[0]?.actions.map((action) => action.trigger)).toEqual(["click"]);
+	});
+});
+
+describe("no script in a message", () => {
+	it("strips a handler and a script from a code block, and keeps a link round a block element", () => {
+		const html = sanitiseMarkup(
+			'<a href="https://example.be" onclick="alert(1)"><div onmouseover="x()" style="padding:8px">Kaart</div><script>alert(2)</script></a><section onclick="y()"><p>Tekst</p></section>',
+		);
+		expect(html).toBe('<a href="https://example.be"><div style="padding:8px">Kaart</div></a><section><p>Tekst</p></section>');
+		expect(html).not.toContain("onclick");
+		expect(html).not.toContain("script");
+	});
+
+	it("keeps that link, and the tel link with it, through a code block's compile", () => {
+		const code = { ...newBlock("html"), id: "c1", html: '<a href="tel:+32 470 12 34 56" onclick="x()"><div>Bel ons</div></a>', css: "" } as MailBlock;
+		const html = compileLayout(layoutWith([sectionWith([code])]));
+		expect(html).toContain('<a data-juno-block="html" data-juno-id="c1" href="tel:+32 470 12 34 56"><div>Bel ons</div></a>');
+		expect(html).not.toContain("onclick");
+		const refused = { ...code, html: '<a href="javascript:alert(1)"><div>Nee</div></a>' } as MailBlock;
+		expect(compileLayout(layoutWith([sectionWith([refused])]))).not.toContain("javascript");
+	});
+
+	it("has no field that carries a script, and reads none from a stored layout", () => {
+		const stored = {
+			version: 2,
+			script: "alert(1)",
+			children: [{ kind: "container", onclick: "alert(2)", script: "alert(3)", children: [{ kind: "text", id: "t", html: '<b onclick="x()">x</b>', onclick: "alert(4)" }] }],
+		};
+		const layout = normaliseLayout(stored);
+		if (!layout) throw new Error("the fixture did not parse");
+		expect(compileLayout(layout)).not.toMatch(/alert|script|onclick/i);
 	});
 });

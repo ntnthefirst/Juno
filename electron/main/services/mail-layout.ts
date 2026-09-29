@@ -35,11 +35,13 @@
  */
 import { randomUUID } from "node:crypto";
 import type {
+	MailAction,
 	MailAlign,
 	MailBlock,
 	MailBlockOverride,
 	MailBoxStyle,
 	MailBreakpoint,
+	MailClickAction,
 	MailColor,
 	MailColumns,
 	MailColumnsCell,
@@ -53,6 +55,7 @@ import type {
 	MailFont,
 	MailFontFallback,
 	MailHeadingTag,
+	MailHoverAction,
 	MailJustify,
 	MailLayout,
 	MailNode,
@@ -163,6 +166,7 @@ export function emptyContainer(tag: MailContainerTag = "section", name = "Sectio
 		grow: 0,
 		layout: stackLayout(),
 		box: emptyBox(),
+		actions: [],
 		children: [],
 	};
 }
@@ -192,7 +196,7 @@ export function emptyLayout(): MailLayout {
  * in it, a button would otherwise be sent as a bar the width of the message.
  */
 export function newBlock(kind: MailBlock["kind"]): MailBlock {
-	const common = { id: randomUUID(), grow: 0, alignSelf: "auto" as const, hidden: false };
+	const common = { id: randomUUID(), grow: 0, alignSelf: "auto" as const, hidden: false, actions: [] };
 	switch (kind) {
 		case "heading":
 			return { ...common, kind, tag: "h2", content: "Titel", text: { ...defaultText(), weight: "semibold" }, box: emptyBox() };
@@ -210,7 +214,7 @@ export function newBlock(kind: MailBlock["kind"]): MailBlock {
 				box: { ...emptyBox(), padding: { top: 10, right: 18, bottom: 10, left: 18 } },
 			};
 		case "image":
-			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", href: null, box: emptyBox() };
+			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", box: emptyBox() };
 		case "divider":
 			return { ...common, kind, color: "#e3e2ec", thickness: 1, box: emptyBox(), grow: 1 };
 		case "spacer":
@@ -636,6 +640,151 @@ function parseSectionLayout(raw: unknown): MailSectionLayout {
 	};
 }
 
+/* ------------------------------------------------------------------ actions */
+
+/** A phone number, an address or a path: long enough for a tracking link, short enough to bound a hostile one. */
+const MAX_TARGET = 500;
+
+const HOVER_CHANGES = ["fill", "color", "underline", "opacity"] as const;
+
+function parseClick(raw: UnknownRecord): MailClickAction {
+	return {
+		id: toId(raw.id),
+		trigger: "click",
+		kind: raw.kind === "mail" || raw.kind === "call" ? raw.kind : "link",
+		target: toStr(raw.target).trim().slice(0, MAX_TARGET),
+		hidden: raw.hidden === true,
+	};
+}
+
+/**
+ * A hover row, with the value its change needs. A value that is missing or
+ * unreadable is replaced by a plain default rather than dropping the row, so
+ * an action an agent half-wrote is still there to correct.
+ */
+function parseHover(raw: UnknownRecord): MailHoverAction | null {
+	const change = HOVER_CHANGES.find((entry) => entry === raw.change);
+	if (!change) return null;
+	const base = { id: toId(raw.id), trigger: "hover" as const, hidden: raw.hidden === true };
+	switch (change) {
+		case "fill":
+			return { ...base, change, fill: parseFill(raw.fill) ?? solidFill("#4a3fa0") };
+		case "color":
+			return { ...base, change, color: colorOr(raw.color, "#4a3fa0") };
+		case "underline":
+			return { ...base, change, underline: raw.underline !== false };
+		case "opacity":
+			return { ...base, change, opacity: toNum(raw.opacity, 0.8, 0, 1) };
+	}
+}
+
+/**
+ * The actions of one element: at most one on click, and at most one hover row
+ * for each kind of change, in the order they were stored. A second click is
+ * dropped because an element is one link, and a second hover for the same
+ * change would only fight the first in the stylesheet.
+ */
+function parseActions(raw: unknown): MailAction[] {
+	if (!Array.isArray(raw)) return [];
+	const out: MailAction[] = [];
+	for (const entry of raw) {
+		if (!isRecord(entry)) continue;
+		if (entry.trigger === "click") {
+			if (!out.some((action) => action.trigger === "click")) out.push(parseClick(entry));
+		} else if (entry.trigger === "hover") {
+			const hover = parseHover(entry);
+			if (hover && !out.some((action) => action.trigger === "hover" && action.change === hover.change)) out.push(hover);
+		}
+	}
+	return out;
+}
+
+function hasClick(actions: MailAction[]): boolean {
+	return actions.some((action) => action.trigger === "click");
+}
+
+/**
+ * The link a stored `href` comes to as an on-click action: what a picture
+ * carried before actions existed, and what the code view reads off an `<a>`.
+ * Null when the address is not one `safeHref` keeps.
+ */
+function clickFromHref(href: string): MailClickAction | null {
+	const safe = safeHref(href);
+	if (!safe) return null;
+	const base = { id: randomUUID(), trigger: "click" as const, hidden: false };
+	if (/^mailto:/i.test(safe)) return { ...base, kind: "mail", target: safe.slice(7) };
+	if (/^tel:/i.test(safe)) return { ...base, kind: "call", target: safe.slice(4) };
+	if (/^https:/i.test(safe)) return { ...base, kind: "link", target: safe.replace(/^https:\/*/i, "") };
+	return { ...base, kind: "link", target: safe };
+}
+
+/** A whole `{{placeholder}}`, which is resolved long after anything here runs. */
+function isPlaceholder(value: string): boolean {
+	return /^\{\{[^{}]+\}\}$/.test(value);
+}
+
+/**
+ * The address an on-click action is sent with, or null when it has none worth
+ * a link. `https://`, `mailto:` and `tel:` are built here from the target, and
+ * the result still goes through `safeHref`, so what a person or an agent typed
+ * into the target cannot become anything else: a target that names another
+ * scheme is refused rather than prefixed.
+ */
+export function clickHref(action: MailClickAction): string | null {
+	const target = action.target.trim();
+	if (!target) return null;
+	if (action.kind === "mail") return safeHref(`mailto:${target.replace(/^mailto:/i, "").replace(/\s+/g, "")}`);
+	if (action.kind === "call") return safeHref(`tel:${target.replace(/^tel:/i, "").replace(/\s+/g, "")}`);
+	if (isPlaceholder(target)) return safeHref(target);
+	const bare = target.replace(/^https:\/\//i, "").replace(/\s+/g, "");
+	// Another scheme (`javascript:`, `http:`, `data:`) is not an address to open.
+	// A port (`host:8080`) is not a scheme, so it is told apart by its digits.
+	if (!bare || /^[a-z][a-z0-9+.-]*:(?!\d+(?:\/|$))/i.test(bare)) return null;
+	return safeHref(`https://${bare}`);
+}
+
+/** The address an element is sent linked to: its first on-click action that shows and has a usable target. */
+function linkOf(actions: MailAction[]): string | null {
+	for (const action of actions) {
+		if (action.trigger === "click" && !action.hidden) return clickHref(action);
+	}
+	return null;
+}
+
+/**
+ * An element cannot sit inside a link and be one: an `<a>` in an `<a>` is not
+ * HTML, and each client repairs it differently. So when a stored layout has an
+ * on-click action on an element and on something under it, the outer one wins
+ * and the inner one is dropped. The editor does not offer the second one, so
+ * this only ever acts on a layout written by hand or by an agent.
+ */
+function dropNestedLinks(nodes: MailNode[], outer = false): MailNode[] {
+	return nodes.map((node) => {
+		const own = linksIn(node.actions, outer);
+		if (isContainer(node)) return { ...node, actions: own.actions, children: dropNestedLinks(node.children, own.linked) };
+		if (isColumns(node)) {
+			return {
+				...node,
+				actions: own.actions,
+				rows: node.rows.map((row) => ({
+					...row,
+					cells: row.cells.map((cell) => {
+						const inCell = linksIn(cell.actions, own.linked);
+						return { ...cell, actions: inCell.actions, children: dropNestedLinks(cell.children, inCell.linked) };
+					}),
+				})),
+			};
+		}
+		return { ...node, actions: own.actions };
+	});
+}
+
+/** An element's actions with the click dropped when something around it is already a link, and whether it is inside one now. */
+function linksIn(actions: MailAction[], outer: boolean): { actions: MailAction[]; linked: boolean } {
+	const own = hasClick(actions);
+	return { actions: outer && own ? actions.filter((action) => action.trigger !== "click") : actions, linked: outer || own };
+}
+
 function parseBlock(raw: unknown): MailBlock | null {
 	if (!isRecord(raw)) return null;
 	const common = {
@@ -643,6 +792,7 @@ function parseBlock(raw: unknown): MailBlock | null {
 		grow: toNum(raw.grow, 0, 0, 12),
 		alignSelf: toSelfAlign(raw.alignSelf),
 		hidden: raw.hidden === true,
+		actions: parseActions(raw.actions),
 	};
 	const box = parseBox(raw.box);
 
@@ -657,6 +807,8 @@ function parseBlock(raw: unknown): MailBlock | null {
 		case "button":
 			return {
 				...common,
+				// A button is its own link, through `href`, so it takes no click.
+				actions: common.actions.filter((action) => action.trigger !== "click"),
 				kind: "button",
 				label: toStr(raw.label),
 				href: safeHref(toStr(raw.href)) ?? "",
@@ -668,19 +820,22 @@ function parseBlock(raw: unknown): MailBlock | null {
 				text: isRecord(raw.text) ? parseTextStyle(raw.text) : { ...defaultText(), weight: "semibold" },
 				box,
 			};
-		case "image":
+		case "image": {
+			// A picture used to link through an `href` of its own. It is an on-click
+			// action now, and a stored one is read into it unless it already has one.
+			const carried = !hasClick(common.actions) && typeof raw.href === "string" ? clickFromHref(raw.href) : null;
 			return {
 				...common,
+				actions: carried ? [carried, ...common.actions] : common.actions,
 				kind: "image",
 				src: safeImageSrc(toStr(raw.src)) ?? "",
 				alt: toStr(raw.alt),
 				width: toNullableNum(raw.width, 8, MAX_WIDTH),
 				align: toAlignText(raw.align),
-				// A picture inside a link. Version 1 never had one, so it is null.
-				href: safeHref(toStr(raw.href)),
 				// A picture has a width of its own, and the box's would be a second one.
 				box: { ...box, width: null },
 			};
+		}
 		case "divider":
 			return {
 				...common,
@@ -746,6 +901,7 @@ function parseV1Section(raw: unknown, budget: { left: number }): MailContainer |
 		grow: 0,
 		layout: parseSectionLayout(raw.layout),
 		box: parseBox(raw.box),
+		actions: [],
 		children,
 	};
 }
@@ -771,6 +927,7 @@ function parseColumnsCell(raw: unknown, depth: number, budget: { left: number })
 		width: toNullableNum(raw.width, 1, 100),
 		verticalAlign: toVerticalAlign(raw.verticalAlign),
 		box: parseBox(raw.box),
+		actions: parseActions(raw.actions),
 		children: parseNodes(raw.children, depth, budget),
 	};
 }
@@ -796,6 +953,7 @@ function parseColumns(raw: UnknownRecord, depth: number, budget: { left: number 
 		grow: toNum(raw.grow, 0, 0, 12),
 		gap: toNum(raw.gap, 12, 0, 120),
 		box: parseBox(raw.box),
+		actions: parseActions(raw.actions),
 		rows,
 	};
 }
@@ -811,6 +969,7 @@ function parseContainer(raw: UnknownRecord, depth: number, budget: { left: numbe
 		grow: toNum(raw.grow, 0, 0, 12),
 		layout: parseSectionLayout(raw.layout),
 		box: parseBox(raw.box),
+		actions: parseActions(raw.actions),
 		children: parseNodes(raw.children, depth + 1, budget),
 	};
 }
@@ -1109,7 +1268,7 @@ export function normaliseLayout(raw: unknown): MailLayout | null {
 	const children: MailNode[] = Array.isArray(raw.sections)
 		? raw.sections.map((section) => parseV1Section(section, budget)).filter((section): section is MailContainer => section !== null)
 		: parseNodes(raw.children, 0, budget);
-	const kept = children.length > 0 ? children : [emptyContainer("section", "Body")];
+	const kept = dropNestedLinks(children.length > 0 ? children : [emptyContainer("section", "Body")]);
 	return {
 		version: 2,
 		width: toNum(raw.width, DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH),
@@ -1189,14 +1348,23 @@ export function sanitiseDeclarations(css: string): string {
 const ALLOWED_INLINE_TAGS = new Set(["strong", "b", "em", "i", "u", "s", "a", "span", "p", "br"]);
 const TAG_RE = /<(\/)?([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^<>]*)?)\/?>/g;
 
-/** An `https:` or `mailto:` target, or nothing. Never `http:`, which leaks the
- * recipient's address to anyone on the path, and never `javascript:`. */
+/**
+ * An `https:`, `mailto:` or `tel:` target, or nothing. Never `http:`, which
+ * leaks the recipient's address to anyone on the path, and never `javascript:`
+ * or `data:`. A phone number is digits, spaces and `+ - ( )` and nothing else
+ * (or a placeholder that is filled in later), so a `tel:` link cannot carry
+ * anything but a number.
+ */
 export function safeHref(raw: string): string | null {
 	const trimmed = raw.trim();
 	if (!trimmed) return null;
 	// A placeholder is resolved long after this runs, so it cannot be checked
 	// here and is allowed through as the author wrote it.
-	if (/^\{\{[^{}]+\}\}$/.test(trimmed)) return trimmed;
+	if (isPlaceholder(trimmed)) return trimmed;
+	if (/^tel:/i.test(trimmed)) {
+		const number = trimmed.slice(4);
+		return /^[0-9 +()-]+$/.test(number) || isPlaceholder(number) ? trimmed : null;
+	}
 	return /^(https:|mailto:)/i.test(trimmed) ? trimmed : null;
 }
 
@@ -1879,11 +2047,54 @@ function markAttributes(marks: Marks): string {
 	return marks.className ? ` class="${marks.className}"` : "";
 }
 
+/** An element's markup with every link taken out and its words kept: what is left of rich text once the text as a whole is the link. */
+function withoutLinks(html: string): string {
+	return html.replace(/<\/?a\b[^>]*>/gi, "");
+}
+
+/**
+ * An element wrapped in the `<a>` its on-click action makes. The wrapper
+ * carries `data-juno-link` so the code view reads it back into an action on
+ * what is inside, and it takes the element's place in a flex or grid parent
+ * (`extra`), because the wrapper is what that parent lays out. Its colour and
+ * decoration are reset so the client's own link look never shows through.
+ */
+function wrapInLink(href: string, display: "block" | "inline-block", extra: (string | null)[], inner: string, kind: "1" | "cell" = "1"): string {
+	const style = styleString([`display:${display}`, "text-decoration:none", "color:inherit", ...extra]);
+	return `<a href="${escapeHtml(href)}" data-juno-link="${kind}"${style}>${inner}</a>`;
+}
+
+/** Whether the wrapper round an element is a block or sits in the line: a picture that hugs its own width and an inline field do. */
+function linkDisplay(block: MailBlock, element: string): "block" | "inline-block" {
+	if (block.kind === "image") return block.width === null ? "inline-block" : "block";
+	if (block.kind === "field") return element.startsWith("<span") ? "inline-block" : "block";
+	return "block";
+}
+
+/**
+ * A block with its on-click action, if it has one that shows. The element
+ * itself is the link when it already is an `<a>`: an inline text is sent as
+ * the link, and a button, a linked input or a code block whose markup is a
+ * link keep the address they have. Anything else is wrapped.
+ */
 function compileBlock(
 	block: MailBlock,
 	inputs: TemplateInput[],
 	fonts: MailFont[],
 	marks: Marks = NO_MARKS,
+): string {
+	const href = block.kind === "button" ? null : linkOf(block.actions);
+	const element = compileBlockElement(block, inputs, fonts, marks, href);
+	if (!href || /^<a[\s>]/.test(element)) return element;
+	return wrapInLink(href, linkDisplay(block, element), placeDeclarations(block), element);
+}
+
+function compileBlockElement(
+	block: MailBlock,
+	inputs: TemplateInput[],
+	fonts: MailFont[],
+	marks: Marks,
+	href: string | null,
 ): string {
 	const marker = ` data-juno-block="${block.kind}" data-juno-id="${escapeHtml(block.id)}"${markAttributes(marks)}`;
 	const declarations = blockDeclarations(block, inputs, fonts);
@@ -1896,11 +2107,21 @@ function compileBlock(
 		}
 		case "text": {
 			const isList = isListTag(block.tag);
-			const html = sanitiseFragment(block.html, textExtraTags(block.tag));
+			const sanitised = sanitiseFragment(block.html, textExtraTags(block.tag));
+			// A text that is a link as a whole cannot hold links of its own.
+			const html = href ? withoutLinks(sanitised) : sanitised;
+			const body = isList ? html : wrapVertical(block.text, html);
+			if (href && block.tag === "span") {
+				// An inline text is the link itself, carrying the span's markers and
+				// style. The client's own link colour and underline are put back to
+				// the text's before the text's own declarations, which win.
+				const linked = ["text-decoration:none", "color:inherit", ...declarations];
+				const own = styleString(marks.hiddenByDefault ? [...linked, ...HIDDEN_DECLARATIONS] : linked);
+				return `<a${marker} href="${escapeHtml(href)}"${own}>${body}</a>`;
+			}
 			// A version 1 tag of "p" keeps its p-or-div choice; every other tag is
 			// written as itself.
 			const tag = block.tag === "p" ? textTag(html) : block.tag;
-			const body = isList ? html : wrapVertical(block.text, html);
 			return `<${tag}${marker}${style}>${body}</${tag}>`;
 		}
 		case "button": {
@@ -1915,12 +2136,7 @@ function compileBlock(
 		case "image": {
 			const src = safeImageSrc(block.src);
 			if (!src) return `<span${marker}${style}>${escapeHtml(block.alt || "Geen afbeelding")}</span>`;
-			const img = `<img${marker} src="${escapeHtml(src)}" alt="${escapeHtml(block.alt)}"${style}>`;
-			// A picture inside a link: the img keeps its own markers and style, so
-			// the code view finds it exactly as it does one with no link, and the
-			// anchor round it is a thin wrapper with nothing else to carry.
-			const href = block.href ? safeHref(block.href) : null;
-			return href ? `<a href="${escapeHtml(href)}" data-juno-link="1" style="display:inline-block">${img}</a>` : img;
+			return `<img${marker} src="${escapeHtml(src)}" alt="${escapeHtml(block.alt)}"${style}>`;
 		}
 		case "divider":
 			return `<hr${marker}${style}>`;
@@ -2011,7 +2227,10 @@ function compileColumnsCell(
 	];
 	const style = styleString(declarations);
 	const widthAttr = cell.width !== null ? ` width="${cell.width}%"` : "";
-	const children = compileNodes(cell.children, inputs, fonts, rules, true);
+	const compiled = compileNodes(cell.children, inputs, fonts, rules, true);
+	// A linked cell is linked inside the `td`: a `td` cannot be wrapped in an anchor.
+	const href = linkOf(cell.actions);
+	const children = href ? wrapInLink(href, "block", [], compiled, "cell") : compiled;
 	return `<td data-juno-id="${escapeHtml(cell.id)}"${widthAttr} valign="${cell.verticalAlign}"${
 		className ? ` class="${className}"` : ""
 	}${style}>${children}</td>`;
@@ -2035,9 +2254,11 @@ function compileColumns(columns: MailColumns, inputs: TemplateInput[], fonts: Ma
 					.join("")}</tr>`,
 		)
 		.join("");
-	return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" data-juno-columns="${escapeHtml(
+	const table = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" data-juno-columns="${escapeHtml(
 		columns.name,
 	)}" data-juno-id="${escapeHtml(columns.id)}"${markAttributes(marks)}${style}>${rows}</table>`;
+	const href = linkOf(columns.actions);
+	return href ? wrapInLink(href, "block", inFlow ? [] : placeDeclarations(columns), table) : table;
 }
 
 function compileContainer(
@@ -2053,9 +2274,11 @@ function compileContainer(
 	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
 	const children = compileNodes(container.children, inputs, fonts, rules, false);
 	const tag = container.tag;
-	return `<${tag} data-juno-section="${escapeHtml(container.name)}" data-juno-id="${escapeHtml(container.id)}"${markAttributes(
+	const element = `<${tag} data-juno-section="${escapeHtml(container.name)}" data-juno-id="${escapeHtml(container.id)}"${markAttributes(
 		marks,
 	)}${style}>${children}</${tag}>`;
+	const href = linkOf(container.actions);
+	return href ? wrapInLink(href, "block", inFlow ? [] : placeDeclarations(container), element) : element;
 }
 
 function compileNode(node: MailNode, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, inFlow: boolean): string {
@@ -2099,7 +2322,9 @@ export function compileLayout(layout: MailLayout, inputs: TemplateInput[] = []):
 		...fillDeclarations(layout.fill),
 		layout.customCss,
 	]);
-	const body = compileNodes(layout.children, inputs, layout.fonts, rules, true);
+	// The editor never puts a link inside a link, but a layout written by hand or
+	// by an agent might, and the compiler is the last place to keep it out.
+	const body = compileNodes(dropNestedLinks(layout.children), inputs, layout.fonts, rules, true);
 	return `<div data-juno-canvas="1"${style}>${body}</div>`;
 }
 
@@ -2341,8 +2566,63 @@ function breakpointRules(layout: MailLayout, inputs: TemplateInput[]): Breakpoin
 	}
 
 	clearDefaultShown(layout.children, shown);
+	const hover = hoverRules(layout, classes, shown);
 
-	return { classes, shown, css: queries.join("").replace(/[<>]/g, "") };
+	return { classes, shown, css: (queries.join("") + hover.join("")).replace(/[<>]/g, "") };
+}
+
+/**
+ * What the pointer resting on an element changes, as the declarations of a
+ * `:hover` rule. One change per row, and a hidden row (Figma's eye) writes
+ * nothing. A solid fill also clears any gradient underneath it, or the
+ * gradient would stay over the new colour.
+ */
+function hoverDeclarations(actions: MailAction[]): string[] {
+	const out: string[] = [];
+	for (const action of actions) {
+		if (action.trigger !== "hover" || action.hidden) continue;
+		switch (action.change) {
+			case "fill":
+				if (action.fill && !action.fill.hidden) {
+					out.push(...fillDeclarations(action.fill).filter((declaration): declaration is string => declaration !== null));
+					if (action.fill.kind === "solid") out.push("background-image:none");
+				}
+				break;
+			case "color":
+				if (action.color) out.push(...colorDeclarations("color", action.color));
+				break;
+			case "underline":
+				out.push(`text-decoration:${action.underline === false ? "none" : "underline"}`);
+				break;
+			case "opacity":
+				if (action.opacity !== undefined) out.push(`opacity:${Number(action.opacity.toFixed(3))}`);
+				break;
+		}
+	}
+	return out;
+}
+
+/**
+ * The `:hover` rules, written after the breakpoints' media queries and not
+ * inside one: the pointer is the same at every width. Each is
+ * `.jb-<id>:hover{...!important}`, the class being the one the breakpoints
+ * give, so an element that has both carries one class, and `!important` for
+ * the same reason it is there for them: the element's own style is inline.
+ * A hidden element that no breakpoint shows is not in the message, so it gets
+ * no rule.
+ */
+function hoverRules(layout: MailLayout, classes: Map<string, string>, shown: Set<string>): string[] {
+	const rules: string[] = [];
+	const visit = (node: { id: string; hidden?: boolean; actions: MailAction[] }) => {
+		const declarations = hoverDeclarations(node.actions);
+		if (declarations.length === 0) return;
+		if (node.hidden && !shown.has(node.id)) return;
+		const className = classes.get(node.id) ?? classFor(node.id);
+		classes.set(node.id, className);
+		rules.push(`.${className}:hover{${declarations.map((declaration) => `${declaration} !important`).join(";")}}`);
+	};
+	walkTree(layout.children, visit, visit, visit);
+	return rules;
 }
 
 /**
@@ -2811,6 +3091,7 @@ function rawBlock(html: string): MailBlock {
 		grow: 0,
 		alignSelf: "auto",
 		hidden: false,
+		actions: [],
 	};
 }
 
@@ -2843,6 +3124,7 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 		grow: readGrow(map),
 		alignSelf: readSelfAlign(map.get("align-self")),
 		hidden: marks.hidden,
+		actions: [] as MailAction[],
 	};
 	const textOwned = [...TEXT_PROPERTIES, ...verticalOwned(map), "flex"];
 
@@ -2862,10 +3144,15 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 			// A version 1 "p" sometimes compiled to a div, by the same p-or-div
 			// choice the compiler still makes; a div is not a recognised text
 			// tag, so it reads back as the default, "p".
-			const tag = toTextTag(node.name);
+			// An inline text that is a link is sent as the `<a>` itself, so an `a`
+			// here is a span with an on-click action.
+			const asLink = node.name === "a";
+			const tag = asLink ? "span" : toTextTag(node.name);
 			const isList = isListTag(tag);
+			const click = asLink ? clickFromHref(unescapeAttr(attribute(node.attrs, "href") ?? "")) : null;
 			return {
 				...common,
+				actions: click ? [click] : [],
 				kind: "text",
 				tag,
 				html: sanitiseFragment(isList ? node.inner : unwrapVertical(node.inner), textExtraTags(tag)),
@@ -2905,9 +3192,6 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 				alt: unescapeAttr(attribute(node.attrs, "alt") ?? ""),
 				width: px(map, "width"),
 				align: map.get("margin") === "0 auto" ? "center" : map.get("margin-left") === "auto" ? "right" : "left",
-				// A picture inside a link has its href attached by the caller, which
-				// is the one that saw the <a> this <img> sat inside.
-				href: null,
 				box: {
 					...readBox(map, ["display", "max-width", "width", "height", "margin", "margin-left", "flex"]),
 					width: null,
@@ -3019,7 +3303,7 @@ const SECTION_PROPERTIES = [
 	"grid-template-columns",
 ];
 
-/** An `<img>` inside the thin `<a data-juno-link>` wrapper an image with a link compiles to, or null. */
+/** The element inside the thin `<a data-juno-link>` wrapper an element with an on-click action compiles to, or null. */
 function unwrapLinked(node: Extract<Node, { type: "element" }>): Extract<Node, { type: "element" }> | null {
 	return (
 		splitTopLevel(node.inner).find((entry): entry is Extract<Node, { type: "element" }> => entry.type === "element") ?? null
@@ -3028,20 +3312,21 @@ function unwrapLinked(node: Extract<Node, { type: "element" }>): Extract<Node, {
 
 /**
  * One child of a container, a cell or the canvas itself, read back as the
- * node it was: a nested container, a columns table, an image wrapped in its
- * link, or a leaf block. Null for markup none of those recognise, which the
- * caller keeps as the author's own rather than losing.
+ * node it was: a nested container, a columns table, a leaf block, or any of
+ * them wrapped in the link its on-click action compiles to. Null for markup
+ * none of those recognise, which the caller keeps as the author's own rather
+ * than losing.
  */
 function readChild(child: Node, depth: number): MailNode | null {
 	if (child.type !== "element" || depth >= MAX_DEPTH) return null;
 	if (attribute(child.attrs, "data-juno-section") !== null) return readContainer(child, depth);
 	if (attribute(child.attrs, "data-juno-columns") !== null) return readColumns(child, depth);
-	if (attribute(child.attrs, "data-juno-link") !== null) {
+	if (attribute(child.attrs, "data-juno-link") === "1") {
 		const inner = unwrapLinked(child);
-		if (!inner || !attribute(inner.attrs, "data-juno-block")) return null;
-		const block = readBlock(inner);
-		const href = safeHref(unescapeAttr(attribute(child.attrs, "href") ?? ""));
-		return block.kind === "image" ? { ...block, href } : block;
+		const node = inner ? readChild(inner, depth) : null;
+		if (!node) return null;
+		const click = clickFromHref(unescapeAttr(attribute(child.attrs, "href") ?? ""));
+		return click ? { ...node, actions: [click, ...node.actions.filter((action) => action.trigger !== "click")] } : node;
 	}
 	if (attribute(child.attrs, "data-juno-block") !== null) return readBlock(child);
 	return null;
@@ -3094,6 +3379,7 @@ function readContainer(node: Extract<Node, { type: "element" }>, depth: number):
 		grow: readGrow(map),
 		layout: readSectionLayout(map),
 		box: readBox(map, [...SECTION_PROPERTIES, "flex", "margin-left", "margin-right"]),
+		actions: [],
 		children: readChildren(node.inner, depth + 1),
 	};
 }
@@ -3115,6 +3401,11 @@ function readCellVerticalAlign(map: Declarations, attrs: string): MailVerticalAl
 
 function readColumnsCell(node: Extract<Node, { type: "element" }>, depth: number): MailColumnsCell {
 	const map = readStyle(node.attrs);
+	// A linked cell holds one thin `<a data-juno-link="cell">` round everything in it.
+	const parts = splitTopLevel(node.inner).filter((part) => part.type === "element" || part.raw.trim() !== "");
+	const only = parts.length === 1 ? parts[0] : undefined;
+	const wrapper = only && only.type === "element" && attribute(only.attrs, "data-juno-link") === "cell" ? only : null;
+	const click = wrapper ? clickFromHref(unescapeAttr(attribute(wrapper.attrs, "href") ?? "")) : null;
 	return {
 		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
 		width: readCellWidth(map, node.attrs),
@@ -3123,7 +3414,8 @@ function readColumnsCell(node: Extract<Node, { type: "element" }>, depth: number
 		// top of the cell's own, so the shorthand `padding` alone is what the
 		// cell was given: reading it back does not carry the gap along too.
 		box: readBox(map, ["width", "vertical-align", "padding-left", "padding-right"]),
-		children: readChildren(node.inner, depth),
+		actions: click ? [click] : [],
+		children: readChildren(wrapper ? wrapper.inner : node.inner, depth),
 	};
 }
 
@@ -3154,8 +3446,44 @@ function readColumns(node: Extract<Node, { type: "element" }>, depth: number): M
 		// rather than guessed back into a number that may not be it.
 		gap: 0,
 		box: readBox(map, ["flex", "align-self", "margin-left", "margin-right"]),
+		actions: [],
 		rows,
 	};
+}
+
+/**
+ * The actions the markup cannot carry, put back from the canvas it came from,
+ * by id: a hover row lives in the head of the message and a hidden click
+ * compiles to nothing, so neither is in the body being read. What the markup
+ * does say, the links, wins, and keeps the id of the click it replaces.
+ */
+function restoreActions(nodes: MailNode[], previous: MailNode[]): MailNode[] {
+	const before = new Map<string, MailAction[]>();
+	const remember = (node: { id: string; actions: MailAction[] }) => before.set(node.id, node.actions);
+	walkTree(previous, remember, remember, remember);
+	const restore = (id: string, read: MailAction[]): MailAction[] => {
+		const old = before.get(id) ?? [];
+		const oldClick = old.find((action) => action.trigger === "click");
+		const readClick = read.some((action) => action.trigger === "click");
+		const kept = old.filter((action) => action.trigger === "hover" || (!readClick && action.trigger === "click" && action.hidden));
+		return [...read.map((action) => (action.trigger === "click" && oldClick ? { ...action, id: oldClick.id } : action)), ...kept];
+	};
+	const walk = (list: MailNode[]): MailNode[] =>
+		list.map((node) => {
+			if (isContainer(node)) return { ...node, actions: restore(node.id, node.actions), children: walk(node.children) };
+			if (isColumns(node)) {
+				return {
+					...node,
+					actions: restore(node.id, node.actions),
+					rows: node.rows.map((row) => ({
+						...row,
+						cells: row.cells.map((cell) => ({ ...cell, actions: restore(cell.id, cell.actions), children: walk(cell.children) })),
+					})),
+				};
+			}
+			return { ...node, actions: restore(node.id, node.actions) };
+		});
+	return walk(nodes);
 }
 
 /**
@@ -3196,7 +3524,9 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 
 	const map = readStyle(canvas.attrs);
 	const children = readChildren(canvas.inner, 0);
-	const kept = children.length > 0 ? children : [emptyContainer("section", "Body")];
+	const kept = dropNestedLinks(
+		restoreActions(children.length > 0 ? children : [emptyContainer("section", "Body")], base.children),
+	);
 	const maxWidth = px(map, "max-width");
 	return {
 		version: 2,
@@ -3368,6 +3698,7 @@ export function convertNodeToCode(
 		grow: 0,
 		alignSelf: "auto",
 		hidden: target.hidden,
+		actions: [],
 	};
 	return {
 		...layout,

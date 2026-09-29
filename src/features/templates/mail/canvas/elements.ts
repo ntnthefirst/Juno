@@ -17,11 +17,20 @@
  */
 import type { MailContainerTag, MailHeadingTag, MailLayout, MailNode, MailTextTag } from "@shared/types";
 import type { IconName } from "../../../../components/Icon";
-import { CONTAINER_TAG_LABELS, newBlock, newColumns, newContainer } from "./canvas-actions";
+import { CONTAINER_TAG_LABELS, newBlock, newButtonText, newClick, newColumns, newContainer } from "./canvas-actions";
 
 export type GroupId = "containers" | "text" | "columns" | "media" | "other";
 
-export type ElementId = MailContainerTag | MailHeadingTag | MailTextTag | "columns" | "image" | "linked-image" | "divider" | "field";
+export type ElementId =
+	| MailContainerTag
+	| MailHeadingTag
+	| MailTextTag
+	| "button"
+	| "columns"
+	| "image"
+	| "linked-image"
+	| "divider"
+	| "field";
 
 export type ElementInfo = {
 	id: ElementId;
@@ -90,6 +99,7 @@ export const GROUPS: GroupInfo[] = [
 			{ id: "span", label: "Inline text", tag: "span", key: "S", icon: "tool-text" },
 			{ id: "ul", label: "Bulleted list", tag: "ul", key: "U", icon: "list" },
 			{ id: "ol", label: "Numbered list", tag: "ol", key: "O", icon: "list" },
+			{ id: "button", label: "Button", tag: "a > p", key: "B", icon: "tool-button" },
 		],
 	},
 	{
@@ -121,9 +131,8 @@ export const GROUPS: GroupInfo[] = [
 	},
 ];
 
-/** The heading and the button keys, which add one element each and belong to no menu of their own. */
+/** The heading key, which adds one element and belongs to no menu of its own. */
 export const HEADING_KEY = "H";
-export const BUTTON_KEY = "B";
 
 export const MEDIA_NOTE =
 	"Video, audio and embeds play in no client that matters, so use a picture that links to where the video plays.";
@@ -205,11 +214,12 @@ export function writeLastUsed(last: LastUsed): void {
 export function newElement(layout: MailLayout, id: ElementId): MailNode {
 	if (id === "columns") return newColumns(layout);
 	if (id === "image") return newBlock("image");
+	if (id === "button") return newButtonText();
 	if (id === "linked-image") {
-		// Empty until an address is typed, and a picture with no usable address
-		// compiles as a plain picture, so nothing is sent as a link that goes nowhere.
-		const picture = newBlock("image");
-		return picture.kind === "image" ? { ...picture, href: "" } : picture;
+		// A picture with an on-click action still to be filled in. An action with
+		// no usable address compiles as a plain picture, so nothing is sent as a
+		// link that goes nowhere.
+		return { ...newBlock("image"), actions: [newClick()] };
 	}
 	if (id === "divider") return { ...newBlock("divider"), grow: 0 };
 	if (id === "field") return newBlock("field");

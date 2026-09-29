@@ -14,7 +14,6 @@ import {
 	insertTarget,
 	moveNode,
 	moveWithinParent,
-	newBlock,
 	parentOf,
 	removeNode,
 	selectionIn,
@@ -403,17 +402,6 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 		remember(id);
 	}
 
-	/** The button block, which stays on the toolbar until actions replace it. */
-	function insertButton(): void {
-		if (!layout) return;
-		const at = landing(false);
-		if (!at) return;
-		const block = newBlock("button");
-		onLayout(insertNode(layout, at.parentId, block, at.afterId));
-		setSelection({ id: block.id });
-		setEditing(null);
-	}
-
 	/** Figma's eye. At a breakpoint it hides or shows at that width and narrower. */
 	function setHidden(id: string, hidden: boolean): void {
 		if (!shown) return;
@@ -588,8 +576,6 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 		switch (action) {
 			case "add-heading":
 				return run(() => insertElement("h2"));
-			case "add-button":
-				return run(insertButton);
 			case "undo":
 				return run(undo);
 			case "redo":
@@ -953,7 +939,6 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 						menu={groupMenu}
 						onMenu={setGroupMenu}
 						onInsert={insertElement}
-						onAddButton={insertButton}
 						mode={mode}
 						onMode={setMode}
 						hasLayout={layout !== null}

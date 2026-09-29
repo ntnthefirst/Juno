@@ -77,8 +77,12 @@ const LAYOUT_SCHEMA = {
 		"heading, a tag (h1 to h6). An image may carry an href, a link round the picture; null is " +
 		"a plain picture. A box carries fill (solid or a two-stop gradient, each with hidden), " +
 		"stroke (borderWidth, borderColor, borderStyle, borderSides, strokeHidden), radius or " +
-		"four corners, opacity, effects (shadow or blur, each with hidden), width, minHeight and " +
-		"clip. An empty container with a minHeight and a fill or a one-sided stroke is a divider. " +
+		"four corners, opacity, effects (shadow or blur, each with hidden), padding and margin " +
+		"(pixels on each side; a margin on a side the element's alignment already sets to auto is " +
+		"ignored, and a cell takes none), width, minHeight and clip. " +
+		"A container's layout is { kind: flex, direction, justify, align, gap, wrap } or { kind: " +
+		"grid, columns, gap, align, justify }, where a grid's justify is across its cells and " +
+		"stretch is the default. An empty container with a minHeight and a fill or a one-sided stroke is a divider. " +
 		"A text style carries fontFamily, weight (thin to black), italic, decoration, transform, " +
 		"letterSpacing and both alignments. fonts: [{ family, source: google or link, href for a " +
 		"link, weights, italic, fallback: sans, serif or mono }]; a block names a font by its " +

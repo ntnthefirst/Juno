@@ -2193,6 +2193,210 @@ if (!app.requestSingleInstanceLock()) {
 									if (linked !== "ok") throw new Error(`Smoke: mail template editor ${linked}`);
 									writeFileSync(joinPath(shotDir, `mail-template-converted.png`), (await capture(window.webContents)).toPNG());
 
+									// The design panel's sections (TODO 4d): Layout holds only how an
+									// element arranges what is in it, Spacing holds padding and margin,
+									// the radius sits with the opacity in Appearance, and W and H are
+									// with Position. A container is given a margin and a padding from
+									// Spacing and a place in the 3 by 3 alignment box, and the compiled
+									// message is checked; then a text block, whose Layout is how its words
+									// sit, and which has no Clip content.
+									const spaced = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setNumber = async (title, value) => {
+												const label = document.querySelector('label[title="' + title + '"]');
+												const field = label ? document.getElementById(label.htmlFor) : null;
+												if (!field) return false;
+												field.focus();
+												Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+												field.blur();
+												await wait(300);
+												return true;
+											};
+											const setSelectByLabel = async (aria, value) => {
+												const select = document.querySelector('select[aria-label="' + aria + '"]');
+												if (!select) return false;
+												Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, value);
+												select.dispatchEvent(new Event("change", { bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const panel = (title) => {
+												const heading = [...document.querySelectorAll("h3")].find((el) => el.textContent.trim() === title);
+												return heading ? heading.closest("section") : null;
+											};
+											const box = () => document.querySelector('[role=group][aria-label="Alignment"]');
+											const cell = (name) => box() ? box().querySelector('button[aria-label="' + name + '"]') : null;
+											const style = (html, name) => {
+												const found = new RegExp('<\\\\w+ data-juno-section="' + name + '"[^>]*style="([^"]*)"').exec(html);
+												return found ? found[1] : "";
+											};
+
+											// The first container at the top of the layers, named so its
+											// style can be found in the compiled message.
+											const top = rows("container").find((el) => el.dataset.layerDepth === "0");
+											if (!top) return "no top-level container";
+											top.click();
+											await wait(300);
+											const nameField = [...document.querySelectorAll("input")].find((el) => /^(Section|Div|Header|Footer|Main|Article|Aside|Nav) name$/.test(el.getAttribute("aria-label") || ""));
+											if (!nameField) return "the container has no name field";
+											Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(nameField, "Ruimte");
+											nameField.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(300);
+
+											// The sections, in the order every element has them.
+											const titles = [...document.querySelectorAll("h3")].map((el) => el.textContent.trim());
+											const order = ["Position", "Layout", "Spacing", "Appearance", "Fill", "Stroke", "Effects"].map((title) => titles.indexOf(title));
+											if (order.some((at, index) => at < 0 || (index > 0 && at < order[index - 1]))) return "the container's sections are not Position, Layout, Spacing, Appearance, Fill, Stroke, Effects: " + titles.join(", ");
+											const position = panel("Position");
+											const layoutSection = panel("Layout");
+											const spacing = panel("Spacing");
+											const appearance = panel("Appearance");
+											if (!position.querySelector('label[title="Width"]') || !position.querySelector('label[title="Height"]')) return "W and H are not with Position";
+											if (layoutSection.querySelector('label[title="Width"]') || layoutSection.querySelector('label[title="Corner radius"]')) return "Layout still holds the size or the radius";
+											if (layoutSection.querySelector('label[title="Padding left and right"]')) return "Layout still holds the padding";
+											if (!appearance.querySelector('label[title="Corner radius"]') || !appearance.querySelector('label[title="Opacity"]')) return "the radius is not with the opacity in Appearance";
+											if (!spacing.querySelector('label[title="Padding left and right"]') || !spacing.querySelector('label[title="Margin left and right"]')) return "Spacing has no padding and margin";
+											if (![...layoutSection.querySelectorAll("label")].some((el) => el.textContent.trim() === "Clip content")) return "a container has no Clip content in Layout";
+											if (!box()) return "Layout has no alignment box";
+											if (box().querySelectorAll("button").length !== 9) return "the alignment box does not have nine places";
+
+											// Margin and padding from Spacing.
+											if (!(await setNumber("Margin top and bottom", "14"))) return "no margin field";
+											if (!(await setNumber("Padding left and right", "30"))) return "no padding field";
+											let html = await compiled((h) => style(h, "Ruimte").includes("margin-top:14px"));
+											let css = style(html, "Ruimte");
+											if (!/margin-top:14px;margin-bottom:14px/.test(css)) return "the margin from Spacing is not in the compiled message: " + css;
+											if (!/padding:\\d+px 30px \\d+px 30px/.test(css)) return "the padding from Spacing is not in the compiled message: " + css;
+
+											// The 3 by 3 box sets the distribution and the alignment in one click.
+											cell("Align middle centre").click();
+											await wait(300);
+											if (cell("Align middle centre").getAttribute("aria-pressed") !== "true") return "the centre of the box is not pressed after a click on it";
+											html = await compiled((h) => style(h, "Ruimte").includes("align-items:center"));
+											css = style(html, "Ruimte");
+											if (!/justify-content:center;align-items:center/.test(css)) return "the middle centre place did not set both alignments: " + css;
+											cell("Align bottom right").click();
+											await wait(300);
+											html = await compiled((h) => style(h, "Ruimte").includes("flex-end"));
+											css = style(html, "Ruimte");
+											if (!/justify-content:flex-end;align-items:flex-end/.test(css)) return "the bottom right place did not set both alignments: " + css;
+
+											// Stretch stays reachable and visible, and the Auto gap is space between.
+											const stretch = document.querySelector('button[aria-label="Stretch across"]');
+											if (!stretch) return "no stretch toggle beside the box";
+											stretch.click();
+											await wait(300);
+											if (document.querySelector('button[aria-label="Stretch across"]').getAttribute("aria-pressed") !== "true") return "the stretch toggle did not turn on";
+											if (![...box().querySelectorAll("button")].some((el) => el.dataset.lit === "line")) return "a stretched box does not light the line it leaves";
+											html = await compiled((h) => /align-items:stretch/.test(style(h, "Ruimte")));
+											if (!/justify-content:flex-end;align-items:stretch/.test(style(html, "Ruimte"))) return "stretch did not reach the compiled message: " + style(html, "Ruimte");
+											if (!(await setSelectByLabel("Gap between blocks spacing", "between"))) return "no Auto option on the gap";
+											html = await compiled((h) => style(h, "Ruimte").includes("space-between"));
+											if (!/justify-content:space-between/.test(style(html, "Ruimte"))) return "the Auto gap did not write space between";
+											cell("Align top left").click();
+											await wait(300);
+											html = await compiled((h) => /align-items:flex-start/.test(style(h, "Ruimte")));
+											if (!/justify-content:space-between;align-items:flex-start/.test(style(html, "Ruimte"))) return "a click on the box while the gap is Auto changed the distribution: " + style(html, "Ruimte");
+
+											// A centred container: the margin sides its alignment sets say Auto.
+											if (!(await setNumber("Width", "400"))) return "no width field on the container";
+											const centre = document.querySelector('[role=group][aria-label="Where it sits across what holds it"] button[title="Align centre"]');
+											if (!centre) return "a container in the frame has no place across it once it is narrower";
+											centre.click();
+											await wait(300);
+											const marginPair = document.querySelector('label[title="Margin left and right"]');
+											const autoField = marginPair ? document.getElementById(marginPair.htmlFor) : null;
+											if (!autoField || !autoField.disabled || autoField.getAttribute("placeholder") !== "Auto") return "a centred container's left and right margins do not say Auto";
+											html = await compiled((h) => /margin-left:auto/.test(style(h, "Ruimte")));
+											css = style(html, "Ruimte");
+											if (!/margin-left:auto;margin-right:auto;margin-top:14px;margin-bottom:14px/.test(css)) return "the auto sides were not kept ahead of the margin: " + css;
+
+											// The canvas draws what the compiler wrote: in the middle, with
+											// the margin above it.
+											const drawn = document.querySelector('[data-canvas-id][class*="outline-2"]');
+											if (!drawn) return "the selected container is not outlined on the canvas";
+											const outer = drawn.parentElement.getBoundingClientRect();
+											const inner = drawn.getBoundingClientRect();
+											if (inner.left - outer.left < 20 || Math.abs(inner.left - outer.left - (outer.right - inner.right)) > 1.5) return "the canvas does not draw a centred container in the middle";
+											if (getComputedStyle(drawn).marginTop !== "14px") return "the canvas does not draw the margin: " + getComputedStyle(drawn).marginTop;
+
+											// Back to something a person would keep, for the screenshot.
+											if (!(await setSelectByLabel("Gap between blocks spacing", "fixed"))) return "no Fixed option on the gap";
+											cell("Align middle centre").click();
+											await wait(300);
+
+											// A text: its Layout is how the words sit, Typography no longer
+											// holds that, and there is nothing to clip.
+											let found = false;
+											for (const candidate of rows("block")) {
+												candidate.click();
+												await wait(250);
+												if ([...document.querySelectorAll("label")].some((el) => el.textContent.trim() === "Text element")) {
+													found = true;
+													break;
+												}
+											}
+											if (!found) return "no text block to look at";
+											const textLayout = panel("Layout");
+											if (!textLayout || !textLayout.querySelector('[role=group][aria-label="Horizontal alignment"]')) return "a text's Layout has no horizontal alignment";
+											if (textLayout.querySelector('label[title="Padding left and right"]') || [...textLayout.querySelectorAll("label")].some((el) => el.textContent.trim() === "Clip content")) return "a text's Layout holds spacing or Clip content";
+											if (panel("Typography") && panel("Typography").querySelector('[role=group][aria-label="Horizontal alignment"]')) return "the text alignment is still in Typography";
+											if (!panel("Spacing") || !panel("Spacing").querySelector('label[title="Margin top and bottom"]')) return "a text has no margin in Spacing";
+											if (!panel("Position").querySelector('label[title="Width"]')) return "a text's W is not with Position";
+											const centreText = textLayout.querySelector('[role=group][aria-label="Horizontal alignment"] button[title="Align centre"]');
+											centreText.click();
+											await wait(300);
+											if (centreText.getAttribute("aria-pressed") !== "true") return "the text alignment button did not press";
+
+											// The container is left selected for the picture.
+											rows("container").find((el) => el.dataset.layerDepth === "0").click();
+											await wait(300);
+											return "ok";
+										})()`,
+									) as string;
+									if (spaced !== "ok") throw new Error(`Smoke: mail template editor ${spaced}`);
+									await shootBoth("mail-template-spacing");
+									// The same panel scrolled to Spacing and Appearance, which the
+									// first shot cuts off.
+									// Only the panel's own scroller moves: scrollIntoView would also
+									// scroll every clipped ancestor and photograph a shifted window.
+									const lowered = await window.webContents.executeJavaScript(
+										`(() => {
+											const heading = [...document.querySelectorAll("h3")].find((el) => el.textContent.trim() === "Spacing");
+											if (!heading) return "no Spacing section";
+											let scroller = heading.parentElement;
+											while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+											if (!scroller) return "the design panel does not scroll";
+											scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+											// Nothing inside the editor may make the window's main area
+											// taller than it is: a clipped overflow there is what a focus
+											// or a scroll into view shifts the whole window by.
+											const main = document.querySelector("main");
+											if (main.scrollHeight > main.clientHeight + 1) return "the main area overflows by " + (main.scrollHeight - main.clientHeight) + "px";
+											return "ok";
+										})()`,
+									) as string;
+									if (lowered !== "ok") throw new Error(`Smoke: mail template editor ${lowered}`);
+									await new Promise((r) => setTimeout(r, 300));
+									await shootBoth("mail-template-spacing-lower");
+
 									// Escape lets go of what is selected before it leaves, so the
 									// first one drops the block that was just inserted and the second
 									// one walks out. Nothing is saved on the way: the template in the

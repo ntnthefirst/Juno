@@ -964,7 +964,10 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 				</main>
 
 				{onCanvas && layout ? (
-					<aside className="w-[256px] flex-none overflow-y-auto border-l border-[var(--line)] bg-[var(--surface)]">
+					<aside className="relative w-[256px] flex-none overflow-y-auto border-l border-[var(--line)] bg-[var(--surface)]">
+						{/* Relative so the panel's screen-reader labels, which are
+						    absolutely positioned, scroll and clip with it rather than
+						    stretching the window's main area. */}
 						<DesignPanel
 							base={layout}
 							active={active}

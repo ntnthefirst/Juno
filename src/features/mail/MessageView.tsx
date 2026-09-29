@@ -13,12 +13,14 @@ type MessageViewProps = {
 	onToggle: () => void;
 	onNotice: (message: string) => void;
 	onReply: (messageId: string, mode: MailReplyMode) => void;
+	clientLinked: boolean;
 	/** A file action on this message changed it (read, flagged): reload the thread. */
 	onChanged: () => void;
 };
 
 const TRUSTED_EMAILS_KEY = "juno.mail.trustedEmails";
 const TRUSTED_SENDERS_KEY = "juno.mail.trustedSenders";
+const BLOCKED_SENDERS_KEY = "juno.mail.blockedSenders";
 
 function readTrust(key: string): string[] {
 	try {
@@ -39,15 +41,30 @@ function addTrust(key: string, value: string): void {
 	}
 }
 
-export function MessageView({ message, open, onToggle, onNotice, onReply, onChanged }: MessageViewProps) {
+function removeTrust(key: string, value: string): void {
+	try {
+		localStorage.setItem(key, JSON.stringify(readTrust(key).filter((item) => item !== value)));
+	} catch {
+		// The current decision still applies until the message is closed.
+	}
+}
+
+export function MessageView({ message, open, onToggle, onNotice, onReply, onChanged, clientLinked }: MessageViewProps) {
 	const senderAddress = message.from?.address.toLowerCase() ?? null;
-	const isNew = !message.isSeen;
 	const emailTrusted = readTrust(TRUSTED_EMAILS_KEY).includes(message.id);
 	const senderTrusted = senderAddress !== null && readTrust(TRUSTED_SENDERS_KEY).includes(senderAddress);
+	const senderBlocked = senderAddress !== null && readTrust(BLOCKED_SENDERS_KEY).includes(senderAddress);
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [body, setBody] = useState<MailMessageBody | null>(null);
 	const [bodyError, setBodyError] = useState<string | null>(null);
-	const [trusted, setTrusted] = useState(!isNew || emailTrusted || senderTrusted);
+	const [trustDecision, setTrustDecision] = useState<"unknown" | "trusted" | "blocked">(
+		clientLinked || (!senderBlocked && (emailTrusted || senderTrusted))
+			? "trusted"
+			: senderBlocked
+				? "blocked"
+				: "unknown",
+	);
+	const trusted = clientLinked || trustDecision === "trusted";
 	const [remoteImages, setRemoteImages] = useState(emailTrusted || senderTrusted);
 	const [linksOpen, setLinksOpen] = useState(false);
 	const [measuredFrame, setMeasuredFrame] = useState<{ messageId: string; height: number } | null>(null);
@@ -55,7 +72,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 	const menu = useContextMenu();
 
 	useEffect(() => {
-		if (!open || !message.bodyFetched || (isNew && !trusted)) return;
+		if (!open || !message.bodyFetched || (!clientLinked && !trusted)) return;
 		let cancelled = false;
 		window.juno.mail.messages
 			.body(message.id)
@@ -68,7 +85,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		return () => {
 			cancelled = true;
 		};
-	}, [open, message.id, message.bodyFetched, isNew, trusted]);
+	}, [open, message.id, message.bodyFetched, clientLinked, trusted]);
 
 	useEffect(() => {
 		function receiveHeight(event: MessageEvent<unknown>) {
@@ -86,15 +103,24 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 
 	function trustEmail() {
 		addTrust(TRUSTED_EMAILS_KEY, message.id);
-		setTrusted(true);
+		setTrustDecision("trusted");
 		setRemoteImages(true);
 	}
 
 	function trustSender() {
 		if (!senderAddress) return;
+		removeTrust(BLOCKED_SENDERS_KEY, senderAddress);
 		addTrust(TRUSTED_SENDERS_KEY, senderAddress);
-		setTrusted(true);
+		setTrustDecision("trusted");
 		setRemoteImages(true);
+	}
+
+	function blockSender() {
+		if (!senderAddress) return;
+		removeTrust(TRUSTED_SENDERS_KEY, senderAddress);
+		addTrust(BLOCKED_SENDERS_KEY, senderAddress);
+		setTrustDecision("blocked");
+		setRemoteImages(false);
 	}
 
 	async function openLink(href: string) {
@@ -213,6 +239,15 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 							>
 								{detailsOpen ? "Hide" : "Details"}
 							</button>
+							{!clientLinked ? (
+								<button
+									type="button"
+									onClick={trustDecision === "trusted" ? blockSender : trustSender}
+									className="shrink-0 hover:text-[var(--ink)] hover:underline"
+								>
+									{trustDecision === "trusted" ? "Don't trust sender" : "Trust sender"}
+								</button>
+							) : null}
 						</div>
 
 						{detailsOpen ? (
@@ -294,7 +329,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 						</div>
 					) : null}
 
-					{!message.bodyFetched ? (
+					{!message.bodyFetched && (clientLinked || trusted) ? (
 						<p className="shrink-0 border-t border-[var(--line)] py-6 text-[var(--ink-muted)]">
 							{message.bodyError
 								? `This message could not be fetched. ${message.bodyError}`
@@ -309,17 +344,27 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 						</p>
 					) : (
 						<div className="-mx-8 flex flex-1 flex-col">
-							{isNew && !trusted ? (
-								<div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-3">
+							{!clientLinked && !trusted ? (
+								<div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-3 text-[var(--warn)]">
 									<span className="mr-auto text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-										This is a new email. Trust it before loading the content.
+										{trustDecision === "blocked"
+											? "This sender is not trusted. Content stays blocked."
+											: "This email is not trusted. Content and links stay blocked."}
 									</span>
 									<Button
 										size="dense"
 										onClick={trustEmail}
 									>
-										Trust email
+										Trust this email
 									</Button>
+									{trustDecision === "unknown" ? (
+										<Button
+											size="dense"
+											onClick={blockSender}
+										>
+											Don't trust sender
+										</Button>
+									) : null}
 									<Button
 										size="dense"
 										onClick={trustSender}
@@ -330,6 +375,11 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 								</div>
 							) : (
 								<>
+									{body?.suspicious ? (
+										<div className="flex shrink-0 items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-2 text-[length:var(--text-sm)] text-[var(--warn)]">
+											<span>Weird content was removed before this email was shown.</span>
+										</div>
+									) : null}
 									{body && body.remoteImages > 0 && !remoteImages ? (
 										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-[length:var(--text-sm)]">
 											<span className="text-[var(--ink-muted)]">

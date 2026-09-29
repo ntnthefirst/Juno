@@ -101,7 +101,11 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 	const currentKey = stepDefs[Math.min(step, stepDefs.length - 1)]!.key;
 	const isLastStep = step >= stepDefs.length - 1;
 
-	const [values, setValues] = useState<Record<string, string>>({});
+	// Starts from what the template offers, because the field shows a starting
+	// value as if it were typed and the render has to be given the same one.
+	const [values, setValues] = useState<Record<string, string>>(() =>
+		Object.fromEntries(template.inputs.filter((input) => input.defaultValue).map((input) => [input.key, input.defaultValue ?? ""])),
+	);
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	// Keyed to the client it was fetched for: a client switch does not need an
 	// effect to clear the stale list, the stale list just stops matching.

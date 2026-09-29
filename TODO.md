@@ -96,79 +96,12 @@ Not tasks, written down so nobody builds them by accident:
 
 ## 4. Mail template editor
 
-Three pieces of work, in this order, because the second changes the model the
-third and the example build on. Read docs/editors.md section 2 and decisions
+Two pieces of work, in this order, because the first changes the model the
+second and the example build on. Read docs/editors.md section 2 and decisions
 36 and 37 first; every rule there still holds. Each piece is its own set of
 commits, and each keeps the four checks green: `npm run check`,
 `JUNO_SMOKE_DEMO=1 JUNO_SMOKE_FRONT=1 npm run smoke`, both themes looked at, and
 the copy sweep in writing.md section 7.
-
-### 4a. A tool for every element a mail client renders, grouped like Figma's
-
-**What it does.** The floating toolbar
-(`src/features/templates/mail/canvas/CanvasToolbar.tsx`) becomes groups. Each
-group is one button with a chevron beside it, and the chevron opens a menu of
-the group's elements, each with its name and its key, the way Figma's frame
-tool opens Frame, Section and Slice. The button adds the group's last-used
-element (remembered per machine in localStorage, like autosave). What is added
-is that HTML element, so the layers and the code view name it for what it is,
-and the tag can be changed afterwards in the design panel within its group,
-the way a heading's level is changed now.
-
-| Group | Elements | Notes |
-| --- | --- | --- |
-| **Containers** | section, div, header, footer, main, article, aside, nav | Each lays out what is in it the way a section does now: flow, gap, padding, alignment, breakpoints. Each can hold blocks and other containers |
-| **Text** | h1 to h6, p, blockquote, pre, address, span, and a list (ul or ol with li) | The element only. Bold, italic, underline and links stay inside the text, on the format bar |
-| **Columns** | a table laid out for mail: `table role="presentation"`, rows, cells | The one layout that stays side by side in Outlook on Windows ("The Outlook problem" in docs/editors.md). Cells hold blocks |
-| **Media** | img, and img inside a link | Video, audio and embeds play in no client that matters. The menu says so in one line instead of offering them: a video is a picture with an on-click action to where it plays |
-| **Other** | hr, and a declared input | As they are now |
-
-**The model change, which is the bulk of it.**
-
-- Today `MailLayout.sections` is one level: sections hold blocks, and a
-  section compiles to a `div`. Containers nest, so the model becomes a tree: a
-  container holds an ordered list of children, each a container, a text
-  element, a table or a leaf block. Keep ids stable; breakpoints key their
-  overrides by id and must keep working (`breakpoints.ts`,
-  `parseBreakpoints` and `breakpointRules` in `mail-layout.ts`).
-- Give every element a `tag` field, checked against its group's list in the
-  parser the way `toColor` checks a colour. A text element's `kind` stays
-  "text" or "heading"; the tag says which one it is written as.
-- **A schema version bump, not a migration.** The layout is JSON in
-  `layout_json`, so there is no Drizzle migration, but `MailLayout.version`
-  goes to 2 and `normaliseLayout` reads a version 1 layout into the tree:
-  each section becomes a `section` container holding its blocks. Every
-  template saved today must open unchanged, and a test must prove it.
-- The compiler writes each element with its own tag, keeps the `data-juno-*`
-  markers, and `layoutFromHtml` reads them back, nested. The code view round
-  trip tests in `mail-layout.test.ts` must pass for nested containers and for
-  a table.
-- The layers panel (`LayerTree.tsx`) becomes a real tree: expand and collapse
-  at every level, drag into and out of containers, Alt and an arrow still move
-  one place. The canvas drop targets follow.
-- `sizing.ts` works per parent rather than per section, since any container is
-  a parent now.
-
-**Files you will touch.** `electron/shared/types.ts`,
-`electron/main/services/mail-layout.ts` and its test, `canvas-actions.ts`,
-`breakpoints.ts`, `sizing.ts`, `CanvasView.tsx`, `LayerTree.tsx`,
-`DesignPanel.tsx`, `CanvasToolbar.tsx`, `shortcuts.ts` (keys per element, and
-the list the toolbar shows), `MailTemplateEditor.tsx` (insert, paste,
-duplicate), the MCP layout description in `electron/main/mcp/mail-outbox.ts`,
-and docs/editors.md.
-
-**Decided.** A section is written as `<section>` in the sent HTML, with
-`display:block` on it because some older clients style unknown block elements
-oddly. That includes every section in a version 1 layout, which compiles to a
-`div` today. A `div` added from the Containers group stays a `div`. Every other
-container is written as its own tag. Write this down in docs/editors.md.
-
-**Done when.** A version 1 layout loads and sends the same body, except that
-each section is now a `<section>` with `display:block`, which a test checks.
-Every element in the table can be added from the toolbar and from its key,
-changed within its group, nested, dragged in the layers, hidden at a
-breakpoint, converted to HTML, and read back from the code view. The smoke walk
-adds one element of each group and nests a text block in a header.
 
 ### 4b. Actions instead of a button block
 

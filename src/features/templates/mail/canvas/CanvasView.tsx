@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent, type HTMLAttributes } from "react";
 import type { MailBlock, MailColumns, MailColumnsCell, MailContainer, MailFont, MailLayout, MailNode, TemplateInput } from "@shared/types";
 import { Icon } from "../../../../components/Icon";
-import { canMoveInto, firstChildOf } from "./canvas-actions";
+import { asListItems, canMoveInto, firstChildOf } from "./canvas-actions";
 import {
 	boxCss,
 	cellCss,
 	CLIENT_DEFAULTS,
 	columnsCss,
 	fillCss,
+	LIST_INDENT,
 	MAIL_SHELL,
+	noPadding,
 	placeCss,
 	placementFromCss,
 	sectionCss,
@@ -16,6 +18,7 @@ import {
 	verticalCss,
 } from "./box-style";
 import { codeMarkup } from "./code-markup";
+import { editTag } from "./inline-html";
 import { InlineText, type Caret } from "./InlineText";
 
 function isContainer(node: MailNode): node is MailContainer {
@@ -111,21 +114,30 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 			);
 		}
 		case "text": {
+			// A list's items are its markup: pushing them down its box with a
+			// wrapping span would break the list, so it is always drawn at the top.
+			const list = block.tag === "ul" || block.tag === "ol";
 			const style = {
 				margin: 0,
 				...textCss(block.text, fonts),
-				...verticalCss(block.text),
+				...(list ? {} : verticalCss(block.text)),
 				...boxCss(block.box),
+				// The bullets live in the left padding. The compiler writes the
+				// same indent (LIST_INDENT in services/mail-layout.ts), and only
+				// while the box has no padding of its own, which is when this
+				// box's own padding here is all zero too.
+				...(list && noPadding(block.box.padding) ? { paddingLeft: LIST_INDENT } : {}),
 				...host.place,
 			};
 			// The author's own markup, shown the way it will be sent. It is
 			// sanitised by the compiler on save and again on render, and this
 			// surface is not where a message from anybody else is displayed.
-			const markup = { __html: block.html || "Tekst" };
-			// A paragraph, as the compiler writes it, unless the markup has
-			// paragraphs of its own (textTag in services/mail-layout.ts).
-			const Tag = /<p[\s>]/i.test(block.html) ? "div" : "p";
-			return block.text.verticalAlign === "top" ? (
+			const markup = { __html: block.html || (list ? "<li>Punt</li>" : "Tekst") };
+			// Written as its own tag, and a plain paragraph as the compiler
+			// writes one, unless the markup has paragraphs of its own (textTag
+			// in services/mail-layout.ts).
+			const Tag = block.tag === "p" ? (/<p[\s>]/i.test(block.html) ? "div" : "p") : block.tag;
+			return list || block.text.verticalAlign === "top" ? (
 				<Tag {...own} className={host.className} style={style} dangerouslySetInnerHTML={markup} />
 			) : (
 				<Tag {...own} className={host.className} style={style}>
@@ -465,12 +477,14 @@ export function CanvasView({
 				<InlineText
 					key={block.id}
 					rich
-					tag="div"
+					tag={editTag(block.tag)}
 					value={block.html}
 					style={editStyle(block, layout.fonts)}
 					caret={editing.caret}
 					host={frame}
-					onCommit={(html) => onEdit(block.id, { html } as Partial<MailBlock>)}
+					onCommit={(html) =>
+							onEdit(block.id, { html: block.tag === "ul" || block.tag === "ol" ? asListItems(html) : html } as Partial<MailBlock>)
+						}
 					onClose={() => onEditing(null)}
 				/>
 			) : (
@@ -571,7 +585,10 @@ export function CanvasView({
 				cellPadding={0}
 				cellSpacing={0}
 				onClick={(event) => select(event, columns.id)}
-				style={{ width: "100%", borderCollapse: "collapse", ...columnsCss(columns, topLevel) }}
+				// Separate, with no spacing: what a client draws for a table with no
+				// border-collapse of its own, which is what the message says, and the
+				// model in which a table's own padding and corners apply.
+				style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, ...columnsCss(columns, topLevel) }}
 				className={`outline-offset-[-2px] ${selected ? "outline-2 outline-[var(--accent)]" : "hover:outline-1 hover:outline-[var(--line-strong)]"}`}
 			>
 				<tbody>
@@ -617,7 +634,7 @@ export function CanvasView({
 						Empty
 					</span>
 				) : null}
-				{shown.map((node) => renderNode(node, cell.id, false))}
+				{shown.map((node) => renderNode(node, cell.id, true))}
 			</td>
 		);
 	};

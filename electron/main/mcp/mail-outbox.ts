@@ -86,7 +86,8 @@ const LAYOUT_SCHEMA = {
 		"sections: { [id]: { hidden, alignSelf, grow, layout, box } }, blocks: { [id]: { hidden, " +
 		"grow, alignSelf, box, text, ... } } }], keyed by the id of any container, columns table, " +
 		"cell or block, each holding only what changes at that width and narrower, as partial box " +
-		"and text styles; content is the same at every width. Colours are hex, #rrggbbaa for an " +
+		"and text styles (a cell can change only its box, and its width, vertical alignment and " +
+		"the table's gap are the same at every width); content is the same at every width. Colours are hex, #rrggbbaa for an " +
 		"opacity; images and links https only. Version 1, one level of sections holding blocks, " +
 		"is still accepted and read as each section becoming a section container. Call " +
 		"mail.templates.get on an existing template to see the shape, and mail.templates.preview " +

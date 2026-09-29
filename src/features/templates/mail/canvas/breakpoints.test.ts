@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { MailContainer, MailLayout } from "@shared/types";
+import type { MailBlock, MailContainer, MailLayout } from "@shared/types";
 import { addBreakpoint, absorb, copyOverrides, layoutAt, removeBreakpoint, renameBreakpoint, resizeBreakpoint } from "./breakpoints";
-import { emptyLayout, insertNode, newBlock, updateBlock, updateSection } from "./canvas-actions";
+import {
+	emptyLayout,
+	findCell,
+	insertNode,
+	newBlock,
+	newColumns,
+	updateBlock,
+	updateCell,
+	updateColumns,
+	updateSection,
+} from "./canvas-actions";
 
-/** Every top-level child in these tests is a section: the only shape this phase builds. */
+/** Every top-level child in these tests is a section, which is how a new canvas starts. */
 function asSection(node: { id: string }): MailContainer {
 	return node as MailContainer;
 }
@@ -93,6 +103,40 @@ describe("breakpoints on the canvas", () => {
 		const next = absorb(added.layout, added.id, updateSection(layoutAt(added.layout, added.id), sectionId, { hidden: true }));
 		expect(next.children[0]?.hidden).toBe(false);
 		expect(next.breakpoints[0]?.sections[sectionId]).toEqual({ hidden: true });
+	});
+
+	it("hides a columns table and styles one of its cells at one breakpoint only", () => {
+		const base = emptyLayout();
+		const columns = newColumns(base);
+		const layout = insertNode(base, null, columns, null);
+		const cell = columns.rows[0]!.cells[0]!;
+		const added = addBreakpoint(layout)!;
+		const drawn = layoutAt(added.layout, added.id);
+		const hiddenTable = absorb(added.layout, added.id, updateColumns(drawn, columns.id, { hidden: true }));
+		expect(hiddenTable.children[1]?.hidden).toBe(false);
+		expect(hiddenTable.breakpoints[0]?.sections[columns.id]).toEqual({ hidden: true });
+
+		const padded = absorb(
+			added.layout,
+			added.id,
+			updateCell(drawn, cell.id, { box: { ...findCell(drawn, cell.id)!.box, padding: { top: 4, right: 4, bottom: 4, left: 4 } } }),
+		);
+		expect(padded.breakpoints[0]?.sections[cell.id]).toEqual({ box: { padding: { top: 4, right: 4, bottom: 4, left: 4 } } });
+		expect(findCell(padded, cell.id)?.box.padding.top).toBe(0);
+		expect(findCell(layoutAt(padded, added.id), cell.id)?.box.padding.top).toBe(4);
+	});
+
+	it("hides a block inside a cell at one breakpoint only", () => {
+		const base = emptyLayout();
+		const columns = newColumns(base);
+		const layout = insertNode(base, null, columns, null);
+		const inner = columns.rows[0]!.cells[1]!.children[0]!;
+		const added = addBreakpoint(layout)!;
+		const drawn = layoutAt(added.layout, added.id);
+		const next = absorb(added.layout, added.id, updateBlock(drawn, inner.id, { hidden: true } as Partial<MailBlock>));
+		expect(next.breakpoints[0]?.blocks[inner.id]).toEqual({ hidden: true });
+		const table = next.children[1];
+		expect(table?.kind === "columns" ? table.rows[0]?.cells[1]?.children[0]?.hidden : null).toBe(false);
 	});
 
 	it("renames, resizes and removes a breakpoint", () => {

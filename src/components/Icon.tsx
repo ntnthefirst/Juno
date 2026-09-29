@@ -187,6 +187,7 @@ export type IconName =
 	| "tool-input"
 	| "tool-divider"
 	| "tool-spacer"
+	| "tool-columns"
 	| "view-canvas"
 	| "view-code"
 	| "device-desktop"
@@ -273,6 +274,12 @@ const DRAWN = {
 		<>
 			<rect x="3" y="7" width="18" height="10" rx="3" />
 			<path d="M8.5 12h7" />
+		</>,
+	),
+	columns: glyph(
+		<>
+			<rect x="3.5" y="5" width="7.5" height="14" rx="1.5" />
+			<rect x="13" y="5" width="7.5" height="14" rx="1.5" />
 		</>,
 	),
 	selfHStart: glyph(
@@ -516,6 +523,7 @@ const ICONS: Record<IconName, Glyph> = {
 	"tool-input": VariableIcon,
 	"tool-divider": MinusIcon,
 	"tool-spacer": ArrowsUpDownIcon,
+	"tool-columns": DRAWN.columns,
 	"view-canvas": CursorArrowRaysIcon,
 	"view-code": CodeBracketIcon,
 	"device-desktop": ComputerDesktopIcon,

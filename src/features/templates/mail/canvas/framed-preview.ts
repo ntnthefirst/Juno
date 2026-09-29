@@ -1,3 +1,5 @@
+import { withoutRemoteImages } from "./remote-image";
+
 /**
  * A rendered message as a preview frame in this window can show it.
  *
@@ -7,8 +9,12 @@
  * of the console, and the faces the editor already loaded go in. A Google font
  * then shows the way the recipient's client will show it; a font linked from
  * anywhere else shows its fallback, the same as on the canvas.
+ *
+ * Pictures at a web address are treated the same way: the window loads no
+ * image but its own, so each becomes a box saying the reader's mail client
+ * loads it (remote-image.ts). What is sent is untouched.
  */
 export function framed(html: string, fontCss: string): string {
-	const unlinked = html.replace(/<link rel="stylesheet" href="[^"]*">/g, "");
+	const unlinked = withoutRemoteImages(html).replace(/<link rel="stylesheet" href="[^"]*">/g, "");
 	return fontCss ? unlinked.replace("</head>", `<style>${fontCss}</style></head>`) : unlinked;
 }

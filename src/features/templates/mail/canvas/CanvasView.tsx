@@ -21,6 +21,8 @@ import {
 import { codeMarkup } from "./code-markup";
 import { editTag } from "./inline-html";
 import { InlineText, type Caret } from "./InlineText";
+import { isDrawable } from "./remote-image";
+import { RemoteImage } from "./RemoteImage";
 
 function isContainer(node: MailNode): node is MailContainer {
 	return node.kind === "container";
@@ -170,17 +172,23 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 			);
 		}
 		case "image": {
+			// Only a picture Juno holds is drawn. A web address is the reader's
+			// mail client's to load, so it gets a box that says so (remote-image.ts).
 			const picture = block.src ? (
-				<img
-					src={block.src}
-					alt={block.alt}
-					style={{
-						display: "block",
-						maxWidth: "100%",
-						width: block.width ?? undefined,
-						height: "auto",
-					}}
-				/>
+				isDrawable(block.src) ? (
+					<img
+						src={block.src}
+						alt={block.alt}
+						style={{
+							display: "block",
+							maxWidth: "100%",
+							width: block.width ?? undefined,
+							height: "auto",
+						}}
+					/>
+				) : (
+					<RemoteImage alt={block.alt} width={block.width} />
+				)
 			) : null;
 			return picture ? (
 				<span

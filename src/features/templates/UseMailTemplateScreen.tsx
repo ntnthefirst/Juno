@@ -14,7 +14,7 @@ import { FormPage, type FormStep } from "../../components/FormPage";
 import { Select } from "../../components/Select";
 import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
-import { framed } from "./mail/canvas/framed-preview";
+import { framed } from "../../lib/framed-preview";
 import { useCanvasFonts } from "./mail/canvas/use-canvas-fonts";
 
 type UseMailTemplateScreenProps = {

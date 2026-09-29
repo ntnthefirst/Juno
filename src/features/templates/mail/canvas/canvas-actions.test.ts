@@ -56,6 +56,7 @@ function newColumns(name = "Columns"): MailColumns {
 		box: {
 			fill: null,
 			padding: { top: 0, right: 0, bottom: 0, left: 0 },
+			margin: { top: 0, right: 0, bottom: 0, left: 0 },
 			borderWidth: 0,
 			borderColor: null,
 			borderStyle: "solid",
@@ -86,6 +87,7 @@ function emptyBoxLike() {
 	return {
 		fill: null,
 		padding: { top: 0, right: 0, bottom: 0, left: 0 },
+		margin: { top: 0, right: 0, bottom: 0, left: 0 },
 		borderWidth: 0,
 		borderColor: null,
 		borderStyle: "solid" as const,

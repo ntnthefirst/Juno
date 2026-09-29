@@ -19,6 +19,10 @@
  * | Across (row) | a share of the room | no share | stretched down | not stretched |
  * | Grid | the cell's width | not offered | stretched down | not stretched |
  *
+ * A grid that does not stretch its items across their cells (its horizontal
+ * alignment is left, centre or right) gives every item the width of its
+ * content, so there fill is not offered and hug is.
+ *
  * Fixed is always the block's own number, a width that still gives way on a
  * narrow screen and a height the content can grow past.
  *
@@ -51,6 +55,11 @@ export function flowOf(section: MailContainer): Flow {
 /** Where a block sits across its section, with "auto" read as what the section says. */
 export function alignOf(block: MailBlock, section: MailContainer): MailAlign {
 	return block.alignSelf === "auto" ? section.layout.align : block.alignSelf;
+}
+
+/** Whether a container is a grid that stretches its items across their cells, which is what a grid does unless it is told otherwise. */
+function stretchesCells(section: MailContainer): boolean {
+	return section.layout.kind === "grid" && section.layout.justify === "stretch";
 }
 
 /** The block's own width in pixels, when it has one. */
@@ -94,7 +103,8 @@ export function widthModes(block: MailBlock, section: Placer): Sizing[] {
 		case "divider":
 			return ["fixed", "fill"];
 		default:
-			return flow === "grid" ? ["fixed", "fill"] : ["fixed", "hug", "fill"];
+			if (flow === "grid") return stretchesCells(section) ? ["fixed", "fill"] : ["fixed", "hug"];
+			return ["fixed", "hug", "fill"];
 	}
 }
 
@@ -120,7 +130,7 @@ export function widthSizing(block: MailBlock, section: Placer): Sizing {
 	// A rule with no width of its own is written at 100%.
 	if (block.kind === "divider") return "fill";
 	if (flow === "row") return block.grow > 0 ? "fill" : "hug";
-	if (flow === "grid") return "fill";
+	if (flow === "grid") return stretchesCells(section) ? "fill" : "hug";
 	// A picture pushed to the middle or the side by its margins cannot be
 	// stretched, whatever the section says, and neither can anything that is
 	// not set to stretch.

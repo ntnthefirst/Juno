@@ -84,7 +84,7 @@ describe("compileLayout", () => {
 
 	it("emits grid declarations with a column count", () => {
 		const html = compileLayout(
-			layoutWith([sectionWith([text("Dag")], { kind: "grid", columns: 3, gap: 8, align: "start" })]),
+			layoutWith([sectionWith([text("Dag")], { kind: "grid", columns: 3, gap: 8, align: "start", justify: "stretch" })]),
 		);
 		expect(html).toContain("display:grid");
 		expect(html).toContain("grid-template-columns:repeat(3,1fr)");
@@ -197,10 +197,10 @@ describe("layoutFromHtml", () => {
 
 	it("reads a grid section back as a grid", () => {
 		const html = compileLayout(
-			layoutWith([sectionWith([text("a")], { kind: "grid", columns: 4, gap: 10, align: "center" })]),
+			layoutWith([sectionWith([text("a")], { kind: "grid", columns: 4, gap: 10, align: "center", justify: "stretch" })]),
 		);
 		const section = layoutFromHtml(html).children[0] as MailContainer;
-		expect(section.layout).toEqual({ kind: "grid", columns: 4, gap: 10, align: "center" });
+		expect(section.layout).toEqual({ kind: "grid", columns: 4, gap: 10, align: "center", justify: "stretch" });
 	});
 
 	it("hands an author's own declarations back to the custom CSS field", () => {

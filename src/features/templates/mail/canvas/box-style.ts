@@ -15,6 +15,7 @@
  */
 import type { CSSProperties } from "react";
 import type {
+	MailBlock,
 	MailBoxStyle,
 	MailColumns,
 	MailColumnsCell,
@@ -25,6 +26,7 @@ import type {
 	MailContainer,
 	MailSelfAlign,
 	MailSpacing,
+	MailTextAlign,
 	MailTextStyle,
 	MailWeight,
 } from "@shared/types";
@@ -376,6 +378,43 @@ function placementCss(node: { grow: number; alignSelf: MailSelfAlign }, topLevel
 	return topLevel ? sectionPlaceCss(node) : placeCss(node);
 }
 
+/** The sides of an element that its own alignment already gives `auto` margins to. */
+export type AutoSides = { left: boolean; right: boolean };
+
+const NO_AUTO: AutoSides = { left: false, right: false };
+
+/** A container or columns table in plain flow, centred or pushed to the end (matches autoSidesInFlow). */
+export function flowAutoSides(node: { alignSelf: MailSelfAlign }, inFlow: boolean): AutoSides {
+	if (!inFlow) return NO_AUTO;
+	return { left: node.alignSelf === "center" || node.alignSelf === "end", right: node.alignSelf === "center" };
+}
+
+/** A picture centred or pushed right by its margins, wherever it sits. */
+export function pictureAutoSides(align: MailTextAlign): AutoSides {
+	return { left: align === "center" || align === "right", right: align === "center" };
+}
+
+/**
+ * The margin, one side at a time and only where it is set, leaving an `auto`
+ * side to the placement that gave it one (matches marginDeclarations).
+ */
+export function marginCss(margin: MailSpacing, auto: AutoSides = NO_AUTO): CSSProperties {
+	// A side that is not set is left out rather than set to undefined: spread
+	// after the placement, an undefined would wipe the `auto` it wrote.
+	const css: CSSProperties = {};
+	if (margin.top > 0) css.marginTop = margin.top;
+	if (margin.right > 0 && !auto.right) css.marginRight = margin.right;
+	if (margin.bottom > 0) css.marginBottom = margin.bottom;
+	if (margin.left > 0 && !auto.left) css.marginLeft = margin.left;
+	return css;
+}
+
+/** A block's margin, with the sides a picture's alignment owns left out. A spacer and code have none. */
+export function blockMarginCss(block: MailBlock): CSSProperties {
+	if (block.kind === "spacer" || block.kind === "html") return {};
+	return marginCss(block.box.margin, block.kind === "image" ? pictureAutoSides(block.align) : NO_AUTO);
+}
+
 /**
  * A container's own declarations: its layout, its box, and its place in
  * whatever parent it sits in. `topLevel` is true for a child of the frame or of
@@ -383,7 +422,11 @@ function placementCss(node: { grow: number; alignSelf: MailSelfAlign }, topLevel
  * inside another container is placed by that container's flex or grid.
  */
 export function sectionCss(section: MailContainer, topLevel: boolean): CSSProperties {
-	const box = { ...boxCss(section.box), ...placementCss(section, topLevel) };
+	const box = {
+		...boxCss(section.box),
+		...placementCss(section, topLevel),
+		...marginCss(section.box.margin, flowAutoSides(section, topLevel)),
+	};
 	if (section.layout.kind === "grid") {
 		return {
 			...box,
@@ -391,6 +434,8 @@ export function sectionCss(section: MailContainer, topLevel: boolean): CSSProper
 			gridTemplateColumns: `repeat(${section.layout.columns},1fr)`,
 			gap: section.layout.gap,
 			alignItems: section.layout.align === "stretch" ? "stretch" : section.layout.align,
+			// Stretch is the grid's own and writes nothing (matches layoutDeclarations).
+			justifyItems: section.layout.justify === "stretch" ? undefined : section.layout.justify,
 		};
 	}
 	const justify = {
@@ -413,7 +458,11 @@ export function sectionCss(section: MailContainer, topLevel: boolean): CSSProper
 
 /** A columns table's own declarations: its box and its place. No display of its own; it is a table already. */
 export function columnsCss(columns: MailColumns, topLevel: boolean): CSSProperties {
-	return { ...boxCss(columns.box), ...placementCss(columns, topLevel) };
+	return {
+		...boxCss(columns.box),
+		...placementCss(columns, topLevel),
+		...marginCss(columns.box.margin, flowAutoSides(columns, topLevel)),
+	};
 }
 
 /** A cell's own declarations: matches compileColumnsCell, bar the gap padding, which the caller adds (it depends on the cell's position in its row). */

@@ -1653,6 +1653,33 @@ export interface MailAccount extends Standard {
 }
 
 /**
+ * A removed account that still has mail stored here, and how much. Counts
+ * cover every row Juno holds for the account, including messages the server
+ * has since deleted, because a purge removes those too.
+ */
+export interface RemovedMailAccount {
+	id: string;
+	label: string;
+	email: string;
+	/** When the account was removed. */
+	removedAt: Iso;
+	messages: number;
+	attachments: number;
+	/** Messages composed here for this account: drafts, queued and sent. */
+	outboxMessages: number;
+	/** The sizes recorded for the attachments. Bodies live in the database, not on disk. */
+	attachmentBytes: number;
+}
+
+/** What a purge removed. `leftOnDisk` counts files or folders that could not be deleted. */
+export interface MailPurgeResult {
+	messages: number;
+	attachments: number;
+	outboxMessages: number;
+	leftOnDisk: number;
+}
+
+/**
  * Server settings guessed from an address. Filled into the form for a person to
  * look at, never saved on its own: `source` says how much to trust it, and the
  * connection test is what settles it.

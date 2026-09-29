@@ -1,4 +1,4 @@
-import { withoutRemoteImages } from "./remote-image";
+import { withoutRemoteImages } from "../../../../lib/remote-image";
 
 /**
  * A rendered message as a preview frame in this window can show it.

@@ -1,5 +1,5 @@
 import { Icon } from "../../../../components/Icon";
-import { REMOTE_IMAGE_NOTE } from "./remote-image";
+import { REMOTE_IMAGE_NOTE } from "../../../../lib/remote-image";
 
 type RemoteImageProps = {
 	alt: string;

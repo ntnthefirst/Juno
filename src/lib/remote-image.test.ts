@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { framed } from "./framed-preview";
+import { framed } from "../features/templates/mail/canvas/framed-preview";
 import { isDrawable, REMOTE_IMAGE_NOTE, withoutRemoteImages } from "./remote-image";
 
 describe("isDrawable", () => {

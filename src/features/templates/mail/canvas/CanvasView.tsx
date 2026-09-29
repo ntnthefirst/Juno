@@ -21,7 +21,7 @@ import {
 import { codeMarkup } from "./code-markup";
 import { editTag } from "./inline-html";
 import { InlineText, type Caret } from "./InlineText";
-import { isDrawable } from "./remote-image";
+import { isDrawable } from "../../../../lib/remote-image";
 import { RemoteImage } from "./RemoteImage";
 
 function isContainer(node: MailNode): node is MailContainer {

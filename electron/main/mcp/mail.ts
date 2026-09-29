@@ -419,7 +419,8 @@ export const mailTools: ToolDescriptor[] = [
 		title: "Read a thread",
 		description:
 			"A thread with every message's headers, flags and attachment list, oldest first. Bodies " +
-			"come from mail.messages.body.",
+			"come from mail.messages.body. `outgoing` lists what Juno sent into the thread that the " +
+			"Sent folder has not returned yet, with its body; it empties by itself after the next sync.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {

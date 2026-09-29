@@ -3169,6 +3169,24 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (closed !== "ok") throw new Error(`Smoke: compose close ${closed}`);
 
+									// A reply sent from Juno, with the Sent folder not synced yet. The
+									// reader has to list it from the outbox in the thread opened below.
+									const { getThread: getSmokeThread, listThreads: listSmokeThreads } = await import("./main/services/mail-threads");
+									const smokeOutbox = await import("./main/services/mail-outbox");
+									const [newestThread] = await listSmokeThreads({ limit: 1 });
+									const answered = newestThread ? (await getSmokeThread(newestThread.id))?.messages.at(-1) : undefined;
+									if (!newestThread || !answered) throw new Error("Smoke: no thread to answer");
+									const smokeReply = await smokeOutbox.createDraft({
+										accountId: answered.accountId,
+										to: [answered.from ?? { name: null, address: "laura@obet.be" }],
+										subject: `Re: ${newestThread.subject}`,
+										bodyText: "Smoke reply, sent before the Sent folder is synced.",
+										replyToMessageId: answered.id,
+									});
+									await smokeOutbox.requestSend(smokeReply.id, { actor: "user" });
+									await mailSend.processQueue();
+									if ((await smokeOutbox.get(smokeReply.id))?.state !== "sent") throw new Error("Smoke: the reply did not send");
+
 									// Opens the newest thread, so the reader and its frame are in
 									// the picture, and checks the frame actually loaded a body.
 									const mailResponses: { url: string; statusCode: number }[] = [];
@@ -3185,6 +3203,18 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: mail reader ${opened}`);
+									const outgoingShown = await window.webContents.executeJavaScript(
+										`(async () => {
+											const cards = document.querySelectorAll("article[data-outgoing]");
+											if (cards.length !== 1) return "the sent reply is not listed in its thread";
+											cards[0].scrollIntoView({ block: "center" });
+											await new Promise((r) => setTimeout(r, 300));
+											return "ok";
+										})()`,
+									);
+									if (outgoingShown !== "ok") throw new Error(`Smoke: mail reader ${outgoingShown}`);
+									await shoot("mail-outgoing");
+									await window.webContents.executeJavaScript(`document.querySelector("article")?.closest(".overflow-y-auto")?.scrollTo(0, 0)`);
 									// A frame the CSP refused would sit on about:blank. One that
 									// navigated to the mail origin proves the scheme host answered
 									// and the frame-src rule let it through.

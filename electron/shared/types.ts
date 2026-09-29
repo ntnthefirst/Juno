@@ -1834,9 +1834,37 @@ export interface MailMessageBody {
 	links: { href: string; text: string }[];
 }
 
+/**
+ * A message Juno sent (or is sending) in this thread that has not come back
+ * from the server's Sent folder yet. It is read from the outbox, and it drops
+ * out of the thread the moment a synced message with the same Message-ID
+ * exists, so no message is ever listed twice.
+ */
+export interface MailThreadOutgoing {
+	/** The outbox row's id. Not a mail message id, so nothing else accepts it. */
+	id: string;
+	accountId: string;
+	state: "queued" | "sending" | "sent";
+	from: MailAddress;
+	to: MailAddress[];
+	cc: MailAddress[];
+	subject: string;
+	bodyText: string;
+	bodyHtml: string | null;
+	messageId: string;
+	/** When it went out, or when it was queued while it has not gone yet. */
+	date: Iso;
+	attachments: MailOutboxAttachment[];
+}
+
 export interface MailThread {
 	summary: MailThreadSummary;
 	messages: MailMessage[];
+	/**
+	 * What was sent from Juno into this thread and is not among `messages` yet,
+	 * oldest first. Empty once the Sent folder has been synced.
+	 */
+	outgoing: MailThreadOutgoing[];
 }
 
 export interface MailThreadListQuery {

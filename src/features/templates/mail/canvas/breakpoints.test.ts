@@ -59,6 +59,24 @@ describe("breakpoints on the canvas", () => {
 		expect(fontSize(layoutAt(next, added.id), blockId)).toBe(13);
 	});
 
+	it("keeps a margin and a padding set at a breakpoint to that breakpoint", () => {
+		const { layout, sectionId, blockId } = withText();
+		const added = addBreakpoint(layout)!;
+		const drawn = layoutAt(added.layout, added.id);
+		const block = asSection(drawn.children[0]!).children[0];
+		if (block?.kind !== "text") throw new Error("not text");
+		let edited = updateBlock(drawn, blockId, { box: { ...block.box, margin: { top: 12, right: 0, bottom: 0, left: 0 } } });
+		const section = asSection(edited.children[0]!);
+		edited = updateSection(edited, sectionId, { box: { ...section.box, padding: { top: 4, right: 4, bottom: 4, left: 4 } } });
+		const next = absorb(added.layout, added.id, edited);
+		expect(next.breakpoints[0]?.blocks[blockId]).toEqual({ box: { margin: { top: 12, right: 0, bottom: 0, left: 0 } } });
+		expect(next.breakpoints[0]?.sections[sectionId]).toEqual({ box: { padding: { top: 4, right: 4, bottom: 4, left: 4 } } });
+		const stored = asSection(next.children[0]!).children[0];
+		expect(stored?.kind === "text" ? stored.box.margin.top : null).toBe(0);
+		const phone = asSection(layoutAt(next, added.id).children[0]!).children[0];
+		expect(phone?.kind === "text" ? phone.box.margin.top : null).toBe(12);
+	});
+
 	it("sends what a block says to the default, because the words are the same at every width", () => {
 		const { layout, blockId } = withText();
 		const added = addBreakpoint(layout)!;

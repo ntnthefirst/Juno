@@ -3,6 +3,7 @@ import type { MailBlock, MailColumns, MailColumnsCell, MailContainer, MailFont, 
 import { Icon } from "../../../../components/Icon";
 import { asListItems, canMoveInto, firstChildOf } from "./canvas-actions";
 import {
+	blockMarginCss,
 	boxCss,
 	cellCss,
 	CLIENT_DEFAULTS,
@@ -458,6 +459,7 @@ export function CanvasView({
 		const overThis = over !== null && over.parentId === parentId && over.beforeId === block.id;
 		const place: CSSProperties = {
 			...placeCss(block),
+			...blockMarginCss(block),
 			...(block.kind === "html" ? placementFromCss(block.css) : {}),
 		};
 

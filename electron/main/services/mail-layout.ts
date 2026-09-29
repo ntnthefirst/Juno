@@ -103,6 +103,7 @@ export function emptyBox(): MailBoxStyle {
 	return {
 		fill: null,
 		padding: noSpacing(),
+		margin: noSpacing(),
 		borderWidth: 0,
 		borderColor: null,
 		borderStyle: "solid",
@@ -542,6 +543,7 @@ function parseBox(raw: unknown): MailBoxStyle {
 	return {
 		fill: parseFill(raw.fill, raw.background),
 		padding: parseSpacing(raw.padding),
+		margin: parseSpacing(raw.margin),
 		borderWidth: toNum(raw.borderWidth, 0, 0, 40),
 		borderColor: toColor(raw.borderColor),
 		borderStyle: toStrokeStyle(raw.borderStyle),
@@ -621,6 +623,7 @@ function parseSectionLayout(raw: unknown): MailSectionLayout {
 			columns: toNum(raw.columns, 2, 1, 6),
 			gap: toNum(raw.gap, 12, 0, 120),
 			align: toAlign(raw.align),
+			justify: toAlign(raw.justify),
 		};
 	}
 	return {
@@ -1655,6 +1658,34 @@ function placementDeclarations(node: { grow: number; alignSelf: MailSelfAlign },
 	return inFlow ? sectionPlaceDeclarations(node) : placeDeclarations(node);
 }
 
+/** The sides of an element that its own alignment already gives `auto` margins to. */
+type AutoSides = { left: boolean; right: boolean };
+
+const NO_AUTO: AutoSides = { left: false, right: false };
+
+/** A container or columns table in plain flow, centred or pushed to the end (matches sectionPlaceDeclarations). */
+function autoSidesInFlow(node: { alignSelf: MailSelfAlign }, inFlow: boolean): AutoSides {
+	if (!inFlow) return NO_AUTO;
+	return { left: node.alignSelf === "center" || node.alignSelf === "end", right: node.alignSelf === "center" };
+}
+
+/**
+ * The box's margin, one side at a time and only where it is set, written after
+ * the element's own placement. A side in `auto` is left to the placement that
+ * put it there, so a centred element stays centred whatever number is stored.
+ * Longhands rather than the shorthand: a text block already carries
+ * `margin:0`, and a picture `margin:0 auto`, and a shorthand here would undo
+ * whichever side the box did not set.
+ */
+function marginDeclarations(margin: MailSpacing, auto: AutoSides = NO_AUTO): (string | null)[] {
+	return [
+		margin.top > 0 ? `margin-top:${margin.top}px` : null,
+		margin.right > 0 && !auto.right ? `margin-right:${margin.right}px` : null,
+		margin.bottom > 0 ? `margin-bottom:${margin.bottom}px` : null,
+		margin.left > 0 && !auto.left ? `margin-left:${margin.left}px` : null,
+	];
+}
+
 const JUSTIFY_CSS: Record<MailJustify, string> = {
 	start: "flex-start",
 	center: "center",
@@ -1677,7 +1708,10 @@ function layoutDeclarations(layout: MailSectionLayout): string[] {
 			`grid-template-columns:repeat(${layout.columns},1fr)`,
 			`gap:${layout.gap}px`,
 			`align-items:${ALIGN_CSS[layout.align]}`,
-		];
+			// A grid stretches its items across their cells on its own, so stretch
+			// writes nothing and a grid saved without this field compiles as it did.
+			layout.justify === "stretch" ? null : `justify-items:${ALIGN_CSS[layout.justify]}`,
+		].filter((declaration): declaration is string => declaration !== null);
 	}
 	return [
 		"display:flex",
@@ -1729,6 +1763,7 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				...verticalDeclarations(block.text),
 				...boxDeclarations(block.box),
 				...place,
+				...marginDeclarations(block.box.margin),
 			];
 		case "text":
 			return [
@@ -1744,6 +1779,7 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				...(isListTag(block.tag) ? [] : verticalDeclarations(block.text)),
 				...boxDeclarations(block.box),
 				...place,
+				...marginDeclarations(block.box.margin),
 			];
 		case "button": {
 			const padded = paddingDeclaration(block.box.padding) !== null;
@@ -1758,6 +1794,7 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				...boxDeclarations({ ...block.box, fill: null, borderRadius: block.radius }),
 				padded ? null : "padding:10px 18px",
 				...place,
+				...marginDeclarations(block.box.margin),
 			];
 		}
 		case "image":
@@ -1770,6 +1807,10 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				block.align === "center" ? "margin:0 auto" : block.align === "right" ? "margin-left:auto" : null,
 				...boxDeclarations({ ...block.box, width: null }),
 				...place,
+				...marginDeclarations(block.box.margin, {
+					left: block.align === "center" || block.align === "right",
+					right: block.align === "center",
+				}),
 			];
 		case "divider":
 			return [
@@ -1782,6 +1823,7 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				block.box.width !== null ? "max-width:100%" : null,
 				block.box.customCss,
 				...place,
+				...marginDeclarations(block.box.margin),
 			];
 		case "spacer":
 			return [`height:${block.height}px`, "line-height:0", "font-size:0", ...place];
@@ -1789,9 +1831,21 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 			if (!block.inputKey) return ["color:#5d5e70", "font-size:12px"];
 			const declared = inputs.find((input) => input.key === block.inputKey);
 			if (declared?.kind === "image") {
-				return ["display:block", "max-width:100%", "height:auto", ...boxDeclarations(block.box), ...place];
+				return [
+					"display:block",
+					"max-width:100%",
+					"height:auto",
+					...boxDeclarations(block.box),
+					...place,
+					...marginDeclarations(block.box.margin),
+				];
 			}
-			return [...textDeclarations(block.text, fonts), ...boxDeclarations(block.box), ...place];
+			return [
+				...textDeclarations(block.text, fonts),
+				...boxDeclarations(block.box),
+				...place,
+				...marginDeclarations(block.box.margin),
+			];
 		}
 		case "html": {
 			const css = sanitiseDeclarations(block.css) || null;
@@ -1917,12 +1971,17 @@ function containerDeclarations(container: MailContainer, inFlow: boolean): (stri
 		...layoutDeclarations(container.layout),
 		...boxDeclarations(container.box),
 		...placementDeclarations(container, inFlow),
+		...marginDeclarations(container.box.margin, autoSidesInFlow(container, inFlow)),
 	];
 }
 
 /** A columns table's declarations. A `<table>` needs no `display:block` fallback: every client already treats it as one. */
 function columnsDeclarations(columns: MailColumns, inFlow: boolean): (string | null)[] {
-	return [...boxDeclarations(columns.box), ...placementDeclarations(columns, inFlow)];
+	return [
+		...boxDeclarations(columns.box),
+		...placementDeclarations(columns, inFlow),
+		...marginDeclarations(columns.box.margin, autoSidesInFlow(columns, inFlow)),
+	];
 }
 
 /** Half the gap on each inner side, so the total between two cells is the gap and the outer edges carry none of it. */
@@ -2100,8 +2159,11 @@ const RESET: Record<string, string> = {
 	flex: "0 1 auto",
 	"align-self": "auto",
 	margin: "0",
+	"margin-top": "0",
+	"margin-bottom": "0",
 	"margin-left": "0",
 	"margin-right": "0",
+	"justify-items": "stretch",
 };
 
 /** A declaration list as property to value, the last of a repeated property winning as it does in CSS. */
@@ -2439,6 +2501,10 @@ const BOX_PROPERTIES = [
 	"background-color",
 	"background-image",
 	"padding",
+	"margin-top",
+	"margin-right",
+	"margin-bottom",
+	"margin-left",
 	"border",
 	"border-top",
 	"border-right",
@@ -2584,6 +2650,12 @@ function readPadding(map: Declarations): MailSpacing {
 	return { top: a, right: b, bottom: c, left: d };
 }
 
+/** The margin the compiler wrote, side by side. An `auto` side is the placement's, so it reads as zero. */
+function readMargin(map: Declarations): MailSpacing {
+	const side = (property: string): number => Math.min(Math.max(px(map, property) ?? 0, 0), 200);
+	return { top: side("margin-top"), right: side("margin-right"), bottom: side("margin-bottom"), left: side("margin-left") };
+}
+
 type Stroke = { width: number; color: MailColor | null; style: MailStrokeStyle; sides: MailSides };
 
 const STROKE = /^(\d+(?:\.\d+)?)px\s+(solid|dashed|dotted)\s+(.+)$/i;
@@ -2630,6 +2702,7 @@ function readBox(map: Declarations, extraOwned: string[] = [], sides = true): Ma
 	return {
 		fill: readFill(map),
 		padding: readPadding(map),
+		margin: readMargin(map),
 		borderWidth: stroke.width,
 		borderColor: stroke.color,
 		borderStyle: stroke.style,
@@ -2891,6 +2964,7 @@ function readSectionLayout(map: Declarations): MailSectionLayout {
 			columns: columns ? Math.min(Math.max(Number.parseInt(columns[1] ?? "2", 10), 1), 6) : 2,
 			gap: px(map, "gap") ?? 12,
 			align: alignFromCss(map.get("align-items")),
+			justify: alignFromCss(map.get("justify-items")),
 		};
 	}
 	return {
@@ -2939,6 +3013,7 @@ const SECTION_PROPERTIES = [
 	"flex-direction",
 	"justify-content",
 	"align-items",
+	"justify-items",
 	"gap",
 	"flex-wrap",
 	"grid-template-columns",

@@ -23,7 +23,7 @@ function row(): MailContainer {
 }
 
 function grid(): MailContainer {
-	return { ...emptySection("Grid"), layout: { kind: "grid", columns: 2, gap: 8, align: "stretch" } };
+	return { ...emptySection("Grid"), layout: { kind: "grid", columns: 2, gap: 8, align: "stretch", justify: "stretch" } };
 }
 
 /** Applies a patch the way the editor does, through updateBlock. */
@@ -140,6 +140,13 @@ describe("what each block can be given", () => {
 		const divider = newBlock("divider");
 		expect(widthModes(divider, column())).toEqual(["fixed", "fill"]);
 		expect(heightModes(divider)).toEqual([]);
+	});
+
+	it("offers hug and not fill in a grid that does not stretch its cells", () => {
+		const centred = { ...grid(), layout: { kind: "grid" as const, columns: 2, gap: 8, align: "stretch" as const, justify: "center" as const } };
+		expect(widthModes(newBlock("text"), centred)).toEqual(["fixed", "hug"]);
+		expect(widthSizing(newBlock("text"), centred)).toBe("hug");
+		expect(widthSizing(newBlock("text"), grid())).toBe("fill");
 	});
 
 	it("offers no hug in a grid cell", () => {

@@ -10,6 +10,7 @@
  */
 import { useId, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "../../../../components/Icon";
+import type { Lit, Spot } from "./alignment";
 
 const CONTROL =
 	"h-[28px] w-full min-w-0 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-2 text-[length:var(--text-sm)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none";
@@ -513,5 +514,134 @@ export function PanelNote({ children, tone = "muted" }: PanelNoteProps) {
 		>
 			{children}
 		</p>
+	);
+}
+
+type AlignmentBoxProps = {
+	label: string;
+	/** How strongly the place at (column, row) is lit. */
+	lit: (column: Spot, row: Spot) => Lit;
+	onPlace: (column: Spot, row: Spot) => void;
+};
+
+const COLUMN_NAMES = ["left", "centre", "right"] as const;
+const ROW_NAMES = ["top", "middle", "bottom"] as const;
+
+/**
+ * Figma's 3 by 3 alignment box: nine places, one click setting where the
+ * content sits along the page and down it. A place is lit when it is the
+ * value; a line of them is lit when one axis has no place of its own
+ * (stretched, or spread by an Auto gap) and the other picks the line.
+ */
+export function AlignmentBox({ label, lit, onPlace }: AlignmentBoxProps) {
+	return (
+		<div
+			role="group"
+			aria-label={label}
+			className="grid w-[108px] flex-none grid-cols-3 gap-px rounded-[var(--radius-sm)] bg-[var(--sunken)] p-px"
+		>
+			{ROW_NAMES.flatMap((rowName, row) =>
+				COLUMN_NAMES.map((columnName, column) => {
+					const state = lit(column as Spot, row as Spot);
+					const name = `Align ${rowName} ${columnName}`;
+					return (
+						<button
+							key={name}
+							type="button"
+							aria-label={name}
+							title={name}
+							aria-pressed={state === "on"}
+							data-lit={state}
+							onClick={() => onPlace(column as Spot, row as Spot)}
+							className={`flex h-[28px] items-center justify-center rounded-[3px] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
+								state === "on"
+									? "bg-[var(--surface)] shadow-[var(--shadow-popover)]"
+									: state === "line"
+										? "bg-[var(--accent-soft)]"
+										: "hover:bg-[var(--hover)]"
+							}`}
+						>
+							<span
+								aria-hidden
+								className={`rounded-full ${
+									state === "on"
+										? "h-2 w-2 bg-[var(--accent)]"
+										: state === "line"
+											? "h-1.5 w-1.5 bg-[var(--accent)]/60"
+											: "h-1 w-1 bg-[var(--ink-faint)]"
+								}`}
+							/>
+						</button>
+					);
+				}),
+			)}
+		</div>
+	);
+}
+
+/** What the gap between a container's children can be: a number, or spread by the container. */
+export type GapMode = "fixed" | "between" | "around";
+
+const GAP_MODE_LABELS: Record<GapMode, string> = { fixed: "Fixed", between: "Auto", around: "Around" };
+
+type GapInputProps = {
+	label: string;
+	value: number;
+	onValue: (value: number) => void;
+	mode: GapMode;
+	/** Left out for a grid, which has no space to spread and so no choice to make. */
+	onMode?: (mode: GapMode) => void;
+	max?: number;
+};
+
+/**
+ * The gap between blocks, with Figma's Auto beside it inside the same field.
+ * Auto is space between; Around, which Figma has no name for, is space around.
+ * Either replaces the number, and going back to Fixed packs the blocks again.
+ */
+export function GapInput({ label, value, onValue, mode, onMode, max = 120 }: GapInputProps) {
+	const id = useId();
+	const [typed, setTyped] = useState<{ over: number; text: string } | null>(null);
+	const shown = typed && typed.over === value ? typed.text : String(value);
+
+	const commit = () => {
+		const parsed = Number.parseFloat(shown);
+		setTyped(null);
+		if (!Number.isFinite(parsed) || parsed === value) return;
+		onValue(Math.min(Math.max(parsed, 0), max));
+	};
+
+	return (
+		<div className="flex h-[28px] min-w-0 items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-2 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
+			<label htmlFor={id} title={label} className="flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+				Gap
+				<span className="sr-only">{label}</span>
+			</label>
+			<input
+				id={id}
+				inputMode="decimal"
+				readOnly={mode !== "fixed"}
+				value={mode === "fixed" ? shown : ""}
+				placeholder={mode === "fixed" ? undefined : GAP_MODE_LABELS[mode]}
+				onChange={(event) => setTyped({ over: value, text: event.target.value })}
+				onBlur={commit}
+				onKeyDown={(event) => {
+					if (event.key === "Enter") commit();
+				}}
+				className="tabular min-w-0 flex-1 bg-transparent text-[length:var(--text-sm)] text-[var(--ink)] placeholder:text-[var(--ink)] focus:outline-none"
+			/>
+			{onMode ? (
+				<select
+					aria-label={`${label} spacing`}
+					value={mode}
+					onChange={(event) => onMode(event.target.value as GapMode)}
+					className="h-[26px] max-w-[52px] flex-none cursor-pointer rounded-[var(--radius-sm)] bg-transparent pr-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] hover:text-[var(--ink)] focus:outline-none focus-visible:outline-2 focus-visible:outline-focus"
+				>
+					<option value="fixed">Fixed</option>
+					<option value="between">Auto (space between)</option>
+					<option value="around">Around (space around)</option>
+				</select>
+			) : null}
+		</div>
 	);
 }

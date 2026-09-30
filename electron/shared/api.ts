@@ -44,7 +44,12 @@ import type {
 	DocumentTemplatePatch,
 	GenerateDocumentInput,
 	GenerateDocumentResult,
-	ImportDocumentInput,
+	AddVersionInput,
+	DocumentVersion,
+	ImportAnalysis,
+	ImportFileInput,
+	ImportSource,
+	PickedPdf,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -54,6 +59,7 @@ import type {
 	ReminderPatch,
 	ReminderSuggestion,
 	SignDocumentInput,
+	SigningCertificateInfo,
 	AddressCandidate,
 	BackupInfo,
 	Client,
@@ -546,10 +552,20 @@ export interface JunoApi {
 		list(query?: { clientId?: string }): Promise<DocumentRecord[]>;
 		get(id: string): Promise<DocumentRecord | null>;
 		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
-		/** Copies an existing PDF in and records it as an imported document. */
-		import(input: ImportDocumentInput): Promise<DocumentRecord>;
-		/** Opens a file picker filtered to PDF and imports the choice for a client. Null when cancelled. */
-		chooseImport(clientId: string): Promise<DocumentRecord | null>;
+		/** Opens the file picker and hands back the chosen PDFs as bytes. Empty when cancelled. */
+		pickPdfs(): Promise<PickedPdf[]>;
+		/** Which existing documents an incoming file looks like, before anything is written. */
+		analyseImport(input: { source: ImportSource; clientId?: string | null }): Promise<ImportAnalysis>;
+		/** A new document from the file. Refuses a title the client already has. */
+		importFile(input: ImportFileInput): Promise<DocumentRecord>;
+		/** Adds the file to a document as a version, placed by the file's own date. */
+		addVersion(input: AddVersionInput): Promise<DocumentVersion>;
+		/** Newest first. */
+		versions(documentId: string): Promise<DocumentVersion[]>;
+		openVersion(versionId: string): Promise<void>;
+		revealVersion(versionId: string): Promise<void>;
+		/** The document's PDF, for the placement page. Never a path. */
+		readPdf(id: string): Promise<Uint8Array>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;
 		remove(id: string): Promise<DocumentRecord>;
 		restore(id: string): Promise<DocumentRecord>;
@@ -562,6 +578,17 @@ export interface JunoApi {
 		/** Opens the PDF in whatever the OS uses for one. */
 		openPdf(id: string): Promise<void>;
 		revealPdf(id: string): Promise<void>;
+	};
+
+	signingCertificate: {
+		/** Null when none is imported. Never returns the key or the file. */
+		get(): Promise<SigningCertificateInfo | null>;
+		/**
+		 * Opens a picker for a .p12 or .pfx and checks the passphrase opens it. Null
+		 * when cancelled. The passphrase is not kept, only asked for again at signing.
+		 */
+		choose(passphrase: string): Promise<SigningCertificateInfo | null>;
+		remove(): Promise<void>;
 	};
 
 	reminders: {

@@ -336,8 +336,14 @@ const api: JunoApi = {
 		list: (query) => call("documents.list", query),
 		get: (id) => call("documents.get", id),
 		generate: (input) => call("documents.generate", input),
-		import: (input) => call("documents.import", input),
-		chooseImport: (clientId) => call("documents.chooseImport", clientId),
+		pickPdfs: () => call("documents.pickPdfs"),
+		analyseImport: (input) => call("documents.analyseImport", input),
+		importFile: (input) => call("documents.importFile", input),
+		addVersion: (input) => call("documents.addVersion", input),
+		versions: (documentId) => call("documents.versions", documentId),
+		openVersion: (versionId) => call("documents.openVersion", versionId),
+		revealVersion: (versionId) => call("documents.revealVersion", versionId),
+		readPdf: (id) => call("documents.readPdf", id),
 		setStatus: (id, statusId) => call("documents.setStatus", id, statusId),
 		remove: (id) => call("documents.remove", id),
 		restore: (id) => call("documents.restore", id),
@@ -347,6 +353,12 @@ const api: JunoApi = {
 		signatures: (documentId) => call("documents.signatures", documentId),
 		openPdf: (id) => call("documents.openPdf", id),
 		revealPdf: (id) => call("documents.revealPdf", id),
+	},
+
+	signingCertificate: {
+		get: () => call("signingCertificate.get"),
+		choose: (passphrase) => call("signingCertificate.choose", passphrase),
+		remove: () => call("signingCertificate.remove"),
 	},
 
 	reminders: {

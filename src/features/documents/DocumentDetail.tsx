@@ -11,7 +11,6 @@ import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { ComposePage } from "../mail/ComposePage";
 import { DocumentPreview } from "./DocumentPreview";
-import { SignDialog } from "./SignDialog";
 
 /** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
 function formatDate(date: string | null): string {
@@ -69,6 +68,8 @@ type DocumentDetailProps = {
 	documentId: string;
 	onDeleted: (record: DocumentRecord) => void;
 	onChanged: () => void;
+	/** Signing is a page that takes the screen, so the screen owns it. */
+	onSign: (record: DocumentRecord) => void;
 	/** The screen shows this in the title bar trail. Called with the loaded
 	 * record's own title, so a rename elsewhere still reaches the trail rather
 	 * than leaving it stuck on whatever label the list row had. */
@@ -79,13 +80,13 @@ export function DocumentDetail({
 	documentId,
 	onDeleted,
 	onChanged,
+	onSign,
 	onTitleChange,
 }: DocumentDetailProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [action, setAction] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [previewing, setPreviewing] = useState(false);
-	const [signing, setSigning] = useState(false);
 	const [sending, setSending] = useState(false);
 	const [sent, setSent] = useState<string | null>(null);
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -252,7 +253,7 @@ export function DocumentDetail({
 				>
 					Show in folder
 				</Button>
-				<Button onClick={() => setSigning(true)}>Sign</Button>
+				<Button onClick={() => onSign(record)}>Sign</Button>
 				<Button onClick={() => setSending(true)}>Send by email</Button>
 				<Button variant="danger" onClick={() => setConfirmingDelete(true)}>
 					Delete
@@ -340,6 +341,15 @@ export function DocumentDetail({
 								>
 									{shortHash(signature.documentHash)}
 								</p>
+								{signature.digital ? (
+									<p
+										data-selectable
+										className="mt-0.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+									>
+										Digital signature, certificate issued to {signature.digital.subject} by{" "}
+										{signature.digital.issuer}
+									</p>
+								) : null}
 							</li>
 						))}
 					</ul>
@@ -352,18 +362,6 @@ export function DocumentDetail({
 					title={record.title}
 					isSpecimen={record.isSpecimen}
 					onClose={() => setPreviewing(false)}
-				/>
-			) : null}
-
-			{signing ? (
-				<SignDialog
-					record={record}
-					onClose={() => setSigning(false)}
-					onSigned={() => {
-						setSigning(false);
-						refresh();
-						onChanged();
-					}}
 				/>
 			) : null}
 

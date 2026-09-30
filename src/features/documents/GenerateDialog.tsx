@@ -12,6 +12,10 @@ import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 
 type GenerateDialogProps = {
+	/** Fixes the client, for a document started from that client's own page. */
+	lockedClientId?: string;
+	/** Wording for the way back, when it is not the Documents list. */
+	backLabel?: string;
 	onClose: () => void;
 	onGenerated: (result: GenerateDocumentResult) => void;
 };
@@ -34,14 +38,14 @@ function labelFor(path: string): string {
 	return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
 
-export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
+export function GenerateDialog({ lockedClientId, backLabel = "Documents", onClose, onGenerated }: GenerateDialogProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
 
-	const [clientId, setClientId] = useState("");
+	const [clientId, setClientId] = useState(lockedClientId ?? "");
 	const [templateId, setTemplateId] = useState("");
 	const [projectId, setProjectId] = useState("");
 	const [title, setTitle] = useState("");
@@ -136,7 +140,7 @@ export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
 		<FormPage
 			title="New document"
 			onBack={onClose}
-			backLabel="Documents"
+			backLabel={backLabel}
 			width="wide"
 			actions={
 				<>
@@ -156,6 +160,7 @@ export function GenerateDialog({ onClose, onGenerated }: GenerateDialogProps) {
 						onChange={chooseClient}
 						placeholder="Choose a client"
 						error={clientError}
+						disabled={lockedClientId !== undefined}
 						options={clients.map((row) => ({ value: row.id, label: row.name }))}
 					/>
 

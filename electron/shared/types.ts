@@ -1409,6 +1409,17 @@ export interface ImportDocumentInput {
 	issuedOn?: IsoDate;
 }
 
+/** A PDF that arrived as bytes, which is what a drop gives the window. */
+export interface ImportPdfBytesInput {
+	/** Only ever a title. It never becomes a path. */
+	fileName: string;
+	data: Uint8Array;
+	clientId: string;
+	title?: string;
+	projectId?: string | null;
+	issuedOn?: IsoDate;
+}
+
 export interface GenerateDocumentInput {
 	clientId: string;
 	templateId: string;
@@ -1432,6 +1443,39 @@ export interface GenerateDocumentResult {
 	pdfError: string | null;
 }
 
+/**
+ * Where the stamp goes on the PDF. Fractions of the page, measured from the top
+ * left, so the window and the file agree whatever size the page is drawn at.
+ * The height is not stored: it follows from the width and the signature image.
+ */
+export interface StampPlacement {
+	/** 1-based. */
+	page: number;
+	x: number;
+	y: number;
+	width: number;
+}
+
+/** What is known about the certificate, and nothing that could sign with it. */
+export interface SigningCertificateInfo {
+	subject: string;
+	issuer: string;
+	serialNumber: string;
+	/** SHA-256 of the certificate, hex. */
+	fingerprint: string;
+	validFrom: Iso;
+	validTo: Iso;
+	importedAt: Iso;
+}
+
+/** The certificate a digital signature was made with, as recorded on the signature. */
+export interface DigitalSignatureInfo {
+	subject: string;
+	issuer: string;
+	fingerprint: string;
+	validTo: Iso;
+}
+
 export interface DocumentSignature extends Standard {
 	documentId: string;
 	signerName: string;
@@ -1441,6 +1485,8 @@ export interface DocumentSignature extends Standard {
 	/** SHA-256 of the unsigned PDF, so later tampering is detectable. */
 	documentHash: string;
 	signedPdfPath: string | null;
+	/** Null when the document was stamped only. */
+	digital: DigitalSignatureInfo | null;
 }
 
 export interface SignDocumentInput {
@@ -1449,6 +1495,14 @@ export interface SignDocumentInput {
 	signerRole?: string | null;
 	/** Leave out to sign without an image, which is still timestamped and hashed. */
 	useSignatureImage?: boolean;
+	/** Left out, the stamp goes bottom left on the last page. */
+	placement?: StampPlacement;
+	/**
+	 * Adds a cryptographic signature made with the imported certificate. The
+	 * passphrase is used once and never stored, so a signature is always an act
+	 * by whoever is at the keyboard.
+	 */
+	digital?: { passphrase: string } | null;
 }
 
 /* ---------------------------------------------------------------- reminders */

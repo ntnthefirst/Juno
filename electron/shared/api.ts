@@ -45,6 +45,7 @@ import type {
 	GenerateDocumentInput,
 	GenerateDocumentResult,
 	ImportDocumentInput,
+	ImportPdfBytesInput,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -54,6 +55,7 @@ import type {
 	ReminderPatch,
 	ReminderSuggestion,
 	SignDocumentInput,
+	SigningCertificateInfo,
 	AddressCandidate,
 	BackupInfo,
 	Client,
@@ -548,6 +550,10 @@ export interface JunoApi {
 		import(input: ImportDocumentInput): Promise<DocumentRecord>;
 		/** Opens a file picker filtered to PDF and imports the choice for a client. Null when cancelled. */
 		chooseImport(clientId: string): Promise<DocumentRecord | null>;
+		/** Imports a PDF the window read from a drop. Refuses a name the client already has. */
+		importBytes(input: ImportPdfBytesInput): Promise<DocumentRecord>;
+		/** The document's PDF, for the placement page. Never a path. */
+		readPdf(id: string): Promise<Uint8Array>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;
 		remove(id: string): Promise<DocumentRecord>;
 		restore(id: string): Promise<DocumentRecord>;
@@ -560,6 +566,17 @@ export interface JunoApi {
 		/** Opens the PDF in whatever the OS uses for one. */
 		openPdf(id: string): Promise<void>;
 		revealPdf(id: string): Promise<void>;
+	};
+
+	signingCertificate: {
+		/** Null when none is imported. Never returns the key or the file. */
+		get(): Promise<SigningCertificateInfo | null>;
+		/**
+		 * Opens a picker for a .p12 or .pfx and checks the passphrase opens it. Null
+		 * when cancelled. The passphrase is not kept, only asked for again at signing.
+		 */
+		choose(passphrase: string): Promise<SigningCertificateInfo | null>;
+		remove(): Promise<void>;
 	};
 
 	reminders: {

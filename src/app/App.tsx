@@ -13,6 +13,7 @@ import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplates
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { TodayScreen } from "../features/today/TodayScreen";
 import { useTheme } from "../lib/theme";
+import { DocumentDropLayer } from "./DocumentDropLayer";
 import { BreadcrumbProvider } from "./breadcrumb";
 import { useBreadcrumbTrail } from "./breadcrumb-context";
 import { SCREEN_LABELS, type ScreenId } from "./screens";
@@ -187,6 +188,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					)}
 				</main>
 			</div>
+
+			<DocumentDropLayer />
 
 			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 		</div>

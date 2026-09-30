@@ -13,7 +13,8 @@ describe("sanitiseHtml", () => {
 				'<form action="https://x"><input name="a"></form><object data="x"></object>',
 		);
 		expect(document).toContain("<p>Hi</p>");
-		expect(document).not.toContain("<script");
+		expect(document).toContain("juno.mail.height");
+		expect(document).not.toContain("alert(1)");
 		expect(document).not.toContain("<iframe");
 		expect(document).not.toContain("<form");
 		expect(document).not.toContain("<object");

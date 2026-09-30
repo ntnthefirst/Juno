@@ -39,3 +39,12 @@ describe("signing certificate", () => {
 		expect(certificate.readP12()).toBeNull();
 	});
 });
+
+describe("a certificate without a passphrase", () => {
+	beforeEach(() => configureCredentialStore(new MemoryCredentialStore()));
+
+	it("opens with an empty passphrase", () => {
+		const { info } = certificate.inspectP12(makeP12({ passphrase: "" }), "");
+		expect(info.subject).toContain("Test Signer");
+	});
+});

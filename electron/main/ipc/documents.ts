@@ -35,6 +35,7 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.versions", (_event, documentId: string) => versions.list(documentId));
 	ipcMain.handle("documents.openVersion", (_event, versionId: string) => actions.openVersion(versionId));
 	ipcMain.handle("documents.revealVersion", (_event, versionId: string) => actions.revealVersion(versionId));
+	ipcMain.handle("documents.openCertificate", (_event, versionId: string) => actions.openCertificate(versionId));
 	ipcMain.handle("documents.readPdf", (_event, id: string) => actions.readPdf(id));
 
 	ipcMain.handle("documents.setStatus", (_event, id: string, statusId: string | null) =>

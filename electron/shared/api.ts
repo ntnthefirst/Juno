@@ -564,6 +564,8 @@ export interface JunoApi {
 		versions(documentId: string): Promise<DocumentVersion[]>;
 		openVersion(versionId: string): Promise<void>;
 		revealVersion(versionId: string): Promise<void>;
+		/** Opens the signing details of a stamped or signed version. */
+		openCertificate(versionId: string): Promise<void>;
 		/** The document's PDF, for the placement page. Never a path. */
 		readPdf(id: string): Promise<Uint8Array>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;

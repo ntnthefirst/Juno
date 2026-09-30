@@ -186,6 +186,7 @@ function toSignature(row: SignatureRow): DocumentSignature {
 		signatureImagePath: row.signatureImagePath,
 		documentHash: row.documentHash,
 		signedPdfPath: row.signedPdfPath,
+		certificatePdfPath: row.certificatePdfPath,
 		digital: digitalOf(row.auditJson),
 	};
 }
@@ -294,6 +295,7 @@ export async function sign(
 			signatureImagePath: imagePath,
 			documentHash: result.documentHash,
 			signedPdfPath: outputPath,
+			certificatePdfPath: result.certificatePath,
 			auditJson: JSON.stringify(result.audit),
 		})
 		.returning()
@@ -341,6 +343,11 @@ export async function openVersion(versionId: string, db: Db = getDb()): Promise<
 
 export async function revealVersion(versionId: string, db: Db = getDb()): Promise<void> {
 	shell.showItemInFolder(versions.pathOf(versionId, db));
+}
+
+/** The signing details of one signed version, as their own PDF. */
+export async function openCertificate(versionId: string, db: Db = getDb()): Promise<void> {
+	await openPath(versions.certificatePathOf(versionId, db));
 }
 
 async function openPath(path: string): Promise<void> {

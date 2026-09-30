@@ -476,6 +476,43 @@ describe("attachments", () => {
 	});
 });
 
+describe("inline attachments", () => {
+	it("keeps a PDF marked inline in the attachment list", async () => {
+		const boundary = "b2";
+		const source = [
+			"From: a@x.be",
+			"To: me@juno.test",
+			"Subject: Inline bijlage",
+			"Message-ID: <inl@x>",
+			`Date: ${new Date(recent(1)).toUTCString()}`,
+			"MIME-Version: 1.0",
+			`Content-Type: multipart/mixed; boundary="${boundary}"`,
+			"",
+			`--${boundary}`,
+			"Content-Type: text/plain",
+			"",
+			"Zie bijlage.",
+			`--${boundary}`,
+			"Content-Type: application/pdf",
+			'Content-Disposition: inline; filename="offerte.pdf"',
+			"Content-Transfer-Encoding: base64",
+			"",
+			Buffer.from("%PDF-1.4 fake").toString("base64"),
+			`--${boundary}--`,
+			"",
+		].join("\r\n");
+		box.add("INBOX", { uid: 1, from: "a@x.be", subject: "Inline bijlage", messageId: "<inl@x>", date: recent(1) });
+		box.sourceOf = () => Buffer.from(source);
+
+		await sync.syncAccount(accountId, db);
+		const list = await threads.listThreads({ accountId }, db);
+		const thread = (await threads.getThread(list[0]!.id, db))!;
+		const [attachment] = thread.messages[0]!.attachments;
+		expect(attachment).toMatchObject({ filename: "offerte.pdf", isInline: false });
+		expect(list[0]!.hasAttachments).toBe(true);
+	});
+});
+
 describe("client linking", () => {
 	it("links a thread to the client whose contact wrote it, and leaves a manual choice alone", async () => {
 		const obet = await clientsService.create({ name: "obet" }, db);

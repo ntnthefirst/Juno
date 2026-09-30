@@ -180,6 +180,22 @@ export type ClientPhoneInput = Partial<Omit<ClientPhone, keyof Standard>> & {
 
 export type ClientPhonePatch = Partial<Omit<ClientPhone, keyof Standard | "clientId">>;
 
+export interface ClientLink extends Standard {
+	clientId: string;
+	/** website, linkedin, instagram, facebook, x, youtube, github or other. */
+	kind: string;
+	label: string | null;
+	/** An absolute http or https address. */
+	url: string;
+}
+
+export type ClientLinkInput = Partial<Omit<ClientLink, keyof Standard>> & {
+	clientId: string;
+	url: string;
+};
+
+export type ClientLinkPatch = Partial<Omit<ClientLink, keyof Standard | "clientId">>;
+
 export interface ClientAddress extends Standard {
 	clientId: string;
 	/** "Kantoor Leuven", "Magazijn". Most clients only need one, so this is optional. */

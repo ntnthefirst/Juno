@@ -75,6 +75,9 @@ import type {
 	ClientPatch,
 	ClientPhone,
 	ClientPhoneInput,
+	ClientLink,
+	ClientLinkInput,
+	ClientLinkPatch,
 	ClientPhonePatch,
 	ClientSummary,
 	Contact,
@@ -276,6 +279,16 @@ export interface JunoApi {
 		remove(id: string): Promise<ClientPhone>;
 		restore(id: string): Promise<ClientPhone>;
 		setPrimary(id: string): Promise<ClientPhone>;
+	};
+
+	clientLinks: {
+		listForClient(clientId: string): Promise<ClientLink[]>;
+		create(input: ClientLinkInput): Promise<ClientLink>;
+		update(id: string, patch: ClientLinkPatch): Promise<ClientLink>;
+		remove(id: string): Promise<ClientLink>;
+		restore(id: string): Promise<ClientLink>;
+		/** Opens the link in the default browser. Resolved from the id, never from an address. */
+		open(id: string): Promise<void>;
 	};
 
 	clientAddresses: {

@@ -120,6 +120,13 @@
       "when": 1790774737888,
       "tag": "0016_signature_certificate",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790808038346,
+      "tag": "0017_client_links",
+      "breakpoints": true
     }
   ]
 }

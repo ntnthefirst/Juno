@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent, type PointerEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { StampPlacement } from "@shared/types";
 import { clampPlacement, stampMetrics } from "@shared/stamp";
 import { FitText } from "./FitText";
@@ -13,6 +13,7 @@ type StampBoxProps = {
 	name: string;
 	dateText: string;
 	onChange: (next: StampPlacement) => void;
+	onNameChange: (name: string) => void;
 };
 
 /**
@@ -22,9 +23,20 @@ type StampBoxProps = {
  *
  * Pointer events do the dragging, and the arrow keys do the same for someone
  * without a pointer: an arrow moves it by one percent, shift by five, and plus
- * and minus resize it.
+ * and minus resize it. The name is changed where it is drawn, by a double
+ * click on the stamp or Enter on it.
  */
-export function StampBox({ placement, pageWidth, pageHeight, image, name, dateText, onChange }: StampBoxProps) {
+export function StampBox({
+	placement,
+	pageWidth,
+	pageHeight,
+	image,
+	name,
+	dateText,
+	onChange,
+	onNameChange,
+}: StampBoxProps) {
+	const [editing, setEditing] = useState<string | null>(null);
 	const drag = useRef<{ mode: "move" | "resize"; x: number; y: number; from: StampPlacement } | null>(null);
 	const imageAspect = image ? image.aspect : null;
 	const pageAspect = pageHeight / pageWidth;
@@ -60,7 +72,18 @@ export function StampBox({ placement, pageWidth, pageHeight, image, name, dateTe
 		drag.current = null;
 	}
 
+	function finishEditing(save: boolean) {
+		if (editing !== null && save && editing.trim()) onNameChange(editing.trim());
+		setEditing(null);
+	}
+
 	function key(event: KeyboardEvent<HTMLElement>) {
+		if (editing !== null) return;
+		if (event.key === "Enter") {
+			event.preventDefault();
+			setEditing(name);
+			return;
+		}
 		const step = event.shiftKey ? 0.05 : 0.01;
 		const moves: Record<string, Partial<StampPlacement>> = {
 			ArrowLeft: { x: placement.x - step },
@@ -81,12 +104,17 @@ export function StampBox({ placement, pageWidth, pageHeight, image, name, dateTe
 		<div
 			role="button"
 			tabIndex={0}
-			aria-label="Stamp. Drag to move, or use the arrow keys. Plus and minus resize it."
+			aria-label="Stamp. Drag to move, or use the arrow keys. Plus and minus resize it. Enter changes the name."
 			onPointerDown={(event) => begin(event, "move")}
 			onPointerMove={move}
 			onPointerUp={end}
 			onPointerCancel={end}
 			onKeyDown={key}
+			// On the stamp rather than on the name: the drag captures the pointer,
+			// so the double click is delivered here whichever line it landed on.
+			onDoubleClick={() => setEditing(name)}
+			title="Double-click to change the name"
+			data-stamp
 			style={{
 				left: placement.x * pageWidth,
 				top: placement.y * pageHeight,
@@ -107,16 +135,35 @@ export function StampBox({ placement, pageWidth, pageHeight, image, name, dateTe
 			) : null}
 			<p
 				style={{ height: metrics.nameSize * 1.2, marginBottom: metrics.gap, lineHeight: 1.2 }}
-				className="overflow-hidden whitespace-nowrap font-[var(--weight-semibold)]"
+				className="whitespace-nowrap font-[var(--weight-semibold)]"
 			>
-				<FitText text={name || "Name"} size={metrics.nameSize} available={inner} />
+				{editing === null ? (
+					<FitText text={name || "Name"} size={metrics.nameSize} available={inner} />
+				) : null}
 			</p>
 			<p
 				style={{ height: metrics.dateSize * 1.2, lineHeight: 1.2 }}
-				className="tabular overflow-hidden whitespace-nowrap text-[var(--canvas-ink-muted)]"
+				className="tabular whitespace-nowrap text-[var(--canvas-ink-muted)]"
 			>
 				<FitText text={dateText} size={metrics.dateSize} available={inner} />
 			</p>
+			{editing !== null ? (
+				<input
+					autoFocus
+					aria-label="Name on the stamp"
+					value={editing}
+					onChange={(event) => setEditing(event.target.value)}
+					onPointerDown={(event) => event.stopPropagation()}
+					onKeyDown={(event) => {
+						event.stopPropagation();
+						if (event.key === "Enter") finishEditing(true);
+						if (event.key === "Escape") finishEditing(false);
+					}}
+					onBlur={() => finishEditing(true)}
+					style={{ top: metrics.padding + (image ? metrics.imageHeight + metrics.gap : 0) - 4 }}
+					className="absolute left-0 z-10 w-[max(100%,220px)] rounded-[var(--radius-sm)] border border-[var(--accent)] bg-[var(--surface)] px-2 py-1 text-[length:var(--text-base)] text-[var(--ink)] shadow-[var(--shadow-popover)]"
+				/>
+			) : null}
 			<span
 				onPointerDown={(event) => begin(event, "resize")}
 				onPointerMove={move}

@@ -21,8 +21,8 @@ type CanvasStageProps = {
 	inputs: TemplateInput[];
 	selection: Selection;
 	onSelect: (selection: Selection) => void;
-	onDrop: (fromSectionId: string, blockId: string, target: DropTarget) => void;
-	onEdit: (sectionId: string, blockId: string, patch: Partial<MailBlock>) => void;
+	onDrop: (id: string, target: DropTarget) => void;
+	onEdit: (blockId: string, patch: Partial<MailBlock>) => void;
 	editing: Editing | null;
 	onEditing: (editing: Editing | null) => void;
 	onMeasure: (size: Measured | null) => void;

@@ -228,6 +228,28 @@ labels without asking is not a reset, it is data loss.
 rows whose `customised_at` is null. It may never touch an edited row, and it may
 never resurrect a hidden one.
 
+**Mail templates stopped being seeded.** The four that shipped were
+`contract_cover`, `project_kickoff`, `invoice_due` and `hosting_renewal`. Their
+definitions left the code: an install that has them keeps the rows exactly as
+they are, since nothing adds, updates, hides or removes them any more, and a new
+install never gets them. A first install, meaning a settings file that has never
+seeded the set and a table with no row in it, is given one example laid out on
+the canvas instead. It is written by `create` like any template, so it is not a
+system row: it is the owner's from the start, a delete is a delete, and nothing
+brings it back. Nothing may point at a mail template by key, because most
+installs will not have the one you want.
+
+**Document templates stopped being seeded, the same way.** The five that shipped
+were `nda`, `development_agreement`, `hosting_agreement`, `project_scope` and
+`addendum`, all invented and none reviewed. Their definitions left the code: an
+install that has them keeps the rows exactly as they are, and a new install
+never gets them. A first install, meaning a settings file that has never seeded
+the set (`documentTemplateSeedVersion`) and a table with no row in it, is given
+one example laid out on the page editor's model, with inputs and two pages. It
+is written by `create`, so it is not a system row, it starts unreviewed like
+every template, and a delete is a delete. Nothing may point at a document
+template by key.
+
 ## 17. Phase 0 derives the lock secret with scrypt, not Argon2id
 
 Amends decision 15. `crypto.scryptSync` is in the Node standard library, so it

@@ -29,6 +29,7 @@ import {
 	breakpointCss,
 	compileLayout,
 	convertBlockToCode,
+	findChildren,
 	fontLinks,
 	layoutFromHtml,
 	normaliseLayout,
@@ -393,8 +394,8 @@ export async function parseBody(html: string): Promise<MailLayout> {
 export async function convertBlock(input: MailBlockConversion): Promise<MailLayout> {
 	const layout = normaliseLayout(input.layout);
 	if (!layout) throw new Error("That layout could not be read. Nothing was converted.");
-	const section = layout.sections.find((entry) => entry.id === input.sectionId);
-	if (!section?.blocks.some((block) => block.id === input.blockId)) {
+	const siblings = findChildren(layout.children, input.sectionId);
+	if (!siblings?.some((node) => node.id === input.blockId)) {
 		throw new Error("That block is not on the canvas any more. Select it again and convert it.");
 	}
 	return convertBlockToCode(layout, input.sectionId, input.blockId, input.inputs ?? []);

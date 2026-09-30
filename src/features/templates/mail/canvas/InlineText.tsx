@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { MailHeadingTag } from "@shared/types";
 import { Icon } from "../../../../components/Icon";
 import { normaliseEditedHtml } from "./inline-html";
 
@@ -13,7 +14,7 @@ type InlineTextProps = {
 	/** Rich text keeps bold, italic, underline, strikethrough and links. A heading is plain. */
 	rich: boolean;
 	value: string;
-	tag: "div" | "h1" | "h2" | "h3";
+	tag: "div" | MailHeadingTag;
 	style: CSSProperties;
 	caret: Caret;
 	/**

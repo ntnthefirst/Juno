@@ -6,15 +6,17 @@
  * any it carries; anything more gets a div with the CSS around it. The saved
  * message is cleaned by the compiler's sanitiser. This is the draft, still
  * being typed, so it is cleaned here with the browser's own parser: nothing
- * that runs, no handler, no address that is not https, mailto or a
- * placeholder.
+ * that runs, no handler, no address that is not https, mailto, tel or a
+ * placeholder. A picture at a web address is not fetched here either: it is
+ * drawn as a box, the way the canvas draws one (remote-image.ts).
  */
 import { cleanDeclarations } from "./box-style";
+import { escapeAttribute, isDrawable, remotePlaceholder } from "../../../../lib/remote-image";
 
 const DROPPED = "script,style,iframe,object,embed,form,svg,noscript,template,head,title,link,meta,base";
 
 function safeAddress(value: string): boolean {
-	return /^(https:|mailto:|\{\{)/i.test(value.trim());
+	return /^(https:|mailto:|tel:|\{\{)/i.test(value.trim());
 }
 
 export function codeMarkup(html: string, css: string): string {
@@ -28,6 +30,14 @@ export function codeMarkup(html: string, css: string): string {
 			else if ((name === "href" || name === "src") && !safeAddress(attribute.value)) element.removeAttribute(attribute.name);
 			else if (name === "style") element.setAttribute("style", cleanDeclarations(attribute.value));
 		}
+	}
+
+	for (const image of body.querySelectorAll("img")) {
+		const src = image.getAttribute("src");
+		if (src === null || isDrawable(src)) continue;
+		const holder = parsed.createElement("template");
+		holder.innerHTML = remotePlaceholder(image.getAttribute("alt") ?? "", escapeAttribute(image.getAttribute("style") ?? ""));
+		image.replaceWith(holder.content);
 	}
 
 	const declarations = cleanDeclarations(css);

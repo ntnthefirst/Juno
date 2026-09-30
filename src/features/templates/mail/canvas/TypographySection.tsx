@@ -29,10 +29,6 @@ type TypographySectionProps = {
 	 * message's ink; a button's label always has one.
 	 */
 	color: { value: string | null; onChange: (value: string | null) => void; clearable: boolean };
-	/** A heading's level, which is set here with the rest of its type. */
-	level?: { value: 1 | 2 | 3; onChange: (level: 1 | 2 | 3) => void };
-	/** Only a text block or a heading can sit lower in a taller box. */
-	showVertical: boolean;
 };
 
 /** The message's own typeface, which is what a block with no family is set in. */
@@ -53,8 +49,9 @@ function cleanFamily(value: string): string | null {
  * has, or one the message links. Linking a Google font is offered right here,
  * because that is where somebody is when they want one. Everything else is the
  * set Figma shows, bar the OpenType features, which no mail client applies.
+ * How the words sit in their box, across and down, is in the Layout section.
  */
-export function TypographySection({ text, onText, fonts, onLinkAndUse, color, level, showVertical }: TypographySectionProps) {
+export function TypographySection({ text, onText, fonts, onLinkAndUse, color }: TypographySectionProps) {
 	const [linking, setLinking] = useState(false);
 	const [name, setName] = useState("");
 	const [fallback, setFallback] = useState<MailFontFallback>("sans");
@@ -76,18 +73,6 @@ export function TypographySection({ text, onText, fonts, onLinkAndUse, color, le
 
 	return (
 		<PanelSection title="Typography">
-			{level ? (
-				<Segmented
-					label="Heading level"
-					value={String(level.value)}
-					options={[
-						{ value: "1", label: "Heading 1", icon: "h1", title: "Heading 1" },
-						{ value: "2", label: "Heading 2", icon: "h2", title: "Heading 2" },
-						{ value: "3", label: "Heading 3", icon: "h3", title: "Heading 3" },
-					]}
-					onChange={(next) => level.onChange(Number.parseInt(next, 10) as 1 | 2 | 3)}
-				/>
-			) : null}
 			<div className="flex items-center gap-1">
 				<div className="min-w-0 flex-1">
 					<PanelSelect
@@ -193,31 +178,6 @@ export function TypographySection({ text, onText, fonts, onLinkAndUse, color, le
 					{missingWeight.family} is linked in {missingWeight.weights.join(", ")}. At{" "}
 					{FONT_WEIGHTS[text.weight]} the client makes one up. Add the weight on the frame, under Fonts.
 				</PanelNote>
-			) : null}
-
-			<Segmented
-				label="Horizontal alignment"
-				value={text.align}
-				options={[
-					{ value: "left", label: "Left", icon: "align-left", title: "Align left" },
-					{ value: "center", label: "Centre", icon: "align-center", title: "Align centre" },
-					{ value: "right", label: "Right", icon: "align-right", title: "Align right" },
-					{ value: "justify", label: "Justify", icon: "align-justify", title: "Justify" },
-				]}
-				onChange={(align) => onText({ align })}
-			/>
-
-			{showVertical ? (
-				<Segmented
-					label="Vertical alignment"
-					value={text.verticalAlign}
-					options={[
-						{ value: "top", label: "Top", icon: "text-top", title: "Text at the top" },
-						{ value: "middle", label: "Middle", icon: "text-middle", title: "Text in the middle" },
-						{ value: "bottom", label: "Bottom", icon: "text-bottom", title: "Text at the bottom" },
-					]}
-					onChange={(verticalAlign) => onText({ verticalAlign })}
-				/>
 			) : null}
 
 			<div className="flex items-center gap-1">

@@ -25,7 +25,7 @@ npm run dev
 | **Mail** | IMAP accounts pulled into SQLite. Threads, a sandboxed reader, search, client linking. Filing that reaches the server, and an outbox that sends over SMTP behind a confirmation gate |
 | **Calendar** | Events and recurring series with an IANA zone each, month, week and agenda views, drag to move and resize, .ics in and out |
 | **Agent** | An MCP server over a local pipe, every side-effectful tool parked for approval. Automations, an audit log purged after six months, briefings across every domain |
-| **Templates** | Mail templates laid out on a canvas of sections and blocks in a Figma-shaped editor: layers on the left, a pannable sheet at three reading widths, a design panel on the right with fills, strokes, effects, typography and linked fonts, Figma's resizing, colour picker and keyboard with undo, breakpoints sent as media queries, a floating toolbar, text edited in place, and any block convertible to its own HTML and CSS. A canvas is sent with nothing around it. Compiled to the HTML a message is made of, with an editable code view back into it. Document templates edited as pages, compiled to the HTML the PDF pipeline takes |
+| **Templates** | Mail templates laid out on a canvas that is a tree of tagged elements (containers of eight tags that nest, columns tables, text of any tag, pictures, dividers and inputs) in a Figma-shaped editor: layers on the left, a pannable sheet at three reading widths, a design panel on the right with fills, strokes, effects, actions (a link on click, a fill, colour, underline or opacity on hover), typography and linked fonts, Figma's resizing, colour picker and keyboard with undo, breakpoints sent as media queries, a floating toolbar of five groups, each with a menu and a key for every element (the button is a text with a link, in the Text menu), text edited in place, and any element convertible to its own HTML and CSS. A canvas is sent with nothing around it. A first install is given one example laid out on the canvas and no other mail template. Compiled to the HTML a message is made of, with an editable code view back into it. Document templates edited as pages, compiled to the HTML the PDF pipeline takes. A first install is given one example laid out on two pages and no other document template |
 | **Settings** | Theme, lock, reference data, owner profile, accounting link, mail accounts, signature, backup |
 
 **Not built:** the in-app assistant panel, which needs a decision about which
@@ -152,7 +152,8 @@ scripts/                dev, build, smoke, the MCP bridge, icon generation
     render either.** Outlook on Windows uses Word's engine, so it stacks every
     section into one column and drops the gaps and the alignment. That was
     chosen over compiling to nested tables, and the section inspector states
-    it where the choice is made. Nothing in the model is positioned: custom
+    it where the choice is made. A columns table is the one layout that is a
+    table, for what has to stay side by side. Nothing in the model is positioned: custom
     CSS is allowed and `sanitiseDeclarations` strips the positioning
     properties out of it, so the escape hatch cannot reintroduce what the
     model refuses. `layout_json` is null for every template written before the

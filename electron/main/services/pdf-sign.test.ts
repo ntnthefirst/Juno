@@ -57,6 +57,30 @@ describe("signPdf", () => {
 		expect(result.signedHash).not.toBe(result.documentHash);
 	});
 
+	it("leaves the name and the date off when asked, with the image alone", async () => {
+		const { dir, path } = await fixture(1);
+		// A 1x1 transparent PNG, enough to be an image to place.
+		const png = Buffer.from(
+			"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+			"base64",
+		);
+		const imagePath = join(dir, "signature.png");
+		writeFileSync(imagePath, png);
+		const withDetails = join(dir, "with.pdf");
+		const without = join(dir, "without.pdf");
+		await signPdf({ ...base, pdfPath: path, outputPath: withDetails, signatureImagePath: imagePath });
+		await signPdf({ ...base, pdfPath: path, outputPath: without, signatureImagePath: imagePath, showDetails: false });
+		// Two lines of text fewer in the page content, so the file is smaller.
+		expect(readFileSync(without).length).toBeLessThan(readFileSync(withDetails).length);
+	});
+
+	it("refuses to stamp nothing", async () => {
+		const { dir, path } = await fixture(1);
+		await expect(
+			signPdf({ ...base, pdfPath: path, outputPath: join(dir, "o.pdf"), showDetails: false }),
+		).rejects.toThrow(/needs a signature image/);
+	});
+
 	it("refuses a page that does not exist", async () => {
 		const { dir, path } = await fixture(1);
 		await expect(

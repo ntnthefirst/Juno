@@ -29,8 +29,12 @@ export interface StampMetrics {
 	gap: number;
 }
 
-/** `imageAspect` is height over width of the signature image, or null for none. */
-export function stampMetrics(width: number, imageAspect: number | null): StampMetrics {
+/**
+ * `imageAspect` is height over width of the signature image, or null for none.
+ * `showDetails` is false for a stamp that is the image alone, without the name
+ * and the date under it.
+ */
+export function stampMetrics(width: number, imageAspect: number | null, showDetails = true): StampMetrics {
 	const padding = width * PADDING_RATIO;
 	const gap = width * GAP_RATIO;
 	const nameSize = width * NAME_RATIO;
@@ -38,12 +42,9 @@ export function stampMetrics(width: number, imageAspect: number | null): StampMe
 	const innerWidth = width - padding * 2;
 	const imageHeight =
 		imageAspect === null ? 0 : Math.min(innerWidth * imageAspect, width * MAX_IMAGE_HEIGHT_RATIO);
-	const height =
-		padding * 2 +
-		(imageHeight > 0 ? imageHeight + gap : 0) +
-		nameSize * 1.2 +
-		gap +
-		dateSize * 1.2;
+	const height = showDetails
+		? padding * 2 + (imageHeight > 0 ? imageHeight + gap : 0) + nameSize * 1.2 + gap + dateSize * 1.2
+		: padding * 2 + imageHeight;
 	return { width, height, padding, imageHeight, nameSize, dateSize, gap };
 }
 
@@ -51,11 +52,12 @@ export function clampPlacement<T extends { x: number; y: number; width: number }
 	placement: T,
 	imageAspect: number | null,
 	pageAspect: number,
+	showDetails = true,
 ): T {
 	const width = Math.min(STAMP_MAX_WIDTH, Math.max(STAMP_MIN_WIDTH, placement.width));
 	// Height as a fraction of the page height: width fraction times page width,
 	// divided by page height, which is why the page height over width is needed.
-	const heightFraction = stampMetrics(width, imageAspect).height / pageAspect;
+	const heightFraction = stampMetrics(width, imageAspect, showDetails).height / pageAspect;
 	return {
 		...placement,
 		width,

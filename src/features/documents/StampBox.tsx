@@ -12,6 +12,8 @@ type StampBoxProps = {
 	image: { url: string; aspect: number } | null;
 	name: string;
 	dateText: string;
+	/** False draws the image alone, as the PDF will. */
+	showDetails: boolean;
 	onChange: (next: StampPlacement) => void;
 	onNameChange: (name: string) => void;
 };
@@ -33,6 +35,7 @@ export function StampBox({
 	image,
 	name,
 	dateText,
+	showDetails,
 	onChange,
 	onNameChange,
 }: StampBoxProps) {
@@ -40,12 +43,12 @@ export function StampBox({
 	const drag = useRef<{ mode: "move" | "resize"; x: number; y: number; from: StampPlacement } | null>(null);
 	const imageAspect = image ? image.aspect : null;
 	const pageAspect = pageHeight / pageWidth;
-	const metrics = stampMetrics(placement.width * pageWidth, imageAspect);
+	const metrics = stampMetrics(placement.width * pageWidth, imageAspect, showDetails);
 
 	const inner = metrics.width - metrics.padding * 2;
 
 	function commit(next: StampPlacement) {
-		onChange(clampPlacement(next, imageAspect, pageAspect));
+		onChange(clampPlacement(next, imageAspect, pageAspect, showDetails));
 	}
 
 	function begin(event: PointerEvent<HTMLElement>, mode: "move" | "resize") {
@@ -81,7 +84,7 @@ export function StampBox({
 		if (editing !== null) return;
 		if (event.key === "Enter") {
 			event.preventDefault();
-			setEditing(name);
+			if (showDetails) setEditing(name);
 			return;
 		}
 		const step = event.shiftKey ? 0.05 : 0.01;
@@ -112,8 +115,10 @@ export function StampBox({
 			onKeyDown={key}
 			// On the stamp rather than on the name: the drag captures the pointer,
 			// so the double click is delivered here whichever line it landed on.
-			onDoubleClick={() => setEditing(name)}
-			title="Double-click to change the name"
+			onDoubleClick={() => {
+				if (showDetails) setEditing(name);
+			}}
+			title={showDetails ? "Double-click to change the name" : undefined}
 			data-stamp
 			style={{
 				left: placement.x * pageWidth,
@@ -129,25 +134,29 @@ export function StampBox({
 					src={image.url}
 					alt=""
 					draggable={false}
-					style={{ height: metrics.imageHeight, marginBottom: metrics.gap }}
+					style={{ height: metrics.imageHeight, marginBottom: showDetails ? metrics.gap : 0 }}
 					className="block max-w-full object-contain object-left"
 				/>
 			) : null}
-			<p
-				style={{ height: metrics.nameSize * 1.2, marginBottom: metrics.gap, lineHeight: 1.2 }}
-				className="whitespace-nowrap font-[var(--weight-semibold)]"
-			>
-				{editing === null ? (
-					<FitText text={name || "Name"} size={metrics.nameSize} available={inner} />
-				) : null}
-			</p>
-			<p
-				style={{ height: metrics.dateSize * 1.2, lineHeight: 1.2 }}
-				className="tabular whitespace-nowrap text-[var(--canvas-ink-muted)]"
-			>
-				<FitText text={dateText} size={metrics.dateSize} available={inner} />
-			</p>
-			{editing !== null ? (
+			{showDetails ? (
+				<>
+					<p
+						style={{ height: metrics.nameSize * 1.2, marginBottom: metrics.gap, lineHeight: 1.2 }}
+						className="whitespace-nowrap font-[var(--weight-semibold)]"
+					>
+						{editing === null ? (
+							<FitText text={name || "Name"} size={metrics.nameSize} available={inner} />
+						) : null}
+					</p>
+					<p
+						style={{ height: metrics.dateSize * 1.2, lineHeight: 1.2 }}
+						className="tabular whitespace-nowrap text-[var(--canvas-ink-muted)]"
+					>
+						<FitText text={dateText} size={metrics.dateSize} available={inner} />
+					</p>
+				</>
+			) : null}
+			{showDetails && editing !== null ? (
 				<input
 					autoFocus
 					aria-label="Name on the stamp"

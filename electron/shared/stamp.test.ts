@@ -13,6 +13,12 @@ describe("stamp geometry", () => {
 		expect(stampMetrics(200, null).height).toBeLessThan(stampMetrics(200, 0.4).height);
 	});
 
+	it("is the image alone without the name and the date", () => {
+		const alone = stampMetrics(200, 0.4, false);
+		expect(alone.height).toBeCloseTo(alone.padding * 2 + alone.imageHeight, 6);
+		expect(alone.height).toBeLessThan(stampMetrics(200, 0.4).height);
+	});
+
 	it("never lets a tall image take more than half the width", () => {
 		expect(stampMetrics(200, 5).imageHeight).toBe(100);
 	});

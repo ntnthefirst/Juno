@@ -37,7 +37,7 @@ type SurfaceProps = {
 	 * right edge with the button's, so a control at the right end of a row opens
 	 * inwards rather than off the edge.
 	 */
-	anchor?: "top-left" | "top-right";
+	anchor?: "top-left" | "top-right" | "bottom-right";
 	/** Kept at least this wide, so a menu under a wide button does not shrink. */
 	minWidth?: number;
 };
@@ -63,8 +63,10 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 		const { width, height } = node.getBoundingClientRect();
 		const room = { w: window.innerWidth, h: window.innerHeight };
 
-		let left = anchor === "top-right" ? at.x - width : at.x;
-		let top = at.y;
+		let left = anchor === "top-left" ? at.x : at.x - width;
+		// bottom-right hangs the menu above the point, for a control at the foot
+		// of a page where below is the edge of the window.
+		let top = anchor === "bottom-right" ? Math.max(MARGIN, at.y - height) : at.y;
 
 		if (left + width > room.w - MARGIN) left = room.w - MARGIN - width;
 		if (left < MARGIN) left = MARGIN;
@@ -320,8 +322,10 @@ type ContextMenuProps = {
 	items: MenuItem[];
 	onClose: () => void;
 	ariaLabel: string;
+	/** Which corner of the menu sits at `at`. Top left, like a right-click menu, unless said. */
+	anchor?: "top-left" | "top-right" | "bottom-right";
 };
 
-export function ContextMenu({ at, items, onClose, ariaLabel }: ContextMenuProps) {
-	return <MenuSurface at={at} items={items} onClose={onClose} ariaLabel={ariaLabel} />;
+export function ContextMenu({ at, items, onClose, ariaLabel, anchor }: ContextMenuProps) {
+	return <MenuSurface at={at} items={items} onClose={onClose} ariaLabel={ariaLabel} anchor={anchor} />;
 }

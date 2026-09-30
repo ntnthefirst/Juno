@@ -20,6 +20,7 @@ import { Icon, type IconName } from "../../components/Icon";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { ClientDocumentsPanel } from "./ClientDocumentsPanel";
 import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
 
@@ -166,7 +167,7 @@ const REMOVE_TITLES: Record<DetailKind, string> = {
 /** A bounded first page. `loadMoreEntries` asks for the next one on request. */
 const TIMELINE_PAGE = 50;
 
-type TabId = "overview" | "timeline" | "projects" | "documents" | "mail";
+export type TabId = "overview" | "timeline" | "projects" | "documents" | "mail";
 
 type ClientDetailProps = {
 	clientId: string;
@@ -189,6 +190,12 @@ type ClientDetailProps = {
 	onEditAddress: (address: ClientAddress | null) => void;
 	/** `initialKind` only matters when `note` is null, for "Log a call". */
 	onEditNote: (note: ClientNote | null, initialKind?: ClientNoteKind) => void;
+	/** A document from a template is a page of its own, so the screen owns it. */
+	onGenerateDocument: () => void;
+	/** The tab to open on, for coming back from a page that started from one. */
+	initialTab?: TabId;
+	/** Reported so the screen can hand the same tab back after a remount. */
+	onTabChange?: (tab: TabId) => void;
 };
 
 export function ClientDetail({
@@ -201,11 +208,14 @@ export function ClientDetail({
 	onEditPhone,
 	onEditAddress,
 	onEditNote,
+	onGenerateDocument,
+	initialTab = "overview",
+	onTabChange,
 }: ClientDetailProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [pending, setPending] = useState<Pending | null>(null);
 	const [busy, setBusy] = useState(false);
-	const [tab, setTab] = useState<TabId>("overview");
+	const [tab, setTab] = useState<TabId>(initialTab);
 	const [loadingMore, setLoadingMore] = useState(false);
 
 	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
@@ -416,7 +426,6 @@ export function ClientDetail({
 	const primaryAddress = addresses.find((address) => address.isPrimary) ?? null;
 
 	const totalEntries = Object.values(entryCounts).reduce((sum, count) => sum + count, 0);
-	const documentEntries = entries.filter((entry) => entry.kind === "document");
 	const mailEntries = entries.filter((entry) => entry.kind === "mail");
 
 	const tabs: { id: TabId; label: string; count: number | null }[] = [
@@ -534,7 +543,10 @@ export function ClientDetail({
 						type="button"
 						role="tab"
 						aria-selected={tab === entry.id}
-						onClick={() => setTab(entry.id)}
+						onClick={() => {
+							setTab(entry.id);
+							onTabChange?.(entry.id);
+						}}
 						className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 							tab === entry.id
 								? "border-[var(--accent)] text-[var(--accent)]"
@@ -611,7 +623,12 @@ export function ClientDetail({
 						onRemove={(project) => setPending({ kind: "project", id: project.id, name: project.name })}
 					/>
 				) : tab === "documents" ? (
-					<EntryList title="Documents" entries={documentEntries} emptyText="No documents for this client yet." />
+					<ClientDocumentsPanel
+						clientId={clientId}
+						clientName={client.name}
+						onGenerate={onGenerateDocument}
+						onChanged={refresh}
+					/>
 				) : (
 					<EntryList title="Mail" entries={mailEntries} emptyText="No mail linked to this client yet." />
 				)}

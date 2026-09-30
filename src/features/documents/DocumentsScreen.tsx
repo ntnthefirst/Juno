@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { DocumentRecord, GenerateDocumentResult, ReferenceItem } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { AddButton } from "../../components/AddButton";
@@ -13,7 +13,11 @@ import { messageOf } from "../../lib/errors";
 import { activeDocumentFilterCount, NO_DOCUMENT_FILTERS, type DocumentFilters } from "./document-filters";
 import { DocumentDetail, SpecimenMark } from "./DocumentDetail";
 import { GenerateDialog } from "./GenerateDialog";
-import { ImportDialog } from "./ImportDialog";
+import { describeOutcome, itemsFromPicked, onDocumentsChanged, type ImportItem } from "../../lib/pdf-drop";
+import { ImportFlow } from "./ImportFlow";
+import { VersionCount } from "./VersionCount";
+import { VersionList } from "./VersionList";
+import { SignPage } from "./SignPage";
 
 /** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
 function formatDate(date: string | null): string {
@@ -53,7 +57,8 @@ export function DocumentsScreen() {
 	const [selectedTitle, setSelectedTitle] = useState<string | null>(null);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [generating, setGenerating] = useState(false);
-	const [importing, setImporting] = useState(false);
+	const [importItems, setImportItems] = useState<ImportItem[] | null>(null);
+	const [signingRecord, setSigningRecord] = useState<DocumentRecord | null>(null);
 	const [deleted, setDeleted] = useState<DocumentRecord[] | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
@@ -88,6 +93,9 @@ export function DocumentsScreen() {
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, [fetchRows]);
 
+	// A drop elsewhere in the window can import into this list.
+	useEffect(() => onDocumentsChanged(refreshList), [refreshList]);
+
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 	const dismissNotice = useCallback(() => setNotice(null), []);
 
@@ -118,12 +126,13 @@ export function DocumentsScreen() {
 		refreshList();
 	}
 
-	function imported(record: DocumentRecord) {
-		setImporting(false);
-		setSelectedId(record.id);
-		setSelectedTitle(record.title);
-		setDetailVersion((version) => version + 1);
-		refreshList();
+	async function pickAndImport() {
+		try {
+			const picked = await window.juno.documents.pickPdfs();
+			if (picked.length > 0) setImportItems(itemsFromPicked(picked));
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
 	}
 
 	function removed(records: DocumentRecord[]) {
@@ -231,6 +240,20 @@ export function DocumentsScreen() {
 		return <GenerateDialog onClose={() => setGenerating(false)} onGenerated={generated} />;
 	}
 
+	if (signingRecord) {
+		return (
+			<SignPage
+				record={signingRecord}
+				onClose={() => setSigningRecord(null)}
+				onSigned={() => {
+					setSigningRecord(null);
+					setDetailVersion((version) => version + 1);
+					refreshList();
+				}}
+			/>
+		);
+	}
+
 	return (
 		<div className="flex h-full flex-col p-8">
 			{selectedId !== null ? (
@@ -240,6 +263,7 @@ export function DocumentsScreen() {
 						documentId={selectedId}
 						onDeleted={(record) => removed([record])}
 						onChanged={refreshList}
+						onSign={setSigningRecord}
 						onTitleChange={setSelectedTitle}
 					/>
 				</div>
@@ -266,7 +290,7 @@ export function DocumentsScreen() {
 										id: "import",
 										label: "Import a PDF",
 										icon: "import",
-										onSelect: () => setImporting(true),
+										onSelect: () => void pickAndImport(),
 									},
 								]}
 							/>
@@ -378,8 +402,16 @@ export function DocumentsScreen() {
 				</>
 			)}
 
-			{importing ? (
-				<ImportDialog onClose={() => setImporting(false)} onImported={imported} />
+			{importItems ? (
+				<ImportFlow
+					items={importItems}
+					onDone={(outcome) => {
+						setImportItems(null);
+						const failures = outcome.failures.map((entry) => entry.message).join(" ");
+						setNotice([describeOutcome(outcome), failures].filter(Boolean).join(" ") || null);
+						refreshList();
+					}}
+				/>
 			) : null}
 
 			{deleted ? (
@@ -422,7 +454,10 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 	// table rather than one per row: sixty rows would otherwise each carry a
 	// portal that is closed.
 	const [target, setTarget] = useState<DocumentRecord | null>(null);
+	const [expanded, setExpanded] = useState<string[]>([]);
 	const hasSelection = selectedIds.length > 0;
+	const toggleVersions = (id: string) =>
+		setExpanded((current) => (current.includes(id) ? current.filter((other) => other !== id) : [...current, id]));
 
 	const items: MenuItem[] = target
 		? [
@@ -471,9 +506,10 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 					// A plain click opens the record; once anything is ticked, the
 					// same click ticks instead, the way the mail template rows do.
 					const open = () => (hasSelection ? onToggle(row.id) : onSelect(row.id, row.title));
+					const unfolded = expanded.includes(row.id);
 					return (
+						<Fragment key={row.id}>
 						<tr
-							key={row.id}
 							onClick={open}
 							onContextMenu={(event) => {
 								setTarget(row);
@@ -502,20 +538,29 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 								className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)]"
 								style={{ height: "var(--row-height)" }}
 							>
-								<button
-									type="button"
-									aria-current={selected ? "true" : undefined}
-									onClick={(event) => {
-										// The row handles the same click; without this a tick
-										// would be made and undone by the one press.
-										event.stopPropagation();
-										open();
-									}}
-									className="flex w-full items-center gap-2 text-left"
-								>
-									<span className="truncate">{row.title}</span>
-									{row.isSpecimen ? <SpecimenMark /> : null}
-								</button>
+								<div className="flex items-center gap-2">
+									<button
+										type="button"
+										aria-current={selected ? "true" : undefined}
+										onClick={(event) => {
+											// The row handles the same click; without this a tick
+											// would be made and undone by the one press.
+											event.stopPropagation();
+											open();
+										}}
+										className="flex min-w-0 items-center gap-2 text-left"
+									>
+										<span className="truncate">{row.title}</span>
+										{row.isSpecimen ? <SpecimenMark /> : null}
+									</button>
+									{row.versionCount > 0 ? (
+										<VersionCount
+											count={row.versionCount}
+											open={unfolded}
+											onToggle={() => toggleVersions(row.id)}
+										/>
+									) : null}
+								</div>
 							</td>
 							<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 								<span className="block truncate">{row.clientName}</span>
@@ -529,6 +574,15 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 								{formatDate(row.issuedOn)}
 							</td>
 						</tr>
+						{unfolded ? (
+							<tr>
+								<td />
+								<td colSpan={HEADS.length} className="border-b border-[var(--line)] px-3 pb-2">
+									<VersionList documentId={row.id} nested />
+								</td>
+							</tr>
+						) : null}
+						</Fragment>
 					);
 				})}
 			</tbody>

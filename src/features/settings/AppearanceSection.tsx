@@ -37,6 +37,7 @@ export function AppearanceSection({
 	return (
 		<Section
 			title="Appearance"
+			anchor="appearance"
 			description="System follows your operating system."
 		>
 			<div role="radiogroup" aria-label="Theme" className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-5 p-0.5">

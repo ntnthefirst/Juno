@@ -69,6 +69,7 @@ export function ReferenceSection() {
 	return (
 		<Section
 			title="Statuses and labels"
+			anchor="reference"
 			action={
 				<Button
 					size="dense"

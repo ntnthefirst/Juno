@@ -42,6 +42,7 @@ export function AccountingSection({ onSaved }: { onSaved: (message: string) => v
 	return (
 		<Section
 			title="Accounting"
+			anchor="accounting"
 			description="Where you invoice. Invoice reminders link here."
 			action={
 				<Button size="dense" variant="primary" disabled={!tool || busy} onClick={() => void save()}>

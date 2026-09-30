@@ -103,6 +103,7 @@ export function OwnerSection({ onSaved }: OwnerSectionProps) {
 		<>
 			<Section
 				title="Your details"
+				anchor="owner-details"
 				description="Printed on the contracts and emails you send clients."
 				action={
 					<Button size="dense" variant="primary" disabled={!profile || busy} onClick={() => void save()}>
@@ -130,6 +131,7 @@ export function OwnerSection({ onSaved }: OwnerSectionProps) {
 
 			<Section
 				title="Email addresses"
+				anchor="owner-emails"
 				description="Documents print the primary one."
 			>
 				{profile === null ? (
@@ -167,6 +169,7 @@ export function OwnerSection({ onSaved }: OwnerSectionProps) {
 
 			<Section
 				title="Phone numbers"
+				anchor="owner-phones"
 				description="Documents print the primary one."
 			>
 				{profile === null ? (

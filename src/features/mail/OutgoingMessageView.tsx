@@ -1,10 +1,12 @@
-import { useState } from "react";
 import type { MailThreadOutgoing } from "@shared/types";
 import { framed } from "../../lib/framed-preview";
 import { displayName, formatFull, formatWhen, participantsLine } from "./format";
 
 type OutgoingMessageViewProps = {
 	message: MailThreadOutgoing;
+	/** One message of a thread is open at a time; the thread decides which. */
+	open: boolean;
+	onToggle: () => void;
 };
 
 /**
@@ -14,19 +16,21 @@ type OutgoingMessageViewProps = {
  * mail message. The frame is the outbox preview's, so a remote picture is a
  * box here as it is there (lib/framed-preview.ts).
  */
-export function OutgoingMessageView({ message }: OutgoingMessageViewProps) {
-	const [open, setOpen] = useState(true);
+export function OutgoingMessageView({ message, open, onToggle }: OutgoingMessageViewProps) {
 	const from = displayName(message.from);
 	const preview = message.bodyHtml ? framed(message.bodyHtml, "") : null;
 	const sending = message.state !== "sent";
 
 	return (
-		<article className="border-t border-[var(--line)] first:border-t-0" data-outgoing>
+		<article
+			className={`border-t border-[var(--line)] first:border-t-0 ${open ? "flex flex-1 flex-col" : ""}`}
+			data-outgoing
+		>
 			<button
 				type="button"
-				onClick={() => setOpen((current) => !current)}
+				onClick={onToggle}
 				aria-expanded={open}
-				className="flex w-full items-start gap-3 py-3 text-left hover:bg-[var(--hover)]"
+				className={`flex w-full shrink-0 items-start gap-3 px-8 py-3 text-left ${open ? "bg-[var(--hover)]" : "hover:bg-[var(--hover)]"}`}
 			>
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
@@ -52,7 +56,7 @@ export function OutgoingMessageView({ message }: OutgoingMessageViewProps) {
 			</button>
 
 			{open ? (
-				<div>
+				<div className="px-8">
 					<p className="pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 						<span data-selectable className="block truncate">
 							To {participantsLine(message.to, "(nobody)")}

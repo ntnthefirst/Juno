@@ -83,7 +83,7 @@ function serveMail(url: URL): Response {
 		status: 200,
 		headers: {
 			"Content-Type": "text/html; charset=utf-8",
-			"Content-Security-Policy": frameCsp(allowRemoteImages),
+			"Content-Security-Policy": frameCsp(allowRemoteImages, body.scriptNonce),
 			"X-Content-Type-Options": "nosniff",
 			"Cache-Control": "no-store",
 		},
@@ -96,14 +96,7 @@ function serveMail(url: URL): Response {
  * trusts as an image source is a bigger door than a preview is worth. An SVG
  * asset gets the file placeholder and opens in the system viewer instead.
  */
-const IMAGE_TYPES = new Set([
-	"image/png",
-	"image/jpeg",
-	"image/gif",
-	"image/webp",
-	"image/avif",
-	"image/bmp",
-]);
+const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp"]);
 
 async function serveAsset(url: URL): Promise<Response> {
 	// Same reasoning as the mail host: the lock guard covers IPC, not a URL.

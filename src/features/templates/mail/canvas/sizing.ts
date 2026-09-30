@@ -17,7 +17,7 @@
  * Fixed is always the block's own number, a width that still gives way on a
  * narrow screen and a height the content can grow past.
  */
-import type { MailAlign, MailBlock, MailSection } from "@shared/types";
+import type { MailAlign, MailBlock, MailContainer } from "@shared/types";
 
 export type Sizing = "fixed" | "hug" | "fill";
 
@@ -28,13 +28,13 @@ export type Across = "start" | "center" | "end";
 
 type Patch = Partial<MailBlock>;
 
-export function flowOf(section: MailSection): Flow {
+export function flowOf(section: MailContainer): Flow {
 	if (section.layout.kind === "grid") return "grid";
 	return section.layout.direction === "row" ? "row" : "column";
 }
 
 /** Where a block sits across its section, with "auto" read as what the section says. */
-export function alignOf(block: MailBlock, section: MailSection): MailAlign {
+export function alignOf(block: MailBlock, section: MailContainer): MailAlign {
 	return block.alignSelf === "auto" ? section.layout.align : block.alignSelf;
 }
 
@@ -57,7 +57,7 @@ export function fixedHeight(block: MailBlock): number | null {
  * spans what it is given, so it cannot hug; a spacer only has a width in a row,
  * where filling is what pushes its neighbours apart; code is sized by its code.
  */
-export function widthModes(block: MailBlock, section: MailSection): Sizing[] {
+export function widthModes(block: MailBlock, section: MailContainer): Sizing[] {
 	const flow = flowOf(section);
 	switch (block.kind) {
 		case "html":
@@ -85,7 +85,7 @@ export function heightModes(block: MailBlock): Sizing[] {
 	}
 }
 
-export function widthSizing(block: MailBlock, section: MailSection): Sizing {
+export function widthSizing(block: MailBlock, section: MailContainer): Sizing {
 	const flow = flowOf(section);
 	if (fixedWidth(block) !== null) return "fixed";
 	// A rule with no width of its own is written at 100%.
@@ -99,7 +99,7 @@ export function widthSizing(block: MailBlock, section: MailSection): Sizing {
 	return alignOf(block, section) === "stretch" ? "fill" : "hug";
 }
 
-export function heightSizing(block: MailBlock, section: MailSection): Sizing {
+export function heightSizing(block: MailBlock, section: MailContainer): Sizing {
 	if (fixedHeight(block) !== null) return "fixed";
 	if (flowOf(section) === "column") return block.grow > 0 ? "fill" : "hug";
 	return alignOf(block, section) === "stretch" ? "fill" : "hug";
@@ -118,12 +118,12 @@ function withHeight(block: MailBlock, height: number | null): Patch {
 }
 
 /** Lets go of a stretch, so the block sits at the start rather than being pulled across. */
-function unstretched(block: MailBlock, section: MailSection): Patch {
+function unstretched(block: MailBlock, section: MailContainer): Patch {
 	return alignOf(block, section) === "stretch" ? ({ alignSelf: "start" } as Patch) : {};
 }
 
 /** Stretches across, writing nothing when the section already stretches everything. */
-function stretched(section: MailSection): Patch {
+function stretched(section: MailContainer): Patch {
 	return { alignSelf: section.layout.align === "stretch" ? "auto" : "stretch" } as Patch;
 }
 
@@ -132,7 +132,7 @@ function stretched(section: MailSection): Patch {
  * drawn right now, which is what fixed starts from, the way Figma keeps a
  * layer the size it was when it is switched to fixed.
  */
-export function sizeWidth(block: MailBlock, section: MailSection, mode: Sizing, measured: number | null): Patch {
+export function sizeWidth(block: MailBlock, section: MailContainer, mode: Sizing, measured: number | null): Patch {
 	const flow = flowOf(section);
 	const px = Math.max(1, Math.round(measured ?? (block.kind === "image" ? 300 : 240)));
 	if (mode === "fixed") {
@@ -160,7 +160,7 @@ export function sizeWidth(block: MailBlock, section: MailSection, mode: Sizing, 
 	} as Patch;
 }
 
-export function sizeHeight(block: MailBlock, section: MailSection, mode: Sizing, measured: number | null): Patch {
+export function sizeHeight(block: MailBlock, section: MailContainer, mode: Sizing, measured: number | null): Patch {
 	const flow = flowOf(section);
 	const px = Math.max(1, Math.round(measured ?? 80));
 	if (mode === "fixed") {
@@ -180,12 +180,12 @@ export function sizeHeight(block: MailBlock, section: MailSection, mode: Sizing,
 }
 
 /** A width typed into the W field: the block becomes fixed at it. */
-export function setWidth(block: MailBlock, section: MailSection, px: number): Patch {
+export function setWidth(block: MailBlock, section: MailContainer, px: number): Patch {
 	return sizeWidth(block, section, "fixed", px);
 }
 
 /** A height typed into the H field. */
-export function setHeight(block: MailBlock, section: MailSection, px: number): Patch {
+export function setHeight(block: MailBlock, section: MailContainer, px: number): Patch {
 	return sizeHeight(block, section, "fixed", px);
 }
 
@@ -199,7 +199,7 @@ const PICTURE_ALIGN = { start: "left", center: "center", end: "right" } as const
  * a client without flexbox reads: Outlook centres a picture on `margin:0 auto`
  * and ignores `align-self` entirely.
  */
-export function alignAcross(block: MailBlock, section: MailSection, across: Across | null): Patch {
+export function alignAcross(block: MailBlock, section: MailContainer, across: Across | null): Patch {
 	const alignSelf = across ?? "auto";
 	if (block.kind === "image" && flowOf(section) === "column") {
 		const resolved = across ?? (section.layout.align === "stretch" ? "start" : section.layout.align);
@@ -209,7 +209,7 @@ export function alignAcross(block: MailBlock, section: MailSection, across: Acro
 }
 
 /** What the alignment row shows as pressed: nothing while the block is stretched. */
-export function acrossOf(block: MailBlock, section: MailSection): Across | null {
+export function acrossOf(block: MailBlock, section: MailContainer): Across | null {
 	if (block.kind === "image" && flowOf(section) === "column" && block.align !== "left" && block.align !== "justify") {
 		return block.align === "center" ? "center" : "end";
 	}

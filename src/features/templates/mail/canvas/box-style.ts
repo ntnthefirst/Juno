@@ -21,7 +21,7 @@ import type {
 	MailFill,
 	MailFont,
 	MailFontFallback,
-	MailSection,
+	MailContainer,
 	MailTextStyle,
 	MailWeight,
 } from "@shared/types";
@@ -343,13 +343,13 @@ export function placeCss(block: MailBlock): CSSProperties {
 }
 
 /** Matches sectionPlaceDeclarations: a section narrower than the frame, moved by its margins. */
-function sectionPlaceCss(section: MailSection): CSSProperties {
+function sectionPlaceCss(section: MailContainer): CSSProperties {
 	if (section.alignSelf === "center") return { marginLeft: "auto", marginRight: "auto" };
 	if (section.alignSelf === "end") return { marginLeft: "auto" };
 	return {};
 }
 
-export function sectionCss(section: MailSection): CSSProperties {
+export function sectionCss(section: MailContainer): CSSProperties {
 	const box = { ...boxCss(section.box), ...sectionPlaceCss(section) };
 	if (section.layout.kind === "grid") {
 		return {

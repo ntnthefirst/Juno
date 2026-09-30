@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MailBlock, MailFont, MailLayout, MailSection, MailTextStyle, TemplateInput } from "../../shared/types";
+import type { MailBlock, MailContainer, MailFont, MailLayout, MailTextStyle, TemplateInput } from "../../shared/types";
 import {
 	blockToCode,
 	breakpointCss,
@@ -13,7 +13,7 @@ import {
 	toFamily,
 	emptyBox,
 	emptyLayout,
-	emptySection,
+	emptyContainer,
 	defaultText,
 	layoutFromHtml,
 	newBlock,
@@ -27,19 +27,24 @@ import {
 	toColor,
 } from "./mail-layout";
 
-function sectionWith(blocks: MailBlock[], layout?: Partial<MailSection["layout"]>): MailSection {
-	const section = emptySection("Body");
-	section.blocks = blocks;
-	if (layout) section.layout = { ...section.layout, ...layout } as MailSection["layout"];
+function sectionWith(children: MailBlock[], layout?: Partial<MailContainer["layout"]>): MailContainer {
+	const section = emptyContainer("section", "Body");
+	section.children = children;
+	if (layout) section.layout = { ...section.layout, ...layout } as MailContainer["layout"];
 	return section;
 }
 
-function layoutWith(sections: MailSection[]): MailLayout {
-	return { ...emptyLayout(), sections };
+function layoutWith(children: MailContainer[]): MailLayout {
+	return { ...emptyLayout(), children };
 }
 
 function text(html: string): MailBlock {
-	return { id: "t1", kind: "text", html, text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false };
+	return { id: "t1", kind: "text", tag: "p", html, text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false };
+}
+
+/** The children of a container, narrowed for tests that already know they hold only blocks. */
+function blocksOf(node: { children: unknown } | undefined): MailBlock[] {
+	return ((node?.children as MailBlock[] | undefined) ?? []) as MailBlock[];
 }
 
 describe("emptyLayout", () => {
@@ -53,9 +58,14 @@ describe("emptyLayout", () => {
 		expect(parseLayout(null)).toBeNull();
 	});
 
-	it("gives a layout with no sections one to start from", () => {
+	it("gives a layout with nothing in it one container to start from", () => {
+		const layout = normaliseLayout({ version: 2, children: [] });
+		expect(layout?.children).toHaveLength(1);
+	});
+
+	it("gives a version 1 layout with no sections one to start from", () => {
 		const layout = normaliseLayout({ version: 1, sections: [] });
-		expect(layout?.sections).toHaveLength(1);
+		expect(layout?.children).toHaveLength(1);
 	});
 });
 
@@ -119,8 +129,8 @@ describe("compileLayout", () => {
 			{ key: "scope", label: "Scope", kind: "text", required: false },
 		];
 		const blocks: MailBlock[] = [
-			{ id: "f1", kind: "field", inputKey: "banner", text: defaultText(), box: emptyBox(), grow: 0 },
-			{ id: "f2", kind: "field", inputKey: "scope", text: defaultText(), box: emptyBox(), grow: 0 },
+			{ id: "f1", kind: "field", inputKey: "banner", text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false },
+			{ id: "f2", kind: "field", inputKey: "scope", text: defaultText(), box: emptyBox(), grow: 0, alignSelf: "auto", hidden: false },
 		];
 		const html = compileLayout(layoutWith([sectionWith(blocks)]), inputs);
 		expect(html).toContain('<img data-juno-block="field"');
@@ -144,7 +154,7 @@ describe("layoutFromHtml", () => {
 					{
 						id: "h1",
 						kind: "heading",
-						level: 2,
+						tag: "h2",
 						content: "Beste",
 						text: defaultText(),
 						box: emptyBox(),
@@ -168,20 +178,20 @@ describe("layoutFromHtml", () => {
 		// editor never produced sitting beside a block that it did.
 		const html =
 			'<div data-juno-canvas="1">' +
-			'<div data-juno-section="Body" data-juno-id="s1" style="display:flex">' +
+			'<section data-juno-section="Body" data-juno-id="s1" style="display:block;display:flex">' +
 			'<div data-juno-block="text" data-juno-id="t1">Dag</div>' +
 			"<table><tr><td>Met de hand</td></tr></table>" +
-			"</div></div>";
+			"</section></div>";
 		const readBack = layoutFromHtml(html);
-		const kinds = readBack.sections.flatMap((section) => section.blocks.map((block) => block.kind));
+		const kinds = readBack.children.flatMap((section) => blocksOf(section).map((block) => block.kind));
 		expect(kinds).toContain("html");
 		expect(JSON.stringify(readBack)).toContain("Met de hand");
 	});
 
 	it("turns markup with no canvas marker into one section holding all of it", () => {
 		const readBack = layoutFromHtml("<p>Zomaar getypt</p>");
-		expect(readBack.sections).toHaveLength(1);
-		expect(readBack.sections[0]?.blocks[0]?.kind).toBe("html");
+		expect(readBack.children).toHaveLength(1);
+		expect(blocksOf(readBack.children[0])[0]?.kind).toBe("html");
 		expect(JSON.stringify(readBack)).toContain("Zomaar getypt");
 	});
 
@@ -189,15 +199,15 @@ describe("layoutFromHtml", () => {
 		const html = compileLayout(
 			layoutWith([sectionWith([text("a")], { kind: "grid", columns: 4, gap: 10, align: "center" })]),
 		);
-		const section = layoutFromHtml(html).sections[0]!;
+		const section = layoutFromHtml(html).children[0] as MailContainer;
 		expect(section.layout).toEqual({ kind: "grid", columns: 4, gap: 10, align: "center" });
 	});
 
 	it("hands an author's own declarations back to the custom CSS field", () => {
 		const layout = emptyLayout();
-		layout.sections[0]!.box.customCss = "text-transform:uppercase";
+		(layout.children[0] as MailContainer).box.customCss = "text-transform:uppercase";
 		const html = compileLayout(normaliseLayout(layout)!);
-		expect(layoutFromHtml(html).sections[0]?.box.customCss).toBe("text-transform:uppercase");
+		expect((layoutFromHtml(html).children[0] as MailContainer).box.customCss).toBe("text-transform:uppercase");
 	});
 });
 
@@ -243,6 +253,11 @@ describe("sanitiseFragment", () => {
 		const out = sanitiseFragment('<a href="javascript:alert(1)">Klik</a>');
 		expect(out).not.toContain("javascript");
 		expect(out).toContain("Klik");
+	});
+
+	it("keeps li only when it is told to, for a list block's items", () => {
+		expect(sanitiseFragment("<li>Een</li>")).toBe("&lt;li&gt;Een&lt;/li&gt;");
+		expect(sanitiseFragment("<li>Een</li>", ["li"])).toBe("<li>Een</li>");
 	});
 });
 
@@ -317,7 +332,7 @@ describe("appearance", () => {
 			],
 		});
 		const back = layoutFromHtml(compileLayout(layout));
-		const box = back.sections[0]?.blocks[0]?.box;
+		const box = blocksOf(back.children[0])[0]?.box;
 		expect(box?.fill).toEqual({ kind: "gradient", angle: 45, from: "#ffffff", to: "#4a3fa0", hidden: false });
 		expect(box?.borderStyle).toBe("dotted");
 		expect(box?.borderRadius).toBe(6);
@@ -336,7 +351,7 @@ describe("appearance", () => {
 			sections: [{ id: "s1", name: "Body", blocks: [{ id: "b1", kind: "text", html: "Dag", box: { background: "#ffffff" } }] }],
 		});
 		expect(layout?.fill).toEqual({ kind: "solid", color: "#f6f6fa", hidden: false });
-		expect(layout?.sections[0]?.blocks[0]?.box.fill).toEqual({ kind: "solid", color: "#ffffff", hidden: false });
+		expect(blocksOf(layout?.children[0])[0]?.box.fill).toEqual({ kind: "solid", color: "#ffffff", hidden: false });
 	});
 
 	it("refuses a colour that is not a hex value anywhere in the appearance", () => {
@@ -400,7 +415,7 @@ describe("typography", () => {
 		const html = typed({ verticalAlign: "middle" });
 		expect(html).toContain("justify-content:center");
 		expect(html).toContain('<span data-juno-inner="1" style="display:block">Dag</span>');
-		const back = layoutFromHtml(html).sections[0]?.blocks[0];
+		const back = blocksOf(layoutFromHtml(html).children[0])[0];
 		expect(back?.kind === "text" ? back.html : null).toBe("Dag");
 		expect(back?.kind === "text" ? back.text.verticalAlign : null).toBe("middle");
 	});
@@ -414,7 +429,7 @@ describe("typography", () => {
 			decoration: "underline",
 			transform: "title",
 		};
-		const back = layoutFromHtml(typed(style)).sections[0]?.blocks[0];
+		const back = blocksOf(layoutFromHtml(typed(style)).children[0])[0];
 		expect(back?.kind === "text" ? back.text : null).toMatchObject(style);
 		expect(back?.kind === "text" ? back.box.customCss : "not text").toBeNull();
 	});
@@ -481,7 +496,7 @@ describe("placing and showing", () => {
 		expect(html).toContain("min-height:80px");
 		expect(html).toContain("overflow:hidden");
 		expect(html).toContain("align-self:center");
-		const back = layoutFromHtml(html).sections[0]?.blocks[0];
+		const back = blocksOf(layoutFromHtml(html).children[0])[0];
 		expect(back?.alignSelf).toBe("center");
 		expect(back && "box" in back ? [back.box.width, back.box.minHeight, back.box.clip] : null).toEqual([240, 80, true]);
 	});
@@ -491,10 +506,10 @@ describe("placing and showing", () => {
 			version: 1,
 			sections: [{ id: "s1", name: "Body", blocks: [{ id: "b1", kind: "text", html: "Dag" }] }],
 		});
-		const block = layout?.sections[0]?.blocks[0];
+		const block = blocksOf(layout?.children[0])[0];
 		expect(block?.hidden).toBe(false);
 		expect(block?.alignSelf).toBe("auto");
-		expect(layout?.sections[0]?.hidden).toBe(false);
+		expect((layout?.children[0] as MailContainer)?.hidden).toBe(false);
 		expect(layout?.fonts).toEqual([]);
 	});
 });
@@ -552,8 +567,8 @@ describe("code blocks", () => {
 			box: { ...emptyBox(), fill: { kind: "solid" as const, color: "#f6f6fa" }, borderRadius: 6 },
 		} as MailBlock;
 		const before = layoutWith([sectionWith([heading])]);
-		const after = convertBlockToCode(before, before.sections[0]!.id, "h1", []);
-		const converted = after.sections[0]?.blocks[0];
+		const after = convertBlockToCode(before, (before.children[0] as MailContainer).id, "h1", []);
+		const converted = blocksOf(after.children[0])[0];
 		expect(converted?.kind).toBe("html");
 		// The placement is part of the code now, so the block carries none of its own.
 		expect(converted?.grow).toBe(0);
@@ -564,7 +579,8 @@ describe("code blocks", () => {
 	it("keeps a hidden block hidden when it is converted", () => {
 		const hidden = { ...newBlock("text"), id: "t9", hidden: true } as MailBlock;
 		const layout = layoutWith([sectionWith([hidden])]);
-		expect(convertBlockToCode(layout, layout.sections[0]!.id, "t9", []).sections[0]?.blocks[0]?.hidden).toBe(true);
+		const converted = convertBlockToCode(layout, (layout.children[0] as MailContainer).id, "t9", []);
+		expect(blocksOf(converted.children[0])[0]?.hidden).toBe(true);
 		expect(blockToCode(hidden, [], []).html).toBe("<p>Tekst</p>");
 	});
 
@@ -574,7 +590,7 @@ describe("code blocks", () => {
 		]);
 		const html = compileLayout(layout);
 		const back = layoutFromHtml(html);
-		expect(back.sections[0]?.blocks).toMatchObject([
+		expect(blocksOf(back.children[0])).toMatchObject([
 			{ kind: "html", html: "<p>Een</p>", css: "margin:0;color:#16161d" },
 			{ kind: "html", html: "<b>A</b> en <i>B</i>", css: "padding:4px" },
 		]);
@@ -595,7 +611,7 @@ describe("code blocks", () => {
 				},
 			],
 		});
-		expect(layout?.sections[0]?.blocks).toMatchObject([
+		expect(blocksOf(layout?.children[0])).toMatchObject([
 			{ kind: "html", html: "<div>Dag <b>Jan</b></div>", css: "padding:8px 8px 8px 8px" },
 			{ kind: "html", html: "<p>Los</p>", css: "" },
 		]);
@@ -634,7 +650,7 @@ describe("colours with an opacity", () => {
 			]),
 		]);
 		const html = compileLayout(layout);
-		const block = layoutFromHtml(html).sections[0]?.blocks[0];
+		const block = blocksOf(layoutFromHtml(html).children[0])[0];
 		expect(block?.kind === "text" ? block.text.color : null).toBe("#16161d80");
 		expect(block?.box).toMatchObject({
 			fill: { kind: "gradient", angle: 90, from: "#ffffff00", to: "#4a3fa0cc" },
@@ -674,7 +690,7 @@ describe("fills, strokes and effects with an eye", () => {
 		const html = compileLayout(layout);
 		expect(html).toContain("border-bottom:1px solid #e3e2ec");
 		expect(html).not.toContain("border:1px");
-		const box = layoutFromHtml(html).sections[0]?.blocks[0]?.box;
+		const box = blocksOf(layoutFromHtml(html).children[0])[0]?.box;
 		expect(box?.borderSides).toEqual({ top: false, right: false, bottom: true, left: false });
 		expect(box?.customCss).toBeNull();
 	});
@@ -695,7 +711,7 @@ describe("text and sections", () => {
 
 	it("reads a paragraph back as the text block it was", () => {
 		const html = compileLayout(layoutWith([sectionWith([text("Dag <b>jij</b>")])]));
-		const block = layoutFromHtml(html).sections[0]?.blocks[0];
+		const block = blocksOf(layoutFromHtml(html).children[0])[0];
 		expect(block?.kind === "text" ? block.html : null).toBe("Dag <b>jij</b>");
 	});
 
@@ -703,7 +719,7 @@ describe("text and sections", () => {
 		const section = { ...sectionWith([]), alignSelf: "center" as const, box: { ...emptyBox(), width: 400 } };
 		const html = compileLayout(layoutWith([section]));
 		expect(html).toContain("margin-left:auto;margin-right:auto");
-		const back = layoutFromHtml(html).sections[0];
+		const back = layoutFromHtml(html).children[0] as MailContainer;
 		expect(back?.alignSelf).toBe("center");
 		expect(back?.box.customCss).toBeNull();
 	});
@@ -758,13 +774,13 @@ describe("breakpoints", () => {
 		expect(tablet.width).toBe(480);
 		expect(phone.width).toBe(320);
 		const at = (shown: MailLayout) => {
-			const block = shown.sections[0]?.blocks[0];
+			const block = blocksOf(shown.children[0])[0];
 			return block?.kind === "text" ? block.text.fontSize : null;
 		};
 		expect(at(tablet)).toBe(14);
 		expect(at(phone)).toBe(18);
 		// The phone inherits the tablet's column.
-		const section = phone.sections[0]?.layout;
+		const section = (phone.children[0] as MailContainer)?.layout;
 		expect(section?.kind === "flex" ? section.direction : null).toBe("column");
 	});
 
@@ -795,7 +811,7 @@ describe("breakpoints", () => {
 		const nowhere: MailLayout = { ...layout, breakpoints: [] };
 		expect(compileLayout(nowhere)).not.toContain("Mobiel");
 		// And the reader knows the two declarations for what they are.
-		const back = layoutFromHtml(html, layout).sections[0]?.blocks[0];
+		const back = blocksOf(layoutFromHtml(html, layout).children[0])[0];
 		expect(back?.hidden).toBe(true);
 		expect(back?.box.customCss).toBeNull();
 	});
@@ -851,5 +867,370 @@ describe("breakpoints", () => {
 		};
 		const converted = convertBlockToCode(layout, "s1", "t1", []);
 		expect(converted.breakpoints[0]?.blocks.t1).toEqual({ hidden: true });
+	});
+
+	it("changes a breakpoint on a nested container's own style, and on a block inside it", () => {
+		const inner = { ...text("Diep"), id: "deep" };
+		const nested: MailContainer = { ...emptyContainer("div", "Inner"), id: "inner", children: [inner] };
+		const outer: MailContainer = { ...sectionWith([nested]), id: "outer" };
+		const layout: MailLayout = {
+			...layoutWith([outer]),
+			breakpoints: [
+				{
+					id: "b",
+					name: "Phone",
+					maxWidth: 480,
+					sections: { inner: { hidden: true } },
+					blocks: { deep: { hidden: true } },
+				},
+			],
+		};
+		const drawn = layoutAt(layout, "b");
+		const drawnInner = (drawn.children[0] as MailContainer).children[0] as MailContainer;
+		expect(drawnInner.hidden).toBe(true);
+		expect((drawnInner.children[0] as MailBlock).hidden).toBe(true);
+		const css = breakpointCss(layout);
+		expect(css).toContain(".jb-inner{display:none !important}");
+		expect(css).toContain(".jb-deep{display:none !important}");
+	});
+});
+
+describe("version migration", () => {
+	/**
+	 * A version 1 layout with every kind of block, a grid section, and
+	 * breakpoints overriding both a section and blocks. Loads unchanged: the
+	 * only difference in what it sends is `<section>` instead of `<div>`, with
+	 * `display:block` written first, on every section.
+	 */
+	function v1Fixture(): Record<string, unknown> {
+		return {
+			version: 1,
+			width: 640,
+			widthMode: "fixed",
+			minHeight: 200,
+			fill: { kind: "solid", color: "#f6f6fa" },
+			fonts: [],
+			customCss: null,
+			sections: [
+				{
+					id: "s1",
+					name: "Header",
+					hidden: false,
+					alignSelf: "auto",
+					layout: { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 12, wrap: false },
+					box: {},
+					blocks: [
+						{ id: "h1", kind: "heading", level: 1, content: "Welkom", box: {} },
+						{ id: "t1", kind: "text", html: "Hallo <b>daar</b>", box: {} },
+						{ id: "b1", kind: "button", label: "Ga", href: "https://example.be", background: "#4a3fa0", color: "#ffffff", radius: 4, box: {} },
+						{ id: "i1", kind: "image", src: "https://example.be/a.png", alt: "Logo", width: 100, align: "left", box: {} },
+						{ id: "d1", kind: "divider", color: "#000000", thickness: 2, box: {} },
+						{ id: "sp1", kind: "spacer", height: 20 },
+						{ id: "f1", kind: "field", inputKey: "scope", box: {} },
+						{ id: "c1", kind: "html", html: "<p>Code</p>", css: "color:red" },
+					],
+				},
+				{
+					id: "s2",
+					name: "Footer",
+					hidden: false,
+					alignSelf: "auto",
+					layout: { kind: "grid", columns: 2, gap: 8, align: "stretch" },
+					box: {},
+					blocks: [{ id: "t2", kind: "text", html: "Tweede" }],
+				},
+			],
+			breakpoints: [
+				{
+					id: "bp1",
+					name: "Phone",
+					maxWidth: 480,
+					sections: { s2: { box: { padding: { top: 4, right: 4, bottom: 4, left: 4 } } } },
+					blocks: { h1: { grow: 1 }, t2: { hidden: true } },
+				},
+			],
+		};
+	}
+
+	it("loads a version 1 layout with every ids and shape kept", () => {
+		const normalised = normaliseLayout(v1Fixture())!;
+		expect(normalised.version).toBe(2);
+		expect(normalised.children.map((node) => node.id)).toEqual(["s1", "s2"]);
+		for (const node of normalised.children) {
+			expect(node.kind).toBe("container");
+			expect((node as MailContainer).tag).toBe("section");
+			expect((node as MailContainer).grow).toBe(0);
+		}
+		expect(blocksOf(normalised.children[0]).map((block) => block.id)).toEqual([
+			"h1",
+			"t1",
+			"b1",
+			"i1",
+			"d1",
+			"sp1",
+			"f1",
+			"c1",
+		]);
+		const heading = blocksOf(normalised.children[0])[0];
+		expect(heading?.kind === "heading" ? heading.tag : null).toBe("h1");
+		const paragraph = blocksOf(normalised.children[0])[1];
+		expect(paragraph?.kind === "text" ? paragraph.tag : null).toBe("p");
+		const picture = blocksOf(normalised.children[0])[3];
+		expect(picture?.kind === "image" ? picture.href : "not image").toBeNull();
+	});
+
+	it("sends the same body as before, except a section is a <section> with display:block first", () => {
+		const normalised = normaliseLayout(v1Fixture())!;
+		const v2Html = compileLayout(normalised);
+
+		// The same tree, with every section's tag forced back to "div": that is
+		// exactly what a version 1 layout always compiled to, since every
+		// section was a div and never carried `display:block`.
+		const asV1Would = {
+			...normalised,
+			children: normalised.children.map((node) => ({ ...(node as MailContainer), tag: "div" as const })),
+		};
+		const oldEquivalentHtml = compileLayout(asV1Would);
+
+		const reverted = v2Html
+			.replace(/<section(\s+data-juno-section=)/g, "<div$1")
+			.replace(/<\/section>/g, "</div>")
+			.replace(/style="display:block;(display:(?:flex|grid))/g, 'style="$1');
+		expect(reverted).toBe(oldEquivalentHtml);
+		// Proof the substitution actually did something, so the test cannot pass
+		// by the two sides already being identical.
+		expect(v2Html).not.toBe(oldEquivalentHtml);
+		expect(v2Html).toContain("<section ");
+		expect(v2Html).toContain("style=\"display:block;display:flex");
+
+		// The breakpoint CSS does not depend on the tag at all.
+		expect(breakpointCss(normalised)).toBe(breakpointCss(asV1Would));
+	});
+
+	it("compiles a version 1 layout to the body version 1 sent, with only the sections changed", () => {
+		// Captured from the version 1 compiler, with each section's
+		// `<div ... style="` turned into `<section ... style="display:block;`.
+		// A change here is a change to what every existing template sends.
+		const inputs: TemplateInput[] = [{ key: "scope", label: "Scope", kind: "text", required: false }];
+		const expected =
+			'<div data-juno-canvas="1" style="max-width:640px;margin:0 auto;min-height:200px;background-color:#f6f6fa">' +
+			'<section data-juno-section="Header" data-juno-id="s1" style="display:block;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:12px;flex-wrap:nowrap">' +
+			'<h1 data-juno-block="heading" data-juno-id="h1" class="jb-h1" style="margin:0;font-weight:400">Welkom</h1>' +
+			'<p data-juno-block="text" data-juno-id="t1" style="margin:0">Hallo <b>daar</b></p>' +
+			'<a data-juno-block="button" data-juno-id="b1" href="https://example.be" style="display:inline-block;text-decoration:none;background:#4a3fa0;color:#ffffff;font-weight:600;border-radius:4px;padding:10px 18px">Ga</a>' +
+			'<img data-juno-block="image" data-juno-id="i1" src="https://example.be/a.png" alt="Logo" style="display:block;max-width:100%;width:100px;height:auto">' +
+			'<hr data-juno-block="divider" data-juno-id="d1" style="border:0;border-top:2px solid #000000;width:100%">' +
+			'<div data-juno-block="spacer" data-juno-id="sp1" style="height:20px;line-height:0;font-size:0">&nbsp;</div>' +
+			'<span data-juno-block="field" data-juno-id="f1" data-juno-field="scope">{{document.scope}}</span>' +
+			'<p data-juno-block="html" data-juno-id="c1" style="color:red">Code</p>' +
+			"</section>" +
+			'<section data-juno-section="Footer" data-juno-id="s2" class="jb-s2" style="display:block;display:grid;grid-template-columns:repeat(2,1fr);gap:8px;align-items:stretch">' +
+			'<p data-juno-block="text" data-juno-id="t2" class="jb-t2" style="margin:0">Tweede</p>' +
+			"</section></div>";
+		expect(compileLayout(normaliseLayout(v1Fixture())!, inputs)).toBe(expected);
+	});
+});
+
+describe("containers", () => {
+	it("writes every container tag as itself, div excepted, and reads it back", () => {
+		const tags = ["section", "div", "header", "footer", "main", "article", "aside", "nav"] as const;
+		for (const tag of tags) {
+			const container: MailContainer = { ...emptyContainer(tag, "Node"), id: `c-${tag}`, children: [text("Dag")] };
+			const html = compileLayout(layoutWith([container]));
+			if (tag === "div") {
+				expect(html).not.toContain("display:block;display:flex");
+				expect(html).toContain(`<div data-juno-section="Node" data-juno-id="c-${tag}"`);
+			} else {
+				expect(html).toContain(`<${tag} data-juno-section="Node" data-juno-id="c-${tag}" style="display:block;display:flex`);
+			}
+			const back = layoutFromHtml(html).children[0] as MailContainer;
+			expect(back.tag).toBe(tag);
+		}
+	});
+
+	it("nests a container inside another, and reads the nesting back", () => {
+		const inner: MailContainer = { ...emptyContainer("div", "Inner"), id: "inner", children: [{ ...text("Diep"), id: "t2" }] };
+		const outer: MailContainer = {
+			...emptyContainer("header", "Outer"),
+			id: "outer",
+			children: [{ ...text("Boven"), id: "t1" }, inner],
+		};
+		const html = compileLayout(layoutWith([outer]));
+		expect(html).toContain('<header data-juno-section="Outer" data-juno-id="outer"');
+		expect(html).toContain('<div data-juno-section="Inner" data-juno-id="inner"');
+
+		const back = layoutFromHtml(html).children[0] as MailContainer;
+		expect(back.tag).toBe("header");
+		expect(back.children).toHaveLength(2);
+		const backInner = back.children[1] as MailContainer;
+		expect(backInner.kind).toBe("container");
+		expect(backInner.tag).toBe("div");
+		expect(blocksOf(backInner)[0]?.kind === "text" ? blocksOf(backInner)[0]?.html : null).toBe("Diep");
+		expect(compileLayout(layoutFromHtml(html))).toBe(html);
+	});
+
+	it("refuses a container nested past the depth limit rather than keeping it", () => {
+		let node: Record<string, unknown> = { id: "leaf", kind: "container", tag: "div", name: "Leaf", children: [] };
+		for (let depth = 0; depth < 12; depth++) {
+			node = { id: `n${depth}`, kind: "container", tag: "div", name: "Node", children: [node] };
+		}
+		const normalised = normaliseLayout({ version: 2, children: [node] });
+		let depth = 0;
+		let current = normalised?.children[0] as MailContainer | undefined;
+		while (current?.kind === "container" && current.children[0]) {
+			current = current.children[0] as MailContainer;
+			depth++;
+		}
+		expect(depth).toBeLessThanOrEqual(8);
+	});
+});
+
+describe("columns", () => {
+	it("compiles a table with two cells, each holding a block, and reads it back", () => {
+		const layout: MailLayout = {
+			...emptyLayout(),
+			children: [
+				{
+					id: "cols",
+					kind: "columns",
+					hidden: false,
+					name: "Vergelijk",
+					alignSelf: "auto",
+					grow: 0,
+					gap: 16,
+					box: emptyBox(),
+					rows: [
+						{
+							id: "row1",
+							cells: [
+								{ id: "cell1", width: 50, verticalAlign: "top", box: emptyBox(), children: [{ ...text("Links"), id: "l1" }] },
+								{ id: "cell2", width: 50, verticalAlign: "middle", box: emptyBox(), children: [{ ...text("Rechts"), id: "r1" }] },
+							],
+						},
+					],
+				},
+			],
+		};
+		const html = compileLayout(layout);
+		expect(html).toContain('<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" data-juno-columns="Vergelijk" data-juno-id="cols"');
+		expect(html).toContain('<tr data-juno-id="row1">');
+		expect(html).toContain('<td data-juno-id="cell1" width="50%" valign="top"');
+		expect(html).toContain('<td data-juno-id="cell2" width="50%" valign="middle"');
+		expect(html).toContain("Links");
+		expect(html).toContain("Rechts");
+
+		const back = layoutFromHtml(html).children[0];
+		expect(back?.kind).toBe("columns");
+		if (back?.kind !== "columns") throw new Error("not columns");
+		expect(back.rows).toHaveLength(1);
+		expect(back.rows[0]?.cells).toHaveLength(2);
+		expect(back.rows[0]?.cells[0]?.width).toBe(50);
+		expect(back.rows[0]?.cells[1]?.verticalAlign).toBe("middle");
+		const leftBlock = back.rows[0]?.cells[0]?.children[0];
+		expect(leftBlock?.kind === "text" ? leftBlock.html : null).toBe("Links");
+	});
+
+	it("splits the gap between cells and leaves the outer edges alone", () => {
+		const layout: MailLayout = {
+			...emptyLayout(),
+			children: [
+				{
+					id: "cols",
+					kind: "columns",
+					hidden: false,
+					name: "Cols",
+					alignSelf: "auto",
+					grow: 0,
+					gap: 20,
+					box: emptyBox(),
+					rows: [
+						{
+							id: "row1",
+							cells: [
+								{ id: "cell1", width: null, verticalAlign: "top", box: emptyBox(), children: [] },
+								{ id: "cell2", width: null, verticalAlign: "top", box: emptyBox(), children: [] },
+							],
+						},
+					],
+				},
+			],
+		};
+		const html = compileLayout(layout);
+		expect(html).toContain('<td data-juno-id="cell1" valign="top" style="vertical-align:top;padding-right:10px">');
+		expect(html).toContain('<td data-juno-id="cell2" valign="top" style="vertical-align:top;padding-left:10px">');
+	});
+});
+
+describe("text tags", () => {
+	it("writes every text tag as itself, and reads it back", () => {
+		const tags = ["p", "blockquote", "pre", "address", "span"] as const;
+		for (const tag of tags) {
+			const block = { ...text("Woord"), id: `t-${tag}`, tag };
+			const html = compileLayout(layoutWith([sectionWith([block])]));
+			expect(html).toContain(`<${tag} data-juno-block="text" data-juno-id="t-${tag}"`);
+			const back = blocksOf(layoutFromHtml(html).children[0])[0];
+			expect(back?.kind === "text" ? back.tag : null).toBe(tag);
+		}
+	});
+
+	it("writes a list's html as its li items, inside the ul or ol, and reads it back", () => {
+		for (const tag of ["ul", "ol"] as const) {
+			const block = { ...text("<li>Een</li><li>Twee</li>"), id: `list-${tag}`, tag };
+			const html = compileLayout(layoutWith([sectionWith([block])]));
+			expect(html).toContain(`<${tag} data-juno-block="text" data-juno-id="list-${tag}"`);
+			expect(html).toContain("<li>Een</li><li>Twee</li>");
+			const back = blocksOf(layoutFromHtml(html).children[0])[0];
+			expect(back?.kind === "text" ? back.tag : null).toBe(tag);
+			expect(back?.kind === "text" ? back.html : null).toBe("<li>Een</li><li>Twee</li>");
+		}
+	});
+
+	it("never lets a list carry anything but li from its own tags", () => {
+		const block = { ...text('<li onclick="x()">Een</li><script>alert(1)</script>'), tag: "ul" as const };
+		const html = compileLayout(layoutWith([sectionWith([block])]));
+		expect(html).toContain("<li>Een</li>");
+		expect(html).not.toContain("onclick");
+		expect(html).not.toContain("<script>");
+	});
+});
+
+describe("heading tags", () => {
+	it("writes every heading tag as itself, and reads it back", () => {
+		const tags = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
+		for (const tag of tags) {
+			const block = { ...(newBlock("heading") as Extract<MailBlock, { kind: "heading" }>), id: `h-${tag}`, tag, content: "Titel" };
+			const html = compileLayout(layoutWith([sectionWith([block])]));
+			expect(html).toContain(`<${tag} data-juno-block="heading" data-juno-id="h-${tag}"`);
+			const back = blocksOf(layoutFromHtml(html).children[0])[0];
+			expect(back?.kind === "heading" ? back.tag : null).toBe(tag);
+		}
+	});
+});
+
+describe("a linked picture", () => {
+	it("compiles a picture with an href inside a thin link, and reads it back", () => {
+		const image = { ...newBlock("image"), id: "pic", src: "https://example.be/a.png", alt: "Logo", href: "https://example.be" } as MailBlock;
+		const html = compileLayout(layoutWith([sectionWith([image])]));
+		expect(html).toContain('<a href="https://example.be" data-juno-link="1" style="display:inline-block">');
+		expect(html).toContain('<img data-juno-block="image" data-juno-id="pic" src="https://example.be/a.png" alt="Logo"');
+
+		const back = blocksOf(layoutFromHtml(html).children[0])[0];
+		expect(back?.kind === "image" ? back.href : "not image").toBe("https://example.be");
+		expect(back?.kind === "image" ? back.src : null).toBe("https://example.be/a.png");
+		expect(compileLayout(layoutFromHtml(html))).toBe(html);
+	});
+
+	it("compiles a plain picture with no link at all", () => {
+		const image = { ...newBlock("image"), src: "https://example.be/a.png", alt: "Logo" } as MailBlock;
+		const html = compileLayout(layoutWith([sectionWith([image])]));
+		expect(html).not.toContain("data-juno-link");
+		expect(html).not.toContain("<a ");
+	});
+
+	it("refuses an unsafe target for the link round a picture", () => {
+		const image = { ...newBlock("image"), src: "https://example.be/a.png", href: "javascript:alert(1)" } as MailBlock;
+		const html = compileLayout(layoutWith([sectionWith([image])]));
+		expect(html).not.toContain("data-juno-link");
+		expect(html).not.toContain("javascript");
 	});
 });

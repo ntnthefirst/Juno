@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MailBlock, MailLayout, MailSection, MailTemplate, MailTextStyle, TemplateInput } from "@shared/types";
+import type { MailBlock, MailContainer, MailLayout, MailTemplate, MailTextStyle, TemplateInput } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
@@ -87,11 +87,21 @@ const TOOL_KINDS: Partial<Record<ShortcutAction, BlockKind>> = {
  * block copied in one template pastes into the next one opened, the way a
  * copy works everywhere else.
  */
-let copied: { kind: "block"; block: MailBlock } | { kind: "section"; section: MailSection } | null = null;
+let copied: { kind: "block"; block: MailBlock } | { kind: "section"; section: MailContainer } | null = null;
+
+/** A container is a section, in the shapes this phase can build. */
+function isContainer(node: MailLayout["children"][number]): node is MailContainer {
+	return node.kind === "container";
+}
+
+/** A leaf: anything that is not a container or a columns table. */
+function isBlockNode(node: MailLayout["children"][number]): node is MailBlock {
+	return node.kind !== "container" && node.kind !== "columns";
+}
 
 /** Which blocks are in which sections, and in what order: what a structural edit changes. */
 function shapeOf(layout: MailLayout): string {
-	return layout.sections.map((section) => `${section.id}:${section.blocks.map((block) => block.id).join(",")}`).join("|");
+	return layout.children.map((node) => `${node.id}:${"children" in node ? node.children.map((child) => child.id).join(",") : ""}`).join("|");
 }
 
 /**
@@ -287,18 +297,24 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 	const canvasFonts = useCanvasFonts(layout?.fonts ?? []);
 	// An undo can take away what was selected. What is gone is not selected.
 	const live = layout && selection && selectionIn(layout, selection) ? selection : null;
-	const selectedSection = layout && live ? (layout.sections.find((section) => section.id === live.sectionId) ?? null) : null;
+	const selectedSection =
+		layout && live ? (layout.children.find((node): node is MailContainer => isContainer(node) && node.id === live.sectionId) ?? null) : null;
 	const selectedBlock =
-		selectedSection && live?.blockId ? (selectedSection.blocks.find((block) => block.id === live.blockId) ?? null) : null;
-	const shownSection = shown && live ? (shown.sections.find((section) => section.id === live.sectionId) ?? null) : null;
+		selectedSection && live?.blockId
+			? (selectedSection.children.find((node): node is MailBlock => isBlockNode(node) && node.id === live.blockId) ?? null)
+			: null;
+	const shownSection =
+		shown && live ? (shown.children.find((node): node is MailContainer => isContainer(node) && node.id === live.sectionId) ?? null) : null;
 	const shownBlock =
-		shownSection && live?.blockId ? (shownSection.blocks.find((block) => block.id === live.blockId) ?? null) : null;
+		shownSection && live?.blockId
+			? (shownSection.children.find((node): node is MailBlock => isBlockNode(node) && node.id === live.blockId) ?? null)
+			: null;
 	// With nothing selected a new block lands in the last section that is
 	// showing, which is where an author is usually working. A hidden one would
 	// swallow the block where nobody can see it land.
-	const shownSections = layout ? layout.sections.filter((section) => !section.hidden) : [];
-	const lastSectionId =
-		shownSections[shownSections.length - 1]?.id ?? (layout ? (layout.sections[layout.sections.length - 1]?.id ?? null) : null);
+	const allSections = layout ? layout.children.filter(isContainer) : [];
+	const shownSections = allSections.filter((section) => !section.hidden);
+	const lastSectionId = shownSections[shownSections.length - 1]?.id ?? (allSections[allSections.length - 1]?.id ?? null);
 	const onCanvas = mode === "canvas" && layout !== null;
 
 	/**
@@ -380,7 +396,7 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 		if (!layout) return;
 		const next = addSection(layout, selectedSection?.id);
 		onLayout(next);
-		const added = next.sections.find((section) => !layout.sections.some((old) => old.id === section.id));
+		const added = next.children.filter(isContainer).find((section) => !layout.children.some((old) => old.id === section.id));
 		if (added) setSelection({ sectionId: added.id });
 	}
 
@@ -448,7 +464,7 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 		const section = cloneSection(selectedSection);
 		const pairs: [string, string][] = [
 			[selectedSection.id, section.id],
-			...selectedSection.blocks.map((original, index): [string, string] => [original.id, section.blocks[index]?.id ?? original.id]),
+			...selectedSection.children.map((original, index): [string, string] => [original.id, section.children[index]?.id ?? original.id]),
 		];
 		onLayout(copyOverrides(insertSectionAfter(layout, selectedSection.id, section), pairs));
 		setSelection({ sectionId: section.id });
@@ -462,7 +478,7 @@ export function MailTemplateEditor({ templateId, onBack, onSaved }: MailTemplate
 			}
 			return;
 		}
-		const first = selectedSection?.blocks[0];
+		const first = selectedSection?.children.find(isBlockNode);
 		if (selectedSection && first) setSelection({ sectionId: selectedSection.id, blockId: first.id });
 	}
 

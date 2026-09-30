@@ -59,6 +59,10 @@ export function MailScreen() {
 	const [outboxRows, setOutboxRows] = useState<MailOutboxMessage[] | null>(null);
 	const [listError, setListError] = useState<string | null>(null);
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+	// Kept apart from selectedThreadId, which also drives the highlight in the
+	// list: going back closes the reader but leaves the row you read marked, so
+	// it stays clear which one that was.
+	const [readerOpen, setReaderOpen] = useState(false);
 	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [lastPicked, setLastPicked] = useState<string | null>(null);
 	const [selectedOutboxId, setSelectedOutboxId] = useState<string | null>(null);
@@ -307,6 +311,13 @@ export function MailScreen() {
 		setLastPicked(null);
 	}
 
+	function openThread(id: string) {
+		setSelectedThreadIds([]);
+		setLastPicked(null);
+		setSelectedThreadId(id);
+		setReaderOpen(true);
+	}
+
 	function threadById(id: string): MailThreadSummary | null {
 		return threads?.find((t) => t.id === id) ?? null;
 	}
@@ -317,6 +328,7 @@ export function MailScreen() {
 	function afterFile(ids: string[]) {
 		setSelectedThreadIds((current) => current.filter((id) => !ids.includes(id)));
 		setSelectedThreadId((current) => (current && ids.includes(current) ? null : current));
+		if (selectedThreadId && ids.includes(selectedThreadId)) setReaderOpen(false);
 		setAccountsVersion((v) => v + 1);
 	}
 
@@ -412,7 +424,7 @@ export function MailScreen() {
 		if (ids.length === 0) return;
 		switch (action) {
 			case "open":
-				setSelectedThreadId(ids[0] ?? null);
+				if (ids[0]) openThread(ids[0]);
 				break;
 			case "markRead":
 				void setThreadsReadState(ids, true);
@@ -503,6 +515,7 @@ export function MailScreen() {
 		try {
 			const count = await window.juno.mail.file.emptyFolder(folderEmpty.id);
 			setSelectedThreadId(null);
+			setReaderOpen(false);
 			clearThreadSelection();
 			setAccountsVersion((v) => v + 1);
 			setNotice(`${count} ${count === 1 ? "message" : "messages"} deleted from ${folderEmpty.name}.`);
@@ -556,7 +569,10 @@ export function MailScreen() {
 						(main/windows/chrome.ts carries the section in the URL).
 					*/}
 					<div className="mt-6">
-						<Button variant="primary" onClick={() => void window.juno.window.openSettings("mail")}>
+						<Button
+							variant="primary"
+							onClick={() => void window.juno.window.openSettings("mail")}
+						>
 							Connect an account
 						</Button>
 					</div>
@@ -576,7 +592,8 @@ export function MailScreen() {
 					setCompose(null);
 					setNotice(queued ? "Message queued." : "Draft saved.");
 					setOutboxVersion((v) => v + 1);
-					const draftsFolderId = folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
+					const draftsFolderId =
+						folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
 					setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
 					setSelectedOutboxId(message.id);
 				}}
@@ -633,6 +650,7 @@ export function MailScreen() {
 						onSelect={(next) => {
 							setSelection(next);
 							setSelectedThreadId(null);
+							setReaderOpen(false);
 							setSelectedOutboxId(null);
 							clearThreadSelection();
 							setRowLimit(PAGE);
@@ -648,11 +666,11 @@ export function MailScreen() {
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
-				{selectedThreadId && !showingDrafts ? (
+				{selectedThreadId && readerOpen && !showingDrafts ? (
 					<ThreadView
 						key={selectedThreadId}
 						threadId={selectedThreadId}
-						onBack={() => setSelectedThreadId(null)}
+						onBack={() => setReaderOpen(false)}
 						inTrash={inTrash}
 						onChanged={() => setAccountsVersion((v) => v + 1)}
 						onNotice={setNotice}
@@ -699,7 +717,10 @@ export function MailScreen() {
 								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 									This folder is not synced, so nothing here reflects the server yet.
 								</p>
-								<Button size="dense" onClick={() => void enableFolderSync(selectedFolder)}>
+								<Button
+									size="dense"
+									onClick={() => void enableFolderSync(selectedFolder)}
+								>
 									Sync this folder
 								</Button>
 							</div>
@@ -721,7 +742,7 @@ export function MailScreen() {
 									inTrash={inTrash}
 									selectedId={selectedThreadId}
 									selectedIds={selectedThreadIds}
-									onSelect={setSelectedThreadId}
+									onSelect={openThread}
 									onToggleSelect={toggleThreadSelection}
 									onAction={handleThreadAction}
 								/>
@@ -764,10 +785,17 @@ export function MailScreen() {
 						copy on the mail server is deleted too. This cannot be undone.
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
-						<Button disabled={deleteBusy} onClick={() => setDeleteConfirm(null)}>
+						<Button
+							disabled={deleteBusy}
+							onClick={() => setDeleteConfirm(null)}
+						>
 							Keep
 						</Button>
-						<Button variant="danger" disabled={deleteBusy} onClick={() => void confirmDelete()}>
+						<Button
+							variant="danger"
+							disabled={deleteBusy}
+							onClick={() => void confirmDelete()}
+						>
 							Delete forever
 						</Button>
 					</div>
@@ -786,10 +814,17 @@ export function MailScreen() {
 						{folderDelete.messageCount === 1 ? "message" : "messages"} in it? This cannot be undone.
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
-						<Button disabled={folderBusy} onClick={() => setFolderDelete(null)}>
+						<Button
+							disabled={folderBusy}
+							onClick={() => setFolderDelete(null)}
+						>
 							Keep
 						</Button>
-						<Button variant="danger" disabled={folderBusy} onClick={() => void confirmFolderDelete()}>
+						<Button
+							variant="danger"
+							disabled={folderBusy}
+							onClick={() => void confirmFolderDelete()}
+						>
 							Delete folder
 						</Button>
 					</div>
@@ -804,14 +839,21 @@ export function MailScreen() {
 				>
 					<p className="mt-4 text-[var(--ink-muted)]">
 						Delete all <span className="tabular">{folderEmpty.messageCount}</span>{" "}
-						{folderEmpty.messageCount === 1 ? "message" : "messages"} in {folderEmpty.name}? They are deleted
-						from the mail server too. This cannot be undone.
+						{folderEmpty.messageCount === 1 ? "message" : "messages"} in {folderEmpty.name}? They are
+						deleted from the mail server too. This cannot be undone.
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
-						<Button disabled={folderBusy} onClick={() => setFolderEmpty(null)}>
+						<Button
+							disabled={folderBusy}
+							onClick={() => setFolderEmpty(null)}
+						>
 							Keep
 						</Button>
-						<Button variant="danger" disabled={folderBusy} onClick={() => void confirmFolderEmpty()}>
+						<Button
+							variant="danger"
+							disabled={folderBusy}
+							onClick={() => void confirmFolderEmpty()}
+						>
 							Empty folder
 						</Button>
 					</div>
@@ -841,7 +883,12 @@ export function MailScreen() {
 				/>
 			) : null}
 
-			{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
+			{notice ? (
+				<Toast
+					message={notice}
+					onDismiss={() => setNotice(null)}
+				/>
+			) : null}
 		</div>
 	);
 }
@@ -875,8 +922,8 @@ function HorizonNote({ accounts, pending, onPullEverything }: HorizonNoteProps) 
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
 			<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-				Juno pulled the last <span className="tabular">{days}</span> days. Anything older is still on the
-				server and is not on this machine yet.
+				Juno pulled the last <span className="tabular">{days}</span> days. Anything older is still on the server
+				and is not on this machine yet.
 				{pending > 0 ? (
 					<>
 						{" "}
@@ -884,7 +931,10 @@ function HorizonNote({ accounts, pending, onPullEverything }: HorizonNoteProps) 
 					</>
 				) : null}
 			</p>
-			<Button size="dense" onClick={() => onPullEverything(bounded.map((account) => account.id))}>
+			<Button
+				size="dense"
+				onClick={() => onPullEverything(bounded.map((account) => account.id))}
+			>
 				Pull everything
 			</Button>
 		</div>

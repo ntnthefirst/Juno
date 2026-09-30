@@ -4,8 +4,18 @@ import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { MenuButton } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
-import { announceDocumentsChanged, importFiles, onDocumentsChanged } from "../../lib/pdf-drop";
+import {
+	describeOutcome,
+	itemsFromFiles,
+	itemsFromPicked,
+	onDocumentsChanged,
+	type ImportItem,
+	type ImportOutcome,
+} from "../../lib/pdf-drop";
 import { useFileDrop } from "../../lib/use-file-drop";
+import { ImportFlow } from "../documents/ImportFlow";
+import { VersionCount } from "../documents/VersionCount";
+import { VersionList } from "../documents/VersionList";
 
 type ClientDocumentsPanelProps = {
 	clientId: string;
@@ -35,7 +45,8 @@ function formatDate(date: string | null): string {
  */
 export function ClientDocumentsPanel({ clientId, clientName, onGenerate, onChanged }: ClientDocumentsPanelProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
-	const [busy, setBusy] = useState(false);
+	const [items, setItems] = useState<ImportItem[] | null>(null);
+	const [expanded, setExpanded] = useState<string[]>([]);
 	const [problems, setProblems] = useState<string[]>([]);
 	const [notice, setNotice] = useState<string | null>(null);
 
@@ -52,45 +63,33 @@ export function ClientDocumentsPanel({ clientId, clientName, onGenerate, onChang
 	}, [reload]);
 
 	async function bring(files: File[]) {
-		if (busy) return;
-		setBusy(true);
 		setProblems([]);
 		setNotice(null);
-		try {
-			const outcome = await importFiles(clientId, files);
-			setProblems(outcome.failures.map((entry) => entry.message));
-			if (outcome.imported.length > 0) {
-				setNotice(
-					outcome.imported.length === 1
-						? "1 document imported."
-						: `${outcome.imported.length} documents imported.`,
-				);
-				announceDocumentsChanged();
-				onChanged();
-			}
-		} finally {
-			setBusy(false);
-		}
+		const { items: read, rejected } = await itemsFromFiles(files);
+		setProblems(rejected);
+		if (read.length > 0) setItems(read);
 	}
 
 	async function choose() {
-		if (busy) return;
-		setBusy(true);
 		setProblems([]);
 		setNotice(null);
 		try {
-			const record = await window.juno.documents.chooseImport(clientId);
-			// A cancelled picker returns null and changes nothing.
-			if (record) {
-				setNotice("1 document imported.");
-				announceDocumentsChanged();
-				onChanged();
-			}
+			const picked = await window.juno.documents.pickPdfs();
+			if (picked.length > 0) setItems(itemsFromPicked(picked));
 		} catch (cause: unknown) {
 			setProblems([messageOf(cause)]);
-		} finally {
-			setBusy(false);
 		}
+	}
+
+	function finished(outcome: ImportOutcome) {
+		setItems(null);
+		setNotice(describeOutcome(outcome));
+		setProblems((current) => [...current, ...outcome.failures.map((entry) => entry.message)]);
+		if (outcome.documents + outcome.versions > 0) onChanged();
+	}
+
+	function toggle(id: string) {
+		setExpanded((current) => (current.includes(id) ? current.filter((other) => other !== id) : [...current, id]));
 	}
 
 	const drop = useFileDrop((files) => void bring(files));
@@ -128,16 +127,14 @@ export function ClientDocumentsPanel({ clientId, clientName, onGenerate, onChang
 				<div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--line-strong)] px-6 py-10 text-center">
 					<p className="font-[var(--weight-medium)]">No documents yet</p>
 					<p className="mx-auto mt-1 max-w-[46ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-						Drop PDF files here, or use the plus to start one from a template or import one.
+						Drop PDF files here, or use the plus to start one from a template or import one. A file that is an existing document again is offered as a new version.
 					</p>
 				</div>
 			) : (
 				<ul>
 					{records.map((record) => (
-						<li
-							key={record.id}
-							className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
-						>
+						<li key={record.id} className="border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]">
+							<div className="flex items-center justify-between gap-4">
 							<div className="flex min-w-0 items-center gap-3">
 								<span
 									aria-hidden
@@ -149,8 +146,15 @@ export function ClientDocumentsPanel({ clientId, clientName, onGenerate, onChang
 									<span data-selectable className="block truncate font-[var(--weight-medium)]">
 										{record.title}
 									</span>
-									<span className="block text-[var(--ink-muted)]">
+									<span className="flex items-center gap-2 text-[var(--ink-muted)]">
 										{record.sourceKind === "imported" ? "Imported PDF" : "From a template"}
+										{record.versionCount > 0 ? (
+											<VersionCount
+												count={record.versionCount}
+												open={expanded.includes(record.id)}
+												onToggle={() => toggle(record.id)}
+											/>
+										) : null}
 									</span>
 								</div>
 							</div>
@@ -170,6 +174,12 @@ export function ClientDocumentsPanel({ clientId, clientName, onGenerate, onChang
 									Open
 								</Button>
 							</div>
+							</div>
+							{expanded.includes(record.id) ? (
+								<div className="mt-2 pl-9">
+									<VersionList documentId={record.id} nested />
+								</div>
+							) : null}
 						</li>
 					))}
 				</ul>
@@ -199,6 +209,7 @@ export function ClientDocumentsPanel({ clientId, clientName, onGenerate, onChang
 					</ul>
 				</div>
 			) : null}
+			{items ? <ImportFlow items={items} clientId={clientId} onDone={finished} /> : null}
 		</section>
 	);
 }

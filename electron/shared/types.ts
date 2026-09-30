@@ -1518,6 +1518,22 @@ export interface DocumentVersion extends Standard {
 	hasCertificate: boolean;
 }
 
+export type DocumentTimelineKind = "created" | "generated" | "imported" | "stamped" | "signed" | "emailed";
+
+/** One thing that happened to a document, newest first wherever a list of them is returned. */
+export interface DocumentTimelineEntry {
+	id: string;
+	kind: DocumentTimelineKind;
+	at: Iso;
+	title: string;
+	detail: string | null;
+	/** The version this entry made, so the viewer can jump to it. Null for an email. */
+	versionId: string | null;
+}
+
+/** What the confirmation asks about, so the wording can say what will really happen. */
+export type VersionUse = "download" | "email" | "sign";
+
 /**
  * A PDF the window hands over: bytes it read from a drop or a picker, or a mail
  * attachment named by id. Never a path. See .claude/rules/security.md section 2.

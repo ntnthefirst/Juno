@@ -42,6 +42,8 @@ import type {
 	DocumentTemplate,
 	DocumentTemplateInput,
 	DocumentTemplatePatch,
+	DocumentTimelineEntry,
+	VersionUse,
 	GenerateDocumentInput,
 	GenerateDocumentResult,
 	AddVersionInput,
@@ -568,6 +570,17 @@ export interface JunoApi {
 		openCertificate(versionId: string): Promise<void>;
 		/** The document's PDF, for the placement page. Never a path. */
 		readPdf(id: string): Promise<Uint8Array>;
+		/** One version's PDF, for the viewer. Never a path. */
+		readVersion(versionId: string): Promise<Uint8Array>;
+		/** Saves a copy where the person chooses. The path saved to, or null when cancelled. */
+		downloadVersion(versionId: string): Promise<string | null>;
+		/**
+		 * A native yes or no when the version is not the newest, worded for what
+		 * `use` will really do. True straight away for the newest.
+		 */
+		confirmVersionUse(versionId: string, use: VersionUse): Promise<boolean>;
+		/** What has happened to the document, newest first. */
+		timeline(documentId: string): Promise<DocumentTimelineEntry[]>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;
 		remove(id: string): Promise<DocumentRecord>;
 		restore(id: string): Promise<DocumentRecord>;

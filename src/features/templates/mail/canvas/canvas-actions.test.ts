@@ -1,249 +1,919 @@
 import { describe, expect, it } from "vitest";
-import type { MailBlock, MailContainer } from "@shared/types";
+import type { MailAction, MailBlock, MailColumns, MailContainer, MailNode } from "@shared/types";
 import {
-	addBlock,
-	addSection,
+	actionsOf,
+	addCell,
+	addRow,
+	asListItems,
+	canMoveInto,
+	childrenOf,
+	clickBlockedReason,
+	clickProblem,
 	cloneBlock,
+	cloneNode,
 	cloneSection,
 	colorsIn,
-	dropBlock,
+	duplicateNode,
 	emptyLayout,
 	emptySection,
-	insertBlockAfter,
-	insertSectionAfter,
-	moveBlock,
-	moveSection,
-	moveSectionTo,
+	findCell,
+	findNode,
+	firstChildOf,
+	insertNode,
+	insertTarget,
+	locateCell,
+	moveNode,
+	moveWithinParent,
+	nameFor,
 	newBlock,
-	removeBlock,
-	removeSection,
-	reparentBlock,
+	newButtonText,
+	newClick,
+	newColumns as makeColumns,
+	newHover,
+	pairIds,
+	parentOf,
+	pathTo,
+	removeCell,
+	removeNode,
+	removeRow,
 	replaceColor,
+	safeLink,
 	selectionIn,
+	setActions,
+	setContainerTag,
+	setTextTag,
 	siblingOf,
 	updateBlock,
+	updateCell,
+	updateColumns,
 	updateSection,
 } from "./canvas-actions";
+import { newElement, type ElementId } from "./elements";
 
-/** Every top-level child in these tests is a section: the only shape this phase builds. */
-function asSection(node: { id: string }): MailContainer {
-	return node as MailContainer;
-}
-
-function withTwoBlocks() {
-	const layout = emptyLayout();
-	const section = asSection(layout.children[0]!);
-	const first = newBlock("text");
-	const second = newBlock("heading");
+/** A columns table with two cells, each empty, for tests that need one. */
+function newColumns(name = "Columns"): MailColumns {
 	return {
-		layout: addBlock(addBlock(layout, section.id, first), section.id, second),
-		sectionId: section.id,
-		firstId: first.id,
-		secondId: second.id,
+		id: crypto.randomUUID(),
+		kind: "columns",
+		hidden: false,
+		name,
+		alignSelf: "auto",
+		grow: 0,
+		gap: 12,
+		box: {
+			fill: null,
+			padding: { top: 0, right: 0, bottom: 0, left: 0 },
+			margin: { top: 0, right: 0, bottom: 0, left: 0 },
+			borderWidth: 0,
+			borderColor: null,
+			borderStyle: "solid",
+			borderSides: { top: true, right: true, bottom: true, left: true },
+			strokeHidden: false,
+			borderRadius: 0,
+			corners: null,
+			opacity: 1,
+			effects: [],
+			width: null,
+			minHeight: null,
+			clip: false,
+			customCss: null,
+		},
+		actions: [],
+		rows: [
+			{
+				id: crypto.randomUUID(),
+				cells: [
+					{ id: crypto.randomUUID(), width: 50, verticalAlign: "top", box: emptyBoxLike(), actions: [], children: [] },
+					{ id: crypto.randomUUID(), width: null, verticalAlign: "top", box: emptyBoxLike(), actions: [], children: [] },
+				],
+			},
+		],
 	};
 }
 
-describe("editing a canvas", () => {
-	it("never mutates the layout it was given", () => {
-		const layout = emptyLayout();
-		const before = JSON.stringify(layout);
-		addBlock(layout, layout.children[0]!.id, newBlock("text"));
-		addSection(layout);
-		expect(JSON.stringify(layout)).toBe(before);
+function emptyBoxLike() {
+	return {
+		fill: null,
+		padding: { top: 0, right: 0, bottom: 0, left: 0 },
+		margin: { top: 0, right: 0, bottom: 0, left: 0 },
+		borderWidth: 0,
+		borderColor: null,
+		borderStyle: "solid" as const,
+		borderSides: { top: true, right: true, bottom: true, left: true },
+		strokeHidden: false,
+		borderRadius: 0,
+		corners: null,
+		opacity: 1,
+		effects: [],
+		width: null,
+		minHeight: null,
+		clip: false,
+		customCss: null,
+	};
+}
+
+/** A node known to be a container, for the tests that build one directly. */
+function asSection(node: MailNode | undefined): MailContainer {
+	return node as MailContainer;
+}
+
+/** A container nested inside the layout's own section, for tests that need real depth. */
+function withNestedContainer() {
+	const layout = emptyLayout();
+	const outer = layout.children[0] as MailContainer;
+	const inner = emptySection("Inner");
+	const withInner = { ...layout, children: [{ ...outer, children: [inner] }] };
+	return { layout: withInner, outerId: outer.id, innerId: inner.id };
+}
+
+function withColumns() {
+	const layout = emptyLayout();
+	const outer = layout.children[0] as MailContainer;
+	const columns = newColumns();
+	const withCols = { ...layout, children: [{ ...outer, children: [columns] }] };
+	const firstCellId = columns.rows[0]!.cells[0]!.id;
+	const secondCellId = columns.rows[0]!.cells[1]!.id;
+	return { layout: withCols, outerId: outer.id, columnsId: columns.id, firstCellId, secondCellId };
+}
+
+describe("finding a node and its parent path", () => {
+	it("finds a node at the top level and one nested inside a container", () => {
+		const { layout, outerId, innerId } = withNestedContainer();
+		expect(findNode(layout, outerId)?.id).toBe(outerId);
+		expect(findNode(layout, innerId)?.id).toBe(innerId);
+		expect(findNode(layout, "missing")).toBeNull();
 	});
 
-	it("adds a section after the one given rather than at the end", () => {
-		const layout = addSection(addSection(emptyLayout()));
-		const middle = layout.children[0]!.id;
-		const next = addSection(layout, middle);
-		expect(next.children).toHaveLength(4);
-		expect(next.children[0]?.id).toBe(middle);
-		expect(next.children[1]?.id).not.toBe(layout.children[1]?.id);
+	it("gives the path to a node, root first, not including the node itself", () => {
+		const { layout, outerId, innerId } = withNestedContainer();
+		expect(pathTo(layout, outerId)).toEqual([]);
+		expect(pathTo(layout, innerId)).toEqual([outerId]);
+		expect(pathTo(layout, "missing")).toBeNull();
 	});
 
-	it("keeps one section when the last one is removed", () => {
-		// Removing it outright would leave nowhere to put a block and no control
-		// to put a section back, which reads as a broken editor.
+	it("names the parent of a top-level node as null, and of a nested one by id", () => {
+		const { layout, outerId, innerId } = withNestedContainer();
+		expect(parentOf(layout, outerId)).toBeNull();
+		expect(parentOf(layout, innerId)).toBe(outerId);
+		expect(parentOf(layout, "missing")).toBeUndefined();
+	});
+
+	it("finds a cell by id, and paths to a node inside one through the columns table and the cell", () => {
+		const { layout, columnsId, firstCellId } = withColumns();
+		const text = newBlock("text");
+		const placed = insertNode(layout, firstCellId, text, null);
+		expect(findCell(placed, firstCellId)?.id).toBe(firstCellId);
+		expect(pathTo(placed, text.id)).toEqual([layout.children[0]!.id, columnsId, firstCellId]);
+		expect(parentOf(placed, text.id)).toBe(firstCellId);
+	});
+});
+
+describe("reading a parent's children", () => {
+	it("reads the frame's own top level for null, and a container's or a cell's own for its id", () => {
+		const { layout, outerId, innerId } = withNestedContainer();
+		expect(childrenOf(layout, null)?.map((node) => node.id)).toEqual([outerId]);
+		expect(childrenOf(layout, outerId)?.map((node) => node.id)).toEqual([innerId]);
+		expect(childrenOf(layout, "missing")).toBeNull();
+	});
+
+	it("steps into the first child of a container, a columns table, and a cell", () => {
+		const { layout, innerId } = withNestedContainer();
+		const outerId = layout.children[0]!.id;
+		expect(firstChildOf(layout, outerId)).toBe(innerId);
+		expect(firstChildOf(layout, innerId)).toBeNull();
+		const { layout: withCols, columnsId, firstCellId } = withColumns();
+		const text = newBlock("text");
+		const placed = insertNode(withCols, firstCellId, text, null);
+		expect(firstChildOf(placed, columnsId)).toBe(firstCellId);
+		expect(firstChildOf(placed, firstCellId)).toBe(text.id);
+	});
+});
+
+describe("inserting into a parent", () => {
+	it("inserts into a container at the end, and straight after a named sibling", () => {
+		const { layout, outerId } = withNestedContainer();
+		const a = newBlock("text");
+		const withA = insertNode(layout, outerId, a, null);
+		const inner = asSection(withA.children[0]).children[0]!;
+		expect(inner.id).not.toBe(a.id); // the existing Inner section is still first
+		expect(asSection(withA.children[0]).children.map((node) => node.id)).toEqual([inner.id, a.id]);
+		const b = newBlock("heading");
+		const withB = insertNode(withA, outerId, b, inner.id);
+		expect(asSection(withB.children[0]).children.map((node) => node.id)).toEqual([inner.id, b.id, a.id]);
+	});
+
+	it("inserts at the frame's own top level for a null parent", () => {
 		const layout = emptyLayout();
-		const emptied = removeSection(layout, layout.children[0]!.id);
+		const section = emptySection("Second");
+		const next = insertNode(layout, null, section, null);
+		expect(next.children.map((node) => node.id)).toEqual([layout.children[0]!.id, section.id]);
+	});
+
+	it("inserts into a cell", () => {
+		const { layout, firstCellId } = withColumns();
+		const text = newBlock("text");
+		const next = insertNode(layout, firstCellId, text, null);
+		expect(findCell(next, firstCellId)?.children.map((node) => node.id)).toEqual([text.id]);
+	});
+});
+
+describe("removing a node", () => {
+	it("removes a nested node without touching its siblings", () => {
+		const { layout, outerId, innerId } = withNestedContainer();
+		const a = newBlock("text");
+		const withA = insertNode(layout, outerId, a, null);
+		const next = removeNode(withA, innerId);
+		expect(asSection(next.children[0]).children.map((node) => node.id)).toEqual([a.id]);
+	});
+
+	it("puts a section back when removing the last thing at the top level", () => {
+		const layout = emptyLayout();
+		const emptied = removeNode(layout, layout.children[0]!.id);
 		expect(emptied.children).toHaveLength(1);
-		expect(asSection(emptied.children[0]!).children).toEqual([]);
+		expect((emptied.children[0] as MailContainer).children).toEqual([]);
+		expect(emptied.children[0]!.id).not.toBe(layout.children[0]!.id);
+	});
+
+	it("leaves a cell alone: it is structural, not a node Delete takes on its own", () => {
+		const { layout, firstCellId } = withColumns();
+		expect(removeNode(layout, firstCellId)).toEqual(layout);
+	});
+
+	it("leaves an id nothing in the tree has alone", () => {
+		const layout = emptyLayout();
+		expect(removeNode(layout, "missing")).toEqual(layout);
+	});
+});
+
+describe("moving a node between parents", () => {
+	it("moves a block from one section into another", () => {
+		const layout = emptyLayout();
+		const a = newBlock("text");
+		const withA = insertNode(layout, layout.children[0]!.id, a, null);
+		const second = emptySection("Second");
+		const twoSections = { ...withA, children: [...withA.children, second] };
+		const moved = moveNode(twoSections, a.id, second.id, null);
+		expect(asSection(moved.children[0]).children).toEqual([]);
+		expect(asSection(moved.children[1]).children.map((node) => node.id)).toEqual([a.id]);
+	});
+
+	it("moves a container into another container, nesting it", () => {
+		const { layout, outerId, innerId } = withNestedContainer();
+		const second = emptySection("Second");
+		const withSecond = { ...layout, children: [...layout.children, second] };
+		const moved = moveNode(withSecond, innerId, second.id, null);
+		expect(asSection(moved.children[0]).children).toEqual([]);
+		expect(asSection(moved.children[1]).children.map((node) => node.id)).toEqual([innerId]);
+		void outerId;
+	});
+
+	it("moves a block into a cell", () => {
+		const { layout, outerId, firstCellId } = withColumns();
+		const text = newBlock("text");
+		const withText = insertNode(layout, outerId, text, null);
+		const moved = moveNode(withText, text.id, firstCellId, null);
+		expect(findCell(moved, firstCellId)?.children.map((node) => node.id)).toEqual([text.id]);
+	});
+
+	it("refuses to move a container into itself", () => {
+		const { layout, outerId } = withNestedContainer();
+		expect(canMoveInto(layout, outerId, outerId)).toBe(false);
+		expect(moveNode(layout, outerId, outerId, null)).toEqual(layout);
+	});
+
+	it("refuses to move a container into its own descendant", () => {
+		const { layout, outerId, innerId } = withNestedContainer();
+		expect(canMoveInto(layout, outerId, innerId)).toBe(false);
+		expect(moveNode(layout, outerId, innerId, null)).toEqual(layout);
+	});
+
+	it("refuses to move a container into a cell of its own columns table", () => {
+		const { layout, outerId, columnsId, firstCellId } = withColumns();
+		void columnsId;
+		expect(canMoveInto(layout, outerId, firstCellId)).toBe(false);
+	});
+
+	it("refuses to nest a container past the depth the parser allows", () => {
+		// The top-level section is one container; seven more nested one inside the
+		// next reach the parser's own limit (MAX_DEPTH is 8 in
+		// services/mail-layout.ts), so moving a spare container into the last one
+		// has nowhere further to go, and into the one before it still fits.
+		let layout = emptyLayout();
+		let parentId = layout.children[0]!.id;
+		let previousParentId = parentId;
+		for (let i = 0; i < 7; i++) {
+			const child = emptySection(`Level ${i}`);
+			layout = insertNode(layout, parentId, child, null);
+			previousParentId = parentId;
+			parentId = child.id;
+		}
+		const spare = emptySection("Spare");
+		layout = { ...layout, children: [...layout.children, spare] };
+		expect(canMoveInto(layout, spare.id, previousParentId)).toBe(true);
+		expect(canMoveInto(layout, spare.id, parentId)).toBe(false);
 	});
 
 	it("moves a block within its section and refuses to move it off either end", () => {
-		const { layout, sectionId, firstId, secondId } = withTwoBlocks();
-		const moved = moveBlock(layout, sectionId, firstId, 1);
-		expect(asSection(moved.children[0]!).children.map((block) => block.id)).toEqual([secondId, firstId]);
-		expect(moveBlock(layout, sectionId, firstId, -1)).toEqual(layout);
-	});
-
-	it("moves a block into another section", () => {
-		const { layout, sectionId, firstId } = withTwoBlocks();
-		const twoSections = addSection(layout);
-		const other = twoSections.children[1]!.id;
-		const moved = reparentBlock(twoSections, sectionId, other, firstId);
-		expect(asSection(moved.children[0]!).children.map((block) => block.id)).not.toContain(firstId);
-		expect(asSection(moved.children[1]!).children.map((block) => block.id)).toEqual([firstId]);
-	});
-
-	it("leaves a reparent into the same section alone", () => {
-		const { layout, sectionId, firstId } = withTwoBlocks();
-		expect(reparentBlock(layout, sectionId, sectionId, firstId)).toEqual(layout);
-	});
-
-	it("drops a block in front of the one it was let go on", () => {
-		const { layout, sectionId, firstId, secondId } = withTwoBlocks();
-		const dropped = dropBlock(layout, sectionId, sectionId, secondId, firstId);
-		expect(asSection(dropped.children[0]!).children.map((block) => block.id)).toEqual([secondId, firstId]);
-	});
-
-	it("drops a block at the end of the section it was let go on", () => {
-		const { layout, sectionId, firstId, secondId } = withTwoBlocks();
-		const twoSections = addSection(layout);
-		const other = twoSections.children[1]!.id;
-		const dropped = dropBlock(twoSections, sectionId, other, firstId, null);
-		expect(asSection(dropped.children[0]!).children.map((block) => block.id)).toEqual([secondId]);
-		expect(asSection(dropped.children[1]!).children.map((block) => block.id)).toEqual([firstId]);
-	});
-
-	it("patches one block and leaves its neighbour untouched", () => {
-		const { layout, sectionId, firstId, secondId } = withTwoBlocks();
-		const next = updateBlock(layout, sectionId, firstId, { grow: 3 });
-		const children = asSection(next.children[0]!).children;
-		expect(children.find((block) => block.id === firstId)?.grow).toBe(3);
-		expect(children.find((block) => block.id === secondId)?.grow).toBe(0);
-	});
-
-	it("removes one block without touching the rest", () => {
-		const { layout, sectionId, firstId, secondId } = withTwoBlocks();
-		const next = removeBlock(layout, sectionId, firstId);
-		expect(asSection(next.children[0]!).children.map((block) => block.id)).toEqual([secondId]);
-	});
-
-	it("switches a section from flex to grid", () => {
 		const layout = emptyLayout();
 		const sectionId = layout.children[0]!.id;
-		const next = updateSection(layout, sectionId, {
-			layout: { kind: "grid", columns: 3, gap: 8, align: "start" },
-		});
-		expect(asSection(next.children[0]!).layout).toEqual({ kind: "grid", columns: 3, gap: 8, align: "start" });
-	});
-
-	it("refuses to move a section past either end", () => {
-		const layout = addSection(emptyLayout());
-		expect(moveSection(layout, layout.children[0]!.id, -1)).toEqual(layout);
-		expect(moveSection(layout, layout.children[1]!.id, 1)).toEqual(layout);
-		expect(moveSection(layout, layout.children[0]!.id, 1).children[0]?.id).toBe(layout.children[1]?.id);
+		const first = newBlock("text");
+		const second = newBlock("heading");
+		const withBlocks = insertNode(insertNode(layout, sectionId, first, null), sectionId, second, null);
+		const moved = moveWithinParent(withBlocks, first.id, 1);
+		expect(asSection(moved.children[0]).children.map((node) => node.id)).toEqual([second.id, first.id]);
+		expect(moveWithinParent(withBlocks, first.id, -1)).toEqual(withBlocks);
+		expect(moveWithinParent(moved, first.id, 1)).toEqual(moved);
 	});
 });
 
-describe("selection colours", () => {
-	function coloured() {
+describe("stepping through the siblings of a parent", () => {
+	it("goes round among the children of a container", () => {
 		const layout = emptyLayout();
 		const sectionId = layout.children[0]!.id;
-		const button = newBlock("button");
+		const first = newBlock("text");
+		const second = newBlock("heading");
+		const withBlocks = insertNode(insertNode(layout, sectionId, first, null), sectionId, second, null);
+		expect(siblingOf(withBlocks, first.id, 1)).toBe(second.id);
+		expect(siblingOf(withBlocks, second.id, 1)).toBe(first.id);
+		expect(siblingOf(withBlocks, first.id, -1)).toBe(second.id);
+	});
+
+	it("goes round among top-level sections", () => {
+		const layout = emptyLayout();
+		const second = emptySection("Second");
+		const withSecond = { ...layout, children: [...layout.children, second] };
+		expect(siblingOf(withSecond, layout.children[0]!.id, 1)).toBe(second.id);
+	});
+});
+
+describe("copying and duplicating", () => {
+	it("gives a clone new ids all the way down, rows and cells included", () => {
+		const { layout, columnsId, firstCellId } = withColumns();
 		const text = newBlock("text");
-		const styled = text.kind === "text" ? { ...text, text: { ...text.text, color: "#4A3FA0" } } : text;
-		return {
-			layout: addBlock(addBlock({ ...layout, fill: { kind: "solid" as const, color: "#f6f6fa", hidden: false } }, sectionId, button), sectionId, styled),
-			sectionId,
-			buttonId: button.id,
-			textId: text.id,
-		};
-	}
-
-	it("lists each colour once, whatever case it was typed in", () => {
-		const { layout } = coloured();
-		expect(colorsIn(layout, null)).toEqual(["#f6f6fa", "#4a3fa0", "#ffffff"]);
+		const placed = insertNode(layout, firstCellId, text, null);
+		const columns = findNode(placed, columnsId) as MailNode & { kind: "columns" };
+		const copy = cloneNode(columns);
+		expect(copy.id).not.toBe(columnsId);
+		expect(copy.kind).toBe("columns");
+		if (copy.kind !== "columns") throw new Error("not columns");
+		expect(copy.rows[0]!.id).not.toBe(columns.rows[0]!.id);
+		expect(copy.rows[0]!.cells[0]!.id).not.toBe(columns.rows[0]!.cells[0]!.id);
+		expect(copy.rows[0]!.cells[0]!.children[0]?.id).not.toBe(text.id);
+		// A deep copy: changing the copy leaves the original as it was.
+		const clonedText = copy.rows[0]!.cells[0]!.children[0] as MailBlock & { kind: "text" };
+		clonedText.text.italic = true;
+		expect((columns.rows[0]!.cells[0]!.children[0] as MailBlock & { kind: "text" }).text.italic).toBe(false);
 	});
 
-	it("only lists what is in the selection", () => {
-		const { layout, sectionId, textId } = coloured();
-		expect(colorsIn(layout, { sectionId, blockId: textId })).toEqual(["#4a3fa0"]);
+	it("pairs every id an original and its copy share a position for", () => {
+		const section = emptySection("Body");
+		const text = newBlock("text");
+		const withText = { ...section, children: [text] };
+		const copy = cloneNode(withText) as MailContainer;
+		const pairs = pairIds(withText, copy);
+		expect(pairs).toEqual([
+			[withText.id, copy.id],
+			[text.id, copy.children[0]!.id],
+		]);
 	});
 
-	it("changes a colour inside the selection and leaves the rest alone", () => {
-		const { layout, sectionId, textId, buttonId } = coloured();
-		const next = replaceColor(layout, { sectionId, blockId: textId }, "#4a3fa0", "#1f6a4d");
-		const blocks: MailBlock[] = asSection(next.children[0]!).children as MailBlock[];
-		const text = blocks.find((block) => block.id === textId);
-		const button = blocks.find((block) => block.id === buttonId);
-		expect(text?.kind === "text" ? text.text.color : null).toBe("#1f6a4d");
-		// The button uses the same purple and was not selected.
-		expect(button?.kind === "button" ? button.background : null).toBe("#4a3fa0");
+	it("duplicates a node straight after the original, in the same parent", () => {
+		const { layout, outerId, innerId } = withNestedContainer();
+		const result = duplicateNode(layout, innerId);
+		expect(result).not.toBeNull();
+		const outer = result!.layout.children.find((node) => node.id === outerId) as MailContainer;
+		expect(outer.children.map((node) => node.id)).toEqual([innerId, result!.id]);
+		expect(result!.pairs[0]).toEqual([innerId, result!.id]);
 	});
-});
 
-describe("dragging sections", () => {
-	it("drops a section in front of another, and at the end when there is none", () => {
-		const layout = addSection(addSection(emptyLayout()));
-		const [first, second, third] = layout.children.map((section) => section.id);
-		expect(moveSectionTo(layout, third!, first!).children.map((section) => section.id)).toEqual([third, first, second]);
-		expect(moveSectionTo(layout, first!, null).children.map((section) => section.id)).toEqual([second, third, first]);
-		expect(moveSectionTo(layout, second!, second!)).toEqual(layout);
+	it("refuses to duplicate a cell", () => {
+		const { layout, firstCellId } = withColumns();
+		expect(duplicateNode(layout, firstCellId)).toBeNull();
 	});
-});
 
-describe("copying and pasting", () => {
-	it("gives a copy new ids all the way down", () => {
-		const { layout, sectionId } = withTwoBlocks();
-		const section = asSection(layout.children.find((entry) => entry.id === sectionId)!);
+	it("clones a block with a new id", () => {
+		const block = newBlock("text");
+		const copy = cloneBlock(block);
+		expect(copy.id).not.toBe(block.id);
+	});
+
+	it("clones a section the same way cloneNode does", () => {
+		const section = emptySection("Copy");
 		const copy = cloneSection(section);
 		expect(copy.id).not.toBe(section.id);
-		expect(copy.children.map((block) => block.id)).not.toContain(section.children[0]!.id);
-		expect(copy.children.map((block) => block.kind)).toEqual(["text", "heading"]);
-		// A deep copy: changing the copy leaves the original as it was.
-		const block = copy.children[0]!;
-		if (block.kind === "text") block.text.italic = true;
-		const original = section.children[0]!;
-		expect(original.kind === "text" ? original.text.italic : null).toBe(false);
-	});
-
-	it("puts a pasted block straight after the one selected, or at the end", () => {
-		const { layout, sectionId, firstId, secondId } = withTwoBlocks();
-		const copy = cloneBlock(newBlock("button"));
-		const after = insertBlockAfter(layout, sectionId, firstId, copy);
-		expect(asSection(after.children[0]!).children.map((block) => block.id)).toEqual([firstId, copy.id, secondId]);
-		const atEnd = insertBlockAfter(layout, sectionId, null, copy);
-		expect(asSection(atEnd.children[0]!).children.map((block) => block.id)).toEqual([firstId, secondId, copy.id]);
-	});
-
-	it("puts a pasted section straight after the one selected", () => {
-		const layout = addSection(emptyLayout());
-		const [first, second] = layout.children.map((section) => section.id);
-		const copy = emptySection("Copy");
-		expect(insertSectionAfter(layout, first!, copy).children.map((section) => section.id)).toEqual([first, copy.id, second]);
-		expect(insertSectionAfter(layout, null, copy).children.map((section) => section.id)).toEqual([first, second, copy.id]);
+		expect(copy.kind).toBe("container");
 	});
 });
 
-describe("stepping through the layers", () => {
-	it("goes round among the blocks of one section", () => {
-		const { layout, sectionId, firstId, secondId } = withTwoBlocks();
-		expect(siblingOf(layout, { sectionId, blockId: firstId }, 1)).toEqual({ sectionId, blockId: secondId });
-		expect(siblingOf(layout, { sectionId, blockId: secondId }, 1)).toEqual({ sectionId, blockId: firstId });
-		expect(siblingOf(layout, { sectionId, blockId: firstId }, -1)).toEqual({ sectionId, blockId: secondId });
+describe("editing a node anywhere in the tree", () => {
+	it("patches a nested container", () => {
+		const { layout, innerId } = withNestedContainer();
+		const next = updateSection(layout, innerId, { name: "Renamed" });
+		expect(findNode(next, innerId)?.kind === "container" ? (findNode(next, innerId) as MailContainer).name : null).toBe(
+			"Renamed",
+		);
 	});
 
-	it("knows when an undo took the selection away", () => {
-		const { layout, sectionId, firstId } = withTwoBlocks();
-		expect(selectionIn(layout, { sectionId, blockId: firstId })).toBe(true);
-		expect(selectionIn(removeBlock(layout, sectionId, firstId), { sectionId, blockId: firstId })).toBe(false);
+	it("patches a block inside a cell", () => {
+		const { layout, firstCellId } = withColumns();
+		const text = newBlock("text");
+		const placed = insertNode(layout, firstCellId, text, null);
+		const next = updateBlock(placed, text.id, { html: "Hallo" } as Partial<MailBlock>);
+		const found = findNode(next, text.id);
+		expect(found?.kind === "text" ? found.html : null).toBe("Hallo");
+	});
+
+	it("patches a columns table and a cell", () => {
+		const { layout, columnsId, firstCellId } = withColumns();
+		const next = updateCell(updateColumns(layout, columnsId, { name: "Renamed" }), firstCellId, { verticalAlign: "middle" });
+		const columns = findNode(next, columnsId);
+		expect(columns?.kind === "columns" ? columns.name : null).toBe("Renamed");
+		expect(findCell(next, firstCellId)?.verticalAlign).toBe("middle");
+	});
+});
+
+describe("what is still selected after an undo", () => {
+	it("knows a top-level node, a nested one, and a cell", () => {
+		const { layout, innerId } = withNestedContainer();
+		expect(selectionIn(layout, innerId)).toBe(true);
+		expect(selectionIn(layout, "missing")).toBe(false);
 		expect(selectionIn(layout, null)).toBe(true);
+		const columns = withColumns();
+		expect(selectionIn(columns.layout, columns.firstCellId)).toBe(true);
 	});
 });
 
-describe("what is added", () => {
-	it("gives a section an author adds room around what goes in it", () => {
-		const added = addSection(emptyLayout());
-		expect(asSection(added.children[1]!).box.padding).toEqual({ top: 24, right: 24, bottom: 24, left: 24 });
-		// The bare one holds a hand-written body, which padding would change.
-		expect(emptySection().box.padding).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
+describe("selection colours across the tree", () => {
+	it("finds a colour nested inside a container and inside a cell", () => {
+		const { layout, innerId } = withNestedContainer();
+		const styled = updateSection(layout, innerId, { box: { ...(findNode(layout, innerId) as MailContainer).box, borderWidth: 1, borderColor: "#4A3FA0" } });
+		expect(colorsIn(styled, null)).toContain("#4a3fa0");
+		expect(colorsIn(styled, innerId)).toEqual(["#4a3fa0"]);
+
+		const { layout: withCols, firstCellId } = withColumns();
+		const cell = findCell(withCols, firstCellId)!;
+		const recellored = updateCell(withCols, firstCellId, { box: { ...cell.box, borderWidth: 1, borderColor: "#1F6A4D" } });
+		expect(colorsIn(recellored, firstCellId)).toEqual(["#1f6a4d"]);
 	});
 
-	it("makes a button and a picture hug their content", () => {
-		expect(newBlock("button").alignSelf).toBe("start");
-		expect(newBlock("image").alignSelf).toBe("start");
-		expect(newBlock("text").alignSelf).toBe("auto");
+	it("changes a colour inside a cell without touching the rest", () => {
+		const { layout, firstCellId } = withColumns();
+		const cell = findCell(layout, firstCellId)!;
+		const styled = updateCell(layout, firstCellId, { box: { ...cell.box, borderWidth: 1, borderColor: "#4a3fa0" } });
+		const next = replaceColor(styled, firstCellId, "#4a3fa0", "#1f6a4d");
+		expect(findCell(next, firstCellId)?.box.borderColor).toBe("#1f6a4d");
+	});
+});
+
+describe("adding every element of the toolbar", () => {
+	const kinds: Record<string, string> = {
+		section: "container",
+		div: "container",
+		header: "container",
+		footer: "container",
+		main: "container",
+		article: "container",
+		aside: "container",
+		nav: "container",
+		h1: "heading",
+		h2: "heading",
+		h3: "heading",
+		h4: "heading",
+		h5: "heading",
+		h6: "heading",
+		p: "text",
+		blockquote: "text",
+		pre: "text",
+		address: "text",
+		span: "text",
+		ul: "text",
+		ol: "text",
+		columns: "columns",
+		image: "image",
+		"linked-image": "image",
+		divider: "divider",
+		field: "field",
+	};
+
+	it("makes exactly the HTML element it names", () => {
+		const layout = emptyLayout();
+		for (const [id, kind] of Object.entries(kinds)) {
+			const node = newElement(layout, id as ElementId);
+			expect(node.kind).toBe(kind);
+			if (node.kind === "container" || node.kind === "heading" || node.kind === "text") expect(node.tag).toBe(id);
+		}
+	});
+
+	it("makes a list with one item, and a heading, a text and a picture that say something", () => {
+		const layout = emptyLayout();
+		const list = newElement(layout, "ol");
+		expect(list.kind === "text" ? list.html : "").toBe("<li>Punt</li>");
+		const heading = newElement(layout, "h4");
+		expect(heading.kind === "heading" ? heading.content : "").toBe("Titel");
+		const text = newElement(layout, "blockquote");
+		expect(text.kind === "text" ? text.html : "").toBe("Tekst");
+	});
+
+	it("makes a linked picture with an empty on-click link, and a plain one with none", () => {
+		const layout = emptyLayout();
+		const linked = newElement(layout, "linked-image");
+		const plain = newElement(layout, "image");
+		expect(linked.kind).toBe("image");
+		expect(linked.actions).toMatchObject([{ trigger: "click", kind: "link", target: "", hidden: false }]);
+		expect(plain.actions).toEqual([]);
+	});
+
+	it("makes columns of one row and two cells, each holding a text", () => {
+		const node = newElement(emptyLayout(), "columns");
+		if (node.kind !== "columns") throw new Error("not columns");
+		expect(node.rows).toHaveLength(1);
+		expect(node.rows[0]?.cells).toHaveLength(2);
+		expect(node.rows[0]?.cells.map((cell) => cell.width)).toEqual([50, 50]);
+		expect(node.rows[0]?.cells.every((cell) => cell.children.length === 1 && cell.children[0]?.kind === "text")).toBe(true);
+	});
+
+	it("makes a rule that takes no share of the room", () => {
+		const rule = newElement(emptyLayout(), "divider");
+		expect(rule.kind === "divider" ? rule.grow : 1).toBe(0);
+	});
+
+	it("tells containers of the same tag apart in the layers", () => {
+		let layout = emptyLayout();
+		const first = newElement(layout, "header");
+		layout = insertNode(layout, null, first, null);
+		const second = newElement(layout, "header");
+		expect((first as MailContainer).name).toBe("Header");
+		expect((second as MailContainer).name).toBe("Header 2");
+		expect(nameFor(layout, "Body")).toBe("Body 2");
+	});
+});
+
+describe("where a new element lands", () => {
+	function scene() {
+		const layout = emptyLayout();
+		const first = layout.children[0] as MailContainer;
+		const text = newBlock("text");
+		const withText = insertNode(layout, first.id, text, null);
+		const columns = makeColumns(withText);
+		const withColumns = insertNode(withText, null, columns, null);
+		return { layout: withColumns, first, text, columns, cell: columns.rows[0]!.cells[0]! };
+	}
+
+	it("goes inside the selected container, at the end", () => {
+		const { layout, first } = scene();
+		expect(insertTarget(layout, first.id, false)).toEqual({ parentId: first.id, afterId: null });
+		expect(insertTarget(layout, first.id, true)).toEqual({ parentId: first.id, afterId: null });
+	});
+
+	it("goes inside the selected cell, at the end", () => {
+		const { layout, cell } = scene();
+		expect(insertTarget(layout, cell.id, false)).toEqual({ parentId: cell.id, afterId: null });
+	});
+
+	it("goes straight after the selected block or columns table, in its own parent", () => {
+		const { layout, first, text, columns } = scene();
+		expect(insertTarget(layout, text.id, false)).toEqual({ parentId: first.id, afterId: text.id });
+		expect(insertTarget(layout, columns.id, false)).toEqual({ parentId: null, afterId: columns.id });
+	});
+
+	it("puts a container or columns at the top level when nothing is selected, and anything else in the last container", () => {
+		const { layout, first } = scene();
+		expect(insertTarget(layout, null, true)).toEqual({ parentId: null, afterId: null });
+		expect(insertTarget(layout, null, false)).toEqual({ parentId: first.id, afterId: null });
+	});
+
+	it("skips a hidden container, and a selection inside one", () => {
+		const { layout, first, text } = scene();
+		const hidden = updateSection(layout, first.id, { hidden: true });
+		expect(insertTarget(hidden, text.id, false)).toEqual({ parentId: first.id, afterId: null });
+		// Nothing shows to land in, so the top level is all there is.
+		const onlyHidden = { ...hidden, children: hidden.children.filter((node) => node.kind === "container") };
+		expect(insertTarget(onlyHidden, null, false)).toEqual({ parentId: first.id, afterId: null });
+		const shown = insertNode(hidden, null, { ...emptySection("Two"), id: "two" }, null);
+		expect(insertTarget(shown, null, false)).toEqual({ parentId: "two", afterId: null });
+	});
+
+	it("goes to the frame when the frame has no container", () => {
+		const layout = { ...emptyLayout(), children: [newBlock("text")] };
+		expect(insertTarget(layout, null, false)).toEqual({ parentId: null, afterId: null });
+	});
+});
+
+describe("changing a tag within its group", () => {
+	function withText(html: string, tag: "p" | "ul" | "ol" | "span" | "blockquote" = "p") {
+		const layout = emptyLayout();
+		const section = layout.children[0] as MailContainer;
+		const block = newBlock("text");
+		if (block.kind !== "text") throw new Error("not text");
+		const text: MailBlock = { ...block, tag, html };
+		return { layout: insertNode(layout, section.id, text, null), id: text.id };
+	}
+
+	function read(layout: ReturnType<typeof emptyLayout>, id: string): MailBlock {
+		const found = findNode(layout, id);
+		if (!found || found.kind === "container" || found.kind === "columns") throw new Error("not a block");
+		return found;
+	}
+
+	it("changes a container's tag and keeps everything in it", () => {
+		const layout = emptyLayout();
+		const section = layout.children[0] as MailContainer;
+		const inner = newBlock("text");
+		const filled = insertNode(layout, section.id, inner, null);
+		for (const tag of ["div", "header", "footer", "main", "article", "aside", "nav", "section"] as const) {
+			const next = setContainerTag(filled, section.id, tag);
+			const changed = findNode(next, section.id) as MailContainer;
+			expect(changed.tag).toBe(tag);
+			expect(changed.children).toHaveLength(1);
+			expect(changed.id).toBe(section.id);
+		}
+	});
+
+	it("renames a container that still has its tag's name, and leaves a name somebody chose", () => {
+		let layout = emptyLayout();
+		const header = newElement(layout, "header") as MailContainer;
+		layout = insertNode(layout, null, header, null);
+		const asDiv = setContainerTag(layout, header.id, "div");
+		expect((findNode(asDiv, header.id) as MailContainer).name).toBe("Div");
+		const named = updateSection(layout, header.id, { name: "Voorpagina" });
+		expect((findNode(setContainerTag(named, header.id, "footer"), header.id) as MailContainer).name).toBe("Voorpagina");
+	});
+
+	it("changes a text between text tags with its words intact", () => {
+		const { layout, id } = withText("Dag <b>Jan</b>");
+		for (const tag of ["blockquote", "pre", "address", "span", "p"] as const) {
+			const block = read(setTextTag(layout, id, tag), id);
+			expect(block.kind === "text" ? block.tag : null).toBe(tag);
+			expect(block.kind === "text" ? block.html : null).toBe("Dag <b>Jan</b>");
+		}
+	});
+
+	it("turns lines into list items and list items back into lines", () => {
+		const { layout, id } = withText("Een<br>Twee<br><br>Drie");
+		const asList = read(setTextTag(layout, id, "ul"), id);
+		expect(asList.kind === "text" ? asList.html : null).toBe("<li>Een</li><li>Twee</li><li>Drie</li>");
+		const back = read(setTextTag(setTextTag(layout, id, "ol"), id, "p"), id);
+		expect(back.kind === "text" ? back.html : null).toBe("Een<br>Twee<br>Drie");
+		// A list to a list keeps its items as they are.
+		const sameKind = read(setTextTag(setTextTag(layout, id, "ul"), id, "ol"), id);
+		expect(sameKind.kind === "text" ? sameKind.html : null).toBe("<li>Een</li><li>Twee</li><li>Drie</li>");
+	});
+
+	it("turns a text into a heading of plain words, and a heading into a text of escaped ones", () => {
+		const { layout, id } = withText("Dag <b>Jan</b> &amp; Els<br>Tot ziens");
+		const heading = read(setTextTag(layout, id, "h3"), id);
+		expect(heading.kind).toBe("heading");
+		expect(heading.kind === "heading" ? heading.tag : null).toBe("h3");
+		expect(heading.kind === "heading" ? heading.content : null).toBe("Dag Jan & Els Tot ziens");
+		expect(heading.id).toBe(id);
+
+		const retitled = read(setTextTag(setTextTag(layout, id, "h1"), id, "h5"), id);
+		expect(retitled.kind === "heading" ? retitled.tag : null).toBe("h5");
+
+		const text = read(setTextTag(updateBlock(setTextTag(layout, id, "h2"), id, { content: "A < B & C" } as Partial<MailBlock>), id, "blockquote"), id);
+		expect(text.kind).toBe("text");
+		expect(text.kind === "text" ? text.tag : null).toBe("blockquote");
+		expect(text.kind === "text" ? text.html : null).toBe("A &lt; B &amp; C");
+	});
+
+	it("turns a list into a heading of its items on one line, and a heading into a one item list", () => {
+		const { layout, id } = withText("<li>Een</li><li>Twee</li>", "ul");
+		const heading = read(setTextTag(layout, id, "h2"), id);
+		expect(heading.kind === "heading" ? heading.content : null).toBe("Een Twee");
+		const list = read(setTextTag(setTextTag(layout, id, "h2"), id, "ol"), id);
+		expect(list.kind === "text" ? list.html : null).toBe("<li>Een Twee</li>");
+	});
+
+	it("keeps a block's look, place and id through any change of tag", () => {
+		const { layout, id } = withText("Dag");
+		const styled = updateBlock(layout, id, { grow: 2, alignSelf: "end", hidden: true } as Partial<MailBlock>);
+		const heading = read(setTextTag(styled, id, "h4"), id);
+		expect(heading.grow).toBe(2);
+		expect(heading.alignSelf).toBe("end");
+		expect(heading.hidden).toBe(true);
+		expect(heading.id).toBe(id);
+	});
+
+	it("ignores an id that is not a text or a container", () => {
+		const { layout } = withText("Dag");
+		expect(setTextTag(layout, "missing", "h1")).toBe(layout);
+		expect(setContainerTag(layout, "missing", "nav")).toBe(layout);
+	});
+});
+
+describe("columns: rows and cells", () => {
+	function table() {
+		const layout = emptyLayout();
+		const columns = makeColumns(layout);
+		return { layout: insertNode(layout, null, columns, null), columns };
+	}
+
+	function tableOf(layout: ReturnType<typeof emptyLayout>, id: string): MailColumns {
+		return findNode(layout, id) as MailColumns;
+	}
+
+	it("adds a row with as many cells as the last one, each holding a text", () => {
+		const { layout, columns } = table();
+		const next = tableOf(addRow(layout, columns.id), columns.id);
+		expect(next.rows).toHaveLength(2);
+		expect(next.rows[1]?.cells.map((cell) => cell.width)).toEqual([50, 50]);
+		expect(next.rows[1]?.cells.every((cell) => cell.children[0]?.kind === "text")).toBe(true);
+		expect(new Set(next.rows.flatMap((row) => [row.id, ...row.cells.map((cell) => cell.id)])).size).toBe(6);
+	});
+
+	it("removes a row, and never the last", () => {
+		const { layout, columns } = table();
+		const two = addRow(layout, columns.id);
+		const rows = tableOf(two, columns.id).rows;
+		const one = tableOf(removeRow(two, columns.id, rows[0]!.id), columns.id);
+		expect(one.rows.map((row) => row.id)).toEqual([rows[1]!.id]);
+		const stillOne = removeRow(removeRow(two, columns.id, rows[0]!.id), columns.id, rows[1]!.id);
+		expect(tableOf(stillOne, columns.id).rows).toHaveLength(1);
+	});
+
+	it("adds a cell and keeps an even row even", () => {
+		const { layout, columns } = table();
+		const rowId = columns.rows[0]!.id;
+		const next = tableOf(addCell(layout, columns.id, rowId), columns.id);
+		expect(next.rows[0]?.cells.map((cell) => cell.width)).toEqual([33, 33, 33]);
+		expect(next.rows[0]?.cells[2]?.children[0]?.kind).toBe("text");
+	});
+
+	it("leaves the widths of an uneven row alone and lets the new cell share what is left", () => {
+		const { layout, columns } = table();
+		const rowId = columns.rows[0]!.id;
+		const firstCell = columns.rows[0]!.cells[0]!;
+		const uneven = updateCell(layout, firstCell.id, { width: 30 });
+		const next = tableOf(addCell(uneven, columns.id, rowId), columns.id);
+		expect(next.rows[0]?.cells.map((cell) => cell.width)).toEqual([30, 50, null]);
+	});
+
+	it("removes a cell, with what is in it, and never the last", () => {
+		const { layout, columns } = table();
+		const rowId = columns.rows[0]!.id;
+		const [a, b] = columns.rows[0]!.cells;
+		const one = tableOf(removeCell(layout, columns.id, rowId, a!.id), columns.id);
+		expect(one.rows[0]?.cells.map((cell) => cell.id)).toEqual([b!.id]);
+		expect(one.rows[0]?.cells[0]?.width).toBe(100);
+		const still = tableOf(removeCell(removeCell(layout, columns.id, rowId, a!.id), columns.id, rowId, b!.id), columns.id);
+		expect(still.rows[0]?.cells).toHaveLength(1);
+	});
+
+	it("finds the table and row a cell is in", () => {
+		const { layout, columns } = table();
+		const cell = columns.rows[0]!.cells[1]!;
+		const at = locateCell(layout, cell.id);
+		expect(at?.columns.id).toBe(columns.id);
+		expect(at?.row.id).toBe(columns.rows[0]!.id);
+		expect(at?.index).toBe(1);
+		expect(locateCell(layout, "nope")).toBeNull();
+	});
+});
+
+describe("a link on a picture", () => {
+	it("keeps https, mailto, tel and placeholders, and refuses anything else", () => {
+		expect(safeLink("https://example.be")).toBe(true);
+		expect(safeLink("mailto:jan@example.be")).toBe(true);
+		expect(safeLink("tel:+32 470 12 34 56")).toBe(true);
+		expect(safeLink("tel:0470abc")).toBe(false);
+		expect(safeLink("{{document.link}}")).toBe(true);
+		expect(safeLink("http://example.be")).toBe(false);
+		expect(safeLink("javascript:alert(1)")).toBe(false);
+		expect(safeLink("data:text/html,x")).toBe(false);
+		expect(safeLink("")).toBe(false);
+	});
+});
+
+describe("a list after it was typed in", () => {
+	it("keeps its items, and puts bare words back into one", () => {
+		expect(asListItems("<li>Een</li><li>Twee</li>")).toBe("<li>Een</li><li>Twee</li>");
+		expect(asListItems("Een<br>Twee")).toBe("<li>Een</li><li>Twee</li>");
+		expect(asListItems("")).toBe("<li></li>");
+	});
+});
+
+describe("actions", () => {
+	/** A section holding a text, with a text inside a second section inside it. */
+	function nested() {
+		const inner = { ...newBlock("text"), id: "inner" } as MailBlock;
+		const deep = { ...emptySection("Diep"), id: "deep", children: [inner] };
+		const first = { ...newBlock("text"), id: "first" } as MailBlock;
+		const outer = { ...emptySection("Buiten"), id: "outer", children: [first, deep] };
+		const table = makeColumns(emptyLayout());
+		const cell = table.rows[0]!.cells[0]!;
+		return { layout: { ...emptyLayout(), children: [outer, table] }, outer, deep, inner, first, table, cell };
+	}
+
+	it("starts every kind of node with none", () => {
+		const { layout, outer, table, cell, first } = nested();
+		expect(outer.actions).toEqual([]);
+		expect(table.actions).toEqual([]);
+		expect(cell.actions).toEqual([]);
+		expect(newBlock("text").actions).toEqual([]);
+		expect(actionsOf(layout, first.id)).toEqual([]);
+	});
+
+	it("sets and removes the actions of a block, a container, a columns table and a cell alike", () => {
+		const { layout, outer, first, table, cell } = nested();
+		const click = newClick();
+		const fill = newHover("fill");
+		let next = setActions(layout, first.id, [click, fill]);
+		expect(actionsOf(next, first.id)).toEqual([click, fill]);
+		next = setActions(next, outer.id, [newHover("opacity")]);
+		next = setActions(next, table.id, [newHover("color")]);
+		next = setActions(next, cell.id, [newHover("underline")]);
+		expect(actionsOf(next, outer.id)).toHaveLength(1);
+		expect(actionsOf(next, table.id)).toHaveLength(1);
+		expect(findCell(next, cell.id)?.actions).toHaveLength(1);
+		// Removing is setting what is left, and nothing else moves.
+		next = setActions(next, first.id, [fill]);
+		expect(actionsOf(next, first.id)).toEqual([fill]);
+		expect(actionsOf(next, outer.id)).toHaveLength(1);
+		expect(setActions(layout, "nope", [click])).toBe(layout);
+	});
+
+	it("starts a click as an empty link and each hover with a value the change needs", () => {
+		expect(newClick()).toMatchObject({ trigger: "click", kind: "link", target: "", hidden: false });
+		expect(newHover("fill")).toMatchObject({ trigger: "hover", change: "fill", fill: { kind: "solid" }, hidden: false });
+		expect(newHover("color")).toMatchObject({ change: "color", color: expect.stringMatching(/^#/) });
+		expect(newHover("underline")).toMatchObject({ change: "underline", underline: true });
+		expect(newHover("opacity")).toMatchObject({ change: "opacity", opacity: 0.8 });
+		expect(new Set([newClick().id, newClick().id]).size).toBe(2);
+	});
+
+	it("offers a click on an element that nothing around or in it links", () => {
+		const { layout, outer, deep, inner, first, table, cell } = nested();
+		for (const node of [outer, deep, inner, first, table, cell]) expect(clickBlockedReason(layout, node.id)).toBeNull();
+	});
+
+	it("refuses a click on what sits inside a link, and on what has a link inside it", () => {
+		const { layout, outer, deep, inner, first, table, cell } = nested();
+		const linkedDeep = setActions(layout, deep.id, [newClick()]);
+		expect(clickBlockedReason(linkedDeep, inner.id)).toMatch(/around this is already a link/);
+		expect(clickBlockedReason(linkedDeep, outer.id)).toMatch(/in this is already a link/);
+		// A sibling is neither around nor in it.
+		expect(clickBlockedReason(linkedDeep, first.id)).toBeNull();
+		expect(clickBlockedReason(linkedDeep, deep.id)).toBeNull();
+
+		const linkedTable = setActions(layout, table.id, [newClick()]);
+		expect(clickBlockedReason(linkedTable, cell.id)).toMatch(/around this/);
+		const linkedCellText = setActions(layout, cell.children[0]!.id, [newClick()]);
+		expect(clickBlockedReason(linkedCellText, cell.id)).toMatch(/in this/);
+		expect(clickBlockedReason(linkedCellText, table.id)).toMatch(/in this/);
+	});
+
+	it("does not count a hover as a link", () => {
+		const { layout, outer, inner } = nested();
+		const hovering = setActions(layout, inner.id, [newHover("color")]);
+		expect(clickBlockedReason(hovering, outer.id)).toBeNull();
+	});
+
+	it("counts a button block as a link of its own, and gives it no click", () => {
+		const { layout, outer, first } = nested();
+		const button = { ...newBlock("button"), id: "knop" } as MailBlock;
+		const withButton = insertNode(layout, outer.id, button, first.id);
+		expect(clickBlockedReason(withButton, "knop")).toMatch(/own link field/);
+		expect(clickBlockedReason(withButton, outer.id)).toMatch(/in this is already a link/);
+		// A button with no address links nowhere, so it does not block anything.
+		const empty = updateBlock(withButton, "knop", { href: "" } as Partial<MailBlock>);
+		expect(clickBlockedReason(empty, outer.id)).toBeNull();
+	});
+
+	it("keeps the actions when a text becomes a heading and back", () => {
+		const { layout, first } = nested();
+		const action: MailAction = newClick();
+		const linked = setActions(layout, first.id, [action]);
+		const heading = setTextTag(linked, first.id, "h2");
+		expect(actionsOf(heading, first.id)).toEqual([action]);
+		expect(actionsOf(setTextTag(heading, first.id, "p"), first.id)).toEqual([action]);
+	});
+
+	it("says why a typed target would be sent without a link, and stays quiet otherwise", () => {
+		const link = (target: string) => ({ ...newClick(), target });
+		expect(clickProblem(link(""))).toBeNull();
+		expect(clickProblem(link("example.be/nieuws"))).toBeNull();
+		expect(clickProblem(link("https://example.be"))).toBeNull();
+		expect(clickProblem(link("example.be:8080"))).toBeNull();
+		expect(clickProblem(link("{{client.website}}"))).toBeNull();
+		expect(clickProblem(link("http://example.be"))).toMatch(/Only https/);
+		expect(clickProblem(link("javascript:alert(1)"))).toMatch(/Only https/);
+		expect(clickProblem({ ...link("+32 470 12 34 56"), kind: "call" })).toBeNull();
+		expect(clickProblem({ ...link("0470abc"), kind: "call" })).toMatch(/digits/);
+		expect(clickProblem({ ...link("jan@example.be"), kind: "mail" })).toBeNull();
+		expect(clickProblem({ ...link("jan"), kind: "mail" })).toMatch(/@/);
+	});
+
+	it("makes the Button a text with a fill, a radius, padding and an empty link", () => {
+		const button = newButtonText();
+		expect(button.kind).toBe("text");
+		if (button.kind !== "text") return;
+		expect(button.box.fill).toMatchObject({ kind: "solid", hidden: false });
+		expect(button.box.borderRadius).toBeGreaterThan(0);
+		expect(button.box.padding).toEqual({ top: 10, right: 18, bottom: 10, left: 18 });
+		expect(button.actions).toMatchObject([{ trigger: "click", kind: "link", target: "" }]);
+		// The old button's look: hugging, centred and bold in white.
+		expect(button.alignSelf).toBe("start");
+		expect(button.text).toMatchObject({ align: "center", weight: "semibold", color: "#ffffff" });
+		expect(newElement(emptyLayout(), "button").kind).toBe("text");
 	});
 });

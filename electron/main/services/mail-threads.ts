@@ -20,6 +20,7 @@ import type {
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
+import { outgoingForThread } from "./mail-outbox";
 import { sanitiseHtml, textDocumentBody } from "./mail-sanitise";
 
 function escapeLike(value: string): string {
@@ -46,6 +47,11 @@ export function configureMailThreads(dir: string): void {
 function mailDir(): string {
 	if (!mailDirectory) throw new Error("Mail reading was used before the app configured it.");
 	return mailDirectory;
+}
+
+/** The directory attachments live in, for the purge, which deletes inside it. */
+export function mailRoot(): string {
+	return mailDir();
 }
 
 type MessageRow = typeof mailMessages.$inferSelect;
@@ -364,6 +370,9 @@ export async function getThread(id: string, db: Db = getDb()): Promise<MailThrea
 	return {
 		summary: summary!,
 		messages: messages.map((m) => toMessage(m, attachments.get(m.id) ?? [])),
+		// The reader shows a reply from the moment it is sent, not from the next
+		// sync of Sent (see outgoingForThread).
+		outgoing: outgoingForThread(id, db),
 	};
 }
 

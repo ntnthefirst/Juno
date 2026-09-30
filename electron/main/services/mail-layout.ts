@@ -35,11 +35,13 @@
  */
 import { randomUUID } from "node:crypto";
 import type {
+	MailAction,
 	MailAlign,
 	MailBlock,
 	MailBlockOverride,
 	MailBoxStyle,
 	MailBreakpoint,
+	MailClickAction,
 	MailColor,
 	MailColumns,
 	MailColumnsCell,
@@ -53,6 +55,7 @@ import type {
 	MailFont,
 	MailFontFallback,
 	MailHeadingTag,
+	MailHoverAction,
 	MailJustify,
 	MailLayout,
 	MailNode,
@@ -103,6 +106,7 @@ export function emptyBox(): MailBoxStyle {
 	return {
 		fill: null,
 		padding: noSpacing(),
+		margin: noSpacing(),
 		borderWidth: 0,
 		borderColor: null,
 		borderStyle: "solid",
@@ -162,6 +166,7 @@ export function emptyContainer(tag: MailContainerTag = "section", name = "Sectio
 		grow: 0,
 		layout: stackLayout(),
 		box: emptyBox(),
+		actions: [],
 		children: [],
 	};
 }
@@ -191,7 +196,7 @@ export function emptyLayout(): MailLayout {
  * in it, a button would otherwise be sent as a bar the width of the message.
  */
 export function newBlock(kind: MailBlock["kind"]): MailBlock {
-	const common = { id: randomUUID(), grow: 0, alignSelf: "auto" as const, hidden: false };
+	const common = { id: randomUUID(), grow: 0, alignSelf: "auto" as const, hidden: false, actions: [] };
 	switch (kind) {
 		case "heading":
 			return { ...common, kind, tag: "h2", content: "Titel", text: { ...defaultText(), weight: "semibold" }, box: emptyBox() };
@@ -209,7 +214,7 @@ export function newBlock(kind: MailBlock["kind"]): MailBlock {
 				box: { ...emptyBox(), padding: { top: 10, right: 18, bottom: 10, left: 18 } },
 			};
 		case "image":
-			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", href: null, box: emptyBox() };
+			return { ...common, alignSelf: "start", kind, src: "", alt: "", width: null, align: "left", box: emptyBox() };
 		case "divider":
 			return { ...common, kind, color: "#e3e2ec", thickness: 1, box: emptyBox(), grow: 1 };
 		case "spacer":
@@ -443,6 +448,9 @@ function textExtraTags(tag: MailTextTag): readonly string[] {
 	return tag === "ul" || tag === "ol" ? ["li"] : [];
 }
 
+/** Pixels of left padding a list keeps for its bullets or numbers. */
+export const LIST_INDENT = 24;
+
 function isListTag(tag: MailTextTag): boolean {
 	return tag === "ul" || tag === "ol";
 }
@@ -539,6 +547,7 @@ function parseBox(raw: unknown): MailBoxStyle {
 	return {
 		fill: parseFill(raw.fill, raw.background),
 		padding: parseSpacing(raw.padding),
+		margin: parseSpacing(raw.margin),
 		borderWidth: toNum(raw.borderWidth, 0, 0, 40),
 		borderColor: toColor(raw.borderColor),
 		borderStyle: toStrokeStyle(raw.borderStyle),
@@ -618,6 +627,7 @@ function parseSectionLayout(raw: unknown): MailSectionLayout {
 			columns: toNum(raw.columns, 2, 1, 6),
 			gap: toNum(raw.gap, 12, 0, 120),
 			align: toAlign(raw.align),
+			justify: toAlign(raw.justify),
 		};
 	}
 	return {
@@ -630,6 +640,151 @@ function parseSectionLayout(raw: unknown): MailSectionLayout {
 	};
 }
 
+/* ------------------------------------------------------------------ actions */
+
+/** A phone number, an address or a path: long enough for a tracking link, short enough to bound a hostile one. */
+const MAX_TARGET = 500;
+
+const HOVER_CHANGES = ["fill", "color", "underline", "opacity"] as const;
+
+function parseClick(raw: UnknownRecord): MailClickAction {
+	return {
+		id: toId(raw.id),
+		trigger: "click",
+		kind: raw.kind === "mail" || raw.kind === "call" ? raw.kind : "link",
+		target: toStr(raw.target).trim().slice(0, MAX_TARGET),
+		hidden: raw.hidden === true,
+	};
+}
+
+/**
+ * A hover row, with the value its change needs. A value that is missing or
+ * unreadable is replaced by a plain default rather than dropping the row, so
+ * an action an agent half-wrote is still there to correct.
+ */
+function parseHover(raw: UnknownRecord): MailHoverAction | null {
+	const change = HOVER_CHANGES.find((entry) => entry === raw.change);
+	if (!change) return null;
+	const base = { id: toId(raw.id), trigger: "hover" as const, hidden: raw.hidden === true };
+	switch (change) {
+		case "fill":
+			return { ...base, change, fill: parseFill(raw.fill) ?? solidFill("#4a3fa0") };
+		case "color":
+			return { ...base, change, color: colorOr(raw.color, "#4a3fa0") };
+		case "underline":
+			return { ...base, change, underline: raw.underline !== false };
+		case "opacity":
+			return { ...base, change, opacity: toNum(raw.opacity, 0.8, 0, 1) };
+	}
+}
+
+/**
+ * The actions of one element: at most one on click, and at most one hover row
+ * for each kind of change, in the order they were stored. A second click is
+ * dropped because an element is one link, and a second hover for the same
+ * change would only fight the first in the stylesheet.
+ */
+function parseActions(raw: unknown): MailAction[] {
+	if (!Array.isArray(raw)) return [];
+	const out: MailAction[] = [];
+	for (const entry of raw) {
+		if (!isRecord(entry)) continue;
+		if (entry.trigger === "click") {
+			if (!out.some((action) => action.trigger === "click")) out.push(parseClick(entry));
+		} else if (entry.trigger === "hover") {
+			const hover = parseHover(entry);
+			if (hover && !out.some((action) => action.trigger === "hover" && action.change === hover.change)) out.push(hover);
+		}
+	}
+	return out;
+}
+
+function hasClick(actions: MailAction[]): boolean {
+	return actions.some((action) => action.trigger === "click");
+}
+
+/**
+ * The link a stored `href` comes to as an on-click action: what a picture
+ * carried before actions existed, and what the code view reads off an `<a>`.
+ * Null when the address is not one `safeHref` keeps.
+ */
+function clickFromHref(href: string): MailClickAction | null {
+	const safe = safeHref(href);
+	if (!safe) return null;
+	const base = { id: randomUUID(), trigger: "click" as const, hidden: false };
+	if (/^mailto:/i.test(safe)) return { ...base, kind: "mail", target: safe.slice(7) };
+	if (/^tel:/i.test(safe)) return { ...base, kind: "call", target: safe.slice(4) };
+	if (/^https:/i.test(safe)) return { ...base, kind: "link", target: safe.replace(/^https:\/*/i, "") };
+	return { ...base, kind: "link", target: safe };
+}
+
+/** A whole `{{placeholder}}`, which is resolved long after anything here runs. */
+function isPlaceholder(value: string): boolean {
+	return /^\{\{[^{}]+\}\}$/.test(value);
+}
+
+/**
+ * The address an on-click action is sent with, or null when it has none worth
+ * a link. `https://`, `mailto:` and `tel:` are built here from the target, and
+ * the result still goes through `safeHref`, so what a person or an agent typed
+ * into the target cannot become anything else: a target that names another
+ * scheme is refused rather than prefixed.
+ */
+export function clickHref(action: MailClickAction): string | null {
+	const target = action.target.trim();
+	if (!target) return null;
+	if (action.kind === "mail") return safeHref(`mailto:${target.replace(/^mailto:/i, "").replace(/\s+/g, "")}`);
+	if (action.kind === "call") return safeHref(`tel:${target.replace(/^tel:/i, "").replace(/\s+/g, "")}`);
+	if (isPlaceholder(target)) return safeHref(target);
+	const bare = target.replace(/^https:\/\//i, "").replace(/\s+/g, "");
+	// Another scheme (`javascript:`, `http:`, `data:`) is not an address to open.
+	// A port (`host:8080`) is not a scheme, so it is told apart by its digits.
+	if (!bare || /^[a-z][a-z0-9+.-]*:(?!\d+(?:\/|$))/i.test(bare)) return null;
+	return safeHref(`https://${bare}`);
+}
+
+/** The address an element is sent linked to: its first on-click action that shows and has a usable target. */
+function linkOf(actions: MailAction[]): string | null {
+	for (const action of actions) {
+		if (action.trigger === "click" && !action.hidden) return clickHref(action);
+	}
+	return null;
+}
+
+/**
+ * An element cannot sit inside a link and be one: an `<a>` in an `<a>` is not
+ * HTML, and each client repairs it differently. So when a stored layout has an
+ * on-click action on an element and on something under it, the outer one wins
+ * and the inner one is dropped. The editor does not offer the second one, so
+ * this only ever acts on a layout written by hand or by an agent.
+ */
+function dropNestedLinks(nodes: MailNode[], outer = false): MailNode[] {
+	return nodes.map((node) => {
+		const own = linksIn(node.actions, outer);
+		if (isContainer(node)) return { ...node, actions: own.actions, children: dropNestedLinks(node.children, own.linked) };
+		if (isColumns(node)) {
+			return {
+				...node,
+				actions: own.actions,
+				rows: node.rows.map((row) => ({
+					...row,
+					cells: row.cells.map((cell) => {
+						const inCell = linksIn(cell.actions, own.linked);
+						return { ...cell, actions: inCell.actions, children: dropNestedLinks(cell.children, inCell.linked) };
+					}),
+				})),
+			};
+		}
+		return { ...node, actions: own.actions };
+	});
+}
+
+/** An element's actions with the click dropped when something around it is already a link, and whether it is inside one now. */
+function linksIn(actions: MailAction[], outer: boolean): { actions: MailAction[]; linked: boolean } {
+	const own = hasClick(actions);
+	return { actions: outer && own ? actions.filter((action) => action.trigger !== "click") : actions, linked: outer || own };
+}
+
 function parseBlock(raw: unknown): MailBlock | null {
 	if (!isRecord(raw)) return null;
 	const common = {
@@ -637,6 +792,7 @@ function parseBlock(raw: unknown): MailBlock | null {
 		grow: toNum(raw.grow, 0, 0, 12),
 		alignSelf: toSelfAlign(raw.alignSelf),
 		hidden: raw.hidden === true,
+		actions: parseActions(raw.actions),
 	};
 	const box = parseBox(raw.box);
 
@@ -651,6 +807,8 @@ function parseBlock(raw: unknown): MailBlock | null {
 		case "button":
 			return {
 				...common,
+				// A button is its own link, through `href`, so it takes no click.
+				actions: common.actions.filter((action) => action.trigger !== "click"),
 				kind: "button",
 				label: toStr(raw.label),
 				href: safeHref(toStr(raw.href)) ?? "",
@@ -662,19 +820,22 @@ function parseBlock(raw: unknown): MailBlock | null {
 				text: isRecord(raw.text) ? parseTextStyle(raw.text) : { ...defaultText(), weight: "semibold" },
 				box,
 			};
-		case "image":
+		case "image": {
+			// A picture used to link through an `href` of its own. It is an on-click
+			// action now, and a stored one is read into it unless it already has one.
+			const carried = !hasClick(common.actions) && typeof raw.href === "string" ? clickFromHref(raw.href) : null;
 			return {
 				...common,
+				actions: carried ? [carried, ...common.actions] : common.actions,
 				kind: "image",
 				src: safeImageSrc(toStr(raw.src)) ?? "",
 				alt: toStr(raw.alt),
 				width: toNullableNum(raw.width, 8, MAX_WIDTH),
 				align: toAlignText(raw.align),
-				// A picture inside a link. Version 1 never had one, so it is null.
-				href: safeHref(toStr(raw.href)),
 				// A picture has a width of its own, and the box's would be a second one.
 				box: { ...box, width: null },
 			};
+		}
 		case "divider":
 			return {
 				...common,
@@ -740,6 +901,7 @@ function parseV1Section(raw: unknown, budget: { left: number }): MailContainer |
 		grow: 0,
 		layout: parseSectionLayout(raw.layout),
 		box: parseBox(raw.box),
+		actions: [],
 		children,
 	};
 }
@@ -765,6 +927,7 @@ function parseColumnsCell(raw: unknown, depth: number, budget: { left: number })
 		width: toNullableNum(raw.width, 1, 100),
 		verticalAlign: toVerticalAlign(raw.verticalAlign),
 		box: parseBox(raw.box),
+		actions: parseActions(raw.actions),
 		children: parseNodes(raw.children, depth, budget),
 	};
 }
@@ -790,6 +953,7 @@ function parseColumns(raw: UnknownRecord, depth: number, budget: { left: number 
 		grow: toNum(raw.grow, 0, 0, 12),
 		gap: toNum(raw.gap, 12, 0, 120),
 		box: parseBox(raw.box),
+		actions: parseActions(raw.actions),
 		rows,
 	};
 }
@@ -805,6 +969,7 @@ function parseContainer(raw: UnknownRecord, depth: number, budget: { left: numbe
 		grow: toNum(raw.grow, 0, 0, 12),
 		layout: parseSectionLayout(raw.layout),
 		box: parseBox(raw.box),
+		actions: parseActions(raw.actions),
 		children: parseNodes(raw.children, depth + 1, budget),
 	};
 }
@@ -1103,7 +1268,7 @@ export function normaliseLayout(raw: unknown): MailLayout | null {
 	const children: MailNode[] = Array.isArray(raw.sections)
 		? raw.sections.map((section) => parseV1Section(section, budget)).filter((section): section is MailContainer => section !== null)
 		: parseNodes(raw.children, 0, budget);
-	const kept = children.length > 0 ? children : [emptyContainer("section", "Body")];
+	const kept = dropNestedLinks(children.length > 0 ? children : [emptyContainer("section", "Body")]);
 	return {
 		version: 2,
 		width: toNum(raw.width, DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH),
@@ -1183,14 +1348,23 @@ export function sanitiseDeclarations(css: string): string {
 const ALLOWED_INLINE_TAGS = new Set(["strong", "b", "em", "i", "u", "s", "a", "span", "p", "br"]);
 const TAG_RE = /<(\/)?([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^<>]*)?)\/?>/g;
 
-/** An `https:` or `mailto:` target, or nothing. Never `http:`, which leaks the
- * recipient's address to anyone on the path, and never `javascript:`. */
+/**
+ * An `https:`, `mailto:` or `tel:` target, or nothing. Never `http:`, which
+ * leaks the recipient's address to anyone on the path, and never `javascript:`
+ * or `data:`. A phone number is digits, spaces and `+ - ( )` and nothing else
+ * (or a placeholder that is filled in later), so a `tel:` link cannot carry
+ * anything but a number.
+ */
 export function safeHref(raw: string): string | null {
 	const trimmed = raw.trim();
 	if (!trimmed) return null;
 	// A placeholder is resolved long after this runs, so it cannot be checked
 	// here and is allowed through as the author wrote it.
-	if (/^\{\{[^{}]+\}\}$/.test(trimmed)) return trimmed;
+	if (isPlaceholder(trimmed)) return trimmed;
+	if (/^tel:/i.test(trimmed)) {
+		const number = trimmed.slice(4);
+		return /^[0-9 +()-]+$/.test(number) || isPlaceholder(number) ? trimmed : null;
+	}
 	return /^(https:|mailto:)/i.test(trimmed) ? trimmed : null;
 }
 
@@ -1228,7 +1402,7 @@ export function sanitiseFragment(html: string, extra: readonly string[] = []): s
 
 	for (const match of html.matchAll(TAG_RE)) {
 		const start = match.index ?? 0;
-		out += escapeHtml(html.slice(cursor, start));
+		out += escapeText(html.slice(cursor, start));
 		cursor = start + match[0].length;
 
 		const closing = Boolean(match[1]);
@@ -1248,22 +1422,35 @@ export function sanitiseFragment(html: string, extra: readonly string[] = []): s
 			continue;
 		}
 		if (name === "a") {
-			const href = safeHref(attribute(attrs, "href") ?? "");
+			const href = safeHref(unescapeAttr(attribute(attrs, "href") ?? ""));
 			// A link with no usable target keeps its words and loses its anchor,
 			// rather than shipping an <a> that goes nowhere.
 			out += href ? `<a href="${escapeHtml(href)}">` : "";
 			continue;
 		}
 		if (name === "span" || name === "p") {
-			const style = sanitiseDeclarations(attribute(attrs, "style") ?? "");
+			const style = sanitiseDeclarations(unescapeAttr(attribute(attrs, "style") ?? ""));
 			out += style ? `<${name} style="${escapeHtml(style)}">` : `<${name}>`;
 			continue;
 		}
 		out += `<${name}>`;
 	}
 
-	out += escapeHtml(html.slice(cursor));
+	out += escapeText(html.slice(cursor));
 	return out;
+}
+
+/**
+ * Words between tags, escaped for markup that has already been through this
+ * once. A text block keeps html, so an entity in it (`&#39;`, `&amp;`) is
+ * already the escaped form of a character; escaping its ampersand again would
+ * grow it on every save (`&amp;#39;`, then `&amp;amp;#39;`). A bare
+ * ampersand is still escaped, so `A & B` is written once as `A &amp; B`.
+ */
+function escapeText(text: string): string {
+	return text.replace(/(&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);)|[&<>"']/gi, (char, entity: string | undefined) =>
+		entity ?? escapeHtml(char),
+	);
 }
 
 /** What a code block may carry: an email's worth of structure, and nothing that runs. */
@@ -1282,6 +1469,15 @@ const MARKUP_TAGS = new Set([
 	"br",
 	"p",
 	"div",
+	"section",
+	"header",
+	"footer",
+	"main",
+	"article",
+	"aside",
+	"nav",
+	"pre",
+	"address",
 	"center",
 	"h1",
 	"h2",
@@ -1626,11 +1822,11 @@ function placeDeclarations(node: { grow: number; alignSelf: MailSelfAlign }): (s
 }
 
 /**
- * Where something narrower than its parent sits across it, at the top level:
- * the frame lays its children one under the next in plain flow, so this is
- * margins, which every client reads. A nested container or columns table
- * takes `placeDeclarations` instead, the way a block does, because its
- * parent is a flex or grid box that already has an alignment of its own.
+ * Where something narrower than its parent sits across it when that parent
+ * lays its children out in plain flow, as the frame and a table cell do: this
+ * is margins, which every client reads. A container or columns table inside a
+ * flex or grid box takes `placeDeclarations` instead, the way a block does,
+ * because that parent already has an alignment of its own.
  */
 function sectionPlaceDeclarations(node: { alignSelf: MailSelfAlign }): string[] {
 	if (node.alignSelf === "center") return ["margin-left:auto", "margin-right:auto"];
@@ -1638,9 +1834,37 @@ function sectionPlaceDeclarations(node: { alignSelf: MailSelfAlign }): string[] 
 	return [];
 }
 
-/** `sectionPlaceDeclarations` at the top level, `placeDeclarations` nested. */
-function placementDeclarations(node: { grow: number; alignSelf: MailSelfAlign }, topLevel: boolean): (string | null)[] {
-	return topLevel ? sectionPlaceDeclarations(node) : placeDeclarations(node);
+/** `sectionPlaceDeclarations` in plain flow, `placeDeclarations` in a flex or grid parent. */
+function placementDeclarations(node: { grow: number; alignSelf: MailSelfAlign }, inFlow: boolean): (string | null)[] {
+	return inFlow ? sectionPlaceDeclarations(node) : placeDeclarations(node);
+}
+
+/** The sides of an element that its own alignment already gives `auto` margins to. */
+type AutoSides = { left: boolean; right: boolean };
+
+const NO_AUTO: AutoSides = { left: false, right: false };
+
+/** A container or columns table in plain flow, centred or pushed to the end (matches sectionPlaceDeclarations). */
+function autoSidesInFlow(node: { alignSelf: MailSelfAlign }, inFlow: boolean): AutoSides {
+	if (!inFlow) return NO_AUTO;
+	return { left: node.alignSelf === "center" || node.alignSelf === "end", right: node.alignSelf === "center" };
+}
+
+/**
+ * The box's margin, one side at a time and only where it is set, written after
+ * the element's own placement. A side in `auto` is left to the placement that
+ * put it there, so a centred element stays centred whatever number is stored.
+ * Longhands rather than the shorthand: a text block already carries
+ * `margin:0`, and a picture `margin:0 auto`, and a shorthand here would undo
+ * whichever side the box did not set.
+ */
+function marginDeclarations(margin: MailSpacing, auto: AutoSides = NO_AUTO): (string | null)[] {
+	return [
+		margin.top > 0 ? `margin-top:${margin.top}px` : null,
+		margin.right > 0 && !auto.right ? `margin-right:${margin.right}px` : null,
+		margin.bottom > 0 ? `margin-bottom:${margin.bottom}px` : null,
+		margin.left > 0 && !auto.left ? `margin-left:${margin.left}px` : null,
+	];
 }
 
 const JUSTIFY_CSS: Record<MailJustify, string> = {
@@ -1665,7 +1889,10 @@ function layoutDeclarations(layout: MailSectionLayout): string[] {
 			`grid-template-columns:repeat(${layout.columns},1fr)`,
 			`gap:${layout.gap}px`,
 			`align-items:${ALIGN_CSS[layout.align]}`,
-		];
+			// A grid stretches its items across their cells on its own, so stretch
+			// writes nothing and a grid saved without this field compiles as it did.
+			layout.justify === "stretch" ? null : `justify-items:${ALIGN_CSS[layout.justify]}`,
+		].filter((declaration): declaration is string => declaration !== null);
 	}
 	return [
 		"display:flex",
@@ -1717,10 +1944,15 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				...verticalDeclarations(block.text),
 				...boxDeclarations(block.box),
 				...place,
+				...marginDeclarations(block.box.margin),
 			];
 		case "text":
 			return [
 				"margin:0",
+				// A list's bullets sit in its left padding. Written out, because a
+				// client's own default differs from one to the next and the
+				// canvas resets it to nothing; the box's padding, when set, wins.
+				isListTag(block.tag) ? `padding-left:${LIST_INDENT}px` : null,
 				...textDeclarations(block.text, fonts),
 				// A list's items are the block's `html`; pushing them down its box
 				// with a wrapping span would break the list, so a list block is
@@ -1728,6 +1960,7 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				...(isListTag(block.tag) ? [] : verticalDeclarations(block.text)),
 				...boxDeclarations(block.box),
 				...place,
+				...marginDeclarations(block.box.margin),
 			];
 		case "button": {
 			const padded = paddingDeclaration(block.box.padding) !== null;
@@ -1742,6 +1975,7 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				...boxDeclarations({ ...block.box, fill: null, borderRadius: block.radius }),
 				padded ? null : "padding:10px 18px",
 				...place,
+				...marginDeclarations(block.box.margin),
 			];
 		}
 		case "image":
@@ -1754,6 +1988,10 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				block.align === "center" ? "margin:0 auto" : block.align === "right" ? "margin-left:auto" : null,
 				...boxDeclarations({ ...block.box, width: null }),
 				...place,
+				...marginDeclarations(block.box.margin, {
+					left: block.align === "center" || block.align === "right",
+					right: block.align === "center",
+				}),
 			];
 		case "divider":
 			return [
@@ -1766,6 +2004,7 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 				block.box.width !== null ? "max-width:100%" : null,
 				block.box.customCss,
 				...place,
+				...marginDeclarations(block.box.margin),
 			];
 		case "spacer":
 			return [`height:${block.height}px`, "line-height:0", "font-size:0", ...place];
@@ -1773,9 +2012,21 @@ function blockDeclarations(block: MailBlock, inputs: TemplateInput[], fonts: Mai
 			if (!block.inputKey) return ["color:#5d5e70", "font-size:12px"];
 			const declared = inputs.find((input) => input.key === block.inputKey);
 			if (declared?.kind === "image") {
-				return ["display:block", "max-width:100%", "height:auto", ...boxDeclarations(block.box), ...place];
+				return [
+					"display:block",
+					"max-width:100%",
+					"height:auto",
+					...boxDeclarations(block.box),
+					...place,
+					...marginDeclarations(block.box.margin),
+				];
 			}
-			return [...textDeclarations(block.text, fonts), ...boxDeclarations(block.box), ...place];
+			return [
+				...textDeclarations(block.text, fonts),
+				...boxDeclarations(block.box),
+				...place,
+				...marginDeclarations(block.box.margin),
+			];
 		}
 		case "html": {
 			const css = sanitiseDeclarations(block.css) || null;
@@ -1809,11 +2060,54 @@ function markAttributes(marks: Marks): string {
 	return marks.className ? ` class="${marks.className}"` : "";
 }
 
+/** An element's markup with every link taken out and its words kept: what is left of rich text once the text as a whole is the link. */
+function withoutLinks(html: string): string {
+	return html.replace(/<\/?a\b[^>]*>/gi, "");
+}
+
+/**
+ * An element wrapped in the `<a>` its on-click action makes. The wrapper
+ * carries `data-juno-link` so the code view reads it back into an action on
+ * what is inside, and it takes the element's place in a flex or grid parent
+ * (`extra`), because the wrapper is what that parent lays out. Its colour and
+ * decoration are reset so the client's own link look never shows through.
+ */
+function wrapInLink(href: string, display: "block" | "inline-block", extra: (string | null)[], inner: string, kind: "1" | "cell" = "1"): string {
+	const style = styleString([`display:${display}`, "text-decoration:none", "color:inherit", ...extra]);
+	return `<a href="${escapeHtml(href)}" data-juno-link="${kind}"${style}>${inner}</a>`;
+}
+
+/** Whether the wrapper round an element is a block or sits in the line: a picture that hugs its own width and an inline field do. */
+function linkDisplay(block: MailBlock, element: string): "block" | "inline-block" {
+	if (block.kind === "image") return block.width === null ? "inline-block" : "block";
+	if (block.kind === "field") return element.startsWith("<span") ? "inline-block" : "block";
+	return "block";
+}
+
+/**
+ * A block with its on-click action, if it has one that shows. The element
+ * itself is the link when it already is an `<a>`: an inline text is sent as
+ * the link, and a button, a linked input or a code block whose markup is a
+ * link keep the address they have. Anything else is wrapped.
+ */
 function compileBlock(
 	block: MailBlock,
 	inputs: TemplateInput[],
 	fonts: MailFont[],
 	marks: Marks = NO_MARKS,
+): string {
+	const href = block.kind === "button" ? null : linkOf(block.actions);
+	const element = compileBlockElement(block, inputs, fonts, marks, href);
+	if (!href || /^<a[\s>]/.test(element)) return element;
+	return wrapInLink(href, linkDisplay(block, element), placeDeclarations(block), element);
+}
+
+function compileBlockElement(
+	block: MailBlock,
+	inputs: TemplateInput[],
+	fonts: MailFont[],
+	marks: Marks,
+	href: string | null,
 ): string {
 	const marker = ` data-juno-block="${block.kind}" data-juno-id="${escapeHtml(block.id)}"${markAttributes(marks)}`;
 	const declarations = blockDeclarations(block, inputs, fonts);
@@ -1826,11 +2120,21 @@ function compileBlock(
 		}
 		case "text": {
 			const isList = isListTag(block.tag);
-			const html = sanitiseFragment(block.html, textExtraTags(block.tag));
+			const sanitised = sanitiseFragment(block.html, textExtraTags(block.tag));
+			// A text that is a link as a whole cannot hold links of its own.
+			const html = href ? withoutLinks(sanitised) : sanitised;
+			const body = isList ? html : wrapVertical(block.text, html);
+			if (href && block.tag === "span") {
+				// An inline text is the link itself, carrying the span's markers and
+				// style. The client's own link colour and underline are put back to
+				// the text's before the text's own declarations, which win.
+				const linked = ["text-decoration:none", "color:inherit", ...declarations];
+				const own = styleString(marks.hiddenByDefault ? [...linked, ...HIDDEN_DECLARATIONS] : linked);
+				return `<a${marker} href="${escapeHtml(href)}"${own}>${body}</a>`;
+			}
 			// A version 1 tag of "p" keeps its p-or-div choice; every other tag is
 			// written as itself.
 			const tag = block.tag === "p" ? textTag(html) : block.tag;
-			const body = isList ? html : wrapVertical(block.text, html);
 			return `<${tag}${marker}${style}>${body}</${tag}>`;
 		}
 		case "button": {
@@ -1845,12 +2149,7 @@ function compileBlock(
 		case "image": {
 			const src = safeImageSrc(block.src);
 			if (!src) return `<span${marker}${style}>${escapeHtml(block.alt || "Geen afbeelding")}</span>`;
-			const img = `<img${marker} src="${escapeHtml(src)}" alt="${escapeHtml(block.alt)}"${style}>`;
-			// A picture inside a link: the img keeps its own markers and style, so
-			// the code view finds it exactly as it does one with no link, and the
-			// anchor round it is a thin wrapper with nothing else to carry.
-			const href = block.href ? safeHref(block.href) : null;
-			return href ? `<a href="${escapeHtml(href)}" data-juno-link="1" style="display:inline-block">${img}</a>` : img;
+			return `<img${marker} src="${escapeHtml(src)}" alt="${escapeHtml(block.alt)}"${style}>`;
 		}
 		case "divider":
 			return `<hr${marker}${style}>`;
@@ -1895,18 +2194,23 @@ function compileBlock(
  * compiles to `<section style="display:block;display:flex;...">`, and that is
  * the one difference a test pins between the two versions' output.
  */
-function containerDeclarations(container: MailContainer, topLevel: boolean): (string | null)[] {
+function containerDeclarations(container: MailContainer, inFlow: boolean): (string | null)[] {
 	return [
 		container.tag !== "div" ? "display:block" : null,
 		...layoutDeclarations(container.layout),
 		...boxDeclarations(container.box),
-		...placementDeclarations(container, topLevel),
+		...placementDeclarations(container, inFlow),
+		...marginDeclarations(container.box.margin, autoSidesInFlow(container, inFlow)),
 	];
 }
 
 /** A columns table's declarations. A `<table>` needs no `display:block` fallback: every client already treats it as one. */
-function columnsDeclarations(columns: MailColumns, topLevel: boolean): (string | null)[] {
-	return [...boxDeclarations(columns.box), ...placementDeclarations(columns, topLevel)];
+function columnsDeclarations(columns: MailColumns, inFlow: boolean): (string | null)[] {
+	return [
+		...boxDeclarations(columns.box),
+		...placementDeclarations(columns, inFlow),
+		...marginDeclarations(columns.box.margin, autoSidesInFlow(columns, inFlow)),
+	];
 }
 
 /** Half the gap on each inner side, so the total between two cells is the gap and the outer edges carry none of it. */
@@ -1936,7 +2240,10 @@ function compileColumnsCell(
 	];
 	const style = styleString(declarations);
 	const widthAttr = cell.width !== null ? ` width="${cell.width}%"` : "";
-	const children = compileNodes(cell.children, inputs, fonts, rules, false);
+	const compiled = compileNodes(cell.children, inputs, fonts, rules, true);
+	// A linked cell is linked inside the `td`: a `td` cannot be wrapped in an anchor.
+	const href = linkOf(cell.actions);
+	const children = href ? wrapInLink(href, "block", [], compiled, "cell") : compiled;
 	return `<td data-juno-id="${escapeHtml(cell.id)}"${widthAttr} valign="${cell.verticalAlign}"${
 		className ? ` class="${className}"` : ""
 	}${style}>${children}</td>`;
@@ -1947,10 +2254,10 @@ function compileColumnsCell(
  * keeps side by side. `role="presentation"` and the zeroed attributes are
  * what stop a screen reader announcing a layout table as data.
  */
-function compileColumns(columns: MailColumns, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
+function compileColumns(columns: MailColumns, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, inFlow: boolean): string {
 	const marks = marksFor(columns.id, columns.hidden, rules);
 	if (!marks) return "";
-	const declarations = columnsDeclarations(columns, topLevel);
+	const declarations = columnsDeclarations(columns, inFlow);
 	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
 	const rows = columns.rows
 		.map(
@@ -1960,9 +2267,11 @@ function compileColumns(columns: MailColumns, inputs: TemplateInput[], fonts: Ma
 					.join("")}</tr>`,
 		)
 		.join("");
-	return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" data-juno-columns="${escapeHtml(
+	const table = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" data-juno-columns="${escapeHtml(
 		columns.name,
 	)}" data-juno-id="${escapeHtml(columns.id)}"${markAttributes(marks)}${style}>${rows}</table>`;
+	const href = linkOf(columns.actions);
+	return href ? wrapInLink(href, "block", inFlow ? [] : placeDeclarations(columns), table) : table;
 }
 
 function compileContainer(
@@ -1970,28 +2279,35 @@ function compileContainer(
 	inputs: TemplateInput[],
 	fonts: MailFont[],
 	rules: BreakpointRules,
-	topLevel: boolean,
+	inFlow: boolean,
 ): string {
 	const marks = marksFor(container.id, container.hidden, rules);
 	if (!marks) return "";
-	const declarations = containerDeclarations(container, topLevel);
+	const declarations = containerDeclarations(container, inFlow);
 	const style = styleString(marks.hiddenByDefault ? [...declarations, ...HIDDEN_DECLARATIONS] : declarations);
 	const children = compileNodes(container.children, inputs, fonts, rules, false);
 	const tag = container.tag;
-	return `<${tag} data-juno-section="${escapeHtml(container.name)}" data-juno-id="${escapeHtml(container.id)}"${markAttributes(
+	const element = `<${tag} data-juno-section="${escapeHtml(container.name)}" data-juno-id="${escapeHtml(container.id)}"${markAttributes(
 		marks,
 	)}${style}>${children}</${tag}>`;
+	const href = linkOf(container.actions);
+	return href ? wrapInLink(href, "block", inFlow ? [] : placeDeclarations(container), element) : element;
 }
 
-function compileNode(node: MailNode, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
-	if (isContainer(node)) return compileContainer(node, inputs, fonts, rules, topLevel);
-	if (isColumns(node)) return compileColumns(node, inputs, fonts, rules, topLevel);
+function compileNode(node: MailNode, inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, inFlow: boolean): string {
+	if (isContainer(node)) return compileContainer(node, inputs, fonts, rules, inFlow);
+	if (isColumns(node)) return compileColumns(node, inputs, fonts, rules, inFlow);
 	const marks = marksFor(node.id, node.hidden, rules);
 	return marks ? compileBlock(node, inputs, fonts, marks) : "";
 }
 
-function compileNodes(nodes: MailNode[], inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, topLevel: boolean): string {
-	return nodes.map((node) => compileNode(node, inputs, fonts, rules, topLevel)).join("");
+/**
+ * `inFlow` is true when the parent lays its children out in plain flow, as the
+ * frame and a table cell do, and false inside a container's flex or grid: it
+ * decides how a container or columns table is placed in it.
+ */
+function compileNodes(nodes: MailNode[], inputs: TemplateInput[], fonts: MailFont[], rules: BreakpointRules, inFlow: boolean): string {
+	return nodes.map((node) => compileNode(node, inputs, fonts, rules, inFlow)).join("");
 }
 
 /**
@@ -2019,7 +2335,9 @@ export function compileLayout(layout: MailLayout, inputs: TemplateInput[] = []):
 		...fillDeclarations(layout.fill),
 		layout.customCss,
 	]);
-	const body = compileNodes(layout.children, inputs, layout.fonts, rules, true);
+	// The editor never puts a link inside a link, but a layout written by hand or
+	// by an agent might, and the compiler is the last place to keep it out.
+	const body = compileNodes(dropNestedLinks(layout.children), inputs, layout.fonts, rules, true);
 	return `<div data-juno-canvas="1"${style}>${body}</div>`;
 }
 
@@ -2079,8 +2397,11 @@ const RESET: Record<string, string> = {
 	flex: "0 1 auto",
 	"align-self": "auto",
 	margin: "0",
+	"margin-top": "0",
+	"margin-bottom": "0",
 	"margin-left": "0",
 	"margin-right": "0",
+	"justify-items": "stretch",
 };
 
 /** A declaration list as property to value, the last of a repeated property winning as it does in CSS. */
@@ -2164,7 +2485,7 @@ function walkRulePair(
 	fonts: MailFont[],
 	add: (id: string, declarations: string[]) => void,
 	shown: Set<string>,
-	topLevel: boolean,
+	inFlow: boolean,
 ): void {
 	here.forEach((node, index) => {
 		const was = before[index];
@@ -2173,8 +2494,8 @@ function walkRulePair(
 			add(
 				node.id,
 				ruleDeclarations(
-					declarationMap(containerDeclarations(was, topLevel)),
-					declarationMap(containerDeclarations(node, topLevel)),
+					declarationMap(containerDeclarations(was, inFlow)),
+					declarationMap(containerDeclarations(node, inFlow)),
 					was.hidden,
 					node.hidden,
 					"block",
@@ -2188,8 +2509,8 @@ function walkRulePair(
 			add(
 				node.id,
 				ruleDeclarations(
-					declarationMap(columnsDeclarations(was, topLevel)),
-					declarationMap(columnsDeclarations(node, topLevel)),
+					declarationMap(columnsDeclarations(was, inFlow)),
+					declarationMap(columnsDeclarations(node, inFlow)),
 					was.hidden,
 					node.hidden,
 					"block",
@@ -2203,7 +2524,7 @@ function walkRulePair(
 					const wasCell = wasRow.cells[cellIndex];
 					if (!wasCell) return;
 					add(cell.id, ruleDeclarations(declarationMap(boxDeclarations(wasCell.box)), declarationMap(boxDeclarations(cell.box)), false, false, "table-cell"));
-					walkRulePair(wasCell.children, cell.children, inputs, fonts, add, shown, false);
+					walkRulePair(wasCell.children, cell.children, inputs, fonts, add, shown, true);
 				});
 			});
 			return;
@@ -2258,8 +2579,63 @@ function breakpointRules(layout: MailLayout, inputs: TemplateInput[]): Breakpoin
 	}
 
 	clearDefaultShown(layout.children, shown);
+	const hover = hoverRules(layout, classes, shown);
 
-	return { classes, shown, css: queries.join("").replace(/[<>]/g, "") };
+	return { classes, shown, css: (queries.join("") + hover.join("")).replace(/[<>]/g, "") };
+}
+
+/**
+ * What the pointer resting on an element changes, as the declarations of a
+ * `:hover` rule. One change per row, and a hidden row (Figma's eye) writes
+ * nothing. A solid fill also clears any gradient underneath it, or the
+ * gradient would stay over the new colour.
+ */
+function hoverDeclarations(actions: MailAction[]): string[] {
+	const out: string[] = [];
+	for (const action of actions) {
+		if (action.trigger !== "hover" || action.hidden) continue;
+		switch (action.change) {
+			case "fill":
+				if (action.fill && !action.fill.hidden) {
+					out.push(...fillDeclarations(action.fill).filter((declaration): declaration is string => declaration !== null));
+					if (action.fill.kind === "solid") out.push("background-image:none");
+				}
+				break;
+			case "color":
+				if (action.color) out.push(...colorDeclarations("color", action.color));
+				break;
+			case "underline":
+				out.push(`text-decoration:${action.underline === false ? "none" : "underline"}`);
+				break;
+			case "opacity":
+				if (action.opacity !== undefined) out.push(`opacity:${Number(action.opacity.toFixed(3))}`);
+				break;
+		}
+	}
+	return out;
+}
+
+/**
+ * The `:hover` rules, written after the breakpoints' media queries and not
+ * inside one: the pointer is the same at every width. Each is
+ * `.jb-<id>:hover{...!important}`, the class being the one the breakpoints
+ * give, so an element that has both carries one class, and `!important` for
+ * the same reason it is there for them: the element's own style is inline.
+ * A hidden element that no breakpoint shows is not in the message, so it gets
+ * no rule.
+ */
+function hoverRules(layout: MailLayout, classes: Map<string, string>, shown: Set<string>): string[] {
+	const rules: string[] = [];
+	const visit = (node: { id: string; hidden?: boolean; actions: MailAction[] }) => {
+		const declarations = hoverDeclarations(node.actions);
+		if (declarations.length === 0) return;
+		if (node.hidden && !shown.has(node.id)) return;
+		const className = classes.get(node.id) ?? classFor(node.id);
+		classes.set(node.id, className);
+		rules.push(`.${className}:hover{${declarations.map((declaration) => `${declaration} !important`).join(";")}}`);
+	};
+	walkTree(layout.children, visit, visit, visit);
+	return rules;
 }
 
 /**
@@ -2403,11 +2779,25 @@ function leftoverCss(map: Declarations, owned: string[]): string | null {
 	return css || null;
 }
 
+/** An element's style as declarations in the order they were written, repeats included, bar the properties named. */
+function declarationsOf(attrs: string, skip: string[]): string {
+	const style = attribute(attrs, "style");
+	if (!style) return "";
+	const kept = unescapeAttr(style)
+		.split(";")
+		.filter((part) => !skip.includes(part.slice(0, Math.max(part.indexOf(":"), 0)).trim().toLowerCase()));
+	return sanitiseDeclarations(kept.join(";"));
+}
+
 const BOX_PROPERTIES = [
 	"background",
 	"background-color",
 	"background-image",
 	"padding",
+	"margin-top",
+	"margin-right",
+	"margin-bottom",
+	"margin-left",
 	"border",
 	"border-top",
 	"border-right",
@@ -2553,6 +2943,12 @@ function readPadding(map: Declarations): MailSpacing {
 	return { top: a, right: b, bottom: c, left: d };
 }
 
+/** The margin the compiler wrote, side by side. An `auto` side is the placement's, so it reads as zero. */
+function readMargin(map: Declarations): MailSpacing {
+	const side = (property: string): number => Math.min(Math.max(px(map, property) ?? 0, 0), 200);
+	return { top: side("margin-top"), right: side("margin-right"), bottom: side("margin-bottom"), left: side("margin-left") };
+}
+
 type Stroke = { width: number; color: MailColor | null; style: MailStrokeStyle; sides: MailSides };
 
 const STROKE = /^(\d+(?:\.\d+)?)px\s+(solid|dashed|dotted)\s+(.+)$/i;
@@ -2599,6 +2995,7 @@ function readBox(map: Declarations, extraOwned: string[] = [], sides = true): Ma
 	return {
 		fill: readFill(map),
 		padding: readPadding(map),
+		margin: readMargin(map),
 		borderWidth: stroke.width,
 		borderColor: stroke.color,
 		borderStyle: stroke.style,
@@ -2707,6 +3104,7 @@ function rawBlock(html: string): MailBlock {
 		grow: 0,
 		alignSelf: "auto",
 		hidden: false,
+		actions: [],
 	};
 }
 
@@ -2739,6 +3137,7 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 		grow: readGrow(map),
 		alignSelf: readSelfAlign(map.get("align-self")),
 		hidden: marks.hidden,
+		actions: [] as MailAction[],
 	};
 	const textOwned = [...TEXT_PROPERTIES, ...verticalOwned(map), "flex"];
 
@@ -2758,10 +3157,15 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 			// A version 1 "p" sometimes compiled to a div, by the same p-or-div
 			// choice the compiler still makes; a div is not a recognised text
 			// tag, so it reads back as the default, "p".
-			const tag = toTextTag(node.name);
+			// An inline text that is a link is sent as the `<a>` itself, so an `a`
+			// here is a span with an on-click action.
+			const asLink = node.name === "a";
+			const tag = asLink ? "span" : toTextTag(node.name);
 			const isList = isListTag(tag);
+			const click = asLink ? clickFromHref(unescapeAttr(attribute(node.attrs, "href") ?? "")) : null;
 			return {
 				...common,
+				actions: click ? [click] : [],
 				kind: "text",
 				tag,
 				html: sanitiseFragment(isList ? node.inner : unwrapVertical(node.inner), textExtraTags(tag)),
@@ -2801,9 +3205,6 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 				alt: unescapeAttr(attribute(node.attrs, "alt") ?? ""),
 				width: px(map, "width"),
 				align: map.get("margin") === "0 auto" ? "center" : map.get("margin-left") === "auto" ? "right" : "left",
-				// A picture inside a link has its href attached by the caller, which
-				// is the one that saw the <a> this <img> sat inside.
-				href: null,
 				box: {
 					...readBox(map, ["display", "max-width", "width", "height", "margin", "margin-left", "flex"]),
 					width: null,
@@ -2834,8 +3235,11 @@ function readBlock(node: Extract<Node, { type: "element" }>): MailBlock {
 		}
 		case "html": {
 			// The CSS is what the style says, bar the flex and alignment that
-			// `common` has already read into the block's own placement.
-			const css = leftoverCss(map, ["flex", "align-self"]) ?? "";
+			// `common` has already read into the block's own placement. Read from
+			// the style itself rather than from `map`, which keeps only the last of a
+			// repeated property: a container converted to code writes
+			// `display:block` and then `display:flex` on purpose.
+			const css = declarationsOf(marks.attrs, ["flex", "align-self"]);
 			const wrapped = attribute(node.attrs, "data-juno-wrap") !== null;
 			return {
 				...common,
@@ -2857,6 +3261,7 @@ function readSectionLayout(map: Declarations): MailSectionLayout {
 			columns: columns ? Math.min(Math.max(Number.parseInt(columns[1] ?? "2", 10), 1), 6) : 2,
 			gap: px(map, "gap") ?? 12,
 			align: alignFromCss(map.get("align-items")),
+			justify: alignFromCss(map.get("justify-items")),
 		};
 	}
 	return {
@@ -2905,12 +3310,13 @@ const SECTION_PROPERTIES = [
 	"flex-direction",
 	"justify-content",
 	"align-items",
+	"justify-items",
 	"gap",
 	"flex-wrap",
 	"grid-template-columns",
 ];
 
-/** An `<img>` inside the thin `<a data-juno-link>` wrapper an image with a link compiles to, or null. */
+/** The element inside the thin `<a data-juno-link>` wrapper an element with an on-click action compiles to, or null. */
 function unwrapLinked(node: Extract<Node, { type: "element" }>): Extract<Node, { type: "element" }> | null {
 	return (
 		splitTopLevel(node.inner).find((entry): entry is Extract<Node, { type: "element" }> => entry.type === "element") ?? null
@@ -2919,20 +3325,21 @@ function unwrapLinked(node: Extract<Node, { type: "element" }>): Extract<Node, {
 
 /**
  * One child of a container, a cell or the canvas itself, read back as the
- * node it was: a nested container, a columns table, an image wrapped in its
- * link, or a leaf block. Null for markup none of those recognise, which the
- * caller keeps as the author's own rather than losing.
+ * node it was: a nested container, a columns table, a leaf block, or any of
+ * them wrapped in the link its on-click action compiles to. Null for markup
+ * none of those recognise, which the caller keeps as the author's own rather
+ * than losing.
  */
 function readChild(child: Node, depth: number): MailNode | null {
 	if (child.type !== "element" || depth >= MAX_DEPTH) return null;
 	if (attribute(child.attrs, "data-juno-section") !== null) return readContainer(child, depth);
 	if (attribute(child.attrs, "data-juno-columns") !== null) return readColumns(child, depth);
-	if (attribute(child.attrs, "data-juno-link") !== null) {
+	if (attribute(child.attrs, "data-juno-link") === "1") {
 		const inner = unwrapLinked(child);
-		if (!inner || !attribute(inner.attrs, "data-juno-block")) return null;
-		const block = readBlock(inner);
-		const href = safeHref(unescapeAttr(attribute(child.attrs, "href") ?? ""));
-		return block.kind === "image" ? { ...block, href } : block;
+		const node = inner ? readChild(inner, depth) : null;
+		if (!node) return null;
+		const click = clickFromHref(unescapeAttr(attribute(child.attrs, "href") ?? ""));
+		return click ? { ...node, actions: [click, ...node.actions.filter((action) => action.trigger !== "click")] } : node;
 	}
 	if (attribute(child.attrs, "data-juno-block") !== null) return readBlock(child);
 	return null;
@@ -2985,6 +3392,7 @@ function readContainer(node: Extract<Node, { type: "element" }>, depth: number):
 		grow: readGrow(map),
 		layout: readSectionLayout(map),
 		box: readBox(map, [...SECTION_PROPERTIES, "flex", "margin-left", "margin-right"]),
+		actions: [],
 		children: readChildren(node.inner, depth + 1),
 	};
 }
@@ -3006,6 +3414,11 @@ function readCellVerticalAlign(map: Declarations, attrs: string): MailVerticalAl
 
 function readColumnsCell(node: Extract<Node, { type: "element" }>, depth: number): MailColumnsCell {
 	const map = readStyle(node.attrs);
+	// A linked cell holds one thin `<a data-juno-link="cell">` round everything in it.
+	const parts = splitTopLevel(node.inner).filter((part) => part.type === "element" || part.raw.trim() !== "");
+	const only = parts.length === 1 ? parts[0] : undefined;
+	const wrapper = only && only.type === "element" && attribute(only.attrs, "data-juno-link") === "cell" ? only : null;
+	const click = wrapper ? clickFromHref(unescapeAttr(attribute(wrapper.attrs, "href") ?? "")) : null;
 	return {
 		id: attribute(node.attrs, "data-juno-id") ?? randomUUID(),
 		width: readCellWidth(map, node.attrs),
@@ -3014,7 +3427,8 @@ function readColumnsCell(node: Extract<Node, { type: "element" }>, depth: number
 		// top of the cell's own, so the shorthand `padding` alone is what the
 		// cell was given: reading it back does not carry the gap along too.
 		box: readBox(map, ["width", "vertical-align", "padding-left", "padding-right"]),
-		children: readChildren(node.inner, depth),
+		actions: click ? [click] : [],
+		children: readChildren(wrapper ? wrapper.inner : node.inner, depth),
 	};
 }
 
@@ -3045,8 +3459,44 @@ function readColumns(node: Extract<Node, { type: "element" }>, depth: number): M
 		// rather than guessed back into a number that may not be it.
 		gap: 0,
 		box: readBox(map, ["flex", "align-self", "margin-left", "margin-right"]),
+		actions: [],
 		rows,
 	};
+}
+
+/**
+ * The actions the markup cannot carry, put back from the canvas it came from,
+ * by id: a hover row lives in the head of the message and a hidden click
+ * compiles to nothing, so neither is in the body being read. What the markup
+ * does say, the links, wins, and keeps the id of the click it replaces.
+ */
+function restoreActions(nodes: MailNode[], previous: MailNode[]): MailNode[] {
+	const before = new Map<string, MailAction[]>();
+	const remember = (node: { id: string; actions: MailAction[] }) => before.set(node.id, node.actions);
+	walkTree(previous, remember, remember, remember);
+	const restore = (id: string, read: MailAction[]): MailAction[] => {
+		const old = before.get(id) ?? [];
+		const oldClick = old.find((action) => action.trigger === "click");
+		const readClick = read.some((action) => action.trigger === "click");
+		const kept = old.filter((action) => action.trigger === "hover" || (!readClick && action.trigger === "click" && action.hidden));
+		return [...read.map((action) => (action.trigger === "click" && oldClick ? { ...action, id: oldClick.id } : action)), ...kept];
+	};
+	const walk = (list: MailNode[]): MailNode[] =>
+		list.map((node) => {
+			if (isContainer(node)) return { ...node, actions: restore(node.id, node.actions), children: walk(node.children) };
+			if (isColumns(node)) {
+				return {
+					...node,
+					actions: restore(node.id, node.actions),
+					rows: node.rows.map((row) => ({
+						...row,
+						cells: row.cells.map((cell) => ({ ...cell, actions: restore(cell.id, cell.actions), children: walk(cell.children) })),
+					})),
+				};
+			}
+			return { ...node, actions: restore(node.id, node.actions) };
+		});
+	return walk(nodes);
 }
 
 /**
@@ -3087,7 +3537,9 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 
 	const map = readStyle(canvas.attrs);
 	const children = readChildren(canvas.inner, 0);
-	const kept = children.length > 0 ? children : [emptyContainer("section", "Body")];
+	const kept = dropNestedLinks(
+		restoreActions(children.length > 0 ? children : [emptyContainer("section", "Body")], base.children),
+	);
 	const maxWidth = px(map, "max-width");
 	return {
 		version: 2,
@@ -3118,17 +3570,8 @@ export function layoutFromHtml(html: string, previous?: MailLayout | null): Mail
 
 /* ------------------------------------------------------------ convert to code */
 
-/**
- * A block as the HTML and CSS it compiles to: the element, and its style as
- * declarations. Compiling the result gives the same markup back, which is
- * what makes "Convert to HTML" a change of how a block is edited rather than
- * of what it looks like.
- */
-export function blockToCode(block: MailBlock, inputs: TemplateInput[], fonts: MailFont[]): { html: string; css: string } {
-	if (block.kind === "html") return { html: block.html, css: block.css };
-	// Compiled as showing, whatever the eye says: a hidden block converts to
-	// the code it would be if it were shown, and stays hidden.
-	const compiled = compileBlock({ ...block, hidden: false }, inputs, fonts);
+/** The one element a compiled node came to, as the HTML and CSS it is edited as. */
+function codeOfCompiled(compiled: string): { html: string; css: string } {
 	const node = splitTopLevel(compiled).find(
 		(entry): entry is Extract<Node, { type: "element" }> => entry.type === "element",
 	);
@@ -3140,22 +3583,57 @@ export function blockToCode(block: MailBlock, inputs: TemplateInput[], fonts: Ma
 }
 
 /**
- * The children of one container or cell, found anywhere in the tree, or null
- * when nothing there has that id. What `sectionId` in `MailBlockConversion`
- * names now that a section is one kind of container among several: the id of
- * the block's immediate parent.
+ * A block as the HTML and CSS it compiles to: the element, and its style as
+ * declarations. Compiling the result gives the same markup back, which is
+ * what makes "Convert to HTML" a change of how a block is edited rather than
+ * of what it looks like.
  */
-export function findChildren(nodes: MailNode[], parentId: string): MailNode[] | null {
+export function blockToCode(block: MailBlock, inputs: TemplateInput[], fonts: MailFont[]): { html: string; css: string } {
+	if (block.kind === "html") return { html: block.html, css: block.css };
+	// Compiled as showing, whatever the eye says: a hidden block converts to
+	// the code it would be if it were shown, and stays hidden.
+	return codeOfCompiled(compileBlock({ ...block, hidden: false }, inputs, fonts));
+}
+
+/**
+ * A container or a columns table, with everything under it, as the one
+ * element of HTML and CSS it compiles to. `inFlow` is whether its parent lays
+ * out in plain flow (the frame, a table cell) rather than with flex or grid,
+ * which decides how the element is placed in it.
+ *
+ * It is compiled with no breakpoints, so it carries no class for a media
+ * query to find, and a descendant that is hidden is left out, because hidden
+ * is "not in the message" and this is the message. What the descendants
+ * looked like at a narrower width is lost with the structure it was keyed to.
+ */
+export function nodeToCode(
+	node: MailContainer | MailColumns,
+	inputs: TemplateInput[],
+	fonts: MailFont[],
+	inFlow: boolean,
+): { html: string; css: string } {
+	const rules: BreakpointRules = { classes: new Map(), shown: new Set(), css: "" };
+	return codeOfCompiled(compileNode({ ...node, hidden: false }, inputs, fonts, rules, inFlow));
+}
+
+/**
+ * The children of one container or cell, found anywhere in the tree, or of the
+ * frame itself for null, together with whether that parent lays them out in
+ * plain flow (the frame, a cell) or with flex or grid (a container). Null when
+ * nothing there has that id. What `parentId` in `MailBlockConversion` names.
+ */
+export function findParent(nodes: MailNode[], parentId: string | null): { children: MailNode[]; inFlow: boolean } | null {
+	if (parentId === null) return { children: nodes, inFlow: true };
 	for (const node of nodes) {
 		if (isContainer(node)) {
-			if (node.id === parentId) return node.children;
-			const found = findChildren(node.children, parentId);
+			if (node.id === parentId) return { children: node.children, inFlow: false };
+			const found = findParent(node.children, parentId);
 			if (found) return found;
 		} else if (isColumns(node)) {
 			for (const row of node.rows) {
 				for (const cell of row.cells) {
-					if (cell.id === parentId) return cell.children;
-					const found = findChildren(cell.children, parentId);
+					if (cell.id === parentId) return { children: cell.children, inFlow: true };
+					const found = findParent(cell.children, parentId);
 					if (found) return found;
 				}
 			}
@@ -3166,9 +3644,10 @@ export function findChildren(nodes: MailNode[], parentId: string): MailNode[] | 
 
 /**
  * Replaces the children of one parent with `transform`'s result, wherever in
- * the tree that parent is.
+ * the tree that parent is, or at the frame's own top level for null.
  */
-function replaceChildren(nodes: MailNode[], parentId: string, transform: (children: MailNode[]) => MailNode[]): MailNode[] {
+function replaceChildren(nodes: MailNode[], parentId: string | null, transform: (children: MailNode[]) => MailNode[]): MailNode[] {
+	if (parentId === null) return transform(nodes);
 	return nodes.map((node) => {
 		if (isContainer(node)) {
 			return node.id === parentId
@@ -3192,41 +3671,68 @@ function replaceChildren(nodes: MailNode[], parentId: string, transform: (childr
 	});
 }
 
+/** Every id under a node, itself, its rows, its cells and everything in them included. */
+function idsUnder(node: MailNode): string[] {
+	if (isContainer(node)) return [node.id, ...node.children.flatMap(idsUnder)];
+	if (isColumns(node)) {
+		return [
+			node.id,
+			...node.rows.flatMap((row) => [row.id, ...row.cells.flatMap((cell) => [cell.id, ...cell.children.flatMap(idsUnder)])]),
+		];
+	}
+	return [node.id];
+}
+
 /**
- * Replaces one block with the code it compiles to. The placement it had is
- * part of that code now, so the new block carries none of its own.
+ * Replaces one node with the code it compiles to: a block as itself, a
+ * container or a columns table with everything in it as one code block. The
+ * placement it had is part of that code now, so the new block carries none of
+ * its own.
  */
-export function convertBlockToCode(
+export function convertNodeToCode(
 	layout: MailLayout,
-	sectionId: string,
-	blockId: string,
+	parentId: string | null,
+	nodeId: string,
 	inputs: TemplateInput[],
 ): MailLayout {
+	const parent = findParent(layout.children, parentId);
+	const target = parent?.children.find((node) => node.id === nodeId);
+	if (!parent || !target || (isBlockNode(target) && target.kind === "html")) return layout;
+	const code = isBlockNode(target)
+		? blockToCode(target, inputs, layout.fonts)
+		: nodeToCode(target, inputs, layout.fonts, parent.inFlow);
+	const gone = new Set(idsUnder(target));
+	gone.delete(nodeId);
+	const converted: MailBlock = {
+		id: target.id,
+		kind: "html",
+		html: code.html,
+		css: code.css,
+		grow: 0,
+		alignSelf: "auto",
+		hidden: target.hidden,
+		actions: [],
+	};
 	return {
 		...layout,
-		children: replaceChildren(layout.children, sectionId, (children) =>
-			children.map((node) => {
-				if (node.id !== blockId || !isBlockNode(node) || node.kind === "html") return node;
-				const code = blockToCode(node, inputs, layout.fonts);
-				return {
-					id: node.id,
-					kind: "html",
-					html: code.html,
-					css: code.css,
-					grow: 0,
-					alignSelf: "auto",
-					hidden: node.hidden,
-				};
-			}),
-		),
-		// What a breakpoint changed about the block was its style, which is code
-		// now. Whether it shows at a breakpoint is still the block's own.
+		children: replaceChildren(layout.children, parentId, (children) => children.map((node) => (node.id === nodeId ? converted : node))),
+		// What a breakpoint changed about the node was its style, which is code
+		// now, and what it changed about anything under it is gone with that
+		// structure. Whether the node shows at a breakpoint is still its own.
 		breakpoints: layout.breakpoints.map((breakpoint) => {
-			const override = entryOf(breakpoint.blocks, blockId) as MailBlockOverride | undefined;
-			if (!override) return breakpoint;
-			const blocks = Object.fromEntries(Object.entries(breakpoint.blocks).filter(([id]) => id !== blockId));
-			if (override.hidden !== undefined) blocks[blockId] = { hidden: override.hidden };
-			return { ...breakpoint, blocks };
+			const blocks: Record<string, MailBlockOverride> = {};
+			for (const [id, override] of Object.entries(breakpoint.blocks)) {
+				if (id !== nodeId && !gone.has(id)) blocks[id] = override;
+			}
+			const sections: Record<string, MailSectionOverride> = {};
+			for (const [id, override] of Object.entries(breakpoint.sections)) {
+				if (id !== nodeId && !gone.has(id)) sections[id] = override;
+			}
+			const own = (entryOf(breakpoint.blocks, nodeId) ?? entryOf(breakpoint.sections, nodeId)) as
+				| { hidden?: boolean }
+				| undefined;
+			if (own?.hidden !== undefined) blocks[nodeId] = { hidden: own.hidden };
+			return { ...breakpoint, sections, blocks };
 		}),
 	};
 }

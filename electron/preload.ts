@@ -390,6 +390,8 @@ const api: JunoApi = {
 			create: (input) => call("mail.accounts.create", input),
 			update: (id, patch) => call("mail.accounts.update", id, patch),
 			remove: (id) => call("mail.accounts.remove", id),
+			removed: () => call("mail.accounts.removed"),
+			purge: (id, confirmEmail) => call("mail.accounts.purge", id, confirmEmail),
 			test: (input) => call("mail.accounts.test", input),
 			testSmtp: (input) => call("mail.accounts.testSmtp", input),
 		},

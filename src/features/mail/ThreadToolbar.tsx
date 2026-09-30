@@ -18,6 +18,8 @@ type ThreadToolbarProps = {
 	onSelectAll: () => void;
 	onClearSelection: () => void;
 	onAction: (action: ThreadAction, ids: string[]) => void;
+	/** A title in place of search, for a list where searching makes no sense. */
+	heading?: string;
 };
 
 type BulkButton = { action: ThreadAction; icon: IconName; label: string; danger?: boolean };
@@ -36,6 +38,9 @@ type BulkButton = { action: ThreadAction; icon: IconName; label: string; danger?
  * way to build a selection, so a bar that pushes search out of the way would
  * be in the way. When the width runs out the actions wrap under search rather
  * than squeezing it.
+ *
+ * Drafts gives a `heading` instead of search: its list also holds messages
+ * that are not threads, and a search across the account would leave the folder.
  */
 export function ThreadToolbar({
 	search,
@@ -48,6 +53,7 @@ export function ThreadToolbar({
 	onSelectAll,
 	onClearSelection,
 	onAction,
+	heading,
 }: ThreadToolbarProps) {
 	const hasSelection = selectedIds.length > 0;
 	const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
@@ -83,7 +89,11 @@ export function ThreadToolbar({
 				</span>
 			) : null}
 
-			<MailSearchBar search={search} onSearch={onSearch} filters={filters} onFilters={onFilters} />
+			{heading ? (
+				<h2 className="min-w-0 text-[length:var(--text-h3)] font-[var(--weight-medium)]">{heading}</h2>
+			) : (
+				<MailSearchBar search={search} onSearch={onSearch} filters={filters} onFilters={onFilters} />
+			)}
 
 			{hasSelection ? (
 				<div className="ml-auto flex items-center gap-1">

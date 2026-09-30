@@ -327,11 +327,26 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 						) : null}
 					</div>
 
-					<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						Signing records the name, the time and a SHA-256 hash of the PDF. A digital signature
-						is made with your certificate and shows in a PDF reader whether the file changed. Neither
-						is a qualified electronic signature under eIDAS.
-					</p>
+					{digital && certificate ? (
+						<div className="flex flex-col gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p>
+								The stamp is added, then the whole file is sealed with your certificate. A PDF reader
+								shows who signed and whether the file changed since.
+							</p>
+							<p>
+								The audit page records the name, the time, a SHA-256 hash of the PDF and the
+								certificate used.
+							</p>
+							<p>
+								Only as trustworthy as the certificate behind it. This is not a qualified electronic
+								signature under eIDAS.
+							</p>
+						</div>
+					) : (
+						<p className="border-l-2 border-[var(--warn)] pl-3 text-[length:var(--text-sm)] text-[var(--warn)]">
+							A stamp alone is not an official signature.
+						</p>
+					)}
 
 				</aside>
 			</div>

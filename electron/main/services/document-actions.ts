@@ -5,11 +5,17 @@
  * Kept apart from documents.ts so that the record logic stays testable in plain
  * Node. This module is the seam where the database meets the printer.
  */
-import { dialog, shell } from "electron";
-import { readFileSync, statSync } from "node:fs";
+import { BrowserWindow, dialog, shell } from "electron";
+import { copyFileSync, readFileSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { eq } from "drizzle-orm";
-import type { DocumentSignature, PickedPdf, SignDocumentInput, StampPlacement } from "../../shared/types";
+import type {
+	DocumentSignature,
+	PickedPdf,
+	SignDocumentInput,
+	StampPlacement,
+	VersionUse,
+} from "../../shared/types";
 import { STAMP_MAX_WIDTH, STAMP_MIN_WIDTH } from "../../shared/stamp";
 import { getDb, type Db } from "../db";
 import { documentSignatures } from "../db/schema";
@@ -344,6 +350,69 @@ export async function openVersion(versionId: string, db: Db = getDb()): Promise<
 
 export async function revealVersion(versionId: string, db: Db = getDb()): Promise<void> {
 	shell.showItemInFolder(versions.pathOf(versionId, db));
+}
+
+/** The bytes of one version, for the viewer. Resolved from its id, never from a path. */
+export async function readVersion(versionId: string, db: Db = getDb()): Promise<Uint8Array> {
+	return new Uint8Array(readFileSync(versions.pathOf(versionId, db)));
+}
+
+/**
+ * Saves a copy of one version where the person chooses. Null when the dialog is
+ * cancelled, which is not an error. The newest keeps the document's plain name;
+ * an older one carries its number so the two do not collide in a folder.
+ */
+export async function downloadVersion(versionId: string, db: Db = getDb()): Promise<string | null> {
+	const { version } = versions.get(versionId, db);
+	const record = await documents.get(version.documentId, db);
+	if (!record) throw new Error("That document no longer exists.");
+	const source = versions.pathOf(versionId, db);
+
+	const base = record.title.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]/g, "").trim() || "document";
+	const parent = BrowserWindow.getFocusedWindow();
+	const options = {
+		title: "Download a copy",
+		defaultPath: `${base}${version.isLatest ? "" : `-v${version.number}`}.pdf`,
+		filters: [{ name: "PDF", extensions: ["pdf"] }],
+	};
+	const result = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
+	if (result.canceled || !result.filePath) return null;
+	copyFileSync(source, result.filePath);
+	return result.filePath;
+}
+
+/**
+ * Asks, in a native dialog, whether to go on when the version being looked at is
+ * not the newest. True straight away for the newest.
+ *
+ * The wording says what will really happen. Downloading saves the version that
+ * is on screen. Sending by email and signing both work on the newest whichever
+ * version is on screen, so for those the question is whether the newest is what
+ * was meant.
+ */
+export async function confirmVersionUse(versionId: string, use: VersionUse, db: Db = getDb()): Promise<boolean> {
+	const { version, total } = versions.get(versionId, db);
+	if (version.isLatest) return true;
+
+	const detail =
+		use === "download"
+			? `This saves version ${version.number}, the one you are looking at. Download it anyway?`
+			: use === "email"
+				? `Sending by email attaches the latest version (${total}), not version ${version.number}. Continue?`
+				: `Signing stamps the latest version (${total}), not version ${version.number}. Continue?`;
+	const options = {
+		type: "question" as const,
+		title: "Not the latest version",
+		message: `You are looking at version ${version.number} of ${total}, not the latest.`,
+		detail,
+		buttons: ["Yes", "No"],
+		defaultId: 1,
+		cancelId: 1,
+		noLink: true,
+	};
+	const parent = BrowserWindow.getFocusedWindow();
+	const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+	return result.response === 0;
 }
 
 /** The signing details of one signed version, as their own PDF. */

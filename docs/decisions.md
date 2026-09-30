@@ -1115,3 +1115,28 @@ resolves each. The agent names a file by path, through its own functions.
 Revisit if: scanned PDFs with no text layer become common, which would need
 OCR to be matched at all; or versions need deleting, which would need the same
 care as any delete (it changes what the document opens as).
+
+## 40. A document opens as its PDF, and older versions are read, not used
+
+Opening a document opens the viewer (`src/features/documents/PdfViewer.tsx`)
+on the newest version, with everything else about it in a column on the right:
+details, a version picker and a timeline. Picking an older version shows it and
+nothing more. It never changes which version the document opens as.
+
+The timeline is read back out of the versions and the outbox, like the client
+timeline, and is not a table of its own (`services/document-timeline.ts`). A
+document has no status history and the timeline does not pretend to.
+
+**Emailing and signing use the newest version whichever one is on screen.**
+The outbox attaches a document, not a version, and signing stamps the newest.
+Reading an old version and then pressing either would do something other than
+what is on screen, so both ask first, in a native dialog that says which
+version will be used. Downloading saves the version on screen and asks the same
+question. The dialog is the main process's (`confirmVersionUse`), so the window
+cannot skip it by asking a different way.
+
+The viewer draws to a canvas, so text in it cannot be selected. The file opens
+outside for that.
+
+Revisit if: an email should carry an older version on purpose, which needs the
+outbox attachment to name a version and a migration to hold it.

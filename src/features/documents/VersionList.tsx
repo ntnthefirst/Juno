@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import type { DocumentVersion, DocumentVersionKind, DocumentVersionSource } from "@shared/types";
+import type { DocumentVersion } from "@shared/types";
 import { Button } from "../../components/Button";
 import { messageOf } from "../../lib/errors";
 import { onDocumentsChanged } from "../../lib/pdf-drop";
+import { detailOf, formatInstant, KIND_LABELS, kindClass } from "./version-format";
 
 type VersionListProps = {
 	documentId: string;
@@ -10,48 +11,10 @@ type VersionListProps = {
 	nested?: boolean;
 };
 
-const KIND_LABELS: Record<DocumentVersionKind, string> = {
-	generated: "Generated",
-	imported: "Imported",
-	stamped: "Stamped",
-	signed: "Signed digitally",
-};
-
-const SOURCE_LABELS: Record<DocumentVersionSource, string> = {
-	generate: "Made in Juno",
-	picker: "Chosen from a folder",
-	drop: "Dropped in",
-	mail: "From a mail",
-	sign: "Signed in Juno",
-	agent: "Added by the agent",
-};
-
-/** Brass is for signed and sealed only (brand/BRAND.md), so it marks those two. */
-function kindClass(kind: DocumentVersionKind): string {
-	return kind === "stamped" || kind === "signed"
-		? "bg-[var(--seal-soft)] text-[var(--seal)]"
-		: "bg-[var(--sunken)] text-[var(--ink-muted)]";
-}
-
-/** An instant, in the reader's own time zone: dd/mm/yyyy hh:mm. */
-function formatInstant(iso: string): string {
-	const at = new Date(iso);
-	if (Number.isNaN(at.getTime())) return iso;
-	const pad = (value: number) => String(value).padStart(2, "0");
-	return `${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
-}
-
-function detailOf(version: DocumentVersion): string {
-	const parts = [SOURCE_LABELS[version.source]];
-	if (version.signerName) parts.push(`by ${version.signerName}`);
-	if (version.digital) parts.push(`certificate of ${version.digital.subject}`);
-	if (version.fileName && version.kind === "imported") parts.push(version.fileName);
-	return parts.join(", ");
-}
-
 /**
- * Every file a document has been, newest first. The newest is the one the
- * document opens as, and says so; the others open on their own from here.
+ * Every file a document has been, newest first, for a row in the documents
+ * list. The newest is the one the document opens as, and says so; the others
+ * open on their own from here.
  */
 export function VersionList({ documentId, nested = false }: VersionListProps) {
 	const [versions, setVersions] = useState<DocumentVersion[] | null>(null);

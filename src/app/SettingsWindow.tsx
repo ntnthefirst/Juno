@@ -10,6 +10,7 @@ import { OnboardingSection } from "../features/settings/OnboardingSection";
 import { OwnerSection } from "../features/settings/OwnerSection";
 import { ReferenceSection } from "../features/settings/ReferenceSection";
 import { Section } from "../features/settings/Section";
+import { CertificateSection } from "../features/settings/CertificateSection";
 import { SignatureSection } from "../features/settings/SignatureSection";
 import { UpdatesSection } from "../features/settings/UpdatesSection";
 import { ConnectionPanel } from "../features/agent/ConnectionPanel";
@@ -143,6 +144,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 						<Pad>
 							<ReferenceSection />
 							<SignatureSection />
+							<CertificateSection />
 						</Pad>
 					) : tab === "mcp" ? (
 						<Pad>

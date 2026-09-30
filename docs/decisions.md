@@ -92,7 +92,9 @@ as a separate phase, because they are separate risk.
 **Signing scope:** a signature image plus timestamp plus audit trail. That is
 appropriate for low-stakes and internal documents. It is *not* a qualified
 electronic signature under eIDAS. Do not claim in the UI or the docs that it is.
-High-stakes contracts keep going through a provider.
+High-stakes contracts keep going through a provider. Decision 38 adds an
+optional cryptographic signature on top of the stamp and keeps that sentence
+true.
 
 ## 9. No invoicing, no payments, ever
 
@@ -1027,3 +1029,87 @@ shell turns out to be something people want back round a canvas, in which case
 it becomes a section the canvas can start with rather than a frame it cannot
 remove.
 
+## 38. A stamp is placed on the page, and a digital signature is the person's own certificate
+
+Signing opens the PDF itself, with the stamp already on it, and nothing else:
+no form beside it. The stamp is a picture, a name and a time. It is dragged
+into place on the page it belongs on and sized by its corner, and the name is
+changed by double-clicking the stamp. Sign stamps; the chevron beside it offers
+"Sign digitally", which asks for the certificate passphrase and nothing more. The window
+sends fractions of the page and the main process turns them into coordinates
+and writes the file, so the position the person sees is the one that is drawn.
+The proportions are one file (`electron/shared/stamp.ts`) used by both sides.
+
+**A digital signature is optional, and it is made with a certificate the person
+already has.** The file is a PKCS#12 (.p12 or .pfx) from a certificate
+authority. It goes into the credential store as it came, and the passphrase is
+never stored: it is typed at every signature, so a signature is an act by
+whoever is at the keyboard and not something an unlocked window can do alone.
+It may be empty, because some certificates are issued without one.
+The signature is PAdES-style, a detached CMS signature with SHA-256 over every
+byte of the final file, written with `@signpdf` and `node-forge`, so a PDF
+reader shows who signed and whether the file changed. A test verifies the
+signature by hand and checks that changing one byte breaks it.
+
+**It is not a qualified electronic signature, and no text says it is.** The
+audit page, the sign page and Settings each say so. A key held as a software
+file is at most an advanced signature. A qualified one needs the key on a
+qualified signature creation device, which is what a provider sells.
+
+**Why not itsme or eID.** itsme signs through an agreement with itsme and a
+registered client, and qualified signing through it goes via a trust service
+provider. That is credentials and a contract per business, and it cannot be
+built or tested from this repository. The eID card holds a key that never
+leaves the card, so using it needs the card reader's PKCS#11 driver and a
+native module (decision 18 is why that is not free). Neither is ruled out; the
+signing step takes a certificate and a passphrase today and that is the seam
+they would replace.
+
+Two things follow from where this sits:
+
+- **Nothing about it is an agent's.** No tool signs, and no tool touches the
+  certificate. The stamp is placed in the window and the passphrase is typed
+  in the window.
+- **A specimen still cannot be signed**, digitally or otherwise, in the
+  service.
+
+Revisit if: a provider agreement exists (itsme or a signing service), in which
+case it is a second way to obtain the signature, chosen next to the certificate
+and held to the same rules; or eID signing is wanted, which is a native module
+and its own decision.
+
+## 39. A document is every file it has been, and opens as the newest
+
+A document used to be one PDF with signatures beside it. It is now a list of
+**versions** (`document_versions`): the generated or imported file, each stamped
+or digitally signed copy, and every file that comes back, from a client by mail
+or dropped in. Nothing is replaced and nothing is edited. `documents.pdf_path`
+follows the newest version, so opening, sending and signing get the latest file
+without knowing versions exist, and signing stamps the newest, which is how a
+copy the client signed gets countersigned rather than the original.
+
+**Newest is the file's own date, not the moment it arrived.** An imported file
+carries its last-modified date, and a mail attachment the date of its message.
+An older copy that turns up late lands between the versions it came between
+instead of pretending to be the latest. The window reports a file's date; the
+service refuses a date in the future and takes now instead, so a machine with
+its clock wrong cannot make a file the newest for years.
+
+**An incoming file is recognised by its text, not its bytes.** A signature, a
+stamp or a re-save changes every byte and not one word, so the service reads
+the text layer with pdf.js (in the main process, as a plain library) and
+compares words, after taking out what Juno's own signing adds: the audit page
+and the stamp's date line. Two files are the same document when nearly all the
+words of the shorter are in the longer and the two are of a similar length.
+The same bytes are recognised too, and refused as a version twice. A file with
+the same name as one of the client's documents is offered as a version of it
+rather than refused. The person decides every time; nothing is filed as a
+version on a guess.
+
+The window never hands over a path. It sends bytes it read from a drop or from
+the main process's own picker, or the id of a mail attachment, and the service
+resolves each. The agent names a file by path, through its own functions.
+
+Revisit if: scanned PDFs with no text layer become common, which would need
+OCR to be matched at all; or versions need deleting, which would need the same
+care as any delete (it changes what the document opens as).

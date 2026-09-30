@@ -2,6 +2,7 @@ import type { GenerateDocumentInput, ImportDocumentInput } from "../../shared/ty
 import * as actions from "../services/document-actions";
 import * as templates from "../services/document-templates";
 import * as imports from "../services/document-import";
+import * as timeline from "../services/document-timeline";
 import * as versions from "../services/document-versions";
 import * as documents from "../services/documents";
 import type { ToolDescriptor } from "./types";
@@ -342,6 +343,22 @@ export const documentTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => actions.signatures(String(args.document_id)),
+	},
+	{
+		name: "documents.timeline",
+		title: "Show what happened to a document",
+		description:
+			"Newest first: each version that was made (generated, imported, stamped, signed) and each email " +
+			"that carried the document. Times are UTC ISO-8601.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: { document_id: { type: "string" } },
+			required: ["document_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => timeline.timeline(String(args.document_id)),
 	},
 	{
 		name: "documents.remove",

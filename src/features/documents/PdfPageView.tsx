@@ -8,8 +8,11 @@ type PdfPageViewProps = {
 	width: number;
 	/** Page height over page width, so the space is reserved before it paints. */
 	aspect: number;
-	/** Called with fractions of the page, measured from its top left. */
-	onPlace: (fraction: { x: number; y: number }) => void;
+	/**
+	 * Called with fractions of the page, measured from its top left. Left out for
+	 * a page that is only read, which then has a plain cursor.
+	 */
+	onPlace?: (fraction: { x: number; y: number }) => void;
 	/** Drawn over the page, in the same pixel space. */
 	children?: ReactNode;
 };
@@ -62,7 +65,7 @@ export function PdfPageView({ pdf, pageNumber, width, aspect, onPlace, children 
 	}, [pdf, pageNumber, width, near]);
 
 	function place(event: PointerEvent<HTMLDivElement>) {
-		if (event.button !== 0) return;
+		if (event.button !== 0 || !onPlace) return;
 		const rect = event.currentTarget.getBoundingClientRect();
 		onPlace({
 			x: (event.clientX - rect.left) / rect.width,
@@ -75,7 +78,7 @@ export function PdfPageView({ pdf, pageNumber, width, aspect, onPlace, children 
 			ref={holder}
 			onPointerDown={place}
 			style={{ width, height }}
-			className="relative cursor-crosshair overflow-hidden rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--canvas-paper)]"
+			className={`relative overflow-hidden rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--canvas-paper)] ${onPlace ? "cursor-crosshair" : ""}`}
 		>
 			<canvas ref={canvas} style={{ width, height }} className="block" />
 			{children}

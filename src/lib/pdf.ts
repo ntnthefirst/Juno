@@ -9,12 +9,20 @@
  */
 export type { PDFDocumentProxy } from "pdfjs-dist";
 
-/** pdf.js transfers the buffer it is given, so it gets a copy. */
+/**
+ * pdf.js transfers the buffer it is given, so it gets a copy.
+ *
+ * Errors only. At its default level pdf.js warns about every font it has to
+ * substitute and every newer JavaScript feature the bundled Chromium lacks, and
+ * falls back correctly each time. Those warnings reach the console of a file
+ * that renders perfectly, and the smoke run treats any console output from the
+ * renderer as a failure.
+ */
 export async function openPdf(data: Uint8Array) {
 	const [pdfjs, worker] = await Promise.all([
 		import("pdfjs-dist"),
 		import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
 	]);
 	pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-	return pdfjs.getDocument({ data: data.slice() }).promise;
+	return pdfjs.getDocument({ data: data.slice(), verbosity: pdfjs.VerbosityLevel.ERRORS }).promise;
 }

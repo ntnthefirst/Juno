@@ -255,9 +255,11 @@ export function DocumentsScreen() {
 	}
 
 	return (
-		<div className="flex h-full flex-col p-8">
+		// An open document is a viewer with a column beside it, so it takes the whole
+		// pane. The list keeps the padding and the centred column.
+		<div className={selectedId !== null ? "flex h-full flex-col" : "flex h-full flex-col p-8"}>
 			{selectedId !== null ? (
-				<div className="mx-auto min-h-0 w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">
+				<div className="min-h-0 w-full flex-1">
 					<DocumentDetail
 						key={`${selectedId}:${detailVersion}`}
 						documentId={selectedId}

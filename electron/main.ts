@@ -1173,6 +1173,50 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
+
+									// Opening a document opens its PDF: a canvas that painted, and the
+									// column beside it with the versions and the timeline. A viewer that
+									// throws draws a message instead of a canvas, which is what this reads.
+									const viewed = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = document.querySelector("tbody tr button[type='button']");
+											if (!row) return "no document row to open";
+											row.click();
+											await wait(2000);
+											const aside = document.querySelector("aside[aria-label='Document']");
+											if (!aside) return "no document column";
+											for (const heading of ["Details", "Versions", "Timeline"]) {
+												if (![...aside.querySelectorAll("h3")].some((el) => el.textContent.startsWith(heading))) {
+													return "the column has no " + heading + " section";
+												}
+											}
+											const canvas = document.querySelector("main canvas");
+											if (!canvas || canvas.width === 0) return "the viewer drew no page";
+											if (document.querySelector("main").textContent.includes("Could not open this PDF")) return "the viewer could not open the PDF";
+											if (!aside.querySelector("ol li")) return "the column lists no versions or timeline";
+											return "ok";
+										})()`,
+									)) as string;
+									if (viewed !== "ok") throw new Error(`Smoke: document viewer ${viewed}`);
+									if (shotDir) {
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											writeFileSync(
+												joinPath(shotDir, `document-viewer-${theme}.png`),
+												(await capture(window.webContents)).toPNG(),
+											);
+										}
+									}
+									// Back to the list, the way the record is left with Escape.
+									await window.webContents.executeJavaScript(
+										`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									);
+									await new Promise((r) => setTimeout(r, 400));
 								}
 								if (screen === "Document templates") {
 									// The example first. It is the one template every first install has and

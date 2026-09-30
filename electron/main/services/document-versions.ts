@@ -164,6 +164,20 @@ export function list(documentId: string, db: Db = getDb()): DocumentVersion[] {
 		.reverse();
 }
 
+/** One version with its number and whether it is the newest, and the document's other versions counted. */
+export function get(versionId: string, db: Db = getDb()): { version: DocumentVersion; total: number } {
+	const row = db
+		.select({ documentId: documentVersions.documentId })
+		.from(documentVersions)
+		.where(and(eq(documentVersions.id, versionId), isNull(documentVersions.deletedAt)))
+		.get();
+	if (!row) throw new Error("That version no longer exists.");
+	const all = list(row.documentId, db);
+	const version = all.find((candidate) => candidate.id === versionId);
+	if (!version) throw new Error("That version no longer exists.");
+	return { version, total: all.length };
+}
+
 /** The file behind one version, resolved from its id. */
 export function pathOf(versionId: string, db: Db = getDb()): string {
 	const row = db

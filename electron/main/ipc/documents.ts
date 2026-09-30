@@ -9,9 +9,11 @@ import type {
 	ImportFileInput,
 	ImportSource,
 	SignDocumentInput,
+	VersionUse,
 } from "../../shared/types";
 import * as actions from "../services/document-actions";
 import * as imports from "../services/document-import";
+import * as timeline from "../services/document-timeline";
 import * as versions from "../services/document-versions";
 import * as documents from "../services/documents";
 
@@ -37,6 +39,12 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.revealVersion", (_event, versionId: string) => actions.revealVersion(versionId));
 	ipcMain.handle("documents.openCertificate", (_event, versionId: string) => actions.openCertificate(versionId));
 	ipcMain.handle("documents.readPdf", (_event, id: string) => actions.readPdf(id));
+	ipcMain.handle("documents.readVersion", (_event, versionId: string) => actions.readVersion(versionId));
+	ipcMain.handle("documents.downloadVersion", (_event, versionId: string) => actions.downloadVersion(versionId));
+	ipcMain.handle("documents.confirmVersionUse", (_event, versionId: string, use: VersionUse) =>
+		actions.confirmVersionUse(versionId, use),
+	);
+	ipcMain.handle("documents.timeline", (_event, documentId: string) => timeline.timeline(documentId));
 
 	ipcMain.handle("documents.setStatus", (_event, id: string, statusId: string | null) =>
 		documents.setStatus(id, statusId),

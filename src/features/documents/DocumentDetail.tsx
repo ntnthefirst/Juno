@@ -211,6 +211,19 @@ export function DocumentDetail({
 		});
 	}
 
+	async function deleteVersion() {
+		if (!viewing) return;
+		const number = viewing.number;
+		await run(async () => {
+			if (!(await window.juno.documents.deleteVersion(viewing.id))) return;
+			setViewedId(null);
+			setNotice(`Deleted version ${number}.`);
+			announceDocumentsChanged();
+			refresh();
+			onChanged();
+		});
+	}
+
 	async function addVersion() {
 		setAction(null);
 		try {
@@ -362,7 +375,14 @@ export function DocumentDetail({
 								disabled={!hasFile}
 								onClick={() => viewing && void run(() => window.juno.documents.revealVersion(viewing.id))}
 							/>
-							<MenuButton
+							<IconAction
+									size="base"
+									icon="remove"
+									label="Delete this version"
+									disabled={!hasFile || versions.length < 2}
+									onClick={() => void deleteVersion()}
+								/>
+								<MenuButton
 								size="base"
 								ariaLabel="More document actions"
 								items={[

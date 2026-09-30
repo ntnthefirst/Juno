@@ -178,6 +178,24 @@ export function get(versionId: string, db: Db = getDb()): { version: DocumentVer
 	return { version, total: all.length };
 }
 
+/**
+ * Soft deletes one version and points the document at what is now newest. The
+ * file stays on disk. The last version cannot go: a document with no file is
+ * deleted as a document instead.
+ */
+export function remove(versionId: string, db: Db = getDb()): DocumentVersion {
+	const { version, total } = get(versionId, db);
+	if (total <= 1) {
+		throw new Error("This is the only version. Delete the document instead.");
+	}
+	db.update(documentVersions)
+		.set({ deletedAt: now(), updatedAt: now() })
+		.where(eq(documentVersions.id, versionId))
+		.run();
+	refreshLatest(version.documentId, db);
+	return version;
+}
+
 /** The file behind one version, resolved from its id. */
 export function pathOf(versionId: string, db: Db = getDb()): string {
 	const row = db

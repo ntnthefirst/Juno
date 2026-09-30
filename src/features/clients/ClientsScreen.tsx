@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
 	Client,
 	ClientAddress,
@@ -20,6 +20,20 @@ import { useContextMenu } from "../../lib/use-context-menu";
 import { ClientAddressPanel } from "./ClientAddressPanel";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ClientDetail, type TabId } from "./ClientDetail";
+import {
+	applyView,
+	citiesOf,
+	EMPTY_VIEW,
+	filterActive,
+	nextSort,
+	NO_CITY,
+	NO_STATUS,
+	statusesOf,
+	type ClientColumn,
+	type ClientView,
+} from "./client-view";
+import { ColumnHeader } from "./ColumnHeader";
+import { CheckList, RangeField } from "./ColumnFilters";
 import { GenerateDialog } from "../documents/GenerateDialog";
 import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
@@ -68,6 +82,7 @@ export function ClientsScreen() {
 		initialKind?: ClientNoteKind;
 	} | null>(null);
 	const [deleted, setDeleted] = useState<Client | null>(null);
+	const [view, setView] = useState<ClientView>(EMPTY_VIEW);
 
 	const fetchRows = useCallback(
 		() => window.juno.clients.list({ search: search.trim() || undefined }),
@@ -387,7 +402,9 @@ export function ClientsScreen() {
 					<Empty searching={search.trim().length > 0} />
 				) : (
 					<ClientTable
-						rows={load.rows}
+						allRows={load.rows}
+						view={view}
+						onView={setView}
 						selectedId={selectedId}
 						onSelect={selectRow}
 						onEdit={(row) => void editRow(row)}
@@ -422,7 +439,9 @@ export function ClientsScreen() {
 }
 
 type ClientTableProps = {
-	rows: ClientSummary[];
+	allRows: ClientSummary[];
+	view: ClientView;
+	onView: (view: ClientView) => void;
 	selectedId: string | null;
 	onSelect: (row: ClientSummary) => void;
 	onEdit: (row: ClientSummary) => void;
@@ -434,8 +453,28 @@ type ClientTableProps = {
  * Rows are the structure. No outer border, no filled header, no card, per
  * brand/BRAND.md section 7.
  */
-function ClientTable({ rows, selectedId, onSelect, onEdit, onAddNote, onDelete }: ClientTableProps) {
-	const heads = ["Name", "Status", "City", "Projects"];
+function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAddNote, onDelete }: ClientTableProps) {
+	const rows = useMemo(() => applyView(allRows, view), [allRows, view]);
+	const statusOptions = useMemo(
+		() => [
+			...statusesOf(allRows).map((status) => ({ value: status.id, label: status.label })),
+			{ value: NO_STATUS, label: "No status" },
+		],
+		[allRows],
+	);
+	const cityOptions = useMemo(
+		() => [...citiesOf(allRows).map((city) => ({ value: city, label: city })), { value: NO_CITY, label: "No city" }],
+		[allRows],
+	);
+
+	const headerProps = (column: ClientColumn, label: string) => ({
+		label,
+		direction: view.sort?.column === column ? view.sort.direction : null,
+		filtered: filterActive(view, column),
+		onCycleSort: () => onView({ ...view, sort: nextSort(view, column) }),
+		onSort: (direction: "asc" | "desc" | null) =>
+			onView({ ...view, sort: direction ? { column, direction } : null }),
+	});
 	const { at, open, close } = useContextMenu();
 	const [menuRow, setMenuRow] = useState<ClientSummary | null>(null);
 
@@ -460,20 +499,61 @@ function ClientTable({ rows, selectedId, onSelect, onEdit, onAddNote, onDelete }
 			<table className="w-full border-collapse">
 				<thead>
 					<tr>
-						{heads.map((head) => (
-							<th
-								key={head}
-								className={[
-									"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]",
-									head === "Projects" ? "text-right" : "text-left",
-								].join(" ")}
-							>
-								{head}
-							</th>
-						))}
+					<ColumnHeader {...headerProps("name", "Name")} />
+					<ColumnHeader
+						{...headerProps("status", "Status")}
+						onClearFilter={() => onView({ ...view, statuses: [] })}
+					>
+						<CheckList
+							options={statusOptions}
+							selected={view.statuses}
+							onChange={(statuses) => onView({ ...view, statuses })}
+							emptyText="No statuses yet."
+						/>
+					</ColumnHeader>
+					<ColumnHeader
+						{...headerProps("city", "City")}
+						onClearFilter={() => onView({ ...view, cities: [] })}
+					>
+						<CheckList
+							options={cityOptions}
+							selected={view.cities}
+							onChange={(cities) => onView({ ...view, cities })}
+							emptyText="No cities yet."
+						/>
+					</ColumnHeader>
+					<ColumnHeader
+						{...headerProps("projects", "Projects")}
+						align="right"
+						onClearFilter={() =>
+							onView({
+								...view,
+								openProjects: EMPTY_VIEW.openProjects,
+								totalProjects: EMPTY_VIEW.totalProjects,
+							})
+						}
+					>
+						<RangeField
+							label="Open projects"
+							value={view.openProjects}
+							onChange={(openProjects) => onView({ ...view, openProjects })}
+						/>
+						<RangeField
+							label="All projects"
+							value={view.totalProjects}
+							onChange={(totalProjects) => onView({ ...view, totalProjects })}
+						/>
+					</ColumnHeader>
 					</tr>
 				</thead>
 				<tbody>
+					{rows.length === 0 ? (
+						<tr>
+							<td colSpan={4} className="px-3 py-4 text-[var(--ink-muted)]">
+								No client matches these filters.
+							</td>
+						</tr>
+					) : null}
 					{rows.map((row) => {
 						const selected = row.id === selectedId;
 						return (

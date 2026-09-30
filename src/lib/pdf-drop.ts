@@ -1,43 +1,63 @@
-import type { DocumentRecord } from "@shared/types";
-import { messageOf } from "./errors";
+import type { ImportSource, PickedPdf } from "@shared/types";
 
 /** True while a drag carries files from outside the window, not a row inside it. */
 export function carriesFiles(event: { dataTransfer: DataTransfer | null }): boolean {
 	return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
 
+/** One file waiting to be brought in, and the name to show while it waits. */
+export type ImportItem = { label: string; source: ImportSource };
+
 export type ImportOutcome = {
-	imported: DocumentRecord[];
+	documents: number;
+	versions: number;
+	skipped: number;
 	failures: { name: string; message: string }[];
 };
 
 /**
- * Imports dropped files for one client, one at a time.
- *
- * In order rather than in parallel, so two files with the same name in one drop
- * meet the duplicate rule the same way every time, and so a failure is reported
- * against the file that caused it. A file that fails does not stop the rest.
+ * Dropped files, read into the shape the import takes. A file that is not a PDF
+ * is reported rather than sent, so a stray .txt in a drop costs nothing.
  *
  * The bytes are read here and sent over. The window never has a path to give:
  * a path from the renderer is exactly what the bridge is not allowed to take.
  */
-export async function importFiles(clientId: string, files: File[]): Promise<ImportOutcome> {
-	const outcome: ImportOutcome = { imported: [], failures: [] };
+export async function itemsFromFiles(files: File[]): Promise<{ items: ImportItem[]; rejected: string[] }> {
+	const items: ImportItem[] = [];
+	const rejected: string[] = [];
 	for (const file of files) {
 		if (!file.name.toLowerCase().endsWith(".pdf")) {
-			outcome.failures.push({ name: file.name, message: `"${file.name}" is not a PDF.` });
+			rejected.push(`"${file.name}" is not a PDF.`);
 			continue;
 		}
-		try {
-			const data = new Uint8Array(await file.arrayBuffer());
-			outcome.imported.push(
-				await window.juno.documents.importBytes({ fileName: file.name, data, clientId }),
-			);
-		} catch (cause: unknown) {
-			outcome.failures.push({ name: file.name, message: messageOf(cause) });
-		}
+		items.push({
+			label: file.name,
+			source: {
+				kind: "bytes",
+				fileName: file.name,
+				data: new Uint8Array(await file.arrayBuffer()),
+				fileDate: new Date(file.lastModified || Date.now()).toISOString(),
+				via: "drop",
+			},
+		});
 	}
-	return outcome;
+	return { items, rejected };
+}
+
+export function itemsFromPicked(picked: PickedPdf[]): ImportItem[] {
+	return picked.map((file) => ({
+		label: file.fileName,
+		source: { kind: "bytes", fileName: file.fileName, data: file.data, fileDate: file.fileDate, via: "picker" },
+	}));
+}
+
+/** "2 documents imported, 1 version added." Past tense, one sentence. */
+export function describeOutcome(outcome: ImportOutcome): string | null {
+	const parts: string[] = [];
+	if (outcome.documents > 0) parts.push(`${outcome.documents} ${outcome.documents === 1 ? "document" : "documents"} imported`);
+	if (outcome.versions > 0) parts.push(`${outcome.versions} ${outcome.versions === 1 ? "version" : "versions"} added`);
+	if (outcome.failures.length > 0) parts.push(`${outcome.failures.length} not brought in`);
+	return parts.length > 0 ? `${parts.join(", ")}.`.replace(/^./, (first) => first.toUpperCase()) : null;
 }
 
 const DOCUMENTS_CHANGED = "juno:documents-changed";

@@ -325,5 +325,9 @@ The way Outlook does signatures. Nothing to do with templates.
   and its intended use. It is not checked against a trust list, and no
   timestamp authority is used, so a signature does not carry a trusted time.
   Adding both is what would make it verifiable after the certificate expires.
+- **Deleting a version.** Versions are only ever added. Removing one changes
+  what the document opens as, so it needs the same confirmation as any delete.
+- **Scans.** A PDF with no text layer cannot be matched to a document, only
+  imported, until there is OCR.
 - **Rotated pages.** A page with a rotation is refused by the stamp, with a
   message. Rotate it upright first.

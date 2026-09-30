@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { DropImportDialog } from "../features/documents/DropImportDialog";
-import { announceDocumentsChanged, carriesFiles } from "../lib/pdf-drop";
+import { Toast } from "../components/Toast";
+import { ImportFlow } from "../features/documents/ImportFlow";
+import { carriesFiles, describeOutcome, itemsFromFiles, type ImportItem } from "../lib/pdf-drop";
 
 /**
- * Catches a file dropped anywhere in the window and asks which client it is for.
+ * Catches a file dropped anywhere in the window and brings it in.
  *
  * Two jobs. The first is to stop the window navigating to a file that was let
  * go of over it, which is what Chromium does with a drop nothing has claimed,
  * and which the navigation rules would only turn into a blank refusal. The
- * second is the import. A client's own documents tab claims its drop before
- * this sees it, and this stays out of the way when that has happened.
+ * second is the import, which asks which client or which document the file
+ * belongs to. A client's own documents tab claims its drop before this sees
+ * it, and this stays out of the way when that has happened.
  */
 export function DocumentDropLayer() {
 	const [hint, setHint] = useState(false);
-	const [files, setFiles] = useState<File[] | null>(null);
+	const [items, setItems] = useState<ImportItem[] | null>(null);
+	const [notice, setNotice] = useState<string | null>(null);
 	const hideTimer = useRef<number | undefined>(undefined);
 
 	useEffect(() => {
@@ -34,7 +37,11 @@ export function DocumentDropLayer() {
 			window.clearTimeout(hideTimer.current);
 			setHint(false);
 			const dropped = Array.from(event.dataTransfer?.files ?? []);
-			if (dropped.length > 0) setFiles(dropped);
+			if (dropped.length === 0) return;
+			void itemsFromFiles(dropped).then(({ items: read, rejected }) => {
+				if (rejected.length > 0) setNotice(rejected.join(" "));
+				if (read.length > 0) setItems(read);
+			});
 		}
 
 		window.addEventListener("dragover", over);
@@ -58,9 +65,17 @@ export function DocumentDropLayer() {
 					</p>
 				</div>
 			) : null}
-			{files ? (
-				<DropImportDialog files={files} onClose={() => setFiles(null)} onImported={announceDocumentsChanged} />
+			{items ? (
+				<ImportFlow
+					items={items}
+					onDone={(outcome) => {
+						setItems(null);
+						const failures = outcome.failures.map((entry) => entry.message).join(" ");
+						setNotice([describeOutcome(outcome), failures].filter(Boolean).join(" ") || null);
+					}}
+				/>
 			) : null}
+			{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
 		</>
 	);
 }

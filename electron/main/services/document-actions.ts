@@ -6,13 +6,17 @@
  * Node. This module is the seam where the database meets the printer.
  */
 import { dialog, shell } from "electron";
+import { readFileSync, statSync } from "node:fs";
+import { basename } from "node:path";
 import { eq } from "drizzle-orm";
-import type { DocumentSignature, SignDocumentInput, StampPlacement } from "../../shared/types";
+import type { DocumentSignature, PickedPdf, SignDocumentInput, StampPlacement } from "../../shared/types";
 import { STAMP_MAX_WIDTH, STAMP_MIN_WIDTH } from "../../shared/stamp";
-import type { DocumentRecord } from "./documents";
 import { getDb, type Db } from "../db";
 import { documentSignatures } from "../db/schema";
 import * as pdf from "./document-pdf";
+import { MAX_IMPORT_BYTES } from "./document-import";
+import * as versions from "./document-versions";
+import { extractText } from "./pdf-text";
 import { signPdf } from "./pdf-sign";
 import * as certificate from "./signing-certificate";
 import { documentShell } from "./document-style";
@@ -36,26 +40,27 @@ export async function previewHtml(id: string, db: Db = getDb()): Promise<string>
 }
 
 /**
- * Asks for a PDF and imports it for a client. Returns null when the picker is
- * cancelled, which is not an error and writes nothing.
+ * Asks for one or more PDFs and hands their bytes back, for the window to
+ * import through the same questions a drop asks. Empty when the picker is
+ * cancelled, which is not an error.
  *
- * The dialog lives here rather than in the IPC adapter or in documents.ts:
- * documents.ts stays free of Electron so its record logic is testable in plain
- * Node, and the adapter stays a one-line call, the same shape as
- * settings.chooseSignature in ipc/settings.ts.
+ * The files go back as bytes rather than paths: the window may not hold a
+ * path, and the import it runs next only takes what it was given.
  */
-export async function chooseImportPdf(
-	clientId: string,
-	db: Db = getDb(),
-): Promise<DocumentRecord | null> {
+export async function pickPdfs(): Promise<PickedPdf[]> {
 	const result = await dialog.showOpenDialog({
 		title: "Kies een PDF",
-		properties: ["openFile"],
+		properties: ["openFile", "multiSelections"],
 		filters: [{ name: "PDF", extensions: ["pdf"] }],
 	});
-	if (result.canceled || result.filePaths.length === 0) return null;
-
-	return documents.importPdf({ sourcePath: result.filePaths[0]!, clientId }, db);
+	if (result.canceled) return [];
+	return result.filePaths.map((path) => {
+		const stat = statSync(path);
+		if (stat.size > MAX_IMPORT_BYTES) {
+			throw new Error(`"${basename(path)}" is larger than 50 MB. Split it or compress it first.`);
+		}
+		return { fileName: basename(path), data: new Uint8Array(readFileSync(path)), fileDate: stat.mtime.toISOString() };
+	});
 }
 
 /**
@@ -136,7 +141,22 @@ export async function renderPdf(id: string, db: Db = getDb()) {
 		fileName: fileNameFor(record.title, ""),
 	});
 
-	return documents.setPdfPath(id, path, db);
+	const bytes = readFileSync(path);
+	versions.record(
+		{
+			documentId: id,
+			kind: "generated",
+			source: "generate",
+			pdfPath: path,
+			fileDate: new Date().toISOString(),
+			fileHash: versions.hashBytes(bytes),
+			textContent: await extractText(bytes),
+		},
+		db,
+	);
+	const updated = await documents.get(id, db);
+	if (!updated) throw new Error("That document no longer exists.");
+	return updated;
 }
 
 type SignatureRow = typeof documentSignatures.$inferSelect;
@@ -216,8 +236,9 @@ export async function sign(
 	const signerName = input.signerName.trim();
 	if (!signerName) throw new Error("A signature needs a name.");
 
-	// Rendered now if it has not been, so the bytes that get hashed are the bytes
-	// that exist, rather than a PDF from before the last edit.
+	// The newest version is what gets stamped, so a copy the client signed and
+	// sent back is countersigned rather than the original. Rendered first when
+	// there is no PDF at all, so the bytes that get hashed are bytes that exist.
 	const withPdf = record.pdfPath ? record : await renderPdf(record.id, db);
 	if (!withPdf.pdfPath) throw new Error("The document has no PDF to sign.");
 
@@ -278,6 +299,21 @@ export async function sign(
 		.returning()
 		.all();
 
+	const signed = readFileSync(outputPath);
+	versions.record(
+		{
+			documentId: record.id,
+			kind: digital ? "signed" : "stamped",
+			source: "sign",
+			pdfPath: outputPath,
+			fileDate: signedAt,
+			fileHash: versions.hashBytes(signed),
+			textContent: await extractText(signed),
+			signatureId: row!.id,
+		},
+		db,
+	);
+
 	return toSignature(row!);
 }
 
@@ -289,22 +325,30 @@ export async function readPdf(id: string, db: Db = getDb()): Promise<Uint8Array>
 	return documents.readPdfBytes(id, db);
 }
 
+/** Opens the newest version, which is what opening a document means. */
 export async function openPdf(id: string, db: Db = getDb()): Promise<void> {
-	const path = await latestPdfPath(id, db);
-	const error = await shell.openPath(path);
-	if (error) throw new Error(error);
+	await openPath(await latestPdfPath(id, db));
 }
 
 export async function revealPdf(id: string, db: Db = getDb()): Promise<void> {
 	shell.showItemInFolder(await latestPdfPath(id, db));
 }
 
-/** The signed copy when there is one, because that is the one people want. */
-async function latestPdfPath(id: string, db: Db): Promise<string> {
-	const signed = await signatures(id, db);
-	const newest = signed.filter((entry) => entry.signedPdfPath).at(-1);
-	if (newest?.signedPdfPath) return newest.signedPdfPath;
+/** One version in particular, from the version list. Resolved from its id. */
+export async function openVersion(versionId: string, db: Db = getDb()): Promise<void> {
+	await openPath(versions.pathOf(versionId, db));
+}
 
+export async function revealVersion(versionId: string, db: Db = getDb()): Promise<void> {
+	shell.showItemInFolder(versions.pathOf(versionId, db));
+}
+
+async function openPath(path: string): Promise<void> {
+	const error = await shell.openPath(path);
+	if (error) throw new Error(error);
+}
+
+async function latestPdfPath(id: string, db: Db): Promise<string> {
 	const record = await documents.get(id, db);
 	if (!record?.pdfPath) throw new Error("This document has no PDF yet. Create one first.");
 	return record.pdfPath;

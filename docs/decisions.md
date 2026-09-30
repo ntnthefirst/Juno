@@ -87,7 +87,8 @@ as a separate phase, because they are separate risk.
   templates stay editable in Word, which matters because they are legal text.
 - **`printToPDF`** renders HTML templates to PDF using the Electron already
   present. No headless browser, no LibreOffice, no extra binary.
-- **pdf-lib** stamps a signature PNG onto a PDF and appends the audit page.
+- **pdf-lib** stamps a signature PNG onto a PDF and writes the audit page as a
+  `.cert.pdf` beside it, so the signed file ends where its author ended it.
 
 **Signing scope:** a signature image plus timestamp plus audit trail. That is
 appropriate for low-stakes and internal documents. It is *not* a qualified
@@ -1052,7 +1053,7 @@ reader shows who signed and whether the file changed. A test verifies the
 signature by hand and checks that changing one byte breaks it.
 
 **It is not a qualified electronic signature, and no text says it is.** The
-audit page, the sign page and Settings each say so. A key held as a software
+certificate file, the sign page and Settings each say so. A key held as a software
 file is at most an advanced signature. A qualified one needs the key on a
 qualified signature creation device, which is what a provider sells.
 
@@ -1099,7 +1100,8 @@ its clock wrong cannot make a file the newest for years.
 stamp or a re-save changes every byte and not one word, so the service reads
 the text layer with pdf.js (in the main process, as a plain library) and
 compares words, after taking out what Juno's own signing adds: the audit page
-and the stamp's date line. Two files are the same document when nearly all the
+(on files signed before the certificate became a file of its own) and the
+stamp's date line. Two files are the same document when nearly all the
 words of the shorter are in the longer and the two are of a similar length.
 The same bytes are recognised too, and refused as a version twice. A file with
 the same name as one of the client's documents is offered as a version of it

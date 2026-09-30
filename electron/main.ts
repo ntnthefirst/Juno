@@ -3439,7 +3439,15 @@ if (!app.requestSingleInstanceLock()) {
 											if (!row) return "no rows";
 											row.click();
 											await new Promise((r) => setTimeout(r, 1200));
-											return document.querySelector("iframe") ? "ok" : "no frame";
+											// A sender nobody has trusted and no client link shows a question
+											// instead of the body. Trusting this one message is what a person
+											// reading it would do, and it leaves the sender untrusted.
+											const trust = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Trust this email");
+											if (trust) {
+												trust.click();
+												await new Promise((r) => setTimeout(r, 1200));
+											}
+											return document.querySelector('iframe[src^="app://mail/message/"]') ? "ok" : "no frame";
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: mail reader ${opened}`);

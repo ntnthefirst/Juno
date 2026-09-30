@@ -154,7 +154,7 @@ export function ThreadView({
 	// Keep the current choice across a refresh as long as it still exists.
 	if (load.thread !== derivedFrom) {
 		const fallback = messages[0] ?? null;
-		const next = openId && messages.some((m) => m.id === openId) ? openId : (fallback?.id ?? null);
+		const next = openId && entries.some((e) => e.message.id === openId) ? openId : (fallback?.id ?? null);
 		setDerivedFrom(load.thread);
 		if (next !== openId) setOpenId(next);
 	}
@@ -272,7 +272,12 @@ export function ThreadView({
 							onChanged={refresh}
 						/>
 					) : (
-						<OutgoingMessageView key={entry.message.id} message={entry.message} />
+						<OutgoingMessageView
+							key={entry.message.id}
+							message={entry.message}
+							open={entry.message.id === openId}
+							onToggle={() => setOpenId((current) => (current === entry.message.id ? null : entry.message.id))}
+						/>
 					),
 				)}
 			</div>

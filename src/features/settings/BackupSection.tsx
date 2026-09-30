@@ -81,6 +81,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 	return (
 		<Section
 			title="Backup"
+			anchor="backup"
 			description="Nothing is backed up unless you do it here."
 			action={
 				<div className="flex gap-1">

@@ -84,6 +84,7 @@ export function UpdatesSection() {
 	return (
 		<Section
 			title="Updates"
+			anchor="updates"
 			description="Checked about every day and a half. Nothing restarts on its own."
 			action={
 				<Button

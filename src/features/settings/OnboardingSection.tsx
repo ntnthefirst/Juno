@@ -46,6 +46,7 @@ export function OnboardingSection({ onNotice }: OnboardingSectionProps) {
 	return (
 		<Section
 			title="Getting started"
+			anchor="onboarding"
 			description="Starts when you close this window."
 		>
 			<div className="flex flex-col gap-5">

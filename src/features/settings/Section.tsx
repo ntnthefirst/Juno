@@ -13,15 +13,18 @@ export function Section({
 	title,
 	description,
 	action,
+	anchor,
 	children,
 }: {
 	title: string;
 	description?: ReactNode;
 	action?: ReactNode;
+	/** The name the settings search jumps to. Listed in search.ts. */
+	anchor?: string;
 	children: ReactNode;
 }) {
 	return (
-		<section className={SECTION_GAP}>
+		<section data-setting={anchor} className={SECTION_GAP}>
 			<div className="flex min-h-[32px] items-center justify-between gap-4">
 				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">{title}</h2>
 				{action}

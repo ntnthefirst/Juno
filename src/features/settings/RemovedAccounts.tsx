@@ -92,6 +92,7 @@ export function RemovedAccounts({ refreshKey, onDone }: RemovedAccountsProps) {
 	return (
 		<Section
 			title="Removed accounts"
+			anchor="removed-accounts"
 			description="Removing an account keeps the mail Juno already pulled. Delete it here when you no longer need it. Nothing changes on the server."
 		>
 			{accounts.length > 0 ? (

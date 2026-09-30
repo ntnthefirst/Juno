@@ -3,6 +3,7 @@ import type {
 	Client,
 	ClientAddress,
 	ClientEmail,
+	ClientLink,
 	ClientNote,
 	ClientNoteKind,
 	ClientPhone,
@@ -41,6 +42,7 @@ import { SignPage } from "../documents/SignPage";
 import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
 import { ClientNotePanel } from "./ClientNotePanel";
+import { ClientLinkPanel } from "./ClientLinkPanel";
 import { ClientPhonePanel } from "./ClientPhonePanel";
 import { ContactForm } from "./ContactForm";
 import { ProjectForm } from "../projects/ProjectForm";
@@ -80,6 +82,7 @@ export function ClientsScreen() {
 	// panel next to the detail pane rather than taking over the screen.
 	const [emailPanel, setEmailPanel] = useState<{ email: ClientEmail | null } | null>(null);
 	const [phonePanel, setPhonePanel] = useState<{ phone: ClientPhone | null } | null>(null);
+	const [linkPanel, setLinkPanel] = useState<{ link: ClientLink | null } | null>(null);
 	const [addressPanel, setAddressPanel] = useState<{ address: ClientAddress | null } | null>(null);
 	// A note belongs to whichever client it was opened from, which is not
 	// always the open one: the list's own context menu offers "Add note"
@@ -256,13 +259,13 @@ export function ClientsScreen() {
 				if (!document.querySelector("[role='dialog']")) closeDocument();
 				return;
 			}
-			if (emailPanel || phonePanel || addressPanel || notePanel) return;
+			if (emailPanel || phonePanel || linkPanel || addressPanel || notePanel) return;
 			if (document.querySelector("[role='dialog']")) return;
 			backToList();
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, form, contactForm, projectForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, addressPanel, notePanel]);
+	}, [selectedId, form, contactForm, projectForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
 
 	// The form takes the screen rather than covering it. Nothing in the list
 	// behind it is worth reading while a client is being filled in.
@@ -363,6 +366,7 @@ export function ClientsScreen() {
 							onEditProject={(project) => setProjectForm({ project })}
 							onEditEmail={(email) => setEmailPanel({ email })}
 							onEditPhone={(phone) => setPhonePanel({ phone })}
+							onEditLink={(link) => setLinkPanel({ link })}
 							onEditAddress={(address) => setAddressPanel({ address })}
 							onGenerateDocument={() => setDocumentForm(true)}
 							onOpenDocument={(id, title) => setOpenDocument({ id, title })}
@@ -380,6 +384,18 @@ export function ClientsScreen() {
 						onClose={() => setEmailPanel(null)}
 						onSaved={() => {
 							setEmailPanel(null);
+							bumpDetail();
+						}}
+					/>
+				) : null}
+
+				{linkPanel ? (
+					<ClientLinkPanel
+						clientId={selectedId}
+						link={linkPanel.link}
+						onClose={() => setLinkPanel(null)}
+						onSaved={() => {
+							setLinkPanel(null);
 							bumpDetail();
 						}}
 					/>

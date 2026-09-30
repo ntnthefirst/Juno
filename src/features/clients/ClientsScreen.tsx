@@ -8,6 +8,7 @@ import type {
 	ClientPhone,
 	ClientSummary,
 	Contact,
+	DocumentRecord,
 	Project,
 } from "@shared/types";
 import type { Crumb } from "../../app/breadcrumb-context";
@@ -34,7 +35,9 @@ import {
 } from "./client-view";
 import { ColumnHeader } from "./ColumnHeader";
 import { CheckList, RangeField } from "./ColumnFilters";
+import { DocumentDetail } from "../documents/DocumentDetail";
 import { GenerateDialog } from "../documents/GenerateDialog";
+import { SignPage } from "../documents/SignPage";
 import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
 import { ClientNotePanel } from "./ClientNotePanel";
@@ -67,6 +70,11 @@ export function ClientsScreen() {
 	// A document from a template is a page too. Coming back from it lands on the
 	// Documents tab, where it was started from.
 	const [documentForm, setDocumentForm] = useState(false);
+	// A document opens in the same viewer the Documents screen uses, inside this
+	// client, so the trail and Escape lead back to the Documents tab.
+	const [openDocument, setOpenDocument] = useState<{ id: string; title: string } | null>(null);
+	const [signingRecord, setSigningRecord] = useState<DocumentRecord | null>(null);
+	const [documentVersion, setDocumentVersion] = useState(0);
 	const [detailTab, setDetailTab] = useState<TabId>("overview");
 	// Unlike contacts and projects, these are small enough to edit in a side
 	// panel next to the detail pane rather than taking over the screen.
@@ -121,7 +129,15 @@ export function ClientsScreen() {
 		setSelectedName(row.name);
 	}
 
+	function closeDocument() {
+		setOpenDocument(null);
+		setSigningRecord(null);
+		setDetailTab("documents");
+	}
+
 	function backToList() {
+		setOpenDocument(null);
+		setSigningRecord(null);
 		setDetailTab("overview");
 		setSelectedId(null);
 		setSelectedName(null);
@@ -209,6 +225,12 @@ export function ClientsScreen() {
 			{ label: selectedName ?? "Client", onSelect: () => setProjectForm(null) },
 			{ label: projectForm.project ? "Edit project" : "New project" },
 		];
+	} else if (openDocument && selectedId) {
+		trail = [
+			clientCrumb,
+			{ label: selectedName ?? "Client", onSelect: closeDocument },
+			{ label: openDocument.title },
+		];
 	} else if (documentForm && selectedId) {
 		trail = [
 			clientCrumb,
@@ -229,14 +251,18 @@ export function ClientsScreen() {
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			if (selectedId === null) return;
-			if (form || contactForm || projectForm || documentForm) return;
+			if (form || contactForm || projectForm || documentForm || signingRecord) return;
+			if (openDocument) {
+				if (!document.querySelector("[role='dialog']")) closeDocument();
+				return;
+			}
 			if (emailPanel || phonePanel || addressPanel || notePanel) return;
 			if (document.querySelector("[role='dialog']")) return;
 			backToList();
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, form, contactForm, projectForm, documentForm, emailPanel, phonePanel, addressPanel, notePanel]);
+	}, [selectedId, form, contactForm, projectForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, addressPanel, notePanel]);
 
 	// The form takes the screen rather than covering it. Nothing in the list
 	// behind it is worth reading while a client is being filled in.
@@ -270,6 +296,38 @@ export function ClientsScreen() {
 					bumpDetail();
 				}}
 			/>
+		);
+	}
+
+	if (signingRecord && selectedId) {
+		return (
+			<SignPage
+				record={signingRecord}
+				onClose={() => setSigningRecord(null)}
+				onSigned={() => {
+					setSigningRecord(null);
+					setDocumentVersion((version) => version + 1);
+					bumpDetail();
+				}}
+			/>
+		);
+	}
+
+	if (openDocument && selectedId) {
+		return (
+			<div className="h-full min-h-0 w-full">
+				<DocumentDetail
+					key={`${openDocument.id}:${documentVersion}`}
+					documentId={openDocument.id}
+					onDeleted={() => {
+						closeDocument();
+						bumpDetail();
+					}}
+					onChanged={bumpDetail}
+					onSign={setSigningRecord}
+					onTitleChange={(title) => setOpenDocument((current) => (current ? { ...current, title } : current))}
+				/>
+			</div>
 		);
 	}
 
@@ -307,6 +365,7 @@ export function ClientsScreen() {
 							onEditPhone={(phone) => setPhonePanel({ phone })}
 							onEditAddress={(address) => setAddressPanel({ address })}
 							onGenerateDocument={() => setDocumentForm(true)}
+							onOpenDocument={(id, title) => setOpenDocument({ id, title })}
 							initialTab={detailTab}
 							onTabChange={setDetailTab}
 							onEditNote={(note, initialKind) => setNotePanel({ clientId: selectedId, note, initialKind })}

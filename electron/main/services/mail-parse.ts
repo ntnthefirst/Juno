@@ -123,6 +123,15 @@ function bracket(id: string | undefined): string | null {
 	return trimmed.startsWith("<") ? trimmed : `<${trimmed}>`;
 }
 
+/**
+ * Only a picture can be inline. Senders such as Apple Mail mark a PDF
+ * `Content-Disposition: inline` when it sits in the flow of the message, and
+ * treating that as a signature image hides a real attachment from the reader.
+ */
+export function isInlineAttachment(mimeType: string, related: boolean, disposition: string | undefined): boolean {
+	return mimeType.toLowerCase().startsWith("image/") && (related || disposition === "inline");
+}
+
 export async function parseMessage(source: Buffer): Promise<ParsedMessage> {
 	const mail = await simpleParser(source, {
 		// An HTML-only message still gets a text body, so the snippet and the
@@ -145,7 +154,11 @@ export async function parseMessage(source: Buffer): Promise<ParsedMessage> {
 		size: attachment.size,
 		content: attachment.content,
 		contentId: attachment.cid ?? null,
-		isInline: Boolean(attachment.related) || attachment.contentDisposition === "inline",
+		isInline: isInlineAttachment(
+			attachment.contentType || "application/octet-stream",
+			Boolean(attachment.related),
+			attachment.contentDisposition,
+		),
 	}));
 
 	return {

@@ -117,11 +117,15 @@ type MainShellProps = {
 /** The application proper: title bar, sidebar and the current screen. */
 function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProps) {
 	const [screen, setScreen] = useState<ScreenId>("today");
+	// Bumped when the entry for the screen already open is chosen again, which
+	// remounts it and so returns it to its overview.
+	const [visit, setVisit] = useState(0);
 	const autoCollapse = useSidebarAutoCollapse();
 	const sidebar = useSidebarLayout(autoCollapse);
 	const trail = useBreadcrumbTrail();
 
 	const navigate = (id: ScreenId) => {
+		if (id === screen) setVisit((count) => count + 1);
 		setScreen(id);
 		// On a narrow window the sidebar is covering the thing just chosen. On a
 		// wider one, close() collapses it only when auto-collapse is on.
@@ -162,7 +166,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					/>
 				) : null}
 
-				<main className="min-w-0 flex-1 overflow-hidden">
+				<main key={`${screen}:${visit}`} className="min-w-0 flex-1 overflow-hidden">
 					{screen === "today" ? (
 						<TodayScreen />
 					) : screen === "clients" ? (

@@ -341,8 +341,9 @@ export async function counts(accountId?: string, db: Db = getDb()): Promise<Mail
  * them, which covers a row whose thread link was lost with the message it
  * answered. Once a live message in the thread carries the row's Message-ID the
  * synced copy is the record and the row steps aside, so nothing shows twice.
- * Drafts, pending, failed and cancelled rows are not in the conversation yet
- * or any more, and a deleted row never is.
+ * Drafts, rows waiting for approval and failed sends are listed, marked by
+ * their state, so the overview shows the whole conversation. A cancelled row is
+ * not in it any more, and a deleted row never is.
  */
 export function outgoingForThread(threadId: string, db: Db = getDb()): MailThreadOutgoing[] {
 	const synced = db
@@ -369,7 +370,7 @@ export function outgoingForThread(threadId: string, db: Db = getDb()): MailThrea
 		.where(
 			and(
 				isNull(mailOutbox.deletedAt),
-				inArray(mailOutbox.state, ["queued", "sending", "sent"]),
+				inArray(mailOutbox.state, ["draft", "pending", "queued", "sending", "sent", "failed"]),
 				or(...belongs),
 			),
 		)
@@ -395,6 +396,7 @@ export function outgoingForThread(threadId: string, db: Db = getDb()): MailThrea
 				bodyText: row.bodyText,
 				bodyHtml: row.bodyHtml,
 				messageId: row.messageId,
+				inReplyTo: row.inReplyTo,
 				date: row.sentAt ?? row.queuedAt ?? row.createdAt,
 				attachments: attachments.get(row.id) ?? [],
 			};

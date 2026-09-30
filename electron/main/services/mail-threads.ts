@@ -80,6 +80,7 @@ function toMessage(row: MessageRow, attachments: MailAttachment[]): MailMessage 
 		threadId: row.threadId,
 		uid: row.uid,
 		messageId: row.messageId,
+		inReplyTo: row.inReplyTo,
 		from: row.fromAddress ? { name: row.fromName, address: row.fromAddress } : null,
 		to: parseAddresses(row.toJson),
 		cc: parseAddresses(row.ccJson),

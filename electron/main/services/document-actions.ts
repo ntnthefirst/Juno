@@ -415,6 +415,34 @@ export async function confirmVersionUse(versionId: string, use: VersionUse, db: 
 	return result.response === 0;
 }
 
+/**
+ * Deletes one version after a native yes or no. False when the person says no.
+ * The question lives here, not in the window, so the agent's tool goes through
+ * the same gate.
+ */
+export async function deleteVersion(versionId: string, db: Db = getDb()): Promise<boolean> {
+	const { version, total } = versions.get(versionId, db);
+	if (total <= 1) throw new Error("This is the only version. Delete the document instead.");
+
+	const options = {
+		type: "warning" as const,
+		title: "Delete version",
+		message: `Delete version ${version.number} of ${total}?`,
+		detail: version.isLatest
+			? "It is the latest version, so the document will open as the one before it."
+			: "The other versions are not changed.",
+		buttons: ["Delete", "Cancel"],
+		defaultId: 1,
+		cancelId: 1,
+		noLink: true,
+	};
+	const parent = BrowserWindow.getFocusedWindow();
+	const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+	if (result.response !== 0) return false;
+	versions.remove(versionId, db);
+	return true;
+}
+
 /** The signing details of one signed version, as their own PDF. */
 export async function openCertificate(versionId: string, db: Db = getDb()): Promise<void> {
 	await openPath(versions.certificatePathOf(versionId, db));

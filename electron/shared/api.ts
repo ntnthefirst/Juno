@@ -579,6 +579,8 @@ export interface JunoApi {
 		 * `use` will really do. True straight away for the newest.
 		 */
 		confirmVersionUse(versionId: string, use: VersionUse): Promise<boolean>;
+		/** Asks in a native dialog, then deletes the version. False when cancelled. */
+		deleteVersion(versionId: string): Promise<boolean>;
 		/** What has happened to the document, newest first. */
 		timeline(documentId: string): Promise<DocumentTimelineEntry[]>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;

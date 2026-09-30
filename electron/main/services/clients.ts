@@ -136,6 +136,20 @@ function projectCounts(db: Db) {
 		.as("project_counts");
 }
 
+/**
+ * The newest change anywhere on a client: the record itself, its projects, its
+ * documents and its notes. Soft-deleted rows do not count, so removing
+ * something does not make a client look active. Correlated subqueries, because
+ * each side is indexed on the client id and the list is bounded.
+ */
+function lastActivityAt() {
+	const newest = (table: string, extra = "") =>
+		sql.raw(
+			`coalesce((select max(updated_at) from ${table} where client_id = clients.id and deleted_at is null${extra}), clients.updated_at)`,
+		);
+	return sql<string>`max(${clients.updatedAt}, ${newest("projects")}, ${newest("documents")}, ${newest("client_notes")})`;
+}
+
 export async function list(
 	query: ListClientsQuery = {},
 	db: Db = getDb(),
@@ -166,6 +180,7 @@ export async function list(
 	const counts = projectCounts(db);
 	const email = primaryEmails(db);
 	const address = primaryAddresses(db);
+	const lastActivity = lastActivityAt();
 
 	const rows = db
 		.select({
@@ -176,6 +191,7 @@ export async function list(
 			status: referenceItems,
 			projectCount: counts.total,
 			openProjectCount: counts.open,
+			lastActivityAt: lastActivity,
 		})
 		.from(clients)
 		.leftJoin(referenceItems, eq(clients.statusId, referenceItems.id))
@@ -183,7 +199,9 @@ export async function list(
 		.leftJoin(email, eq(email.clientId, clients.id))
 		.leftJoin(address, eq(address.clientId, clients.id))
 		.where(conditions.length ? and(...conditions) : undefined)
-		.orderBy(asc(clients.sortName))
+		// Whoever was worked on last comes first, so the list opens on what is live.
+		// Name breaks a tie, which is also what an untouched database looks like.
+		.orderBy(desc(lastActivity), asc(clients.sortName), asc(clients.id))
 		.limit(limit)
 		.offset(offset)
 		.all();
@@ -196,6 +214,7 @@ export async function list(
 		email: row.email ?? null,
 		projectCount: Number(row.projectCount ?? 0),
 		openProjectCount: Number(row.openProjectCount ?? 0),
+		lastActivityAt: row.lastActivityAt,
 	}));
 }
 

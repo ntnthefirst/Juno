@@ -26,7 +26,7 @@ export function FitText({ text, size, available }: FitTextProps) {
 	}, [text, size, available]);
 
 	return (
-		<span ref={element} style={{ fontSize: size * scale }}>
+		<span ref={element} className="inline-block" style={{ fontSize: size * scale }}>
 			{text}
 		</span>
 	);

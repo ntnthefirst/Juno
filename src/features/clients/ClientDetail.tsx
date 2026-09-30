@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CLIENT_LINK_KIND_LABELS, isClientLinkKind } from "@shared/client-links";
 import type {
 	Client,
 	ClientAddress,
 	ClientEmail,
+	ClientLink,
 	ClientNote,
 	ClientNoteKind,
 	ClientPhone,
@@ -140,6 +142,7 @@ type Detail = {
 	emails: ClientEmail[];
 	phones: ClientPhone[];
 	addresses: ClientAddress[];
+	links: ClientLink[];
 	contacts: Contact[];
 	projects: ProjectSummary[];
 	entries: ClientTimelineEntry[];
@@ -152,7 +155,7 @@ type Load =
 	| { status: "ready"; detail: Detail }
 	| { status: "error"; message: string };
 
-type DetailKind = "contact" | "project" | "email" | "phone" | "address" | "note";
+type DetailKind = "contact" | "project" | "email" | "phone" | "address" | "link" | "note";
 type Pending = { kind: DetailKind; id: string; name: string };
 
 const REMOVE_TITLES: Record<DetailKind, string> = {
@@ -161,6 +164,7 @@ const REMOVE_TITLES: Record<DetailKind, string> = {
 	email: "Remove email",
 	phone: "Remove phone number",
 	address: "Remove address",
+	link: "Remove link",
 	note: "Remove note",
 };
 
@@ -188,6 +192,7 @@ type ClientDetailProps = {
 	onEditEmail: (email: ClientEmail | null) => void;
 	onEditPhone: (phone: ClientPhone | null) => void;
 	onEditAddress: (address: ClientAddress | null) => void;
+	onEditLink: (link: ClientLink | null) => void;
 	/** `initialKind` only matters when `note` is null, for "Log a call". */
 	onEditNote: (note: ClientNote | null, initialKind?: ClientNoteKind) => void;
 	/** A document from a template is a page of its own, so the screen owns it. */
@@ -208,6 +213,7 @@ export function ClientDetail({
 	onEditEmail,
 	onEditPhone,
 	onEditAddress,
+	onEditLink,
 	onEditNote,
 	onGenerateDocument,
 	onOpenDocument,
@@ -221,12 +227,13 @@ export function ClientDetail({
 	const [loadingMore, setLoadingMore] = useState(false);
 
 	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
-		const [client, emails, phones, addresses, contacts, projects, statusSet, entries, entryCounts] =
+		const [client, emails, phones, addresses, links, contacts, projects, statusSet, entries, entryCounts] =
 			await Promise.all([
 				window.juno.clients.get(clientId),
 				window.juno.clientEmails.listForClient(clientId),
 				window.juno.clientPhones.listForClient(clientId),
 				window.juno.clientAddresses.listForClient(clientId),
+				window.juno.clientLinks.listForClient(clientId),
 				window.juno.contacts.listForClient(clientId),
 				window.juno.projects.list({ clientId }),
 				window.juno.reference.getSet("client_status"),
@@ -244,6 +251,7 @@ export function ClientDetail({
 			emails,
 			phones,
 			addresses,
+			links,
 			contacts,
 			projects,
 			entries,
@@ -292,6 +300,7 @@ export function ClientDetail({
 			else if (pending.kind === "email") await window.juno.clientEmails.remove(pending.id);
 			else if (pending.kind === "phone") await window.juno.clientPhones.remove(pending.id);
 			else if (pending.kind === "address") await window.juno.clientAddresses.remove(pending.id);
+			else if (pending.kind === "link") await window.juno.clientLinks.remove(pending.id);
 			else await window.juno.clientNotes.remove(pending.id);
 			setPending(null);
 			refresh();
@@ -416,6 +425,7 @@ export function ClientDetail({
 		emails,
 		phones,
 		addresses,
+		links,
 		contacts,
 		projects,
 		entries,
@@ -596,6 +606,13 @@ export function ClientDetail({
 							onEdit={onEditAddress}
 							onMakePrimary={(id) => void makeAddressPrimary(id)}
 							onRemove={(address, line) => setPending({ kind: "address", id: address.id, name: address.label ?? line })}
+						/>
+
+						<LinksSection
+							links={links}
+							onAdd={() => onEditLink(null)}
+							onEdit={onEditLink}
+							onRemove={(link) => setPending({ kind: "link", id: link.id, name: link.label ?? link.url })}
 						/>
 
 						<ContactsSection
@@ -850,6 +867,97 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 					))}
 				</ul>
 			)}
+		</section>
+	);
+}
+
+type LinksSectionProps = {
+	links: ClientLink[];
+	onAdd: () => void;
+	onEdit: (link: ClientLink) => void;
+	onRemove: (link: ClientLink) => void;
+};
+
+function linkTitle(link: ClientLink): string {
+	return link.label ?? (isClientLinkKind(link.kind) ? CLIENT_LINK_KIND_LABELS[link.kind] : link.url);
+}
+
+/** What to show under a link's title: the address without its scheme or trailing slash. */
+function shortUrl(url: string): string {
+	return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+}
+
+function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
+	const [problem, setProblem] = useState<string | null>(null);
+
+	async function open(id: string) {
+		setProblem(null);
+		try {
+			await window.juno.clientLinks.open(id);
+		} catch (cause: unknown) {
+			setProblem(messageOf(cause));
+		}
+	}
+
+	return (
+		<section>
+			<div className="mb-4 flex items-center justify-between gap-4">
+				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Links</h3>
+				<Button size="dense" data-opens-panel onClick={onAdd}>
+					Add link
+				</Button>
+			</div>
+
+			{links.length === 0 ? (
+				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+					No website or profiles for this client yet.
+				</p>
+			) : (
+				<ul>
+					{links.map((link) => (
+						<li
+							key={link.id}
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+						>
+							<div className="flex min-w-0 items-start gap-3">
+								<Icon
+									name={link.kind === "website" ? "web" : "link"}
+									className="mt-0.5 shrink-0 text-[var(--ink-muted)]"
+								/>
+								<div className="min-w-0">
+									<div className="flex items-center gap-2">
+										<span className="truncate font-[var(--weight-medium)]">{linkTitle(link)}</span>
+										{link.label && isClientLinkKind(link.kind) ? (
+											<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+												{CLIENT_LINK_KIND_LABELS[link.kind]}
+											</span>
+										) : null}
+									</div>
+									<div data-selectable className="mt-0.5 truncate text-[var(--ink-muted)]">
+										{shortUrl(link.url)}
+									</div>
+								</div>
+							</div>
+							<span className="flex shrink-0 gap-1">
+								<Button size="dense" onClick={() => void open(link.id)}>
+									Open
+								</Button>
+								<Button size="dense" data-opens-panel onClick={() => onEdit(link)}>
+									Edit
+								</Button>
+								<Button size="dense" variant="danger" onClick={() => onRemove(link)}>
+									Remove
+								</Button>
+							</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{problem ? (
+				<p role="alert" data-selectable className="mt-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+					{problem}
+				</p>
+			) : null}
 		</section>
 	);
 }

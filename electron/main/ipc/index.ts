@@ -13,6 +13,7 @@ import { registerBackupIpc } from "./backup";
 import { registerCalendarIpc } from "./calendar";
 import { registerClientAddressesIpc } from "./client-addresses";
 import { registerClientEmailsIpc } from "./client-emails";
+import { registerClientLinksIpc } from "./client-links";
 import { registerClientPhonesIpc } from "./client-phones";
 import { registerClientsIpc } from "./clients";
 import { registerDocumentsIpc } from "./documents";
@@ -42,6 +43,7 @@ export function registerAllIpc(userDataDir: string): void {
 	registerClientsIpc();
 	registerClientEmailsIpc();
 	registerClientPhonesIpc();
+	registerClientLinksIpc();
 	registerClientAddressesIpc();
 	registerContactsIpc();
 	registerProjectsIpc();

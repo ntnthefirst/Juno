@@ -274,6 +274,7 @@ export async function sign(
 		pdfPath: withPdf.pdfPath,
 		outputPath,
 		placement,
+		showDetails: input.showDetails,
 		digital,
 		signatureImagePath: imagePath,
 		signerName,

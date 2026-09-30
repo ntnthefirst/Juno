@@ -53,6 +53,8 @@ export interface SignOptions {
 	templateVersion: number | null;
 	isSpecimen: boolean;
 	placement?: StampPlacement;
+	/** False draws the image alone, without the name and the date. Defaults to true. */
+	showDetails?: boolean;
 	digital?: DigitalOptions | null;
 }
 
@@ -203,9 +205,13 @@ export async function signPdf(options: SignOptions): Promise<SignResult> {
 
 	const image =
 		options.signatureImagePath === null ? null : await pdf.embedPng(readFileSync(options.signatureImagePath));
+	const showDetails = options.showDetails !== false;
+	if (!showDetails && !image) {
+		throw new Error("A stamp without the name and the date needs a signature image. Turn the name and time back on.");
+	}
 	const box = page.getMediaBox();
 	const stampWidth = box.width * placement.width;
-	const metrics = stampMetrics(stampWidth, image ? image.height / image.width : null);
+	const metrics = stampMetrics(stampWidth, image ? image.height / image.width : null, showDetails);
 
 	// Top left of the stamp, in PDF space where y grows upward.
 	const left = box.x + box.width * placement.x;
@@ -218,24 +224,26 @@ export async function signPdf(options: SignOptions): Promise<SignResult> {
 		page.drawImage(image, { x: left + metrics.padding, y: cursor - drawHeight, width: drawWidth, height: drawHeight });
 		cursor -= metrics.imageHeight + metrics.gap;
 	}
-	const who = text(`${options.signerName}${options.signerRole ? `, ${options.signerRole}` : ""}`, true);
-	const inner = stampWidth - metrics.padding * 2;
-	page.drawText(who, {
-		x: left + metrics.padding,
-		y: cursor - metrics.nameSize,
-		size: fitted(who, helveticaBold, metrics.nameSize, inner),
-		font: helveticaBold,
-		color: rgb(0.07, 0.07, 0.07),
-	});
-	cursor -= metrics.nameSize * 1.2 + metrics.gap;
-	const when = text(`Ondertekend op ${formatDateTime(options.signedAt)}`);
-	page.drawText(when, {
-		x: left + metrics.padding,
-		y: cursor - metrics.dateSize,
-		size: fitted(when, helvetica, metrics.dateSize, inner),
-		font: helvetica,
-		color: rgb(0.35, 0.35, 0.35),
-	});
+	if (showDetails) {
+		const who = text(`${options.signerName}${options.signerRole ? `, ${options.signerRole}` : ""}`, true);
+		const inner = stampWidth - metrics.padding * 2;
+		page.drawText(who, {
+			x: left + metrics.padding,
+			y: cursor - metrics.nameSize,
+			size: fitted(who, helveticaBold, metrics.nameSize, inner),
+			font: helveticaBold,
+			color: rgb(0.07, 0.07, 0.07),
+		});
+		cursor -= metrics.nameSize * 1.2 + metrics.gap;
+		const when = text(`Ondertekend op ${formatDateTime(options.signedAt)}`);
+		page.drawText(when, {
+			x: left + metrics.padding,
+			y: cursor - metrics.dateSize,
+			size: fitted(when, helvetica, metrics.dateSize, inner),
+			font: helvetica,
+			color: rgb(0.35, 0.35, 0.35),
+		});
+	}
 
 	let output: Uint8Array;
 	if (options.digital) {

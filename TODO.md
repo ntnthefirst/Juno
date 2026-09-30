@@ -39,9 +39,10 @@ Until then an external agent does the same work. Open Agent, copy the
 configuration, paste it into Claude Desktop or Claude Code. That also answers
 phase 6's done-when in PLAN.md.
 
-## 3. Smaller things
+## 3. Things only you can try - **you**
 
-Needs your hands rather than code:
+Everything decided and buildable in this section is built. What is left needs
+your hands, a real account or a real client, rather than code.
 
 - **No real mail server has been used yet.** Reading and sending are proven
   against a mailbox and a transport held in memory.
@@ -64,7 +65,9 @@ Needs your hands rather than code:
   columns, keep the comparison table side by side, and paint no gradient,
   shadow, rounded corner or transparent colour. Anything else is a finding.
 
-Not tasks, written down so nobody builds them by accident:
+## 4. Not tasks
+
+Written down so nobody builds them by accident.
 
 - **Nothing files mail on its own except the owner's mailbox rules** (5b).
   An agent or an automation still cannot: filing is side-effectful, so it is
@@ -87,6 +90,13 @@ database with the five columns, behind a service, IPC channels and MCP tools,
 like everything else (decision 2).
 
 ### 5a. Greetings and sign-offs
+
+**Being built separately, not on this branch.** An unfinished start is on the
+branch `wip/mail-phrases`: the schema and migration 0015, the service with its
+tests, the IPC and MCP adapters, and the composer inserting the greeting and
+sign-off. The Settings screen, the smoke steps and a full `npm run check` and
+smoke run are still missing. Whichever of 5a and 5b lands second regenerates
+its migration so the numbers do not collide (data.md section 3).
 
 The way Outlook does signatures. Nothing to do with templates.
 

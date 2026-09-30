@@ -276,6 +276,15 @@ export function MailScreen() {
 		}
 	}
 
+	async function editOutgoing(outboxId: string) {
+		try {
+			const draft = await window.juno.mail.outbox.get(outboxId);
+			if (draft) setCompose({ draft });
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
 	async function reply(messageId: string, mode: MailReplyMode) {
 		try {
 			const seed = await window.juno.mail.outbox.replySeed(messageId, mode);
@@ -689,6 +698,7 @@ export function MailScreen() {
 						onNotice={setNotice}
 						onReply={(messageId, mode) => void reply(messageId, mode)}
 						onAction={(action) => handleThreadAction(action, [selectedThreadId])}
+						onEditDraft={(id) => void editOutgoing(id)}
 					/>
 				) : showingDrafts && selectedOutbox ? (
 					<OutboxDetail

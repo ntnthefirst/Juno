@@ -17,11 +17,16 @@ import type { CSSProperties } from "react";
 import type {
 	MailBlock,
 	MailBoxStyle,
+	MailColumns,
+	MailColumnsCell,
 	MailEffect,
 	MailFill,
 	MailFont,
 	MailFontFallback,
 	MailContainer,
+	MailSelfAlign,
+	MailSpacing,
+	MailTextAlign,
 	MailTextStyle,
 	MailWeight,
 } from "@shared/types";
@@ -271,6 +276,14 @@ function strokeCss(box: MailBoxStyle): CSSProperties {
 	};
 }
 
+/** Pixels of left padding a list keeps for its bullets, as LIST_INDENT in services/mail-layout.ts. */
+export const LIST_INDENT = 24;
+
+/** No padding on any side: when the compiler writes no padding for a box at all. */
+export function noPadding(padding: MailSpacing): boolean {
+	return !padding.top && !padding.right && !padding.bottom && !padding.left;
+}
+
 export function boxCss(box: MailBoxStyle): CSSProperties {
 	const sized = box.width !== null || box.minHeight !== null;
 	return {
@@ -326,7 +339,7 @@ export function verticalCss(text: MailTextStyle): CSSProperties {
 	};
 }
 
-const SELF: Record<MailBlock["alignSelf"], CSSProperties["alignSelf"]> = {
+const SELF: Record<MailSelfAlign, CSSProperties["alignSelf"]> = {
 	auto: undefined,
 	start: "flex-start",
 	center: "center",
@@ -334,23 +347,86 @@ const SELF: Record<MailBlock["alignSelf"], CSSProperties["alignSelf"]> = {
 	stretch: "stretch",
 };
 
-/** How a block takes its place in its section: its share of the room, and where it sits across. */
-export function placeCss(block: MailBlock): CSSProperties {
+/**
+ * How something takes its place in a flex or grid parent: its share of the
+ * room, and where it sits across. A block, a container and a columns table
+ * all have `grow` and `alignSelf`, so this reaches all three (matches
+ * placeDeclarations in services/mail-layout.ts).
+ */
+export function placeCss(node: { grow: number; alignSelf: MailSelfAlign }): CSSProperties {
 	return {
-		flex: block.grow > 0 ? `${block.grow} 1 0%` : undefined,
-		alignSelf: SELF[block.alignSelf],
+		flex: node.grow > 0 ? `${node.grow} 1 0%` : undefined,
+		alignSelf: SELF[node.alignSelf],
 	};
 }
 
-/** Matches sectionPlaceDeclarations: a section narrower than the frame, moved by its margins. */
-function sectionPlaceCss(section: MailContainer): CSSProperties {
-	if (section.alignSelf === "center") return { marginLeft: "auto", marginRight: "auto" };
-	if (section.alignSelf === "end") return { marginLeft: "auto" };
+/**
+ * Where something narrower than its parent sits across it when that parent
+ * lays its children out in plain flow, as the frame and a table cell do: this
+ * is margins. A container or columns table inside a flex or grid box takes
+ * `placeCss` instead, the way a block does, because that parent already has an
+ * alignment of its own (matches sectionPlaceDeclarations).
+ */
+function sectionPlaceCss(node: { alignSelf: MailSelfAlign }): CSSProperties {
+	if (node.alignSelf === "center") return { marginLeft: "auto", marginRight: "auto" };
+	if (node.alignSelf === "end") return { marginLeft: "auto" };
 	return {};
 }
 
-export function sectionCss(section: MailContainer): CSSProperties {
-	const box = { ...boxCss(section.box), ...sectionPlaceCss(section) };
+/** `sectionPlaceCss` in plain flow, `placeCss` in a flex or grid parent. Matches placementDeclarations. */
+function placementCss(node: { grow: number; alignSelf: MailSelfAlign }, topLevel: boolean): CSSProperties {
+	return topLevel ? sectionPlaceCss(node) : placeCss(node);
+}
+
+/** The sides of an element that its own alignment already gives `auto` margins to. */
+export type AutoSides = { left: boolean; right: boolean };
+
+const NO_AUTO: AutoSides = { left: false, right: false };
+
+/** A container or columns table in plain flow, centred or pushed to the end (matches autoSidesInFlow). */
+export function flowAutoSides(node: { alignSelf: MailSelfAlign }, inFlow: boolean): AutoSides {
+	if (!inFlow) return NO_AUTO;
+	return { left: node.alignSelf === "center" || node.alignSelf === "end", right: node.alignSelf === "center" };
+}
+
+/** A picture centred or pushed right by its margins, wherever it sits. */
+export function pictureAutoSides(align: MailTextAlign): AutoSides {
+	return { left: align === "center" || align === "right", right: align === "center" };
+}
+
+/**
+ * The margin, one side at a time and only where it is set, leaving an `auto`
+ * side to the placement that gave it one (matches marginDeclarations).
+ */
+export function marginCss(margin: MailSpacing, auto: AutoSides = NO_AUTO): CSSProperties {
+	// A side that is not set is left out rather than set to undefined: spread
+	// after the placement, an undefined would wipe the `auto` it wrote.
+	const css: CSSProperties = {};
+	if (margin.top > 0) css.marginTop = margin.top;
+	if (margin.right > 0 && !auto.right) css.marginRight = margin.right;
+	if (margin.bottom > 0) css.marginBottom = margin.bottom;
+	if (margin.left > 0 && !auto.left) css.marginLeft = margin.left;
+	return css;
+}
+
+/** A block's margin, with the sides a picture's alignment owns left out. A spacer and code have none. */
+export function blockMarginCss(block: MailBlock): CSSProperties {
+	if (block.kind === "spacer" || block.kind === "html") return {};
+	return marginCss(block.box.margin, block.kind === "image" ? pictureAutoSides(block.align) : NO_AUTO);
+}
+
+/**
+ * A container's own declarations: its layout, its box, and its place in
+ * whatever parent it sits in. `topLevel` is true for a child of the frame or of
+ * a table cell, which lay their children out in plain flow; a container
+ * inside another container is placed by that container's flex or grid.
+ */
+export function sectionCss(section: MailContainer, topLevel: boolean): CSSProperties {
+	const box = {
+		...boxCss(section.box),
+		...placementCss(section, topLevel),
+		...marginCss(section.box.margin, flowAutoSides(section, topLevel)),
+	};
 	if (section.layout.kind === "grid") {
 		return {
 			...box,
@@ -358,6 +434,8 @@ export function sectionCss(section: MailContainer): CSSProperties {
 			gridTemplateColumns: `repeat(${section.layout.columns},1fr)`,
 			gap: section.layout.gap,
 			alignItems: section.layout.align === "stretch" ? "stretch" : section.layout.align,
+			// Stretch is the grid's own and writes nothing (matches layoutDeclarations).
+			justifyItems: section.layout.justify === "stretch" ? undefined : section.layout.justify,
 		};
 	}
 	const justify = {
@@ -375,5 +453,23 @@ export function sectionCss(section: MailContainer): CSSProperties {
 		alignItems: section.layout.align === "stretch" ? "stretch" : section.layout.align,
 		gap: section.layout.gap,
 		flexWrap: section.layout.wrap ? "wrap" : "nowrap",
+	};
+}
+
+/** A columns table's own declarations: its box and its place. No display of its own; it is a table already. */
+export function columnsCss(columns: MailColumns, topLevel: boolean): CSSProperties {
+	return {
+		...boxCss(columns.box),
+		...placementCss(columns, topLevel),
+		...marginCss(columns.box.margin, flowAutoSides(columns, topLevel)),
+	};
+}
+
+/** A cell's own declarations: matches compileColumnsCell, bar the gap padding, which the caller adds (it depends on the cell's position in its row). */
+export function cellCss(cell: MailColumnsCell): CSSProperties {
+	return {
+		...boxCss(cell.box),
+		width: cell.width !== null ? `${cell.width}%` : undefined,
+		verticalAlign: cell.verticalAlign,
 	};
 }

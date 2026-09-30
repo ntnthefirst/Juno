@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import type { MailReplyMode, MailThread } from "@shared/types";
+import type { MailMessage, MailReplyMode, MailThread, MailThreadOutgoing } from "@shared/types";
 import { Icon, type IconName } from "../../components/Icon";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { MessageView } from "./MessageView";
+import { OutgoingMessageView } from "./OutgoingMessageView";
 import type { ThreadAction } from "./ThreadList";
 
 type ThreadViewProps = {
@@ -20,6 +21,33 @@ type ThreadViewProps = {
 	/** Filing the whole thread. The screen owns it, the same as from a list row. */
 	onAction: (action: ThreadAction) => void;
 };
+
+type Entry =
+	| { kind: "message"; message: MailMessage }
+	| { kind: "outgoing"; message: MailThreadOutgoing };
+
+/**
+ * Synced messages and the replies still waiting for their Sent copy, in date
+ * order. Both lists arrive oldest first, so this is a merge, and on a tie the
+ * synced message goes first because it is the record.
+ */
+function interleave(messages: MailMessage[], outgoing: MailThreadOutgoing[]): Entry[] {
+	const out: Entry[] = [];
+	let m = 0;
+	let o = 0;
+	while (m < messages.length || o < outgoing.length) {
+		const message = messages[m];
+		const sent = outgoing[o];
+		if (message && (!sent || message.internalDate <= sent.date)) {
+			out.push({ kind: "message", message });
+			m += 1;
+		} else if (sent) {
+			out.push({ kind: "outgoing", message: sent });
+			o += 1;
+		}
+	}
+	return out;
+}
 
 type Load =
 	| { status: "loading" }
@@ -67,6 +95,16 @@ export function ThreadView({
 		};
 	}, [threadId, version]);
 
+	// A reply to this thread moving from queued to sent, or being sent from
+	// another window, changes what the reader lists as outgoing.
+	useEffect(
+		() =>
+			window.juno.mail.outbox.onChange((message) => {
+				if (message.threadId === threadId) setVersion((v) => v + 1);
+			}),
+		[threadId],
+	);
+
 	// A file action on one message (read, flag) or a client link change both
 	// mean the thread and the list behind it are out of date.
 	function refresh() {
@@ -108,14 +146,15 @@ export function ThreadView({
 		);
 	}
 
-	const { summary, messages } = load.thread;
+	const { summary, messages, outgoing } = load.thread;
+	const entries = interleave(messages, outgoing);
 
 	// Start with the first message in the thread, so opening a conversation shows
 	// the message represented by the clicked row rather than a later reply.
 	// Keep the current choice across a refresh as long as it still exists.
 	if (load.thread !== derivedFrom) {
 		const fallback = messages[0] ?? null;
-		const next = openId && messages.some((m) => m.id === openId) ? openId : (fallback?.id ?? null);
+		const next = openId && entries.some((e) => e.message.id === openId) ? openId : (fallback?.id ?? null);
 		setDerivedFrom(load.thread);
 		if (next !== openId) setOpenId(next);
 	}
@@ -214,24 +253,33 @@ export function ThreadView({
 						</span>
 					) : null}
 					<p className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						{messages.length} {messages.length === 1 ? "message" : "messages"}
+						{entries.length} {entries.length === 1 ? "message" : "messages"}
 					</p>
 				</div>
 			</div>
 
 			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-				{messages.map((message) => (
-					<MessageView
-						key={message.id}
-						message={message}
-						clientLinked={summary.clientId !== null}
-						open={message.id === openId}
-						onToggle={() => setOpenId((current) => (current === message.id ? null : message.id))}
-						onNotice={onNotice}
-						onReply={onReply}
-						onChanged={refresh}
-					/>
-				))}
+				{entries.map((entry) =>
+					entry.kind === "message" ? (
+						<MessageView
+							key={entry.message.id}
+							message={entry.message}
+							clientLinked={summary.clientId !== null}
+							open={entry.message.id === openId}
+							onToggle={() => setOpenId((current) => (current === entry.message.id ? null : entry.message.id))}
+							onNotice={onNotice}
+							onReply={onReply}
+							onChanged={refresh}
+						/>
+					) : (
+						<OutgoingMessageView
+							key={entry.message.id}
+							message={entry.message}
+							open={entry.message.id === openId}
+							onToggle={() => setOpenId((current) => (current === entry.message.id ? null : entry.message.id))}
+						/>
+					),
+				)}
 			</div>
 
 			{linking ? (

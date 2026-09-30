@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
-import type { MailThreadSummary } from "@shared/types";
+import type { MailOutboxMessage, MailThreadSummary } from "@shared/types";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { startThreadDrag } from "./drag";
 import { formatWhen, participantsLine } from "./format";
+import { OutboxRow } from "./OutboxRow";
 
 export type ThreadAction =
 	| "open"
@@ -20,8 +21,20 @@ export type ThreadAction =
 	| "trash"
 	| "deleteForever";
 
+/**
+ * What Juno has not sent yet, listed among the threads. Given only for the
+ * Drafts view, where these rows and the server's own drafts share one list.
+ */
+export type ThreadListOutbox = {
+	/** `null` while the outbox is still loading. */
+	messages: MailOutboxMessage[] | null;
+	selectedId: string | null;
+	onSelect: (id: string) => void;
+};
+
 type ThreadListProps = {
 	threads: MailThreadSummary[] | null;
+	outbox?: ThreadListOutbox;
 	error: string | null;
 	searching: boolean;
 	/** The trash offers "delete forever" where every other folder offers "trash". */
@@ -33,6 +46,24 @@ type ThreadListProps = {
 	/** One row, or the whole selection when `ids` is given. */
 	onAction: (action: ThreadAction, ids: string[]) => void;
 };
+
+type Entry =
+	| { kind: "thread"; id: string; at: string; thread: MailThreadSummary }
+	| { kind: "outbox"; id: string; at: string; message: MailOutboxMessage };
+
+/**
+ * Newest first, and by id when two share an instant. A thread sorts by its
+ * last message and an outbox row by when it was last saved, which is what the
+ * outbox list itself is ordered by.
+ */
+function mergeEntries(threads: MailThreadSummary[], messages: MailOutboxMessage[] | null): Entry[] {
+	const entries: Entry[] = threads.map((thread): Entry => ({ kind: "thread", id: thread.id, at: thread.lastMessageAt, thread }));
+	// Without the outbox the threads keep the order they came in, which in a
+	// search is by relevance and not by date.
+	if (messages === null) return entries;
+	entries.push(...messages.map((message): Entry => ({ kind: "outbox", id: message.id, at: message.updatedAt, message })));
+	return entries.sort((x, y) => (x.at === y.at ? y.id.localeCompare(x.id) : y.at.localeCompare(x.at)));
+}
 
 /**
  * Two and a bit lines per thread: who and when, the subject, the snippet.
@@ -50,9 +81,15 @@ type ThreadListProps = {
  * one anywhere adds or removes it, and the hover icons go away, because a list
  * where the same click sometimes files a row and sometimes opens it is a list
  * that loses somebody's selection.
+ *
+ * In Drafts the same list also holds Juno's own unsent messages (`outbox`),
+ * merged by date. Those rows open on a click and take none of the thread
+ * actions: they are not on the server, so there is nothing to file, and the
+ * selection, the menu and the keyboard shortcuts all skip them.
  */
 export function ThreadList({
 	threads,
+	outbox,
 	error,
 	searching,
 	inTrash,
@@ -78,11 +115,16 @@ export function ThreadList({
 			</div>
 		);
 	}
-	if (threads === null) {
+	if (threads === null || (outbox && outbox.messages === null)) {
 		return <p className="px-4 text-[var(--ink-muted)]">Loading.</p>;
 	}
-	if (threads.length === 0) {
-		return <p className="px-4 text-[var(--ink-muted)]">{searching ? "Nothing matches." : "Nothing here yet."}</p>;
+	const entries = mergeEntries(threads, outbox ? outbox.messages : null);
+	if (entries.length === 0) {
+		return (
+			<p className="px-4 text-[var(--ink-muted)]">
+				{outbox ? "Nothing composed yet." : searching ? "Nothing matches." : "Nothing here yet."}
+			</p>
+		);
 	}
 
 	const hasSelection = selectedIds.length > 0;
@@ -156,11 +198,10 @@ export function ThreadList({
 	 */
 	function onListKeyDown(event: React.KeyboardEvent<HTMLUListElement>) {
 		if (event.metaKey || event.ctrlKey || event.altKey) return;
-		const list = threads ?? [];
-		const focused = list.find((thread) => rows.current.get(thread.id) === document.activeElement);
+		const focusedEntry = entries.find((entry) => rows.current.get(entry.id) === document.activeElement);
 		const step = (delta: number) => {
-			const from = focused ? list.indexOf(focused) : -1;
-			const next = list[Math.min(Math.max(from + delta, 0), list.length - 1)];
+			const from = focusedEntry ? entries.indexOf(focusedEntry) : -1;
+			const next = entries[Math.min(Math.max(from + delta, 0), entries.length - 1)];
 			if (next) rows.current.get(next.id)?.focus();
 		};
 
@@ -174,7 +215,9 @@ export function ThreadList({
 			step(-1);
 			return;
 		}
-		if (!focused) return;
+		// The rest are thread actions, and an unsent message has none.
+		if (focusedEntry?.kind !== "thread") return;
+		const focused = focusedEntry.thread;
 		const shortcuts: Record<string, ThreadAction> = {
 			e: "archive",
 			a: "archive",
@@ -188,10 +231,10 @@ export function ThreadList({
 		if (!action) return;
 		event.preventDefault();
 		// A filing action takes the row away, so the next one gets the focus.
-		const index = list.indexOf(focused);
+		const index = entries.indexOf(focusedEntry);
 		onAction(action, [focused.id]);
 		if (action !== "flag" && action !== "unflag" && action !== "markRead" && action !== "markUnread") {
-			const next = list[index + 1] ?? list[index - 1];
+			const next = entries[index + 1] ?? entries[index - 1];
 			if (next) requestAnimationFrame(() => rows.current.get(next.id)?.focus());
 		}
 	}
@@ -203,7 +246,22 @@ export function ThreadList({
 				whichever row has focus, and a row is a button that already takes it.
 			*/}
 			<ul className="flex flex-col" onKeyDown={onListKeyDown}>
-				{threads.map((thread) => {
+				{entries.map((entry) => {
+					if (entry.kind === "outbox") {
+						return (
+							<OutboxRow
+								key={entry.id}
+								message={entry.message}
+								active={entry.id === outbox?.selectedId}
+								onSelect={(id) => outbox?.onSelect(id)}
+								buttonRef={(element) => {
+									if (element) rows.current.set(entry.id, element);
+									else rows.current.delete(entry.id);
+								}}
+							/>
+						);
+					}
+					const thread = entry.thread;
 					const active = thread.id === selectedId;
 					const checked = selectedIds.includes(thread.id);
 					const unread = thread.unreadCount > 0;
@@ -214,6 +272,7 @@ export function ThreadList({
 					return (
 						<li
 							key={thread.id}
+							data-draft-kind={outbox ? "thread" : undefined}
 							draggable
 							onDragStart={(event) => startThreadDrag(event, dragIds, thread.subject || "1 thread")}
 							className="group relative border-b border-[var(--line)]/60"
@@ -312,6 +371,12 @@ export function ThreadList({
 										<span className="min-w-0 flex-1 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 											{thread.snippet}
 										</span>
+										{/* Beside Juno's own unsent messages, the server's are told apart. */}
+										{outbox ? (
+											<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+												On the server
+											</span>
+										) : null}
 										{thread.clientName ? (
 											<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
 												{thread.clientName}

@@ -77,6 +77,7 @@ export function SignatureSection() {
 	return (
 		<Section
 			title="Signature"
+			anchor="signature"
 			description="Stamped onto a PDF when you sign it. Optional."
 			action={
 				<div className="flex gap-1">

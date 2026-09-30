@@ -69,6 +69,7 @@ export function CertificateSection() {
 	return (
 		<Section
 			title="Digital signature"
+			anchor="certificate"
 			description="A certificate that signs the PDF itself, so a reader can see who signed and whether it changed."
 			action={
 				info ? (

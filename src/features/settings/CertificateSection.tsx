@@ -99,7 +99,7 @@ export function CertificateSection() {
 				<div className="flex max-w-[420px] flex-col gap-3">
 					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 						Import the .p12 or .pfx file your certificate authority gave you. Enter its passphrase
-						first, then choose the file.
+						first, or leave it empty when it has none, then choose the file.
 					</p>
 					<Field
 						label="Certificate passphrase"
@@ -108,7 +108,7 @@ export function CertificateSection() {
 						onChange={setPassphrase}
 					/>
 					<div>
-						<Button disabled={busy || passphrase.length === 0} onClick={() => void choose()}>
+						<Button disabled={busy} onClick={() => void choose()}>
 							Choose certificate
 						</Button>
 					</div>

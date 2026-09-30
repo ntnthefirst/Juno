@@ -6,9 +6,26 @@
  * especially after the client data it quoted has changed.
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
+import {
+	closeSync,
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	openSync,
+	readFileSync,
+	readSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
-import type { Client, Contact, DocumentSourceKind, ImportDocumentInput, Project } from "../../shared/types";
+import type {
+	Client,
+	Contact,
+	DocumentSourceKind,
+	ImportDocumentInput,
+	ImportPdfBytesInput,
+	Project,
+} from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import {
@@ -314,10 +331,33 @@ export async function generate(
  * original file is copied, never moved and never deleted, and the copy is what
  * the record points at from then on.
  */
-export async function importPdf(
-	input: ImportDocumentInput,
-	db: Db = getDb(),
-): Promise<DocumentRecord> {
+/** Largest PDF that can be brought in. A contract does not need to be bigger. */
+export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Throws when the client already has a live document with this title.
+ *
+ * Compared case-insensitively and trimmed, because "Contract.pdf" and
+ * "contract.pdf " are the same file to the person who dropped both. A document
+ * that was deleted does not count, so removing one frees its name again.
+ * Lives here so the window, a drop and an agent all get the same answer.
+ */
+function assertTitleFree(clientId: string, clientName: string, title: string, db: Db): void {
+	const wanted = title.trim().toLowerCase();
+	const taken = db
+		.select({ title: documents.title })
+		.from(documents)
+		.where(and(eq(documents.clientId, clientId), isNull(documents.deletedAt)))
+		.all()
+		.some((row) => row.title.trim().toLowerCase() === wanted);
+	if (taken) {
+		throw new Error(
+			`${clientName} already has a document named "${title.trim()}". Rename the file or delete the existing document first.`,
+		);
+	}
+}
+
+function resolveImportTarget(input: ImportDocumentInput | ImportPdfBytesInput, db: Db) {
 	const client = db
 		.select()
 		.from(clients)
@@ -336,6 +376,40 @@ export async function importPdf(
 			throw new Error("That project belongs to a different client.");
 		}
 	}
+	return client;
+}
+
+function insertImported(
+	client: { id: string; name: string },
+	title: string,
+	destination: string,
+	input: { projectId?: string | null; issuedOn?: string },
+	db: Db,
+): DocumentRecord {
+	const [row] = db
+		.insert(documents)
+		.values({
+			clientId: client.id,
+			projectId: input.projectId ?? null,
+			templateId: null,
+			templateVersion: null,
+			title,
+			bodyHtml: "",
+			issuedOn: input.issuedOn ?? todayIsoDate(),
+			pdfPath: destination,
+			isSpecimen: false,
+			sourceKind: "imported",
+		})
+		.returning()
+		.all();
+	return toRecord(row!, client.name);
+}
+
+export async function importPdf(
+	input: ImportDocumentInput,
+	db: Db = getDb(),
+): Promise<DocumentRecord> {
+	const client = resolveImportTarget(input, db);
 
 	const fileLabel = basename(input.sourcePath);
 	if (!existsSync(input.sourcePath) || !statSync(input.sourcePath).isFile()) {
@@ -346,7 +420,7 @@ export async function importPdf(
 	}
 
 	const title = input.title?.trim() || basename(input.sourcePath, ".pdf") || "Document";
-	const issuedOn = input.issuedOn ?? todayIsoDate();
+	assertTitleFree(client.id, client.name, title, db);
 
 	// The destination name comes from the title through fileNameFor, never from
 	// the source path, so a title carrying "../" cannot walk the copy outside
@@ -354,24 +428,52 @@ export async function importPdf(
 	const destination = join(importStorageDir(), fileNameFor(title, "-import"));
 	copyFileSync(input.sourcePath, destination);
 
-	const [row] = db
-		.insert(documents)
-		.values({
-			clientId: client.id,
-			projectId: input.projectId ?? null,
-			templateId: null,
-			templateVersion: null,
-			title,
-			bodyHtml: "",
-			issuedOn,
-			pdfPath: destination,
-			isSpecimen: false,
-			sourceKind: "imported",
-		})
-		.returning()
-		.all();
+	return insertImported(client, title, destination, input, db);
+}
 
-	return toRecord(row!, client.name);
+/**
+ * Imports a PDF that arrived as bytes, which is what a drop gives the window.
+ *
+ * The renderer never supplies a path: a dropped file is read there and sent
+ * across, so nothing here joins a renderer-chosen path onto the filesystem
+ * (.claude/rules/security.md section 2). The name is only ever a title.
+ */
+export async function importPdfBytes(
+	input: ImportPdfBytesInput,
+	db: Db = getDb(),
+): Promise<DocumentRecord> {
+	const client = resolveImportTarget(input, db);
+
+	const bytes = Buffer.from(input.data);
+	const fileLabel = input.fileName.trim() || "This file";
+	if (bytes.length === 0 || bytes.subarray(0, 5).toString("latin1") !== "%PDF-") {
+		throw new Error(`"${fileLabel}" is not a PDF. Drop a file that starts with a PDF header.`);
+	}
+	if (bytes.length > MAX_IMPORT_BYTES) {
+		throw new Error(`"${fileLabel}" is larger than 50 MB. Split it or compress it first.`);
+	}
+
+	const title =
+		input.title?.trim() || input.fileName.replace(/\.pdf$/i, "").trim() || "Document";
+	assertTitleFree(client.id, client.name, title, db);
+
+	const destination = join(importStorageDir(), fileNameFor(title, "-import"));
+	writeFileSync(destination, bytes);
+
+	return insertImported(client, title, destination, input, db);
+}
+
+/**
+ * The bytes of a document's PDF, for the placement page. Resolved from the id,
+ * so the renderer never names a file.
+ */
+export async function readPdfBytes(id: string, db: Db = getDb()): Promise<Uint8Array> {
+	const record = await get(id, db);
+	if (!record) throw new Error("That document no longer exists.");
+	if (!record.pdfPath || !existsSync(record.pdfPath)) {
+		throw new Error("This document has no PDF yet. Create one first.");
+	}
+	return new Uint8Array(readFileSync(record.pdfPath));
 }
 
 /**

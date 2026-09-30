@@ -338,6 +338,8 @@ const api: JunoApi = {
 		generate: (input) => call("documents.generate", input),
 		import: (input) => call("documents.import", input),
 		chooseImport: (clientId) => call("documents.chooseImport", clientId),
+		importBytes: (input) => call("documents.importBytes", input),
+		readPdf: (id) => call("documents.readPdf", id),
 		setStatus: (id, statusId) => call("documents.setStatus", id, statusId),
 		remove: (id) => call("documents.remove", id),
 		restore: (id) => call("documents.restore", id),
@@ -347,6 +349,12 @@ const api: JunoApi = {
 		signatures: (documentId) => call("documents.signatures", documentId),
 		openPdf: (id) => call("documents.openPdf", id),
 		revealPdf: (id) => call("documents.revealPdf", id),
+	},
+
+	signingCertificate: {
+		get: () => call("signingCertificate.get"),
+		choose: (passphrase) => call("signingCertificate.choose", passphrase),
+		remove: () => call("signingCertificate.remove"),
 	},
 
 	reminders: {

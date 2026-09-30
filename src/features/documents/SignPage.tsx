@@ -342,11 +342,7 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 								signature under eIDAS.
 							</p>
 						</div>
-					) : (
-						<p className="border-l-2 border-[var(--warn)] pl-3 text-[length:var(--text-sm)] text-[var(--warn)]">
-							A stamp alone is not an official signature.
-						</p>
-					)}
+					) : null}
 
 				</aside>
 			</div>

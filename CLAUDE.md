@@ -125,12 +125,16 @@ Juno and may never unlock it. Details in
 
 ## Seeded reference data
 
-Document types, statuses, labels, reminder presets and email templates ship
-seeded, stay editable, and are **never hard-deleted** (decision 16). Removing one
-sets `hidden_at`, because rows already point at it. Those rows carry `is_system`,
+Document types, statuses, labels and reminder presets ship seeded, stay
+editable, and are **never hard-deleted** (decision 16). Removing one sets
+`hidden_at`, because rows already point at it. Those rows carry `is_system`,
 `hidden_at`, `sort_order`, `seed_key` and `customised_at` on top of the five
 mandatory columns. Reset is per set and global; an upgrade never overwrites an
-edited row and never resurrects a hidden one.
+edited row and never resurrects a hidden one. Mail templates and document
+templates are no longer seeded: an install that has the old ones (four mail
+templates, five document templates) keeps them as they are, and a first install
+gets one example of each that is an ordinary template. No code may look either
+kind of template up by key.
 [.claude/rules/data.md](.claude/rules/data.md).
 
 ## Windows

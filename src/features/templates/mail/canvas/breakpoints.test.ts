@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { MailContainer, MailLayout } from "@shared/types";
+import type { MailBlock, MailContainer, MailLayout } from "@shared/types";
 import { addBreakpoint, absorb, copyOverrides, layoutAt, removeBreakpoint, renameBreakpoint, resizeBreakpoint } from "./breakpoints";
-import { addBlock, emptyLayout, newBlock, updateBlock, updateSection } from "./canvas-actions";
+import {
+	emptyLayout,
+	findCell,
+	insertNode,
+	newBlock,
+	newColumns,
+	updateBlock,
+	updateCell,
+	updateColumns,
+	updateSection,
+} from "./canvas-actions";
 
-/** Every top-level child in these tests is a section: the only shape this phase builds. */
+/** Every top-level child in these tests is a section, which is how a new canvas starts. */
 function asSection(node: { id: string }): MailContainer {
 	return node as MailContainer;
 }
@@ -12,7 +22,7 @@ function withText(): { layout: MailLayout; sectionId: string; blockId: string } 
 	const layout = emptyLayout();
 	const sectionId = layout.children[0]!.id;
 	const block = newBlock("text");
-	return { layout: addBlock(layout, sectionId, block), sectionId, blockId: block.id };
+	return { layout: insertNode(layout, sectionId, block, null), sectionId, blockId: block.id };
 }
 
 function fontSize(layout: MailLayout, blockId: string): number | null {
@@ -35,12 +45,12 @@ describe("breakpoints on the canvas", () => {
 	});
 
 	it("keeps a change made at a breakpoint to that breakpoint", () => {
-		const { layout, sectionId, blockId } = withText();
+		const { layout, blockId } = withText();
 		const added = addBreakpoint(layout)!;
 		const drawn = layoutAt(added.layout, added.id);
 		const firstBlock = asSection(drawn.children[0]!).children[0];
 		if (firstBlock?.kind !== "text") throw new Error("not text");
-		const edited = updateBlock(drawn, sectionId, blockId, {
+		const edited = updateBlock(drawn, blockId, {
 			text: { ...firstBlock.text, fontSize: 13 },
 		});
 		const next = absorb(added.layout, added.id, edited);
@@ -49,10 +59,28 @@ describe("breakpoints on the canvas", () => {
 		expect(fontSize(layoutAt(next, added.id), blockId)).toBe(13);
 	});
 
-	it("sends what a block says to the default, because the words are the same at every width", () => {
+	it("keeps a margin and a padding set at a breakpoint to that breakpoint", () => {
 		const { layout, sectionId, blockId } = withText();
 		const added = addBreakpoint(layout)!;
-		const edited = updateBlock(layoutAt(added.layout, added.id), sectionId, blockId, { html: "Hallo" } as never);
+		const drawn = layoutAt(added.layout, added.id);
+		const block = asSection(drawn.children[0]!).children[0];
+		if (block?.kind !== "text") throw new Error("not text");
+		let edited = updateBlock(drawn, blockId, { box: { ...block.box, margin: { top: 12, right: 0, bottom: 0, left: 0 } } });
+		const section = asSection(edited.children[0]!);
+		edited = updateSection(edited, sectionId, { box: { ...section.box, padding: { top: 4, right: 4, bottom: 4, left: 4 } } });
+		const next = absorb(added.layout, added.id, edited);
+		expect(next.breakpoints[0]?.blocks[blockId]).toEqual({ box: { margin: { top: 12, right: 0, bottom: 0, left: 0 } } });
+		expect(next.breakpoints[0]?.sections[sectionId]).toEqual({ box: { padding: { top: 4, right: 4, bottom: 4, left: 4 } } });
+		const stored = asSection(next.children[0]!).children[0];
+		expect(stored?.kind === "text" ? stored.box.margin.top : null).toBe(0);
+		const phone = asSection(layoutAt(next, added.id).children[0]!).children[0];
+		expect(phone?.kind === "text" ? phone.box.margin.top : null).toBe(12);
+	});
+
+	it("sends what a block says to the default, because the words are the same at every width", () => {
+		const { layout, blockId } = withText();
+		const added = addBreakpoint(layout)!;
+		const edited = updateBlock(layoutAt(added.layout, added.id), blockId, { html: "Hallo" } as never);
 		const next = absorb(added.layout, added.id, edited);
 		const block = asSection(next.children[0]!).children[0]!;
 		expect(block.kind === "text" ? block.html : null).toBe("Hallo");
@@ -60,14 +88,14 @@ describe("breakpoints on the canvas", () => {
 	});
 
 	it("lets a narrower breakpoint put back what a wider one changed", () => {
-		const { layout, sectionId, blockId } = withText();
+		const { layout, blockId } = withText();
 		const phone = addBreakpoint(layout)!;
 		const small = addBreakpoint(phone.layout)!;
 		const at = (current: MailLayout, id: string, size: number | null) => {
 			const drawn = layoutAt(current, id);
 			const block = asSection(drawn.children[0]!).children[0]!;
 			if (block.kind !== "text") throw new Error("not text");
-			return absorb(current, id, updateBlock(drawn, sectionId, blockId, { text: { ...block.text, fontSize: size } }));
+			return absorb(current, id, updateBlock(drawn, blockId, { text: { ...block.text, fontSize: size } }));
 		};
 		const narrowed = at(small.layout, phone.id, 13);
 		expect(fontSize(layoutAt(narrowed, small.id), blockId)).toBe(13);
@@ -93,6 +121,40 @@ describe("breakpoints on the canvas", () => {
 		const next = absorb(added.layout, added.id, updateSection(layoutAt(added.layout, added.id), sectionId, { hidden: true }));
 		expect(next.children[0]?.hidden).toBe(false);
 		expect(next.breakpoints[0]?.sections[sectionId]).toEqual({ hidden: true });
+	});
+
+	it("hides a columns table and styles one of its cells at one breakpoint only", () => {
+		const base = emptyLayout();
+		const columns = newColumns(base);
+		const layout = insertNode(base, null, columns, null);
+		const cell = columns.rows[0]!.cells[0]!;
+		const added = addBreakpoint(layout)!;
+		const drawn = layoutAt(added.layout, added.id);
+		const hiddenTable = absorb(added.layout, added.id, updateColumns(drawn, columns.id, { hidden: true }));
+		expect(hiddenTable.children[1]?.hidden).toBe(false);
+		expect(hiddenTable.breakpoints[0]?.sections[columns.id]).toEqual({ hidden: true });
+
+		const padded = absorb(
+			added.layout,
+			added.id,
+			updateCell(drawn, cell.id, { box: { ...findCell(drawn, cell.id)!.box, padding: { top: 4, right: 4, bottom: 4, left: 4 } } }),
+		);
+		expect(padded.breakpoints[0]?.sections[cell.id]).toEqual({ box: { padding: { top: 4, right: 4, bottom: 4, left: 4 } } });
+		expect(findCell(padded, cell.id)?.box.padding.top).toBe(0);
+		expect(findCell(layoutAt(padded, added.id), cell.id)?.box.padding.top).toBe(4);
+	});
+
+	it("hides a block inside a cell at one breakpoint only", () => {
+		const base = emptyLayout();
+		const columns = newColumns(base);
+		const layout = insertNode(base, null, columns, null);
+		const inner = columns.rows[0]!.cells[1]!.children[0]!;
+		const added = addBreakpoint(layout)!;
+		const drawn = layoutAt(added.layout, added.id);
+		const next = absorb(added.layout, added.id, updateBlock(drawn, inner.id, { hidden: true } as Partial<MailBlock>));
+		expect(next.breakpoints[0]?.blocks[inner.id]).toEqual({ hidden: true });
+		const table = next.children[1];
+		expect(table?.kind === "columns" ? table.rows[0]?.cells[1]?.children[0]?.hidden : null).toBe(false);
 	});
 
 	it("renames, resizes and removes a breakpoint", () => {

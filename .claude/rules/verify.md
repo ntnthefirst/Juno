@@ -22,7 +22,7 @@ Run from the repo root. The project uses npm.
 | `npm run build:win` / `build:mac` / `build:linux` | The same for one named platform | CI. Each runner builds the platform it is |
 | `npm run icons` | Redraws `build/icon.png` and the NSIS installer artwork from `brand/logo/` | After a brand change |
 | `npm run db:generate` | Drizzle turns a schema change into a migration file | After editing anything under `electron/main/db/schema/` |
-| `npm run db:migrate` | Applies pending migrations forward | After generating one, and on a copy of the real database before the real one |
+| `npm run db:migrate -- --db <path>` | Builds the main process, then applies pending migrations forward to that one file under Electron's own SQLite, and lists what it applied. Refuses the installed and development databases unless `--yes-this-is-the-real-one` is added | After generating one, and on a copy of the real database before the real one |
 
 Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
 screen and the settings window, and write a screenshot of each in both themes

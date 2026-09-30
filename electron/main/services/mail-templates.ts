@@ -3,8 +3,10 @@
  * same context the document templates use, so a client's name is spelled the
  * same way in the mail as in the contract it carries.
  *
- * Seeded reference data, decision 16: shipped rows are updated by an upgrade
- * only while unedited, and a removed one is soft-deleted rather than purged.
+ * Rows that shipped in an earlier version are seeded reference data, decision
+ * 16: a removed one is hidden rather than purged. Nothing ships any more except
+ * one example on a first install, and that one is the owner's from the start
+ * (see ensureMailTemplatesSeeded).
  */
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { primaryOwnerEmail, primaryOwnerPhone } from "../../shared/owner";
@@ -28,27 +30,18 @@ import { canvasShell, htmlToText, mailShell } from "./mail-html";
 import {
 	breakpointCss,
 	compileLayout,
-	convertBlockToCode,
-	findChildren,
+	convertNodeToCode,
+	findParent,
 	fontLinks,
 	layoutFromHtml,
 	normaliseLayout,
 	parseLayout,
 	serialiseLayout,
 } from "./mail-layout";
-import { MAIL_TEMPLATES, MAIL_TEMPLATE_SEED_VERSION } from "./mail-templates-seed";
+import { exampleTemplate, MAIL_TEMPLATE_SEED_VERSION } from "./mail-templates-seed";
 import * as settings from "./settings";
 import { placeholdersIn, render, unescapeHtml } from "./template-render";
 import { parseInputs, serialiseInputs, validateInputs } from "./template-inputs";
-
-export interface SeedMailTemplate {
-	key: string;
-	name: string;
-	description: string;
-	register: MailRegister;
-	subject: string;
-	bodyHtml: string;
-}
 
 type Row = typeof mailTemplates.$inferSelect;
 
@@ -383,8 +376,9 @@ export async function parseBody(html: string): Promise<MailLayout> {
 }
 
 /**
- * One block of a canvas in hand turned into the HTML and CSS it compiles to,
- * which is what "Convert to HTML" does in the editor.
+ * One node of a canvas in hand turned into the HTML and CSS it compiles to,
+ * which is what "Convert to HTML" does in the editor: a block as itself, a
+ * container or a columns table with everything in it as one code block.
  *
  * A pure read like `parseBody`: it answers with the changed canvas and stores
  * nothing, so the conversion is part of the draft and is saved, or not, with
@@ -394,11 +388,11 @@ export async function parseBody(html: string): Promise<MailLayout> {
 export async function convertBlock(input: MailBlockConversion): Promise<MailLayout> {
 	const layout = normaliseLayout(input.layout);
 	if (!layout) throw new Error("That layout could not be read. Nothing was converted.");
-	const siblings = findChildren(layout.children, input.sectionId);
-	if (!siblings?.some((node) => node.id === input.blockId)) {
-		throw new Error("That block is not on the canvas any more. Select it again and convert it.");
+	const siblings = findParent(layout.children, input.parentId);
+	if (!siblings?.children.some((node) => node.id === input.nodeId)) {
+		throw new Error("That element is not on the canvas any more. Select it again and convert it.");
 	}
-	return convertBlockToCode(layout, input.sectionId, input.blockId, input.inputs ?? []);
+	return convertNodeToCode(layout, input.parentId, input.nodeId, input.inputs ?? []);
 }
 
 export async function previewDraft(draft: MailTemplateDraft, db: Db = getDb()): Promise<MailTemplateRender> {
@@ -426,52 +420,39 @@ export async function previewDraft(draft: MailTemplateDraft, db: Db = getDb()): 
 	};
 }
 
+/**
+ * Puts the example on a first install, and does nothing else, ever.
+ *
+ * Four templates used to be seeded here by key. They are not any more: an
+ * install that has them keeps them exactly as they are, because this function
+ * neither adds, updates, hides nor removes a row that exists. What it does is
+ * decide whether this is a first install, which takes two answers to agree:
+ * the settings say the set was never seeded, and the table has no row in it at
+ * all, deleted and hidden ones included. An upgrade fails the second, and an
+ * owner who deleted the example fails both once the version is written, so it
+ * is never brought back.
+ *
+ * The example is written by `create`, like anything a person makes: it is not
+ * a system row, so a reset does not touch it and hiding it is deleting it.
+ * The source is a parameter so a test can apply a later version.
+ */
 export async function ensureMailTemplatesSeeded(
 	db: Db = getDb(),
-	source: { version: number; templates: SeedMailTemplate[] } = {
+	source: { version: number; example: () => MailTemplateInput } = {
 		version: MAIL_TEMPLATE_SEED_VERSION,
-		templates: MAIL_TEMPLATES,
+		example: exampleTemplate,
 	},
 ): Promise<{ created: number; updated: number }> {
+	const applied = await settings.getMailTemplateSeedVersion();
+	if (applied >= source.version) return { created: 0, updated: 0 };
+
 	let created = 0;
-	let updated = 0;
+	const empty = db.select({ id: mailTemplates.id }).from(mailTemplates).limit(1).get() === undefined;
+	if (applied === 0 && empty) {
+		await create(source.example(), db);
+		created = 1;
+	}
 
-	source.templates.forEach((seed, index) => {
-		const existing = db.select().from(mailTemplates).where(eq(mailTemplates.seedKey, seed.key)).get();
-		if (!existing) {
-			db.insert(mailTemplates)
-				.values({
-					seedKey: seed.key,
-					key: seed.key,
-					name: seed.name,
-					description: seed.description,
-					register: seed.register,
-					subject: seed.subject,
-					bodyHtml: seed.bodyHtml,
-					isSystem: true,
-					sortOrder: index,
-				})
-				.run();
-			created++;
-			return;
-		}
-		// An edited, hidden or removed row is the owner's. Leave it alone.
-		if (existing.customisedAt !== null || existing.hiddenAt !== null || existing.deletedAt !== null) return;
-		if (existing.bodyHtml === seed.bodyHtml && existing.subject === seed.subject && existing.name === seed.name) return;
-		db.update(mailTemplates)
-			.set({
-				name: seed.name,
-				description: seed.description,
-				register: seed.register,
-				subject: seed.subject,
-				bodyHtml: seed.bodyHtml,
-				sortOrder: index,
-				updatedAt: now(),
-			})
-			.where(eq(mailTemplates.id, existing.id))
-			.run();
-		updated++;
-	});
-
-	return { created, updated };
+	await settings.setMailTemplateSeedVersion(source.version);
+	return { created, updated: 0 };
 }

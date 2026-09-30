@@ -18,9 +18,9 @@ const userData = mkdtempSync(join(tmpdir(), "juno-smoke-"));
 // walkthrough after it, both template editors, every settings tab and both
 // sides of the MCP switch, and it starts the bridge as a real child process.
 // Each capture also waits for a composited frame first, which is what stops
-// the screenshots being one step stale. Four minutes is the headroom that
+// the screenshots being one step stale. Five minutes is the headroom that
 // leaves; a run that takes longer than this is stuck rather than slow.
-const TIMEOUT_MS = 240_000;
+const TIMEOUT_MS = 300_000;
 
 const child = spawn(
 	electron,

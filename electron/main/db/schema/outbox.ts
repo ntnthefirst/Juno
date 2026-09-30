@@ -6,14 +6,19 @@ import { mailAccounts, mailMessages, mailThreads } from "./mail";
 
 /**
  * A mail template: a Dutch subject and body with placeholders, filled from the
- * same context the document templates use. Seeded reference data, decision 16.
+ * same context the document templates use. Rows that shipped in an earlier
+ * version are seeded reference data (decision 16); a new install gets one
+ * example that is not a system row, and no code looks a template up by key.
  */
 export const mailTemplates = sqliteTable(
 	"mail_templates",
 	{
 		...standardColumns,
 		...seededColumns,
-		/** Stable machine key: contract_cover, project_kickoff, invoice_due, hosting_renewal. */
+		/**
+		 * A machine name derived from the name, or set by whoever writes the row.
+		 * Not a way to find a template: an install may not have the one you want.
+		 */
 		key: text("key").notNull(),
 		name: text("name").notNull(),
 		description: text("description"),

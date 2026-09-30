@@ -45,14 +45,19 @@ function GradientStops({ fill, active, onActive }: GradientStopsProps) {
 	);
 }
 
-type PaintRowProps = { fill: MailFill; onFill: (fill: MailFill) => void };
+type PaintRowProps = {
+	fill: MailFill;
+	onFill: (fill: MailFill) => void;
+	/** What the colour row is called, for a screen reader and as the picker's title. */
+	label?: string;
+};
 
 /**
  * The fill as a row: a colour shows its hex and its opacity, a gradient its
  * name and one opacity for the whole of it. The picker switches between the
  * two and edits whichever stop is chosen.
  */
-function PaintRow({ fill, onFill }: PaintRowProps) {
+export function PaintRow({ fill, onFill, label = "Fill" }: PaintRowProps) {
 	const [stop, setStop] = useState<"from" | "to">("from");
 	const first = fill.kind === "solid" ? fill.color : fill.from;
 
@@ -96,11 +101,11 @@ function PaintRow({ fill, onFill }: PaintRowProps) {
 	);
 
 	if (fill.kind === "solid") {
-		return <ColorRow label="Fill" value={fill.color} onChange={(color) => onFill({ ...fill, color })} picker={picker} />;
+		return <ColorRow label={label} value={fill.color} onChange={(color) => onFill({ ...fill, color })} picker={picker} />;
 	}
 	return (
 		<ColorRow
-			label="Fill"
+			label={label}
 			value={fill.from}
 			onChange={(from) => onFill({ ...fill, from })}
 			paint={{

@@ -47,45 +47,186 @@ with `FormPage`'s header, because a bar over a canvas is room the canvas needs.
 | --- | --- |
 | **Left** | The name, the description and the subject, each edited where it is written rather than in a box; the subject wraps and Enter leaves it. The layers, which are also where order is changed. Autosave and Save at the foot. It folds away to a bar over the canvas with the name in it |
 | **Middle** | The sheet, drawn at the width of the breakpoint being edited, with its name and size over it, on a surface that scrolls and pans (space or the middle button) and zooms (Ctrl and the wheel, the buttons, or the keys below). It opens zoomed to fit, and a click on the empty surface round it lets go of what is selected. Below it, a handle that makes the sheet taller and never shorter than its content |
-| **Bottom** | A toolbar floating over the canvas, the way Figma's does. On the left, everything that can go in a message, as glyphs with their names and keys in the tooltips; a new block lands straight after the selected one, at the end of the selected section, or in the last section showing. On the right, in a group of their own, the four views: the canvas, the message as it will be sent, the HTML, and what the template asks for. At the end, the list of keyboard shortcuts |
-| **Right** | The design panel, in Figma's order, for the frame, a section or a block: breakpoints, position, layout, appearance, typography, fill, stroke, effects. Its choices are icons with the words in the tooltips, its colours are Figma's rows with a picker behind the swatch, and its controls are Figma's size, 28 pixels |
+| **Bottom** | A toolbar floating over the canvas, the way Figma's does. On the left, the five groups of everything that can go in a message (Containers, Text, Columns, Media, Other), as glyphs with their names and keys in the tooltips. A group is a button that adds the element it added last, with a chevron beside it that opens the group's menu ("The toolbar's groups" below). A new element lands inside the selected container or cell, or straight after the selected element; with nothing selected, a container or columns table goes at the end of the frame and anything else at the end of the last container showing. On the right, in a group of their own, the four views: the canvas, the message as it will be sent, the HTML, and what the template asks for. At the end, the list of keyboard shortcuts |
+| **Right** | The design panel, in Figma's order, for the frame, a container, a columns table, a cell or a block: breakpoints, position, layout, spacing, appearance, typography, fill, stroke, effects, actions. Its choices are icons with the words in the tooltips, its colours are Figma's rows with a picker behind the swatch, and its controls are Figma's size, 28 pixels |
+
+### The toolbar's groups
+
+What is added is that HTML element, so the layers and the code view name it for
+what it is, and its tag is changed afterwards in the design panel, within its
+group, the way a heading's level is changed.
+
+| Group | Elements | Written as |
+| --- | --- | --- |
+| **Containers** | Section, div, header, footer, main, article, aside, nav | The tag itself, laying out what is in it the way a section does. Each holds blocks and other containers |
+| **Text** | Heading 1 to 6, text (`p`), quote (`blockquote`), preformatted (`pre`), address, inline text (`span`), bulleted list (`ul`), numbered list (`ol`), button | The tag itself. Bold, italic, underline and links stay inside the text, on the format bar. A list's words are its `li` items, one line each. A button is a text with a fill, a radius, padding and an empty on-click link, styled like the button block it replaces ("Actions" below) |
+| **Columns** | A table laid out for mail | `table role="presentation"`, rows and cells, below |
+| **Media** | Picture (`img`), linked picture (`img` inside an `a`) | A linked picture is a picture with an on-click link, and one whose link has no usable address is a plain picture. Video, audio and embeds are not offered: they play in no client that matters, so the menu says so instead, and a video is a picture that links to where it plays |
+| **Other** | Divider (`hr`), input (a declared input) | As they always were |
+
+**The keys.** One scheme, from one table (`canvas/elements.ts`) that the
+toolbar, its menus, the shortcut table and the list of shortcuts all read:
+
+- A group's own letter adds the element it added last, which is remembered per
+  machine in local storage like the autosave switch: **F** containers, **T**
+  text, **C** columns, **I** media, **E** other.
+- **Shift with the group's letter** opens its menu, and the focus goes into it.
+  In an open menu an element's own key adds it, with Shift still held or not;
+  the arrows walk the rows, Enter presses the focused one and Escape closes it.
+  Containers: **S** section, **D** div, **H** header, **F** footer, **M** main,
+  **A** article, **I** aside, **N** nav. Text: **1** to **6** for the heading
+  levels, **P** text, **Q** quote, **R** preformatted, **A** address, **S**
+  inline text, **U** bulleted list, **O** numbered list, **B** button. Columns:
+  **C**. Media: **I** picture, **L** linked picture. Other: **D** divider, **I**
+  input.
+- **H** adds a heading 2, as it always has. **B** used to add a button block on
+  its own; the button is an element of the Text menu now, so a bare **B** adds
+  nothing.
+
+Each element's key is in its menu row and in the list of shortcuts. A test
+holds that every element has a key, that no key is used twice in a group, and
+that no key means two things: a bare letter adds, Shift with one opens a menu,
+Alt aligns and Ctrl with Alt aligns text, and none of those overlap. As
+everywhere in this editor, a letter typed into a text belongs to the text.
+
+**A section is written as `<section>`** in the sent HTML, with `display:block`
+on it because some older clients style unknown block elements oddly. That
+includes every section in a version 1 layout, which compiled to a `div` before
+version 2. A `div` added from the Containers group stays a `div`. Every other
+container is written as its own tag. The compiler writes `display:block` first
+on every container that is not a `div`, ahead of the layout's own
+`display:flex` or `display:grid`: a client that knows the element but not
+flexbox keeps the block, and one that knows neither still gets a block rather
+than an inline box.
+
+**Columns** are a table because a table is the one layout Outlook on Windows
+keeps side by side. A table has rows and a row has cells. A cell has a width,
+a percentage of the table or empty to share what is left, a vertical
+alignment and a box of its own, and holds blocks, containers and other tables
+the way a container does. The gap is written as padding on the inner sides of
+the cells, because `border-spacing` is unreliable in mail. A new table is one
+row of two cells at half each, each holding a text, so there is something to
+type into. Rows and cells are added and taken away in the design panel, and a
+row of even widths stays even.
 
 ### The model
 
-The model is sections holding blocks:
+The model is a tree (`MailNode` in `electron/shared/types.ts`, version 2). A
+container holds an ordered list of children, each one a container, a columns
+table or a leaf block, so a section can hold another section, and any of them
+can hold a columns table. A columns table holds rows of cells, and a cell
+holds children the same way a container does. Ids stay stable through all of
+this, which is what lets breakpoints and drags address a node at any depth.
 
 | | |
 | --- | --- |
-| **Frame** | The whole message. It **fills** the reader's mail client, or is **fixed**: never wider than its width and in the middle of a wider client. The width is also what the default is drawn at, 600 until somebody changes it. Its height is the sheet the author draws on, and content past it just makes the message longer |
-| **Section** | A row down the frame that arranges what is in it with **flexbox** or **grid**: flow (down, across or a grid), distribution, alignment, gap, wrap, column count. One narrower than the frame sits at its start, in its middle or at its end, by its margins. An empty one with a height and a fill, or a stroke on one side, is a divider or a gap |
-| **Block** | Text, sent as a paragraph; heading, button, image, a declared input placed as a block, and code. There is no divider or spacer to add, because a section is both; the ones older templates have still load and still send |
-| **Sizing** | Figma's three, for the width and the height each: **fixed**, **hug** and **fill**. A fixed width is compiled with `max-width:100%` so it still gives way on a phone, and a fixed height is a least height the content can grow past. Clip content |
-| **Alignment** | Where a block sits across its section, start, middle or end, overriding the section's own alignment. It moves a block across the flow and nowhere else. Stretching is not an alignment: it is a fill |
-| **Hidden** | Figma's eye. A hidden block or section stays in the layers and is left out of the message |
+| **Frame** | The whole message. It **fills** the reader's mail client, or is **fixed**: never wider than its width and in the middle of a wider client. The width is also what the default is drawn at, 600 until somebody changes it. Its height is the sheet the author draws on, and content past it just makes the message longer. Any node may sit at its own top level |
+| **Container** | What every section has always been, generalised to nest and to be any of eight tags: it arranges what is in it with **flexbox** or **grid**, flow (down, across or a grid), distribution, alignment, gap, wrap, column count. One narrower than its parent sits at its start, in its middle or at its end, by margins in the frame or a table cell and by `grow`/`alignSelf` when it is nested inside another container's flex or grid, the way a block sits in a section. An empty one with a height and a fill, or a stroke on one side, is a divider or a gap. A version 1 section loads as a container tagged `section` |
+| **Columns** | A table laid out for mail, the one layout that stays side by side in Outlook on Windows ("The Outlook problem" below). Its cells hold children the way a container does; a cell has no eye of its own, because it is fixed in place by its row rather than something that is added or removed |
+| **Block** | Text, sent as the tag it has (a paragraph, a quote, a list and so on); heading, h1 to h6; image; a declared input placed as a block; the divider (`hr`); and code. A button is a text with an on-click action; the button blocks older templates have still load, compile and edit, and are simply not offered. There is no spacer to add, because a container is one; the ones older templates have still load and still send |
+| **Sizing** | Figma's three, for the width and the height each: **fixed**, **hug** and **fill**. A fixed width is compiled with `max-width:100%` so it still gives way on a phone, and a fixed height is a least height the content can grow past. Clip content. `sizing.ts` only ever looks at the one container a block actually sits in, never at where that container itself sits, so a block nested three levels deep resizes exactly the way a top-level one does |
+| **Alignment** | Where a block sits across its own parent, start, middle or end, overriding that parent's own alignment. It moves a block across the flow and nowhere else. Stretching is not an alignment: it is a fill |
+| **Hidden** | Figma's eye. A hidden container, columns table or block stays in the layers and is left out of the message |
+| **Actions** | What a click or a hover does, on any node including a cell: `actions`, empty by default, and a saved layout without it reads as empty ("Actions" below) |
 
 **Nothing is positioned.** There is no `position`, no coordinate, no rotation
-and no drag to a point on the frame. A block is placed by the rules of the
-section holding it or it is not placed at all. Order is changed by dragging, on
-the canvas or in the layers, where a section can be dragged too, and Alt with an
-arrow moves the focused layer one place. Custom CSS is allowed per block,
-per section and per canvas, and `sanitiseDeclarations` strips the positioning
-properties and `transform` out of it, because the escape hatch must not
-reintroduce what the model refuses.
+and no drag to a point on the frame. A node is placed by the rules of the
+parent holding it or it is not placed at all. Order is changed by dragging, on
+the canvas or in the layers: into a container or a cell, in front of a sibling,
+or out of one into its own parent, and Alt with an arrow moves the focused
+layer one place within its parent. Custom CSS is allowed per block, per
+container, per columns table and per canvas, and `sanitiseDeclarations` strips
+the positioning properties and `transform` out of it, because the escape hatch
+must not reintroduce what the model refuses. A move that would nest a
+container into itself, into its own descendant, or past the parser's own
+depth limit is refused outright (`canMoveInto` in `canvas/canvas-actions.ts`),
+the same way the parser refuses to read a layout that deep.
+
+**Selecting and entering.** A click selects whatever element is directly under
+the pointer, at whatever depth that is: every node's own handler stops the
+click before it reaches an ancestor's, so a block nested inside two containers
+is selected in one click, never its parent first. A double click on a
+container, a columns table or a cell that is already selected steps into it
+and selects its first child, the way Figma's frame does when there is nothing
+exposed to click directly; a double click on a text block or a heading opens
+it for typing, as it always has.
+
+**What the design panel gives each kind**, the same at any depth:
+
+| | |
+| --- | --- |
+| **Container** | Its element (the tag), position (where it sits and its size), layout (flow, alignment, gap, wrap, columns of a grid, clip), spacing (padding and margin), appearance (the eye, radius, opacity), fill, stroke, effects, actions, breakpoints, and conversion to HTML. Inside a flex or grid parent its position is that parent's cross axis and its share of the room is a block's, worked out by `sizing.ts`; in the frame or a table cell, which lay things out in plain flow, it is margins, and there is nowhere to move until it is narrower than what holds it |
+| **Columns** | Its name, position and width, layout (the gap), spacing, appearance with the eye, fill, stroke, effects, actions, then its rows and the cells in each (add and remove), and conversion to HTML |
+| **Cell** | Position (its width, a percentage or empty), layout (vertical alignment and clip), padding, radius and opacity, fill, stroke, effects and actions. No eye of its own, no margin (a `td` ignores one) and nothing to drag, because its row fixes it in the table. Removing it is in its header |
+| **Block** | As before, and for a text or heading its element (any tag of the Text group), and actions for every kind, a code block included. In the frame or a cell a block is sized fixed or filling (a picture or a button fixes or hugs instead), with no share of the room and no alignment but a picture's. A text, heading, button or input has a Layout of its own: how its words sit (see below). No block has Clip content |
+
+What something is written as and what a table holds are the same at every
+width: a tag, a row, a cell, a cell's width and alignment, and the gap change
+the stored canvas whichever breakpoint is being looked at, and only how
+something looks goes to the breakpoint. Between a text and a heading the
+element changes kind: a text made a heading keeps its words as plain text, a
+heading made a text gets them back escaped, and between a list and a text the
+items become lines and back.
 
 `bodyHtml` is compiled from the layout on every save, so the renderer, the
 placeholder substitution and the outbox below them never learn that a canvas
 exists. The layout is the source; the HTML is output. They cannot disagree,
 because one write produces both.
 
-The panel's order is Figma's. **Position** is the alignment row, the three
-across and the three down, with the ones that do not apply in the section
-greyed out as Figma greys them in an auto layout; there is no X or Y because
-nothing is placed at a point. **Layout** is W and H, each with fixed, hug or
-fill in the field beside the number, then the corner radius, one or four, the
-padding, as two numbers or four, and clip content. **Appearance** is whether it
-shows and its opacity. Then **Typography** for anything with words,
-what a button links to or a picture shows, and **Fill**, **Stroke** and
-**Effects** as rows, each with its eye and its minus.
+The panel's order is Figma's, and it is the same for every kind of element. A
+section an element has nothing for is left out, never shown empty.
+
+| Section | Holds |
+| --- | --- |
+| **Position** | Where the element sits in its parent, and how big it is. The alignment row, the three across and the three down, with the ones that do not apply in the parent greyed out as Figma greys them in an auto layout; there is no X or Y because nothing is placed at a point. Then W and H, each with fixed, hug or fill in the field beside the number: sitting and sizing in the parent are one question |
+| **Layout** | Only how the element arranges what is in it. For a container: the flow (down, across or a grid), Figma's 3 by 3 alignment box, the gap with its Auto, wrap for a row or a column and the column count for a grid, and Clip content. For a columns table: the gap between cells. For a cell: its vertical alignment and Clip content. For a text, heading, button or input, which lay out words rather than children: the horizontal alignment (left, centre, right, justify) and, for a text or a heading that is not a list, the vertical one |
+| **Spacing** | Padding, then margin. Each is across and down as two numbers, or each side on its own behind the button beside them. A cell has padding only |
+| **Appearance** | The eye, then the corner radius and the opacity on one row, with the button that gives each corner a radius of its own |
+| **Typography** | For anything with words: family, weight, size, line height, letter spacing, italic, underline, strikethrough, case and the colour |
+| **Fill**, **Stroke**, **Effects** | As rows, each with its eye and its minus |
+| **Actions** | Rows like the effects: a trigger, what it does, the eye and the minus ("Actions" below) |
+| The kind's own | What a button block links to, what a picture shows, which input an input is, a columns table's rows. Then the selection colours and the custom CSS |
+
+**The alignment box** is two questions asked with one click: where the content
+sits across the page (left, centre, right) and where down it (top, middle,
+bottom). The model asks them the way CSS does, along the flow and across it, so
+`alignment.ts` maps the box on to the fields by the way the container runs: in
+a row, left to right is `justify` and top to bottom is `align`; in a column it
+is the other way round; in a grid, across is `justify` (which writes
+`justify-items`) and down is `align`. Four values are not a place in the box
+and stay reachable:
+
+- **Stretch** is a toggle beside the box, "Stretch across" and "Stretch down".
+  A flex container can stretch across its flow, a grid both ways. A stretched
+  axis lights the line of places the other axis picks, and a click on the box
+  takes the container out of stretch, since the click chooses a place.
+- **Space between and space around** are the gap's Auto. The gap field has a
+  choice beside it, Fixed, Auto (space between) and Around (space around), the
+  way W and H have theirs. Around is Juno's own; Figma has no name for it. While
+  the gap is Auto or Around a click on the box changes only the other axis,
+  the way Figma's box does. Choosing Fixed packs the content at the start.
+
+Opening the panel never rewrites anything: the box is read from the fields and
+only a click writes.
+
+A grid used to have only `align`. It now has `justify` as well, stretch by
+default, which is what a grid without it always did and writes nothing, so a
+saved grid compiles to the same bytes. Where a grid does not stretch its items
+across their cells they are as wide as their content, so a block in it can be
+fixed or hug there and not fill.
+
+**Margin** is new in the model: `box.margin`, zero on every side, so every saved
+template reads as it did (the parser gives a missing one zeros, and no version
+bump was needed). The compiler writes it after the element's own placement, one
+side at a time and only where it is set, as `margin-top` and the others, since a
+text already carries `margin:0` and a picture `margin:0 auto`. A side the
+element's alignment already sets to `auto` keeps that: a container or columns
+table in the frame or a cell that is centred or pushed to the end, and a picture
+that is centred or pushed right. The panel shows that side as Auto and takes no
+number there. A cell takes no margin, because a `td` ignores one. Breakpoints
+override it like any other box field, `RESET` puts a side back to zero, and the
+code view reads it back. Outlook on Windows drops margins on a `div` in some
+versions, and the Spacing section says so.
 
 The model has no field called fill or hug. It has what CSS has, a block's own
 width and least height, its share of the room along the section (`grow`) and
@@ -97,7 +238,14 @@ the keyboard both:
 | --- | --- | --- | --- | --- |
 | Down | Stretched across | Not stretched | A share of the room | No share |
 | Across | A share of the room | No share | Stretched down | Not stretched |
-| Grid | The cell's width | Not offered | Stretched down | Not stretched |
+| Grid | The cell's width | Not offered, unless the grid does not stretch across its cells; then hug and not fill | Stretched down | Not stretched |
+
+A container or a columns table sizes the same way, by the parent it sits in.
+The frame and a table cell are not flex or grid boxes: they lay what is in them
+out in plain flow, one under the next, so there is no share of the room and no
+alignment to take. In them a width is fixed or fills (a picture or a button
+fixes or hugs instead), a height is a least height, and only a picture, or a
+container or table narrower than what holds it, moves across by its margins.
 
 W and H in the panel always say how big the block is drawn, measured on the
 canvas, the way Figma's do; typing a number into either makes that side fixed,
@@ -149,7 +297,14 @@ compiler, the canvas and the code view all follow. The HTML may carry an email's
 structure, headings, tables, pictures and links, and goes through
 `sanitiseMarkup`, which is stricter about what runs than it is about what is
 shown: scripts, styles, frames and forms go with what is inside them, every
-handler goes, and an address that is not https or mailto goes.
+handler goes, and an address that is not https, mailto or tel goes.
+
+It works on a container and on a columns table as well: the element and
+everything in it become one code block of the markup it compiles to, and the
+canvas draws that exactly as it drew the tree. A descendant that is hidden is
+left out, because hidden is "not in the message" and this is the message; what
+a breakpoint changed about anything under it goes with the structure it was
+keyed to, and whether the element itself shows at a breakpoint is kept.
 
 The code view is where a code block also comes from: markup it cannot place
 comes back as one, in the position it was written. A block made before blocks
@@ -189,12 +344,82 @@ through `--canvas-paper`, `--canvas-ink` and `--canvas-line`, which are fixed
 on purpose. A preview in the application's dark ink would be unreadable on it
 and would not be what the recipient opens.
 
+### Actions
+
+The button leaves the toolbar, and every element gets an **Actions** section
+after Effects: rows like the effects, each with a trigger, what it does, an eye
+and a minus. An email can do two things when somebody interacts with it, and
+this is both of them.
+
+| Trigger | What it can do | Compiles to | Where it works |
+| --- | --- | --- | --- |
+| **On click** | Open a link, start a mail, call | The element wrapped in an `<a>`, or an `<a>` itself for an inline text | Every client |
+| **On hover** | Change the fill, the text colour, the underline or the opacity | A `:hover` rule in the head, next to the breakpoints, `!important` like them | Apple Mail, iOS Mail and Outlook on the web. Not Gmail, not Outlook on Windows; the panel says so under the rows |
+
+An on-click action has a kind and a target: the address after `https://`, an
+email address, or a phone number. The compiler builds `https://...`,
+`mailto:...` or `tel:...` from it and runs the result through `safeHref`, which
+keeps those three and refuses everything else, `http`, `javascript` and `data`
+included; a phone number is digits, spaces and `+ - ( )` and nothing more, and
+is sent without its spaces. A target that makes no usable address sends the
+element without a link, the way a button with no target was sent as words. A
+hidden action compiles to nothing.
+
+- **One click per element.** The Add menu stops offering it once there is one.
+  A hover row is one change, and an element has at most one row for each kind
+  of change.
+- **A link cannot hold a link.** An element with an on-click action around it or
+  inside it cannot get one, and the panel says so in one line instead of
+  offering it. A stored layout that has both keeps the outer action; the parser
+  drops the inner one, and the compiler does the same for a layout handed to
+  it directly. A button block is a link through its own `href`, so it takes
+  hover rows and no click. A text that is a link as a whole is sent without the
+  links it holds in its own words.
+- **The link is the wrapper.** A block is wrapped in `<a href style="display:block;
+  text-decoration:none;color:inherit">`, or `display:inline-block` for a picture
+  that hugs its own width and an input that is text. An inline text (`span`)
+  is the `<a>` itself, carrying the span's markers and style. A container, a
+  columns table and a cell are wrapped the same way (a cell inside its `td`,
+  because a `td` cannot sit in an anchor). The wrapper is marked
+  `data-juno-link`, and the code view reads it back into an on-click action on
+  the element inside. It takes over the element's `flex` and `align-self`,
+  because in a flex or grid parent the wrapper is what is laid out; a
+  breakpoint that changes those on a linked element changes the element and not
+  its wrapper. Outlook on Windows makes only the text inside a link clickable,
+  not the whole box, and the row says so for anything but a picture or an
+  inline text.
+- **Hover is written once, for every width.** The rules come out of the place
+  the breakpoints do (`breakpointRules`), after their media queries, as
+  `.jb-<id>:hover{...!important}` on the class the breakpoints already give an
+  element; a fill writes `background-color` and `background-image` as the fill
+  compiler does, a solid one clearing any gradient under it. A rule can never
+  contain an angle bracket. What is converted to HTML loses its hover rows, the
+  way it loses its breakpoints; the code view gets them back from the canvas it
+  came from, by id, because the markup cannot carry them.
+- **A picture links the same way.** What used to be its `href` is an on-click
+  action now: a stored `href` is read into one, the field is gone, and the
+  linked picture in the Media group adds a picture with an empty link. The
+  canvas marks an element with an on-click action with a link glyph in the
+  layers. It draws the default look; the preview shows the hover, because it
+  renders the message as it will be sent.
+- **Actions are content.** They are the same at every width, like a tag, so
+  they change the stored canvas and never a breakpoint (decision 37).
+
+**No custom JavaScript.** Not a choice Juno gets to make: every mail client
+removes `<script>` and every `on*` handler before the reader sees the message,
+Gmail and Outlook drop the whole element, and mail with scripts in it scores as
+spam. `sanitiseMarkup` strips them for that reason, and a test holds that a
+code block's `onclick` and its `<script>` do not survive. Focus, scroll and
+timed triggers need a script, so the two triggers above are the whole of what
+an email can do. There is no script field, and a code block cannot carry one.
+
 ### Typography
 
 Figma's type panel, bar the OpenType features, which no mail client applies:
 family, nine weights from thin to black, size, line height, letter spacing,
-horizontal and vertical alignment, italic, underline, strikethrough, and case.
-An empty size or line height is the message's own, 15 and 1.65.
+italic, underline, strikethrough, and case. How the words sit in their block,
+across and down, is in Layout. An empty size or line height is the message's
+own, 15 and 1.65.
 
 Bold, italic, underline, strikethrough and links inside a text block are edited
 on the canvas: a double click opens the block in place, in its own type, with a
@@ -221,6 +446,17 @@ A family is one of three kinds:
 
 The canvas shows a Google font and not a linked one, and decision 36 says why.
 
+**A picture at a web address is treated the same way.** The window loads images
+from Juno and nowhere else (`img-src` in `windows/chrome.ts`), and that is not
+loosened for a logo, so the canvas does not try. It draws a box at the picture's
+width with its alt text and a line saying that the reader's mail client loads it
+and Juno does not (`RemoteImage.tsx`); only a `data:` or Juno's own address is
+drawn as a picture. A code block on the canvas gets the same box in place of an
+`img`, and every preview frame does too: `framed` in `canvas/framed-preview.ts`
+swaps each remote `img` in the rendered message for a box that keeps its style
+(`remote-image.ts`), the way received mail is shown without its remote images
+(security.md section 4). It changes what is shown and never what is sent.
+
 ### The keyboard
 
 Figma's keys, from one table in `canvas/shortcuts.ts` that the editor, the
@@ -231,7 +467,7 @@ what the button does with them.
 
 | | |
 | --- | --- |
-| **Add** | F section, T text, H heading, B button, I image, E input |
+| **Add** | F containers, T text, C columns, I media and E other add what the group added last; H heading, B button. Shift with F, T, C, I or E opens the group's menu, where each element has a key of its own ("The toolbar's groups") |
 | **Edit** | Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+D, Delete or Backspace, Ctrl+Shift+H to hide or show, Ctrl+S |
 | **Select** | Enter opens a text or steps into a section, Shift+Enter goes up to the section, Tab and Shift+Tab step through the layers beside it, Escape lets go |
 | **Arrange** | An arrow moves what is selected one place earlier or later; Alt with A, H, D or W, V, S aligns it across its section |
@@ -262,12 +498,15 @@ a row draws the canvas at that width, and what is changed from then on changes
 there.
 
 A breakpoint starts as a copy of the widths above it and holds only what is
-changed at it, keyed by the id of the section or block
+changed at it, keyed by the id of the container, columns table, cell or block
 (`MailBreakpoint` in electron/shared/types.ts). What changes is how something
 looks and where it sits: size, sizing, alignment, padding, fill, stroke,
-effects, type, whether it shows, a section's flow. What something says, where
-it links and what it shows are the same at every width, so an edit to the
-words made at a breakpoint goes to the default. Anything a breakpoint has not
+effects, type, whether it shows (every kind but a cell, which has no eye), a
+container's flow, a cell's box. A table's gap and a cell's width and
+alignment are structure, and the same at every width. What something says, where
+it links, what it does when it is clicked or hovered and what it shows are the
+same at every width, so an edit to the words made at a breakpoint goes to the
+default. Anything a breakpoint has not
 changed follows the default, and a narrower breakpoint starts from the wider
 ones, because that is how `max-width` media queries stack in a client.
 
@@ -326,7 +565,7 @@ to. That is the whole template; "Convert to HTML" in the design panel is one
 block.
 
 The register (u or je) is no longer offered in the editor. The column stays on
-the row, the shipped templates carry one, and nothing reads it to decide
+the row, the older templates carry one, and nothing reads it to decide
 anything.
 
 ### The code view stays editable
@@ -367,8 +606,40 @@ compiler refuses one.
 
 Only `https:` URLs. Not `http:`, because a mail client that loads one leaks the
 recipient's address and IP to anyone on the path. The same rule applies to a
-button's target and to a link typed on the canvas, and a button with no usable
-target renders as words rather than as a link that goes nowhere.
+button's target, to an on-click link and to a link typed on the canvas, which
+may also be `mailto:` or `tel:`, and an element with no usable target renders
+as words rather than as a link that goes nowhere.
+
+### What ships
+
+Nothing is seeded into the list of mail templates any more, bar one example on
+a first install. The four that used to ship (`contract_cover`,
+`project_kickoff`, `invoice_due`, `hosting_renewal`) are gone from the code. An
+install that has them keeps them as they are; a new install never gets them, and
+nothing may look a template up by key, since most installs will not have it.
+
+The example is one canvas template, in Dutch with "u", that shows one of each
+part of this editor, so opening it teaches the canvas: a header with a logo at
+a web address and a Google font on its heading, rich text with bold, italic, a
+link and a placeholder, a picture the template asks for (a declared image input
+placed as a field block), two columns across that stack at the Phone
+breakpoint, a columns table, a divider, a gradient, a drop shadow, rounded
+corners, a colour with an opacity, a text set up as a button with an on-click
+link and a hover colour, a code block, and a footer with the business details
+as placeholders. Its first paragraph says it is an example to adapt.
+
+It is written once, by `ensureMailTemplatesSeeded`, on a first install: the
+settings file has never seeded the set and the table has no row in it at all,
+deleted and hidden rows included. It goes through `create`, so it is an
+ordinary template and not a system row. Editing it stamps nothing that an
+upgrade reads, deleting it is a delete, and no upgrade or launch brings it back.
+Because a canvas is sent with nothing around it, the footer is the business
+details the house shell used to add; conditionals do not nest in the template
+syntax, so each optional line has its own.
+
+The example's picture input declares an address as its starting value, and both
+the editor's preview and the Use screen start an input from the value its
+template declares, so the picture has an address before anyone types one.
 
 ### What an agent can do
 
@@ -418,6 +689,19 @@ flow, no styles panel with forty controls. The block set above is the set.
 Content that overruns its page is shown as overrunning, with a warning saying
 which page. Silently clipping it would put a clause off the bottom of a signed
 contract, and silently reflowing it would move the signature block.
+
+### What ships
+
+Nothing is seeded into the list of document templates any more, bar one example
+on a first install. The five that used to ship (`nda`, `development_agreement`,
+`hosting_agreement`, `project_scope`, `addendum`) are gone from the code. An
+install that has them keeps them as they are; a new install never gets them.
+
+The example is one page-model template in Dutch with "u", laid out on two pages:
+headings, a list, a table, the client's address pinned to the paper, and both
+signature blocks pinned side by side at the foot of the second. It asks for
+three inputs, a textarea, a choice and a number. It is unreviewed, so a document
+made from it carries the specimen banner.
 
 ## 4. Declared inputs, and using a template
 

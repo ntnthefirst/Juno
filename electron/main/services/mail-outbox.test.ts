@@ -6,11 +6,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
-import { documents, mailFolders, mailMessages, mailThreads } from "../db/schema";
+import { documents, mailFolders, mailMessages, mailOutbox, mailThreads } from "../db/schema";
 import * as clientsService from "./clients";
 import * as contactsService from "./contacts";
 import * as accounts from "./mail-accounts";
@@ -19,12 +20,14 @@ import { htmlToText, textToHtml } from "./mail-html";
 import * as outbox from "./mail-outbox";
 import * as sender from "./mail-send";
 import * as templates from "./mail-templates";
+import * as threads from "./mail-threads";
 import {
 	configureMailTransport,
 	type OutgoingMessage,
 	type SmtpConnection,
 } from "./mail-transport";
 import { configureSettings } from "./settings";
+import type { MailOutboxMessage } from "../../shared/types";
 
 const MIGRATIONS = resolve(process.cwd(), "electron/main/db/migrations");
 
@@ -32,6 +35,24 @@ function freshDb(): Db {
 	const connection = openDatabase(":memory:");
 	runMigrations(connection, MIGRATIONS);
 	return createDrizzle(connection);
+}
+
+/**
+ * A cover mail of the test's own. No install is promised any template by key,
+ * so a test that needs one writes it, the way the owner would.
+ */
+async function coverTemplate() {
+	return templates.create(
+		{
+			name: "Contract ter ondertekening",
+			subject: "{{ document.title }} ter ondertekening",
+			bodyHtml:
+				"<p>Beste {{ client.contactName }},</p>" +
+				"<p>In bijlage vindt u {{ document.title }}.</p>" +
+				"<p>Met vriendelijke groeten,<br>{{ owner.contactName }}</p>",
+		},
+		db,
+	);
 }
 
 let db: Db;
@@ -69,7 +90,6 @@ beforeEach(async () => {
 		},
 	);
 	sender.resetForTests();
-	await templates.ensureMailTemplatesSeeded(db);
 
 	const account = await accounts.create(
 		{
@@ -212,7 +232,7 @@ describe("the gate", () => {
 
 	it("refuses to send a template gap to a client", async () => {
 		const client = await clientsService.create({ name: "obet" }, db);
-		const cover = (await templates.list(db)).find((t) => t.key === "contract_cover")!;
+		const cover = await coverTemplate();
 		// No contact and no owner profile: the greeting and the sign-off are gaps.
 		const rendered = await templates.renderTemplate({ templateId: cover.id, clientId: client.id, extras: { title: "de NDA" } }, db);
 		expect(rendered.missing).toContain("client.contactName");
@@ -276,42 +296,44 @@ describe("the gate", () => {
 	});
 });
 
-describe("replies", () => {
-	function storeOriginal(db: Db): string {
-		const threadId = db
-			.insert(mailThreads)
-			.values({ accountId, subject: "Offerte", subjectNorm: "offerte", firstMessageAt: "2026-09-01T10:00:00.000Z", lastMessageAt: "2026-09-01T10:00:00.000Z" })
-			.returning({ id: mailThreads.id })
-			.get().id;
-		const folderId = db
-			.insert(mailFolders)
-			.values({ accountId, path: "INBOX", name: "INBOX", specialUse: "inbox", syncEnabled: true })
-			.returning({ id: mailFolders.id })
-			.get().id;
-		return db
-			.insert(mailMessages)
-			.values({
-				accountId,
-				folderId,
-				threadId,
-				uid: 1,
-				messageId: "<orig@obet.be>",
-				referencesJson: JSON.stringify(["<root@obet.be>"]),
-				fromName: "Laura",
-				fromAddress: "laura@obet.be",
-				toJson: JSON.stringify([{ name: null, address: "hallo@juno.test" }, { name: "Tom", address: "tom@obet.be" }]),
-				ccJson: JSON.stringify([{ name: null, address: "cc@elders.be" }]),
-				subject: "Offerte",
-				snippet: "Kunnen we",
-				internalDate: "2026-09-01T10:00:00.000Z",
-				sentAt: "2026-09-01T10:00:00.000Z",
-				bodyText: "Kunnen we de offerte bekijken?",
-				bodyFetchedAt: "2026-09-01T10:01:00.000Z",
-			})
-			.returning({ id: mailMessages.id })
-			.get().id;
-	}
+function storeOriginal(db: Db, messageId = "<orig@obet.be>"): string {
+	const threadId = db
+		.insert(mailThreads)
+		.values({ accountId, subject: "Offerte", subjectNorm: "offerte", firstMessageAt: "2026-09-01T10:00:00.000Z", lastMessageAt: "2026-09-01T10:00:00.000Z" })
+		.returning({ id: mailThreads.id })
+		.get().id;
+	db.insert(mailFolders)
+		.values({ accountId, path: "INBOX", name: "INBOX", specialUse: "inbox", syncEnabled: true })
+		.onConflictDoNothing()
+		.run();
+	const folderId = db.select({ id: mailFolders.id }).from(mailFolders).where(eq(mailFolders.path, "INBOX")).get()!.id;
+	// One uid per stored message, so a test can keep several threads in one folder.
+	const uid = db.select().from(mailMessages).all().length + 1;
+	return db
+		.insert(mailMessages)
+		.values({
+			accountId,
+			folderId,
+			threadId,
+			uid,
+			messageId,
+			referencesJson: JSON.stringify(["<root@obet.be>"]),
+			fromName: "Laura",
+			fromAddress: "laura@obet.be",
+			toJson: JSON.stringify([{ name: null, address: "hallo@juno.test" }, { name: "Tom", address: "tom@obet.be" }]),
+			ccJson: JSON.stringify([{ name: null, address: "cc@elders.be" }]),
+			subject: "Offerte",
+			snippet: "Kunnen we",
+			internalDate: "2026-09-01T10:00:00.000Z",
+			sentAt: "2026-09-01T10:00:00.000Z",
+			bodyText: "Kunnen we de offerte bekijken?",
+			bodyFetchedAt: "2026-09-01T10:01:00.000Z",
+		})
+		.returning({ id: mailMessages.id })
+		.get().id;
+}
 
+describe("replies", () => {
 	it("seeds a forward with nobody on it and no threading headers", async () => {
 		// A forward is a new conversation. Carrying In-Reply-To would file it under
 		// the thread it came from on both ends, and pre-filling a recipient would
@@ -353,13 +375,10 @@ describe("replies", () => {
 });
 
 describe("templates", () => {
-	it("seeds the four templates in Dutch and renders one against a client", async () => {
-		const list = await templates.list(db);
-		expect(list.map((t) => t.key)).toEqual(["contract_cover", "project_kickoff", "invoice_due", "hosting_renewal"]);
-
+	it("renders a template in Dutch against a client", async () => {
 		const client = await clientsService.create({ name: "obet" }, db);
 		await contactsService.create({ clientId: client.id, name: "Laura", email: "laura@obet.be", isPrimary: true }, db);
-		const cover = list.find((t) => t.key === "contract_cover")!;
+		const cover = await coverTemplate();
 		const rendered = await templates.renderTemplate(
 			{ templateId: cover.id, clientId: client.id, extras: { title: "de ontwikkelovereenkomst" } },
 			db,
@@ -374,8 +393,8 @@ describe("templates", () => {
 	});
 
 	it("keeps an edited template through a re-seed", async () => {
-		const list = await templates.list(db);
-		const edited = await templates.update(list[0]!.id, { subject: "Mijn onderwerp" }, db);
+		const cover = await coverTemplate();
+		const edited = await templates.update(cover.id, { subject: "Mijn onderwerp" }, db);
 		expect(edited.customisedAt).not.toBeNull();
 		const result = await templates.ensureMailTemplatesSeeded(db);
 		expect(result.updated).toBe(0);
@@ -421,5 +440,148 @@ describe("attachments", () => {
 		const sent = sentMessages[0]!.message;
 		expect(sent.attachments.map((a) => a.path)).toEqual([pdfPath, join(dir, "nda.pdf")]);
 		expect((await outbox.get(draft.id, db))!.state).toBe("sent");
+	});
+});
+
+describe("a sent reply in its thread", () => {
+	/** The thread the stored original sits in, and the original's id. */
+	function threadOf(messageId: string): string {
+		return db.select({ threadId: mailMessages.threadId }).from(mailMessages).where(eq(mailMessages.id, messageId)).get()!.threadId;
+	}
+
+	async function sentReply(originalId: string, bodyText = "Zeker."): Promise<MailOutboxMessage> {
+		const draft = await outbox.createDraft(
+			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Re: Offerte", bodyText, replyToMessageId: originalId },
+			db,
+		);
+		await outbox.requestSend(draft.id, { actor: "user" }, db);
+		await sender.processQueue(db);
+		return (await outbox.get(draft.id, db))!;
+	}
+
+	it("shows in the thread as soon as it is sent, before the Sent folder is synced", async () => {
+		const originalId = storeOriginal(db);
+		const reply = await sentReply(originalId);
+		expect(reply.state).toBe("sent");
+
+		const thread = (await threads.getThread(threadOf(originalId), db))!;
+		expect(thread.messages).toHaveLength(1);
+		expect(thread.outgoing).toHaveLength(1);
+		const [shown] = thread.outgoing;
+		expect(shown).toMatchObject({
+			id: reply.id,
+			state: "sent",
+			messageId: reply.messageId,
+			subject: "Re: Offerte",
+			bodyText: "Zeker.",
+			to: [{ name: null, address: "laura@obet.be" }],
+			from: { address: "hallo@juno.test", name: "Nathan" },
+		});
+		expect(shown!.date).toBe(reply.sentAt);
+		expect(shown!.bodyHtml).toContain("Zeker.");
+	});
+
+	it("shows a queued reply as queued", async () => {
+		const originalId = storeOriginal(db);
+		const draft = await outbox.createDraft(
+			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Re: Offerte", bodyText: "Zeker.", replyToMessageId: originalId },
+			db,
+		);
+		await outbox.requestSend(draft.id, { actor: "user" }, db);
+		const thread = (await threads.getThread(threadOf(originalId), db))!;
+		expect(thread.outgoing.map((o) => o.state)).toEqual(["queued"]);
+	});
+
+	it("finds a reply by its References when the thread link is gone", async () => {
+		const originalId = storeOriginal(db);
+		const reply = await sentReply(originalId);
+		db.update(mailOutbox).set({ threadId: null, inReplyTo: null, referencesJson: JSON.stringify(["<orig@obet.be>"]) }).where(eq(mailOutbox.id, reply.id)).run();
+		const thread = (await threads.getThread(threadOf(originalId), db))!;
+		expect(thread.outgoing.map((o) => o.id)).toEqual([reply.id]);
+	});
+
+	it("steps aside once a synced message with the same Message-ID is in the thread", async () => {
+		const originalId = storeOriginal(db);
+		const threadId = threadOf(originalId);
+		const reply = await sentReply(originalId);
+		expect((await threads.getThread(threadId, db))!.outgoing).toHaveLength(1);
+
+		const sentFolder = db.select({ id: mailFolders.id }).from(mailFolders).where(eq(mailFolders.specialUse, "sent")).get()!;
+		db.insert(mailMessages)
+			.values({
+				accountId,
+				folderId: sentFolder.id,
+				threadId,
+				uid: 7,
+				messageId: reply.messageId,
+				fromAddress: "hallo@juno.test",
+				toJson: JSON.stringify([{ name: null, address: "laura@obet.be" }]),
+				subject: "Re: Offerte",
+				snippet: "Zeker.",
+				internalDate: reply.sentAt!,
+				sentAt: reply.sentAt,
+			})
+			.run();
+
+		const thread = (await threads.getThread(threadId, db))!;
+		expect(thread.messages).toHaveLength(2);
+		expect(thread.outgoing).toEqual([]);
+	});
+
+	it("does not step aside for a synced message that was deleted", async () => {
+		const originalId = storeOriginal(db);
+		const threadId = threadOf(originalId);
+		const reply = await sentReply(originalId);
+		const sentFolder = db.select({ id: mailFolders.id }).from(mailFolders).where(eq(mailFolders.specialUse, "sent")).get()!;
+		db.insert(mailMessages)
+			.values({
+				accountId,
+				folderId: sentFolder.id,
+				threadId,
+				uid: 7,
+				messageId: reply.messageId,
+				subject: "Re: Offerte",
+				internalDate: reply.sentAt!,
+				deletedAt: reply.sentAt,
+			})
+			.run();
+		expect((await threads.getThread(threadId, db))!.outgoing).toHaveLength(1);
+	});
+
+	it("leaves out a message that answers a different thread", async () => {
+		const originalId = storeOriginal(db);
+		const otherId = storeOriginal(db, "<other@obet.be>");
+		await sentReply(otherId);
+		const thread = (await threads.getThread(threadOf(originalId), db))!;
+		expect(thread.outgoing).toEqual([]);
+	});
+
+	it("leaves out drafts, failed and cancelled messages, and a deleted one", async () => {
+		const originalId = storeOriginal(db);
+		const threadId = threadOf(originalId);
+		const make = () =>
+			outbox.createDraft(
+				{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Re: Offerte", bodyText: "x", replyToMessageId: originalId },
+				db,
+			);
+		await make();
+		const failed = await make();
+		const cancelled = await make();
+		db.update(mailOutbox).set({ state: "failed" }).where(eq(mailOutbox.id, failed.id)).run();
+		await outbox.cancel(cancelled.id, db);
+		expect((await threads.getThread(threadId, db))!.outgoing).toEqual([]);
+
+		const gone = await sentReply(originalId);
+		expect((await threads.getThread(threadId, db))!.outgoing).toHaveLength(1);
+		db.update(mailOutbox).set({ deletedAt: "2026-09-02T00:00:00.000Z" }).where(eq(mailOutbox.id, gone.id)).run();
+		expect((await threads.getThread(threadId, db))!.outgoing).toEqual([]);
+	});
+
+	it("lists more than one, oldest first", async () => {
+		const originalId = storeOriginal(db);
+		const first = await sentReply(originalId, "Een.");
+		const second = await sentReply(originalId, "Twee.");
+		const thread = (await threads.getThread(threadOf(originalId), db))!;
+		expect(thread.outgoing.map((o) => o.id)).toEqual([first.id, second.id]);
 	});
 });

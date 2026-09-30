@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { MailBlock, MailContainer } from "@shared/types";
-import { emptySection, newBlock, updateBlock } from "./canvas-actions";
+import type { MailBlock, MailContainer, MailLayout } from "@shared/types";
+import { emptySection, insertNode, newBlock, updateBlock } from "./canvas-actions";
 import {
 	acrossOf,
 	alignAcross,
@@ -23,7 +23,7 @@ function row(): MailContainer {
 }
 
 function grid(): MailContainer {
-	return { ...emptySection("Grid"), layout: { kind: "grid", columns: 2, gap: 8, align: "stretch" } };
+	return { ...emptySection("Grid"), layout: { kind: "grid", columns: 2, gap: 8, align: "stretch", justify: "stretch" } };
 }
 
 /** Applies a patch the way the editor does, through updateBlock. */
@@ -39,9 +39,36 @@ function apply(block: MailBlock, section: MailContainer, patch: Partial<MailBloc
 		children: [{ ...section, children: [block] }],
 		breakpoints: [],
 	};
-	const updated = (updateBlock(layout, section.id, block.id, patch).children[0] as MailContainer).children[0]!;
+	const updated = (updateBlock(layout, block.id, patch).children[0] as MailContainer).children[0]!;
 	return updated as MailBlock;
 }
+
+describe("resizing in a container nested inside another", () => {
+	it("works the same for a block in a nested container as for one at the top level: sizing.ts only looks at the one container the block is actually in", () => {
+		const outer = emptySection("Outer");
+		const inner = row();
+		const withInner: MailContainer = { ...outer, children: [inner] };
+		const text = newBlock("text");
+		const layout: MailLayout = {
+			version: 2,
+			width: 600,
+			widthMode: "fill",
+			minHeight: 0,
+			fill: null,
+			fonts: [],
+			customCss: null,
+			children: [withInner],
+			breakpoints: [],
+		};
+		const placed = insertNode(layout, inner.id, text, null);
+		const nested = (placed.children[0] as MailContainer).children[0] as MailContainer;
+		expect(widthSizing(text, nested)).toBe("hug");
+		const filled = updateBlock(placed, text.id, sizeWidth(text, nested, "fill", null));
+		const grown = ((filled.children[0] as MailContainer).children[0] as MailContainer).children[0] as MailBlock;
+		expect(grown.grow).toBe(1);
+		expect(widthSizing(grown, nested)).toBe("fill");
+	});
+});
 
 describe("resizing in a section that runs down", () => {
 	it("reads a stretched text block as filling the width and hugging the height", () => {
@@ -115,6 +142,13 @@ describe("what each block can be given", () => {
 		expect(heightModes(divider)).toEqual([]);
 	});
 
+	it("offers hug and not fill in a grid that does not stretch its cells", () => {
+		const centred = { ...grid(), layout: { kind: "grid" as const, columns: 2, gap: 8, align: "stretch" as const, justify: "center" as const } };
+		expect(widthModes(newBlock("text"), centred)).toEqual(["fixed", "hug"]);
+		expect(widthSizing(newBlock("text"), centred)).toBe("hug");
+		expect(widthSizing(newBlock("text"), grid())).toBe("fill");
+	});
+
 	it("offers no hug in a grid cell", () => {
 		expect(widthModes(newBlock("text"), grid())).toEqual(["fixed", "fill"]);
 	});
@@ -146,5 +180,50 @@ describe("placing a block across its section", () => {
 		const filled = apply(image, section, sizeWidth(image, section, "fill", null));
 		expect(filled.kind === "image" ? filled.align : null).toBe("left");
 		expect(widthSizing(filled, section)).toBe("fill");
+	});
+});
+
+describe("in plain flow, in the frame or a table cell", () => {
+	it("offers a text a fixed width or the full width, and a picture or a button fixed or hugging", () => {
+		expect(widthModes(newBlock("text"), null)).toEqual(["fixed", "fill"]);
+		expect(widthModes(newBlock("image"), null)).toEqual(["fixed", "hug"]);
+		expect(widthModes(newBlock("button"), null)).toEqual(["fixed", "hug"]);
+		expect(widthModes(newBlock("html"), null)).toEqual([]);
+		expect(widthModes(newBlock("spacer"), null)).toEqual([]);
+	});
+
+	it("offers a height that is fixed or hugs, never a share of room there is none of", () => {
+		expect(heightModes(newBlock("text"), null)).toEqual(["fixed", "hug"]);
+		expect(heightModes(newBlock("text"), column())).toEqual(["fixed", "hug", "fill"]);
+	});
+
+	it("reads a block as filling the width until it has a width of its own", () => {
+		const text = newBlock("text");
+		expect(widthSizing(text, null)).toBe("fill");
+		expect(heightSizing(text, null)).toBe("hug");
+		const fixed = { ...text, box: { ...(text as Extract<MailBlock, { kind: "text" }>).box, width: 200 } } as MailBlock;
+		expect(widthSizing(fixed, null)).toBe("fixed");
+	});
+
+	it("writes only the size, with no share of the room and no alignment", () => {
+		const text = newBlock("text");
+		const fixed = sizeWidth(text, null, "fixed", 320.4);
+		expect(fixed).toEqual({ box: { ...(text as Extract<MailBlock, { kind: "text" }>).box, width: 320 } });
+		expect("grow" in fixed || "alignSelf" in fixed).toBe(false);
+		const filled = sizeWidth({ ...text, ...fixed } as MailBlock, null, "fill", null);
+		expect((filled as { box: { width: number | null } }).box.width).toBeNull();
+		const taller = sizeHeight(text, null, "fixed", 90);
+		expect((taller as { box: { minHeight: number | null } }).box.minHeight).toBe(90);
+		expect("grow" in taller).toBe(false);
+	});
+
+	it("moves only a picture across, by its margins", () => {
+		const image = newBlock("image");
+		expect(acrossOf(image, null)).toBe("start");
+		expect(alignAcross(image, null, "center")).toEqual({ align: "center" });
+		expect(acrossOf({ ...image, align: "center" } as MailBlock, null)).toBe("center");
+		const text = newBlock("text");
+		expect(acrossOf(text, null)).toBeNull();
+		expect(alignAcross(text, null, "center")).toEqual({});
 	});
 });

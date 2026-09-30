@@ -87,6 +87,7 @@ import type {
 	MailAutoconfig,
 	MailAccountPatch,
 	MailConnectionTest,
+	MailPurgeResult,
 	MailDraftInput,
 	MailDraftPatch,
 	MailFolder,
@@ -113,6 +114,7 @@ import type {
 	MailThread,
 	MailThreadListQuery,
 	MailThreadSummary,
+	RemovedMailAccount,
 	Project,
 	ProjectInput,
 	ProjectPatch,
@@ -636,6 +638,14 @@ export interface JunoApi {
 			update(id: string, patch: MailAccountPatch): Promise<MailAccount>;
 			/** Also forgets the password. Messages stay until a purge. */
 			remove(id: string): Promise<MailAccount>;
+			/** Removed accounts that still hold mail here, with what they hold. */
+			removed(): Promise<RemovedMailAccount[]>;
+			/**
+			 * Deletes every message, attachment and composed message stored for a
+			 * removed account, for good. `confirmEmail` has to be the account's
+			 * address. Nothing changes on the server.
+			 */
+			purge(id: string, confirmEmail: string): Promise<MailPurgeResult>;
 			/**
 			 * Tries the settings without saving. Leave the password out to test an
 			 * existing account with its stored one.

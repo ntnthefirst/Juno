@@ -554,6 +554,14 @@ export interface AppSettings {
 	lock: LockSettings;
 	owner: OwnerProfile;
 	seedVersion: number;
+	/**
+	 * The version of the mail templates set this install has been through, 0 for
+	 * never. It sits beside the reference data's version because it describes
+	 * the installation, and it is what tells a first install from an upgrade.
+	 */
+	mailTemplateSeedVersion: number;
+	/** The same for document templates: 0 is never, and it tells a first install from an upgrade. */
+	documentTemplateSeedVersion: number;
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
 	/**
@@ -843,7 +851,18 @@ export type MailSectionLayout =
 			gap: number;
 			wrap: boolean;
 	  }
-	| { kind: "grid"; columns: number; gap: number; align: MailAlign };
+	| {
+			kind: "grid";
+			columns: number;
+			gap: number;
+			/** Down the cell: `align-items`. */
+			align: MailAlign;
+			/**
+			 * Across the cell: `justify-items`. Stretch is the grid's own default and
+			 * writes nothing, which is what a grid saved before this field had.
+			 */
+			justify: MailAlign;
+	  };
 
 /**
  * A fill: one flat colour, or a two-stop linear gradient.
@@ -902,6 +921,51 @@ export type MailEffect = (
 };
 
 /**
+ * What a click on an element does. One target, one of three shapes: `link`
+ * opens an https address, `mail` starts a message to an address and `call`
+ * dials a number. The compiler builds `https://...`, `mailto:...` or `tel:...`
+ * from `target` and runs the result through `safeHref`, so nothing else can be
+ * written, and an element with no usable target is sent without a link.
+ */
+export interface MailClickAction {
+	id: string;
+	trigger: "click";
+	kind: "link" | "mail" | "call";
+	/** The address after `https://`, the email address, or the phone number. */
+	target: string;
+	/** Figma's eye: kept in the panel, left out of the message. */
+	hidden: boolean;
+}
+
+/**
+ * What the pointer resting on an element changes, one change per row. It is
+ * written as a `:hover` rule in the head of the message, which Apple Mail, iOS
+ * and Outlook on the web apply and Gmail and Outlook on Windows do not, so it
+ * is only ever a nicety on top of a design that already works without it.
+ */
+export interface MailHoverAction {
+	id: string;
+	trigger: "hover";
+	change: "fill" | "color" | "underline" | "opacity";
+	/** For `fill`. */
+	fill?: MailFill;
+	/** For `color`: the text colour. */
+	color?: MailColor;
+	/** For `underline`: whether the text is underlined while the pointer is over it. */
+	underline?: boolean;
+	/** For `opacity`: 0 to 1. */
+	opacity?: number;
+	hidden: boolean;
+}
+
+/**
+ * An action on an element: a click that opens something, or a hover that
+ * changes how it looks. Nothing else, because focus, scroll and timed triggers
+ * need a script, and every mail client removes scripts (docs/editors.md).
+ */
+export type MailAction = MailClickAction | MailHoverAction;
+
+/**
  * The box around anything: a section or a single block.
  *
  * This is the appearance panel, and it is deliberately the set of Figma
@@ -919,6 +983,13 @@ export type MailEffect = (
 export interface MailBoxStyle {
 	fill: MailFill | null;
 	padding: MailSpacing;
+	/**
+	 * Room outside the box, in pixels, zero on every side. A side the element's
+	 * own alignment already sets to `auto` (centring, or pushing to an end) keeps
+	 * that and takes no number; a table cell takes none at all, since a `td`
+	 * ignores one.
+	 */
+	margin: MailSpacing;
 	borderWidth: number;
 	borderColor: MailColor | null;
 	borderStyle: MailStrokeStyle;
@@ -996,6 +1067,8 @@ export interface MailBlockCommon {
 	alignSelf: MailSelfAlign;
 	/** Figma's eye. A hidden block stays on the canvas and is left out of the message. */
 	hidden: boolean;
+	/** At most one on-click action and one hover action per kind of change. Empty by default. */
+	actions: MailAction[];
 }
 
 export type MailBlock = MailBlockCommon &
@@ -1005,6 +1078,7 @@ export type MailBlock = MailBlockCommon &
 		| {
 				kind: "button";
 				label: string;
+				/** A button block is its own link. Every other element links through an on-click action. */
 				href: string;
 				background: MailColor;
 				/** The label's colour. The rest of its type is `text`, whose own colour is not used. */
@@ -1020,8 +1094,6 @@ export type MailBlock = MailBlockCommon &
 				/** Pixels, or null for the picture's own width. */
 				width: number | null;
 				align: MailTextAlign;
-				/** A picture inside a link, compiled as `<a href><img></a>`. Null is a plain picture. */
-				href: string | null;
 				box: MailBoxStyle;
 		  }
 		| { kind: "divider"; color: MailColor; thickness: number; box: MailBoxStyle }
@@ -1061,6 +1133,7 @@ export interface MailContainer {
 	grow: number;
 	layout: MailSectionLayout;
 	box: MailBoxStyle;
+	actions: MailAction[];
 	children: MailNode[];
 }
 
@@ -1074,6 +1147,7 @@ export interface MailColumnsCell {
 	width: number | null;
 	verticalAlign: MailVerticalAlign;
 	box: MailBoxStyle;
+	actions: MailAction[];
 	children: MailNode[];
 }
 
@@ -1096,6 +1170,7 @@ export interface MailColumns {
 	/** Pixels between cells, compiled as cell padding: `border-spacing` is unreliable in mail. */
 	gap: number;
 	box: MailBoxStyle;
+	actions: MailAction[];
 	rows: MailColumnsRow[];
 }
 
@@ -1161,11 +1236,16 @@ export interface MailBreakpoint {
 	blocks: Record<string, MailBlockOverride>;
 }
 
-/** One block of a canvas in hand, to be turned into the HTML and CSS it compiles to. */
+/**
+ * One node of a canvas in hand, to be turned into the HTML and CSS it compiles
+ * to: a block, or a container or columns table with everything under it as one
+ * code block.
+ */
 export interface MailBlockConversion {
 	layout: MailLayout;
-	sectionId: string;
-	blockId: string;
+	/** The container or cell holding the node directly, or null for the frame's own top level. */
+	parentId: string | null;
+	nodeId: string;
 	/** What the template asks for, which decides how an input block compiles. */
 	inputs?: TemplateInput[];
 }
@@ -1341,8 +1421,8 @@ export interface DocumentTemplate extends Standard {
 	language: string;
 	bodyHtml: string;
 	/**
-	 * Null means nobody has checked the text is sound. Every template that ships
-	 * starts null, because the shipped ones are invented. See docs/templates.md.
+	 * Null means nobody has checked the text is sound. Every template starts null,
+	 * the example that ships included. See docs/templates.md.
 	 */
 	reviewedAt: Iso | null;
 	version: number;
@@ -1568,6 +1648,33 @@ export interface MailAccount extends Standard {
 }
 
 /**
+ * A removed account that still has mail stored here, and how much. Counts
+ * cover every row Juno holds for the account, including messages the server
+ * has since deleted, because a purge removes those too.
+ */
+export interface RemovedMailAccount {
+	id: string;
+	label: string;
+	email: string;
+	/** When the account was removed. */
+	removedAt: Iso;
+	messages: number;
+	attachments: number;
+	/** Messages composed here for this account: drafts, queued and sent. */
+	outboxMessages: number;
+	/** The sizes recorded for the attachments. Bodies live in the database, not on disk. */
+	attachmentBytes: number;
+}
+
+/** What a purge removed. `leftOnDisk` counts files or folders that could not be deleted. */
+export interface MailPurgeResult {
+	messages: number;
+	attachments: number;
+	outboxMessages: number;
+	leftOnDisk: number;
+}
+
+/**
  * Server settings guessed from an address. Filled into the form for a person to
  * look at, never saved on its own: `source` says how much to trust it, and the
  * connection test is what settles it.
@@ -1750,9 +1857,37 @@ export interface MailMessageBody {
 	links: { href: string; text: string }[];
 }
 
+/**
+ * A message Juno sent (or is sending) in this thread that has not come back
+ * from the server's Sent folder yet. It is read from the outbox, and it drops
+ * out of the thread the moment a synced message with the same Message-ID
+ * exists, so no message is ever listed twice.
+ */
+export interface MailThreadOutgoing {
+	/** The outbox row's id. Not a mail message id, so nothing else accepts it. */
+	id: string;
+	accountId: string;
+	state: "queued" | "sending" | "sent";
+	from: MailAddress;
+	to: MailAddress[];
+	cc: MailAddress[];
+	subject: string;
+	bodyText: string;
+	bodyHtml: string | null;
+	messageId: string;
+	/** When it went out, or when it was queued while it has not gone yet. */
+	date: Iso;
+	attachments: MailOutboxAttachment[];
+}
+
 export interface MailThread {
 	summary: MailThreadSummary;
 	messages: MailMessage[];
+	/**
+	 * What was sent from Juno into this thread and is not among `messages` yet,
+	 * oldest first. Empty once the Sent folder has been synced.
+	 */
+	outgoing: MailThreadOutgoing[];
 }
 
 export interface MailThreadListQuery {

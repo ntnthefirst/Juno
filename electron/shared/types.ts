@@ -2115,6 +2115,83 @@ export interface MailReplySeed {
 	clientId: string | null;
 }
 
+/* --------------------------------------------- greetings and sign-offs */
+
+export type MailPhraseKind = "greeting" | "signoff";
+
+/**
+ * A greeting or a sign-off: a named, static text. Plain text with line breaks,
+ * no placeholders, so nothing in it can come out empty.
+ */
+export interface MailPhrase extends Standard {
+	kind: MailPhraseKind;
+	title: string;
+	text: string;
+	sortOrder: number;
+}
+
+export interface MailPhraseInput {
+	kind: MailPhraseKind;
+	title: string;
+	text: string;
+}
+
+/** The kind is fixed once a phrase exists: a rule points at it as one or the other. */
+export type MailPhrasePatch = Partial<Omit<MailPhraseInput, "kind">>;
+
+/** How a message is started. */
+export type MailPhraseMode = "new" | "reply" | "forward";
+
+export type MailPhraseMessageKind = "any" | MailPhraseMode;
+
+/** Who a message goes to, as a rule condition. */
+export type MailPhraseRecipientKind = "any" | "client" | "contact" | "other";
+
+/** What one address, or a whole To line, turns out to be. */
+export type MailRecipientClass = Exclude<MailPhraseRecipientKind, "any">;
+
+/**
+ * Decides which greeting and sign-off go on which message. Checked top to
+ * bottom by `sortOrder`; the first enabled rule whose conditions all match
+ * decides.
+ */
+export interface MailPhraseRule extends Standard {
+	name: string;
+	enabled: boolean;
+	sortOrder: number;
+	messageKind: MailPhraseMessageKind;
+	recipientKind: MailPhraseRecipientKind;
+	/** Null means any account. */
+	accountId: string | null;
+	greetingId: string | null;
+	signoffId: string | null;
+}
+
+export interface MailPhraseRuleInput {
+	name: string;
+	enabled?: boolean;
+	messageKind?: MailPhraseMessageKind;
+	recipientKind?: MailPhraseRecipientKind;
+	accountId?: string | null;
+	greetingId?: string | null;
+	signoffId?: string | null;
+}
+
+export type MailPhraseRulePatch = Partial<MailPhraseRuleInput>;
+
+export interface MailPhraseResolveInput {
+	accountId: string;
+	mode: MailPhraseMode;
+	to: MailAddress[];
+}
+
+/** The text a message starts with. All null when no rule matches. */
+export interface MailPhraseResolution {
+	ruleId: string | null;
+	greeting: string | null;
+	signoff: string | null;
+}
+
 export interface MailOutboxListQuery {
 	accountId?: string;
 	states?: MailOutboxState[];

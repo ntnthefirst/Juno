@@ -278,6 +278,7 @@ export function MailScreen() {
 				bodyText: `\n\n${seed.quotedText}`,
 				replyToMessageId: seed.replyToMessageId,
 				clientId: seed.clientId,
+				mode: mode === "forward" ? "forward" : "reply",
 			});
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));

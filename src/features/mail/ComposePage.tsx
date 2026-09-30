@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DocumentRecord, MailAccount, MailAddress, MailOutboxMessage, MailTemplate } from "@shared/types";
+import type {
+	DocumentRecord,
+	MailAccount,
+	MailAddress,
+	MailOutboxMessage,
+	MailPhraseMode,
+	MailTemplate,
+} from "@shared/types";
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import MessageEditor from "./MessageEditor";
+import { withPhrases } from "./phrase-body";
 import { RecipientField } from "./RecipientField";
 
 export type ComposeSeed = {
@@ -19,6 +27,12 @@ export type ComposeSeed = {
 	projectId?: string | null;
 	documentIds?: string[];
 	draft?: MailOutboxMessage;
+	/**
+	 * How the message was started, which decides the greeting and sign-off rules
+	 * that apply. A new message when left out. Ignored for a reopened draft, which
+	 * already has whatever body it was given.
+	 */
+	mode?: MailPhraseMode;
 };
 
 type ComposePageProps = {
@@ -61,6 +75,11 @@ export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
 	const [templateApplied, setTemplateApplied] = useState(Boolean(seed.draft?.templateId));
 	const [savedMessage, setSavedMessage] = useState<MailOutboxMessage | null>(seed.draft ?? null);
 	const [saveState, setSaveState] = useState<SaveState>("idle");
+	// The body as the greeting and sign-off rules last wrote it, or null while
+	// they have written nothing. The body counts as untouched for as long as it
+	// is exactly this; bare says there was nothing else in it, so it is still
+	// an empty message as far as autosave is concerned.
+	const [inserted, setInserted] = useState<{ text: string; bare: boolean } | null>(null);
 
 	const attachmentsRef = useRef<HTMLDivElement>(null);
 
@@ -83,6 +102,43 @@ export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
 			cancelled = true;
 		};
 	}, []);
+
+	// A reopened draft keeps the body it has. Everything else starts from the
+	// rules, and asks again while nobody has typed in the body: a new message
+	// has no recipient yet, and the rule that fits depends on who it goes to.
+	const phraseMode: MailPhraseMode | null = seed.draft ? null : (seed.mode ?? "new");
+	const startText = seed.bodyText ?? "";
+	const toKey = to.map((address) => address.address).join(",");
+	const bodyRef = useRef({ text: bodyText, html: bodyHtml, inserted });
+	useEffect(() => {
+		bodyRef.current = { text: bodyText, html: bodyHtml, inserted };
+	}, [bodyText, bodyHtml, inserted]);
+
+	useEffect(() => {
+		if (!phraseMode || !accountId) return;
+		let cancelled = false;
+		const recipients = toKey ? toKey.split(",").map((address) => ({ name: null, address })) : [];
+		window.juno.mail.phrases
+			.resolve({ accountId, mode: phraseMode, to: recipients })
+			.then((found) => {
+				if (cancelled) return;
+				const current = bodyRef.current;
+				// Any edit makes the editor report HTML, and any edit changes the
+				// text, so either one means the person has taken over the body.
+				if (current.html !== null || current.text !== (current.inserted?.text ?? startText)) return;
+				if (!current.inserted && !found.greeting && !found.signoff) return;
+				const text = withPhrases(found.greeting, found.signoff, startText);
+				setBodyText(text);
+				setInserted({ text, bare: startText.trim() === "" });
+			})
+			.catch(() => {
+				// A greeting is a convenience. If it cannot be worked out, the message
+				// simply starts empty, and the composer has nothing to report.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [accountId, toKey, phraseMode, startText]);
 
 	const addressKey = [...to, ...cc, ...bcc].map((address) => address.address).join(",");
 	useEffect(() => {
@@ -190,8 +246,15 @@ export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
 		setTemplateApplied(false);
 	}
 
+	const onlyPhrases =
+		inserted !== null && inserted.bare && bodyHtml === null && bodyText === inserted.text;
 	const isEmpty =
-		to.length === 0 && cc.length === 0 && bcc.length === 0 && !subject.trim() && !bodyText.trim() && documentIds.length === 0;
+		to.length === 0 &&
+		cc.length === 0 &&
+		bcc.length === 0 &&
+		!subject.trim() &&
+		(onlyPhrases || !bodyText.trim()) &&
+		documentIds.length === 0;
 
 	// Read through a ref rather than depended on directly: persist's own
 	// success calls setSavedMessage, and depending on that state would give

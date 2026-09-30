@@ -15,6 +15,12 @@ import type {
 	MailDraftInput,
 	MailDraftPatch,
 	MailOutboxListQuery,
+	MailPhraseInput,
+	MailPhraseKind,
+	MailPhrasePatch,
+	MailPhraseResolveInput,
+	MailPhraseRuleInput,
+	MailPhraseRulePatch,
 	MailReplyMode,
 	MailTemplateDraft,
 	MailTemplateInput,
@@ -28,6 +34,7 @@ import * as folders from "../services/mail-folders";
 import * as fonts from "../services/mail-fonts";
 import type { MailFolderInput } from "../services/mail-folders";
 import * as outbox from "../services/mail-outbox";
+import * as phrases from "../services/mail-phrases";
 import * as purgeMail from "../services/mail-purge";
 import * as recipients from "../services/mail-recipients";
 import * as sender from "../services/mail-send";
@@ -167,6 +174,21 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.templates.render", (_event, input: Parameters<typeof templates.renderTemplate>[0]) =>
 		templates.renderTemplate(input),
 	);
+
+	ipcMain.handle("mail.phrases.list", (_event, kind?: MailPhraseKind) => phrases.listPhrases(kind));
+	ipcMain.handle("mail.phrases.create", (_event, input: MailPhraseInput) => phrases.createPhrase(input));
+	ipcMain.handle("mail.phrases.update", (_event, id: string, patch: MailPhrasePatch) =>
+		phrases.updatePhrase(id, patch),
+	);
+	ipcMain.handle("mail.phrases.remove", (_event, id: string) => phrases.deletePhrase(id));
+	ipcMain.handle("mail.phrases.resolve", (_event, input: MailPhraseResolveInput) => phrases.resolve(input));
+	ipcMain.handle("mail.phraseRules.list", () => phrases.listRules());
+	ipcMain.handle("mail.phraseRules.create", (_event, input: MailPhraseRuleInput) => phrases.createRule(input));
+	ipcMain.handle("mail.phraseRules.update", (_event, id: string, patch: MailPhraseRulePatch) =>
+		phrases.updateRule(id, patch),
+	);
+	ipcMain.handle("mail.phraseRules.remove", (_event, id: string) => phrases.deleteRule(id));
+	ipcMain.handle("mail.phraseRules.reorder", (_event, ids: string[]) => phrases.reorderRules(ids));
 
 	ipcMain.handle("mail.outbox.list", (_event, query?: MailOutboxListQuery) => outbox.list(query ?? {}));
 	ipcMain.handle("mail.outbox.get", (_event, id: string) => outbox.get(id));

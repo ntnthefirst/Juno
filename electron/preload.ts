@@ -462,6 +462,20 @@ const api: JunoApi = {
 			preview: (draft) => call("mail.templates.preview", draft),
 			render: (input) => call("mail.templates.render", input),
 		},
+		phrases: {
+			list: (kind) => call("mail.phrases.list", kind),
+			create: (input) => call("mail.phrases.create", input),
+			update: (id, patch) => call("mail.phrases.update", id, patch),
+			remove: (id) => call("mail.phrases.remove", id),
+			resolve: (input) => call("mail.phrases.resolve", input),
+		},
+		phraseRules: {
+			list: () => call("mail.phraseRules.list"),
+			create: (input) => call("mail.phraseRules.create", input),
+			update: (id, patch) => call("mail.phraseRules.update", id, patch),
+			remove: (id) => call("mail.phraseRules.remove", id),
+			reorder: (ids) => call("mail.phraseRules.reorder", ids),
+		},
 		outbox: {
 			list: (query) => call("mail.outbox.list", query),
 			get: (id) => call("mail.outbox.get", id),

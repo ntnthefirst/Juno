@@ -96,6 +96,15 @@ import type {
 	MailMessageClient,
 	MailOutboxCounts,
 	MailOutboxListQuery,
+	MailPhrase,
+	MailPhraseInput,
+	MailPhraseKind,
+	MailPhrasePatch,
+	MailPhraseResolution,
+	MailPhraseResolveInput,
+	MailPhraseRule,
+	MailPhraseRuleInput,
+	MailPhraseRulePatch,
 	MailOutboxMessage,
 	MailRecipientSuggestion,
 	MailReplyMode,
@@ -762,6 +771,28 @@ export interface JunoApi {
 				projectId?: string | null;
 				extras?: Record<string, string>;
 			}): Promise<MailTemplateRender>;
+		};
+		/**
+		 * Greetings and sign-offs: named plain texts the composer puts in a
+		 * message, and the rules that choose which one goes where.
+		 */
+		phrases: {
+			list(kind?: MailPhraseKind): Promise<MailPhrase[]>;
+			create(input: MailPhraseInput): Promise<MailPhrase>;
+			update(id: string, patch: MailPhrasePatch): Promise<MailPhrase>;
+			/** Refused while a rule still uses it; the error names the rule. */
+			remove(id: string): Promise<MailPhrase>;
+			/** What a message would start with. Reads only. */
+			resolve(input: MailPhraseResolveInput): Promise<MailPhraseResolution>;
+		};
+		/** Checked top to bottom; the first enabled rule that matches decides. */
+		phraseRules: {
+			list(): Promise<MailPhraseRule[]>;
+			create(input: MailPhraseRuleInput): Promise<MailPhraseRule>;
+			update(id: string, patch: MailPhraseRulePatch): Promise<MailPhraseRule>;
+			remove(id: string): Promise<MailPhraseRule>;
+			/** Every rule id once, first to last. Answers with the rules in the new order. */
+			reorder(ids: string[]): Promise<MailPhraseRule[]>;
 		};
 		outbox: {
 			list(query?: MailOutboxListQuery): Promise<MailOutboxMessage[]>;

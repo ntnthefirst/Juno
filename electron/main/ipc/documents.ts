@@ -4,12 +4,15 @@
  */
 import { ipcMain } from "electron";
 import type {
+	AddVersionInput,
 	GenerateDocumentInput,
-	ImportDocumentInput,
-	ImportPdfBytesInput,
+	ImportFileInput,
+	ImportSource,
 	SignDocumentInput,
 } from "../../shared/types";
 import * as actions from "../services/document-actions";
+import * as imports from "../services/document-import";
+import * as versions from "../services/document-versions";
 import * as documents from "../services/documents";
 
 export function registerDocumentsIpc(): void {
@@ -22,12 +25,16 @@ export function registerDocumentsIpc(): void {
 		actions.generate(input),
 	);
 
-	ipcMain.handle("documents.import", (_event, input: ImportDocumentInput) => documents.importPdf(input));
-	ipcMain.handle("documents.chooseImport", (_event, clientId: string) => actions.chooseImportPdf(clientId));
-
-	ipcMain.handle("documents.importBytes", (_event, input: ImportPdfBytesInput) =>
-		documents.importPdfBytes(input),
+	ipcMain.handle("documents.pickPdfs", () => actions.pickPdfs());
+	ipcMain.handle(
+		"documents.analyseImport",
+		(_event, input: { source: ImportSource; clientId?: string | null }) => imports.analyseImport(input),
 	);
+	ipcMain.handle("documents.importFile", (_event, input: ImportFileInput) => imports.importFile(input));
+	ipcMain.handle("documents.addVersion", (_event, input: AddVersionInput) => imports.addVersion(input));
+	ipcMain.handle("documents.versions", (_event, documentId: string) => versions.list(documentId));
+	ipcMain.handle("documents.openVersion", (_event, versionId: string) => actions.openVersion(versionId));
+	ipcMain.handle("documents.revealVersion", (_event, versionId: string) => actions.revealVersion(versionId));
 	ipcMain.handle("documents.readPdf", (_event, id: string) => actions.readPdf(id));
 
 	ipcMain.handle("documents.setStatus", (_event, id: string, statusId: string | null) =>

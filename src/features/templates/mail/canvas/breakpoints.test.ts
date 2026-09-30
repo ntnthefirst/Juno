@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
-import type { MailLayout } from "@shared/types";
+import type { MailContainer, MailLayout } from "@shared/types";
 import { addBreakpoint, absorb, copyOverrides, layoutAt, removeBreakpoint, renameBreakpoint, resizeBreakpoint } from "./breakpoints";
 import { addBlock, emptyLayout, newBlock, updateBlock, updateSection } from "./canvas-actions";
 
+/** Every top-level child in these tests is a section: the only shape this phase builds. */
+function asSection(node: { id: string }): MailContainer {
+	return node as MailContainer;
+}
+
 function withText(): { layout: MailLayout; sectionId: string; blockId: string } {
 	const layout = emptyLayout();
-	const sectionId = layout.sections[0]!.id;
+	const sectionId = layout.children[0]!.id;
 	const block = newBlock("text");
 	return { layout: addBlock(layout, sectionId, block), sectionId, blockId: block.id };
 }
 
 function fontSize(layout: MailLayout, blockId: string): number | null {
-	const block = layout.sections.flatMap((section) => section.blocks).find((entry) => entry.id === blockId);
+	const block = layout.children.flatMap((node) => asSection(node).children).find((entry) => entry.id === blockId);
 	return block?.kind === "text" ? block.text.fontSize : null;
 }
 
@@ -23,7 +28,7 @@ describe("breakpoints on the canvas", () => {
 		expect(added.layout.breakpoints).toEqual([{ id: added.id, name: "Phone", maxWidth: 480, sections: {}, blocks: {} }]);
 		const phone = layoutAt(added.layout, added.id);
 		expect(phone.width).toBe(480);
-		expect(phone.sections).toEqual(layout.sections);
+		expect(phone.children).toEqual(layout.children);
 		expect(fontSize(phone, blockId)).toBeNull();
 		const second = addBreakpoint(added.layout);
 		expect(second?.layout.breakpoints[1]?.maxWidth).toBe(360);
@@ -33,8 +38,10 @@ describe("breakpoints on the canvas", () => {
 		const { layout, sectionId, blockId } = withText();
 		const added = addBreakpoint(layout)!;
 		const drawn = layoutAt(added.layout, added.id);
+		const firstBlock = asSection(drawn.children[0]!).children[0];
+		if (firstBlock?.kind !== "text") throw new Error("not text");
 		const edited = updateBlock(drawn, sectionId, blockId, {
-			text: { ...(drawn.sections[0]!.blocks[0] as Extract<MailLayout["sections"][0]["blocks"][0], { kind: "text" }>).text, fontSize: 13 },
+			text: { ...firstBlock.text, fontSize: 13 },
 		});
 		const next = absorb(added.layout, added.id, edited);
 		expect(next.breakpoints[0]?.blocks[blockId]).toEqual({ text: { fontSize: 13 } });
@@ -47,7 +54,7 @@ describe("breakpoints on the canvas", () => {
 		const added = addBreakpoint(layout)!;
 		const edited = updateBlock(layoutAt(added.layout, added.id), sectionId, blockId, { html: "Hallo" } as never);
 		const next = absorb(added.layout, added.id, edited);
-		const block = next.sections[0]!.blocks[0]!;
+		const block = asSection(next.children[0]!).children[0]!;
 		expect(block.kind === "text" ? block.html : null).toBe("Hallo");
 		expect(next.breakpoints[0]?.blocks[blockId]).toBeUndefined();
 	});
@@ -58,7 +65,7 @@ describe("breakpoints on the canvas", () => {
 		const small = addBreakpoint(phone.layout)!;
 		const at = (current: MailLayout, id: string, size: number | null) => {
 			const drawn = layoutAt(current, id);
-			const block = drawn.sections[0]!.blocks[0]!;
+			const block = asSection(drawn.children[0]!).children[0]!;
 			if (block.kind !== "text") throw new Error("not text");
 			return absorb(current, id, updateBlock(drawn, sectionId, blockId, { text: { ...block.text, fontSize: size } }));
 		};
@@ -84,7 +91,7 @@ describe("breakpoints on the canvas", () => {
 		const { layout, sectionId } = withText();
 		const added = addBreakpoint(layout)!;
 		const next = absorb(added.layout, added.id, updateSection(layoutAt(added.layout, added.id), sectionId, { hidden: true }));
-		expect(next.sections[0]?.hidden).toBe(false);
+		expect(next.children[0]?.hidden).toBe(false);
 		expect(next.breakpoints[0]?.sections[sectionId]).toEqual({ hidden: true });
 	});
 

@@ -22,11 +22,29 @@ import type {
 	MailBlock,
 	MailBlockOverride,
 	MailBreakpoint,
+	MailColumns,
+	MailColumnsCell,
+	MailContainer,
 	MailLayout,
-	MailSection,
+	MailNode,
 	MailSectionOverride,
 } from "@shared/types";
 import { newId } from "./canvas-actions";
+
+function isContainer(node: MailNode): node is MailContainer {
+	return node.kind === "container";
+}
+
+function isColumns(node: MailNode): node is MailColumns {
+	return node.kind === "columns";
+}
+
+function isBlockNode(node: MailNode): node is MailBlock {
+	return !isContainer(node) && !isColumns(node);
+}
+
+/** A container, a columns table, or a cell: anything a breakpoint can hold an override for under `sections`. */
+type Parent = MailContainer | MailColumns | MailColumnsCell;
 
 /** Matches KIND_STYLE in services/mail-layout.ts: what a breakpoint may change beyond the common three. */
 const KIND_STYLE: Record<MailBlock["kind"], (keyof MailBlockOverride)[]> = {
@@ -44,10 +62,10 @@ const COMMON_STYLE: (keyof MailBlockOverride)[] = ["hidden", "grow", "alignSelf"
 
 /** What a block says or shows, which is the same at every width. */
 const CONTENT: Record<MailBlock["kind"], string[]> = {
-	text: ["html"],
-	heading: ["content", "level"],
+	text: ["html", "tag"],
+	heading: ["content", "tag"],
 	button: ["label", "href"],
-	image: ["src", "alt"],
+	image: ["src", "alt", "href"],
 	divider: [],
 	spacer: [],
 	field: ["inputKey"],
@@ -94,14 +112,32 @@ function applyBlock(block: MailBlock, override: MailBlockOverride | undefined): 
 	} as MailBlock;
 }
 
-function applySection(section: MailSection, breakpoint: MailBreakpoint): MailSection {
-	const { box, ...top } = own(breakpoint.sections, section.id) ?? ({} as MailSectionOverride);
-	return {
-		...section,
-		...top,
-		box: box ? { ...section.box, ...box } : section.box,
-		blocks: section.blocks.map((block) => applyBlock(block, own(breakpoint.blocks, block.id))),
-	};
+/** A container, a columns table or a cell as a breakpoint draws it, its own style only. */
+function applyParent<T extends Parent>(node: T, breakpoint: MailBreakpoint): T {
+	const { box, ...top } = own(breakpoint.sections, node.id) ?? ({} as MailSectionOverride);
+	return { ...node, ...top, box: box ? { ...node.box, ...box } : node.box } as T;
+}
+
+/** A node as a breakpoint draws it, and everything under it. */
+function applyNode(node: MailNode, breakpoint: MailBreakpoint): MailNode {
+	if (isContainer(node)) {
+		const applied = applyParent(node, breakpoint);
+		return { ...applied, children: applied.children.map((child) => applyNode(child, breakpoint)) };
+	}
+	if (isColumns(node)) {
+		const applied = applyParent(node, breakpoint);
+		return {
+			...applied,
+			rows: applied.rows.map((row) => ({
+				...row,
+				cells: row.cells.map((cell) => {
+					const appliedCell = applyParent(cell, breakpoint);
+					return { ...appliedCell, children: appliedCell.children.map((child) => applyNode(child, breakpoint)) };
+				}),
+			})),
+		};
+	}
+	return applyBlock(node, own(breakpoint.blocks, node.id));
 }
 
 /**
@@ -111,15 +147,15 @@ function applySection(section: MailSection, breakpoint: MailBreakpoint): MailSec
  */
 function drawnAt(layout: MailLayout, id: string | null, through: boolean): MailLayout {
 	if (!id || !layout.breakpoints.some((breakpoint) => breakpoint.id === id)) return layout;
-	let sections = layout.sections;
+	let children = layout.children;
 	let width = layout.width;
 	for (const breakpoint of widestFirst(layout.breakpoints)) {
 		if (breakpoint.id === id && !through) break;
-		sections = sections.map((section) => applySection(section, breakpoint));
+		children = children.map((node) => applyNode(node, breakpoint));
 		width = breakpoint.maxWidth;
 		if (breakpoint.id === id) break;
 	}
-	return { ...layout, width, sections };
+	return { ...layout, width, children };
 }
 
 /** Matches layoutAt in services/mail-layout.ts. */
@@ -149,11 +185,13 @@ function diffBlock(next: MailBlock, was: MailBlock): MailBlockOverride | null {
 	return Object.keys(override).length > 0 ? (override as MailBlockOverride) : null;
 }
 
-function diffSection(next: MailSection, was: MailSection): MailSectionOverride | null {
+/** The same, for a container, a columns table or a cell: only the fields it actually has can differ. */
+function diffParent(next: Parent, was: Parent): MailSectionOverride | null {
 	const override: MailSectionOverride = {};
-	if (next.hidden !== was.hidden) override.hidden = next.hidden;
-	if (next.alignSelf !== was.alignSelf) override.alignSelf = next.alignSelf;
-	if (!same(next.layout, was.layout)) override.layout = next.layout;
+	if ("hidden" in next && "hidden" in was && next.hidden !== was.hidden) override.hidden = next.hidden;
+	if ("alignSelf" in next && "alignSelf" in was && next.alignSelf !== was.alignSelf) override.alignSelf = next.alignSelf;
+	if ("grow" in next && "grow" in was && next.grow !== was.grow) override.grow = next.grow;
+	if ("layout" in next && "layout" in was && !same(next.layout, was.layout)) override.layout = next.layout;
 	const box = Object.fromEntries(
 		Object.entries(next.box).filter(([key, value]) => !same(value, was.box[key as keyof typeof was.box])),
 	);
@@ -166,6 +204,69 @@ function withContent(block: MailBlock, next: MailBlock): MailBlock {
 	if (block.kind !== next.kind) return block;
 	const after = next as unknown as Record<string, unknown>;
 	return { ...block, ...Object.fromEntries(CONTENT[block.kind].map((key) => [key, after[key]])) } as MailBlock;
+}
+
+/**
+ * Walks three parallel trees: the layout as it is, the edit made at the
+ * breakpoint, and what the wider breakpoints already draw. Collects what
+ * changed into `sectionOverrides` and `blockOverrides`, keyed by id at any
+ * depth, and returns the layout's own tree with each block's content (never
+ * its look) taken from the edit.
+ */
+function foldTree(
+	layoutNodes: MailNode[],
+	editedNodes: MailNode[],
+	wasNodes: MailNode[],
+	sectionOverrides: Record<string, MailSectionOverride>,
+	blockOverrides: Record<string, MailBlockOverride>,
+): MailNode[] {
+	return layoutNodes.map((node) => {
+		const edited = editedNodes.find((entry) => entry.id === node.id);
+		const was = wasNodes.find((entry) => entry.id === node.id);
+		if (!edited || !was || edited.kind !== node.kind || was.kind !== node.kind) return node;
+		if (isContainer(node) && isContainer(edited) && isContainer(was)) {
+			const override = diffParent(edited, was);
+			if (override) sectionOverrides[node.id] = override;
+			return {
+				...node,
+				name: edited.name,
+				children: foldTree(node.children, edited.children, was.children, sectionOverrides, blockOverrides),
+			};
+		}
+		if (isColumns(node) && isColumns(edited) && isColumns(was)) {
+			const override = diffParent(edited, was);
+			if (override) sectionOverrides[node.id] = override;
+			return {
+				...node,
+				name: edited.name,
+				rows: node.rows.map((row, rowIndex) => {
+					const editedRow = edited.rows[rowIndex];
+					const wasRow = was.rows[rowIndex];
+					if (!editedRow || !wasRow) return row;
+					return {
+						...row,
+						cells: row.cells.map((cell, cellIndex) => {
+							const editedCell = editedRow.cells[cellIndex];
+							const wasCell = wasRow.cells[cellIndex];
+							if (!editedCell || !wasCell) return cell;
+							const cellOverride = diffParent(editedCell, wasCell);
+							if (cellOverride) sectionOverrides[cell.id] = cellOverride;
+							return {
+								...cell,
+								children: foldTree(cell.children, editedCell.children, wasCell.children, sectionOverrides, blockOverrides),
+							};
+						}),
+					};
+				}),
+			};
+		}
+		if (isBlockNode(node) && isBlockNode(edited) && isBlockNode(was)) {
+			const blockOverride = diffBlock(edited, was);
+			if (blockOverride) blockOverrides[node.id] = blockOverride;
+			return withContent(node, edited);
+		}
+		return node;
+	});
 }
 
 /**
@@ -185,30 +286,12 @@ export function absorb(layout: MailLayout, id: string | null, next: MailLayout):
 	const sectionOverrides: Record<string, MailSectionOverride> = {};
 	const blockOverrides: Record<string, MailBlockOverride> = {};
 
-	const sections = layout.sections.map((section) => {
-		const edited = next.sections.find((entry) => entry.id === section.id);
-		const was = before.sections.find((entry) => entry.id === section.id);
-		if (!edited || !was) return section;
-		const sectionOverride = diffSection(edited, was);
-		if (sectionOverride) sectionOverrides[section.id] = sectionOverride;
-		return {
-			...section,
-			name: edited.name,
-			blocks: section.blocks.map((block) => {
-				const editedBlock = edited.blocks.find((entry) => entry.id === block.id);
-				const wasBlock = was.blocks.find((entry) => entry.id === block.id);
-				if (!editedBlock || !wasBlock || editedBlock.kind !== block.kind) return block;
-				const blockOverride = diffBlock(editedBlock, wasBlock);
-				if (blockOverride) blockOverrides[block.id] = blockOverride;
-				return withContent(block, editedBlock);
-			}),
-		};
-	});
+	const children = foldTree(layout.children, next.children, before.children, sectionOverrides, blockOverrides);
 
 	return {
 		...next,
 		width: layout.width,
-		sections,
+		children,
 		breakpoints: layout.breakpoints.map((entry) =>
 			entry.id === breakpoint.id
 				? {

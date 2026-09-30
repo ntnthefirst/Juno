@@ -65,7 +65,7 @@ const CONTENT: Record<MailBlock["kind"], string[]> = {
 	text: ["html", "tag"],
 	heading: ["content", "tag"],
 	button: ["label", "href"],
-	image: ["src", "alt", "href"],
+	image: ["src", "alt"],
 	divider: [],
 	spacer: [],
 	field: ["inputKey"],

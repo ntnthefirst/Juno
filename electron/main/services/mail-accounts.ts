@@ -211,9 +211,10 @@ export async function update(id: string, patch: MailAccountPatch, db: Db = getDb
 }
 
 /**
- * Soft-deletes the account and forgets its password. The messages stay in the
- * database, soft-deleted with it by the sync's next pass being skipped; a
- * purge is a separate decision and not one this function makes.
+ * Soft-deletes the account and forgets its password. Its mail stays where it
+ * is, folders, threads, messages and attachment files alike, because deleting
+ * someone's mail is a separate decision. `mail-purge.ts` makes it, and only
+ * after the person has confirmed it.
  */
 export async function remove(id: string, db: Db = getDb()): Promise<MailAccount> {
 	const existing = requireRow(id, db);

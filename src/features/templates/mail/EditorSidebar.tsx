@@ -8,8 +8,6 @@ import { LayerTree } from "./canvas/LayerTree";
 /** What the middle of the editor is showing. */
 export type EditorMode = "canvas" | "preview" | "code" | "inputs";
 
-type LayerTarget = { sectionId: string; blockId?: string };
-
 type EditorSidebarProps = {
 	name: string;
 	description: string;
@@ -21,10 +19,9 @@ type EditorSidebarProps = {
 	layout: MailLayout | null;
 	selection: Selection;
 	onSelect: (selection: Selection) => void;
-	onHidden: (target: LayerTarget, hidden: boolean) => void;
-	onDropBlock: (fromSectionId: string, blockId: string, target: DropTarget) => void;
-	onDropSection: (sectionId: string, beforeSectionId: string | null) => void;
-	onStep: (target: LayerTarget, by: -1 | 1) => void;
+	onHidden: (id: string, hidden: boolean) => void;
+	onDrop: (id: string, target: DropTarget) => void;
+	onStep: (id: string, by: -1 | 1) => void;
 	/** Swaps the whole canvas for hand-written HTML, and back. */
 	onConvert: () => void;
 
@@ -65,8 +62,7 @@ export function EditorSidebar({
 	selection,
 	onSelect,
 	onHidden,
-	onDropBlock,
-	onDropSection,
+	onDrop,
 	onStep,
 	onConvert,
 	unreviewed,
@@ -156,15 +152,14 @@ export function EditorSidebar({
 						Layers
 					</h2>
 				</div>
-				<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
+				<div className="relative min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
 					{layout ? (
 						<LayerTree
 							layout={layout}
 							selection={selection}
 							onSelect={onSelect}
 							onHidden={onHidden}
-							onDropBlock={onDropBlock}
-							onDropSection={onDropSection}
+							onDrop={onDrop}
 							onStep={onStep}
 						/>
 					) : (

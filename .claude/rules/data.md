@@ -155,8 +155,11 @@ from the dead in one screen and not another.
 
 ## 9. Seeded reference data is hidden, never deleted
 
-Decision 16. Document types, statuses, labels, reminder presets and email
-templates ship with defaults on first run, stay editable, and can be reset.
+Decision 16. Document types, statuses, labels and reminder presets ship with
+defaults on first run, stay editable, and can be reset. Mail templates and
+document templates used to be sets of their own and are not any more: an
+install that has them keeps them, and a first install gets one example of each
+that is not a system row.
 
 They still carry the five mandatory columns from section 2, including
 `deleted_at`. These five are **extra**, on top of them:

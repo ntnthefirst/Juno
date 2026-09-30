@@ -3,6 +3,7 @@ import type { MailOutboxMessage } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
+import { framed } from "../../lib/framed-preview";
 import { formatFull } from "./format";
 import { STATE_LABELS, STATE_TONES } from "./outbox-format";
 
@@ -21,7 +22,9 @@ type OutboxDetailProps = {
 export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDetailProps) {
 	const [busy, setBusy] = useState(false);
 	const [confirmingCancel, setConfirmingCancel] = useState(false);
-	const preview = message.bodyHtml;
+	// The window fetches no picture or stylesheet from an address, so the frame
+	// shows a box where each remote picture goes (lib/framed-preview.ts).
+	const preview = message.bodyHtml ? framed(message.bodyHtml, "") : null;
 
 	async function run(action: () => Promise<unknown>, done?: string) {
 		setBusy(true);

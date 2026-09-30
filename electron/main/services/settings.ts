@@ -122,6 +122,8 @@ const DEFAULTS: AppSettings = {
 	lock: DEFAULT_LOCK,
 	owner: DEFAULT_OWNER,
 	seedVersion: 0,
+	mailTemplateSeedVersion: 0,
+	documentTemplateSeedVersion: 0,
 	signaturePath: null,
 	accountingTool: DEFAULT_ACCOUNTING,
 	lastNotifiedOn: null,
@@ -291,6 +293,11 @@ function normalise(raw: unknown): AppSettings {
 		},
 		owner,
 		seedVersion: Math.max(0, int(raw.seedVersion, DEFAULTS.seedVersion)),
+		mailTemplateSeedVersion: Math.max(0, int(raw.mailTemplateSeedVersion, DEFAULTS.mailTemplateSeedVersion)),
+		documentTemplateSeedVersion: Math.max(
+			0,
+			int(raw.documentTemplateSeedVersion, DEFAULTS.documentTemplateSeedVersion),
+		),
 		signaturePath: typeof raw.signaturePath === "string" && raw.signaturePath ? raw.signaturePath : null,
 		lastNotifiedOn:
 			typeof raw.lastNotifiedOn === "string" && raw.lastNotifiedOn ? raw.lastNotifiedOn : null,
@@ -609,6 +616,23 @@ export async function getSeedVersion(): Promise<number> {
 
 export async function setSeedVersion(version: number): Promise<number> {
 	return write({ ...read(), seedVersion: Math.max(0, Math.trunc(version)) }).seedVersion;
+}
+
+export async function getMailTemplateSeedVersion(): Promise<number> {
+	return read().mailTemplateSeedVersion;
+}
+
+export async function setMailTemplateSeedVersion(version: number): Promise<number> {
+	return write({ ...read(), mailTemplateSeedVersion: Math.max(0, Math.trunc(version)) }).mailTemplateSeedVersion;
+}
+
+export async function getDocumentTemplateSeedVersion(): Promise<number> {
+	return read().documentTemplateSeedVersion;
+}
+
+export async function setDocumentTemplateSeedVersion(version: number): Promise<number> {
+	return write({ ...read(), documentTemplateSeedVersion: Math.max(0, Math.trunc(version)) })
+		.documentTemplateSeedVersion;
 }
 
 export async function getOnboarding(): Promise<OnboardingState> {

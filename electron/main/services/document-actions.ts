@@ -7,11 +7,14 @@
  */
 import { dialog, shell } from "electron";
 import { eq } from "drizzle-orm";
-import type { DocumentSignature, SignDocumentInput } from "../../shared/types";
+import type { DocumentSignature, SignDocumentInput, StampPlacement } from "../../shared/types";
+import { STAMP_MAX_WIDTH, STAMP_MIN_WIDTH } from "../../shared/stamp";
 import type { DocumentRecord } from "./documents";
 import { getDb, type Db } from "../db";
 import { documentSignatures } from "../db/schema";
 import * as pdf from "./document-pdf";
+import { signPdf } from "./pdf-sign";
+import * as certificate from "./signing-certificate";
 import { documentShell } from "./document-style";
 import * as templates from "./document-templates";
 import * as documents from "./documents";
@@ -138,6 +141,17 @@ export async function renderPdf(id: string, db: Db = getDb()) {
 
 type SignatureRow = typeof documentSignatures.$inferSelect;
 
+/** The certificate recorded in the audit JSON, or null for a stamp-only signature. */
+function digitalOf(auditJson: string | null): DocumentSignature["digital"] {
+	if (!auditJson) return null;
+	try {
+		const digital = (JSON.parse(auditJson) as { digital?: DocumentSignature["digital"] }).digital;
+		return digital ?? null;
+	} catch {
+		return null;
+	}
+}
+
 function toSignature(row: SignatureRow): DocumentSignature {
 	return {
 		id: row.id,
@@ -152,6 +166,7 @@ function toSignature(row: SignatureRow): DocumentSignature {
 		signatureImagePath: row.signatureImagePath,
 		documentHash: row.documentHash,
 		signedPdfPath: row.signedPdfPath,
+		digital: digitalOf(row.auditJson),
 	};
 }
 
@@ -165,6 +180,20 @@ export async function signatures(
 		.where(eq(documentSignatures.documentId, documentId))
 		.all()
 		.map(toSignature);
+}
+
+/** Refuses a placement that is not numbers on the page, then keeps the stamp on it. */
+function validPlacement(placement: StampPlacement): StampPlacement {
+	const { page, x, y, width } = placement;
+	if (!Number.isInteger(page) || page < 1) throw new Error("Choose a page for the stamp.");
+	if (![x, y, width].every(Number.isFinite)) throw new Error("The stamp position is not valid.");
+	const clamped = Math.min(STAMP_MAX_WIDTH, Math.max(STAMP_MIN_WIDTH, width));
+	return {
+		page,
+		width: clamped,
+		x: Math.min(1 - clamped, Math.max(0, x)),
+		y: Math.min(1, Math.max(0, y)),
+	};
 }
 
 /**
@@ -196,8 +225,34 @@ export async function sign(
 	const imagePath = input.useSignatureImage === false ? null : await signature.getPath();
 	const signedAt = new Date().toISOString();
 
-	const result = await pdf.signPdf({
+	const placement = input.placement ? validPlacement(input.placement) : undefined;
+	const outputPath = pdf.outputPathFor(fileNameFor(record.title, "-ondertekend"));
+
+	let digital: Parameters<typeof signPdf>[0]["digital"] = null;
+	if (input.digital) {
+		const info = certificate.get();
+		const p12 = certificate.readP12();
+		if (!info || !p12) {
+			throw new Error("No signing certificate is set up. Import one under Settings > Documents.");
+		}
+		// Opened here as well as at signing, so an expired certificate or a wrong
+		// passphrase is refused before anything is written.
+		certificate.inspectP12(p12, input.digital.passphrase);
+		digital = {
+			p12,
+			passphrase: input.digital.passphrase,
+			subject: info.subject,
+			issuer: info.issuer,
+			fingerprint: info.fingerprint,
+			validTo: info.validTo,
+		};
+	}
+
+	const result = await signPdf({
 		pdfPath: withPdf.pdfPath,
+		outputPath,
+		placement,
+		digital,
 		signatureImagePath: imagePath,
 		signerName,
 		signerRole: input.signerRole ?? null,
@@ -206,7 +261,6 @@ export async function sign(
 		templateName: template?.name ?? "onbekend",
 		templateVersion: record.templateVersion,
 		isSpecimen: record.isSpecimen,
-		fileName: fileNameFor(record.title, "-ondertekend"),
 	});
 
 	const [row] = db
@@ -218,13 +272,21 @@ export async function sign(
 			signedAt,
 			signatureImagePath: imagePath,
 			documentHash: result.documentHash,
-			signedPdfPath: result.signedPdfPath,
+			signedPdfPath: outputPath,
 			auditJson: JSON.stringify(result.audit),
 		})
 		.returning()
 		.all();
 
 	return toSignature(row!);
+}
+
+/** The PDF to place a stamp on, written first when the document has none yet. */
+export async function readPdf(id: string, db: Db = getDb()): Promise<Uint8Array> {
+	const record = await documents.get(id, db);
+	if (!record) throw new Error("That document no longer exists.");
+	if (!record.pdfPath) await renderPdf(id, db);
+	return documents.readPdfBytes(id, db);
 }
 
 export async function openPdf(id: string, db: Db = getDb()): Promise<void> {

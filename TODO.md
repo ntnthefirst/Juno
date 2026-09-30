@@ -312,3 +312,18 @@ The way Outlook does signatures. Nothing to do with templates.
 - Every action a rule takes writes an audit row naming the rule, so "why did
   this message move" always has an answer.
 
+---
+
+## Signing: what is deliberately not there
+
+- **itsme and eID.** A digital signature uses a .p12 or .pfx certificate the
+  owner imports in Settings > Documents. itsme needs an agreement and client
+  credentials, and the eID key never leaves the card, so it needs a card reader
+  driver and a native module. **You**: an itsme or signing-provider agreement, or
+  a decision to take on eID through PKCS#11. See decision 38.
+- **A trust check.** The certificate is checked for a key, a validity period
+  and its intended use. It is not checked against a trust list, and no
+  timestamp authority is used, so a signature does not carry a trusted time.
+  Adding both is what would make it verifiable after the certificate expires.
+- **Rotated pages.** A page with a rotation is refused by the stamp, with a
+  message. Rotate it upright first.

@@ -14,8 +14,10 @@ import type { ToolDescriptor } from "./types";
  *   legal text has been read and is sound. An agent cannot know that, and a tool
  *   that could set the flag would let an invented contract be promoted to a real
  *   one without anybody reading it. See docs/templates.md.
- * - **Nothing signs.** `documents.sign` exists in the interface only. The
- *   service refuses a specimen regardless, but signing is a person's act.
+ * - **Nothing signs, and nothing touches the certificate.** `documents.sign` and
+ *   the signing certificate exist in the interface only. The service refuses a
+ *   specimen regardless, but signing is a person's act: placing the stamp and
+ *   typing the certificate passphrase are things somebody at the keyboard does.
  */
 
 const templateProperties: Record<string, unknown> = {
@@ -204,7 +206,8 @@ export const documentTools: ToolDescriptor[] = [
 		title: "Import a PDF as a document",
 		description:
 			"Copies an existing PDF on this machine into Juno and records it for a client. It has no body " +
-			"and cannot be rendered again, because it did not come from a template, but it can still be signed.",
+			"and cannot be rendered again, because it did not come from a template, but it can still be signed. " +
+			"Refused when the client already has a document with the same title.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {

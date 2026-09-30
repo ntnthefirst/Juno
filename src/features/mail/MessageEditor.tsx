@@ -5,6 +5,7 @@ import { EmojiPicker } from "../../components/EmojiPicker";
 import { Field } from "../../components/Field";
 import { InsertImageControl } from "../../components/InsertImageControl";
 import { TOOLBAR_BUTTON, TOOLBAR_BUTTON_ACTIVE } from "../../components/toolbar-styles";
+import { escapeAttribute, isDrawable, REMOTE_IMAGE_NOTE } from "../../lib/remote-image";
 
 type MessageEditorProps = {
 	text: string;
@@ -12,13 +13,46 @@ type MessageEditorProps = {
 	onChange: (text: string, html: string | null) => void;
 };
 
-function cleanHtml(value: string): string {
+/**
+ * Where a picture at a web address keeps its address while it is in the
+ * editor. The editor is part of Juno's window, which loads no picture from an
+ * address (lib/remote-image.ts), so the picture is parked without a `src` and
+ * drawn as a box with the note as its tooltip. Nothing is fetched, and the
+ * address goes back before the message is saved.
+ */
+const PARKED = "data-juno-src";
+
+function cleanDocument(value: string): Document {
 	const document = new DOMParser().parseFromString(value, "text/html");
 	document.querySelectorAll("script, iframe, object, embed, form").forEach((node) => node.remove());
 	document.querySelectorAll("*").forEach((node) => {
 		for (const attribute of [...node.attributes]) {
 			if (attribute.name.toLowerCase().startsWith("on")) node.removeAttribute(attribute.name);
 		}
+	});
+	return document;
+}
+
+/** A message as the editor shows it, each remote picture parked. */
+function forEditor(value: string): string {
+	const document = cleanDocument(value);
+	document.querySelectorAll("img[src]").forEach((image) => {
+		const src = image.getAttribute("src") ?? "";
+		if (isDrawable(src)) return;
+		image.removeAttribute("src");
+		image.setAttribute(PARKED, src);
+		if (!image.hasAttribute("title")) image.setAttribute("title", REMOTE_IMAGE_NOTE);
+	});
+	return document.body.innerHTML;
+}
+
+/** What the editor holds, as the message it saves, each parked picture back at its address. */
+function forMessage(value: string): string {
+	const document = cleanDocument(value);
+	document.querySelectorAll(`img[${PARKED}]`).forEach((image) => {
+		image.setAttribute("src", image.getAttribute(PARKED) ?? "");
+		image.removeAttribute(PARKED);
+		if (image.getAttribute("title") === REMOTE_IMAGE_NOTE) image.removeAttribute("title");
 	});
 	return document.body.innerHTML;
 }
@@ -70,7 +104,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 	useEffect(() => {
 		const host = hostRef.current;
 		if (!host) return;
-		const next = html ? cleanHtml(html) : text.replace(/\n/g, "<br>");
+		const next = html ? forEditor(html) : text.replace(/\n/g, "<br>");
 		if (host.innerHTML !== next) host.innerHTML = next;
 	}, [html, text]);
 
@@ -91,7 +125,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 	function update() {
 		const host = hostRef.current;
 		if (!host) return;
-		const nextHtml = cleanHtml(host.innerHTML);
+		const nextHtml = forMessage(host.innerHTML);
 		onChange(host.innerText, nextHtml || null);
 		refreshActiveFormats();
 	}
@@ -254,7 +288,16 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 					) : null}
 				</div>
 
-				<InsertImageControl onInsert={(src) => insertAtSelection("insertImage", src)} />
+				<InsertImageControl
+					onInsert={(src) =>
+						isDrawable(src)
+							? insertAtSelection("insertImage", src)
+							: insertAtSelection(
+									"insertHTML",
+									`<img ${PARKED}="${escapeAttribute(src)}" alt="" title="${escapeAttribute(REMOTE_IMAGE_NOTE)}">`,
+								)
+					}
+				/>
 				<EmojiPicker onInsert={(emoji) => insertAtSelection("insertText", emoji)} />
 			</div>
 
@@ -271,7 +314,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 				onFocus={refreshActiveFormats}
 				onBlur={refreshActiveFormats}
 				data-placeholder="Write your message"
-				className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-4 text-[length:var(--text-lg)] leading-[var(--leading-relaxed)] text-[var(--ink)] outline-none empty:before:text-[var(--ink-faint)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--accent)] [&_a]:underline [&_img]:max-w-full [&_img]:rounded-[var(--radius-md)]"
+				className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-4 text-[length:var(--text-lg)] leading-[var(--leading-relaxed)] text-[var(--ink)] outline-none empty:before:text-[var(--ink-faint)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--accent)] [&_a]:underline [&_img]:max-w-full [&_img]:rounded-[var(--radius-md)] [&_img[data-juno-src]]:inline-block [&_img[data-juno-src]]:min-h-12 [&_img[data-juno-src]]:min-w-32 [&_img[data-juno-src]]:border [&_img[data-juno-src]]:border-dashed [&_img[data-juno-src]]:border-[var(--line-strong)] [&_img[data-juno-src]]:bg-[var(--sunken)] [&_img[data-juno-src]]:p-2 [&_img[data-juno-src]]:text-[length:var(--text-sm)] [&_img[data-juno-src]]:text-[var(--ink-muted)]"
 			/>
 		</div>
 	);

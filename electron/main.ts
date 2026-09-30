@@ -232,14 +232,14 @@ if (!app.requestSingleInstanceLock()) {
 								const lead = statuses.items.find((i) => i.key === "lead") ?? statuses.items[0];
 								const made = [];
 								for (const c of [
-									{ name: "obet", city: "Gent", email: "hallo@obet.be", statusId: active.id },
-									{ name: "bodhi", city: "Brugge", email: "info@bodhi.be", statusId: active.id },
-									{ name: "noir", city: "Antwerpen", statusId: active.id },
-									{ name: "hyge", city: "Leuven", statusId: lead.id },
+									{ name: "obet", city: "Gent", postalCode: "9000", email: "hallo@obet.be", statusId: active.id },
+									{ name: "bodhi", city: "Brugge", postalCode: "8000", email: "info@bodhi.be", statusId: active.id },
+									{ name: "noir", city: "Antwerpen", postalCode: "2000", statusId: active.id },
+									{ name: "hyge", city: "Leuven", postalCode: "3000", statusId: lead.id },
 								]) {
 									const client = await b.clients.create({ name: c.name, statusId: c.statusId });
 									if (c.email) await b.clientEmails.create({ clientId: client.id, email: c.email });
-									await b.clientAddresses.create({ clientId: client.id, addressLine1: "Kerkstraat 1", city: c.city });
+									await b.clientAddresses.create({ clientId: client.id, addressLine1: "Kerkstraat 1", postalCode: c.postalCode, city: c.city });
 									made.push(client);
 								}
 								await b.contacts.create({ clientId: made[0].id, name: "Laura", role: "Zaakvoerder", email: "laura@obet.be", isPrimary: true });
@@ -247,11 +247,34 @@ if (!app.requestSingleInstanceLock()) {
 								const running = ps.items.find((i) => i.key === "active") ?? ps.items[0];
 								await b.projects.create({ clientId: made[0].id, name: "Ontwikkelovereenkomst site", statusId: running.id, dueOn: "2026-11-14", agreedValueCents: 210000 });
 								await b.projects.create({ clientId: made[1].id, name: "Project scope", statusId: running.id, dueOn: "2026-10-03", agreedValueCents: 125000 });
+								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", addressLine1: "Kerkstraat 1", postalCode: "9000", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
 								// Phase 1: generate a document through the same bridge the
 								// interface uses, so the smoke run covers it too.
-								const tpl = (await b.templates.list()).find((t) => t.key === "development_agreement");
+								// A first install holds one document template and no other: the
+								// example, written as an ordinary template. Nothing here may look it
+								// up by key, because that is not how anyone finds it.
+								const seededTemplates = await b.templates.list();
+								if (seededTemplates.length !== 1) throw new Error("Smoke: a first install should hold exactly one document template, found " + seededTemplates.length);
+								const tpl = seededTemplates[0];
+								if (tpl.isSystem || tpl.reviewedAt !== null || !tpl.layout || tpl.layout.pages.length < 2 || tpl.inputs.length === 0) {
+									throw new Error("Smoke: the example is not an unreviewed, paged template that asks for inputs: " + JSON.stringify({ isSystem: tpl.isSystem, reviewedAt: tpl.reviewedAt, pages: tpl.layout?.pages.length, inputs: tpl.inputs.length }));
+								}
+								const exampleValues = Object.fromEntries(tpl.inputs.map((input) => [input.key, input.defaultValue ?? "het ontwerp en de bouw van een website"]));
 								const gen = await b.documents.generate({
 									clientId: made[0].id, templateId: tpl.id, projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
+									extras: exampleValues,
+								});
+								// Every placeholder answered by the records and the inputs above. A
+								// marker left in the example would be printed in the first document
+								// anyone makes from it.
+								if (gen.missing.length !== 0) throw new Error("Smoke: the example left placeholders unresolved: " + gen.missing.join(", "));
+								if (!gen.document.isSpecimen) throw new Error("Smoke: a document from an unreviewed template is not marked as a specimen");
+								// A hand-written document template, HTML only, for the same reason as
+								// the mail one further down: the walk reads it in the code view and starts a
+								// page layout on it, and the example is already laid out.
+								await b.templates.create({
+									name: "Handgeschreven overeenkomst",
+									bodyHtml: "<h1>Overeenkomst</h1><p>Tussen {{ owner.businessName }} en {{ client.name }}.</p>",
 								});
 								// Generating writes the PDF now, so this call is only here to
 								// prove the explicit path still works. What generating produced is
@@ -282,7 +305,14 @@ if (!app.requestSingleInstanceLock()) {
 								// in-memory mailbox the main process swapped in above. This is
 								// what exercises the credential store, the scheme host and the
 								// reader's frame policy.
-								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
+								// A hand-written template of the walk's own. A fresh install ships
+								// none of the old ones, and the walk below still needs one that is
+								// HTML only, to read in the code view and to lay out on a canvas.
+								await b.mail.templates.create({
+									name: "Herinnering betaling",
+									subject: "Herinnering: {{ document.title }}",
+									bodyHtml: "<p>Beste {{ client.contactName }},</p><p>Volgens mijn administratie staat {{ document.title }} nog open. Mogelijk is de betaling al onderweg.</p><p>Met vriendelijke groeten,<br>{{ owner.contactName }}</p>",
+								});
 								// Two addresses and a number, so the lists under Your business are
 								// photographed with something in them. The second one is the case
 								// the lists exist for: an address that is kept and never read.
@@ -304,6 +334,12 @@ if (!app.requestSingleInstanceLock()) {
 								await b.mail.outbox.createDraft({
 									accountId: mailAccount.id, to: [{ name: null, address: "info@noir.be" }], subject: "Even navragen",
 									bodyText: "Dag,\\n\\nIs de offerte goed ontvangen?\\n\\nGroeten", clientId: made[2].id,
+								});
+								// A draft with a picture at a web address, which the window
+								// may not fetch. The Drafts step checks it is drawn as a box.
+								await b.mail.outbox.createDraft({
+									accountId: mailAccount.id, to: [{ name: null, address: "info@noir.be" }], subject: "Met logo",
+									bodyText: "Dag", bodyHtml: '<p>Dag</p><img src="https://www.example.com/logo.png" alt="Logo" style="width:96px">', clientId: made[2].id,
 								});
 
 								// Phase 5: a weekly call anchored to this week's Tuesday, one
@@ -545,7 +581,13 @@ if (!app.requestSingleInstanceLock()) {
 								if (head !== "%PDF-") {
 									throw new Error(`Smoke: the generated file starts with ${head}, not a PDF header`);
 								}
-								console.log(`SMOKE_DEMO generated pdf=${size}`);
+								// The example is two pages, and the specimen banner sits above them. A
+								// page that spills onto a third sheet is a layout fault the bytes above
+								// would never show.
+								const { PDFDocument } = await import("pdf-lib");
+								const sheets = (await PDFDocument.load(readPdfBytes(generated.pdfPath))).getPageCount();
+								if (sheets !== 2) throw new Error(`Smoke: the example printed on ${sheets} sheets, not its two pages`);
+								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheets}`);
 							}
 							window.webContents.reload();
 							await new Promise((r) => {
@@ -1132,14 +1174,84 @@ if (!app.requestSingleInstanceLock()) {
 									)) as string;
 									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
 								}
+								if (screen === "Document templates") {
+									// The example first. It is the one template every first install has and
+									// the only one laid out on more than one page, so its preview and its
+									// editor are the first things a new owner opens.
+									const inspected = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
+											if (!row) return "no row for the example";
+											row.click();
+											await wait(900);
+											const frame = document.querySelector("main iframe");
+											if (!frame) return "the example has no preview";
+											return "ok";
+										})()`,
+									) as string;
+									if (inspected !== "ok") throw new Error(`Smoke: the example document template ${inspected}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-example-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									// Into the page editor, where both pages have to be there to click on.
+									const laidOut = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											await wait(800);
+											if (!document.querySelector("button[aria-label^='Page 1']")) return "no first page on the canvas";
+											if (!document.querySelector("button[aria-label^='Page 2']")) return "no second page on the canvas";
+											return "ok";
+										})()`,
+									) as string;
+									if (laidOut !== "ok") throw new Error(`Smoke: the example document template editor ${laidOut}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-example-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									// Back out without a change, to the preview and then to the list, so the
+									// steps after this start where they always did.
+									const returned = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											if (!back()) return "no back action from the editor";
+											back().click();
+											await wait(400);
+											const dialog = document.querySelector("[role=dialog]");
+											if (dialog) {
+												const discard = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
+												if (!discard) return "the editor asked to discard a change nobody made";
+												discard.click();
+												await wait(500);
+											}
+											if (!back()) return "no back action from the preview";
+											back().click();
+											await wait(500);
+											return document.querySelector("main ul li button") ? "ok" : "did not return to the list";
+										})()`,
+									) as string;
+									if (returned !== "ok") throw new Error(`Smoke: leaving the example document template ${returned}`);
+								}
 								if (screen === "Mail templates" || screen === "Document templates") {
-									// Opens the first template so the preview path runs for real: the
+									// Opens a template so the preview path runs for real: the
 									// list renders, the row opens a preview, and the preview asks the
 									// service to fill the template. A typecheck proves none of that,
-									// and the preview is where a template screen would throw.
+									// and the preview is where a template screen would throw. For the
+									// mail templates it is the hand-written one the walk made, which
+									// the steps after this need.
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
-											const row = document.querySelector("main ul li button");
+											const wanted = ${JSON.stringify(screen === "Mail templates" ? "Herinnering betaling" : "Handgeschreven overeenkomst")};
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes(wanted));
 											if (!row) return "no template row";
 											row.click();
 											await new Promise((r) => setTimeout(r, 900));
@@ -1366,8 +1478,9 @@ if (!app.requestSingleInstanceLock()) {
 									// One document underneath every view (docs/editors.md section 2):
 									// switching to Code has to show the very text the body was
 									// rendering, not a blank editor or a stale one. Then onto a
-									// canvas, because the seeded templates are hand-written HTML and
-									// converting one is the only way the canvas is reached at all.
+									// canvas, because the template the walk made is hand-written HTML and
+									// converting one is the only way the canvas is reached at all: a
+									// fresh install ships only the example, and that one is a canvas.
 									const edited = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1682,7 +1795,7 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const layerRows = () => [...document.querySelectorAll('button[title="Drag to reorder. Alt and an arrow move it too"]')];
-											const blockRows = () => layerRows().filter((el) => el.className.includes("pl-6"));
+											const blockRows = () => layerRows().filter((el) => el.dataset.layerKind === "block");
 											const press = async (key, code, mods = {}) => {
 												document.body.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
 												await wait(300);
@@ -1732,7 +1845,7 @@ if (!app.requestSingleInstanceLock()) {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											if (!document.querySelector('[role=toolbar][aria-label="Canvas tools"]')) return "no floating toolbar";
 											const layerRows = () => [...document.querySelectorAll('button[title="Drag to reorder. Alt and an arrow move it too"]')];
-											const blockRows = () => layerRows().filter((el) => el.className.includes("pl-6"));
+											const blockRows = () => layerRows().filter((el) => el.dataset.layerKind === "block");
 											if (document.querySelector('[role=region][aria-label="Keyboard shortcuts"]')) return "Escape did not close the list of shortcuts";
 											const tekst = blockRows().find((el) => el.textContent.trim() === "Welkom");
 											if (!tekst) return "no layer for the text block";
@@ -1777,6 +1890,875 @@ if (!app.requestSingleInstanceLock()) {
 										(await capture(window.webContents)).toPNG(),
 									);
 
+									// A container nests inside another (docs/editors.md section 2): F
+									// while a container is selected lands the new one inside it. A
+									// block added the same way lands in the nested
+									// section, the layers show the nesting by depth, Alt and an arrow
+									// still moves a block within its own parent, and the compiled message
+									// carries the nesting through to a second `<section>`.
+									const nested = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code) => {
+												document.body.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }));
+												await wait(300);
+											};
+											const type = async (text) => {
+												const editor = document.querySelector('[role=textbox][aria-label="Text"]');
+												if (!editor) return false;
+												document.execCommand("insertText", false, text);
+												editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const containerRows = () => [...document.querySelectorAll('[data-layer-kind="container"]')];
+											const blockRows = () => [...document.querySelectorAll('[data-layer-kind="block"]')];
+
+											const top = containerRows().find((el) => el.dataset.layerDepth === "0");
+											if (!top) return "no top-level container in the layers";
+											top.click();
+											await wait(200);
+											const containersBefore = containerRows().length;
+											await press("f", "KeyF");
+											if (containerRows().length !== containersBefore + 1) return "F did not add a nested section";
+											const nestedRow = containerRows().find((el) => el !== top && el.dataset.layerDepth !== "0");
+											if (!nestedRow) return "the new section is not nested under the top-level one";
+
+											const blocksBefore = blockRows().length;
+											await press("t", "KeyT");
+											if (!(await type("Genest"))) return "T did not open a new text for typing";
+											if (blockRows().length !== blocksBefore + 1) return "T did not add a block";
+											const first = blockRows().find((el) => el.textContent.trim() === "Genest");
+											if (!first) return "the new block is not in the layers";
+											if (first.dataset.layerDepth !== String(Number(nestedRow.dataset.layerDepth) + 1)) {
+												return "the new block did not land inside the nested section";
+											}
+
+											// A second block beside the first, so Alt and an arrow has
+											// something to reorder within that same parent.
+											first.click();
+											await wait(200);
+											await press("t", "KeyT");
+											if (!(await type("Tweede"))) return "T did not open a second text for typing";
+											const second = blockRows().find((el) => el.textContent.trim() === "Tweede");
+											if (!second || second.dataset.layerDepth !== first.dataset.layerDepth) {
+												return "the second block did not land beside the first, in the same parent";
+											}
+											const siblings = () =>
+												blockRows()
+													.filter((el) => el.dataset.layerDepth === first.dataset.layerDepth)
+													.map((el) => el.textContent.trim());
+											const before = siblings();
+											second.focus();
+											second.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
+											await wait(300);
+											const after = siblings();
+											if (after.indexOf("Tweede") !== before.indexOf("Tweede") - 1) {
+												return "Alt and an arrow did not move the block within its nested parent";
+											}
+
+											// An apostrophe and an ampersand typed into a text go into the
+											// message escaped once, and read as the same words again.
+											second.click();
+											await wait(200);
+											await press("t", "KeyT");
+											if (!(await type("Apostrof's & meer"))) return "T did not open a third text for typing";
+
+											const view = document.querySelector('button[title="The message as it will be sent"]');
+											if (!view) return "no preview view";
+											view.click();
+											// The frame may already exist from an earlier look at the
+											// preview, so wait for its document to carry these edits
+											// rather than for the frame itself.
+											let html = "";
+											for (let tries = 0; tries < 40; tries++) {
+												await wait(150);
+												const frame = document.querySelector('iframe[title="Template preview"]');
+												html = frame ? frame.getAttribute("srcdoc") || "" : "";
+												if (html.includes("Genest") && html.includes("Tweede") && html.includes("Apostrof")) break;
+											}
+											if (!html) return "the message did not render";
+											if (!html.includes("Genest") || !html.includes("Tweede")) return "the compiled HTML does not carry the nested blocks";
+											if (!html.includes("Apostrof&#39;s &amp; meer") || /&amp;#|&amp;amp;/.test(html)) return "an apostrophe or an ampersand was not escaped exactly once";
+											// A section opened inside another before that one closes.
+											if (!/<section[^>]*>(?:(?!<\\/section>)[\\s\\S])*<section/.test(html)) {
+												return "the compiled HTML has no section nested inside another";
+											}
+											const canvasView = document.querySelector('button[title="The canvas"]');
+											if (canvasView) {
+												canvasView.click();
+												await wait(300);
+											}
+											return "ok";
+										})()`,
+									) as string;
+									if (nested !== "ok") throw new Error(`Smoke: mail template editor ${nested}`);
+									writeFileSync(joinPath(shotDir, `mail-template-nested.png`), (await capture(window.webContents)).toPNG());
+
+									// The toolbar's groups (TODO 4a). Every group has a button that adds
+									// its last-used element and a chevron that opens its menu; both are
+									// used here on the real toolbar, and so are the keys: a group's letter,
+									// Shift with it for the menu, and an element's own key inside it. A
+									// text is nested in a header, and the compiled message follows what
+									// is added and what is changed in the design panel.
+									// A screenshot in the theme the walk is in (dark, after the two
+									// above) and in light, and back to dark: the new controls have to be
+									// looked at in both.
+									const shootBoth = async (name: string) => {
+										writeFileSync(joinPath(shotDir, `${name}.png`), (await capture(window.webContents)).toPNG());
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											if (theme === "light") writeFileSync(joinPath(shotDir, `${name}-light.png`), (await capture(window.webContents)).toPNG());
+										}
+									};
+
+									const grouped = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const named = (kind, start) => rows(kind).find((el) => el.textContent.trim().startsWith(start));
+											const type = async (text) => {
+												const editor = document.querySelector("[role=textbox]");
+												if (!editor) return false;
+												document.execCommand("insertText", false, text);
+												editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setSelect = async (labelText, value) => {
+												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === labelText);
+												const select = label ? document.getElementById(label.htmlFor) : null;
+												if (!select) return false;
+												Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, value);
+												select.dispatchEvent(new Event("change", { bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const openMenu = async (group) => {
+												const chevron = document.querySelector('button[aria-label="' + group + ' menu"]');
+												if (!chevron) return false;
+												chevron.click();
+												await wait(300);
+												return document.querySelector('[role=menu][aria-label="' + group + ' menu"]') !== null;
+											};
+											const pick = async (id) => {
+												const item = document.querySelector('[role=menuitem][data-element="' + id + '"]');
+												if (!item) return false;
+												item.click();
+												await wait(300);
+												return true;
+											};
+
+											for (const [group, name] of [["containers", "Containers"], ["text", "Text"], ["columns", "Columns"], ["media", "Media"], ["other", "Other"]]) {
+												if (!document.querySelector('[data-tool-group="' + group + '"] button')) return "the toolbar has no " + name + " group";
+												if (!document.querySelector('button[aria-label="' + name + ' menu"]')) return "the " + name + " group has no chevron";
+											}
+
+											// Containers: the key adds the last-used one, and Shift and F opens
+											// the menu, where H is a header.
+											const top = rows("container").find((el) => el.dataset.layerDepth === "0");
+											if (!top) return "no top-level container to start from";
+											top.click();
+											await wait(200);
+											const containers = rows("container").length;
+											await press("f", "KeyF");
+											if (rows("container").length !== containers + 1) return "F did not add a container";
+											await press("F", "KeyF", { shiftKey: true });
+											const menu = document.querySelector('[role=menu][aria-label="Containers menu"]');
+											if (!menu) return "Shift+F did not open the Containers menu";
+											if (!menu.contains(document.activeElement)) return "the menu did not take the focus";
+											if (menu.querySelectorAll("[role=menuitem]").length !== 8) return "the Containers menu does not list its eight elements";
+											const keys = [...menu.querySelectorAll("kbd")].map((el) => el.textContent.trim()).join("");
+											if (keys !== "SDHFMAIN") return "the rows of the Containers menu do not show their keys: " + keys;
+											await press("H", "KeyH", { shiftKey: true }, document.activeElement);
+											if (document.querySelector("[role=menu]")) return "picking an element did not close the menu";
+											if (rows("container").length !== containers + 2) return "H in the Containers menu did not add a header";
+											const header = named("container", "Header");
+											if (!header) return "the new header is not in the layers under its name";
+											if (!header.textContent.includes("header")) return "the layers do not show the header tag";
+
+											// A text in the header. A letter typed into the open text belongs to
+											// the text, not to the toolbar.
+											const blocks = () => rows("block");
+											await press("t", "KeyT");
+											const typing = document.querySelector('[role=textbox][aria-label="Text"]');
+											if (!typing || document.activeElement !== typing) return "T did not add a text open for typing";
+											const beforeTyping = rows("container").length;
+											typing.dispatchEvent(new KeyboardEvent("keydown", { key: "f", code: "KeyF", bubbles: true, cancelable: true }));
+											await wait(300);
+											if (rows("container").length !== beforeTyping) return "a letter typed into a text added a container";
+											if (!(await type("In de kop"))) return "the text closed early";
+											const kop = blocks().find((el) => el.textContent.trim().startsWith("In de kop"));
+											if (!kop) return "the text is not in the layers";
+											if (kop.dataset.layerDepth !== String(Number(named("container", "Header").dataset.layerDepth) + 1)) {
+												return "the text is not nested in the header";
+											}
+											const nestedHtml = await compiled((html) => html.includes("In de kop"));
+											if (!/<header[^>]*>(?:(?!<\\/header>)[\\s\\S])*In de kop/.test(nestedHtml)) return "the compiled HTML has no header holding the text";
+
+											// Text: the chevron and its menu, and the button that remembers.
+											if (!(await openMenu("Text"))) return "the Text chevron did not open its menu";
+											if (document.querySelectorAll("[role=menuitem]").length !== 14) return "the Text menu does not list its fourteen elements";
+											if (!document.querySelector('[role=menuitem][data-element="button"]')) return "the Text menu has no Button";
+											if (document.querySelector('button[aria-label="Add button"]')) return "the toolbar still has a Button tool of its own";
+											if (!(await pick("h3"))) return "no Heading 3 in the Text menu";
+											if (!(await type("Kopje"))) return "a new heading did not open for typing";
+											const remembered = document.querySelector('[data-tool-group="text"] button').getAttribute("aria-label");
+											if (remembered !== "Add heading 3") return "the Text button did not take the last-used element: " + remembered;
+											const headingHtml = await compiled((html) => html.includes("Kopje"));
+											if (!/<h3[^>]*>Kopje<\\/h3>/.test(headingHtml)) return "the compiled HTML has no h3";
+											let stored = "";
+											try { stored = window.localStorage.getItem("juno.mailTemplates.lastElements") || ""; } catch { stored = ""; }
+											if (!stored.includes('"text":"h3"')) return "the last-used element was not remembered on this machine";
+
+											// A tag changed in the design panel, within its group.
+											blocks().find((el) => el.textContent.trim().startsWith("In de kop")).click();
+											await wait(300);
+											if (!(await setSelect("Text element", "blockquote"))) return "no Text element list in the design panel";
+											const quote = await compiled((html) => html.includes("<blockquote"));
+											if (!/<blockquote[^>]*>In de kop<\\/blockquote>/.test(quote)) return "changing the tag to blockquote did not reach the compiled HTML";
+											if (!(await setSelect("Text element", "h4"))) return "no Text element list after the first change";
+											const asHeading = await compiled((html) => html.includes("<h4"));
+											if (!/<h4[^>]*>In de kop<\\/h4>/.test(asHeading)) return "a text turned into a heading did not compile as one";
+											if (!(await setSelect("Text element", "ul"))) return "no Text element list after the second change";
+											const asList = await compiled((html) => html.includes("<ul"));
+											if (!/<ul[^>]*><li>In de kop<\\/li><\\/ul>/.test(asList)) return "a heading turned into a list did not compile as one";
+											const kept = blocks().filter((el) => el.textContent.trim().startsWith("In de kop")).length;
+											if (kept !== 1) return "changing the tag lost or copied the element";
+
+											named("container", "Header").click();
+											await wait(300);
+											if (!(await setSelect("Container element", "footer"))) return "no Container element list in the design panel";
+											const footerHtml = await compiled((html) => html.includes("<footer"));
+											if (!/<footer[^>]*>(?:(?!<\\/footer>)[\\s\\S])*In de kop/.test(footerHtml)) return "changing the container to a footer did not reach the compiled HTML";
+											if (/<header/.test(footerHtml)) return "the header is still sent as a header";
+											if (!named("container", "Footer")) return "the layers still call the footer a header";
+
+											// A list opens for typing like a text does, and what is typed stays
+											// an item of it.
+											await press("T", "KeyT", { shiftKey: true });
+											if (!document.querySelector('[role=menu][aria-label="Text menu"]')) return "Shift+T did not open the Text menu";
+											await press("U", "KeyU", { shiftKey: true }, document.activeElement);
+											if (!(await type("Eerste punt"))) return "a new list did not open for typing";
+											const listHtml = await compiled((html) => html.includes("Eerste punt"));
+											if (!/<ul[^>]*><li>Eerste punt<\\/li><\\/ul>/.test(listHtml)) return "what was typed into a new list is not an item of it";
+											return "ok";
+										})()`,
+									) as string;
+									if (grouped !== "ok") throw new Error(`Smoke: mail template editor ${grouped}`);
+									await shootBoth("mail-template-grouped");
+
+									// Columns: added from the key and from the menu, with a cell chosen
+									// as the place a new text lands, and rows and cells changed in the
+									// design panel.
+									const columned = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const type = async (text) => {
+												const editor = document.querySelector("[role=textbox]");
+												if (!editor) return false;
+												document.execCommand("insertText", false, text);
+												editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setNumber = async (title, value) => {
+												const label = document.querySelector('label[title="' + title + '"]');
+												const field = label ? document.getElementById(label.htmlFor) : null;
+												if (!field) return false;
+												field.focus();
+												Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+												field.blur();
+												await wait(300);
+												return true;
+											};
+
+											await press("c", "KeyC");
+											if (rows("columns").length !== 1) return "C did not add a columns table";
+											if (rows("cell").length !== 2) return "a new columns table does not have two cells";
+											const chevron = document.querySelector('button[aria-label="Columns menu"]');
+											chevron.click();
+											await wait(300);
+											const item = document.querySelector('[role=menuitem][data-element="columns"]');
+											if (!item) return "the Columns menu has no columns";
+											item.click();
+											await wait(300);
+											if (rows("columns").length !== 2 || rows("cell").length !== 4) return "the Columns menu did not add a second table";
+											const tables = await compiled((html) => (html.match(/data-juno-columns/g) || []).length === 2);
+											if (!/<table[^>]*role="presentation"[^>]*data-juno-columns/.test(tables)) return "the compiled HTML has no presentation table";
+
+											// A cell: its width, and a text that lands in it.
+											const cell = rows("cell")[0];
+											cell.click();
+											await wait(300);
+											if (!(await setNumber("Width", "30"))) return "no width field for a cell";
+											const cellHtml = await compiled((html) => html.includes('width="30%"'));
+											if (!cellHtml.includes('width="30%"')) return "a cell width set in the design panel is not in the compiled HTML";
+											const cellDepth = Number(rows("cell")[0].dataset.layerDepth);
+											rows("cell")[0].click();
+											await wait(300);
+											await press("t", "KeyT");
+											if (!(await type("In de cel"))) return "T with a cell selected did not open a text";
+											const inCell = rows("block").find((el) => el.textContent.trim().startsWith("In de cel"));
+											if (!inCell || Number(inCell.dataset.layerDepth) !== cellDepth + 1) return "a text added with a cell selected did not land in the cell";
+
+											// Rows and cells of the table itself.
+											rows("columns")[0].click();
+											await wait(300);
+											const before = rows("cell").length;
+											document.querySelector('button[aria-label="Add row"]').click();
+											await wait(300);
+											if (rows("cell").length !== before + 2) return "Add row did not add a row of cells";
+											document.querySelector('button[aria-label="Remove row 2"]').click();
+											await wait(300);
+											if (rows("cell").length !== before) return "Remove row did not take the row out";
+											document.querySelector('button[aria-label="Add a cell to row 1"]').click();
+											await wait(300);
+											if (rows("cell").length !== before + 1) return "Add a cell did not add a cell";
+											return "ok";
+										})()`,
+									) as string;
+									if (columned !== "ok") throw new Error(`Smoke: mail template editor ${columned}`);
+									await shootBoth("mail-template-columns");
+
+									// Media and the rest, then the menu photographed open.
+									const media = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const footer = rows("container").find((el) => el.textContent.trim().startsWith("Footer"));
+											if (!footer) return "the footer went away";
+											footer.click();
+											await wait(300);
+											const blocks = rows("block").length;
+											await press("i", "KeyI");
+											if (rows("block").length !== blocks + 1) return "I did not add a picture";
+											await press("e", "KeyE");
+											if (rows("block").length !== blocks + 2) return "E did not add an input";
+											await press("E", "KeyE", { shiftKey: true });
+											const other = document.querySelector('[role=menu][aria-label="Other menu"]');
+											if (!other) return "Shift+E did not open the Other menu";
+											await press("D", "KeyD", { shiftKey: true }, document.activeElement);
+											if (rows("block").length !== blocks + 3) return "D in the Other menu did not add a divider";
+											const chevron = document.querySelector('button[aria-label="Media menu"]');
+											chevron.click();
+											await wait(300);
+											const menu = document.querySelector('[role=menu][aria-label="Media menu"]');
+											if (!menu) return "the Media chevron did not open its menu";
+											if (menu.querySelectorAll("[role=menuitem]").length !== 2) return "the Media menu offers more than a picture and a linked picture";
+											if (!/no client that matters/.test(menu.textContent)) return "the Media menu does not say why there is no video";
+											if (/video|audio|embed/i.test([...menu.querySelectorAll("[role=menuitem]")].map((el) => el.textContent).join(" "))) return "the Media menu offers video, audio or an embed";
+											return "ok";
+										})()`,
+									) as string;
+									if (media !== "ok") throw new Error(`Smoke: mail template editor ${media}`);
+									await shootBoth("mail-template-groups");
+
+									const linked = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setText = async (labelText, value) => {
+												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === labelText);
+												const field = label ? document.getElementById(label.htmlFor) : null;
+												if (!field) return false;
+												Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												await wait(300);
+												return true;
+											};
+
+											// Escape closes a menu and nothing else.
+											await press("Escape", "Escape", {}, document.activeElement);
+											if (document.querySelector("[role=menu]")) return "Escape did not close the menu";
+											if (!document.querySelector('button[aria-label="Delete block"]')) return "Escape in the menu let go of the selection";
+
+											const blocks = rows("block").length;
+											await press("I", "KeyI", { shiftKey: true });
+											if (!document.querySelector('[role=menu][aria-label="Media menu"]')) return "Shift+I did not open the Media menu";
+											await press("L", "KeyL", { shiftKey: true }, document.activeElement);
+											if (rows("block").length !== blocks + 1) return "L in the Media menu did not add a linked picture";
+											const remembered = document.querySelector('[data-tool-group="media"] button').getAttribute("aria-label");
+											if (remembered !== "Add linked picture") return "the Media button did not take the last-used element: " + remembered;
+
+											// The picture links through an on-click action in the Actions
+											// section. A link with a scheme the message refuses is said to be
+											// refused, and a safe one is not. The picture has no address of its
+											// own here: the canvas would try to load one, and its content policy
+											// refuses every address that is not the app's own.
+											if (!(await setText("Link address", "http://insecure.example"))) return "no link address field on a picture";
+											if (![...document.querySelectorAll("p")].some((el) => el.textContent.startsWith("Only https addresses are kept"))) return "an http link was not shown as refused";
+											if (!(await setText("Link address", "https://example.be"))) return "the link field went away";
+											if ([...document.querySelectorAll("p")].some((el) => el.textContent.startsWith("Only https addresses are kept"))) return "an https link was shown as refused";
+											if (!document.querySelector("[data-layer-linked]")) return "a linked picture has no link glyph in the layers";
+											const sent = await compiled((html) => /<hr /.test(html));
+											if (sent.includes("insecure.example")) return "an http link reached the message";
+											if (!/<hr[^>]*>/.test(sent)) return "the divider is not in the compiled HTML";
+
+											// What the compiler makes of a picture with an address, through the
+											// real bridge: inside its link when the link is safe, and a plain
+											// picture when it is not.
+											const viaBridge = await window.juno.mail.templates.preview({
+												subject: "x",
+												bodyHtml: "",
+												inputs: [],
+												clientId: null,
+												layout: {
+													version: 2,
+													children: [
+														{
+															kind: "container",
+															tag: "header",
+															children: [
+																{ kind: "image", src: "https://example.be/logo.png", alt: "Logo", href: "https://example.be" },
+																{ kind: "image", src: "https://example.be/other.png", alt: "Other", href: "javascript:alert(1)" },
+																{ kind: "image", src: "https://example.be/plain.png", alt: "Plain", href: "" },
+															],
+														},
+													],
+												},
+											});
+											const pictures = viaBridge.bodyHtml;
+											if ((pictures.match(/data-juno-link/g) || []).length !== 1) return "only the picture with a safe link should be inside a link";
+											if (!/<a href="https:\\/\\/example.be" data-juno-link="1"[^>]*><img[^>]*logo.png/.test(pictures)) return "the picture is not inside its link in the compiled HTML";
+											if (pictures.includes("javascript")) return "an unsafe link reached the message";
+											if (!/<header[^>]*>/.test(pictures)) return "the header container is not written as a header";
+
+											// Convert to HTML for a container: the footer and everything in
+											// it become one block that is sent as it was.
+											const footer = rows("container").find((el) => el.textContent.trim().startsWith("Footer"));
+											footer.click();
+											await wait(300);
+											const containers = rows("container").length;
+											const convert = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Convert to HTML");
+											if (!convert) return "a container has no Convert to HTML";
+											convert.click();
+											for (let tries = 0; tries < 20 && rows("container").length === containers; tries++) await wait(150);
+											if (rows("container").length !== containers - 1) return "converting the footer left it in the layers as a container";
+											if (rows("columns").length !== 0) return "the tables it held are still in the layers";
+											const converted = await compiled((html) => html.includes("<footer data-juno-block=\\"html\\""));
+											if (!/<footer data-juno-block="html"[^>]*>(?:(?!<\\/footer>)[\\s\\S])*<table[^>]*role="presentation"/.test(converted)) return "the converted footer is not sent as the footer with its table";
+											if (!converted.includes("In de kop") || !converted.includes("In de cel")) return "converting lost what was in the footer";
+											return "ok";
+										})()`,
+									) as string;
+									if (linked !== "ok") throw new Error(`Smoke: mail template editor ${linked}`);
+									writeFileSync(joinPath(shotDir, `mail-template-converted.png`), (await capture(window.webContents)).toPNG());
+
+									// The design panel's sections (TODO 4d): Layout holds only how an
+									// element arranges what is in it, Spacing holds padding and margin,
+									// the radius sits with the opacity in Appearance, and W and H are
+									// with Position. A container is given a margin and a padding from
+									// Spacing and a place in the 3 by 3 alignment box, and the compiled
+									// message is checked; then a text block, whose Layout is how its words
+									// sit, and which has no Clip content.
+									const spaced = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setNumber = async (title, value) => {
+												const label = document.querySelector('label[title="' + title + '"]');
+												const field = label ? document.getElementById(label.htmlFor) : null;
+												if (!field) return false;
+												field.focus();
+												Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+												field.blur();
+												await wait(300);
+												return true;
+											};
+											const setSelectByLabel = async (aria, value) => {
+												const select = document.querySelector('select[aria-label="' + aria + '"]');
+												if (!select) return false;
+												Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, value);
+												select.dispatchEvent(new Event("change", { bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const panel = (title) => {
+												const heading = [...document.querySelectorAll("h3")].find((el) => el.textContent.trim() === title);
+												return heading ? heading.closest("section") : null;
+											};
+											const box = () => document.querySelector('[role=group][aria-label="Alignment"]');
+											const cell = (name) => box() ? box().querySelector('button[aria-label="' + name + '"]') : null;
+											const style = (html, name) => {
+												const found = new RegExp('<\\\\w+ data-juno-section="' + name + '"[^>]*style="([^"]*)"').exec(html);
+												return found ? found[1] : "";
+											};
+
+											// The first container at the top of the layers, named so its
+											// style can be found in the compiled message.
+											const top = rows("container").find((el) => el.dataset.layerDepth === "0");
+											if (!top) return "no top-level container";
+											top.click();
+											await wait(300);
+											const nameField = [...document.querySelectorAll("input")].find((el) => /^(Section|Div|Header|Footer|Main|Article|Aside|Nav) name$/.test(el.getAttribute("aria-label") || ""));
+											if (!nameField) return "the container has no name field";
+											Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(nameField, "Ruimte");
+											nameField.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(300);
+
+											// The sections, in the order every element has them.
+											const titles = [...document.querySelectorAll("h3")].map((el) => el.textContent.trim());
+											const order = ["Position", "Layout", "Spacing", "Appearance", "Fill", "Stroke", "Effects", "Actions"].map((title) => titles.indexOf(title));
+											if (order.some((at, index) => at < 0 || (index > 0 && at < order[index - 1]))) return "the container's sections are not Position, Layout, Spacing, Appearance, Fill, Stroke, Effects, Actions: " + titles.join(", ");
+											const position = panel("Position");
+											const layoutSection = panel("Layout");
+											const spacing = panel("Spacing");
+											const appearance = panel("Appearance");
+											if (!position.querySelector('label[title="Width"]') || !position.querySelector('label[title="Height"]')) return "W and H are not with Position";
+											if (layoutSection.querySelector('label[title="Width"]') || layoutSection.querySelector('label[title="Corner radius"]')) return "Layout still holds the size or the radius";
+											if (layoutSection.querySelector('label[title="Padding left and right"]')) return "Layout still holds the padding";
+											if (!appearance.querySelector('label[title="Corner radius"]') || !appearance.querySelector('label[title="Opacity"]')) return "the radius is not with the opacity in Appearance";
+											if (!spacing.querySelector('label[title="Padding left and right"]') || !spacing.querySelector('label[title="Margin left and right"]')) return "Spacing has no padding and margin";
+											if (![...layoutSection.querySelectorAll("label")].some((el) => el.textContent.trim() === "Clip content")) return "a container has no Clip content in Layout";
+											if (!box()) return "Layout has no alignment box";
+											if (box().querySelectorAll("button").length !== 9) return "the alignment box does not have nine places";
+
+											// Margin and padding from Spacing.
+											if (!(await setNumber("Margin top and bottom", "14"))) return "no margin field";
+											if (!(await setNumber("Padding left and right", "30"))) return "no padding field";
+											let html = await compiled((h) => style(h, "Ruimte").includes("margin-top:14px"));
+											let css = style(html, "Ruimte");
+											if (!/margin-top:14px;margin-bottom:14px/.test(css)) return "the margin from Spacing is not in the compiled message: " + css;
+											if (!/padding:\\d+px 30px \\d+px 30px/.test(css)) return "the padding from Spacing is not in the compiled message: " + css;
+
+											// The 3 by 3 box sets the distribution and the alignment in one click.
+											cell("Align middle centre").click();
+											await wait(300);
+											if (cell("Align middle centre").getAttribute("aria-pressed") !== "true") return "the centre of the box is not pressed after a click on it";
+											html = await compiled((h) => style(h, "Ruimte").includes("align-items:center"));
+											css = style(html, "Ruimte");
+											if (!/justify-content:center;align-items:center/.test(css)) return "the middle centre place did not set both alignments: " + css;
+											cell("Align bottom right").click();
+											await wait(300);
+											html = await compiled((h) => style(h, "Ruimte").includes("flex-end"));
+											css = style(html, "Ruimte");
+											if (!/justify-content:flex-end;align-items:flex-end/.test(css)) return "the bottom right place did not set both alignments: " + css;
+
+											// Stretch stays reachable and visible, and the Auto gap is space between.
+											const stretch = document.querySelector('button[aria-label="Stretch across"]');
+											if (!stretch) return "no stretch toggle beside the box";
+											stretch.click();
+											await wait(300);
+											if (document.querySelector('button[aria-label="Stretch across"]').getAttribute("aria-pressed") !== "true") return "the stretch toggle did not turn on";
+											if (![...box().querySelectorAll("button")].some((el) => el.dataset.lit === "line")) return "a stretched box does not light the line it leaves";
+											html = await compiled((h) => /align-items:stretch/.test(style(h, "Ruimte")));
+											if (!/justify-content:flex-end;align-items:stretch/.test(style(html, "Ruimte"))) return "stretch did not reach the compiled message: " + style(html, "Ruimte");
+											if (!(await setSelectByLabel("Gap between blocks spacing", "between"))) return "no Auto option on the gap";
+											html = await compiled((h) => style(h, "Ruimte").includes("space-between"));
+											if (!/justify-content:space-between/.test(style(html, "Ruimte"))) return "the Auto gap did not write space between";
+											cell("Align top left").click();
+											await wait(300);
+											html = await compiled((h) => /align-items:flex-start/.test(style(h, "Ruimte")));
+											if (!/justify-content:space-between;align-items:flex-start/.test(style(html, "Ruimte"))) return "a click on the box while the gap is Auto changed the distribution: " + style(html, "Ruimte");
+
+											// A centred container: the margin sides its alignment sets say Auto.
+											if (!(await setNumber("Width", "400"))) return "no width field on the container";
+											const centre = document.querySelector('[role=group][aria-label="Where it sits across what holds it"] button[title="Align centre"]');
+											if (!centre) return "a container in the frame has no place across it once it is narrower";
+											centre.click();
+											await wait(300);
+											const marginPair = document.querySelector('label[title="Margin left and right"]');
+											const autoField = marginPair ? document.getElementById(marginPair.htmlFor) : null;
+											if (!autoField || !autoField.disabled || autoField.getAttribute("placeholder") !== "Auto") return "a centred container's left and right margins do not say Auto";
+											html = await compiled((h) => /margin-left:auto/.test(style(h, "Ruimte")));
+											css = style(html, "Ruimte");
+											if (!/margin-left:auto;margin-right:auto;margin-top:14px;margin-bottom:14px/.test(css)) return "the auto sides were not kept ahead of the margin: " + css;
+
+											// The canvas draws what the compiler wrote: in the middle, with
+											// the margin above it.
+											const drawn = document.querySelector('[data-canvas-id][class*="outline-2"]');
+											if (!drawn) return "the selected container is not outlined on the canvas";
+											const outer = drawn.parentElement.getBoundingClientRect();
+											const inner = drawn.getBoundingClientRect();
+											if (inner.left - outer.left < 20 || Math.abs(inner.left - outer.left - (outer.right - inner.right)) > 1.5) return "the canvas does not draw a centred container in the middle";
+											if (getComputedStyle(drawn).marginTop !== "14px") return "the canvas does not draw the margin: " + getComputedStyle(drawn).marginTop;
+
+											// Back to something a person would keep, for the screenshot.
+											if (!(await setSelectByLabel("Gap between blocks spacing", "fixed"))) return "no Fixed option on the gap";
+											cell("Align middle centre").click();
+											await wait(300);
+
+											// A text: its Layout is how the words sit, Typography no longer
+											// holds that, and there is nothing to clip.
+											let found = false;
+											for (const candidate of rows("block")) {
+												candidate.click();
+												await wait(250);
+												if ([...document.querySelectorAll("label")].some((el) => el.textContent.trim() === "Text element")) {
+													found = true;
+													break;
+												}
+											}
+											if (!found) return "no text block to look at";
+											const textLayout = panel("Layout");
+											if (!textLayout || !textLayout.querySelector('[role=group][aria-label="Horizontal alignment"]')) return "a text's Layout has no horizontal alignment";
+											if (textLayout.querySelector('label[title="Padding left and right"]') || [...textLayout.querySelectorAll("label")].some((el) => el.textContent.trim() === "Clip content")) return "a text's Layout holds spacing or Clip content";
+											if (panel("Typography") && panel("Typography").querySelector('[role=group][aria-label="Horizontal alignment"]')) return "the text alignment is still in Typography";
+											if (!panel("Spacing") || !panel("Spacing").querySelector('label[title="Margin top and bottom"]')) return "a text has no margin in Spacing";
+											if (!panel("Position").querySelector('label[title="Width"]')) return "a text's W is not with Position";
+											const centreText = textLayout.querySelector('[role=group][aria-label="Horizontal alignment"] button[title="Align centre"]');
+											centreText.click();
+											await wait(300);
+											if (centreText.getAttribute("aria-pressed") !== "true") return "the text alignment button did not press";
+
+											// The container is left selected for the picture.
+											rows("container").find((el) => el.dataset.layerDepth === "0").click();
+											await wait(300);
+											return "ok";
+										})()`,
+									) as string;
+									if (spaced !== "ok") throw new Error(`Smoke: mail template editor ${spaced}`);
+									await shootBoth("mail-template-spacing");
+									// The same panel scrolled to Spacing and Appearance, which the
+									// first shot cuts off.
+									// Only the panel's own scroller moves: scrollIntoView would also
+									// scroll every clipped ancestor and photograph a shifted window.
+									const lowered = await window.webContents.executeJavaScript(
+										`(() => {
+											const heading = [...document.querySelectorAll("h3")].find((el) => el.textContent.trim() === "Spacing");
+											if (!heading) return "no Spacing section";
+											let scroller = heading.parentElement;
+											while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+											if (!scroller) return "the design panel does not scroll";
+											scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+											// Nothing inside the editor may make the window's main area
+											// taller than it is: a clipped overflow there is what a focus
+											// or a scroll into view shifts the whole window by.
+											const main = document.querySelector("main");
+											if (main.scrollHeight > main.clientHeight + 1) return "the main area overflows by " + (main.scrollHeight - main.clientHeight) + "px";
+											return "ok";
+										})()`,
+									) as string;
+									if (lowered !== "ok") throw new Error(`Smoke: mail template editor ${lowered}`);
+									await new Promise((r) => setTimeout(r, 300));
+									await shootBoth("mail-template-spacing-lower");
+
+									// Actions (TODO 4b): the section after Effects, with an on-click link
+									// and a hover fill added from the real panel on a text, checked in the
+									// message that is sent, and the Button in the Text menu.
+									const actioned = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const press = async (key, code, mods = {}, target = document.body) => {
+												target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+												await wait(300);
+											};
+											const rows = (kind) => [...document.querySelectorAll('[data-layer-kind="' + kind + '"]')];
+											const panel = (title) => {
+												const heading = [...document.querySelectorAll("h3")].find((el) => el.textContent.trim() === title);
+												return heading ? heading.closest("section") : null;
+											};
+											const compiled = async (has) => {
+												document.querySelector('button[title="The message as it will be sent"]').click();
+												let html = "";
+												for (let tries = 0; tries < 40; tries++) {
+													await wait(150);
+													const frame = document.querySelector('iframe[title="Template preview"]');
+													html = frame ? frame.getAttribute("srcdoc") || "" : "";
+													if (has(html)) break;
+												}
+												document.querySelector('button[title="The canvas"]').click();
+												await wait(300);
+												return html;
+											};
+											const setText = async (labelText, value) => {
+												const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === labelText);
+												const field = label ? document.getElementById(label.htmlFor) : null;
+												if (!field) return false;
+												Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												await wait(300);
+												return true;
+											};
+											const addAction = async (label) => {
+												const add = panel("Actions").querySelector('button[aria-label="Add action"]');
+												if (!add) return "no way to add an action";
+												add.click();
+												await wait(200);
+												const item = [...panel("Actions").querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === label);
+												if (!item) return "the Add action menu does not offer " + label;
+												item.click();
+												await wait(300);
+												return "ok";
+											};
+
+											// A text block to work on.
+											let found = false;
+											for (const candidate of rows("block")) {
+												candidate.click();
+												await wait(250);
+												if ([...document.querySelectorAll("label")].some((el) => el.textContent.trim() === "Text element")) {
+													found = true;
+													break;
+												}
+											}
+											if (!found) return "no text block to give an action";
+
+											// After Effects, before anything of the kind's own.
+											const titles = [...document.querySelectorAll("h3")].map((el) => el.textContent.trim());
+											if (titles.indexOf("Actions") < 0 || titles.indexOf("Actions") < titles.indexOf("Effects")) return "Actions does not follow Effects: " + titles.join(", ");
+											if (panel("Actions").querySelector("[role=menu]")) return "the Add menu is open before it was asked for";
+
+											// On click: an address typed into the row is a link in the message.
+											let step = await addAction("On click");
+											if (step !== "ok") return step;
+											const again = panel("Actions").querySelector('button[aria-label="Add action"]');
+											again.click();
+											await wait(200);
+											if ([...panel("Actions").querySelectorAll("[role=menuitem]")].some((el) => el.textContent.trim() === "On click")) return "a second on-click action is still offered";
+											again.click();
+											await wait(200);
+											if (!(await setText("Link address", "example.be/aanbod"))) return "the click row has no address field";
+											if (!panel("Actions").textContent.includes("Outlook on Windows makes only the text inside a link clickable")) return "a linked block does not say what Outlook on Windows does";
+											if (!document.querySelector("[data-layer-linked]")) return "a linked layer has no link glyph";
+
+											// On hover: a fill.
+											step = await addAction("On hover: fill");
+											if (step !== "ok") return step;
+											if (!panel("Actions").textContent.includes("Works in Apple Mail")) return "a hover row does not say where it works";
+											if (!panel("Actions").textContent.includes("Not in Gmail or Outlook on Windows")) return "a hover row does not say where it does not work";
+
+											const html = await compiled((h) => h.includes("https://example.be/aanbod") && h.includes(":hover"));
+											const wrapped = /<a href="https:\\/\\/example.be\\/aanbod" data-juno-link="1" style="display:block;text-decoration:none;color:inherit[^"]*"><p[^>]*data-juno-id="([^"]+)"/.exec(html);
+											if (!wrapped) return "the sent message has no link round the text: " + html.slice(0, 600);
+											const id = wrapped[1];
+											if (!html.includes('class="jb-' + id + '"')) return "the text has no class for its hover rule";
+											if (!new RegExp("\\\\.jb-" + id + ":hover\\\\{background-color:#[0-9a-f]{6} !important;background-image:none !important\\\\}").test(html)) return "the head has no hover rule for the text";
+
+											// The scripts stay out: the section offers a link and a hover, nothing else.
+											const offered = [];
+											panel("Actions").querySelector('button[aria-label="Add action"]').click();
+											await wait(200);
+											for (const item of panel("Actions").querySelectorAll("[role=menuitem]")) offered.push(item.textContent.trim());
+											panel("Actions").querySelector('button[aria-label="Add action"]').click();
+											await wait(200);
+											if (offered.join("|") !== "On hover: text colour|On hover: underline|On hover: opacity") return "the Add action menu offers " + offered.join("|");
+											if (/script|focus|scroll|timer/i.test(panel("Actions").textContent)) return "the Actions section mentions a trigger a message cannot have";
+
+											// The Button is in the Text menu, and adds a linked, filled text.
+											if (document.querySelector('button[aria-label="Add button"]')) return "the toolbar still has a Button tool";
+											const countBefore = rows("block").length;
+											await press("b", "KeyB");
+											if (rows("block").length !== countBefore) return "B on its own still adds something";
+											await press("T", "KeyT", { shiftKey: true });
+											if (!document.querySelector('[role=menu][aria-label="Text menu"]')) return "Shift+T did not open the Text menu";
+											await press("B", "KeyB", { shiftKey: true }, document.activeElement);
+											if (rows("block").length !== countBefore + 1) return "B in the Text menu did not add the Button";
+											const typing = document.querySelector('[role=textbox][aria-label="Text"]');
+											if (!typing) return "the new Button did not open for typing";
+											typing.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											const clickRow = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Link address");
+											if (!clickRow) return "the Button has no empty on-click link row";
+											if (!panel("Actions").textContent.includes("Empty, so it is sent without a link")) return "an empty link does not say it is sent without one";
+											if (!(await setText("Link address", "example.be/boek"))) return "no address field on the Button";
+											const buttonHtml = await compiled((h) => h.includes("example.be/boek"));
+											if (!/<a href="https:\\/\\/example.be\\/boek" data-juno-link="1"[^>]*><p[^>]*style="[^"]*background-color:#4a3fa0[^"]*border-radius:4px/.test(buttonHtml)) return "the Button is not a filled, rounded text inside its link: " + buttonHtml.slice(0, 800);
+											return "ok";
+										})()`,
+									) as string;
+									if (actioned !== "ok") throw new Error(`Smoke: mail template editor ${actioned}`);
+
+									// Back on the linked text, with the section scrolled into view for the photograph.
+									const shown = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const link = document.querySelector("[data-layer-linked]");
+											const row = link ? link.closest("button") : null;
+											if (!row) return "no linked layer to select";
+											row.click();
+											await wait(300);
+											const heading = [...document.querySelectorAll("h3")].find((el) => el.textContent.trim() === "Actions");
+											if (!heading) return "no Actions section on the linked text";
+											let scroller = heading.parentElement;
+											while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+											if (!scroller) return "the design panel does not scroll";
+											scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 8;
+											await wait(300);
+											return "ok";
+										})()`,
+									) as string;
+									if (shown !== "ok") throw new Error(`Smoke: mail template editor ${shown}`);
+									await shootBoth("mail-template-actions");
+
 									// Escape lets go of what is selected before it leaves, so the
 									// first one drops the block that was just inserted and the second
 									// one walks out. Nothing is saved on the way: the template in the
@@ -1804,7 +2786,7 @@ if (!app.requestSingleInstanceLock()) {
 										}
 									}
 
-									// No Fill step either: the seeded mail templates ask for nothing
+									// No Fill step either: the hand-written template asks for nothing
 									// beyond a client and a project, so one Next reaches Review.
 									const usedMail = (await window.webContents.executeJavaScript(
 										`(async () => {
@@ -1914,6 +2896,203 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (listed !== "ok") throw new Error(`Smoke: creating a mail template ${listed}`);
+
+									// The example a first install is given. This database is
+									// fresh, so it is here and none of the four retired templates are,
+									// and against the demo client it fills in with nothing missing.
+									// Every picture in it is at a web address, which this window refuses
+									// to load, so the steps below also prove that neither the canvas
+									// nor a preview tries: a refused load fails the run.
+									const exampleFacts = await window.webContents.executeJavaScript(
+										`(async () => {
+											const b = window.juno;
+											const all = await b.mail.templates.listAll();
+											const example = all.find((t) => t.key === "voorbeeld");
+											if (!example) return "a fresh install has no example";
+											if (all.some((t) => ["contract_cover", "project_kickoff", "invoice_due", "hosting_renewal"].includes(t.key))) return "a fresh install was given a retired template";
+											if (!example.layout) return "the example has no canvas";
+											if (example.isSystem) return "the example is a system row";
+											const clients = await b.clients.list({ limit: 50 });
+											const obet = clients.find((c) => c.name === "obet");
+											if (!obet) return "no demo client";
+											const extras = Object.fromEntries(example.inputs.map((input) => [input.key, input.defaultValue || ""]));
+											const filled = await b.mail.templates.preview({ subject: example.subject, layout: example.layout, inputs: example.inputs, clientId: obet.id, extras });
+											if (filled.missing.length > 0) return "the example has no value for " + filled.missing.join(", ");
+											if (!filled.bodyHtml.includes("Beste Laura,")) return "the example does not greet the demo client";
+											if (!filled.bodyHtml.includes("Kerkstraat 1, 9000 Gent")) return "the example does not carry the business address";
+											return "ok:" + example.updatedAt;
+										})()`,
+									) as string;
+									if (!exampleFacts.startsWith("ok:")) throw new Error(`Smoke: the example ${exampleFacts}`);
+									const exampleUpdatedAt = exampleFacts.slice(3);
+
+									// Used the way a person would: the picture it asks for, a client,
+									// and the review. The review is the example filled in against the
+									// demo client, and it must say nothing is missing.
+									const exampleReview = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
+											if (!row) return "no row for the example";
+											row.click();
+											await wait(900);
+											const panel = document.querySelector("main");
+											if (!panel || !panel.querySelector("iframe")) return "the example opens no preview";
+											if (!panel.querySelector("iframe").getAttribute("srcdoc").includes("data-juno-remote-image")) return "the preview does not stand a box in for a picture at a web address";
+											const use = [...panel.querySelectorAll("button")].find((el) => el.textContent.trim() === "Use");
+											if (!use) return "no use action";
+											use.click();
+											await wait(700);
+											const ask = [...document.querySelectorAll("main label")].find((el) => el.textContent.trim().startsWith("Foto"));
+											const field = ask ? document.getElementById(ask.htmlFor) : null;
+											if (!field) return "the Fill step does not ask for the picture";
+											if (!field.value.startsWith("https://")) return "the picture starts without an address";
+											const next = () => [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
+											next().click();
+											await wait(500);
+											const clientLabel = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Client");
+											const select = clientLabel ? document.getElementById(clientLabel.htmlFor) : null;
+											if (!select) return "no client to pick";
+											const obet = [...select.options].find((option) => option.textContent.trim() === "obet");
+											if (!obet) return "the demo client is not offered";
+											Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, obet.value);
+											select.dispatchEvent(new Event("change", { bubbles: true }));
+											await wait(500);
+											next().click();
+											let frame = null;
+											for (let tries = 0; tries < 30 && !frame; tries++) {
+												await wait(200);
+												frame = document.querySelector('main iframe[title="Message preview"]');
+											}
+											if (!frame) return "the review shows no message";
+											await wait(600);
+											const main = document.querySelector("main");
+											const gap = main.textContent.indexOf("No value for");
+											if (gap >= 0) return "the review says a value is missing: " + main.textContent.slice(gap, gap + 120);
+											if (!main.textContent.includes("Voorbeeld: bericht voor obet")) return "the subject did not fill in for the demo client";
+											const html = frame.getAttribute("srcdoc") || "";
+											if (!html.includes("Beste Laura,")) return "the review does not greet the demo client";
+											if (/<img[^>]+src="https:/.test(html)) return "the review still asks for a picture at a web address";
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleReview !== "ok") throw new Error(`Smoke: using the example ${exampleReview}`);
+									await shootBoth("mail-template-example-review");
+									await window.webContents.executeJavaScript(
+										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									);
+									await new Promise((r) => setTimeout(r, 500));
+
+									// Opened in the editor: the layers name its parts, the picture at a
+									// web address is a box that says who loads it, and what it asks for
+									// is in the Asks view.
+									const exampleOpen = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
+											if (!row) return "no row for the example";
+											row.click();
+											await wait(900);
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											let ready = null;
+											for (let tries = 0; tries < 30 && !ready; tries++) {
+												await wait(150);
+												ready = document.querySelector('button[aria-label="Hide the panel"]');
+											}
+											if (!ready) return "no editor panel";
+											await wait(1500);
+											const layers = [...document.querySelectorAll("[data-layer-kind]")].map((el) => el.textContent.trim());
+											for (const name of ["Kop", "Inhoud", "Twee kolommen", "Vergelijking", "Scheidingslijn", "Voettekst"]) {
+												if (!layers.some((text) => text.startsWith(name))) return "no layer named " + name;
+											}
+											if (!document.body.textContent.includes("not by Juno.")) return "the canvas does not say who loads the logo";
+											if (document.querySelector('img[src^="http"]')) return "the canvas is drawing a picture at a web address";
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleOpen !== "ok") throw new Error(`Smoke: the example in the editor ${exampleOpen}`);
+									// Nothing is selected on opening, so the frame's panel is showing.
+									await shootBoth("mail-template-example");
+
+									// The other half of it: the table, the button, the code and the footer.
+									const exampleLower = await window.webContents.executeJavaScript(
+										`(async () => {
+											const footer = document.querySelector('[data-canvas-id="voorbeeld-voet"]');
+											if (!footer) return "the footer is not on the canvas";
+											footer.scrollIntoView({ block: "end" });
+											await new Promise((r) => setTimeout(r, 400));
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleLower !== "ok") throw new Error(`Smoke: the example in the editor ${exampleLower}`);
+									await shootBoth("mail-template-example-lower");
+
+									const exampleViews = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const asks = document.querySelector('button[title="What this template asks for"]');
+											if (!asks) return "no asks view";
+											asks.click();
+											await wait(500);
+											if (![...document.querySelectorAll("input")].some((el) => el.value === "foto")) return "the Asks view does not list the picture";
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleViews !== "ok") throw new Error(`Smoke: the example in the editor ${exampleViews}`);
+									writeFileSync(joinPath(shotDir, `mail-template-example-asks.png`), (await capture(window.webContents)).toPNG());
+
+									const exampleSent = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const view = document.querySelector('button[title="The message as it will be sent"]');
+											if (!view) return "no preview view";
+											view.click();
+											let frame = null;
+											for (let tries = 0; tries < 30 && !frame; tries++) {
+												await wait(150);
+												frame = document.querySelector('iframe[title="Template preview"]');
+											}
+											if (!frame) return "the message did not render";
+											const html = frame.getAttribute("srcdoc") || "";
+											if (!html.includes("data-juno-remote-image")) return "the preview does not stand a box in for the logo";
+											if (/<img[^>]+src="https:/.test(html)) return "the preview still asks for a picture at a web address";
+											if (html.includes("[ontbreekt: document.foto]")) return "the preview does not use the picture the template offers";
+											if (!html.includes("@media only screen and (max-width:480px)")) return "the phone breakpoint is not in the message";
+											return "ok";
+										})()`,
+									) as string;
+									if (exampleSent !== "ok") throw new Error(`Smoke: the example in the editor ${exampleSent}`);
+									await shootBoth("mail-template-example-view");
+
+									const examplePhone = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const phone = [...document.querySelectorAll('[role=group][aria-label="Preview width"] button')].find((el) => el.textContent.trim().startsWith("Phone"));
+											if (!phone) return "the preview has no Phone width";
+											phone.click();
+											await wait(600);
+											return phone.getAttribute("aria-pressed") === "true" ? "ok" : "the Phone width did not take";
+										})()`,
+									) as string;
+									if (examplePhone !== "ok") throw new Error(`Smoke: the example in the editor ${examplePhone}`);
+									await shootBoth("mail-template-example-phone");
+
+									// Looking at it changes nothing: leaving writes no save.
+									const exampleLeft = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											for (let press = 0; press < 3 && document.querySelector('button[aria-label="Hide the panel"]'); press++) {
+												document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(500);
+											}
+											if (document.querySelector('button[aria-label="Hide the panel"]')) return "Escape did not leave the editor";
+											const example = (await window.juno.mail.templates.listAll()).find((t) => t.key === "voorbeeld");
+											return example ? example.updatedAt : "the example went away";
+										})()`,
+									) as string;
+									if (exampleLeft !== exampleUpdatedAt) throw new Error(`Smoke: opening the example wrote to it (${exampleLeft})`);
 								}
 								if (screen === "Calendar") {
 									// Opens a recurring occurrence, asks to edit it, answers the
@@ -2023,6 +3202,85 @@ if (!app.requestSingleInstanceLock()) {
 									if (switched !== "ok") throw new Error(`Smoke: calendar week view ${switched}`);
 								}
 								if (screen === "Drafts") {
+									// A draft with a picture at a web address: the frame draws a
+									// box for it and the composer parks it, so the window fetches
+									// nothing, and saving from the composer puts the address back.
+									const pictured = await window.webContents.executeJavaScript(
+										`(async () => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
+											if (!nav) return "no drafts entry";
+											nav.click();
+											await new Promise((r) => setTimeout(r, 600));
+											// One list, both kinds of row: Juno's own unsent messages and the
+											// threads in the server's Drafts folder.
+											const kinds = new Set([...document.querySelectorAll("li[data-draft-kind]")].map((el) => el.getAttribute("data-draft-kind")));
+											if (!kinds.has("outbox")) return "no unsent message in the list";
+											if (!kinds.has("thread")) return "no server draft in the list";
+											const row = [...document.querySelectorAll("ul li button")].find((el) => el.textContent.includes("Met logo"));
+											if (!row) return "no draft with a picture";
+											row.click();
+											await new Promise((r) => setTimeout(r, 600));
+											const frame = document.querySelector("iframe[title='Message as it will be sent']");
+											if (!frame) return "no frame";
+											const doc = frame.getAttribute("srcdoc") || "";
+											if (/<img[^>]*https:/.test(doc) || !doc.includes("data-juno-remote-image")) return "the frame loads the picture: " + doc.slice(0, 200);
+											const edit = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit button";
+											edit.click();
+											await new Promise((r) => setTimeout(r, 900));
+											const host = document.querySelector("[contenteditable][aria-label=Message]");
+											if (!host) return "no editor";
+											if (host.querySelector("img[src]") || !host.querySelector("img[data-juno-src]")) return "the editor loads the picture: " + host.innerHTML.slice(0, 200);
+											host.append(document.createTextNode(" Tot dan."));
+											host.dispatchEvent(new Event("input", { bubbles: true }));
+											await new Promise((r) => setTimeout(r, 1500));
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 900));
+											return "ok";
+										})()`,
+									);
+									if (pictured !== "ok") throw new Error(`Smoke: drafts picture ${pictured}`);
+									const saved = (await (await import("./main/services/mail-outbox")).list({ states: ["draft"] })).find((m) => m.subject === "Met logo");
+									if (!saved?.bodyHtml?.includes('src="https://www.example.com/logo.png"') || saved.bodyHtml.includes("data-juno-src") || !saved.bodyText.includes("Tot dan.")) {
+										throw new Error(`Smoke: the composer did not save the picture's address: ${saved?.bodyHtml}`);
+									}
+									console.log("SMOKE_DEMO draft picture parked and restored");
+									// The merged list itself, in both themes, before a row takes the pane.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
+											if (nav) nav.click();
+											await new Promise((r) => setTimeout(r, 600));
+										})()`,
+									);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										const shot = await capture(window.webContents);
+										writeFileSync(joinPath(shotDir, `drafts-list-${theme}.png`), shot.toPNG());
+									}
+									// A server draft opens as a thread, like any other folder's.
+									const server = await window.webContents.executeJavaScript(
+										`(async () => {
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
+											if (!nav) return "no drafts entry";
+											nav.click();
+											await new Promise((r) => setTimeout(r, 600));
+											const row = document.querySelector("li[data-draft-kind=thread] button");
+											if (!row) return "no server draft row";
+											row.click();
+											await new Promise((r) => setTimeout(r, 800));
+											if (document.querySelector("li[data-draft-kind]")) return "the list stayed over the thread";
+											const text = document.body.textContent;
+											if (!text.includes("Offerte website") && !text.includes("Nieuw dit najaar")) return "the thread did not open";
+											return "ok";
+										})()`,
+									);
+									if (server !== "ok") throw new Error(`Smoke: server draft ${server}`);
+									console.log("SMOKE_DEMO drafts list both kinds, server draft opens as a thread");
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
 											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
@@ -2148,6 +3406,24 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (closed !== "ok") throw new Error(`Smoke: compose close ${closed}`);
 
+									// A reply sent from Juno, with the Sent folder not synced yet. The
+									// reader has to list it from the outbox in the thread opened below.
+									const { getThread: getSmokeThread, listThreads: listSmokeThreads } = await import("./main/services/mail-threads");
+									const smokeOutbox = await import("./main/services/mail-outbox");
+									const [newestThread] = await listSmokeThreads({ limit: 1 });
+									const answered = newestThread ? (await getSmokeThread(newestThread.id))?.messages.at(-1) : undefined;
+									if (!newestThread || !answered) throw new Error("Smoke: no thread to answer");
+									const smokeReply = await smokeOutbox.createDraft({
+										accountId: answered.accountId,
+										to: [answered.from ?? { name: null, address: "laura@obet.be" }],
+										subject: `Re: ${newestThread.subject}`,
+										bodyText: "Smoke reply, sent before the Sent folder is synced.",
+										replyToMessageId: answered.id,
+									});
+									await smokeOutbox.requestSend(smokeReply.id, { actor: "user" });
+									await mailSend.processQueue();
+									if ((await smokeOutbox.get(smokeReply.id))?.state !== "sent") throw new Error("Smoke: the reply did not send");
+
 									// Opens the newest thread, so the reader and its frame are in
 									// the picture, and checks the frame actually loaded a body.
 									const mailResponses: { url: string; statusCode: number }[] = [];
@@ -2167,6 +3443,18 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: mail reader ${opened}`);
+									const outgoingShown = await window.webContents.executeJavaScript(
+										`(async () => {
+											const cards = document.querySelectorAll("article[data-outgoing]");
+											if (cards.length !== 1) return "the sent reply is not listed in its thread";
+											cards[0].scrollIntoView({ block: "center" });
+											await new Promise((r) => setTimeout(r, 300));
+											return "ok";
+										})()`,
+									);
+									if (outgoingShown !== "ok") throw new Error(`Smoke: mail reader ${outgoingShown}`);
+									await shoot("mail-outgoing");
+									await window.webContents.executeJavaScript(`document.querySelector("article")?.closest(".overflow-y-auto")?.scrollTo(0, 0)`);
 									// A frame the CSP refused would sit on about:blank. One that
 									// navigated to the mail origin proves the scheme host answered
 									// and the frame-src rule let it through.
@@ -2215,6 +3503,17 @@ if (!app.requestSingleInstanceLock()) {
 							if (process.env.JUNO_SMOKE_DEMO) {
 								const { closeSettingsWindow, getSettingsWindow, openSettingsWindow } =
 									await import("./main/windows");
+
+								// An account that was set up, synced and then removed, so Mail accounts
+								// has a removed account with mail on disk to photograph and purge.
+								const oldAccountId = (await window.webContents.executeJavaScript(`(async () => {
+									const b = window.juno;
+									const old = await b.mail.accounts.create({ email: "oud@juno.test", label: "Oud", imapHost: "imap.juno.test", password: "smoke" });
+									const runs = await b.mail.sync.run(old.id);
+									if (runs.some((r) => r.phase !== "done")) throw new Error("Smoke: the second account did not sync: " + JSON.stringify(runs));
+									await b.mail.accounts.remove(old.id);
+									return old.id;
+								})()`)) as string;
 
 								openSettingsWindow();
 								const settingsWindow = getSettingsWindow();
@@ -2356,6 +3655,53 @@ if (!app.requestSingleInstanceLock()) {
 											image.toPNG(),
 										);
 									}
+								}
+								// The removed account's mail is deleted the way a person does it: the
+								// button, the dialog, the confirm. The tab loop above photographed the
+								// section with the account still in it.
+								{
+									const { existsSync: exists } = await import("node:fs");
+									const mailTab = tabs.findIndex((tab) => tab === "Mail accounts");
+									if (mailTab === -1) throw new Error("Smoke: the settings window has no mail section");
+									await settingsWindow.webContents.executeJavaScript(`${TABS}[${mailTab}].click()`);
+									await new Promise((r) => setTimeout(r, 400));
+									const listed = (await settingsWindow.webContents.executeJavaScript(
+										`(() => { const text = document.querySelector("main").textContent; return text.includes("Removed accounts") && text.includes("oud@juno.test") && text.includes("Delete stored mail"); })()`,
+									)) as boolean;
+									if (!listed) throw new Error("Smoke: the mail section did not list the removed account");
+									if (!exists(join(mailDir(), oldAccountId))) throw new Error("Smoke: the removed account has no mail on disk to purge");
+									const opened = (await settingsWindow.webContents.executeJavaScript(
+										`(() => { const button = [...document.querySelectorAll("main button")].find((b) => b.textContent.trim() === "Delete stored mail"); if (!button) return false; button.click(); return true; })()`,
+									)) as boolean;
+									if (!opened) throw new Error("Smoke: there was no button to delete the stored mail");
+									await new Promise((r) => setTimeout(r, 400));
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await settingsWindow.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 350));
+										const image = await capture(settingsWindow.webContents);
+										writeFileSync(joinPath(shotDir, `settings-purge-dialog-${theme}.png`), image.toPNG());
+									}
+									const confirmed = (await settingsWindow.webContents.executeJavaScript(
+										`(() => { const button = [...document.querySelectorAll("[role='dialog'] button")].find((b) => b.textContent.trim() === "Delete"); if (!button) return false; button.click(); return true; })()`,
+									)) as boolean;
+									if (!confirmed) throw new Error("Smoke: the purge dialog had no Delete button");
+									await new Promise((r) => setTimeout(r, 800));
+									const after = (await settingsWindow.webContents.executeJavaScript(
+										`({ section: document.querySelector("main").textContent.includes("Removed accounts"), notice: document.body.textContent.includes("Stored mail deleted.") })`,
+									)) as { section: boolean; notice: boolean };
+									if (after.section || !after.notice) {
+										throw new Error(`Smoke: after the purge the section showed=${after.section} and the notice showed=${after.notice}`);
+									}
+									const remaining = (await window.webContents.executeJavaScript(
+										`window.juno.mail.accounts.removed().then((rows) => rows.length)`,
+									)) as number;
+									if (remaining !== 0 || exists(join(mailDir(), oldAccountId))) {
+										throw new Error("Smoke: the purge left the removed account's mail behind");
+									}
+									console.log("SMOKE_DEMO removed account purged");
 								}
 								console.log(`SMOKE_DEMO settings tabs=${tabs.length}`);
 								closeSettingsWindow();

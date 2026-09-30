@@ -11,7 +11,7 @@
  * Decision 9 still holds here: an invoice nudge carries a title and an amount
  * typed by the owner, and Juno never numbers or issues one.
  */
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type {
 	MailAddress,
 	MailDraftInput,
@@ -22,6 +22,7 @@ import type {
 	MailOutboxListQuery,
 	MailOutboxMessage,
 	MailOutboxState,
+	MailThreadOutgoing,
 	MailReplyMode,
 	MailReplySeed,
 } from "../../shared/types";
@@ -328,6 +329,77 @@ export async function counts(accountId?: string, db: Db = getDb()): Promise<Mail
 		failed: by.failed ?? 0,
 		drafts: by.draft ?? 0,
 	};
+}
+
+/**
+ * What was sent from Juno into a thread and has not arrived in it as a synced
+ * message yet, oldest first. The Sent folder only reaches the reader on the
+ * next sync, and until then the outbox is the only record of the reply.
+ *
+ * A row belongs to the thread when it was created as a reply to one of its
+ * messages (`thread_id`), or when its In-Reply-To or References point at one of
+ * them, which covers a row whose thread link was lost with the message it
+ * answered. Once a live message in the thread carries the row's Message-ID the
+ * synced copy is the record and the row steps aside, so nothing shows twice.
+ * Drafts, pending, failed and cancelled rows are not in the conversation yet
+ * or any more, and a deleted row never is.
+ */
+export function outgoingForThread(threadId: string, db: Db = getDb()): MailThreadOutgoing[] {
+	const synced = db
+		.select({ messageId: mailMessages.messageId })
+		.from(mailMessages)
+		.where(and(eq(mailMessages.threadId, threadId), isNull(mailMessages.deletedAt)))
+		.all();
+	const messageIds = [...new Set(synced.map((m) => m.messageId).filter((v): v is string => Boolean(v)))];
+
+	const belongs = [eq(mailOutbox.threadId, threadId)];
+	if (messageIds.length > 0) {
+		belongs.push(inArray(mailOutbox.inReplyTo, messageIds));
+		belongs.push(
+			sql`exists (select 1 from json_each(${mailOutbox.referencesJson}) where json_each.value in (${sql.join(
+				messageIds.map((id) => sql`${id}`),
+				sql`, `,
+			)}))`,
+		);
+	}
+	const rows = db
+		.select({ outbox: mailOutbox, fromName: mailAccounts.fromName, fromAddress: mailAccounts.email })
+		.from(mailOutbox)
+		.innerJoin(mailAccounts, eq(mailOutbox.accountId, mailAccounts.id))
+		.where(
+			and(
+				isNull(mailOutbox.deletedAt),
+				inArray(mailOutbox.state, ["queued", "sending", "sent"]),
+				or(...belongs),
+			),
+		)
+		.all()
+		.filter((r) => !messageIds.includes(r.outbox.messageId));
+	if (rows.length === 0) return [];
+
+	const attachments = attachmentsFor(
+		db,
+		rows.map((r) => r.outbox.id),
+	);
+	return rows
+		.map((r): MailThreadOutgoing => {
+			const row = r.outbox;
+			return {
+				id: row.id,
+				accountId: row.accountId,
+				state: row.state as MailThreadOutgoing["state"],
+				from: { name: r.fromName, address: r.fromAddress },
+				to: parseAddresses(row.toJson),
+				cc: parseAddresses(row.ccJson),
+				subject: row.subject,
+				bodyText: row.bodyText,
+				bodyHtml: row.bodyHtml,
+				messageId: row.messageId,
+				date: row.sentAt ?? row.queuedAt ?? row.createdAt,
+				attachments: attachments.get(row.id) ?? [],
+			};
+		})
+		.sort((a, b) => (a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1));
 }
 
 /**

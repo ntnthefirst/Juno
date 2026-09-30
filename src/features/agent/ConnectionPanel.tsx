@@ -81,7 +81,7 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 
 	return (
 		<div className="mx-auto w-full max-w-[var(--content-width)]">
-			<section className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+			<section data-setting="mcp-connect" className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
 				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">
 					Connecting an agent
 				</h2>
@@ -113,7 +113,7 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 				</p>
 			</section>
 
-			<section className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+			<section data-setting="mcp-tools" className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
 				<div className="flex flex-wrap items-center justify-between gap-3">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Connect a client</h2>
 					<RouteSwitch route={route} onChange={setRoute} />

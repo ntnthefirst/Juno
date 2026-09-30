@@ -6,9 +6,8 @@
  * especially after the client data it quoted has changed.
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
-import type { Client, Contact, DocumentSourceKind, ImportDocumentInput, Project } from "../../shared/types";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import type { Client, Contact, DocumentSourceKind, DocumentVersionKind, Project } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import {
@@ -23,6 +22,7 @@ import {
 } from "../db/schema";
 import { buildContext, todayIsoDate } from "./document-context";
 import * as templates from "./document-templates";
+import * as versions from "./document-versions";
 import * as settings from "./settings";
 
 /** The primary row of each, or null. A client need not have any of them yet. */
@@ -89,6 +89,8 @@ export interface DocumentRecord {
 	 * re-generates has to check this before it tries.
 	 */
 	sourceKind: DocumentSourceKind;
+	versionCount: number;
+	latestVersion: { id: string; kind: DocumentVersionKind; fileDate: string } | null;
 }
 
 export interface GenerateInput {
@@ -109,7 +111,7 @@ export interface GenerateResult {
 
 type Row = typeof documents.$inferSelect;
 
-function toRecord(row: Row, clientName: string): DocumentRecord {
+function toRecord(row: Row, clientName: string, summary?: versions.VersionSummary): DocumentRecord {
 	return {
 		id: row.id,
 		ownerId: row.ownerId,
@@ -128,6 +130,8 @@ function toRecord(row: Row, clientName: string): DocumentRecord {
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 		sourceKind: row.sourceKind as DocumentSourceKind,
+		versionCount: summary?.count ?? 0,
+		latestVersion: summary?.latest ?? null,
 	};
 }
 
@@ -164,24 +168,13 @@ export function configureDocumentStorage(directory: string): void {
 	importDirectory = directory;
 }
 
-function importStorageDir(): string {
+/** The folder imported files and new versions are copied into. */
+export function documentStorageDir(): string {
 	if (!importDirectory) {
 		throw new Error("configureDocumentStorage() was not called before a document was imported.");
 	}
 	if (!existsSync(importDirectory)) mkdirSync(importDirectory, { recursive: true });
 	return importDirectory;
-}
-
-/** True when the file at `path` starts with the five bytes every PDF starts with. */
-function looksLikePdf(path: string): boolean {
-	const fd = openSync(path, "r");
-	try {
-		const header = Buffer.alloc(5);
-		const read = readSync(fd, header, 0, 5, 0);
-		return read === 5 && header.toString("latin1") === "%PDF-";
-	} finally {
-		closeSync(fd);
-	}
 }
 
 export async function list(
@@ -199,7 +192,11 @@ export async function list(
 		)
 		.orderBy(desc(documents.createdAt))
 		.all();
-	return rows.map((row) => toRecord(row.document, row.clientName));
+	const summaries = versions.summaries(
+		rows.map((row) => row.document.id),
+		db,
+	);
+	return rows.map((row) => toRecord(row.document, row.clientName, summaries.get(row.document.id)));
 }
 
 export async function get(id: string, db: Db = getDb()): Promise<DocumentRecord | null> {
@@ -209,7 +206,8 @@ export async function get(id: string, db: Db = getDb()): Promise<DocumentRecord 
 		.innerJoin(clients, eq(documents.clientId, clients.id))
 		.where(and(eq(documents.id, id), isNull(documents.deletedAt)))
 		.get();
-	return row ? toRecord(row.document, row.clientName) : null;
+	if (!row) return null;
+	return toRecord(row.document, row.clientName, versions.summaries([id], db).get(id));
 }
 
 /**
@@ -310,68 +308,16 @@ export async function generate(
 }
 
 /**
- * Brings in a PDF that already exists, rather than one Juno generated. The
- * original file is copied, never moved and never deleted, and the copy is what
- * the record points at from then on.
+ * The bytes of a document's PDF, for the placement page. Resolved from the id,
+ * so the renderer never names a file.
  */
-export async function importPdf(
-	input: ImportDocumentInput,
-	db: Db = getDb(),
-): Promise<DocumentRecord> {
-	const client = db
-		.select()
-		.from(clients)
-		.where(and(eq(clients.id, input.clientId), isNull(clients.deletedAt)))
-		.get();
-	if (!client) throw new Error("That client no longer exists.");
-
-	if (input.projectId) {
-		const project = db
-			.select()
-			.from(projects)
-			.where(and(eq(projects.id, input.projectId), isNull(projects.deletedAt)))
-			.get();
-		if (!project) throw new Error("That project no longer exists.");
-		if (project.clientId !== client.id) {
-			throw new Error("That project belongs to a different client.");
-		}
+export async function readPdfBytes(id: string, db: Db = getDb()): Promise<Uint8Array> {
+	const record = await get(id, db);
+	if (!record) throw new Error("That document no longer exists.");
+	if (!record.pdfPath || !existsSync(record.pdfPath)) {
+		throw new Error("This document has no PDF yet. Create one first.");
 	}
-
-	const fileLabel = basename(input.sourcePath);
-	if (!existsSync(input.sourcePath) || !statSync(input.sourcePath).isFile()) {
-		throw new Error(`Could not find "${fileLabel}". Check the file still exists at that location.`);
-	}
-	if (!looksLikePdf(input.sourcePath)) {
-		throw new Error(`"${fileLabel}" is not a PDF. Choose a file that starts with a PDF header.`);
-	}
-
-	const title = input.title?.trim() || basename(input.sourcePath, ".pdf") || "Document";
-	const issuedOn = input.issuedOn ?? todayIsoDate();
-
-	// The destination name comes from the title through fileNameFor, never from
-	// the source path, so a title carrying "../" cannot walk the copy outside
-	// the configured directory.
-	const destination = join(importStorageDir(), fileNameFor(title, "-import"));
-	copyFileSync(input.sourcePath, destination);
-
-	const [row] = db
-		.insert(documents)
-		.values({
-			clientId: client.id,
-			projectId: input.projectId ?? null,
-			templateId: null,
-			templateVersion: null,
-			title,
-			bodyHtml: "",
-			issuedOn,
-			pdfPath: destination,
-			isSpecimen: false,
-			sourceKind: "imported",
-		})
-		.returning()
-		.all();
-
-	return toRecord(row!, client.name);
+	return new Uint8Array(readFileSync(record.pdfPath));
 }
 
 /**
@@ -431,20 +377,6 @@ export async function setStatus(
 ): Promise<DocumentRecord> {
 	db.update(documents)
 		.set({ statusId, updatedAt: now() })
-		.where(eq(documents.id, id))
-		.run();
-	const record = await get(id, db);
-	if (!record) throw new Error("That document no longer exists.");
-	return record;
-}
-
-export async function setPdfPath(
-	id: string,
-	pdfPath: string,
-	db: Db = getDb(),
-): Promise<DocumentRecord> {
-	db.update(documents)
-		.set({ pdfPath, updatedAt: now() })
 		.where(eq(documents.id, id))
 		.run();
 	const record = await get(id, db);

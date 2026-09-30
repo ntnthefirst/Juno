@@ -428,8 +428,8 @@ type PreviewState =
 /**
  * Reading a template is the common case, editing it is the rare one
  * (docs/editors.md section 4), so clicking a row opens this rather than the
- * editor. It renders the same way DocumentPreview.tsx renders a real
- * document: a fully sandboxed frame, because the body quotes client data.
+ * editor. It renders in a fully sandboxed frame, because the body quotes
+ * client data.
  */
 function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewProps) {
 	// The component starts loading, and only this file's TemplatePreview

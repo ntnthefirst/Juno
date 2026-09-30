@@ -84,6 +84,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 		<div className="px-6 py-5">
 			<Section
 				title="Mail accounts"
+				anchor="mail-accounts"
 				description="Passwords are kept in the operating system keychain."
 				action={
 					<AddButton label="Add account" onClick={() => setForm({ account: null })} />

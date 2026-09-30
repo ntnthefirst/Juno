@@ -118,11 +118,60 @@ export const documentSignatures = sqliteTable(
 		/** SHA-256 of the unsigned PDF, so later tampering is detectable. */
 		documentHash: text("document_hash").notNull(),
 		signedPdfPath: text("signed_pdf_path"),
+		/**
+		 * The signing details as a PDF of their own, `<name>.cert.pdf` beside the
+		 * signed file. Null for a signature made before certificates were separate,
+		 * whose details are on the last page of the signed PDF itself.
+		 */
+		certificatePdfPath: text("certificate_pdf_path"),
 		/** JSON: what was signed, by whom, from which template version. */
 		auditJson: text("audit_json"),
 	},
 	(t) => [
 		index("document_signatures_document_idx").on(t.documentId),
 		index("document_signatures_owner_idx").on(t.ownerId),
+	],
+);
+
+/**
+ * One file a document has been. A document is the thing people talk about, "the
+ * hosting agreement with Acme"; its versions are every PDF it has been on the
+ * way: generated, imported, stamped, signed digitally, sent back by the client.
+ * Nothing is replaced. Opening a document opens its newest version.
+ *
+ * Newest is by `file_date`, not by when the row was written. An imported file
+ * carries the date the file itself was last changed, so an older copy that
+ * arrives late lands between the versions it came between, rather than
+ * pretending to be the latest.
+ */
+export const documentVersions = sqliteTable(
+	"document_versions",
+	{
+		...standardColumns,
+		documentId: text("document_id")
+			.notNull()
+			.references(() => documents.id),
+		/** generated, imported, stamped or signed. What the version is, not where it came from. */
+		kind: text("kind").notNull(),
+		/** How it arrived: generate, picker, drop, mail, sign, agent. */
+		source: text("source").notNull(),
+		pdfPath: text("pdf_path").notNull(),
+		/** The name the file had when it arrived, for an imported version. */
+		fileName: text("file_name"),
+		/** UTC ISO-8601. Orders the versions. */
+		fileDate: text("file_date").notNull(),
+		/** SHA-256 of the file. Null for versions recorded before this table existed. */
+		fileHash: text("file_hash"),
+		/** The words in the PDF, for spotting that an incoming file is this document again. */
+		textContent: text("text_content"),
+		signatureId: text("signature_id").references(() => documentSignatures.id),
+		mailAttachmentId: text("mail_attachment_id"),
+	},
+	(t) => [
+		index("document_versions_document_idx").on(t.documentId, t.fileDate),
+		index("document_versions_signature_idx").on(t.signatureId),
+		index("document_versions_hash_idx").on(t.fileHash),
+		index("document_versions_owner_idx").on(t.ownerId),
+		index("document_versions_deleted_idx").on(t.deletedAt),
 	],
 );

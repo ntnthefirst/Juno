@@ -1,0 +1,1 @@
+ALTER TABLE `document_signatures` ADD `certificate_pdf_path` text;

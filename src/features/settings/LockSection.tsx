@@ -69,6 +69,7 @@ export function LockSection() {
 	return (
 		<Section
 			title="Lock"
+			anchor="lock"
 			action={
 				configured ? (
 					<div className="flex gap-1">

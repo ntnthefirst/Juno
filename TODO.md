@@ -5,57 +5,26 @@ a **you** tag needs Nathan rather than a session.
 
 ---
 
-## 1. Decide the licence — **you**
+## 1. Your own real document templates - **you**
 
-The repository exists (`github.com/ntnthefirst/Juno`), `publish:` in
-`electron-builder.yml` points at it with `releaseType: draft`, and the
-`electron-updater` wiring is in. What is left is the licence: the repo is
-currently all rights reserved by default, which is the right holding position
-until decided otherwise. See decision 13. The question that settles it: should
-a company be able to take Juno, host it, and sell it back?
+Nothing that ships is fit to send to a client. A new install gets one example
+document template and it is a specimen. An install that still has the five
+invented templates from phase 1 (`nda`, `development_agreement`,
+`hosting_agreement`, `project_scope`, `addendum`) keeps them as they are, and
+they are specimens too.
 
-## 2. Replace the placeholder legal texts with real ones — **you**
+**Still yours.** Write your real contract templates in the app, from the
+example or from nothing. The placeholder syntax and the fields are in
+`docs/templates.md`. **Do not send a document generated from an unreviewed
+template to a client.** That is what the banner is for.
 
-Phase 1 ships with **invented** contract templates so the machinery can be built
-and tested. They are structurally plausible and legally worthless.
+## 2. Decide what the in-app assistant runs on - **you**, parked
 
-Every seeded template carries `reviewedAt: null`, and the app treats that as a
-first-class state:
-
-- The template list marks them plainly as not reviewed.
-- Generating from one stamps a visible specimen banner into the document.
-- The signing screen refuses to treat an unreviewed template as final.
-
-**What to do:** rewrite each template's body with your real text, then clear the
-specimen flag on it. The placeholder syntax and the available fields are
-documented in `docs/templates.md`.
-
-**Do not send a document generated from an unreviewed template to a client.**
-That is what the banner is for, and why it is on the page rather than in a
-tooltip.
-
-## 3. Run mail against a real account, both ways - **you**
-
-Phases 3 and 4 have never seen a real IMAP or SMTP server. Add one account
-under Settings with both servers, press Sync now, then send one message to
-yourself from the composer. Note anything that looks wrong: a folder missing, a
-body that will not fetch, a thread split in two, a date off by a few hours, a
-message that never arrives, a copy missing from Sent, or the house shell
-looking broken in Outlook or on the phone. The questions the runs are meant to
-answer are at the end of the two session entries in `BUILD-LOG.md`.
-
-Deliverability is the other half: SPF, DKIM and DMARC on the real domains have
-to align with the SMTP server the account uses, or the first client mail lands
-in spam. That is DNS, not Juno, and it is worth checking before a real
-contract goes out this way.
-
-The sync writes nothing to the server. The sender writes exactly two things:
-the message, and a copy into Sent.
-
-## 4. Decide what the in-app assistant runs on - **you**
+**Parked on purpose.** Not now; picked up later. Until then an external agent
+does the job, as below.
 
 Phase 6 is built except its assistant panel. Everything the panel would drive
-is there: 99 tools, the approval gate, briefings and automations. What it needs
+is there: 170 tools, the approval gate, briefings and automations. What it needs
 and nothing else does is a model, which means three answers from you.
 
 - **Which provider**, and whether Juno ever talks to one at all. PLAN.md is
@@ -70,43 +39,128 @@ Until then an external agent does the same work. Open Agent, copy the
 configuration, paste it into Claude Desktop or Claude Code. That also answers
 phase 6's done-when in PLAN.md.
 
-## 5. Smaller things
+## 3. Things only you can try - **you**
 
-- **Auto-update tests.** Nothing exercises the updater, because there is no feed.
-- **The MCP server itself.** The tool descriptors exist for every service, but
-  nothing serves them over stdio yet. That is phase 6 in `PLAN.md`; the
-  descriptors are written per feature so that phase is assembly, not archaeology.
-- **`npm run test` runs under Electron's Node** because the host's Node 23.9 has
-  no `StatementSync.setReturnArrays`. If the host Node moves past 24 this can go
-  back to plain `vitest`.
-- **Database encryption** is out of scope and would mean revisiting decision 18,
-  since `node:sqlite` cannot do SQLCipher. The likely answer then is
-  `@libsql/client`.
-- **Purging a removed mail account.** Removing an account forgets its password
-  and soft-deletes the row; its messages and attachments stay on disk until a
-  purge exists. That purge is a confirmed action, never an MCP tool.
-- **The reader frame has a fixed height** with a taller and shorter toggle,
-  because a sandboxed frame cannot report its content height. A resize handle
-  would be nicer.
-- **The composer is plain text.** A small fixed toolbar (bold, a link, a list)
-  is the phase 4 promise not yet kept. Templates carry their own layout, so it
-  matters least for the messages Juno writes on its own.
-- **Sent messages show in the reader only after the Sent folder is synced.**
-  Until then the outbox is the record. Showing outbox rows inside a thread
-  would close the gap.
+Everything decided and buildable in this section is built. What is left needs
+your hands, a real account or a real client, rather than code.
+
+- **No real mail server has been used yet.** Reading and sending are proven
+  against a mailbox and a transport held in memory.
 - **No other calendar has read a Juno .ics file yet.** Export a month, open
   it in Google Calendar or Outlook, and check the moved occurrence of a
   recurring event after the October change. Then import an Outlook export the
   other way; its Windows zone names are handled through the file's VTIMEZONE,
   which is tested against a hand-written one and not yet a real one.
 - **No third-party MCP client has connected yet.** The smoke run starts the
-  real bridge and speaks MCP to it, so the socket, the token and the wire are
-  covered, but Claude Desktop and Claude Code have not. Try both, and check
-  that a tool list cached while Juno was closed recovers when it opens.
-- **The audit log has no purge.** It grows by one row per write. A year of
-  ordinary use is a few thousand rows, so this is not urgent, but "keep the
-  last N months" belongs next to the backup settings eventually.
-- **An automation cannot pass one step's result to the next.** Steps are
-  independent calls with fixed arguments. Anything that needs the output of a
-  previous step is a job for an agent, which can read and then decide, rather
-  than for a recording.
+  real bridge and speaks MCP to it, but Claude Desktop and Claude Code have
+  not. Try both, and check that a tool list cached while Juno was closed
+  recovers when it opens.
+- **The example mail template has not been read in a real mail client yet.**
+  Use it on a client whose address is yours (Mail templates, the example,
+  Use), create the draft and send it to yourself. Put a real logo and a real
+  photo address in first: the two at example.com will not load. Then open it in
+  Gmail on a phone and in Outlook on Windows, and write down what each shows.
+  Expect Gmail to show Arial for the heading, since it loads no web fonts, and
+  no hover colour on the button; expect Outlook on Windows to stack the two
+  columns, keep the comparison table side by side, and paint no gradient,
+  shadow, rounded corner or transparent colour. Anything else is a finding.
+
+## 4. Not tasks
+
+Written down so nobody builds them by accident.
+
+- **Nothing files mail on its own except the owner's mailbox rules** (5b).
+  An agent or an automation still cannot: filing is side-effectful, so it is
+  excluded from anything unattended by the same rule that keeps sending out of
+  an automation.
+- **An automation cannot pass one step's result to the next.** Anything that
+  needs the output of a previous step is a job for an agent, which can read and
+  then decide, rather than for a recording.
+
+## 5. Mail rules: greetings for every message, automation per mailbox
+
+Two kinds of rule, and they live in different places on purpose. Greetings and
+sign-offs apply to every message from every account, so they are one list.
+Automation belongs to one mailbox, so each mailbox has its own list.
+
+Both are built like Cloudflare's rules: a rule has a **name**, an on and off
+switch, **conditions** and **what it does**. Rules sit in an **ordered list**
+that is reordered by dragging, and are checked top to bottom. Stored in the
+database with the five columns, behind a service, IPC channels and MCP tools,
+like everything else (decision 2).
+
+### 5a. Greetings and sign-offs
+
+**Being built separately, not on this branch.** An unfinished start is on the
+branch `wip/mail-phrases`: the schema and migration 0015, the service with its
+tests, the IPC and MCP adapters, and the composer inserting the greeting and
+sign-off. The Settings screen, the smoke steps and a full `npm run check` and
+smoke run are still missing. Whichever of 5a and 5b lands second regenerates
+its migration so the numbers do not collide (data.md section 3).
+
+The way Outlook does signatures. Nothing to do with templates.
+
+- **Greetings and sign-offs are named, static texts.** The owner keeps a list
+  of each, as many as they like, each with a title and a text. For example a
+  greeting "Basic" with "Beste,", and a greeting "Reply to clients" with
+  "Beste," and "Bedankt voor uw bericht." on the next line. Sign-offs the
+  same way. Static means
+  plain text, no placeholders, so there is nothing to fill in and nothing that
+  can come out empty.
+- **Rules decide which one goes where.** A rule has a name, conditions, and
+  which greeting and which sign-off it adds (either may be none). Conditions:
+  - what the message is: new, reply or forward;
+  - who it goes to: a client, a known contact, or anyone else;
+  - which account it is sent from.
+  So "every new mail" adds "Basic", and "every reply to a client" adds
+  "Reply to clients".
+- The first rule that matches decides. The composer puts its greeting and
+  sign-off in when a message is started, and they stay editable there. No rule
+  matches, nothing is added.
+- Edited in Settings > Mail accounts, above the accounts, because it is common
+  to all of them: the greetings, the sign-offs, and the rules.
+
+### 5b. Automation rules per mailbox
+
+- **The account gets a detail page.** Settings > Mail accounts lists the
+  connected mailboxes; clicking one opens its page (a `FormPage`, decision 30)
+  with its details, its folders (the folders dialog moves here) and its rules.
+- **When they run.** On every sync of that mailbox, on new incoming messages in
+  its **inbox** only. Not on sent mail, not on other folders, and not again on
+  a message a rule has already seen.
+- **Conditions** on the sender, the recipients, the subject, whether the
+  sender is a client, and whether it has attachments.
+- **Actions**, one or several per rule: move to a folder, move to trash,
+  archive, mark read, flag, link the thread to its client. For example "from
+  this address: mark read and move to trash".
+- **Order, like Cloudflare.** Rules run top to bottom. Each rule has its own
+  choice of whether a match stops the rules below it or lets them run too.
+- **The owner's rules may file on their own.** Moving and deleting on the
+  server is filing, which the project otherwise never does unattended
+  (mcp.md section 4). A rule the owner wrote and switched on is the owner's
+  standing instruction, so it runs without asking each time. That is an
+  exception, and it covers these rules only: an agent may create or edit a
+  rule only through the approval gate, and an automation may not run one.
+  Write the exception into docs/decisions.md in the same commit.
+- Every action a rule takes writes an audit row naming the rule, so "why did
+  this message move" always has an answer.
+
+---
+
+## Signing: what is deliberately not there
+
+- **itsme and eID.** A digital signature uses a .p12 or .pfx certificate the
+  owner imports in Settings > Documents. itsme needs an agreement and client
+  credentials, and the eID key never leaves the card, so it needs a card reader
+  driver and a native module. **You**: an itsme or signing-provider agreement, or
+  a decision to take on eID through PKCS#11. See decision 38.
+- **A trust check.** The certificate is checked for a key, a validity period
+  and its intended use. It is not checked against a trust list, and no
+  timestamp authority is used, so a signature does not carry a trusted time.
+  Adding both is what would make it verifiable after the certificate expires.
+- **Deleting a version.** Versions are only ever added. Removing one changes
+  what the document opens as, so it needs the same confirmation as any delete.
+- **Scans.** A PDF with no text layer cannot be matched to a document, only
+  imported, until there is OCR.
+- **Rotated pages.** A page with a rotation is refused by the stamp, with a
+  message. Rotate it upright first.

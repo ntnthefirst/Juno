@@ -31,9 +31,9 @@ all of it. No invoicing, no payments, no cloud requirement.
 Read [docs/decisions.md](docs/decisions.md) before proposing an alternative to
 any of these. It records what would have to stop being true for each to change.
 
-**Status: phases 0 to 6 built.** Read [START-HERE.md](START-HERE.md) and then
-[BUILD-LOG.md](BUILD-LOG.md) before touching anything; several decisions above
-have been amended by what actually happened, and the log says which.
+**Status: phases 0 to 6 built.** Read [STRUCTURE.md](STRUCTURE.md) and then
+[TODO.md](TODO.md) before touching anything; several decisions above have been
+amended by what actually happened, and the structure map says which.
 
 ---
 
@@ -125,12 +125,16 @@ Juno and may never unlock it. Details in
 
 ## Seeded reference data
 
-Document types, statuses, labels, reminder presets and email templates ship
-seeded, stay editable, and are **never hard-deleted** (decision 16). Removing one
-sets `hidden_at`, because rows already point at it. Those rows carry `is_system`,
+Document types, statuses, labels and reminder presets ship seeded, stay
+editable, and are **never hard-deleted** (decision 16). Removing one sets
+`hidden_at`, because rows already point at it. Those rows carry `is_system`,
 `hidden_at`, `sort_order`, `seed_key` and `customised_at` on top of the five
 mandatory columns. Reset is per set and global; an upgrade never overwrites an
-edited row and never resurrects a hidden one.
+edited row and never resurrects a hidden one. Mail templates and document
+templates are no longer seeded: an install that has the old ones (four mail
+templates, five document templates) keeps them as they are, and a first install
+gets one example of each that is an ordinary template. No code may look either
+kind of template up by key.
 [.claude/rules/data.md](.claude/rules/data.md).
 
 ## Windows
@@ -225,7 +229,9 @@ The commands are `npm run check` (lint, typecheck and test together) and
 `npm run smoke`, and a change is not done until both are clean and anything
 visual has been looked at in both themes. `JUNO_SMOKE_DEMO=1 npm run smoke`
 writes a screenshot of every screen and every settings tab, in both themes, to
-`.smoke/`. The stack's traps
+`.smoke/`; add `JUNO_SMOKE_FRONT=1` to keep the window above everything else for
+the run, which is what makes those screenshots evidence on a machine where it
+might be covered. The stack's traps
 and the definition of done are in
 [.claude/rules/verify.md](.claude/rules/verify.md).
 

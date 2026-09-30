@@ -42,9 +42,16 @@ import type {
 	DocumentTemplate,
 	DocumentTemplateInput,
 	DocumentTemplatePatch,
+	DocumentTimelineEntry,
+	VersionUse,
 	GenerateDocumentInput,
 	GenerateDocumentResult,
-	ImportDocumentInput,
+	AddVersionInput,
+	DocumentVersion,
+	ImportAnalysis,
+	ImportFileInput,
+	ImportSource,
+	PickedPdf,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -54,6 +61,7 @@ import type {
 	ReminderPatch,
 	ReminderSuggestion,
 	SignDocumentInput,
+	SigningCertificateInfo,
 	AddressCandidate,
 	BackupInfo,
 	Client,
@@ -76,31 +84,61 @@ import type {
 	LockSettings,
 	LockState,
 	MailAccount,
+	ClientNote,
+	ClientNoteInput,
+	ClientNotePatch,
+	ClientTimelineEntry,
+	ClientTimelineKind,
+	ClientTimelineQuery,
+	MailFileResult,
 	MailAccountInput,
 	MailAutoconfig,
 	MailAccountPatch,
 	MailConnectionTest,
+	MailPurgeResult,
 	MailDraftInput,
 	MailDraftPatch,
 	MailFolder,
 	MailMessage,
 	MailMessageBody,
+	MailMessageClient,
 	MailOutboxCounts,
 	MailOutboxListQuery,
 	MailOutboxMessage,
+	MailRecipientSuggestion,
+	MailReplyMode,
 	MailReplySeed,
 	MailSecurity,
 	MailSyncStatus,
 	MailTemplate,
+	MailLayout,
+	GoogleFontLoad,
+	GoogleFontRequest,
+	MailBlockConversion,
+	MailTemplateDraft,
 	MailTemplateInput,
 	MailTemplatePatch,
 	MailTemplateRender,
 	MailThread,
 	MailThreadListQuery,
 	MailThreadSummary,
+	RemovedMailAccount,
 	Project,
 	ProjectInput,
 	ProjectPatch,
+	ProjectAsset,
+	ProjectAssetPatch,
+	ProjectAssetStorage,
+	ProjectCommand,
+	ProjectCommandInput,
+	ProjectCommandPatch,
+	ProjectLink,
+	ProjectLinkInput,
+	ProjectLinkPatch,
+	ProjectRun,
+	ProjectsView,
+	ProjectStorageChoice,
+	ProjectStorageInfo,
 	ProjectSummary,
 	ReferenceItem,
 	ReferenceItemInput,
@@ -121,6 +159,7 @@ import type {
 	OnboardingPatch,
 	OnboardingState,
 	SettingsSection,
+	UpdateStatus,
 } from "./types";
 
 export interface ListClientsQuery {
@@ -134,6 +173,23 @@ export interface ListClientsQuery {
 export interface JunoApi {
 	app: {
 		info(): Promise<AppInfo>;
+
+		/**
+		 * The clipboard commands, run against whatever has focus in this window.
+		 *
+		 * Electron draws no context menu of its own, so cut, copy and paste have
+		 * to come from somewhere for the app's own menu to offer them. They are
+		 * routed through the main process rather than the renderer reading the
+		 * clipboard itself, which means no clipboard content ever crosses the
+		 * bridge: the renderer asks for the edit, the main process performs it on
+		 * the focused element, and nothing comes back.
+		 */
+		edit: {
+			cut(): Promise<void>;
+			copy(): Promise<void>;
+			paste(): Promise<void>;
+			selectAll(): Promise<void>;
+		};
 	};
 
 	/**
@@ -172,6 +228,22 @@ export interface JunoApi {
 		/** Soft delete. Returns the row so the interface can offer an undo. */
 		remove(id: string): Promise<Client>;
 		restore(id: string): Promise<Client>;
+		/**
+		 * What has happened with this client, assembled from the records that
+		 * already hold it. Newest first.
+		 */
+		timeline(query: ClientTimelineQuery): Promise<ClientTimelineEntry[]>;
+		timelineCounts(clientId: string): Promise<Record<ClientTimelineKind, number>>;
+	};
+
+	/** Calls, meetings and anything else that leaves no other trace. */
+	clientNotes: {
+		listForClient(clientId: string): Promise<ClientNote[]>;
+		get(id: string): Promise<ClientNote | null>;
+		create(input: ClientNoteInput): Promise<ClientNote>;
+		update(id: string, patch: ClientNotePatch): Promise<ClientNote>;
+		remove(id: string): Promise<ClientNote>;
+		restore(id: string): Promise<ClientNote>;
 	};
 
 	contacts: {
@@ -216,12 +288,79 @@ export interface JunoApi {
 	};
 
 	projects: {
-		list(query?: { clientId?: string; statusId?: string | null }): Promise<ProjectSummary[]>;
+		list(query?: {
+			clientId?: string;
+			statusId?: string | null;
+			unassigned?: boolean;
+		}): Promise<ProjectSummary[]>;
 		get(id: string): Promise<Project | null>;
 		create(input: ProjectInput): Promise<Project>;
 		update(id: string, patch: ProjectPatch): Promise<Project>;
 		remove(id: string): Promise<Project>;
 		restore(id: string): Promise<Project>;
+
+		/** Which folder this project's own files are in, and how much is in it. */
+		storage(id: string): Promise<ProjectStorageInfo>;
+		setStorage(id: string, choice: ProjectStorageChoice): Promise<Project>;
+		/**
+		 * Opens a folder picker in the main process and moves the files there.
+		 * Null when the picker was cancelled, which writes nothing.
+		 */
+		chooseStorageFolder(id: string, move: boolean): Promise<ProjectStorageInfo | null>;
+		useAppStorage(id: string, move: boolean): Promise<ProjectStorageInfo>;
+		openStorageFolder(id: string): Promise<void>;
+		/** A directory picker. Returns the path so a form can show it before saving. */
+		chooseLocalFolder(): Promise<string | null>;
+		openLocalFolder(id: string): Promise<void>;
+		setCover(id: string, assetId: string | null): Promise<Project>;
+
+		links: {
+			list(projectId: string): Promise<ProjectLink[]>;
+			create(input: ProjectLinkInput): Promise<ProjectLink>;
+			update(id: string, patch: ProjectLinkPatch): Promise<ProjectLink>;
+			remove(id: string): Promise<ProjectLink>;
+			reorder(projectId: string, orderedIds: string[]): Promise<ProjectLink[]>;
+			/** The main process decides browser or file manager, from the target. */
+			open(id: string): Promise<void>;
+		};
+
+		assets: {
+			list(projectId: string): Promise<ProjectAsset[]>;
+			/**
+			 * A file picker. managed copies the files into the project's folder,
+			 * linked points at them where they are. There is no method that takes a
+			 * path from here: the renderer never names a file on disk.
+			 */
+			choose(projectId: string, storage: ProjectAssetStorage): Promise<ProjectAsset[]>;
+			update(id: string, patch: ProjectAssetPatch): Promise<ProjectAsset>;
+			remove(id: string): Promise<ProjectAsset>;
+			restore(id: string): Promise<ProjectAsset>;
+			reorder(projectId: string, orderedIds: string[]): Promise<ProjectAsset[]>;
+			open(id: string): Promise<void>;
+			reveal(id: string): Promise<void>;
+		};
+
+		/**
+		 * Commands have no MCP counterpart and are not going to get one. One runs
+		 * in a real shell with the owner's privileges, so writing one and running
+		 * one together are a remote shell. Decision 35.
+		 */
+		commands: {
+			list(projectId: string): Promise<ProjectCommand[]>;
+			create(input: ProjectCommandInput): Promise<ProjectCommand>;
+			update(id: string, patch: ProjectCommandPatch): Promise<ProjectCommand>;
+			remove(id: string): Promise<ProjectCommand>;
+			reorder(projectId: string, orderedIds: string[]): Promise<ProjectCommand[]>;
+		};
+
+		runs: {
+			list(projectId?: string): Promise<ProjectRun[]>;
+			start(commandId: string): Promise<ProjectRun>;
+			stop(commandId: string): Promise<ProjectRun | null>;
+			clear(commandId: string): Promise<void>;
+			/** Output arrives as it is printed. Returns an unsubscribe. */
+			onChange(listener: (run: ProjectRun) => void): () => void;
+		};
 	};
 
 	reference: {
@@ -257,6 +396,12 @@ export interface JunoApi {
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
 		/** Fires in every window, so a change made in settings reaches the app. */
 		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
+		/** Whether the main sidebar goes back to the rail on its own. */
+		getSidebarAutoCollapse(): Promise<boolean>;
+		setSidebarAutoCollapse(value: boolean): Promise<boolean>;
+		/** How the projects screen is drawn. A preference, not a record. */
+		getProjectsView(): Promise<ProjectsView>;
+		setProjectsView(patch: Partial<ProjectsView>): Promise<ProjectsView>;
 		getOwner(): Promise<OwnerProfile>;
 		/**
 		 * The scalar fields only. The two contact lists are edited one entry at a
@@ -277,6 +422,25 @@ export interface JunoApi {
 		setOnboarding(patch: OnboardingPatch): Promise<OnboardingState>;
 		/** True on a genuinely first launch, and after a step is added an install has not seen. */
 		needsOnboarding(): Promise<boolean>;
+	};
+
+	/**
+	 * Updates, against the public GitHub releases. There is no method that
+	 * installs without asking and none that reads the feed URL: the renderer
+	 * says check, install or auto-install, and is told what happened.
+	 */
+	updates: {
+		status(): Promise<UpdateStatus>;
+		/**
+		 * A person pressed the button. Rate-limited to three a minute in the
+		 * service, and it throws with how long to wait when that is exceeded.
+		 */
+		check(): Promise<UpdateStatus>;
+		/** Downloads if needed, then restarts into the new version. */
+		install(): Promise<UpdateStatus>;
+		setAutoInstall(value: boolean): Promise<UpdateStatus>;
+		/** Fires while a download runs, which is the only slow part of this. */
+		onChange(listener: (status: UpdateStatus) => void): () => void;
 	};
 
 	lock: {
@@ -390,10 +554,33 @@ export interface JunoApi {
 		list(query?: { clientId?: string }): Promise<DocumentRecord[]>;
 		get(id: string): Promise<DocumentRecord | null>;
 		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
-		/** Copies an existing PDF in and records it as an imported document. */
-		import(input: ImportDocumentInput): Promise<DocumentRecord>;
-		/** Opens a file picker filtered to PDF and imports the choice for a client. Null when cancelled. */
-		chooseImport(clientId: string): Promise<DocumentRecord | null>;
+		/** Opens the file picker and hands back the chosen PDFs as bytes. Empty when cancelled. */
+		pickPdfs(): Promise<PickedPdf[]>;
+		/** Which existing documents an incoming file looks like, before anything is written. */
+		analyseImport(input: { source: ImportSource; clientId?: string | null }): Promise<ImportAnalysis>;
+		/** A new document from the file. Refuses a title the client already has. */
+		importFile(input: ImportFileInput): Promise<DocumentRecord>;
+		/** Adds the file to a document as a version, placed by the file's own date. */
+		addVersion(input: AddVersionInput): Promise<DocumentVersion>;
+		/** Newest first. */
+		versions(documentId: string): Promise<DocumentVersion[]>;
+		openVersion(versionId: string): Promise<void>;
+		revealVersion(versionId: string): Promise<void>;
+		/** Opens the signing details of a stamped or signed version. */
+		openCertificate(versionId: string): Promise<void>;
+		/** The document's PDF, for the placement page. Never a path. */
+		readPdf(id: string): Promise<Uint8Array>;
+		/** One version's PDF, for the viewer. Never a path. */
+		readVersion(versionId: string): Promise<Uint8Array>;
+		/** Saves a copy where the person chooses. The path saved to, or null when cancelled. */
+		downloadVersion(versionId: string): Promise<string | null>;
+		/**
+		 * A native yes or no when the version is not the newest, worded for what
+		 * `use` will really do. True straight away for the newest.
+		 */
+		confirmVersionUse(versionId: string, use: VersionUse): Promise<boolean>;
+		/** What has happened to the document, newest first. */
+		timeline(documentId: string): Promise<DocumentTimelineEntry[]>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;
 		remove(id: string): Promise<DocumentRecord>;
 		restore(id: string): Promise<DocumentRecord>;
@@ -406,6 +593,17 @@ export interface JunoApi {
 		/** Opens the PDF in whatever the OS uses for one. */
 		openPdf(id: string): Promise<void>;
 		revealPdf(id: string): Promise<void>;
+	};
+
+	signingCertificate: {
+		/** Null when none is imported. Never returns the key or the file. */
+		get(): Promise<SigningCertificateInfo | null>;
+		/**
+		 * Opens a picker for a .p12 or .pfx and checks the passphrase opens it. Null
+		 * when cancelled. The passphrase is not kept, only asked for again at signing.
+		 */
+		choose(passphrase: string): Promise<SigningCertificateInfo | null>;
+		remove(): Promise<void>;
 	};
 
 	reminders: {
@@ -482,6 +680,14 @@ export interface JunoApi {
 			update(id: string, patch: MailAccountPatch): Promise<MailAccount>;
 			/** Also forgets the password. Messages stay until a purge. */
 			remove(id: string): Promise<MailAccount>;
+			/** Removed accounts that still hold mail here, with what they hold. */
+			removed(): Promise<RemovedMailAccount[]>;
+			/**
+			 * Deletes every message, attachment and composed message stored for a
+			 * removed account, for good. `confirmEmail` has to be the account's
+			 * address. Nothing changes on the server.
+			 */
+			purge(id: string, confirmEmail: string): Promise<MailPurgeResult>;
 			/**
 			 * Tries the settings without saving. Leave the password out to test an
 			 * existing account with its stored one.
@@ -508,6 +714,16 @@ export interface JunoApi {
 		folders: {
 			list(accountId: string): Promise<MailFolder[]>;
 			setSyncEnabled(id: string, enabled: boolean): Promise<MailFolder>;
+			/** Makes the folder on the server, then lists it here. */
+			create(input: { accountId: string; name: string; parentId?: string | null }): Promise<MailFolder>;
+			rename(id: string, name: string): Promise<MailFolder>;
+			/** Removes it from the server with everything in it. Confirmed first. */
+			remove(id: string): Promise<MailFolder>;
+		};
+		/** Who a message can go to, and which clients an address belongs to. */
+		recipients: {
+			suggest(term: string, limit?: number): Promise<MailRecipientSuggestion[]>;
+			clientsFor(addresses: string[]): Promise<MailMessageClient[]>;
 		};
 		sync: {
 			/** One account, or every enabled one. Resolves when the run is over. */
@@ -523,6 +739,26 @@ export interface JunoApi {
 			unlinkClient(id: string): Promise<MailThreadSummary>;
 			countForClient(clientId: string): Promise<number>;
 		};
+		/**
+		 * Filing mail. Each of these changes the mailbox on the server first and
+		 * the local rows second, so nothing here is undone by the next sync.
+		 * Deleting for good is exactly that, on the server too, and the window
+		 * confirms it with a count before calling.
+		 */
+		file: {
+			archive(threadIds: string[]): Promise<MailFileResult>;
+			trash(threadIds: string[]): Promise<MailFileResult>;
+			junk(threadIds: string[]): Promise<MailFileResult>;
+			moveToFolder(threadIds: string[], folderId: string): Promise<MailFileResult>;
+			deleteForever(threadIds: string[]): Promise<number>;
+			setSeen(messageIds: string[], seen: boolean): Promise<number>;
+			setThreadsSeen(threadIds: string[], seen: boolean): Promise<number>;
+			setFlagged(messageIds: string[], flagged: boolean): Promise<number>;
+			/** A whole folder read, or unread. Returns how many messages changed. */
+			setFolderSeen(folderId: string, seen: boolean): Promise<number>;
+			/** Everything in a folder, expunged on the server too. Confirmed first. */
+			emptyFolder(folderId: string): Promise<number>;
+		};
 		messages: {
 			get(id: string): Promise<MailMessage | null>;
 			/** Beside the frame: text, blocked-image count and links. See MAIL_FRAME_ORIGIN. */
@@ -537,11 +773,30 @@ export interface JunoApi {
 		/** Opens a link from a message in the real browser, after a protocol check. */
 		openLink(url: string): Promise<void>;
 		templates: {
+			/** What a picker offers: hidden templates are left out. */
 			list(): Promise<MailTemplate[]>;
+			/** Every template, hidden ones included. What the management screen shows. */
+			listAll(): Promise<MailTemplate[]>;
 			get(id: string): Promise<MailTemplate | null>;
 			create(input: MailTemplateInput): Promise<MailTemplate>;
 			update(id: string, patch: MailTemplatePatch): Promise<MailTemplate>;
+			/** Hides a shipped template, soft-deletes one of your own. */
 			remove(id: string): Promise<MailTemplate>;
+			hide(id: string): Promise<MailTemplate>;
+			unhide(id: string): Promise<MailTemplate>;
+			duplicate(id: string): Promise<MailTemplate>;
+			/** Reads hand-edited HTML back into a canvas. Stores nothing. */
+			parseBody(html: string): Promise<MailLayout>;
+			/**
+			 * A Google font by name, with its files inline, so the canvas can show
+			 * it. Juno builds the address itself and never fetches one it is given.
+			 */
+			loadGoogleFont(request: GoogleFontRequest): Promise<GoogleFontLoad>;
+			/** One block as its HTML and CSS. Answers with the changed canvas; stores nothing. */
+			convertBlock(input: MailBlockConversion): Promise<MailLayout>;
+			/** Renders values in hand. Writes nothing, so a preview cannot mark a
+			 * template as edited. */
+			preview(draft: MailTemplateDraft): Promise<MailTemplateRender>;
 			/** Fills a template against a client and project. Stores nothing. */
 			render(input: {
 				templateId: string;
@@ -556,8 +811,8 @@ export interface JunoApi {
 			counts(accountId?: string): Promise<MailOutboxCounts>;
 			createDraft(input: MailDraftInput): Promise<MailOutboxMessage>;
 			updateDraft(id: string, patch: MailDraftPatch): Promise<MailOutboxMessage>;
-			/** The addresses, subject and quote a reply starts from. */
-			replySeed(messageId: string, all: boolean): Promise<MailReplySeed>;
+			/** The addresses, subject and quote an answer starts from. */
+			replySeed(messageId: string, mode: MailReplyMode): Promise<MailReplySeed>;
 			/** The person's press. Queues the message; the sender picks it up at once. */
 			send(id: string): Promise<MailOutboxMessage>;
 			/** Approves what an agent prepared. Only a person can reach this. */

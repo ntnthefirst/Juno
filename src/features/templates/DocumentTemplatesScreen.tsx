@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import type { DocumentTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
+import { IconAction } from "../../components/IconAction";
+import { InlineAdd } from "../../components/InlineAdd";
+import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
+import { SelectAllButton } from "../../components/SelectAllButton";
 import { messageOf } from "../../lib/errors";
+import {
+	activeDocumentTemplateFilterCount,
+	NO_DOCUMENT_TEMPLATE_FILTERS,
+	type DocumentTemplateFilters,
+} from "./document-template-filters";
 import { TemplateEditor } from "./TemplateEditor";
 import { UseDocumentTemplateScreen } from "./UseDocumentTemplateScreen";
 
@@ -18,9 +28,20 @@ type View =
 	| { status: "edit"; id: string }
 	| { status: "use"; id: string };
 
+function matches(template: DocumentTemplate, needle: string): boolean {
+	return `${template.name} ${template.description ?? ""}`.toLowerCase().includes(needle);
+}
+
 export function DocumentTemplatesScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [view, setView] = useState<View>({ status: "list" });
+	const [search, setSearch] = useState("");
+	const [filters, setFilters] = useState<DocumentTemplateFilters>(NO_DOCUMENT_TEMPLATE_FILTERS);
+	const [selectedIds, setSelectedIds] = useState<string[]>([]);
+	const [confirmRemove, setConfirmRemove] = useState<string[] | null>(null);
+	const [removeError, setRemoveError] = useState<string | null>(null);
+	const [creating, setCreating] = useState(false);
+	const [createError, setCreateError] = useState<string | null>(null);
 
 	const fetchRows = useCallback(() => window.juno.templates.list(), []);
 
@@ -43,6 +64,54 @@ export function DocumentTemplatesScreen() {
 			.then((rows) => setLoad({ status: "ready", rows }))
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, [fetchRows]);
+
+	/**
+	 * A new template, from the one thing worth asking for before it exists.
+	 *
+	 * The body is left out: the service defaults it to one empty page, the same
+	 * one the editor already treats as blank, which is where the rest gets
+	 * filled in. The list is reloaded before the view switches, so the row the
+	 * editor opens on is already there to find.
+	 */
+	async function create(name: string): Promise<void> {
+		setCreateError(null);
+		setCreating(true);
+		try {
+			const created = await window.juno.templates.create({ name });
+			const rows = await fetchRows();
+			setLoad({ status: "ready", rows });
+			setView({ status: "edit", id: created.id });
+		} catch (cause: unknown) {
+			setCreateError(messageOf(cause));
+		} finally {
+			setCreating(false);
+		}
+	}
+
+	async function removeSelected(ids: string[]): Promise<void> {
+		setRemoveError(null);
+		try {
+			for (const id of ids) await window.juno.templates.remove(id);
+			setSelectedIds([]);
+			refresh();
+		} catch (cause: unknown) {
+			setRemoveError(messageOf(cause));
+		}
+	}
+
+	// Memoised so the two derived lists below only rebuild when a load lands,
+	// not on every keystroke in search.
+	const rows = useMemo(() => (load.status === "ready" ? load.rows : []), [load]);
+	const needle = search.trim().toLowerCase();
+	const filterCount = activeDocumentTemplateFilterCount(filters);
+	const shown = useMemo(() => {
+		let list = rows;
+		if (filters.unreviewedOnly) list = list.filter((row) => row.reviewedAt === null);
+		if (needle) list = list.filter((row) => matches(row, needle));
+		return list;
+	}, [rows, needle, filters]);
+	const allSelected = shown.length > 0 && shown.every((row) => selectedIds.includes(row.id));
+	const someSelected = selectedIds.length > 0 && !allSelected;
 
 	const selected = view.status !== "list" && load.status === "ready"
 		? load.rows.find((row) => row.id === view.id) ?? null
@@ -132,21 +201,93 @@ export function DocumentTemplatesScreen() {
 	return (
 		<div className="flex h-full flex-col p-8">
 			<div className="mx-auto mb-6 w-full max-w-[var(--content-width)]">
-				<div className="flex items-baseline gap-3">
+				<div className="flex items-center gap-3">
 					<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
 						Document templates
 					</h1>
 					{load.status === "ready" ? (
 						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							{load.rows.length} {load.rows.length === 1 ? "template" : "templates"}
+							{shown.length} {shown.length === 1 ? "template" : "templates"}
 						</span>
 					) : null}
+					<span className="ml-auto" />
+					<InlineAdd
+						label="New document template"
+						placeholder="Template name"
+						busy={creating}
+						onSubmit={(name) => void create(name)}
+					/>
 				</div>
 				<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 					The contract texts that get rendered into the PDFs you send clients. The texts that ship
 					are invented, so read one, correct it, and mark it as reviewed before anything generated
 					from it goes out.
 				</p>
+				{createError ? (
+					<p
+						role="alert"
+						data-selectable
+						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					>
+						{createError}
+					</p>
+				) : null}
+				{removeError ? (
+					<p
+						role="alert"
+						data-selectable
+						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					>
+						{removeError}
+					</p>
+				) : null}
+
+				{load.status === "ready" && rows.length > 0 ? (
+					<div className="mt-5 flex items-center gap-2">
+						<SelectAllButton
+							checked={allSelected}
+							indeterminate={someSelected}
+							disabled={shown.length === 0}
+							onSelectAll={() => setSelectedIds(shown.map((row) => row.id))}
+							onClearSelection={() => setSelectedIds([])}
+						/>
+						{selectedIds.length > 0 ? (
+							<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
+								{selectedIds.length} selected
+							</span>
+						) : null}
+
+						<ListSearchBar
+							search={search}
+							onSearch={setSearch}
+							placeholder="Search document templates"
+							filtersAriaLabel="Document template filters"
+							filterCount={filterCount}
+							onClearFilters={() => setFilters(NO_DOCUMENT_TEMPLATE_FILTERS)}
+							filters={
+								<div className="flex flex-wrap gap-1">
+									<FilterToggle
+										label="Unreviewed"
+										icon="warning"
+										on={filters.unreviewedOnly}
+										onClick={() => setFilters({ ...filters, unreviewedOnly: !filters.unreviewedOnly })}
+									/>
+								</div>
+							}
+						/>
+
+						{selectedIds.length > 0 ? (
+							<div className="ml-auto flex items-center gap-1">
+								<IconAction
+									icon="remove"
+									label="Delete"
+									danger
+									onClick={() => setConfirmRemove(selectedIds)}
+								/>
+							</div>
+						) : null}
+					</div>
+				) : null}
 			</div>
 
 			<div className="mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">
@@ -161,67 +302,113 @@ export function DocumentTemplatesScreen() {
 							{load.message}
 						</p>
 					</div>
-				) : load.rows.length === 0 ? (
+				) : rows.length === 0 ? (
 					<p className="text-[var(--ink-muted)]">No document templates yet.</p>
+				) : shown.length === 0 ? (
+					<p className="text-[var(--ink-muted)]">Nothing matches.</p>
 				) : (
 					<ul>
-						{load.rows.map((row) => (
+						{shown.map((row) => (
 							<DocumentTemplateRow
 								key={row.id}
 								template={row}
-								selected={false}
+								checked={selectedIds.includes(row.id)}
+								hasSelection={selectedIds.length > 0}
+								onToggle={(id) =>
+									setSelectedIds((current) =>
+										current.includes(id) ? current.filter((other) => other !== id) : [...current, id],
+									)
+								}
 								onSelect={(id) => setView({ status: "preview", id })}
 							/>
 						))}
 					</ul>
 				)}
 			</div>
+
+			{confirmRemove ? (
+				<Dialog title="Delete document templates" onClose={() => setConfirmRemove(null)} width="narrow">
+					<p className="text-[length:var(--text-dense)]">
+						{confirmRemove.length === 1
+							? "1 document template will be deleted. This cannot be undone."
+							: `${confirmRemove.length} document templates will be deleted. This cannot be undone.`}
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setConfirmRemove(null)}>Cancel</Button>
+						<Button
+							variant="danger"
+							onClick={() => {
+								const ids = confirmRemove;
+								setConfirmRemove(null);
+								void removeSelected(ids);
+							}}
+						>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
+			) : null}
 		</div>
 	);
 }
 
 type DocumentTemplateRowProps = {
 	template: DocumentTemplate;
-	selected: boolean;
+	checked: boolean;
+	/** Once anything is ticked, a plain click on any row ticks it too. */
+	hasSelection: boolean;
+	onToggle: (id: string) => void;
 	onSelect: (id: string) => void;
 };
 
-function DocumentTemplateRow({ template, selected, onSelect }: DocumentTemplateRowProps) {
+function DocumentTemplateRow({ template, checked, hasSelection, onToggle, onSelect }: DocumentTemplateRowProps) {
 	const count = template.placeholders.length;
 	const reviewed = template.reviewedAt !== null;
 
 	return (
 		<li className="border-b border-[var(--line)]">
-			<button
-				type="button"
-				aria-current={selected ? "true" : undefined}
-				onClick={() => onSelect(template.id)}
-				style={{ minHeight: "var(--row-height)" }}
-				className={`block w-full rounded-[var(--radius-md)] px-3 py-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
-					selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
+			<div
+				className={`group flex items-center gap-2 rounded-[var(--radius-md)] px-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+					checked ? "bg-[var(--sunken)]" : "hover:bg-[var(--hover)]"
 				}`}
+				style={{ minHeight: "var(--row-height)" }}
 			>
-				<span className="flex items-center gap-2">
-					<span className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
-						{template.name}
-					</span>
-					{reviewed ? null : (
-						<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--risk)]">
-							Not reviewed
+				<input
+					type="checkbox"
+					checked={checked}
+					onChange={() => onToggle(template.id)}
+					aria-label={`Select ${template.name}`}
+					className={`h-4 w-4 flex-none accent-[var(--accent)] ${
+						hasSelection ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+					}`}
+				/>
+				<button
+					type="button"
+					onClick={() => (hasSelection ? onToggle(template.id) : onSelect(template.id))}
+					className="min-w-0 flex-1 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				>
+					<span className="flex items-center gap-2">
+						<span className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+							{template.name}
 						</span>
-					)}
-				</span>
-				{template.description ? (
-					<span className="mt-0.5 block truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-						{template.description}
+						{reviewed ? null : (
+							<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--risk)]">
+								Not reviewed
+							</span>
+						)}
 					</span>
-				) : null}
-				<span className="tabular mt-0.5 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					Version {template.version}
-					{"  ·  "}
-					{count} {count === 1 ? "placeholder" : "placeholders"}
-				</span>
-			</button>
+					{template.description ? (
+						<span className="mt-0.5 block truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							{template.description}
+						</span>
+					) : null}
+					<span className="tabular mt-0.5 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						Version {template.version}
+						{"  ·  "}
+						{count} {count === 1 ? "placeholder" : "placeholders"}
+					</span>
+				</button>
+			</div>
 		</li>
 	);
 }
@@ -241,8 +428,8 @@ type PreviewState =
 /**
  * Reading a template is the common case, editing it is the rare one
  * (docs/editors.md section 4), so clicking a row opens this rather than the
- * editor. It renders the same way DocumentPreview.tsx renders a real
- * document: a fully sandboxed frame, because the body quotes client data.
+ * editor. It renders in a fully sandboxed frame, because the body quotes
+ * client data.
  */
 function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewProps) {
 	// The component starts loading, and only this file's TemplatePreview

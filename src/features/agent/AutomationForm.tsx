@@ -145,19 +145,38 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 			actions={
 				<>
 					<Button onClick={onClose}>Cancel</Button>
-					<Button type="submit" form={formId} variant="primary" disabled={busy}>
+					<Button
+						type="submit"
+						form={formId}
+						variant="primary"
+						disabled={busy}
+					>
 						{busy ? "Saving" : "Save"}
 					</Button>
 				</>
 			}
 		>
-			<form id={formId} onSubmit={submit} noValidate>
+			<form
+				id={formId}
+				onSubmit={submit}
+				noValidate
+			>
 				<div className="grid grid-cols-2 gap-4">
 					<div className="col-span-2">
-						<Field label="Name" required value={name} onChange={setName} error={nameError} />
+						<Field
+							label="Name"
+							required
+							value={name}
+							onChange={setName}
+							error={nameError}
+						/>
 					</div>
 					<div className="col-span-2">
-						<Field label="Description" value={description} onChange={setDescription} />
+						<Field
+							label="Description"
+							value={description}
+							onChange={setDescription}
+						/>
 					</div>
 
 					<Select
@@ -173,11 +192,22 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 					{kind === "manual" ? (
 						<div />
 					) : (
-						<Field label="At" type="time" value={time} onChange={setTime} tabular />
+						<Field
+							label="At"
+							type="time"
+							value={time}
+							onChange={setTime}
+							tabular
+						/>
 					)}
 					{kind === "weekly" ? (
 						<div className="col-span-2">
-							<Select label="On" value={weekday} onChange={setWeekday} options={WEEKDAYS} />
+							<Select
+								label="On"
+								value={weekday}
+								onChange={setWeekday}
+								options={WEEKDAYS}
+							/>
 						</div>
 					) : null}
 
@@ -191,13 +221,13 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 							error={stepsError}
 						/>
 						<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							A list of steps, each with a tool and its arguments. The tool names and what they
-							take are listed under Connection.
+							A list of steps, each with a tool and its arguments. The tool names and what they take are
+							listed in Settings under Connection.
 						</p>
 						{willWait ? (
 							<p className="mt-2 text-[length:var(--text-sm)] text-[var(--warn)]">
-								One of these steps needs your approval. The run will stop there and wait for you,
-								every time, including on a schedule.
+								One of these steps needs your approval. The run will stop there and wait for you, every
+								time, including on a schedule.
 							</p>
 						) : null}
 					</div>
@@ -208,12 +238,14 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not save this automation.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p
+							data-selectable
+							className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						>
 							{error}
 						</p>
 					</div>
 				) : null}
-
 			</form>
 		</FormPage>
 	);

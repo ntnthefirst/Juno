@@ -87,12 +87,15 @@ as a separate phase, because they are separate risk.
   templates stay editable in Word, which matters because they are legal text.
 - **`printToPDF`** renders HTML templates to PDF using the Electron already
   present. No headless browser, no LibreOffice, no extra binary.
-- **pdf-lib** stamps a signature PNG onto a PDF and appends the audit page.
+- **pdf-lib** stamps a signature PNG onto a PDF and writes the audit page as a
+  `.cert.pdf` beside it, so the signed file ends where its author ended it.
 
 **Signing scope:** a signature image plus timestamp plus audit trail. That is
 appropriate for low-stakes and internal documents. It is *not* a qualified
 electronic signature under eIDAS. Do not claim in the UI or the docs that it is.
-High-stakes contracts keep going through a provider.
+High-stakes contracts keep going through a provider. Decision 38 adds an
+optional cryptographic signature on top of the stamp and keeps that sentence
+true.
 
 ## 9. No invoicing, no payments, ever
 
@@ -124,14 +127,17 @@ The **no AI attribution in git history** rule still applies. See
 [../.claude/rules/git.md](../.claude/rules/git.md). Commits should read as though a
 developer wrote them, because the decisions in them are the developer's.
 
-## 13. Licence: undecided, and deliberately so
+## 13. Licence: all rights reserved, permanently
 
-The repo starts private with no `LICENSE` file, which means default copyright,
-meaning all rights reserved. That is the right default while the answer is unknown,
-because adding a permissive licence later is easy and retracting one is not.
+The repo has no `LICENSE` file, which means default copyright, meaning all
+rights reserved. That is not a placeholder waiting on a decision: it is the
+decision. A company must not be able to take Juno, host it, and sell it back,
+and a permissive licence is the one thing that is easy to grant and impossible
+to take back once someone has built on it.
 
-Decide before the repo goes public. The question to answer first is whether a
-company should be able to take Juno, host it, and sell it back.
+If the repo goes public later, it goes public still unlicensed. Public without
+a `LICENSE` file remains "look, don't reuse" under copyright law; nothing about
+visibility changes what this decision settled.
 
 ## 14. Theme is a three-state setting, not a toggle
 
@@ -169,6 +175,13 @@ replacing plain `better-sqlite3`. It is off by default because the trade is real
 the key must be held in memory while unlocked, a forgotten passphrase means the
 data is unrecoverable, and there is no reset. Turning it on must state that in
 those words and require the passphrase to be entered twice.
+
+**Database encryption is dropped, and not built.** What it protects against, a
+stolen laptop or a copied file, is what BitLocker and FileVault already cover
+for the whole disk, and they are on by default on most machines Juno runs on.
+Building it would also mean leaving `node:sqlite` (decision 18) for a SQLite
+that can do SQLCipher. The two layers that exist are the OS account and the
+lock screen. Revisit only if Juno ever syncs the file off the machine.
 
 **Unlock methods**, in order of how much work they are:
 
@@ -217,6 +230,28 @@ labels without asking is not a reset, it is data loss.
 **Upgrades** carry a `seed_version`. A new version may add rows and may update
 rows whose `customised_at` is null. It may never touch an edited row, and it may
 never resurrect a hidden one.
+
+**Mail templates stopped being seeded.** The four that shipped were
+`contract_cover`, `project_kickoff`, `invoice_due` and `hosting_renewal`. Their
+definitions left the code: an install that has them keeps the rows exactly as
+they are, since nothing adds, updates, hides or removes them any more, and a new
+install never gets them. A first install, meaning a settings file that has never
+seeded the set and a table with no row in it, is given one example laid out on
+the canvas instead. It is written by `create` like any template, so it is not a
+system row: it is the owner's from the start, a delete is a delete, and nothing
+brings it back. Nothing may point at a mail template by key, because most
+installs will not have the one you want.
+
+**Document templates stopped being seeded, the same way.** The five that shipped
+were `nda`, `development_agreement`, `hosting_agreement`, `project_scope` and
+`addendum`, all invented and none reviewed. Their definitions left the code: an
+install that has them keeps the rows exactly as they are, and a new install
+never gets them. A first install, meaning a settings file that has never seeded
+the set (`documentTemplateSeedVersion`) and a table with no row in it, is given
+one example laid out on the page editor's model, with inputs and two pages. It
+is written by `create`, so it is not a system row, it starts unreviewed like
+every template, and a delete is a delete. Nothing may point at a document
+template by key.
 
 ## 17. Phase 0 derives the lock secret with scrypt, not Argon2id
 
@@ -412,7 +447,7 @@ the first thing to reopen.
 
 Phase 5 stores `start_local` and `end_local` as `YYYY-MM-DDTHH:MM:SS` with no
 zone suffix, beside an IANA `timezone`, and keeps `start_utc`, `end_utc` and
-`series_end_utc` only as an index for range queries. PLAN.md section 3 had
+`series_end_utc` only as an index for range queries. The original plan had
 sketched `starts_at` and `ends_at` as instants with a zone beside them; that
 shape is wrong for the one case the phase exists for. "10:00 every Tuesday in
 Brussels" is at 08:00Z until the clocks change and 09:00Z after, so a rule
@@ -486,7 +521,17 @@ a step needing approval stops the run and waits for a person, on a schedule as
 much as by hand. That is what keeps "an agent may prepare a send and may never
 fire it" true when the caller is a timer.
 
-`@modelcontextprotocol/sdk` is used in the bridge only, as PLAN.md chose. It
+The audit table this gate writes to is not kept forever. Rows older than six
+months are purged on launch (`purgeOldEvents` in
+`electron/main/services/agent-audit.ts`), except a row a still-open action
+still points at, which survives regardless of age until that action closes.
+This is the one hard delete in the app rather than a soft one
+(.claude/rules/data.md section 6): the log is not a record anything else is
+built from (the client timeline reads notes, status changes, documents and
+mail directly), so retention is the owner's call and runs unattended, with no
+IPC channel and no MCP tool.
+
+`@modelcontextprotocol/sdk` is used in the bridge only, as planned. It
 costs about 19 MB in the installer through dependencies the stdio path never
 loads (express, hono, jose and the rest are pulled in by other transports).
 Hand-rolling the protocol would save that and take on being wrong about a
@@ -570,12 +615,36 @@ builds installers on Windows and macOS and uploads them to a **draft** release:
 publishing that release is the deliberate act that starts a rollout, so a tag
 alone can never push a build to every installed copy.
 
-The updater is quiet by design. It checks thirty seconds after launch and daily
-after that, it downloads in the background, and it installs on the next quit.
-It never checks while Juno is locked, because locked means nobody is at the
-keyboard and nothing unattended runs then (decision 15). It is also the only
-outbound request Juno makes that the user did not configure themselves, which
-is why it lives in one small file that says so.
+Merging into `main` is what produces the tag. The version workflow reads the
+highest tag rather than `package.json`, because the two drift: a release is cut
+on main and the branch it came from keeps the older number. A pull request that
+bumps `package.json` past the highest tag is asking for a minor or a major, and
+is taken at its word. It calls the release workflow rather than letting its own
+tag push start it, because a tag pushed with `GITHUB_TOKEN` starts nothing, and
+an automatic release that waited for that event would quietly never run.
+
+The draft is the line this holds. Every merge produces installers; no merge
+reaches anybody's machine.
+
+The updater is quiet by design. It checks 38 hours after the last check rather
+than every 24, because a whole number of days lands every check in the same few
+minutes of the working day forever, and an odd interval walks around the clock
+instead. The last check is persisted, so opening and closing Juno four times in
+an afternoon is four launches and no extra checks. It never checks while Juno is
+locked, because locked means nobody is at the keyboard and nothing unattended
+runs then (decision 15). It is also the only outbound request Juno makes that
+the user did not configure themselves, which is why it lives in one small file
+that says so.
+
+Settings > General owns the rest of it: the running version, what the last check
+found, a button that checks now, and a toggle. With the toggle on, a release
+downloads in the background and is applied when Juno is next closed, so the
+following launch is the new version. With it off, nothing is downloaded until
+somebody presses Install, and that press is the only thing in the app that
+restarts it. The button is rate-limited to three checks a minute, shared with
+the agent's `updates.check`, so neither a stuck finger nor a loop hammers the
+feed. There is no MCP tool that installs: restarting the application somebody is
+working in is a person's decision, the same answer as the lock.
 
 **What would reverse this:** shipping to clients who cannot reach GitHub, or a
 signing certificate arriving with its own distribution channel.
@@ -631,6 +700,12 @@ Consequences:
   and reaches it with `form={id}`.
 - Sections in the settings window own their padding, because a section that
   turns into a form page draws its header and footer against the window edges.
+- A side panel closes on a click outside it, the same way it closes on
+  Escape, since a modeless panel that only Escape can dismiss is halfway to
+  the shape it was chosen instead of. A click on the row that opens the next
+  one swaps the panel's content rather than closing and reopening it, and a
+  click inside a menu, a dialog or another popover the panel opened is not
+  outside it, even though that content renders elsewhere in the tree.
 
 ## 31. Server settings are guessed, and the MX record is the second guess
 
@@ -786,3 +861,282 @@ never seen.
 **What would reverse this:** nothing short of setup growing into something with
 its own navigation, which would make it a screen again. If it ever needs more
 than one field per line, the questions are wrong rather than the window.
+
+## 35. A project is a workspace, and the command that starts it is not an agent's to write
+
+Projects were a name, a client, a date and a value. They are now the place a
+piece of work actually lives: its links, its files, the folder it is checked out
+into, and the command that starts it.
+
+Four things were decided along the way, and each one is the kind that is
+expensive to reverse.
+
+**A project need not belong to a client.** `projects.client_id` is nullable, and
+migration 0012 rebuilds the table to make it so, which is also what made the
+migration runner turn foreign keys off around each file and run `PRAGMA
+foreign_key_check` inside the transaction instead. A rebuild drops the parent
+table, and a drop is an implicit delete of every parent row; with enforcement on
+it fails the moment a document points at a project, and deferring the check does
+not help because nothing lowers the counter the drop raised. The work a one-person business
+does for itself takes exactly the shape of the work it does for someone else,
+and requiring a client for it would mean inventing one and putting a fiction in
+the client list. Every read that wants a client name joins it left; the one
+place that still joins inner is the invoice suggestion in `reminders-derive.ts`,
+deliberately, because there is nobody to invoice.
+
+**Files are held one of two ways, and the user picks.** A managed file is copied
+into the project's folder and Juno owns it: it moves when the folder moves, it
+is backed up with the folder, and deleting the record eventually deletes it. A
+linked file stays where it is and the record points at it: nothing is copied,
+which is the whole reason it exists, and Juno never writes to it or deletes it.
+The cost of the second kind is that moving the original breaks the record, which
+is why `exists` is on every asset the service returns and why the interface
+shows it rather than drawing a blank square.
+
+**Where the managed files live is per project, and the default is the app's own
+folder.** `storage_mode` is `app` or `custom`. The app's folder is under
+userData, so it travels with a backup; a project carrying four gigabytes of
+video wants somewhere with room on it, and that is the whole feature. Changing
+it moves the files first and writes the row second, because the other order
+leaves a project whose row says one folder and whose files are in another, and
+nothing would ever tell you which was right. A move renames when it can and
+copies when it cannot, and deletes nothing from the source until the
+destination has the file.
+
+**A command runs in a real shell, so no agent may write one or run one.** This
+is the one place Juno deliberately breaks the rule in decision 2 that anything
+the interface can do an agent can do, and it is worth being exact about why.
+`npm run dev` and `docker compose up` are shell lines; there is no weaker
+version of this feature, because anything that can start a dev server can start
+anything. The confirmation gate does not help: a tool that writes a command
+plus a tool that runs one is a remote shell with a dialog in front of it asking
+a person to read a command line and guess. So `projects.list_commands` is
+read-only and there is no tool that creates, edits, deletes or runs one.
+`.claude/rules/mcp.md` section 7 already says a tool does not take a raw
+statement; this is that rule applied rather than an exception to it. The panel
+that writes a command says in plain words what it does, the same way the lock
+settings say the lock screen does not protect the file on disk (decision 15).
+
+A run is held in memory rather than in the database. A process is not a record:
+it does not survive a restart, and writing every line a dev server prints into
+SQLite would be a log file with extra steps and a database that grows while
+nothing happens. Output is pushed to the window as it arrives, the tree is
+killed rather than the shell alone, and `before-quit` stops everything, because
+a dev server left behind by a closed app is a port nobody can explain.
+
+Thumbnails are served over `app://asset`, a third host on the custom scheme and
+therefore a third origin, which the renderer's policy allows as an image source
+and as nothing else. The handler takes an asset id and resolves the path
+itself, so the renderer never names a file on disk, and it refuses to serve
+anything that is not one of six image types it is willing to decode. SVG is
+absent on purpose: it is a document that can carry script.
+
+**What would reverse the command rule:** a sandbox that can run a build without
+the user's privileges, which Electron does not have and which a back office has
+no business building. **What would reverse the storage rule:** nothing short of
+Juno becoming a sync client, at which point a folder outside its own tree stops
+being something it can reason about at all.
+
+## 36. A mail template links its fonts, and Juno fetches only Google's, by name
+
+A template can set its text in a typeface no mail client has. The message links
+the stylesheet in its head and the recipient's client loads it; Apple Mail, iOS,
+Outlook for Mac and most Android clients do, and Gmail and Outlook on Windows do
+not load web fonts at all. So a linked font is never trusted to arrive: each one
+names a fallback, sans, serif or mono, and every block that uses it is written as
+`'Family', <fallback stack>`.
+
+The hard part is the editor, not the message. The canvas is a page in Juno's own
+window, and that window loads styles and fonts from Juno and nowhere else
+(`.claude/rules/security.md` section 3, and decision 10 for the app's own type).
+Loosening the policy for a typeface would loosen it for everything the window
+shows, including the mail reader's neighbours. It stays as it is.
+
+Instead, **for a Google font, the main process fetches it once and hands the
+canvas the faces inline**, which `font-src data:` already allows.
+`services/mail-fonts.ts` does this, and three things about it are the decision:
+
+- **It is asked for a family name, never an address.** The bridge must not carry
+  a URL for the main process to fetch (security.md section 2). A name that passes
+  `toFamily` cannot become one, the stylesheet address is built by
+  `googleFontHref`, and a font file the stylesheet points at is fetched only from
+  Google's own file host. There is no path from the renderer, or from an agent,
+  to making Juno fetch an arbitrary address.
+- **Only the Latin files are kept.** Google splits every weight into a file per
+  script, and a Dutch letter only ever needs the Latin ones.
+- **It fetches only when a person adds or changes a font**, and caches for as
+  long as the app runs. That is one request to Google per font, with the IP it
+  comes from, which is the same thing the recipient's client does on opening the
+  message. A business that would rather not ask Google at all links Bunny Fonts,
+  which serves the same families from the EU, and sees the fallback on the
+  canvas in exchange.
+
+**A linked font from anywhere else is not fetched, and the canvas shows its
+fallback and says so.** Fetching it would mean fetching an address somebody
+typed, which is exactly what the rule above refuses. The message still links it.
+
+**There is no MCP tool for loading a font.** What the service returns is the bytes
+of a typeface for a canvas to paint with, which an agent has no use for. What an
+agent does need, putting a font on a template, is the layout's `fonts` field, and
+that goes through `mail.templates.update` like every other edit, parked for a
+person to approve (decision 24). This is the one piece of the editor with no
+agent twin, and it is plumbing for the screen rather than a capability.
+
+Revisit if: a font source other than Google needs to show on the canvas (then it
+is a second named source with a builder of its own, never a typed address), or
+the window's content policy is ever loosened for another reason, in which case
+this indirection should go rather than sit beside a second way to do the same
+thing.
+
+## 37. A canvas message is sent with nothing around it, and changes by media query
+
+A mail template laid out on the canvas used to go out inside the house shell:
+a tinted page, a 600 pixel card with an accent line over it, and a footer with
+the business name and address. That shell was made for text somebody typed,
+which has no look of its own and needs one. A canvas has a look of its own, and
+the shell put a border, a margin and a footer round it that the author never
+drew and could not remove.
+
+So **a canvas is the whole message** (`canvasShell` in services/mail-html.ts).
+The frame fills the reader's mail client, or is given a width and sits in the
+middle, and what is drawn is what is sent. The footer's business details are
+not lost: they are what the author puts in a section, and a template that wants
+them has them where the author can see and style them. Hand-written templates
+and plain messages keep the house shell, because it is still what makes them
+look like anything.
+
+**The message changes at narrower widths by media query**, written in the head
+of the message from the breakpoints on the canvas. Media queries are the only
+way an email changes with the screen, and the clients most phones open mail in
+read them: Apple Mail on iOS and Gmail's app among them. Outlook on Windows does
+not, and shows the default, which is why the default is a
+complete design and a breakpoint only ever changes it. Every declaration in a
+breakpoint is `!important`, because the message's own styles are inline, and an
+inline style gives way to nothing less.
+
+Two things about this are the decision:
+
+- **A breakpoint holds only what it changes**, per section and per block by id,
+  and starts as a copy of the widths above it. A change to the default reaches
+  every breakpoint that did not change the same thing, which is what somebody
+  editing a design at two widths expects, and what the media queries do anyway.
+- **Only how something looks can differ by width.** The words, the links and
+  the pictures are the same at every width, because a message that says
+  something different on a phone is two messages, and an agent or a person
+  reading one of them would not know about the other.
+
+Revisit if: a client that matters stops reading media queries, or the house
+shell turns out to be something people want back round a canvas, in which case
+it becomes a section the canvas can start with rather than a frame it cannot
+remove.
+
+## 38. A stamp is placed on the page, and a digital signature is the person's own certificate
+
+Signing opens the PDF itself, with the stamp already on it, and nothing else:
+no form beside it. The stamp is a picture, a name and a time. It is dragged
+into place on the page it belongs on and sized by its corner, and the name is
+changed by double-clicking the stamp. Sign stamps; the chevron beside it offers
+"Sign digitally", which asks for the certificate passphrase and nothing more. The window
+sends fractions of the page and the main process turns them into coordinates
+and writes the file, so the position the person sees is the one that is drawn.
+The proportions are one file (`electron/shared/stamp.ts`) used by both sides.
+
+**A digital signature is optional, and it is made with a certificate the person
+already has.** The file is a PKCS#12 (.p12 or .pfx) from a certificate
+authority. It goes into the credential store as it came, and the passphrase is
+never stored: it is typed at every signature, so a signature is an act by
+whoever is at the keyboard and not something an unlocked window can do alone.
+It may be empty, because some certificates are issued without one.
+The signature is PAdES-style, a detached CMS signature with SHA-256 over every
+byte of the final file, written with `@signpdf` and `node-forge`, so a PDF
+reader shows who signed and whether the file changed. A test verifies the
+signature by hand and checks that changing one byte breaks it.
+
+**It is not a qualified electronic signature, and no text says it is.** The
+certificate file, the sign page and Settings each say so. A key held as a software
+file is at most an advanced signature. A qualified one needs the key on a
+qualified signature creation device, which is what a provider sells.
+
+**Why not itsme or eID.** itsme signs through an agreement with itsme and a
+registered client, and qualified signing through it goes via a trust service
+provider. That is credentials and a contract per business, and it cannot be
+built or tested from this repository. The eID card holds a key that never
+leaves the card, so using it needs the card reader's PKCS#11 driver and a
+native module (decision 18 is why that is not free). Neither is ruled out; the
+signing step takes a certificate and a passphrase today and that is the seam
+they would replace.
+
+Two things follow from where this sits:
+
+- **Nothing about it is an agent's.** No tool signs, and no tool touches the
+  certificate. The stamp is placed in the window and the passphrase is typed
+  in the window.
+- **A specimen still cannot be signed**, digitally or otherwise, in the
+  service.
+
+Revisit if: a provider agreement exists (itsme or a signing service), in which
+case it is a second way to obtain the signature, chosen next to the certificate
+and held to the same rules; or eID signing is wanted, which is a native module
+and its own decision.
+
+## 39. A document is every file it has been, and opens as the newest
+
+A document used to be one PDF with signatures beside it. It is now a list of
+**versions** (`document_versions`): the generated or imported file, each stamped
+or digitally signed copy, and every file that comes back, from a client by mail
+or dropped in. Nothing is replaced and nothing is edited. `documents.pdf_path`
+follows the newest version, so opening, sending and signing get the latest file
+without knowing versions exist, and signing stamps the newest, which is how a
+copy the client signed gets countersigned rather than the original.
+
+**Newest is the file's own date, not the moment it arrived.** An imported file
+carries its last-modified date, and a mail attachment the date of its message.
+An older copy that turns up late lands between the versions it came between
+instead of pretending to be the latest. The window reports a file's date; the
+service refuses a date in the future and takes now instead, so a machine with
+its clock wrong cannot make a file the newest for years.
+
+**An incoming file is recognised by its text, not its bytes.** A signature, a
+stamp or a re-save changes every byte and not one word, so the service reads
+the text layer with pdf.js (in the main process, as a plain library) and
+compares words, after taking out what Juno's own signing adds: the audit page
+(on files signed before the certificate became a file of its own) and the
+stamp's date line. Two files are the same document when nearly all the
+words of the shorter are in the longer and the two are of a similar length.
+The same bytes are recognised too, and refused as a version twice. A file with
+the same name as one of the client's documents is offered as a version of it
+rather than refused. The person decides every time; nothing is filed as a
+version on a guess.
+
+The window never hands over a path. It sends bytes it read from a drop or from
+the main process's own picker, or the id of a mail attachment, and the service
+resolves each. The agent names a file by path, through its own functions.
+
+Revisit if: scanned PDFs with no text layer become common, which would need
+OCR to be matched at all; or versions need deleting, which would need the same
+care as any delete (it changes what the document opens as).
+
+## 40. A document opens as its PDF, and older versions are read, not used
+
+Opening a document opens the viewer (`src/features/documents/PdfViewer.tsx`)
+on the newest version, with everything else about it in a column on the right:
+details, a version picker and a timeline. Picking an older version shows it and
+nothing more. It never changes which version the document opens as.
+
+The timeline is read back out of the versions and the outbox, like the client
+timeline, and is not a table of its own (`services/document-timeline.ts`). A
+document has no status history and the timeline does not pretend to.
+
+**Emailing and signing use the newest version whichever one is on screen.**
+The outbox attaches a document, not a version, and signing stamps the newest.
+Reading an old version and then pressing either would do something other than
+what is on screen, so both ask first, in a native dialog that says which
+version will be used. Downloading saves the version on screen and asks the same
+question. The dialog is the main process's (`confirmVersionUse`), so the window
+cannot skip it by asking a different way.
+
+The viewer draws to a canvas, so text in it cannot be selected. The file opens
+outside for that.
+
+Revisit if: an email should carry an older version on purpose, which needs the
+outbox attachment to name a version and a migration to hold it.

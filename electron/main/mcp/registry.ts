@@ -11,10 +11,12 @@ import { calendarTools } from "./calendar";
 import { clientAddressTools } from "./client-addresses";
 import { clientEmailTools } from "./client-emails";
 import { clientPhoneTools } from "./client-phones";
+import { clientTimelineTools } from "./client-timeline";
 import { clientTools } from "./clients";
 import { contactTools } from "./contacts";
 import { documentTools, templateTools } from "./documents";
 import { geocodingTools } from "./geocoding";
+import { mailActionTools } from "./mail-actions";
 import { mailTools } from "./mail";
 import { mailOutboxTools } from "./mail-outbox";
 import { projectTools } from "./projects";
@@ -22,10 +24,12 @@ import { referenceTools } from "./reference";
 import { reminderTools } from "./reminders";
 import { searchTools } from "./search";
 import { settingsTools } from "./settings";
+import { updateTools } from "./updates";
 import type { ToolDescriptor } from "./types";
 
 const lists: ToolDescriptor[][] = [
 	clientTools,
+	clientTimelineTools,
 	clientEmailTools,
 	clientPhoneTools,
 	clientAddressTools,
@@ -34,10 +38,12 @@ const lists: ToolDescriptor[][] = [
 	searchTools,
 	referenceTools,
 	settingsTools,
+	updateTools,
 	templateTools,
 	documentTools,
 	reminderTools,
 	mailTools,
+	mailActionTools,
 	mailOutboxTools,
 	calendarTools,
 	geocodingTools,

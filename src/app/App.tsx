@@ -7,11 +7,13 @@ import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
 import { Walkthrough } from "../features/onboarding/Walkthrough";
+import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { TodayScreen } from "../features/today/TodayScreen";
 import { useTheme } from "../lib/theme";
+import { DocumentDropLayer } from "./DocumentDropLayer";
 import { BreadcrumbProvider } from "./breadcrumb";
 import { useBreadcrumbTrail } from "./breadcrumb-context";
 import { SCREEN_LABELS, type ScreenId } from "./screens";
@@ -115,13 +117,15 @@ type MainShellProps = {
 /** The application proper: title bar, sidebar and the current screen. */
 function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProps) {
 	const [screen, setScreen] = useState<ScreenId>("today");
-	const sidebar = useSidebarLayout();
+	const autoCollapse = useSidebarAutoCollapse();
+	const sidebar = useSidebarLayout(autoCollapse);
 	const trail = useBreadcrumbTrail();
 
 	const navigate = (id: ScreenId) => {
 		setScreen(id);
-		// On a narrow window the sidebar is covering the thing just chosen.
-		if (sidebar.floating) sidebar.close();
+		// On a narrow window the sidebar is covering the thing just chosen. On a
+		// wider one, close() collapses it only when auto-collapse is on.
+		sidebar.close();
 	};
 
 	return (
@@ -158,11 +162,13 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					/>
 				) : null}
 
-				<main className="min-w-0 flex-1 overflow-auto">
+				<main className="min-w-0 flex-1 overflow-hidden">
 					{screen === "today" ? (
 						<TodayScreen />
 					) : screen === "clients" ? (
 						<ClientsScreen />
+					) : screen === "projects" ? (
+						<ProjectsScreen />
 					) : screen === "reminders" ? (
 						<RemindersScreen />
 					) : screen === "documents" ? (
@@ -183,9 +189,41 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 				</main>
 			</div>
 
+			<DocumentDropLayer />
+
 			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 		</div>
 	);
+}
+
+/**
+ * The auto-collapse setting, as the main window knows it. It is changed in the
+ * settings window, which has no channel back (decision 26), so it is read again
+ * whenever a modal child closes. Until the first answer arrives it is the
+ * default, which is on.
+ */
+function useSidebarAutoCollapse(): boolean {
+	const [value, setValue] = useState(true);
+	useEffect(() => {
+		let cancelled = false;
+		const read = () => {
+			void window.juno.settings
+				.getSidebarAutoCollapse()
+				.then((next) => {
+					if (!cancelled) setValue(next);
+				})
+				.catch(() => {
+					// Keeps the value it had. A sidebar is not worth an error on screen.
+				});
+		};
+		read();
+		const stop = window.juno.window.onChildClosed(read);
+		return () => {
+			cancelled = true;
+			stop();
+		};
+	}, []);
+	return value;
 }
 
 function Placeholder({ title }: { title: string }) {
@@ -193,7 +231,7 @@ function Placeholder({ title }: { title: string }) {
 		<div className="p-8">
 			<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">{title}</h1>
 			<p className="mt-3 max-w-[60ch] text-[var(--ink-muted)]">
-				Not built yet. See PLAN.md for which phase this arrives in.
+				Not built yet.
 			</p>
 		</div>
 	);

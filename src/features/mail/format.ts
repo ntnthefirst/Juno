@@ -1,4 +1,4 @@
-import type { MailAddress, MailSyncStatus } from "@shared/types";
+import type { MailAddress, MailFileResult, MailSyncStatus } from "@shared/types";
 
 /**
  * A message time the way a list shows it: the clock for today, the weekday
@@ -19,6 +19,26 @@ export function formatWhen(iso: string, now = new Date()): string {
 	if (days < 6 && days > 0) {
 		return date.toLocaleDateString("en-GB", { weekday: "short" });
 	}
+	if (date.getFullYear() === now.getFullYear()) {
+		return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+	}
+	return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/**
+ * When an account last synced, short enough to sit beside its name. The clock
+ * for today, "Yesterday", then the weekday, then the date. Longer than a list
+ * row's stamp on purpose: "Tue" is fine on a message, but on a sync it has to
+ * say plainly that nothing has run since.
+ */
+export function formatSyncWhen(iso: string, now = new Date()): string {
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return "";
+	const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const days = Math.floor((midnight.getTime() - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / (24 * 60 * 60 * 1000));
+	if (days <= 0) return date.toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" });
+	if (days === 1) return "Yesterday";
+	if (days < 7) return date.toLocaleDateString("en-GB", { weekday: "short" });
 	if (date.getFullYear() === now.getFullYear()) {
 		return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 	}
@@ -92,4 +112,20 @@ export function isSyncing(status: MailSyncStatus | null): boolean {
 		status.phase !== "done" &&
 		status.phase !== "failed"
 	);
+}
+
+/**
+ * What a filing action actually did, honestly. A server without UIDPLUS
+ * cannot say where a message landed, so the row disappears until the next
+ * sync brings it back in its new folder. That is worth saying out loud
+ * rather than letting the count alone imply it is already sitting there.
+ */
+export function describeMailFileResult(verb: string, count: number, result: MailFileResult): string {
+	const noun = count === 1 ? "thread" : "threads";
+	const base = `${count} ${noun} ${verb}.`;
+	if (result.moved > 0 && result.remembered === 0) {
+		const pronoun = count === 1 ? "It" : "They";
+		return `${base} ${pronoun} will reappear in ${result.folderName} after the next sync.`;
+	}
+	return base;
 }

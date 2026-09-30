@@ -6,14 +6,19 @@ import { mailAccounts, mailMessages, mailThreads } from "./mail";
 
 /**
  * A mail template: a Dutch subject and body with placeholders, filled from the
- * same context the document templates use. Seeded reference data, decision 16.
+ * same context the document templates use. Rows that shipped in an earlier
+ * version are seeded reference data (decision 16); a new install gets one
+ * example that is not a system row, and no code looks a template up by key.
  */
 export const mailTemplates = sqliteTable(
 	"mail_templates",
 	{
 		...standardColumns,
 		...seededColumns,
-		/** Stable machine key: contract_cover, project_kickoff, invoice_due, hosting_renewal. */
+		/**
+		 * A machine name derived from the name, or set by whoever writes the row.
+		 * Not a way to find a template: an install may not have the one you want.
+		 */
 		key: text("key").notNull(),
 		name: text("name").notNull(),
 		description: text("description"),
@@ -27,10 +32,21 @@ export const mailTemplates = sqliteTable(
 		 * and the project already answer. JSON array of input declarations.
 		 */
 		inputsJson: text("inputs_json"),
+		/**
+		 * The canvas the editor works on, as JSON. Null is an HTML-only template:
+		 * everything written before the canvas existed, and anything somebody
+		 * prefers to keep as hand-written HTML. `body_html` is compiled from this
+		 * whenever it is set, so the two cannot disagree.
+		 */
+		layoutJson: text("layout_json"),
 	},
 	(t) => [
 		index("mail_templates_key_idx").on(t.key),
 		index("mail_templates_deleted_idx").on(t.deletedAt),
+		// The list filters both of these on every read: a hidden system template
+		// is gone from the pickers and still resolves on the drafts that point at
+		// it (.claude/rules/data.md section 9).
+		index("mail_templates_hidden_idx").on(t.hiddenAt),
 	],
 );
 
@@ -93,6 +109,35 @@ export const mailOutbox = sqliteTable(
 		index("mail_outbox_thread_idx").on(t.threadId),
 		index("mail_outbox_client_idx").on(t.clientId),
 		index("mail_outbox_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
+ * Every client an outgoing message concerns.
+ *
+ * `mail_outbox.client_id` is the one the message is filed under, and it stays.
+ * This table is the rest of them, because a message addressed to two people who
+ * belong to two different clients concerns both, and dropping one of them the
+ * moment the recipients are resolved loses information nobody typed twice.
+ * Filled from the addresses, so it follows the To and Cc lines.
+ */
+export const mailOutboxClients = sqliteTable(
+	"mail_outbox_clients",
+	{
+		...standardColumns,
+		outboxId: text("outbox_id")
+			.notNull()
+			.references(() => mailOutbox.id),
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		/** The address that resolved to this client, so the composer can say why. */
+		matchedAddress: text("matched_address").notNull(),
+	},
+	(t) => [
+		index("mail_outbox_clients_outbox_idx").on(t.outboxId),
+		index("mail_outbox_clients_client_idx").on(t.clientId),
+		index("mail_outbox_clients_deleted_idx").on(t.deletedAt),
 	],
 );
 

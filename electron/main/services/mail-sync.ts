@@ -23,6 +23,7 @@ import * as store from "./mail-store";
 
 /** Headers pulled per folder per run. */
 const HEADER_BATCH = 2000;
+const MIN_HEADER_BATCH = 1;
 /** Bodies pulled per folder per run. Each is a round trip, so this is the slow part. */
 const BODY_BATCH = 150;
 /** How many of the newest local messages get their flags refreshed per run. */
@@ -32,6 +33,16 @@ const STORE_CHUNK = 250;
 
 const SCHEDULER_TICK_MS = 60 * 1000;
 const FIRST_RUN_DELAY_MS = 8 * 1000;
+/**
+ * How soon a run that left work behind is followed by another.
+ *
+ * One run pulls a bounded number of headers and bodies, so a mailbox of any
+ * size needs several. Waiting the account's whole interval between them means a
+ * first sync of forty thousand messages finishes next week, and in the meantime
+ * the list is a fraction of the mailbox with no explanation. Coming straight
+ * back drains it in minutes and stops on its own when nothing is left.
+ */
+const FOLLOW_UP_MS = 10 * 1000;
 
 type Listener = (status: MailSyncStatus) => void;
 
@@ -39,6 +50,11 @@ interface SyncConfig {
 	mailDir: string;
 	/** True while the app is locked. No sync starts, and a running one stops early. */
 	isPaused?: () => boolean;
+	/**
+	 * Headers pulled per folder per run. Only a test sets this, so the resume
+	 * across several runs can be exercised without two thousand fake messages.
+	 */
+	headerBatch?: number;
 }
 
 let config: SyncConfig | null = null;
@@ -46,6 +62,7 @@ const listeners = new Set<Listener>();
 const statuses = new Map<string, MailSyncStatus>();
 const running = new Set<string>();
 let schedulerTimer: NodeJS.Timeout | null = null;
+const followUps = new Map<string, NodeJS.Timeout>();
 
 export function configureMailSync(next: SyncConfig): void {
 	config = next;
@@ -60,6 +77,10 @@ function paused(): boolean {
 	return config?.isPaused?.() ?? false;
 }
 
+function headerBatch(): number {
+	return Math.max(MIN_HEADER_BATCH, config?.headerBatch ?? HEADER_BATCH);
+}
+
 function idle(accountId: string): MailSyncStatus {
 	return {
 		accountId,
@@ -72,6 +93,7 @@ function idle(accountId: string): MailSyncStatus {
 		error: null,
 		newMessages: 0,
 		fetchedBodies: 0,
+		pending: 0,
 	};
 }
 
@@ -153,7 +175,7 @@ async function syncFolder(
 	// and empty. A later run with real local data goes back to the horizon-only
 	// listing above; this only fires once, before there is anything local yet.
 	if (local.length === 0 && serverUids.length === 0 && mailbox.exists > 0) {
-		serverUids = await source.searchUids({ uidFrom: Math.max(1, mailbox.uidNext - HEADER_BATCH) });
+		serverUids = await source.searchUids({ uidFrom: Math.max(1, mailbox.uidNext - headerBatch()) });
 	}
 
 	const present = new Set(serverUids);
@@ -161,7 +183,11 @@ async function syncFolder(
 
 	if (minLocal !== undefined) store.markMissing(db, folder.id, present);
 
-	const missing = serverUids.filter((uid) => !have.has(uid)).sort((a, b) => b - a).slice(0, HEADER_BATCH);
+	const outstanding = serverUids.filter((uid) => !have.has(uid)).sort((a, b) => b - a);
+	const missing = outstanding.slice(0, headerBatch());
+	// One run pulls at most HEADER_BATCH headers, newest first, so a mailbox
+	// with more than that inside the horizon finishes over several runs.
+	const capped = outstanding.length > missing.length;
 	const own = store.ownAddressesFor(account.email, account.username);
 
 	step({ phase: "headers", done: 0, total: missing.length });
@@ -217,11 +243,22 @@ async function syncFolder(
 		}
 	}
 
+	// What this run knew about and did not reach. A bounded run is the design,
+	// but a list that stops early with nothing saying so is the bug this number
+	// exists to make visible, and the scheduler uses it to come straight back.
+	progress.pending += outstanding.length - missing.length + store.countPendingBodies(db, folder.id);
+
 	db.update(mailFolders)
 		.set({
 			uidValidity: mailbox.uidValidity,
 			uidNext: mailbox.uidNext,
-			syncedHorizonDays: account.horizonDays,
+			// Only claim the horizon once it has actually been walked. A capped
+			// run leaves this null so the next one lists from the horizon again
+			// rather than from the oldest uid it happens to hold: that listing
+			// starts at the oldest local message, so anything older inside the
+			// horizon that this run did not reach would never be asked for again
+			// and the folder would sit permanently half synced.
+			syncedHorizonDays: capped ? null : account.horizonDays,
 			lastSyncAt: now(),
 			updatedAt: now(),
 		})
@@ -273,6 +310,7 @@ export async function syncAccount(accountId: string, db: Db = getDb()): Promise<
 		await accounts.recordSync(accountId, { error: null }, db);
 		const finished: MailSyncStatus = { ...progress, phase: "done", folderPath: null, finishedAt: now() };
 		publish(finished);
+		if (finished.pending > 0) followUp(accountId);
 		return finished;
 	} catch (error) {
 		const message =
@@ -333,9 +371,27 @@ export function startScheduler(): void {
 	schedulerTimer.unref();
 }
 
+/**
+ * Comes back to an account that has more to pull, soon rather than at its
+ * interval. Only while the schedule is running: a test that calls syncAccount
+ * directly gets one run and no timers.
+ */
+function followUp(accountId: string): void {
+	if (!schedulerTimer || followUps.has(accountId)) return;
+	const timer = setTimeout(() => {
+		followUps.delete(accountId);
+		if (paused()) return;
+		void syncAccount(accountId).catch(() => undefined);
+	}, FOLLOW_UP_MS);
+	timer.unref();
+	followUps.set(accountId, timer);
+}
+
 export function stopScheduler(): void {
 	if (schedulerTimer) clearInterval(schedulerTimer);
 	schedulerTimer = null;
+	for (const timer of followUps.values()) clearTimeout(timer);
+	followUps.clear();
 }
 
 /** Test seam. Never called by application code. */

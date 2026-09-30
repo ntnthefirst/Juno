@@ -1,6 +1,9 @@
 import type { GenerateDocumentInput, ImportDocumentInput } from "../../shared/types";
 import * as actions from "../services/document-actions";
 import * as templates from "../services/document-templates";
+import * as imports from "../services/document-import";
+import * as timeline from "../services/document-timeline";
+import * as versions from "../services/document-versions";
 import * as documents from "../services/documents";
 import type { ToolDescriptor } from "./types";
 
@@ -14,8 +17,10 @@ import type { ToolDescriptor } from "./types";
  *   legal text has been read and is sound. An agent cannot know that, and a tool
  *   that could set the flag would let an invented contract be promoted to a real
  *   one without anybody reading it. See docs/templates.md.
- * - **Nothing signs.** `documents.sign` exists in the interface only. The
- *   service refuses a specimen regardless, but signing is a person's act.
+ * - **Nothing signs, and nothing touches the certificate.** `documents.sign` and
+ *   the signing certificate exist in the interface only. The service refuses a
+ *   specimen regardless, but signing is a person's act: placing the stamp and
+ *   typing the certificate passphrase are things somebody at the keyboard does.
  */
 
 const templateProperties: Record<string, unknown> = {
@@ -25,7 +30,8 @@ const templateProperties: Record<string, unknown> = {
 		type: "string",
 		description:
 			"The body as HTML with placeholders, for example {{ client.name }} and " +
-			"{{#if client.vatNumber}}...{{/if}}. Values are escaped; a missing one renders a visible marker.",
+			"{{#if client.vatNumber}}...{{/if}}. Values are escaped; a missing one renders a visible marker. " +
+			"Left out on create, the template gets one empty page, ready to be filled in in the editor.",
 	},
 };
 
@@ -66,13 +72,13 @@ export const templateTools: ToolDescriptor[] = [
 		inputSchema: {
 			type: "object",
 			properties: templateProperties,
-			required: ["name", "body_html"],
+			required: ["name"],
 			additionalProperties: false,
 		},
 		handler: async (args) =>
 			templates.create({
 				name: String(args.name),
-				bodyHtml: String(args.body_html),
+				...(args.body_html === undefined ? {} : { bodyHtml: String(args.body_html) }),
 				description: args.description === undefined ? null : (args.description as string | null),
 			}),
 	},
@@ -203,7 +209,8 @@ export const documentTools: ToolDescriptor[] = [
 		title: "Import a PDF as a document",
 		description:
 			"Copies an existing PDF on this machine into Juno and records it for a client. It has no body " +
-			"and cannot be rendered again, because it did not come from a template, but it can still be signed.",
+			"and cannot be rendered again, because it did not come from a template, but it can still be signed. " +
+			"Refused when the client already has a document with the same title: check documents.find_matches first.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -226,13 +233,77 @@ export const documentTools: ToolDescriptor[] = [
 				...(args.project_id !== undefined ? { projectId: args.project_id as string | null } : {}),
 				...(args.issued_on !== undefined ? { issuedOn: String(args.issued_on) } : {}),
 			};
-			return documents.importPdf(input);
+			return imports.importPdf(input);
 		},
+	},
+	{
+		name: "documents.list_versions",
+		title: "List a document's versions",
+		description:
+			"Every file a document has been, newest first: generated, imported, stamped, signed digitally. " +
+			"The newest is the one the document opens as. Numbered from the oldest.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: { document_id: { type: "string", description: "Document id." } },
+			required: ["document_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => versions.list(String(args.document_id)),
+	},
+	{
+		name: "documents.find_matches",
+		title: "Find documents a PDF matches",
+		description:
+			"Reads a PDF on this machine and lists the existing documents it looks like: the same file, the same " +
+			"text with a signature or stamp added, or the same name for the given client. Writes nothing. " +
+			"Use it before documents.import to decide whether the file is a new version instead.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				source_path: { type: "string", description: "Absolute path to the PDF on this machine." },
+				client_id: { type: ["string", "null"], description: "The client the file is for, when known." },
+			},
+			required: ["source_path"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			imports.analysePath({
+				sourcePath: String(args.source_path),
+				clientId: (args.client_id as string | null) ?? null,
+			}),
+	},
+	{
+		name: "documents.add_version",
+		title: "Add a PDF as a version of a document",
+		description:
+			"Copies a PDF on this machine into Juno as a new version of an existing document, such as the copy a " +
+			"client signed and sent back. Its place among the versions follows the file's own modified date. " +
+			"Refused when the same file is already one of the document's versions.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				document_id: { type: "string", description: "The document the file is a version of." },
+				source_path: { type: "string", description: "Absolute path to the PDF on this machine." },
+			},
+			required: ["document_id", "source_path"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			imports.addVersionFromPath({
+				documentId: String(args.document_id),
+				sourcePath: String(args.source_path),
+			}),
 	},
 	{
 		name: "documents.render_pdf",
 		title: "Write a document's PDF",
-		description: "Renders the stored body to a PDF file and records its path.",
+		description: "Renders the stored body to a PDF file and records it as the document's newest version.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -272,6 +343,22 @@ export const documentTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => actions.signatures(String(args.document_id)),
+	},
+	{
+		name: "documents.timeline",
+		title: "Show what happened to a document",
+		description:
+			"Newest first: each version that was made (generated, imported, stamped, signed) and each email " +
+			"that carried the document. Times are UTC ISO-8601.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: { document_id: { type: "string" } },
+			required: ["document_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => timeline.timeline(String(args.document_id)),
 	},
 	{
 		name: "documents.remove",

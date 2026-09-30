@@ -23,9 +23,11 @@ import { registerMailIpc } from "./mail";
 import { registerProjectsIpc } from "./projects";
 import { registerReferenceIpc } from "./reference";
 import { registerRemindersIpc } from "./reminders";
+import { registerSigningCertificateIpc } from "./signing-certificate";
 import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
 import { registerTemplatesIpc } from "./templates";
+import { registerUpdatesIpc } from "./updates";
 import { registerWindowIpc } from "./window";
 
 export function registerAllIpc(userDataDir: string): void {
@@ -35,6 +37,7 @@ export function registerAllIpc(userDataDir: string): void {
 	registerWindowIpc();
 	registerLockIpc();
 	registerSettingsIpc();
+	registerUpdatesIpc();
 
 	registerClientsIpc();
 	registerClientEmailsIpc();
@@ -47,6 +50,7 @@ export function registerAllIpc(userDataDir: string): void {
 	registerBackupIpc();
 	registerTemplatesIpc();
 	registerDocumentsIpc();
+	registerSigningCertificateIpc();
 	registerRemindersIpc();
 	registerMailIpc();
 	registerCalendarIpc();

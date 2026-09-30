@@ -8,7 +8,7 @@ import type {
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
-import { StatusBadge } from "../clients/ClientDetail";
+import { StatusBadge } from "../../components/StatusBadge";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
 
@@ -69,6 +69,7 @@ export function ReferenceSection() {
 	return (
 		<Section
 			title="Statuses and labels"
+			anchor="reference"
 			action={
 				<Button
 					size="dense"
@@ -78,7 +79,7 @@ export function ReferenceSection() {
 					Reset all
 				</Button>
 			}
-			description="Juno ships with sensible defaults so it works before it is configured. Removing a value that ships hides it rather than deleting it, because records already point at it. Hidden values stay listed here so you can bring them back."
+			description="Removing a value hides it, so records that use it keep it."
 		>
 			{sets === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
@@ -289,7 +290,7 @@ function HideDialog({
 					: "It stops being offered for new records. Nothing else changes."}
 			</p>
 			<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-				This hides the value rather than deleting it. You can bring it back here at any time.
+				You can bring it back here at any time.
 			</p>
 			<div className="mt-5 flex justify-end gap-2">
 				<Button onClick={onClose}>Cancel</Button>

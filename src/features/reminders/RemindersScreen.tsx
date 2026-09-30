@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Reminder, ReminderBucket } from "@shared/types";
+import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
@@ -99,9 +100,7 @@ export function RemindersScreen() {
 						>
 							{includeDone ? "Hide completed" : "Show completed"}
 						</Button>
-						<Button variant="primary" onClick={() => setForm({ reminder: null })}>
-							New reminder
-						</Button>
+						<AddButton label="New reminder" onClick={() => setForm({ reminder: null })} />
 					</div>
 				</div>
 

@@ -12,17 +12,11 @@ import type { DocumentLayout, TemplateInput as TemplateField } from "../../share
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { documentTemplates } from "../db/schema";
-import { DOCUMENT_TEMPLATES, DOCUMENT_TEMPLATE_SEED_VERSION } from "./document-templates-seed";
-import { compileLayout, parseLayout, serialiseLayout } from "./document-layout";
+import { compileLayout, emptyLayout, parseLayout, serialiseLayout } from "./document-layout";
+import { DOCUMENT_TEMPLATE_SEED_VERSION, exampleTemplate } from "./document-templates-seed";
+import * as settings from "./settings";
 import { parseInputs, serialiseInputs, validateInputs } from "./template-inputs";
 import { placeholdersIn, render, type RenderResult, type TemplateContext } from "./template-render";
-
-export interface SeedTemplate {
-	key: string;
-	name: string;
-	description: string;
-	bodyHtml: string;
-}
 
 export interface DocumentTemplate {
 	id: string;
@@ -55,7 +49,8 @@ export interface TemplateInput {
 	key?: string;
 	name: string;
 	description?: string | null;
-	bodyHtml: string;
+	/** Left out, a fresh template gets one empty page, which the editor treats as blank. */
+	bodyHtml?: string;
 	language?: string;
 	/** Supplying a layout compiles the body from it and ignores `bodyHtml`. */
 	layout?: DocumentLayout | null;
@@ -128,15 +123,31 @@ export async function getByKey(key: string, db: Db = getDb()): Promise<DocumentT
 	return row ? toTemplate(row) : null;
 }
 
+/**
+ * Two templates may share a name: a second variant of the same contract is
+ * ordinary. The key is derived from the name, so a repeat counts up (`nda_2`)
+ * rather than refusing to create the second one.
+ */
+async function uniqueKey(base: string, db: Db): Promise<string> {
+	const slug = base.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+	if (!(await getByKey(slug, db))) return slug;
+	let n = 2;
+	while (await getByKey(`${slug}_${n}`, db)) n++;
+	return `${slug}_${n}`;
+}
+
 export async function create(input: TemplateInput, db: Db = getDb()): Promise<DocumentTemplate> {
 	const name = input.name.trim();
 	if (!name) throw new Error("A template needs a name.");
-	const body = bodyFor(input.layout, input.bodyHtml) ?? "";
-	if (!input.layout && !body.trim()) throw new Error("A template needs a body.");
+	// A caller with nothing to say yet, the plus button beside the heading or an
+	// agent's templates.create with a name only, gets the same blank page the
+	// editor already treats as an empty template rather than a body it has to
+	// invent.
+	const layout = input.layout ?? (input.bodyHtml?.trim() ? undefined : emptyLayout());
+	const body = bodyFor(layout, input.bodyHtml) ?? "";
 	if (input.inputs) validateInputs(input.inputs);
 
-	const key = (input.key ?? name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
-	if (await getByKey(key, db)) throw new Error(`A template with the key "${key}" already exists.`);
+	const key = await uniqueKey(input.key ?? name, db);
 
 	const [row] = db
 		.insert(documentTemplates)
@@ -146,7 +157,7 @@ export async function create(input: TemplateInput, db: Db = getDb()): Promise<Do
 			description: input.description ?? null,
 			language: input.language ?? "nl-BE",
 			bodyHtml: body,
-			layoutJson: input.layout ? serialiseLayout(input.layout) : null,
+			layoutJson: layout ? serialiseLayout(layout) : null,
 			inputsJson: serialiseInputs(input.inputs ?? []),
 			isSystem: false,
 			// A template someone wrote themselves is still unreviewed until they say
@@ -234,60 +245,39 @@ export function renderTemplate(template: DocumentTemplate, context: TemplateCont
 }
 
 /**
- * Seeds the shipped templates. Idempotent, and it never overwrites a body the
- * owner has edited, which is the whole point: the seeded text is a placeholder
- * they are expected to replace.
+ * Puts the example on a first install, and does nothing else, ever.
+ *
+ * Five templates used to be seeded here by key. They are not any more: an
+ * install that has them keeps them exactly as they are, because this function
+ * neither adds, updates, hides nor removes a row that exists. What it does is
+ * decide whether this is a first install, which takes two answers to agree:
+ * the settings say the set was never seeded, and the table has no row in it at
+ * all, deleted and hidden ones included. An upgrade fails the second, and an
+ * owner who deleted the example fails both once the version is written, so it
+ * is never brought back.
+ *
+ * The example is written by `create`, like anything a person makes: it is not
+ * a system row, so a reset does not touch it, deleting it is a real delete, and
+ * it starts unreviewed. The source is a parameter so a test can apply a later
+ * version.
  */
 export async function ensureTemplatesSeeded(
 	db: Db = getDb(),
-	source: { version: number; templates: SeedTemplate[] } = {
+	source: { version: number; example: () => TemplateInput } = {
 		version: DOCUMENT_TEMPLATE_SEED_VERSION,
-		templates: DOCUMENT_TEMPLATES,
+		example: exampleTemplate,
 	},
 ): Promise<{ created: number; updated: number }> {
+	const applied = await settings.getDocumentTemplateSeedVersion();
+	if (applied >= source.version) return { created: 0, updated: 0 };
+
 	let created = 0;
-	let updated = 0;
+	const empty = db.select({ id: documentTemplates.id }).from(documentTemplates).limit(1).get() === undefined;
+	if (applied === 0 && empty) {
+		await create(source.example(), db);
+		created = 1;
+	}
 
-	source.templates.forEach((seed, index) => {
-		const existing = db
-			.select()
-			.from(documentTemplates)
-			.where(eq(documentTemplates.seedKey, seed.key))
-			.get();
-
-		if (!existing) {
-			db.insert(documentTemplates)
-				.values({
-					seedKey: seed.key,
-					key: seed.key,
-					name: seed.name,
-					description: seed.description,
-					bodyHtml: seed.bodyHtml,
-					isSystem: true,
-					sortOrder: index,
-					reviewedAt: null,
-				})
-				.run();
-			created++;
-			return;
-		}
-
-		// An edited or hidden row is the owner's. Leave it alone.
-		if (existing.customisedAt !== null || existing.hiddenAt !== null) return;
-		if (existing.bodyHtml === seed.bodyHtml && existing.name === seed.name) return;
-
-		db.update(documentTemplates)
-			.set({
-				name: seed.name,
-				description: seed.description,
-				bodyHtml: seed.bodyHtml,
-				sortOrder: index,
-				updatedAt: now(),
-			})
-			.where(eq(documentTemplates.id, existing.id))
-			.run();
-		updated++;
-	});
-
-	return { created, updated };
+	await settings.setDocumentTemplateSeedVersion(source.version);
+	return { created, updated: 0 };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppInfo, SettingsSection } from "@shared/types";
 import { Toast } from "../components/Toast";
 import { AccountingSection } from "../features/settings/AccountingSection";
@@ -10,7 +10,11 @@ import { OnboardingSection } from "../features/settings/OnboardingSection";
 import { OwnerSection } from "../features/settings/OwnerSection";
 import { ReferenceSection } from "../features/settings/ReferenceSection";
 import { Section } from "../features/settings/Section";
+import { CertificateSection } from "../features/settings/CertificateSection";
+import { SettingsSearch } from "../features/settings/SettingsSearch";
+import type { SettingEntry } from "../features/settings/search";
 import { SignatureSection } from "../features/settings/SignatureSection";
+import { UpdatesSection } from "../features/settings/UpdatesSection";
 import { ConnectionPanel } from "../features/agent/ConnectionPanel";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
@@ -42,17 +46,73 @@ const TABS: { id: SettingsSection; label: string }[] = [
  */
 export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	const [theme, setTheme] = useTheme();
+	// Null until the stored value is in, so the checkbox does not flash a
+	// state it is about to leave.
+	const [autoCollapse, setAutoCollapse] = useState<boolean | null>(null);
 	const [tab, setTab] = useState<SettingsSection>(initialSection ?? "general");
 	const [toast, setToast] = useState<string | null>(null);
+	// The section a search result asked for, kept until the tab has painted it.
+	const [jumpTo, setJumpTo] = useState<{ anchor: string; nonce: number } | null>(null);
+	const main = useRef<HTMLElement>(null);
 
 	// Escape closes a modal dialog, and this window is one.
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape") void window.juno.window.closeSettings();
+			// The search box handles its own Escape and marks it as taken.
+			if (event.key === "Escape" && !event.defaultPrevented) void window.juno.window.closeSettings();
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, []);
+
+	useEffect(() => {
+		void window.juno.settings.getSidebarAutoCollapse().then(setAutoCollapse);
+	}, []);
+
+	function changeAutoCollapse(next: boolean) {
+		setAutoCollapse(next);
+		window.juno.settings
+			.setSidebarAutoCollapse(next)
+			.then(setAutoCollapse)
+			.catch((cause: unknown) => {
+				setAutoCollapse(!next);
+				setToast(messageOf(cause));
+			});
+	}
+
+	function goTo(entry: SettingEntry) {
+		setTab(entry.tab);
+		setJumpTo({ anchor: entry.anchor, nonce: Date.now() });
+	}
+
+	// The tab renders after the state change, and a section that loads its own
+	// data may take a frame or two more, so look for it a few times.
+	useEffect(() => {
+		if (!jumpTo) return;
+		let frame = 0;
+		let tries = 0;
+		const look = () => {
+			const target = main.current?.querySelector<HTMLElement>(
+				`[data-setting="${jumpTo.anchor}"]`,
+			);
+			if (!target) {
+				if (++tries < 20) frame = requestAnimationFrame(look);
+				else setJumpTo(null);
+				return;
+			}
+			const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+			target.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+			if (!still) {
+				target.animate(
+					[{ backgroundColor: "var(--accent-soft)" }, { backgroundColor: "transparent" }],
+					{ duration: 1600, easing: "ease-out" },
+				);
+			}
+			setJumpTo(null);
+		};
+		frame = requestAnimationFrame(look);
+		return () => cancelAnimationFrame(frame);
+	}, [jumpTo]);
 
 	// Asked for a tab while this window was already open, so it could not ride
 	// in the URL. Reloading instead would throw away a half-typed field.
@@ -69,6 +129,9 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 				}}
 			>
 				<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)]">Settings</span>
+				<div className="ml-auto">
+					<SettingsSearch onPick={goTo} />
+				</div>
 			</header>
 
 			<div className="flex min-h-0 flex-1">
@@ -100,14 +163,17 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 					own header and footer against the window edges, so the padding
 					belongs to the sections rather than to the frame.
 				*/}
-				<main className="min-w-0 flex-1 overflow-y-auto">
+				<main ref={main} className="min-w-0 flex-1 overflow-y-auto">
 					{tab === "general" ? (
 						<Pad>
 							<AppearanceSection
 								theme={theme}
 								onChange={setTheme}
+								sidebarAutoCollapse={autoCollapse}
+								onSidebarAutoCollapseChange={changeAutoCollapse}
 							/>
 							<OnboardingSection onNotice={setToast} />
+							<UpdatesSection />
 							<AboutSection />
 						</Pad>
 					) : tab === "business" ? (
@@ -121,6 +187,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 						<Pad>
 							<ReferenceSection />
 							<SignatureSection />
+							<CertificateSection />
 						</Pad>
 					) : tab === "mcp" ? (
 						<Pad>
@@ -170,18 +237,21 @@ function AboutSection() {
 	}, []);
 
 	return (
-		<Section title="About">
+		<Section
+			title="About"
+			anchor="about"
+			description="Where this installation keeps its data."
+		>
 			{error ? (
 				<p className="text-[var(--risk)]">{error}</p>
 			) : info === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : (
 				<dl className="flex flex-col gap-2 text-[length:var(--text-dense)]">
-					<Row label="Version">
-						{info.version}
-						{info.isDev ? " (development build)" : ""}
+					<Row label="Platform">
+						{info.platform}
+						{info.isDev ? ", development build" : ""}
 					</Row>
-					<Row label="Platform">{info.platform}</Row>
 					<Row label="Database">
 						<span
 							data-selectable

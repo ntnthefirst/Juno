@@ -22,11 +22,14 @@ Run from the repo root. The project uses npm.
 | `npm run build:win` / `build:mac` / `build:linux` | The same for one named platform | CI. Each runner builds the platform it is |
 | `npm run icons` | Redraws `build/icon.png` and the NSIS installer artwork from `brand/logo/` | After a brand change |
 | `npm run db:generate` | Drizzle turns a schema change into a migration file | After editing anything under `electron/main/db/schema/` |
-| `npm run db:migrate` | Applies pending migrations forward | After generating one, and on a copy of the real database before the real one |
+| `npm run db:migrate -- --db <path>` | Builds the main process, then applies pending migrations forward to that one file under Electron's own SQLite, and lists what it applied. Refuses the installed and development databases unless `--yes-this-is-the-real-one` is added | After generating one, and on a copy of the real database before the real one |
 
 Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
 screen and the settings window, and write a screenshot of each in both themes
-to `.smoke/`. That is the fastest honest look at a visual change.
+to `.smoke/`. That is the fastest honest look at a visual change. Add
+`JUNO_SMOKE_FRONT=1` to keep the window above every other window for the run;
+without it, a window somebody covers produces stale captures (see the
+`capturePage` trap below).
 
 These names are the canonical set. A skill or a script that invents a different
 one (`npm run package`, `npm run dist`) is wrong and should be corrected to match.
@@ -105,6 +108,37 @@ A clean typecheck is not proof a screen works.
   renderer console, which a frameless window with no menu does not open on its
   own. The development policy carries a nonce for exactly this
   ([security.md](security.md)).
+- **A migration that was renamed stays behind in `dist-electron` and runs again.**
+  The migrations are copied out of the source tree next to the compiled main
+  process, and the runner applies every `.sql` it finds there by file name. A
+  file that was renamed or regenerated leaves its old copy in the build folder,
+  that name is not in `_migrations`, so it runs on the next launch and fails on
+  a table it already created. The app then refuses to open, and nothing names
+  the file, because the file is no longer in the repo. `scripts/after-main.mjs`
+  empties the destination before copying for this reason. If a launch fails on
+  "table X already exists", list `dist-electron/main/db/migrations` and compare
+  it with the source folder.
+- **Never write to the app's database with a different SQLite than the app
+  uses.** `node:sqlite` under the host's Node is not the build Electron ships,
+  and a write from the wrong one can leave the file with a schema page that
+  parses on one and not on the other ("malformed database schema ... orphan
+  index"). Anything that has to touch a real database outside the app runs
+  under `ELECTRON_RUN_AS_NODE=1 electron`, with the app closed, on a copy
+  first.
+- **`capturePage()` hands back whatever the compositor last produced, which is
+  not always what is on screen.** A capture taken straight after toggling the
+  theme shows the previous frame, and the smoke run waits for two animation
+  frames to avoid that. What the wait cannot fix is a window that is **occluded
+  or minimised**: it is not composited at all, so no frame is produced and no
+  wait conjures one. A run under a window somebody clicked in front of writes a
+  folder where whole stretches of images are the same picture under different
+  names, every one of them plausible on its own.
+  **`npm run smoke` counts the identical images and says so at the end. Read
+  that line before using any screenshot as evidence**, and if it reports
+  repeats, run it again with the window in front, or with
+  `JUNO_SMOKE_FRONT=1`, which puts it there and keeps it there. Two captures of
+  the same screen in the same state are identical too; check which ones repeat
+  before calling them stale.
 - **`tsBuildInfoFile` without `"incremental": true` does nothing at all.** tsc
   writes no build info and recompiles the whole program on every run, including
   the first pass of a `--watch`. It looks configured and is not.

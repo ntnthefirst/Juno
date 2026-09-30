@@ -14,9 +14,12 @@
  *   could fetch (`url(`, `@import`) or run (`expression(`, `behavior`) is cut.
  *
  * The output is a complete document with its own CSP meta tag, served on its
- * own origin with the same policy as a header, in a frame with an empty
- * sandbox. Four layers, each of which would be enough on its own.
+ * own origin with the same policy as a header. The only script is a
+ * nonce-authorized height reporter; the opaque sandbox gives it no application
+ * origin or navigation access. Four layers, each of which would be enough on
+ * its own.
  */
+import { randomBytes } from "node:crypto";
 import sanitizeHtml from "sanitize-html";
 
 export interface SanitiseOptions {
@@ -29,8 +32,12 @@ export interface SanitiseOptions {
 export interface SanitisedBody {
 	/** A full HTML document, ready for a sandboxed frame. */
 	document: string;
+	/** The nonce used by the trusted height-measurement script. */
+	scriptNonce: string;
 	/** How many http(s) images were replaced by a placeholder. */
 	remoteImages: number;
+	/** Whether dangerous or unusual markup was removed before rendering. */
+	suspicious: boolean;
 	links: { href: string; text: string }[];
 }
 
@@ -41,16 +48,81 @@ const BLOCKED_IMAGE =
 	);
 
 const ALLOWED_TAGS = [
-	"a", "abbr", "address", "b", "big", "blockquote", "br", "caption", "center", "cite",
-	"code", "col", "colgroup", "dd", "del", "div", "dl", "dt", "em", "font", "h1", "h2",
-	"h3", "h4", "h5", "h6", "hr", "i", "img", "ins", "kbd", "li", "mark", "ol", "p",
-	"pre", "q", "s", "small", "span", "strike", "strong", "sub", "sup", "table", "tbody",
-	"td", "tfoot", "th", "thead", "tr", "tt", "u", "ul", "wbr",
+	"a",
+	"abbr",
+	"address",
+	"b",
+	"big",
+	"blockquote",
+	"br",
+	"caption",
+	"center",
+	"cite",
+	"code",
+	"col",
+	"colgroup",
+	"dd",
+	"del",
+	"div",
+	"dl",
+	"dt",
+	"em",
+	"font",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"hr",
+	"i",
+	"img",
+	"ins",
+	"kbd",
+	"li",
+	"mark",
+	"ol",
+	"p",
+	"pre",
+	"q",
+	"s",
+	"small",
+	"span",
+	"strike",
+	"strong",
+	"sub",
+	"sup",
+	"table",
+	"tbody",
+	"td",
+	"tfoot",
+	"th",
+	"thead",
+	"tr",
+	"tt",
+	"u",
+	"ul",
+	"wbr",
 ];
 
 const SHARED_ATTRIBUTES = [
-	"style", "class", "id", "dir", "lang", "title", "align", "valign", "width", "height",
-	"bgcolor", "color", "border", "cellpadding", "cellspacing", "colspan", "rowspan",
+	"style",
+	"class",
+	"id",
+	"dir",
+	"lang",
+	"title",
+	"align",
+	"valign",
+	"width",
+	"height",
+	"bgcolor",
+	"color",
+	"border",
+	"cellpadding",
+	"cellspacing",
+	"colspan",
+	"rowspan",
 	"nowrap",
 ];
 
@@ -91,7 +163,10 @@ export function extractStyles(html: string): { css: string; html: string } {
 
 const BASE_CSS = `
 html, body { margin: 0; padding: 0; }
-body { font: 14px/1.5 Inter, -apple-system, "Segoe UI", sans-serif; color: #1c1b19; background: #ffffff; padding: 16px; word-wrap: break-word; overflow-wrap: anywhere; }
+body { font: 15px/1.65 Inter, -apple-system, "Segoe UI", sans-serif; color: #1c1b19; background: #ffffff; padding: 24px 28px; word-wrap: break-word; overflow-wrap: anywhere; overflow-x: auto; overflow-y: hidden; }
+h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin: 1.2em 0 0.55em; }
+h1:first-child, h2:first-child, h3:first-child, h4:first-child, h5:first-child, h6:first-child { margin-top: 0; }
+p { margin: 0 0 1em; }
 img { max-width: 100%; height: auto; }
 a[data-href] { color: #4a3fa0; text-decoration: underline; cursor: default; }
 blockquote { margin: 8px 0 8px 8px; padding-left: 12px; border-left: 2px solid #d9d6cf; color: #5c5a55; }
@@ -103,14 +178,28 @@ function escapeAttribute(value: string): string {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
-export function frameCsp(allowRemoteImages: boolean): string {
+export function frameCsp(allowRemoteImages: boolean, scriptNonce: string): string {
 	return [
 		"default-src 'none'",
+		`script-src 'nonce-${scriptNonce}'`,
 		"style-src 'unsafe-inline'",
 		allowRemoteImages ? "img-src data: https:" : "img-src data:",
 		"form-action 'none'",
 		"base-uri 'none'",
 	].join("; ");
+}
+
+const HEIGHT_SCRIPT =
+	"(() => {" +
+	"const send = () => parent.postMessage({ type: 'juno.mail.height', height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) }, '*');" +
+	"new ResizeObserver(send).observe(document.documentElement);" +
+	"new ResizeObserver(send).observe(document.body);" +
+	"window.addEventListener('load', send);" +
+	"send();" +
+	"})();";
+
+function createNonce(): string {
+	return randomBytes(18).toString("base64");
 }
 
 function decodeEntities(value: string): string {
@@ -128,7 +217,9 @@ function collectLinks(body: string): { href: string; text: string }[] {
 	const seen = new Map<string, { href: string; text: string }>();
 	for (const match of body.matchAll(/<a\b[^>]*\bdata-href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) {
 		const href = decodeEntities(match[1] ?? "");
-		const text = decodeEntities((match[2] ?? "").replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+		const text = decodeEntities((match[2] ?? "").replace(/<[^>]+>/g, ""))
+			.replace(/\s+/g, " ")
+			.trim();
 		const existing = seen.get(href);
 		if (existing) {
 			if (!existing.text && text) existing.text = text;
@@ -142,6 +233,9 @@ function collectLinks(body: string): { href: string; text: string }[] {
 /** Sanitises an HTML body into a self-contained document. */
 export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): SanitisedBody {
 	const { css, html } = extractStyles(raw);
+	const scriptNonce = createNonce();
+	const suspicious =
+		/<(script|iframe|object|embed|form|svg|noscript)\b|\bon[a-z][\w-]*\s*=|javascript:|data:text\/html/i.test(raw);
 	let remoteImages = 0;
 
 	const body = sanitizeHtml(html, {
@@ -213,11 +307,12 @@ export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): Saniti
 	const links = collectLinks(body);
 
 	const document =
-		"<!doctype html><html><head><meta charset=\"utf-8\">" +
-		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(Boolean(options.allowRemoteImages)))}">` +
-		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body></html>`;
+		'<!doctype html><html><head><meta charset="utf-8">' +
+		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(Boolean(options.allowRemoteImages), scriptNonce))}">` +
+		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body>` +
+		`<script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
 
-	return { document, remoteImages, links };
+	return { document, scriptNonce, remoteImages, suspicious, links };
 }
 
 function escapeText(value: string): string {
@@ -236,14 +331,19 @@ const TEXT_DARK_CSS =
 	"@media (prefers-color-scheme: dark) { body { background: #1c1b19; color: #e8e6e1; } .q { color: #9a978f; } a[data-href] { color: #8fb0dc; } }";
 
 export function textDocument(text: string): string {
+	return textDocumentBody(text).document;
+}
+
+export function textDocumentBody(text: string): SanitisedBody {
+	const scriptNonce = createNonce();
 	const body = text
 		.split(/\r?\n/)
 		.map((line) => (/^\s*>/.test(line) ? `<span class="q">${escapeText(line)}</span>` : escapeText(line)))
 		.join("\n");
-	return (
-		"<!doctype html><html><head><meta charset=\"utf-8\">" +
-		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false))}">` +
+	const document =
+		'<!doctype html><html><head><meta charset="utf-8">' +
+		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false, scriptNonce))}">` +
 		`<style>${BASE_CSS} body { white-space: pre-wrap; } .q { color: #5c5a55; } ${TEXT_DARK_CSS}</style></head>` +
-		`<body>${body}</body></html>`
-	);
+		`<body>${body}</body><script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
+	return { document, scriptNonce, remoteImages: 0, suspicious: false, links: [] };
 }

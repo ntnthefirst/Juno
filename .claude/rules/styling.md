@@ -129,13 +129,19 @@ not resolving the OS preference yourself.
 
 | Window width | Behaviour |
 | --- | --- |
-| >= 1100px | Beside the content, expanded. The toggle collapses it to a rail |
-| 760 to 1100px | The same, but a rail by default. A 248px sidebar is a third of the screen here |
+| >= 760px | Beside the content, a rail by default. The toggle opens it fully |
 | < 760px | Out of the layout. The toggle floats it over the content as a drawer |
 
 The drawer closes on Escape, on a click outside, and when something in it is
 chosen. Widening the window past 760px puts the sidebar back and closes the
 drawer, so a panel is never left hanging over the content.
+
+A docked sidebar opened fully goes back to the rail the same way, when an
+entry is chosen or anything beside it is pressed. That is the "Collapse the
+sidebar on its own" setting in Settings > General, on by default. Turned off,
+the sidebar stays open or collapsed the way the toggle left it, and that
+choice is remembered per machine. The main window reads the setting again
+when the settings window closes, which is the only way a change reaches it.
 
 Collapsed means icons only: the label moves into `aria-label` and `title`, and a
 group heading becomes a hairline rather than an abbreviation. Every entry keeps
@@ -162,7 +168,11 @@ of taste.
 - The submit button lives in the page footer, outside the `<form>`, and reaches
   it with `form={id}` from `useId()`.
 - A side panel does not trap focus and does not block a click behind it. That is
-  the point: the grid it opened from stays usable.
+  the point: the grid it opened from stays usable. A click on that grid also
+  closes the panel, the same way Escape does, unless the click is on whatever
+  opens or swaps the panel's own content (a row, an "Add" or "Edit" button
+  marked `data-opens-panel`) or lands inside a menu, a dialog or another
+  popover the screen or the panel opened on top of everything.
 - The settings **window** is still modal, for the reason in decision 26. Reading
   a row changes nothing; changing a setting changes what every screen shows.
 
@@ -190,6 +200,10 @@ Not for amounts, which are tabular sans.
   button in a 36px row), and 40x40px for anything standalone: toolbar buttons,
   primary actions, anything in a modal. Pad a small icon out to the target rather
   than growing the icon.
+- **One exception, by the owner's choice: the mail template editor.** Its design
+  panel, layers and floating toolbar use Figma's sizes, 28px controls and 34px
+  tools, because that editor is a canvas tool and is used like one. It does not
+  spread: every other screen keeps the targets above.
 - Every interactive element is a `<button>` or an `<a>`, never a `div` with
   `onClick`. Icon-only buttons carry an `aria-label`.
 - Text contrast at least 4.5:1 against its actual background. `--ink-muted` passes,

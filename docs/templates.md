@@ -4,10 +4,27 @@ A template is the legal text with placeholders in it. The body is HTML, per
 [decision 19](decisions.md). Templates live in the database and are edited in the
 app, not on disk.
 
-**The templates that ship are invented and are not fit to send to anyone.** See
-[../TODO.md](../TODO.md) item 2.
+**Nothing that ships is fit to send to anyone.** A new install gets one example
+template and no other, and it is a specimen until you have read it and marked it
+as reviewed. An install that still has the five older invented templates
+(`nda`, `development_agreement`, `hosting_agreement`, `project_scope`,
+`addendum`) keeps them, and they are just as unfit. See
+[../TODO.md](../TODO.md) item 1.
 
 ---
+
+## What ships
+
+One example on a first install, and nothing else. It is laid out on two pages
+with a heading, a list, a table, the client's address pinned to the paper and two
+signature blocks. It uses a value, a condition and its negation, and asks for
+three values when it is used (what is being done, how it is paid, and the payment
+term in days). It is written in Dutch with "u", it is an ordinary template you can
+edit or delete, and it starts unreviewed like every template.
+
+An install that has the five older templates keeps them exactly as they are, and
+a new one never gets them. Nothing may look a template up by key, because most
+installs will not have the one you want.
 
 ## Syntax
 
@@ -25,7 +42,7 @@ programming language inside a legal document.
 Whitespace inside the braces is ignored, so `{{client.name}}` and
 `{{ client.name }}` are the same thing.
 
-### Two behaviours worth knowing
+### Three behaviours worth knowing
 
 **Everything is escaped by default.** A client called `<script>` or a note
 containing markup becomes text, not markup. Use `{{& … }}` only for a value you
@@ -36,6 +53,10 @@ renders a red marked box reading `[ontbreekt: client.iban]`, on the page and in
 the PDF. This is deliberate: a blank space in a contract gets signed, and a
 marked gap gets questioned. Wrap the paragraph in `{{#if …}}` when the value is
 genuinely optional.
+
+**A page layout cannot use the raw form.** A layout escapes an ampersand on its
+way into the page, so `{{& … }}` is never recognised there. Plain values and
+conditions work in every template; the raw form only in one written as HTML.
 
 ## Available values
 
@@ -103,8 +124,8 @@ orphaned at the foot of a page.
 
 ## The specimen flag
 
-A template with no `reviewedAt` is a specimen. That is the state every shipped
-template starts in, and it has teeth:
+A template with no `reviewedAt` is a specimen. That is the state every template
+starts in, the example included, and it has teeth:
 
 - Every document generated from it carries `isSpecimen`, recorded **on the
   document**, so reviewing the template later cannot silently reclassify a
@@ -126,3 +147,25 @@ and internal documents.
 It is **not** a qualified electronic signature under eIDAS, the audit page says
 so in plain Dutch, and anything where that distinction matters should go through
 a provider that offers one. See decision 8.
+
+## Mail templates
+
+A mail template uses the same syntax and the same values, plus whatever it
+declares as an input, which arrives as `document.<key>`. The canvas it is laid
+out on is in [editors.md](editors.md) section 2.
+
+**What ships.** One example on a first install, and nothing else. An install
+that already has the four old mail templates keeps them; a new one never gets
+them, and no code looks a mail template up by key.
+
+Three things to know when writing one:
+
+- There is no `client.firstName`. A greeting uses `client.contactName`, the
+  name of the primary contact, and `client.name` is the business.
+- A footer uses `owner.businessName`, `owner.contactName`, `owner.addressLine1`,
+  `owner.postalCode`, `owner.city`, `owner.vatNumber`, `owner.email` and
+  `owner.phone`. Only the first two are always filled in, so wrap the rest in
+  `{{#if …}}`.
+- Conditionals do not nest. The first closing tag ends the conditional it
+  meets, so an `if` inside an `if` leaves the outer one open. Give each
+  optional line its own.

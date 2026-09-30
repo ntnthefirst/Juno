@@ -117,13 +117,23 @@ export const contacts = sqliteTable(
 	],
 );
 
+/**
+ * A piece of work. Usually for a client, and not always: the thing Juno itself
+ * is takes the same shape, and requiring a client for it would mean inventing
+ * one. `clientId` is therefore nullable, which is why every read that wants the
+ * client name joins it left rather than inner.
+ *
+ * The three storage columns are one decision the user makes per project.
+ * `localPath` is the working copy, the checkout a command runs in, and Juno
+ * never writes to it. `storageMode` and `storagePath` are where the files Juno
+ * does own are kept: the app's own folder by default, somewhere with room on it
+ * when the files are large. See services/project-storage.ts.
+ */
 export const projects = sqliteTable(
 	"projects",
 	{
 		...standardColumns,
-		clientId: text("client_id")
-			.notNull()
-			.references(() => clients.id),
+		clientId: text("client_id").references(() => clients.id),
 		name: text("name").notNull(),
 		statusId: text("status_id").references(() => referenceItems.id),
 		description: text("description"),
@@ -133,6 +143,18 @@ export const projects = sqliteTable(
 		/** Integer cents. Never a float, and never a decimal string. */
 		agreedValueCents: integer("agreed_value_cents"),
 		notes: text("notes"),
+		/** The checkout on this machine. Read, never written by Juno. */
+		localPath: text("local_path"),
+		/** app: under userData. custom: the folder in storagePath. */
+		storageMode: text("storage_mode").notNull().default("app"),
+		storagePath: text("storage_path"),
+		/**
+		 * The asset shown on the card. No foreign key on purpose: assets point at
+		 * projects, so a key back would be a cycle, and SQLite resolves those only
+		 * with deferred constraints that the rest of this schema does not use. The
+		 * service clears it when the asset goes.
+		 */
+		coverAssetId: text("cover_asset_id"),
 	},
 	(t) => [
 		index("projects_client_idx").on(t.clientId),
@@ -181,5 +203,73 @@ export const referenceItems = sqliteTable(
 	(t) => [
 		index("reference_items_set_idx").on(t.setId),
 		index("reference_items_hidden_idx").on(t.hiddenAt),
+	],
+);
+
+/**
+ * Something that happened with a client, written down by hand.
+ *
+ * The timeline is otherwise assembled from records that already exist: a
+ * document was generated, a thread arrived, an appointment was kept. A phone
+ * call leaves no record at all, and it is often the one that mattered, so this
+ * is the row for "I called them on Tuesday and they want the roof done in
+ * March".
+ *
+ * `happenedAt` is when the thing happened, which is not `createdAt`, when it
+ * was typed in. A call remembered on Friday still belongs on Tuesday, and the
+ * timeline sorts on the first of those.
+ */
+export const clientNotes = sqliteTable(
+	"client_notes",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		/** UTC ISO-8601, like every instant in this database. */
+		happenedAt: text("happened_at").notNull(),
+		/**
+		 * call, meeting, note. Drives an icon and nothing else, which is why it is
+		 * a plain column rather than a reference set: a value the user could hide
+		 * would take rows with it and nothing would gain by that.
+		 */
+		kind: text("kind").notNull().default("note"),
+		title: text("title").notNull(),
+		/** Free text, Markdown, like a client's notes field. */
+		body: text("body"),
+	},
+	(t) => [
+		index("client_notes_client_idx").on(t.clientId, t.happenedAt),
+		index("client_notes_owner_idx").on(t.ownerId),
+		index("client_notes_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
+ * One line of a client's status history: it moved from one status to another
+ * at a point in time.
+ *
+ * A row is not written per click. Changes within ten minutes of each other
+ * fold into the same row, its `toStatusId` and `changedAt` moving forward each
+ * time, because a status corrected twice in a minute is one change, not three.
+ * `fromStatusId` and `toStatusId` are both nullable: "no status" is a status a
+ * client can move to or from, not the absence of a row.
+ */
+export const clientStatusChanges = sqliteTable(
+	"client_status_changes",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		fromStatusId: text("from_status_id").references(() => referenceItems.id),
+		toStatusId: text("to_status_id").references(() => referenceItems.id),
+		/** UTC ISO-8601. The latest change folded into this row, not when the row was first written. */
+		changedAt: text("changed_at").notNull(),
+	},
+	(t) => [
+		index("client_status_changes_client_idx").on(t.clientId),
+		index("client_status_changes_deleted_idx").on(t.deletedAt),
+		index("client_status_changes_client_deleted_changed_idx").on(t.clientId, t.deletedAt, t.changedAt),
 	],
 );

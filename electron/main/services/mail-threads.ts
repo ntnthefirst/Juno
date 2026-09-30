@@ -20,10 +20,20 @@ import type {
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
-import { sanitiseHtml, textDocument } from "./mail-sanitise";
+import { outgoingForThread } from "./mail-outbox";
+import { sanitiseHtml, textDocumentBody } from "./mail-sanitise";
+
+function escapeLike(value: string): string {
+	return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+/**
+ * The most rows one call returns. A page is bounded on purpose, and the list
+ * screen asks for another hundred at a time up to this, which is more mail than
+ * anybody scrolls in one sitting and small enough to stay one query.
+ */
+const MAX_LIMIT = 500;
 
 /** Inline images larger than this are not embedded. A logo is kilobytes. */
 const MAX_INLINE_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -37,6 +47,11 @@ export function configureMailThreads(dir: string): void {
 function mailDir(): string {
 	if (!mailDirectory) throw new Error("Mail reading was used before the app configured it.");
 	return mailDirectory;
+}
+
+/** The directory attachments live in, for the purge, which deletes inside it. */
+export function mailRoot(): string {
+	return mailDir();
 }
 
 type MessageRow = typeof mailMessages.$inferSelect;
@@ -117,6 +132,7 @@ interface Summarised {
 	messageCount: number;
 	unreadCount: number;
 	hasAttachments: boolean;
+	isFlagged: boolean;
 	snippet: string;
 	participants: MailAddress[];
 }
@@ -134,6 +150,7 @@ function summarise(
 			fromAddress: mailMessages.fromAddress,
 			toJson: mailMessages.toJson,
 			isSeen: mailMessages.isSeen,
+			isFlagged: mailMessages.isFlagged,
 			hasAttachments: mailMessages.hasAttachments,
 			snippet: mailMessages.snippet,
 			internalDate: mailMessages.internalDate,
@@ -159,6 +176,7 @@ function summarise(
 			messageCount: 0,
 			unreadCount: 0,
 			hasAttachments: false,
+			isFlagged: false,
 			snippet: entry.snippet ?? "",
 			participants: [],
 		});
@@ -169,6 +187,7 @@ function summarise(
 		group.messageCount += 1;
 		if (!message.isSeen) group.unreadCount += 1;
 		if (message.hasAttachments) group.hasAttachments = true;
+		if (message.isFlagged) group.isFlagged = true;
 		if (!group.snippet && message.snippet) group.snippet = message.snippet;
 		const people = [
 			...(message.fromAddress ? [{ name: message.fromName, address: message.fromAddress }] : []),
@@ -195,6 +214,7 @@ function summarise(
 			messageCount: group.messageCount,
 			unreadCount: group.unreadCount,
 			hasAttachments: group.hasAttachments,
+			isFlagged: group.isFlagged,
 			participants: group.participants,
 			snippet: group.snippet,
 		};
@@ -224,6 +244,30 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 			sql`exists (select 1 from ${mailMessages} where ${mailMessages.threadId} = ${mailThreads.id} and ${mailMessages.isSeen} = 0 and ${mailMessages.deletedAt} is null)`,
 		);
 	}
+	if (query.flaggedOnly) {
+		conditions.push(
+			sql`exists (select 1 from ${mailMessages} where ${mailMessages.threadId} = ${mailThreads.id} and ${mailMessages.isFlagged} = 1 and ${mailMessages.deletedAt} is null)`,
+		);
+	}
+	if (query.withAttachments) {
+		conditions.push(
+			sql`exists (select 1 from ${mailMessages} where ${mailMessages.threadId} = ${mailThreads.id} and ${mailMessages.hasAttachments} = 1 and ${mailMessages.deletedAt} is null)`,
+		);
+	}
+	if (query.fromAddress) {
+		const address = query.fromAddress.trim().toLowerCase();
+		if (address) {
+			// Either side: "mail from Laura" and "mail to Laura" are the same
+			// question asked from the two ends of one conversation.
+			const inList = `%${escapeLike(JSON.stringify(address))}%`;
+			conditions.push(
+				sql`exists (select 1 from ${mailMessages} where ${mailMessages.threadId} = ${mailThreads.id} and ${mailMessages.deletedAt} is null and (lower(${mailMessages.fromAddress}) = ${address} or lower(${mailMessages.toJson}) like ${inList} escape '\\' or lower(${mailMessages.ccJson}) like ${inList} escape '\\'))`,
+			);
+		}
+	}
+	// A day bound is a date with no time, so the range runs to the end of it.
+	if (query.since) conditions.push(sql`${mailThreads.lastMessageAt} >= ${`${query.since}T00:00:00.000Z`}`);
+	if (query.until) conditions.push(sql`${mailThreads.lastMessageAt} <= ${`${query.until}T23:59:59.999Z`}`);
 
 	if (term) {
 		const match = ftsQuery(term);
@@ -326,6 +370,9 @@ export async function getThread(id: string, db: Db = getDb()): Promise<MailThrea
 	return {
 		summary: summary!,
 		messages: messages.map((m) => toMessage(m, attachments.get(m.id) ?? [])),
+		// The reader shows a reply from the moment it is sent, not from the next
+		// sync of Sent (see outgoingForThread).
+		outgoing: outgoingForThread(id, db),
 	};
 }
 
@@ -386,7 +433,7 @@ export function renderBody(
 	id: string,
 	options: { allowRemoteImages?: boolean } = {},
 	db: Db = getDb(),
-): { document: string; remoteImages: number } | null {
+): { document: string; scriptNonce: string; remoteImages: number } | null {
 	const row = db
 		.select()
 		.from(mailMessages)
@@ -398,9 +445,10 @@ export function renderBody(
 			allowRemoteImages: options.allowRemoteImages ?? false,
 			inlineImages: inlineImages(db, id),
 		});
-		return { document: result.document, remoteImages: result.remoteImages };
+		return { document: result.document, scriptNonce: result.scriptNonce, remoteImages: result.remoteImages };
 	}
-	return { document: textDocument(row.bodyText ?? ""), remoteImages: 0 };
+	const result = textDocumentBody(row.bodyText ?? "");
+	return { document: result.document, scriptNonce: result.scriptNonce, remoteImages: 0 };
 }
 
 /** What the reader needs beside the frame. See MailMessageBody. */
@@ -418,10 +466,11 @@ export async function getBody(id: string, db: Db = getDb()): Promise<MailMessage
 			text: row.bodyText,
 			hasHtml: true,
 			remoteImages: result.remoteImages,
+			suspicious: result.suspicious,
 			links: result.links,
 		};
 	}
-	return { messageId: id, text: row.bodyText, hasHtml: false, remoteImages: 0, links: [] };
+	return { messageId: id, text: row.bodyText, hasHtml: false, remoteImages: 0, suspicious: false, links: [] };
 }
 
 async function requireThread(id: string, db: Db): Promise<MailThreadSummary> {

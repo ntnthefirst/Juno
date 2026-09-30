@@ -1,288 +1,258 @@
 /**
- * The document templates that ship.
+ * The one document template that ships, and only on a first install.
  *
- * **Every one of these is invented.** They exist so the generation, preview,
- * PDF and signing machinery can be built and tested against something shaped
- * like a real contract. They are not legal advice, they have not been checked by
- * anyone, and they are not fit to send to a client.
+ * Juno used to seed five contract templates (nda, development_agreement,
+ * hosting_agreement, project_scope, addendum). All five were invented so the
+ * generation, preview, PDF and signing machinery had something contract-shaped
+ * to work on, and none of them was checked by anyone. They are gone from the
+ * code: an install that already has them keeps its rows exactly as they are,
+ * since nothing seeds, updates, hides or removes them any more, and a new
+ * install never gets them. Nothing may look one up by key, because most
+ * installs will not have it.
  *
- * That is enforced rather than just written down: each one seeds with
- * `reviewedAt: null`, which makes every document generated from it carry
- * `isSpecimen`, which prints the banner from document-style.ts on the page and
- * blocks the signing screen. See TODO.md item 2.
+ * What a new install gets in their place is a single example laid out on the
+ * page editor's model, so opening it teaches the editor: two pages, headings,
+ * a list, a table, a block pinned to the paper, the signature blocks, every
+ * kind of placeholder a layout can carry and three values the template asks
+ * for when it is used. Dutch (Belgium), "u", per .claude/rules/writing.md. It
+ * is an ordinary template afterwards, not a system row: the owner edits it or
+ * deletes it, and an upgrade never brings it back (`ensureTemplatesSeeded` in
+ * ./document-templates).
  *
- * Replacing the text is the owner's job. When a body has been rewritten and
- * checked, clear the specimen flag on that template and only then.
+ * It is still unreviewed, like every template `create` writes. Documents made
+ * from it carry the specimen banner and cannot be signed until the owner has
+ * read the text and marked it as checked.
  *
- * Placeholder syntax is in ./template-render.ts. Available paths are documented
- * in docs/templates.md.
+ * Placeholder syntax is in ./template-render.ts and the available paths are
+ * documented in docs/templates.md. Two limits of that syntax shape the text
+ * below. Conditionals do not nest, so each optional piece has its own. And the
+ * raw form `{{& path }}` is left out on purpose: a layout escapes an ampersand
+ * on its way into the page, so the marker would never be recognised.
  */
-import type { SeedTemplate } from "./document-templates";
+import type {
+	DocumentLayout,
+	LayoutBlock,
+	LayoutBox,
+	LayoutPage,
+	TemplateInput as TemplateField,
+} from "../../shared/types";
+import { DEFAULT_MARGIN } from "./document-layout";
+import type { TemplateInput } from "./document-templates";
 
-export const DOCUMENT_TEMPLATE_SEED_VERSION = 1;
+/**
+ * 1 was the five invented templates, seeded by matching keys and never
+ * recorded. 2 is the example on a first install and nothing else.
+ */
+export const DOCUMENT_TEMPLATE_SEED_VERSION = 2;
 
-const PARTIES = `
-<dl class="juno-parties">
-	<dt>Opdrachtnemer</dt>
-	<dd>
-		{{ owner.businessName }}, {{ owner.addressLine1 }}, {{ owner.postalCode }} {{ owner.city }}
-		{{#if owner.vatNumber}}<br>Ondernemingsnummer {{ owner.vatNumber }}{{/if}}
-		{{#if owner.email}}<br>{{ owner.email }}{{/if}}
-	</dd>
-	<dt>Opdrachtgever</dt>
-	<dd>
-		{{ client.name }}{{#if client.addressLine1}}, {{ client.addressLine1 }}{{/if}}{{#if client.city}}, {{ client.postalCode }} {{ client.city }}{{/if}}
-		{{#if client.vatNumber}}<br>Ondernemingsnummer {{ client.vatNumber }}{{/if}}
-		{{#if client.email}}<br>{{ client.email }}{{/if}}
-	</dd>
-</dl>
-`.trim();
+function heading(id: string, level: 1 | 2 | 3, text: string): LayoutBlock {
+	return { id, kind: "heading", level, text, align: "left" };
+}
 
-const SIGNATURES = `
-<div class="juno-signatures">
-	<div class="juno-signature">
-		{{ owner.contactName }}<br>
-		<span class="role">voor {{ owner.businessName }}</span>
-	</div>
-	<div class="juno-signature">
-		{{#if client.contactName}}{{ client.contactName }}{{/if}}<br>
-		<span class="role">voor {{ client.name }}</span>
-	</div>
-</div>
-`.trim();
+function paragraph(id: string, html: string): LayoutBlock {
+	return { id, kind: "paragraph", html, align: "left" };
+}
 
-const META = `<p class="juno-doc-meta">Opgemaakt te {{ owner.city }} op {{ document.issuedOn }}.</p>`;
+function page(id: string, blocks: LayoutBlock[], boxes: LayoutBox[] = []): LayoutPage {
+	return { id, blocks, boxes };
+}
 
-export const DOCUMENT_TEMPLATES: SeedTemplate[] = [
+const CLIENT_ADDRESS = [
+	"<strong>{{ client.name }}</strong>",
+	"{{#if client.addressLine1}}<br>{{ client.addressLine1 }}{{/if}}",
+	"{{#if client.city}}<br>{{ client.postalCode }} {{ client.city }}{{/if}}",
+].join("");
+
+const OWNER_PARTY = [
+	'<strong>Opdrachtnemer ("wij")</strong>',
+	"<br>{{ owner.businessName }}, {{ owner.addressLine1 }}, {{ owner.postalCode }} {{ owner.city }}",
+	"{{#if owner.vatNumber}}<br>Ondernemingsnummer {{ owner.vatNumber }}{{/if}}",
+	"{{#if owner.email}}<br>{{ owner.email }}{{/if}}",
+].join("");
+
+const CLIENT_PARTY = [
+	'<strong>Opdrachtgever ("u")</strong>',
+	"<br>{{ client.name }}",
+	"{{#if client.addressLine1}}, {{ client.addressLine1 }}{{/if}}",
+	"{{#if client.city}}, {{ client.postalCode }} {{ client.city }}{{/if}}",
+	"{{#if client.vatNumber}}<br>Ondernemingsnummer {{ client.vatNumber }}{{/if}}",
+	"{{#if client.email}}<br>{{ client.email }}{{/if}}",
+].join("");
+
+/** A cell that says what the project holds, or what happens when there is none. */
+function orElse(path: string, fallback: string, suffix = ""): string {
+	return `{{#if ${path}}}{{ ${path} }}${suffix}{{/if}}{{#unless ${path}}}${fallback}{{/unless}}`;
+}
+
+function layout(): DocumentLayout {
+	const first = page(
+		"voorbeeld-pagina-1",
+		[
+			heading("v1-titel", 1, "Voorbeeldovereenkomst"),
+			paragraph("v1-datum", "Opgemaakt te {{ owner.city }} op {{ document.issuedOn }}."),
+			// Clears the address block pinned to the right of the title, so the
+			// text below starts under it instead of running through it.
+			{ id: "v1-ruimte", kind: "spacer", heightMm: 18 },
+			paragraph(
+				"v1-toelichting",
+				"<strong>Dit is een voorbeeld om aan te passen.</strong> Het sjabloon laat zien wat de editor kan: " +
+					"gegevens die vanzelf worden ingevuld, velden die bij het gebruik worden gevraagd, twee pagina's, " +
+					"een tabel en een handtekeningblok. De tekst is verzonnen en niet juridisch nagekeken. " +
+					"Pas hem aan, of verwijder het sjabloon.",
+			),
+			heading("v1-partijen", 2, "1. Partijen"),
+			paragraph("v1-nemer", OWNER_PARTY),
+			paragraph("v1-gever", CLIENT_PARTY),
+			paragraph(
+				"v1-woorden",
+				'In deze overeenkomst is "wij" de opdrachtnemer en "u" de opdrachtgever.',
+			),
+			heading("v1-opdracht", 2, "2. Opdracht"),
+			paragraph(
+				"v1-omschrijving",
+				'Wij voeren voor u de volgende opdracht uit{{#if project.name}} in het kader van het project "{{ project.name }}"{{/if}}: ' +
+					"{{ document.scope }}",
+			),
+			paragraph(
+				"v1-achtergrond",
+				"{{#if project.description}}Over het project: {{ project.description }}{{/if}}" +
+					"{{#unless project.description}}Wat hier niet staat, valt buiten de opdracht.{{/unless}}",
+			),
+			heading("v1-medewerking", 2, "3. Uw medewerking"),
+			{
+				id: "v1-lijst",
+				kind: "list",
+				ordered: false,
+				items: [
+					"U bezorgt ons tijdig de teksten, beelden en toegangen die nodig zijn.",
+					"U bundelt uw feedback per fase.",
+					"U wijst een aanspreekpunt aan{{#if client.contactName}}, voorlopig {{ client.contactName }}{{/if}}.",
+				],
+			},
+		],
+		[
+			{
+				id: "v1-adres",
+				xMm: 130,
+				yMm: 24,
+				widthMm: 60,
+				block: paragraph("v1-adres-blok", CLIENT_ADDRESS),
+			},
+		],
+	);
+
+	const second = page(
+		"voorbeeld-pagina-2",
+		[
+			heading("v2-afspraken", 2, "4. Planning en vergoeding"),
+			paragraph("v2-inleiding", "Dit spreken wij met u af."),
+			{
+				id: "v2-tabel",
+				kind: "table",
+				headerRow: true,
+				columns: [
+					{ header: "Onderdeel", widthPct: 30 },
+					{ header: "Afspraak", widthPct: 70 },
+				],
+				rows: [
+					["Opdracht", orElse("project.name", "Zoals omschreven onder punt 2")],
+					["Start", orElse("project.startsOn", "Bij ondertekening")],
+					["Oplevering", orElse("project.dueOn", "In overleg")],
+					["Vergoeding", orElse("project.agreedValue", "Vooraf schriftelijk overeengekomen", " exclusief btw")],
+					[
+						"Betaling",
+						"{{ document.payment_terms }}. U betaalt binnen {{ document.payment_days }} dagen na factuurdatum.",
+					],
+				],
+			},
+			{ id: "v2-ruimte", kind: "spacer", heightMm: 4 },
+			paragraph(
+				"v2-meerwerk",
+				"Werk dat buiten de opdracht valt, bespreken wij vooraf met u. Daarvoor krijgt u een aparte offerte.",
+			),
+			heading("v2-recht", 2, "5. Toepasselijk recht"),
+			paragraph(
+				"v2-recht-tekst",
+				"Op deze overeenkomst is het Belgisch recht van toepassing. Bij een geschil is de rechtbank van " +
+					"het arrondissement waar wij gevestigd zijn bevoegd.",
+			),
+			{ id: "v2-lijn", kind: "divider" },
+			heading("v2-akkoord", 3, "Voor akkoord"),
+			paragraph(
+				"v2-exemplaren",
+				"Opgemaakt in twee exemplaren te {{ owner.city }} op {{ document.issuedOn }}. Elke partij erkent een exemplaar te hebben ontvangen.",
+			),
+		],
+		// Pinned to the paper rather than flowed, so the two lines sit side by
+		// side at the foot of the page whatever the text above them does.
+		[
+			{
+				id: "v2-teken-nemer",
+				xMm: 20,
+				yMm: 236,
+				widthMm: 75,
+				block: {
+					id: "v2-teken-nemer-blok",
+					kind: "signature",
+					label: "{{ owner.contactName }}, voor {{ owner.businessName }}",
+					widthMm: 75,
+				},
+			},
+			{
+				id: "v2-teken-gever",
+				xMm: 115,
+				yMm: 236,
+				widthMm: 75,
+				block: {
+					id: "v2-teken-gever-blok",
+					kind: "signature",
+					label: "{{#if client.contactName}}{{ client.contactName }}, {{/if}}voor {{ client.name }}",
+					widthMm: 75,
+				},
+			},
+		],
+	);
+
+	return { version: 1, pageSize: "A4", margin: { ...DEFAULT_MARGIN }, pages: [first, second] };
+}
+
+const INPUTS: TemplateField[] = [
 	{
-		key: "nda",
-		name: "Geheimhoudingsovereenkomst",
-		description:
-			"Wederzijdse geheimhouding rond een voorlopig ontwerp of een offerte. Voorbeeldtekst.",
-		bodyHtml: `
-<h1>Geheimhoudingsovereenkomst</h1>
-${META}
-${PARTIES}
-
-<p>Partijen wensen informatie uit te wisselen met het oog op
-{{#if project.name}}het project "{{ project.name }}"{{/if}}{{#unless project.name}}een mogelijke samenwerking{{/unless}},
-en komen daarom het volgende overeen.</p>
-
-<h2 class="juno-clause">1. Vertrouwelijke informatie</h2>
-<p>Onder vertrouwelijke informatie wordt verstaan alle informatie die een partij
-aan de andere partij bezorgt in het kader van deze besprekingen, met inbegrip van
-ontwerpen, broncode, prijzen, klantgegevens en bedrijfsprocessen, ongeacht de
-vorm waarin zij wordt meegedeeld.</p>
-
-<h2 class="juno-clause">2. Verplichtingen</h2>
-<p>De ontvangende partij gebruikt de vertrouwelijke informatie uitsluitend voor
-de hierboven omschreven doeleinden, deelt haar niet met derden zonder
-voorafgaande schriftelijke toestemming, en beschermt haar met dezelfde zorg als
-haar eigen vertrouwelijke informatie.</p>
-
-<h2 class="juno-clause">3. Uitzonderingen</h2>
-<p>Deze overeenkomst geldt niet voor informatie die reeds publiek is, die de
-ontvangende partij rechtmatig van een derde heeft verkregen, of waarvan
-openbaarmaking wettelijk verplicht is.</p>
-
-<h2 class="juno-clause">4. Voorlopige ontwerpen</h2>
-<p>Een voorlopig ontwerp blijft eigendom van de opdrachtnemer tot het volledige
-overeengekomen bedrag is voldaan. Het mag niet worden gebruikt, gekopieerd of
-aan derden bezorgd zolang geen ontwikkelovereenkomst is gesloten.</p>
-
-<h2 class="juno-clause">5. Duur</h2>
-<p>Deze overeenkomst treedt in werking op {{ document.issuedOn }} en blijft
-gelden gedurende drie jaar, ook indien de besprekingen niet tot een samenwerking
-leiden.</p>
-
-<h2 class="juno-clause">6. Toepasselijk recht</h2>
-<p>Op deze overeenkomst is het Belgisch recht van toepassing. Geschillen worden
-voorgelegd aan de bevoegde rechtbanken van het arrondissement van de
-opdrachtnemer.</p>
-
-${SIGNATURES}
-`.trim(),
+		key: "scope",
+		label: "Wat wordt er gedaan",
+		kind: "textarea",
+		required: true,
+		help: "Een of twee zinnen. Ze komen letterlijk onder Opdracht in de overeenkomst.",
 	},
-
 	{
-		key: "development_agreement",
-		name: "Ontwikkelovereenkomst",
-		description: "Opdracht tot ontwikkeling van een website of webapplicatie. Voorbeeldtekst.",
-		bodyHtml: `
-<h1>Ontwikkelovereenkomst</h1>
-${META}
-${PARTIES}
-
-<h2 class="juno-clause">1. Voorwerp</h2>
-<p>De opdrachtnemer ontwikkelt voor de opdrachtgever
-{{#if project.name}}"{{ project.name }}"{{/if}}{{#unless project.name}}de overeengekomen toepassing{{/unless}},
-zoals omschreven in de bijgevoegde scope-definitie. Die definitie maakt integraal
-deel uit van deze overeenkomst.</p>
-
-<h2 class="juno-clause">2. Prijs</h2>
-<p>De overeengekomen prijs bedraagt {{ project.agreedValue }} exclusief btw.
-Meerwerk buiten de scope wordt vooraf besproken en apart geoffreerd.</p>
-
-<h2 class="juno-clause">3. Betaling</h2>
-<p>Facturatie gebeurt in drie schijven: dertig procent bij ondertekening, dertig
-procent bij oplevering van de testomgeving en veertig procent bij ingebruikname.
-Facturen zijn betaalbaar binnen veertien dagen na factuurdatum.</p>
-
-<h2 class="juno-clause">4. Planning</h2>
-<p>{{#if project.startsOn}}De werkzaamheden starten op {{ project.startsOn }}.{{/if}}
-{{#if project.dueOn}}De streefdatum voor oplevering is {{ project.dueOn }}.{{/if}}
-Een planning is een inspanningsverbintenis; vertraging door laattijdige
-aanlevering van materiaal of feedback verschuift de streefdatum navenant.</p>
-
-<h2 class="juno-clause">5. Medewerking van de opdrachtgever</h2>
-<p>De opdrachtgever levert tijdig teksten, beeldmateriaal, toegangen en feedback
-aan. De opdrachtnemer is niet aansprakelijk voor vertraging die hieruit
-voortvloeit.</p>
-
-<h2 class="juno-clause">6. Intellectuele eigendom</h2>
-<p>Na volledige betaling verkrijgt de opdrachtgever een niet-exclusief,
-overdraagbaar gebruiksrecht op het opgeleverde werk. De opdrachtnemer behoudt het
-recht om generieke componenten en onderliggende technieken te hergebruiken.</p>
-
-<h2 class="juno-clause">7. Oplevering en aanvaarding</h2>
-<p>De opdrachtgever beschikt over veertien dagen na oplevering om gebreken
-schriftelijk te melden. Bij gebreke daarvan wordt het werk geacht aanvaard te
-zijn.</p>
-
-<h2 class="juno-clause">8. Aansprakelijkheid</h2>
-<p>De aansprakelijkheid van de opdrachtnemer is beperkt tot het bedrag van deze
-overeenkomst. Indirecte schade, waaronder winstderving en gegevensverlies, komt
-niet voor vergoeding in aanmerking.</p>
-
-<h2 class="juno-clause">9. Toepasselijk recht</h2>
-<p>Op deze overeenkomst is het Belgisch recht van toepassing.</p>
-
-${SIGNATURES}
-`.trim(),
+		key: "payment_terms",
+		label: "Betaling",
+		kind: "choice",
+		required: true,
+		options: [
+			"In één keer bij oplevering",
+			"In twee schijven: de helft bij ondertekening, de helft bij oplevering",
+		],
+		defaultValue: "In één keer bij oplevering",
 	},
-
 	{
-		key: "hosting_agreement",
-		name: "Hosting- en serviceovereenkomst",
-		description: "Doorlopende hosting, onderhoud en ondersteuning. Voorbeeldtekst.",
-		bodyHtml: `
-<h1>Hosting- en serviceovereenkomst</h1>
-${META}
-${PARTIES}
-
-<h2 class="juno-clause">1. Dienstverlening</h2>
-<p>De opdrachtnemer voorziet hosting, back-ups en onderhoud voor
-{{#if project.name}}"{{ project.name }}"{{/if}}{{#unless project.name}}de toepassing van de opdrachtgever{{/unless}}.
-De infrastructuur bevindt zich binnen de Europese Unie.</p>
-
-<h2 class="juno-clause">2. Beschikbaarheid</h2>
-<p>De opdrachtnemer streeft een beschikbaarheid van 99,5 procent op maandbasis
-na, gepland onderhoud niet meegerekend. Gepland onderhoud wordt minstens
-achtenveertig uur vooraf aangekondigd.</p>
-
-<h2 class="juno-clause">3. Back-ups</h2>
-<p>Er wordt dagelijks een back-up genomen met een bewaartermijn van dertig dagen.
-Herstel van een back-up gebeurt op verzoek van de opdrachtgever.</p>
-
-<h2 class="juno-clause">4. Ondersteuning</h2>
-<p>Vragen worden behandeld op werkdagen tussen negen en zeventien uur. Bij een
-storing die de toepassing onbruikbaar maakt wordt binnen vier werkuren
-gereageerd.</p>
-
-<h2 class="juno-clause">5. Vergoeding en duur</h2>
-<p>De vergoeding bedraagt {{ project.agreedValue }} per jaar, exclusief btw. De
-overeenkomst loopt één jaar en wordt stilzwijgend verlengd, tenzij één van beide
-partijen uiterlijk één maand voor de vervaldag schriftelijk opzegt.</p>
-
-<h2 class="juno-clause">6. Gegevensverwerking</h2>
-<p>De opdrachtnemer treedt op als verwerker in de zin van de Algemene Verordening
-Gegevensbescherming en verwerkt persoonsgegevens uitsluitend in opdracht van de
-opdrachtgever.</p>
-
-<h2 class="juno-clause">7. Beëindiging</h2>
-<p>Bij beëindiging bezorgt de opdrachtnemer op verzoek een volledige export van
-de gegevens en van de broncode die aan de opdrachtgever toebehoort.</p>
-
-${SIGNATURES}
-`.trim(),
-	},
-
-	{
-		key: "project_scope",
-		name: "Project scope en MVP-definitie",
-		description: "Wat wel en niet in de eerste versie zit. Voorbeeldtekst.",
-		bodyHtml: `
-<h1>Project scope en MVP-definitie</h1>
-${META}
-<p class="juno-doc-meta">
-	Opdrachtgever: {{ client.name }}{{#if project.name}} &middot; Project: {{ project.name }}{{/if}}
-</p>
-
-<h2 class="juno-clause">1. Doel</h2>
-<p>{{#if project.description}}{{ project.description }}{{/if}}{{#unless project.description}}Dit document beschrijft
-wat de eerste bruikbare versie bevat, en even uitdrukkelijk wat zij niet
-bevat.{{/unless}}</p>
-
-<h2 class="juno-clause">2. Binnen scope</h2>
-<ol>
-	<li>De schermen en functies die in de bijgevoegde lijst zijn opgenomen.</li>
-	<li>Een responsieve weergave voor telefoon, tablet en desktop.</li>
-	<li>Een beheeromgeving voor de inhoud die de opdrachtgever zelf aanpast.</li>
-	<li>Eenmalige overname van bestaande inhoud, voor zover aangeleverd in een
-		bruikbaar formaat.</li>
-</ol>
-
-<h2 class="juno-clause">3. Buiten scope</h2>
-<ol>
-	<li>Functies die hierboven niet vermeld staan.</li>
-	<li>Koppelingen met systemen van derden, tenzij apart overeengekomen.</li>
-	<li>Het schrijven van teksten en het aanleveren van beeldmateriaal.</li>
-	<li>Doorlopend onderhoud na oplevering, dat valt onder een aparte
-		serviceovereenkomst.</li>
-</ol>
-
-<h2 class="juno-clause">4. Aannames</h2>
-<p>Feedback wordt gebundeld per fase aangeleverd. Toegangen tot domein, hosting
-en bestaande systemen zijn beschikbaar bij aanvang.</p>
-
-<h2 class="juno-clause">5. Wijzigingen</h2>
-<p>Een wijziging aan deze scope wordt schriftelijk vastgelegd in een addendum,
-met de gevolgen voor prijs en planning erbij.</p>
-
-{{#if project.dueOn}}<p>Streefdatum voor oplevering: {{ project.dueOn }}.</p>{{/if}}
-
-${SIGNATURES}
-`.trim(),
-	},
-
-	{
-		key: "addendum",
-		name: "Addendum",
-		description: "Wijziging op een bestaande overeenkomst. Voorbeeldtekst.",
-		bodyHtml: `
-<h1>Addendum</h1>
-${META}
-${PARTIES}
-
-<h2 class="juno-clause">1. Voorwerp</h2>
-<p>Dit addendum wijzigt de eerder tussen partijen gesloten overeenkomst
-{{#if project.name}}met betrekking tot "{{ project.name }}"{{/if}}. Alle
-bepalingen van de oorspronkelijke overeenkomst blijven onverkort gelden, behalve
-waar zij hieronder uitdrukkelijk worden gewijzigd.</p>
-
-<h2 class="juno-clause">2. Wijziging</h2>
-<p>{{ document.changeSummary }}</p>
-
-<h2 class="juno-clause">3. Gevolgen voor prijs</h2>
-<p>{{ document.priceEffect }}</p>
-
-<h2 class="juno-clause">4. Gevolgen voor planning</h2>
-<p>{{ document.scheduleEffect }}</p>
-
-<h2 class="juno-clause">5. Inwerkingtreding</h2>
-<p>Dit addendum treedt in werking op {{ document.issuedOn }}.</p>
-
-${SIGNATURES}
-`.trim(),
+		key: "payment_days",
+		label: "Betalingstermijn in dagen",
+		kind: "number",
+		required: false,
+		help: "Het aantal dagen na de factuurdatum.",
+		defaultValue: "14",
 	},
 ];
+
+export function exampleTemplate(): TemplateInput {
+	return {
+		key: "voorbeeld_overeenkomst",
+		name: "Voorbeeld: overeenkomst met alle onderdelen",
+		description:
+			"Toont wat de editor kan: gegevens die vanzelf worden ingevuld, velden die bij het gebruik worden gevraagd, twee pagina's, een tabel en een handtekeningblok. Pas het aan of verwijder het.",
+		language: "nl-BE",
+		layout: layout(),
+		inputs: INPUTS,
+	};
+}

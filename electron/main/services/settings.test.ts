@@ -142,3 +142,44 @@ describe("a settings file from the older shape", () => {
 		expect(owner.emails[0].email).toBe("b@juno.test");
 	});
 });
+
+describe("the update preference", () => {
+	it("installs automatically until somebody says otherwise", async () => {
+		freshStore();
+		expect(await settings.getUpdates()).toEqual({ autoInstall: true, lastCheckedAt: null });
+	});
+
+	it("patches one field without clearing the other", async () => {
+		freshStore();
+		const checked = "2026-03-14T09:00:00.000Z";
+		await settings.setUpdates({ lastCheckedAt: checked });
+		const updates = await settings.setUpdates({ autoInstall: false });
+		expect(updates).toEqual({ autoInstall: false, lastCheckedAt: checked });
+	});
+
+	it("falls back to the default when the stored value is the wrong type", async () => {
+		freshStore({ updates: { autoInstall: "yes", lastCheckedAt: 17 } });
+		expect(await settings.getUpdates()).toEqual({ autoInstall: true, lastCheckedAt: null });
+	});
+});
+
+describe("the sidebar auto-collapse", () => {
+	it("is on until somebody turns it off", async () => {
+		freshStore();
+		expect(await settings.getSidebarAutoCollapse()).toBe(true);
+	});
+
+	it("keeps the value it was given across a write and a fresh read", async () => {
+		const dir = freshStore();
+		await settings.setSidebarAutoCollapse(false);
+		// Pointing the store at the same folder again drops the cache, so this
+		// read comes from the file rather than from memory.
+		configureSettings(dir);
+		expect(await settings.getSidebarAutoCollapse()).toBe(false);
+	});
+
+	it("falls back to on when the stored value is the wrong type", async () => {
+		freshStore({ sidebarAutoCollapse: "no" });
+		expect(await settings.getSidebarAutoCollapse()).toBe(true);
+	});
+});

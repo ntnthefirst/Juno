@@ -334,9 +334,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 							/>
 						</div>
 						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)] sm:col-span-2">
-							The password is stored in the operating system keychain and never shown again.
-							Working out the servers happens on this machine, so the address is not sent
-							anywhere to do it.
+							The password goes into the operating system keychain and is never shown again.
 						</p>
 					</div>
 				) : step === 1 ? (
@@ -438,9 +436,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 						<div className="border-t border-[var(--line)] pt-4">
 							<h3 className="text-[length:var(--text-base)] font-[var(--weight-medium)]">Sending</h3>
 							<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								Leave the server empty for an account you only read. The same password is
-								used; fill in a username only if the provider wants a different one for
-								sending.
+								Leave the server empty for an account you only read.
 							</p>
 							<div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
 								<Field
@@ -534,8 +530,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 							/>
 						</div>
 						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)] sm:col-span-2">
-							The horizon bounds the first sync of each folder. Raise it later to pull older
-							mail.
+							How far back the first sync goes. Raise it later for older mail.
 						</p>
 					</div>
 				)}

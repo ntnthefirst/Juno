@@ -1,31 +1,91 @@
-import { useEffect, useState } from "react";
-import { MAIL_FRAME_ORIGIN, type MailMessage, type MailMessageBody } from "@shared/types";
+import { useEffect, useRef, useState } from "react";
+import {
+	MAIL_FRAME_ORIGIN,
+	type MailAttachment,
+	type MailMessage,
+	type MailMessageBody,
+	type MailReplyMode,
+} from "@shared/types";
 import { Button } from "../../components/Button";
+import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
-import { displayName, formatBytes, formatFull, formatWhen } from "./format";
+import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
+import { ImportFlow } from "../documents/ImportFlow";
+import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 
 type MessageViewProps = {
 	message: MailMessage;
-	initiallyOpen: boolean;
+	/** Accordion: the thread shows one open message at a time. */
+	open: boolean;
+	onToggle: () => void;
 	onNotice: (message: string) => void;
-	onReply: (messageId: string, all: boolean) => void;
+	onReply: (messageId: string, mode: MailReplyMode) => void;
+	clientLinked: boolean;
+	/** A file action on this message changed it (read, flagged): reload the thread. */
+	onChanged: () => void;
 };
 
-/**
- * One message. The body lives in a frame with an empty sandbox, loaded from
- * its own origin with its own policy: no scripts, no navigation, no network,
- * no remote images unless this message's button is pressed. Links are listed
- * below the frame with their real targets, because a click inside goes nowhere.
- */
-export function MessageView({ message, initiallyOpen, onNotice, onReply }: MessageViewProps) {
-	const [open, setOpen] = useState(initiallyOpen);
+function isPdf(attachment: MailAttachment): boolean {
+	return attachment.mimeType === "application/pdf" || attachment.filename.toLowerCase().endsWith(".pdf");
+}
+
+const TRUSTED_EMAILS_KEY = "juno.mail.trustedEmails";
+const TRUSTED_SENDERS_KEY = "juno.mail.trustedSenders";
+const BLOCKED_SENDERS_KEY = "juno.mail.blockedSenders";
+
+function readTrust(key: string): string[] {
+	try {
+		const value: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+		return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+	} catch {
+		return [];
+	}
+}
+
+function addTrust(key: string, value: string): void {
+	try {
+		const values = new Set(readTrust(key));
+		values.add(value);
+		localStorage.setItem(key, JSON.stringify([...values]));
+	} catch {
+		// Trust still applies for this open message when site data is unavailable.
+	}
+}
+
+function removeTrust(key: string, value: string): void {
+	try {
+		localStorage.setItem(key, JSON.stringify(readTrust(key).filter((item) => item !== value)));
+	} catch {
+		// The current decision still applies until the message is closed.
+	}
+}
+
+export function MessageView({ message, open, onToggle, onNotice, onReply, onChanged, clientLinked }: MessageViewProps) {
+	const senderAddress = message.from?.address.toLowerCase() ?? null;
+	const emailTrusted = readTrust(TRUSTED_EMAILS_KEY).includes(message.id);
+	const senderTrusted = senderAddress !== null && readTrust(TRUSTED_SENDERS_KEY).includes(senderAddress);
+	const senderBlocked = senderAddress !== null && readTrust(BLOCKED_SENDERS_KEY).includes(senderAddress);
+	const [detailsOpen, setDetailsOpen] = useState(false);
+	const [importItems, setImportItems] = useState<ImportItem[] | null>(null);
 	const [body, setBody] = useState<MailMessageBody | null>(null);
 	const [bodyError, setBodyError] = useState<string | null>(null);
-	const [remoteImages, setRemoteImages] = useState(false);
-	const [tall, setTall] = useState(false);
+	const [trustDecision, setTrustDecision] = useState<"unknown" | "trusted" | "blocked">(
+		clientLinked || (!senderBlocked && (emailTrusted || senderTrusted))
+			? "trusted"
+			: senderBlocked
+				? "blocked"
+				: "unknown",
+	);
+	const trusted = clientLinked || trustDecision === "trusted";
+	const [remoteImages, setRemoteImages] = useState(emailTrusted || senderTrusted);
+	const [linksOpen, setLinksOpen] = useState(false);
+	const [measuredFrame, setMeasuredFrame] = useState<{ messageId: string; height: number } | null>(null);
+	const frame = useRef<HTMLIFrameElement>(null);
+	const menu = useContextMenu();
 
 	useEffect(() => {
-		if (!open || !message.bodyFetched) return;
+		if (!open || !message.bodyFetched || (!clientLinked && !trusted)) return;
 		let cancelled = false;
 		window.juno.mail.messages
 			.body(message.id)
@@ -38,7 +98,43 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 		return () => {
 			cancelled = true;
 		};
-	}, [open, message.id, message.bodyFetched]);
+	}, [open, message.id, message.bodyFetched, clientLinked, trusted]);
+
+	useEffect(() => {
+		function receiveHeight(event: MessageEvent<unknown>) {
+			if (event.source !== frame.current?.contentWindow) return;
+			if (!event.data || typeof event.data !== "object") return;
+			const data = event.data as { type?: unknown; height?: unknown };
+			if (data.type !== "juno.mail.height" || typeof data.height !== "number" || !Number.isFinite(data.height))
+				return;
+			setMeasuredFrame({ messageId: message.id, height: Math.max(1, Math.ceil(data.height)) });
+		}
+
+		window.addEventListener("message", receiveHeight);
+		return () => window.removeEventListener("message", receiveHeight);
+	}, [message.id]);
+
+	function trustEmail() {
+		addTrust(TRUSTED_EMAILS_KEY, message.id);
+		setTrustDecision("trusted");
+		setRemoteImages(true);
+	}
+
+	function trustSender() {
+		if (!senderAddress) return;
+		removeTrust(BLOCKED_SENDERS_KEY, senderAddress);
+		addTrust(TRUSTED_SENDERS_KEY, senderAddress);
+		setTrustDecision("trusted");
+		setRemoteImages(true);
+	}
+
+	function blockSender() {
+		if (!senderAddress) return;
+		removeTrust(TRUSTED_SENDERS_KEY, senderAddress);
+		addTrust(BLOCKED_SENDERS_KEY, senderAddress);
+		setTrustDecision("blocked");
+		setRemoteImages(false);
+	}
 
 	async function openLink(href: string) {
 		try {
@@ -65,29 +161,75 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 		}
 	}
 
+	async function markUnread() {
+		try {
+			await window.juno.mail.file.setSeen([message.id], false);
+			onChanged();
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		}
+	}
+
+	async function copyAddress() {
+		if (!message.from) return;
+		try {
+			await navigator.clipboard.writeText(message.from.address);
+			onNotice("Address copied.");
+		} catch {
+			onNotice("Could not copy the address.");
+		}
+	}
+
 	const from = message.from ? displayName(message.from) : "(unknown sender)";
 	const visibleAttachments = message.attachments.filter((a) => !a.isInline);
 	const frameSrc = `${MAIL_FRAME_ORIGIN}/message/${message.id}${remoteImages ? "?images=1" : ""}`;
+	const frameHeight = measuredFrame?.messageId === message.id ? measuredFrame.height : null;
+	const ariaLabel = `Actions for message from ${from}`;
+
+	const contextItems: MenuItem[] = [
+		{ id: "reply", label: "Reply", icon: "reply", onSelect: () => onReply(message.id, "reply") },
+		{ id: "reply-all", label: "Reply all", icon: "reply", onSelect: () => onReply(message.id, "reply_all") },
+		{ id: "forward", label: "Forward", icon: "forward", onSelect: () => onReply(message.id, "forward") },
+		{ id: "mark-unread", label: "Mark unread", icon: "unread", onSelect: () => void markUnread() },
+		{
+			id: "copy-address",
+			label: "Copy sender address",
+			icon: "copy",
+			disabled: !message.from,
+			onSelect: () => void copyAddress(),
+		},
+	];
 
 	return (
-		<article className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
+		<article
+			className={`border-t border-[var(--line)] first:border-t-0 ${open ? "flex flex-1 flex-col" : ""}`}
+			onContextMenu={menu.open}
+		>
 			<button
 				type="button"
-				onClick={() => setOpen((current) => !current)}
+				onClick={onToggle}
 				aria-expanded={open}
-				className="flex w-full items-baseline gap-3 px-4 py-3 text-left hover:bg-[var(--hover)]"
+				className={`flex w-full shrink-0 items-start gap-3 px-8 py-3 text-left ${open ? "bg-[var(--hover)]" : "hover:bg-[var(--hover)]"}`}
 			>
-				<span
-					className={`min-w-0 flex-1 truncate ${message.isSeen ? "" : "font-[var(--weight-semibold)]"}`}
-					title={message.from?.address}
-				>
-					{from}
-				</span>
-				{!open ? (
-					<span className="min-w-0 flex-[2] truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						{message.snippet}
-					</span>
-				) : null}
+				<div className="min-w-0 flex-1">
+					<div className="flex items-baseline gap-2">
+						<span
+							className={`truncate ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
+						>
+							{from}
+						</span>
+						{message.from ? (
+							<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								{message.from.address}
+							</span>
+						) : null}
+					</div>
+					{!open ? (
+						<span className="mt-0.5 block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							{message.snippet}
+						</span>
+					) : null}
+				</div>
 				<span
 					className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
 					title={formatFull(message.internalDate)}
@@ -97,81 +239,69 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 			</button>
 
 			{open ? (
-				<div className="border-t border-[var(--line)]">
-					<dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 px-4 py-3 text-[length:var(--text-sm)]">
-						<dt className="text-[var(--ink-muted)]">From</dt>
-						<dd data-selectable className="truncate">
-							{message.from ? `${from} <${message.from.address}>` : "(unknown sender)"}
-						</dd>
-						{message.to.length > 0 ? (
-							<>
-								<dt className="text-[var(--ink-muted)]">To</dt>
-								<dd data-selectable className="truncate">
-									{message.to.map((a) => a.address).join(", ")}
-								</dd>
-							</>
-						) : null}
-						{message.cc.length > 0 ? (
-							<>
-								<dt className="text-[var(--ink-muted)]">Cc</dt>
-								<dd data-selectable className="truncate">
-									{message.cc.map((a) => a.address).join(", ")}
-								</dd>
-							</>
-						) : null}
-						<dt className="text-[var(--ink-muted)]">Date</dt>
-						<dd className="tabular">{formatFull(message.sentAt ?? message.internalDate)}</dd>
-					</dl>
-
-					{!message.bodyFetched ? (
-						<p className="border-t border-[var(--line)] px-4 py-6 text-[var(--ink-muted)]">
-							{message.bodyError
-								? `This message could not be fetched. ${message.bodyError}`
-								: "The body has not been fetched yet. It arrives with the next sync."}
-						</p>
-					) : bodyError ? (
-						<p data-selectable className="border-t border-[var(--line)] px-4 py-6 text-[var(--risk)]">
-							{bodyError}
-						</p>
-					) : (
-						<>
-							{body && body.remoteImages > 0 && !remoteImages ? (
-								<div className="flex items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-4 py-2 text-[length:var(--text-sm)]">
-									<span className="text-[var(--ink-muted)]">
-										{body.remoteImages} remote {body.remoteImages === 1 ? "image" : "images"} not
-										loaded. Loading them tells the sender you opened this.
-									</span>
-									<Button size="dense" onClick={() => setRemoteImages(true)}>
-										Load images
-									</Button>
-								</div>
+				<div className="flex flex-1 flex-col px-8">
+					<div className="-mx-8 bg-[var(--hover)] px-8">
+						<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="min-w-0 flex-1 truncate">
+								To {participantsLine(message.to, "(nobody)")}
+							</span>
+							<button
+								type="button"
+								onClick={() => setDetailsOpen((current) => !current)}
+								className="shrink-0 hover:text-[var(--ink)] hover:underline"
+							>
+								{detailsOpen ? "Hide" : "Details"}
+							</button>
+							{!clientLinked ? (
+								<button
+									type="button"
+									onClick={trustDecision === "trusted" ? blockSender : trustSender}
+									className="shrink-0 hover:text-[var(--ink)] hover:underline"
+								>
+									{trustDecision === "trusted" ? "Don't trust sender" : "Trust sender"}
+								</button>
 							) : null}
-							<iframe
-								title={`Message from ${from}`}
-								src={frameSrc}
-								sandbox=""
-								referrerPolicy="no-referrer"
-								className="block w-full border-t border-[var(--line)] bg-[var(--surface)]"
-								style={{ height: tall ? 1600 : 520 }}
-							/>
-							<div className="flex items-center justify-between gap-4 border-t border-[var(--line)] px-4 py-2">
-								<div className="flex gap-2">
-									<Button size="dense" onClick={() => onReply(message.id, false)}>
-										Reply
-									</Button>
-									<Button size="dense" onClick={() => onReply(message.id, true)}>
-										Reply all
-									</Button>
-								</div>
-								<Button size="dense" onClick={() => setTall((current) => !current)}>
-									{tall ? "Shorter" : "Taller"}
-								</Button>
-							</div>
-						</>
-					)}
+						</div>
+
+						{detailsOpen ? (
+							<dl className="grid shrink-0 grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 pb-3 text-[length:var(--text-sm)]">
+								<dt className="text-[var(--ink-muted)]">From</dt>
+								<dd
+									data-selectable
+									className="truncate"
+								>
+									{message.from ? `${from} <${message.from.address}>` : "(unknown sender)"}
+								</dd>
+								{message.to.length > 0 ? (
+									<>
+										<dt className="text-[var(--ink-muted)]">To</dt>
+										<dd
+											data-selectable
+											className="truncate"
+										>
+											{message.to.map((a) => a.address).join(", ")}
+										</dd>
+									</>
+								) : null}
+								{message.cc.length > 0 ? (
+									<>
+										<dt className="text-[var(--ink-muted)]">Cc</dt>
+										<dd
+											data-selectable
+											className="truncate"
+										>
+											{message.cc.map((a) => a.address).join(", ")}
+										</dd>
+									</>
+								) : null}
+								<dt className="text-[var(--ink-muted)]">Date</dt>
+								<dd className="tabular">{formatFull(message.sentAt ?? message.internalDate)}</dd>
+							</dl>
+						) : null}
+					</div>
 
 					{visibleAttachments.length > 0 ? (
-						<div className="border-t border-[var(--line)] px-4 py-3">
+						<div className="shrink-0 border-t border-[var(--line)] py-3">
 							<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 								Attachments
 							</h3>
@@ -182,18 +312,42 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 										className="flex items-center gap-3 text-[length:var(--text-dense)]"
 										style={{ height: "var(--row-height)" }}
 									>
-										<span className="min-w-0 flex-1 truncate" title={attachment.mimeType}>
+										<span
+											className="min-w-0 flex-1 truncate"
+											title={attachment.mimeType}
+										>
 											{attachment.filename}
 										</span>
 										<span className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 											{formatBytes(attachment.size)}
 										</span>
-										<Button size="dense" onClick={() => void reveal(attachment.id)}>
+										<Button
+											size="dense"
+											onClick={() => void reveal(attachment.id)}
+										>
 											Show in folder
 										</Button>
-										<Button size="dense" onClick={() => void save(attachment.id)}>
+										<Button
+											size="dense"
+											onClick={() => void save(attachment.id)}
+										>
 											Save as
 										</Button>
+										{isPdf(attachment) ? (
+											<Button
+												size="dense"
+												onClick={() =>
+													setImportItems([
+														{
+															label: attachment.filename,
+															source: { kind: "attachment", attachmentId: attachment.id },
+														},
+													])
+												}
+											>
+												Add to documents
+											</Button>
+										) : null}
 									</li>
 								))}
 							</ul>
@@ -203,30 +357,144 @@ export function MessageView({ message, initiallyOpen, onNotice, onReply }: Messa
 						</div>
 					) : null}
 
-					{body && body.links.length > 0 ? (
-						<div className="border-t border-[var(--line)] px-4 py-3">
-							<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
-								Links in this message
-							</h3>
-							<ul className="mt-2 flex flex-col gap-1">
-								{body.links.slice(0, 40).map((link) => (
-									<li key={link.href} className="flex min-w-0 items-baseline gap-2 text-[length:var(--text-sm)]">
-										<button
-											type="button"
-											onClick={() => void openLink(link.href)}
-											className="shrink-0 text-[var(--accent)] hover:underline"
+					{!message.bodyFetched && (clientLinked || trusted) ? (
+						<p className="shrink-0 border-t border-[var(--line)] py-6 text-[var(--ink-muted)]">
+							{message.bodyError
+								? `This message could not be fetched. ${message.bodyError}`
+								: "The body has not been fetched yet. It arrives with the next sync."}
+						</p>
+					) : bodyError ? (
+						<p
+							data-selectable
+							className="shrink-0 border-t border-[var(--line)] py-6 text-[var(--risk)]"
+						>
+							{bodyError}
+						</p>
+					) : (
+						<div className="-mx-8 flex flex-1 flex-col">
+							{!clientLinked && !trusted ? (
+								<div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-3 text-[var(--warn)]">
+									<span className="mr-auto text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										{trustDecision === "blocked"
+											? "This sender is not trusted. Content stays blocked."
+											: "This email is not trusted. Content and links stay blocked."}
+									</span>
+									<Button
+										size="dense"
+										onClick={trustEmail}
+									>
+										Trust this email
+									</Button>
+									{trustDecision === "unknown" ? (
+										<Button
+											size="dense"
+											onClick={blockSender}
 										>
-											{link.text || "Open"}
-										</button>
-										<span data-selectable className="min-w-0 truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-											{link.href}
-										</span>
-									</li>
-								))}
-							</ul>
+											Don't trust sender
+										</Button>
+									) : null}
+									<Button
+										size="dense"
+										onClick={trustSender}
+										disabled={!senderAddress}
+									>
+										Trust sender
+									</Button>
+								</div>
+							) : (
+								<>
+									{body?.suspicious ? (
+										<div className="flex shrink-0 items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-2 text-[length:var(--text-sm)] text-[var(--warn)]">
+											<span>Weird content was removed before this email was shown.</span>
+										</div>
+									) : null}
+									{body && body.remoteImages > 0 && !remoteImages ? (
+										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-[length:var(--text-sm)]">
+											<span className="text-[var(--ink-muted)]">
+												{body.remoteImages} remote{" "}
+												{body.remoteImages === 1 ? "image" : "images"} not loaded. Loading them
+												tells the sender you opened this.
+											</span>
+											<Button
+												size="dense"
+												onClick={() => setRemoteImages(true)}
+											>
+												Load images
+											</Button>
+										</div>
+									) : null}
+									<iframe
+										ref={frame}
+										title={`Message from ${from}`}
+										src={frameSrc}
+										sandbox="allow-scripts"
+										referrerPolicy="no-referrer"
+										className="block min-h-full w-full shrink-0 overflow-x-auto overflow-y-hidden border-t border-[var(--line)] bg-[var(--surface)]"
+										style={frameHeight === null ? undefined : { height: frameHeight }}
+									/>
+
+									{body && body.links.length > 0 ? (
+										<div className="shrink-0 border-t border-[var(--line)] px-8 py-3">
+											<button
+												type="button"
+												aria-expanded={linksOpen}
+												onClick={() => setLinksOpen((current) => !current)}
+												className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+											>
+												Links ({body.links.length})
+											</button>
+											{linksOpen ? (
+												<ul className="mt-2 flex max-h-[180px] flex-col gap-1 overflow-y-auto">
+													{body.links.slice(0, 40).map((link) => (
+														<li
+															key={link.href}
+															className="flex min-w-0 items-baseline gap-2 text-[length:var(--text-sm)]"
+														>
+															<button
+																type="button"
+																onClick={() => void openLink(link.href)}
+																className="shrink-0 text-[var(--accent)] hover:underline"
+															>
+																{link.text || "Open"}
+															</button>
+															<span
+																data-selectable
+																className="min-w-0 truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]"
+															>
+																{link.href}
+															</span>
+														</li>
+													))}
+												</ul>
+											) : null}
+										</div>
+									) : null}
+								</>
+							)}
 						</div>
-					) : null}
+					)}
 				</div>
+			) : null}
+
+			{menu.at ? (
+				<ContextMenu
+					at={menu.at}
+					items={contextItems}
+					onClose={menu.close}
+					ariaLabel={ariaLabel}
+				/>
+			) : null}
+			{importItems ? (
+				<ImportFlow
+					items={importItems}
+					onDone={(outcome) => {
+						setImportItems(null);
+						const text = [describeOutcome(outcome), ...outcome.failures.map((entry) => entry.message)]
+							.filter(Boolean)
+							.join(" ");
+						if (text) onNotice(text);
+					}}
+				/>
 			) : null}
 		</article>
 	);

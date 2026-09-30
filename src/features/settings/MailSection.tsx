@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MailAccount, MailFolder } from "@shared/types";
+import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
 import { formatWhen } from "../mail/format";
 import { MailAccountForm } from "./MailAccountForm";
+import { RemovedAccounts } from "./RemovedAccounts";
 import { Section, SectionError } from "./Section";
 
 export function MailSection({ onSaved }: { onSaved: (message: string) => void }) {
@@ -13,6 +15,8 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 	const [form, setForm] = useState<{ account: MailAccount | null } | null>(null);
 	const [removing, setRemoving] = useState<MailAccount | null>(null);
 	const [foldersFor, setFoldersFor] = useState<string | null>(null);
+	// Bumped when an account is removed, so the removed list fetches again.
+	const [removedVersion, setRemovedVersion] = useState(0);
 
 	const refresh = useCallback(() => {
 		window.juno.mail.accounts
@@ -44,6 +48,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 			await window.juno.mail.accounts.remove(account.id);
 			onSaved(`${account.label} removed.`);
 			refresh();
+			setRemovedVersion((version) => version + 1);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		}
@@ -79,11 +84,10 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 		<div className="px-6 py-5">
 			<Section
 				title="Mail accounts"
-				description="IMAP accounts Juno reads from. Nothing is ever written back to the server: no flags, no moves, no deletes. Passwords go into the operating system keychain and are never shown again."
+				anchor="mail-accounts"
+				description="Passwords are kept in the operating system keychain."
 				action={
-					<Button size="dense" variant="primary" onClick={() => setForm({ account: null })}>
-						Add account
-					</Button>
+					<AddButton label="Add account" onClick={() => setForm({ account: null })} />
 				}
 			>
 				{accounts === null ? (
@@ -159,6 +163,7 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 					</Dialog>
 				) : null}
 			</Section>
+			<RemovedAccounts refreshKey={removedVersion} onDone={onSaved} />
 		</div>
 	);
 }

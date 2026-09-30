@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { Reminder, ReminderBucket } from "@shared/types";
 import { Button } from "../../components/Button";
+import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
+import { useContextMenu } from "../../lib/use-context-menu";
 import { BUCKET_LABELS, BUCKET_TONES, formatDate } from "./format";
 
 export function BucketBadge({ bucket }: { bucket: ReminderBucket }) {
@@ -28,6 +30,11 @@ type ReminderRowProps = {
 /**
  * A row is its own hairline and its own space, not a card. See brand/BRAND.md
  * section 7.
+ *
+ * One act is a button and the rest are a menu. Five buttons on every row read
+ * as five equally likely things to do, when marking a reminder done is what
+ * happens on nearly all of them and the other four are occasional. The same
+ * four are on the right-click menu, so the mouse has both routes.
  */
 export function ReminderRow({
 	reminder,
@@ -38,6 +45,7 @@ export function ReminderRow({
 	onError,
 }: ReminderRowProps) {
 	const [busy, setBusy] = useState(false);
+	const menu = useContextMenu();
 
 	async function run(work: () => Promise<unknown>) {
 		if (busy) return;
@@ -70,8 +78,67 @@ export function ReminderRow({
 	const meta = [belongsTo, reminder.recurrenceLabel].filter(Boolean).join(" · ");
 	const done = reminder.bucket === "done";
 
+	const items: MenuItem[] = [
+		done
+			? {
+					id: "reopen",
+					label: "Reopen",
+					icon: "reminders",
+					disabled: busy,
+					onSelect: () => void run(() => window.juno.reminders.reopen(reminder.id)),
+				}
+			: {
+					id: "complete",
+					label: "Mark done",
+					icon: "check",
+					disabled: busy,
+					onSelect: () => void run(() => window.juno.reminders.complete(reminder.id)),
+				},
+		...(done
+			? []
+			: [
+					{
+						id: "snooze",
+						label: "Snooze",
+						icon: "today" as const,
+						disabled: busy,
+						onSelect: () => onSnooze(reminder),
+					},
+				]),
+		...(reminder.actionUrl && reminder.actionLabel
+			? [
+					{
+						id: "action",
+						label: reminder.actionLabel,
+						icon: "external" as const,
+						disabled: busy,
+						onSelect: () => void run(() => window.juno.reminders.openAction(reminder.id)),
+					},
+				]
+			: []),
+		{
+			id: "edit",
+			label: "Edit",
+			icon: "edit",
+			disabled: busy,
+			onSelect: () => onEdit(reminder),
+		},
+		{
+			id: "delete",
+			label: "Delete",
+			icon: "remove",
+			danger: true,
+			separatorBefore: true,
+			disabled: busy,
+			onSelect: () => void remove(),
+		},
+	];
+
 	return (
-		<div className="flex items-center gap-3 border-b border-[var(--line)] px-3 py-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]">
+		<div
+			onContextMenu={menu.open}
+			className="flex items-center gap-3 border-b border-[var(--line)] px-3 py-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+		>
 			<BucketBadge bucket={reminder.bucket} />
 
 			<div className="min-w-0 flex-1">
@@ -86,16 +153,6 @@ export function ReminderRow({
 			</span>
 
 			<div className="flex shrink-0 items-center gap-1">
-				{reminder.actionUrl && reminder.actionLabel ? (
-					<Button
-						size="dense"
-						disabled={busy}
-						onClick={() => void run(() => window.juno.reminders.openAction(reminder.id))}
-					>
-						<span className="text-[var(--accent)]">{reminder.actionLabel}</span>
-					</Button>
-				) : null}
-
 				{done ? (
 					<Button
 						size="dense"
@@ -105,27 +162,30 @@ export function ReminderRow({
 						Reopen
 					</Button>
 				) : (
-					<>
-						<Button
-							size="dense"
-							disabled={busy}
-							onClick={() => void run(() => window.juno.reminders.complete(reminder.id))}
-						>
-							Done
-						</Button>
-						<Button size="dense" disabled={busy} onClick={() => onSnooze(reminder)}>
-							Snooze
-						</Button>
-					</>
+					<Button
+						size="dense"
+						disabled={busy}
+						onClick={() => void run(() => window.juno.reminders.complete(reminder.id))}
+					>
+						Done
+					</Button>
 				)}
 
-				<Button size="dense" disabled={busy} onClick={() => onEdit(reminder)}>
-					Edit
-				</Button>
-				<Button size="dense" variant="danger" disabled={busy} onClick={() => void remove()}>
-					Delete
-				</Button>
+				<MenuButton
+					items={items}
+					ariaLabel={`More for ${reminder.title}`}
+					disabled={busy}
+				/>
 			</div>
+
+			{menu.at ? (
+				<ContextMenu
+					at={menu.at}
+					items={items}
+					onClose={menu.close}
+					ariaLabel={reminder.title}
+				/>
+			) : null}
 		</div>
 	);
 }

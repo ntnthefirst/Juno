@@ -14,6 +14,8 @@ import { FormPage, type FormStep } from "../../components/FormPage";
 import { Select } from "../../components/Select";
 import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
+import { framed } from "../../lib/framed-preview";
+import { useCanvasFonts } from "./mail/canvas/use-canvas-fonts";
 
 type UseMailTemplateScreenProps = {
 	template: MailTemplate;
@@ -94,10 +96,16 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 	];
 
 	const [step, setStep] = useState(0);
+	// The message is shown in the fonts it links, the same as in the editor.
+	const fonts = useCanvasFonts(template.layout?.fonts ?? []);
 	const currentKey = stepDefs[Math.min(step, stepDefs.length - 1)]!.key;
 	const isLastStep = step >= stepDefs.length - 1;
 
-	const [values, setValues] = useState<Record<string, string>>({});
+	// Starts from what the template offers, because the field shows a starting
+	// value as if it were typed and the render has to be given the same one.
+	const [values, setValues] = useState<Record<string, string>>(() =>
+		Object.fromEntries(template.inputs.filter((input) => input.defaultValue).map((input) => [input.key, input.defaultValue ?? ""])),
+	);
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	// Keyed to the client it was fetched for: a client switch does not need an
 	// effect to clear the stale list, the stale list just stops matching.
@@ -314,7 +322,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 							<div className="mt-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
 								<iframe
 									title="Message preview"
-									srcDoc={rendered.bodyHtml}
+									srcDoc={framed(rendered.bodyHtml, fonts.css)}
 									sandbox=""
 									referrerPolicy="no-referrer"
 									className="block h-[420px] w-full bg-[var(--surface)]"

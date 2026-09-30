@@ -16,7 +16,7 @@ const FIELDS: { key: keyof Omit<OwnerProfile, "emails" | "phones">; label: strin
 	{
 		key: "establishmentNumber",
 		label: "Establishment number",
-		help: "The vestigingsnummer of your registered office, if you have one. Not the same as the VAT number.",
+		help: "Your vestigingsnummer. Not the VAT number.",
 	},
 	{ key: "iban", label: "IBAN" },
 	{ key: "addressLine1", label: "Address" },
@@ -103,7 +103,8 @@ export function OwnerSection({ onSaved }: OwnerSectionProps) {
 		<>
 			<Section
 				title="Your details"
-				description="These fill the contracts and emails Juno generates later, so what you put here ends up in front of clients."
+				anchor="owner-details"
+				description="Printed on the contracts and emails you send clients."
 				action={
 					<Button size="dense" variant="primary" disabled={!profile || busy} onClick={() => void save()}>
 						Save
@@ -130,7 +131,8 @@ export function OwnerSection({ onSaved }: OwnerSectionProps) {
 
 			<Section
 				title="Email addresses"
-				description="Several is normal. The primary one is what a generated document prints, and an address nobody reads is still worth recording."
+				anchor="owner-emails"
+				description="Documents print the primary one."
 			>
 				{profile === null ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
@@ -167,7 +169,8 @@ export function OwnerSection({ onSaved }: OwnerSectionProps) {
 
 			<Section
 				title="Phone numbers"
-				description="Several is normal. The primary one is what a generated document prints, and a number you don't always pick up is still worth recording."
+				anchor="owner-phones"
+				description="Documents print the primary one."
 			>
 				{profile === null ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>

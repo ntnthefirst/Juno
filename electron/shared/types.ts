@@ -1658,6 +1658,8 @@ export interface SignDocumentInput {
 	signerRole?: string | null;
 	/** Leave out to sign without an image, which is still timestamped and hashed. */
 	useSignatureImage?: boolean;
+	/** False leaves the name and the date off the stamp. Needs the image. Defaults to true. */
+	showDetails?: boolean;
 	/** Left out, the stamp goes bottom left on the last page. */
 	placement?: StampPlacement;
 	/**

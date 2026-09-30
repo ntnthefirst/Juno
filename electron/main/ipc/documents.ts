@@ -3,7 +3,12 @@
  * everything that touches a PDF lives in ../services/document-actions.ts.
  */
 import { ipcMain } from "electron";
-import type { GenerateDocumentInput, ImportDocumentInput, SignDocumentInput } from "../../shared/types";
+import type {
+	GenerateDocumentInput,
+	ImportDocumentInput,
+	ImportPdfBytesInput,
+	SignDocumentInput,
+} from "../../shared/types";
 import * as actions from "../services/document-actions";
 import * as documents from "../services/documents";
 
@@ -19,6 +24,11 @@ export function registerDocumentsIpc(): void {
 
 	ipcMain.handle("documents.import", (_event, input: ImportDocumentInput) => documents.importPdf(input));
 	ipcMain.handle("documents.chooseImport", (_event, clientId: string) => actions.chooseImportPdf(clientId));
+
+	ipcMain.handle("documents.importBytes", (_event, input: ImportPdfBytesInput) =>
+		documents.importPdfBytes(input),
+	);
+	ipcMain.handle("documents.readPdf", (_event, id: string) => actions.readPdf(id));
 
 	ipcMain.handle("documents.setStatus", (_event, id: string, statusId: string | null) =>
 		documents.setStatus(id, statusId),

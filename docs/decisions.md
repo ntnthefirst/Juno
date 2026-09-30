@@ -92,7 +92,9 @@ as a separate phase, because they are separate risk.
 **Signing scope:** a signature image plus timestamp plus audit trail. That is
 appropriate for low-stakes and internal documents. It is *not* a qualified
 electronic signature under eIDAS. Do not claim in the UI or the docs that it is.
-High-stakes contracts keep going through a provider.
+High-stakes contracts keep going through a provider. Decision 38 adds an
+optional cryptographic signature on top of the stamp and keeps that sentence
+true.
 
 ## 9. No invoicing, no payments, ever
 
@@ -1005,3 +1007,47 @@ shell turns out to be something people want back round a canvas, in which case
 it becomes a section the canvas can start with rather than a frame it cannot
 remove.
 
+## 38. A stamp is placed on the page, and a digital signature is the person's own certificate
+
+Signing opens the PDF itself. The stamp is a picture, a name and a time, and it
+is dragged into place on the page it belongs on, at the size wanted. The window
+sends fractions of the page and the main process turns them into coordinates
+and writes the file, so the position the person sees is the one that is drawn.
+The proportions are one file (`electron/shared/stamp.ts`) used by both sides.
+
+**A digital signature is optional, and it is made with a certificate the person
+already has.** The file is a PKCS#12 (.p12 or .pfx) from a certificate
+authority. It goes into the credential store as it came, and the passphrase is
+never stored: it is typed at every signature, so a signature is an act by
+whoever is at the keyboard and not something an unlocked window can do alone.
+The signature is PAdES-style, a detached CMS signature with SHA-256 over every
+byte of the final file, written with `@signpdf` and `node-forge`, so a PDF
+reader shows who signed and whether the file changed. A test verifies the
+signature by hand and checks that changing one byte breaks it.
+
+**It is not a qualified electronic signature, and no text says it is.** The
+audit page, the sign page and Settings each say so. A key held as a software
+file is at most an advanced signature. A qualified one needs the key on a
+qualified signature creation device, which is what a provider sells.
+
+**Why not itsme or eID.** itsme signs through an agreement with itsme and a
+registered client, and qualified signing through it goes via a trust service
+provider. That is credentials and a contract per business, and it cannot be
+built or tested from this repository. The eID card holds a key that never
+leaves the card, so using it needs the card reader's PKCS#11 driver and a
+native module (decision 18 is why that is not free). Neither is ruled out; the
+signing step takes a certificate and a passphrase today and that is the seam
+they would replace.
+
+Two things follow from where this sits:
+
+- **Nothing about it is an agent's.** No tool signs, and no tool touches the
+  certificate. The stamp is placed in the window and the passphrase is typed
+  in the window.
+- **A specimen still cannot be signed**, digitally or otherwise, in the
+  service.
+
+Revisit if: a provider agreement exists (itsme or a signing service), in which
+case it is a second way to obtain the signature, chosen next to the certificate
+and held to the same rules; or eID signing is wanted, which is a native module
+and its own decision.

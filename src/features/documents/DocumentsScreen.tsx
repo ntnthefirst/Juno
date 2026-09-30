@@ -13,7 +13,9 @@ import { messageOf } from "../../lib/errors";
 import { activeDocumentFilterCount, NO_DOCUMENT_FILTERS, type DocumentFilters } from "./document-filters";
 import { DocumentDetail, SpecimenMark } from "./DocumentDetail";
 import { GenerateDialog } from "./GenerateDialog";
+import { onDocumentsChanged } from "../../lib/pdf-drop";
 import { ImportDialog } from "./ImportDialog";
+import { SignPage } from "./SignPage";
 
 /** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
 function formatDate(date: string | null): string {
@@ -54,6 +56,7 @@ export function DocumentsScreen() {
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [generating, setGenerating] = useState(false);
 	const [importing, setImporting] = useState(false);
+	const [signingRecord, setSigningRecord] = useState<DocumentRecord | null>(null);
 	const [deleted, setDeleted] = useState<DocumentRecord[] | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
@@ -87,6 +90,9 @@ export function DocumentsScreen() {
 			.then((rows) => setLoad({ status: "ready", rows }))
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, [fetchRows]);
+
+	// A drop elsewhere in the window can import into this list.
+	useEffect(() => onDocumentsChanged(refreshList), [refreshList]);
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 	const dismissNotice = useCallback(() => setNotice(null), []);
@@ -231,6 +237,20 @@ export function DocumentsScreen() {
 		return <GenerateDialog onClose={() => setGenerating(false)} onGenerated={generated} />;
 	}
 
+	if (signingRecord) {
+		return (
+			<SignPage
+				record={signingRecord}
+				onClose={() => setSigningRecord(null)}
+				onSigned={() => {
+					setSigningRecord(null);
+					setDetailVersion((version) => version + 1);
+					refreshList();
+				}}
+			/>
+		);
+	}
+
 	return (
 		<div className="flex h-full flex-col p-8">
 			{selectedId !== null ? (
@@ -240,6 +260,7 @@ export function DocumentsScreen() {
 						documentId={selectedId}
 						onDeleted={(record) => removed([record])}
 						onChanged={refreshList}
+						onSign={setSigningRecord}
 						onTitleChange={setSelectedTitle}
 					/>
 				</div>

@@ -7,6 +7,7 @@ import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
 import { FormPage } from "../../components/FormPage";
 import { SplitButton } from "../../components/SplitButton";
+import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { openPdf, type PDFDocumentProxy } from "../../lib/pdf";
 import { PdfPageView } from "./PdfPageView";
@@ -54,6 +55,7 @@ function measureImage(url: string): Promise<{ url: string; aspect: number } | nu
 export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 	const [loaded, setLoaded] = useState<Loaded | null>(null);
 	const [signerName, setSignerName] = useState("");
+	const [showDetails, setShowDetails] = useState(true);
 	const [placement, setPlacement] = useState<StampPlacement | null>(null);
 	const [asking, setAsking] = useState<"passphrase" | "certificate" | null>(null);
 	const [passphrase, setPassphrase] = useState("");
@@ -121,6 +123,17 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 	}, [loaded]);
 
 	const image = loaded?.image ?? null;
+	// Without an image the name and the date are all the stamp has, so they stay.
+	const details = showDetails || image === null;
+
+	/** The stamp changes height, so it is kept on the page when it grows. */
+	function changeDetails(next: boolean) {
+		setShowDetails(next);
+		if (!loaded || !placement) return;
+		setPlacement(
+			clampPlacement(placement, image ? image.aspect : null, loaded.aspects[placement.page - 1]!, next),
+		);
+	}
 
 	// The stamp starts on the last page, which is usually below the fold.
 	const stampPage = placement?.page ?? null;
@@ -136,13 +149,14 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 	function moveTo(page: number, fraction: { x: number; y: number }) {
 		if (!loaded || !placement) return;
 		const aspect = loaded.aspects[page - 1]!;
-		const height = stampMetrics(placement.width, image ? image.aspect : null).height / aspect;
+		const height = stampMetrics(placement.width, image ? image.aspect : null, details).height / aspect;
 		// Centred on the click, then kept on the page.
 		setPlacement(
 			clampPlacement(
 				{ page, width: placement.width, x: fraction.x - placement.width / 2, y: fraction.y - height / 2 },
 				image ? image.aspect : null,
 				aspect,
+				details,
 			),
 		);
 	}
@@ -162,6 +176,7 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 				signerName: name,
 				signerRole: null,
 				useSignatureImage: image !== null,
+				showDetails: details,
 				placement,
 				digital: digital ? { passphrase } : null,
 			});
@@ -231,6 +246,19 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 			<p className="mb-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 				Drag the stamp where it goes and its corner to size it. Double-click the stamp to change the name.
 			</p>
+			<div className="mb-3 max-w-md">
+				<Toggle
+					checked={details}
+					disabled={image === null}
+					onChange={changeDetails}
+					label="Name and time under the stamp"
+					description={
+						image === null
+							? "Needed while there is no signature image to stamp."
+							: "Turn off to stamp the signature image alone. They stay in the certificate."
+					}
+				/>
+			</div>
 			<div ref={column} className="flex flex-col items-center gap-4 rounded-[var(--radius-lg)] bg-[var(--sunken)] p-4">
 				{!loaded ? (
 					<p className="py-8 text-[var(--ink-muted)]">{error ? "" : "Opening the PDF."}</p>
@@ -254,6 +282,7 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 											image={image}
 											name={signerName}
 											dateText={stampDate(openedAt)}
+											showDetails={details}
 											onChange={setPlacement}
 											onNameChange={setSignerName}
 										/>

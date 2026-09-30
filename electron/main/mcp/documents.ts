@@ -361,6 +361,22 @@ export const documentTools: ToolDescriptor[] = [
 		handler: async (args) => timeline.timeline(String(args.document_id)),
 	},
 	{
+		name: "documents.remove_version",
+		title: "Delete one version of a document",
+		description:
+			"Soft deletes one version. The person is asked in a native dialog and nothing happens until they " +
+			"agree; returns deleted false when they decline. Refused for the only version of a document.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { version_id: { type: "string", description: "Version id, from documents.list_versions." } },
+			required: ["version_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => ({ deleted: await actions.deleteVersion(String(args.version_id)) }),
+	},
+	{
 		name: "documents.remove",
 		title: "Delete a document",
 		description: "Soft delete. The record can be restored.",

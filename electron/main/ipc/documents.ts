@@ -44,6 +44,7 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.confirmVersionUse", (_event, versionId: string, use: VersionUse) =>
 		actions.confirmVersionUse(versionId, use),
 	);
+	ipcMain.handle("documents.deleteVersion", (_event, versionId: string) => actions.deleteVersion(versionId));
 	ipcMain.handle("documents.timeline", (_event, documentId: string) => timeline.timeline(documentId));
 
 	ipcMain.handle("documents.setStatus", (_event, id: string, statusId: string | null) =>

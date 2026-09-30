@@ -348,6 +348,7 @@ const api: JunoApi = {
 		readVersion: (versionId) => call("documents.readVersion", versionId),
 		downloadVersion: (versionId) => call("documents.downloadVersion", versionId),
 		confirmVersionUse: (versionId, use) => call("documents.confirmVersionUse", versionId, use),
+		deleteVersion: (versionId) => call("documents.deleteVersion", versionId),
 		timeline: (documentId) => call("documents.timeline", documentId),
 		setStatus: (id, statusId) => call("documents.setStatus", id, statusId),
 		remove: (id) => call("documents.remove", id),

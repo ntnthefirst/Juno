@@ -234,6 +234,27 @@ describe("document versions", () => {
 		expect(list.map((entry) => entry.fileName)).toEqual(["v3.pdf", "v2.pdf", "Contract.pdf"]);
 	});
 
+	it("deletes a version, repoints the document and keeps the last one", async () => {
+		const { db, record, original } = await withDocument();
+		const signed = await textPdf([...CONTRACT, "Getekend door de klant"]);
+		const second = await addVersion(
+			{
+				documentId: record.id,
+				source: { kind: "bytes", fileName: "getekend.pdf", data: signed, fileDate: "2026-03-05T10:00:00.000Z" },
+			},
+			db,
+		);
+
+		versions.remove(second.id, db);
+
+		const remaining = versions.list(record.id, db);
+		expect(remaining).toHaveLength(1);
+		expect(remaining[0]).toMatchObject({ number: 1, isLatest: true });
+		const reloaded = await documents.get(record.id, db);
+		expect(readFileSync(reloaded!.pdfPath!)).toEqual(Buffer.from(original));
+		expect(() => versions.remove(remaining[0]!.id, db)).toThrow(/only version/);
+	});
+
 	it("refuses the same file twice", async () => {
 		const { db, record, original } = await withDocument();
 		await expect(

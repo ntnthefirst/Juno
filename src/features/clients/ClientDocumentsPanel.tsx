@@ -22,6 +22,8 @@ type ClientDocumentsPanelProps = {
 	clientName: string;
 	/** Starting a document from a template is a page, which the screen owns. */
 	onGenerate: () => void;
+	/** Opening one is the same viewer the Documents screen shows, which the screen owns too. */
+	onOpen: (id: string, title: string) => void;
 	/** The client's own counts and timeline are stale once a document is added. */
 	onChanged: () => void;
 };
@@ -43,7 +45,13 @@ function formatDate(date: string | null): string {
  * template or an import, and files dropped on the panel are imported for this
  * client without being asked which one.
  */
-export function ClientDocumentsPanel({ clientId, clientName, onGenerate, onChanged }: ClientDocumentsPanelProps) {
+export function ClientDocumentsPanel({
+	clientId,
+	clientName,
+	onGenerate,
+	onOpen,
+	onChanged,
+}: ClientDocumentsPanelProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [items, setItems] = useState<ImportItem[] | null>(null);
 	const [expanded, setExpanded] = useState<string[]>([]);
@@ -165,11 +173,7 @@ export function ClientDocumentsPanel({ clientId, clientName, onGenerate, onChang
 								<Button
 									size="dense"
 									disabled={record.pdfPath === null}
-									onClick={() =>
-										void window.juno.documents.openPdf(record.id).catch((cause: unknown) => {
-											setProblems([messageOf(cause)]);
-										})
-									}
+									onClick={() => onOpen(record.id, record.title)}
 								>
 									Open
 								</Button>

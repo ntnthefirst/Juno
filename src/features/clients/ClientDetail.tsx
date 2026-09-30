@@ -192,6 +192,7 @@ type ClientDetailProps = {
 	onEditNote: (note: ClientNote | null, initialKind?: ClientNoteKind) => void;
 	/** A document from a template is a page of its own, so the screen owns it. */
 	onGenerateDocument: () => void;
+	onOpenDocument: (id: string, title: string) => void;
 	/** The tab to open on, for coming back from a page that started from one. */
 	initialTab?: TabId;
 	/** Reported so the screen can hand the same tab back after a remount. */
@@ -209,6 +210,7 @@ export function ClientDetail({
 	onEditAddress,
 	onEditNote,
 	onGenerateDocument,
+	onOpenDocument,
 	initialTab = "overview",
 	onTabChange,
 }: ClientDetailProps) {
@@ -627,6 +629,7 @@ export function ClientDetail({
 						clientId={clientId}
 						clientName={client.name}
 						onGenerate={onGenerateDocument}
+						onOpen={onOpenDocument}
 						onChanged={refresh}
 					/>
 				) : (

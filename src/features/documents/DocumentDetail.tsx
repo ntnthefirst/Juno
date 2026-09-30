@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type {
 	DocumentRecord,
-	DocumentSignature,
 	DocumentTemplate,
 	ReferenceItem,
 } from "@shared/types";
@@ -9,27 +8,16 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { announceDocumentsChanged } from "../../lib/pdf-drop";
 import { ComposePage } from "../mail/ComposePage";
 import { DocumentPreview } from "./DocumentPreview";
-import { SignDialog } from "./SignDialog";
+import { VersionList } from "./VersionList";
 
 /** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
 function formatDate(date: string | null): string {
 	if (!date) return "";
 	const parts = date.split("-");
 	return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
-}
-
-function formatWhen(iso: string): string {
-	return new Intl.DateTimeFormat("nl-BE", {
-		dateStyle: "medium",
-		timeStyle: "short",
-	}).format(new Date(iso));
-}
-
-/** Enough of the hash to compare two by eye, without a line of forty hex digits. */
-function shortHash(hash: string): string {
-	return hash.slice(0, 12);
 }
 
 export function SpecimenMark() {
@@ -52,7 +40,6 @@ type Detail = {
 	record: DocumentRecord;
 	statuses: ReferenceItem[];
 	template: DocumentTemplate | null;
-	signatures: DocumentSignature[];
 };
 
 type Load =
@@ -69,6 +56,8 @@ type DocumentDetailProps = {
 	documentId: string;
 	onDeleted: (record: DocumentRecord) => void;
 	onChanged: () => void;
+	/** Signing is a page that takes the screen, so the screen owns it. */
+	onSign: (record: DocumentRecord) => void;
 	/** The screen shows this in the title bar trail. Called with the loaded
 	 * record's own title, so a rename elsewhere still reaches the trail rather
 	 * than leaving it stuck on whatever label the list row had. */
@@ -79,22 +68,21 @@ export function DocumentDetail({
 	documentId,
 	onDeleted,
 	onChanged,
+	onSign,
 	onTitleChange,
 }: DocumentDetailProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [action, setAction] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [previewing, setPreviewing] = useState(false);
-	const [signing, setSigning] = useState(false);
 	const [sending, setSending] = useState(false);
 	const [sent, setSent] = useState<string | null>(null);
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 
 	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
-		const [record, statusSet, signatures] = await Promise.all([
+		const [record, statusSet] = await Promise.all([
 			window.juno.documents.get(documentId),
 			window.juno.reference.getSet("document_status"),
-			window.juno.documents.signatures(documentId),
 		]);
 		if (!record) return null;
 		const template = record.templateId
@@ -104,7 +92,6 @@ export function DocumentDetail({
 			record,
 			statuses: statusSet ? statusSet.items.filter((item) => item.hiddenAt === null) : [],
 			template,
-			signatures,
 		};
 	}, [documentId]);
 
@@ -172,6 +159,27 @@ export function DocumentDetail({
 		}
 	}
 
+	async function addVersion() {
+		setAction(null);
+		try {
+			const picked = await window.juno.documents.pickPdfs();
+			for (const file of picked) {
+				await window.juno.documents.addVersion({
+					documentId,
+					source: { kind: "bytes", fileName: file.fileName, data: file.data, fileDate: file.fileDate, via: "picker" },
+				});
+			}
+			if (picked.length > 0) {
+				announceDocumentsChanged();
+				refresh();
+				onChanged();
+			}
+		} catch (cause: unknown) {
+			setAction(messageOf(cause));
+			refresh();
+		}
+	}
+
 	async function remove() {
 		setConfirmingDelete(false);
 		try {
@@ -201,7 +209,7 @@ export function DocumentDetail({
 		);
 	}
 
-	const { record, statuses, template, signatures } = load.detail;
+	const { record, statuses, template } = load.detail;
 	const hasPdf = record.pdfPath !== null;
 	const version = record.templateVersion ?? template?.version ?? null;
 	// An imported PDF has no body and no template behind it, so nothing here may
@@ -252,7 +260,7 @@ export function DocumentDetail({
 				>
 					Show in folder
 				</Button>
-				<Button onClick={() => setSigning(true)}>Sign</Button>
+				<Button onClick={() => onSign(record)}>Sign</Button>
 				<Button onClick={() => setSending(true)}>Send by email</Button>
 				<Button variant="danger" onClick={() => setConfirmingDelete(true)}>
 					Delete
@@ -296,7 +304,7 @@ export function DocumentDetail({
 							<Fact label="Template">
 								{template ? template.name : "The template has since been removed."}
 							</Fact>
-							<Fact label="Version">
+							<Fact label="Template version">
 								<span className="tabular">{version === null ? "Unknown" : version}</span>
 							</Fact>
 						</>
@@ -305,45 +313,23 @@ export function DocumentDetail({
 			</section>
 
 			<section className="mt-10">
-				<h3 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
-					Signatures
-				</h3>
-				{signatures.length === 0 ? (
-					<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-						Not signed yet.
-					</p>
-				) : (
-					<ul className="mt-2 max-w-[620px]">
-						{signatures.map((signature) => (
-							<li
-								key={signature.id}
-								className="border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
-							>
-								<div className="flex items-baseline justify-between gap-4">
-									<span data-selectable className="truncate font-[var(--weight-medium)]">
-										{signature.signerName}
-										{signature.signerRole ? (
-											<span className="font-[var(--weight-normal)] text-[var(--ink-muted)]">
-												{"  ·  "}
-												{signature.signerRole}
-											</span>
-										) : null}
-									</span>
-									<span className="tabular shrink-0 text-[var(--ink-muted)]">
-										{formatWhen(signature.signedAt)}
-									</span>
-								</div>
-								<p
-									data-selectable
-									className="mt-0.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
-									style={{ fontFamily: "var(--font-mono)" }}
-								>
-									{shortHash(signature.documentHash)}
-								</p>
-							</li>
-						))}
-					</ul>
-				)}
+				<div className="flex items-center justify-between gap-4 border-b border-[var(--line)] pb-2">
+					<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+						Versions
+						<span className="tabular ml-2 text-[length:var(--text-base)] font-[var(--weight-normal)] text-[var(--ink-muted)]">
+							{record.versionCount}
+						</span>
+					</h3>
+					<Button size="dense" onClick={() => void addVersion()}>
+						Add a version
+					</Button>
+				</div>
+				<p className="mt-2 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					Opening, sending and signing use the latest. An imported file sits where its own date puts it.
+				</p>
+				<div className="mt-2">
+					<VersionList documentId={record.id} />
+				</div>
 			</section>
 
 			{previewing ? (
@@ -352,18 +338,6 @@ export function DocumentDetail({
 					title={record.title}
 					isSpecimen={record.isSpecimen}
 					onClose={() => setPreviewing(false)}
-				/>
-			) : null}
-
-			{signing ? (
-				<SignDialog
-					record={record}
-					onClose={() => setSigning(false)}
-					onSigned={() => {
-						setSigning(false);
-						refresh();
-						onChanged();
-					}}
 				/>
 			) : null}
 

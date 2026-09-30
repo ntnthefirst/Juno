@@ -19,7 +19,8 @@ import { messageOf } from "../../lib/errors";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { ClientAddressPanel } from "./ClientAddressPanel";
 import { StatusBadge } from "../../components/StatusBadge";
-import { ClientDetail } from "./ClientDetail";
+import { ClientDetail, type TabId } from "./ClientDetail";
+import { GenerateDialog } from "../documents/GenerateDialog";
 import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
 import { ClientNotePanel } from "./ClientNotePanel";
@@ -49,6 +50,10 @@ export function ClientsScreen() {
 	// that is too narrow to hold one.
 	const [contactForm, setContactForm] = useState<{ contact: Contact | null } | null>(null);
 	const [projectForm, setProjectForm] = useState<{ project: Project | null } | null>(null);
+	// A document from a template is a page too. Coming back from it lands on the
+	// Documents tab, where it was started from.
+	const [documentForm, setDocumentForm] = useState(false);
+	const [detailTab, setDetailTab] = useState<TabId>("overview");
 	// Unlike contacts and projects, these are small enough to edit in a side
 	// panel next to the detail pane rather than taking over the screen.
 	const [emailPanel, setEmailPanel] = useState<{ email: ClientEmail | null } | null>(null);
@@ -96,11 +101,13 @@ export function ClientsScreen() {
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 
 	function selectRow(row: ClientSummary) {
+		setDetailTab("overview");
 		setSelectedId(row.id);
 		setSelectedName(row.name);
 	}
 
 	function backToList() {
+		setDetailTab("overview");
 		setSelectedId(null);
 		setSelectedName(null);
 	}
@@ -187,6 +194,12 @@ export function ClientsScreen() {
 			{ label: selectedName ?? "Client", onSelect: () => setProjectForm(null) },
 			{ label: projectForm.project ? "Edit project" : "New project" },
 		];
+	} else if (documentForm && selectedId) {
+		trail = [
+			clientCrumb,
+			{ label: selectedName ?? "Client", onSelect: () => setDocumentForm(false) },
+			{ label: "New document" },
+		];
 	} else if (selectedId !== null) {
 		trail = [clientCrumb, { label: selectedName ?? "Client" }];
 	}
@@ -201,14 +214,14 @@ export function ClientsScreen() {
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			if (selectedId === null) return;
-			if (form || contactForm || projectForm) return;
+			if (form || contactForm || projectForm || documentForm) return;
 			if (emailPanel || phonePanel || addressPanel || notePanel) return;
 			if (document.querySelector("[role='dialog']")) return;
 			backToList();
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, form, contactForm, projectForm, emailPanel, phonePanel, addressPanel, notePanel]);
+	}, [selectedId, form, contactForm, projectForm, documentForm, emailPanel, phonePanel, addressPanel, notePanel]);
 
 	// The form takes the screen rather than covering it. Nothing in the list
 	// behind it is worth reading while a client is being filled in.
@@ -245,6 +258,21 @@ export function ClientsScreen() {
 		);
 	}
 
+	if (documentForm && selectedId) {
+		return (
+			<GenerateDialog
+				lockedClientId={selectedId}
+				backLabel="Client"
+				onClose={() => setDocumentForm(false)}
+				onGenerated={() => {
+					setDocumentForm(false);
+					setDetailTab("documents");
+					bumpDetail();
+				}}
+			/>
+		);
+	}
+
 	// A client replaces the list rather than shrinking it into a column: it gets
 	// the whole working area, and the title bar trail is what says where you are
 	// and how to get back.
@@ -263,6 +291,9 @@ export function ClientsScreen() {
 							onEditEmail={(email) => setEmailPanel({ email })}
 							onEditPhone={(phone) => setPhonePanel({ phone })}
 							onEditAddress={(address) => setAddressPanel({ address })}
+							onGenerateDocument={() => setDocumentForm(true)}
+							initialTab={detailTab}
+							onTabChange={setDetailTab}
 							onEditNote={(note, initialKind) => setNotePanel({ clientId: selectedId, note, initialKind })}
 						/>
 					</div>

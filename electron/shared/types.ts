@@ -1476,6 +1476,10 @@ export interface DocumentRecord extends Standard {
 	 * re-generates has to check this before it tries.
 	 */
 	sourceKind: DocumentSourceKind;
+	/** How many files this document has been. Always at least one once it has a PDF. */
+	versionCount: number;
+	/** The newest version, which is the one `pdfPath` points at. Null before the first PDF. */
+	latestVersion: { id: string; kind: DocumentVersionKind; fileDate: Iso } | null;
 }
 
 export type DocumentSourceKind = "generated" | "imported";
@@ -1487,6 +1491,92 @@ export interface ImportDocumentInput {
 	title?: string;
 	projectId?: string | null;
 	issuedOn?: IsoDate;
+}
+
+/** What a version is. Where it came from is `DocumentVersionSource`. */
+export type DocumentVersionKind = "generated" | "imported" | "stamped" | "signed";
+export type DocumentVersionSource = "generate" | "picker" | "drop" | "mail" | "sign" | "agent";
+
+/** One file a document has been. Newest first wherever a list of them is returned. */
+export interface DocumentVersion extends Standard {
+	documentId: string;
+	kind: DocumentVersionKind;
+	source: DocumentVersionSource;
+	fileName: string | null;
+	/** Orders the versions: the file's own date for an import, the moment it was made otherwise. */
+	fileDate: Iso;
+	fileHash: string | null;
+	signatureId: string | null;
+	mailAttachmentId: string | null;
+	/** 1 is the oldest. Counted, not stored, so a file slotted in between renumbers the rest. */
+	number: number;
+	isLatest: boolean;
+	/** Filled for a stamped or signed version. */
+	signerName: string | null;
+	digital: DigitalSignatureInfo | null;
+}
+
+/**
+ * A PDF the window hands over: bytes it read from a drop or a picker, or a mail
+ * attachment named by id. Never a path. See .claude/rules/security.md section 2.
+ */
+export type ImportSource =
+	| {
+			kind: "bytes";
+			/** Only ever a title. It never becomes a path. */
+			fileName: string;
+			data: Uint8Array;
+			/** The file's own last-modified time, UTC ISO-8601. Orders the version. */
+			fileDate?: Iso;
+			/** A drop or a picker. Defaults to a drop. */
+			via?: "drop" | "picker";
+	  }
+	| { kind: "attachment"; attachmentId: string };
+
+/** A file read by the main process's picker, ready to be imported. */
+export interface PickedPdf {
+	fileName: string;
+	data: Uint8Array;
+	fileDate: Iso;
+}
+
+/** A document the incoming file looks like. */
+export interface ImportMatch {
+	documentId: string;
+	title: string;
+	clientId: string;
+	clientName: string;
+	/** 0 to 1, how much of the text is the same. */
+	score: number;
+	/** The same bytes are already one of this document's versions. */
+	identical: boolean;
+	/** Why it is offered: the same text, or only the same name. */
+	reason: "text" | "name";
+}
+
+export interface ImportAnalysis {
+	fileName: string;
+	/** What the title would be as a document of its own. */
+	defaultTitle: string;
+	/** The client the file probably belongs to: the one asked for, the mail's, or the best match's. */
+	suggestedClientId: string | null;
+	/** Best first. Empty when nothing looks like it. */
+	matches: ImportMatch[];
+	/** The file's date, which decides where it would sit among the versions. */
+	fileDate: Iso;
+}
+
+export interface ImportFileInput {
+	source: ImportSource;
+	clientId: string;
+	title?: string;
+	projectId?: string | null;
+	issuedOn?: IsoDate;
+}
+
+export interface AddVersionInput {
+	documentId: string;
+	source: ImportSource;
 }
 
 export interface GenerateDocumentInput {
@@ -1512,6 +1602,39 @@ export interface GenerateDocumentResult {
 	pdfError: string | null;
 }
 
+/**
+ * Where the stamp goes on the PDF. Fractions of the page, measured from the top
+ * left, so the window and the file agree whatever size the page is drawn at.
+ * The height is not stored: it follows from the width and the signature image.
+ */
+export interface StampPlacement {
+	/** 1-based. */
+	page: number;
+	x: number;
+	y: number;
+	width: number;
+}
+
+/** What is known about the certificate, and nothing that could sign with it. */
+export interface SigningCertificateInfo {
+	subject: string;
+	issuer: string;
+	serialNumber: string;
+	/** SHA-256 of the certificate, hex. */
+	fingerprint: string;
+	validFrom: Iso;
+	validTo: Iso;
+	importedAt: Iso;
+}
+
+/** The certificate a digital signature was made with, as recorded on the signature. */
+export interface DigitalSignatureInfo {
+	subject: string;
+	issuer: string;
+	fingerprint: string;
+	validTo: Iso;
+}
+
 export interface DocumentSignature extends Standard {
 	documentId: string;
 	signerName: string;
@@ -1521,6 +1644,8 @@ export interface DocumentSignature extends Standard {
 	/** SHA-256 of the unsigned PDF, so later tampering is detectable. */
 	documentHash: string;
 	signedPdfPath: string | null;
+	/** Null when the document was stamped only. */
+	digital: DigitalSignatureInfo | null;
 }
 
 export interface SignDocumentInput {
@@ -1529,6 +1654,14 @@ export interface SignDocumentInput {
 	signerRole?: string | null;
 	/** Leave out to sign without an image, which is still timestamped and hashed. */
 	useSignatureImage?: boolean;
+	/** Left out, the stamp goes bottom left on the last page. */
+	placement?: StampPlacement;
+	/**
+	 * Adds a cryptographic signature made with the imported certificate. The
+	 * passphrase is used once and never stored, so a signature is always an act
+	 * by whoever is at the keyboard. Empty for a certificate that has none.
+	 */
+	digital?: { passphrase: string } | null;
 }
 
 /* ---------------------------------------------------------------- reminders */

@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { MAIL_FRAME_ORIGIN, type MailMessage, type MailMessageBody, type MailReplyMode } from "@shared/types";
+import {
+	MAIL_FRAME_ORIGIN,
+	type MailAttachment,
+	type MailMessage,
+	type MailMessageBody,
+	type MailReplyMode,
+} from "@shared/types";
 import { Button } from "../../components/Button";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
+import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
+import { ImportFlow } from "../documents/ImportFlow";
 import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 
 type MessageViewProps = {
@@ -17,6 +25,10 @@ type MessageViewProps = {
 	/** A file action on this message changed it (read, flagged): reload the thread. */
 	onChanged: () => void;
 };
+
+function isPdf(attachment: MailAttachment): boolean {
+	return attachment.mimeType === "application/pdf" || attachment.filename.toLowerCase().endsWith(".pdf");
+}
 
 const TRUSTED_EMAILS_KEY = "juno.mail.trustedEmails";
 const TRUSTED_SENDERS_KEY = "juno.mail.trustedSenders";
@@ -55,6 +67,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 	const senderTrusted = senderAddress !== null && readTrust(TRUSTED_SENDERS_KEY).includes(senderAddress);
 	const senderBlocked = senderAddress !== null && readTrust(BLOCKED_SENDERS_KEY).includes(senderAddress);
 	const [detailsOpen, setDetailsOpen] = useState(false);
+	const [importItems, setImportItems] = useState<ImportItem[] | null>(null);
 	const [body, setBody] = useState<MailMessageBody | null>(null);
 	const [bodyError, setBodyError] = useState<string | null>(null);
 	const [trustDecision, setTrustDecision] = useState<"unknown" | "trusted" | "blocked">(
@@ -320,6 +333,21 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 										>
 											Save as
 										</Button>
+										{isPdf(attachment) ? (
+											<Button
+												size="dense"
+												onClick={() =>
+													setImportItems([
+														{
+															label: attachment.filename,
+															source: { kind: "attachment", attachmentId: attachment.id },
+														},
+													])
+												}
+											>
+												Add to documents
+											</Button>
+										) : null}
 									</li>
 								))}
 							</ul>
@@ -454,6 +482,18 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 					items={contextItems}
 					onClose={menu.close}
 					ariaLabel={ariaLabel}
+				/>
+			) : null}
+			{importItems ? (
+				<ImportFlow
+					items={importItems}
+					onDone={(outcome) => {
+						setImportItems(null);
+						const text = [describeOutcome(outcome), ...outcome.failures.map((entry) => entry.message)]
+							.filter(Boolean)
+							.join(" ");
+						if (text) onNotice(text);
+					}}
 				/>
 			) : null}
 		</article>

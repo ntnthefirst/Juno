@@ -1,11 +1,16 @@
 /**
- * Stamps a signature onto a PDF, appends the audit page and, when asked, seals
- * the whole file with a cryptographic signature.
+ * Stamps a signature onto a PDF, writes the signing details as a certificate
+ * file of their own and, when asked, seals the whole file with a cryptographic
+ * signature.
  *
- * No Electron import, so the stamp geometry, the audit page and the seal are
+ * No Electron import, so the stamp geometry, the certificate and the seal are
  * covered by tests in plain Node.
  *
- * Two different things are written and the audit page says which:
+ * The signed file carries the stamp and nothing else: no page is added to it, so
+ * a contract still ends where its author ended it. What was signed, when, by
+ * whom and the hashes go in `<name>.cert.pdf` beside it.
+ *
+ * Two different things are written and the certificate says which:
  *
  * - The **stamp** is a picture, a name and a time, with a SHA-256 hash of the
  *   unsigned bytes. It shows who signed and lets a changed file be noticed.
@@ -37,6 +42,8 @@ export interface DigitalOptions {
 export interface SignOptions {
 	pdfPath: string;
 	outputPath: string;
+	/** Where the certificate is written. Defaults to `outputPath` with `.cert.pdf`. */
+	certificatePath?: string;
 	signatureImagePath: string | null;
 	signerName: string;
 	signerRole?: string | null;
@@ -50,7 +57,11 @@ export interface SignOptions {
 }
 
 export interface SignResult {
+	/** SHA-256 of the file before it was signed. */
 	documentHash: string;
+	/** SHA-256 of the signed file, which is the one that goes out. */
+	signedHash: string;
+	certificatePath: string;
 	audit: Record<string, unknown>;
 }
 
@@ -75,6 +86,102 @@ function drawable(text: string, font: PDFFont): string {
 function fitted(value: string, font: PDFFont, size: number, maxWidth: number): number {
 	const width = font.widthOfTextAtSize(value, size);
 	return width <= maxWidth ? size : size * (maxWidth / width);
+}
+
+/** `contract-ondertekend.pdf` gets `contract-ondertekend.cert.pdf` beside it. */
+export function certificatePathFor(signedPath: string): string {
+	return `${signedPath.replace(/\.pdf$/i, "")}.cert.pdf`;
+}
+
+interface CertificateFacts {
+	documentHash: string;
+	signedHash: string;
+	placement: StampPlacement;
+	pageCount: number;
+}
+
+/**
+ * The signing details on a page of their own. Plain, complete, and explicit
+ * about what this signature is not, because that sentence is the whole point of
+ * it being here.
+ */
+async function certificatePdf(options: SignOptions, facts: CertificateFacts): Promise<Uint8Array> {
+	const pdf = await PDFDocument.create();
+	const helvetica = await pdf.embedFont(StandardFonts.Helvetica);
+	const helveticaBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+	const courier = await pdf.embedFont(StandardFonts.Courier);
+
+	const page = pdf.addPage([595, 842]);
+	let y = page.getHeight() - 70;
+	const line = (value: string, size = 9, bold = false, gap = 14) => {
+		const font = bold ? helveticaBold : helvetica;
+		page.drawText(drawable(value, font), { x: 60, y, size, font, color: rgb(0.1, 0.1, 0.1) });
+		y -= gap;
+	};
+	// A hash is 64 characters of hex and reads better in a fixed-width face.
+	const hash = (value: string) => {
+		page.drawText(value, { x: 60, y, size: 8, font: courier, color: rgb(0.1, 0.1, 0.1) });
+		y -= 22;
+	};
+
+	const who = `${options.signerName}${options.signerRole ? `, ${options.signerRole}` : ""}`;
+	line("Ondertekeningsgegevens", 13, true, 26);
+	line(`Document: ${options.documentTitle}`);
+	line(`Sjabloon: ${options.templateName}${options.templateVersion ? ` (versie ${options.templateVersion})` : ""}`);
+	line(`Ondertekenaar: ${who}`);
+	line(`Tijdstip: ${formatDateTime(options.signedAt)}`);
+	line(`Tijdstip (UTC, exact): ${options.signedAt}`, 8);
+	line(`Plaats van de stempel: pagina ${facts.placement.page} van ${facts.pageCount}`, 9, false, 20);
+	line("SHA-256 van het bestand voor ondertekening:", 9, true);
+	hash(facts.documentHash);
+	line("SHA-256 van het ondertekende bestand:", 9, true);
+	hash(facts.signedHash);
+
+	if (options.digital) {
+		line("Digitale handtekening", 11, true, 18);
+		line(`Certificaat van: ${options.digital.subject}`);
+		line(`Uitgegeven door: ${options.digital.issuer}`);
+		line(`Geldig tot: ${options.digital.validTo.slice(0, 10)}`);
+		line("SHA-256 van het certificaat:");
+		hash(options.digital.fingerprint);
+	}
+
+	line("Wat deze ondertekening is", 11, true, 18);
+	for (const value of options.digital
+		? [
+				"Een stempel met naam en tijdstip, een controlegetal van het bestand en een",
+				"digitale handtekening (PAdES) gemaakt met het certificaat hierboven. Een PDF-lezer",
+				"toont of het bestand sinds de ondertekening is gewijzigd en door wie het is getekend.",
+			]
+		: [
+				"Een afbeelding van een handtekening, een tijdstip en een controlegetal van",
+				"het ondertekende bestand. Daarmee is achteraf vast te stellen of het bestand",
+				"nadien is gewijzigd.",
+			]) {
+		line(value);
+	}
+	y -= 6;
+	line("Wat deze ondertekening niet is", 11, true, 18);
+	for (const value of [
+		"Dit is geen gekwalificeerde elektronische handtekening in de zin van de",
+		"eIDAS-verordening. Voor overeenkomsten waar dat vereist is, gebruik een",
+		"daartoe erkende dienstverlener.",
+	]) {
+		line(value);
+	}
+
+	if (options.isSpecimen) {
+		y -= 10;
+		page.drawText("LET OP: VOORBEELDDOCUMENT, NIET JURIDISCH NAGEKEKEN.", {
+			x: 60,
+			y,
+			size: 10,
+			font: helveticaBold,
+			color: rgb(0.56, 0.13, 0.13),
+		});
+	}
+
+	return pdf.save();
 }
 
 export async function signPdf(options: SignOptions): Promise<SignResult> {
@@ -130,79 +237,6 @@ export async function signPdf(options: SignOptions): Promise<SignResult> {
 		color: rgb(0.35, 0.35, 0.35),
 	});
 
-	// The audit page. Plain, complete, and explicit about what this signature is
-	// not, because that sentence is the whole point of it being here.
-	const audit = pdf.addPage();
-	const { height } = audit.getSize();
-	let y = height - 70;
-	const line = (value: string, size = 9, bold = false, gap = 14) => {
-		audit.drawText(text(value, bold), {
-			x: 60,
-			y,
-			size,
-			font: bold ? helveticaBold : helvetica,
-			color: rgb(0.1, 0.1, 0.1),
-		});
-		y -= gap;
-	};
-
-	line("Ondertekeningsgegevens", 13, true, 26);
-	line(`Document: ${options.documentTitle}`);
-	line(`Sjabloon: ${options.templateName}${options.templateVersion ? ` (versie ${options.templateVersion})` : ""}`);
-	line(`Ondertekenaar: ${who}`);
-	line(`Tijdstip: ${formatDateTime(options.signedAt)}`);
-	line(`Tijdstip (UTC, exact): ${options.signedAt}`, 8);
-	line(`Plaats van de stempel: pagina ${placement.page} van ${pages.length}`, 9, false, 20);
-	line("SHA-256 van het bestand voor ondertekening:", 9, true);
-	// Split, because a 64 character hash does not fit on one line at this size.
-	line(documentHash.slice(0, 32), 9);
-	line(documentHash.slice(32), 9, false, 22);
-
-	if (options.digital) {
-		line("Digitale handtekening", 11, true, 18);
-		line(`Certificaat van: ${options.digital.subject}`);
-		line(`Uitgegeven door: ${options.digital.issuer}`);
-		line(`Geldig tot: ${options.digital.validTo.slice(0, 10)}`);
-		line("SHA-256 van het certificaat:");
-		line(options.digital.fingerprint.slice(0, 32));
-		line(options.digital.fingerprint.slice(32), 9, false, 22);
-	}
-
-	line("Wat deze ondertekening is", 11, true, 18);
-	for (const value of options.digital
-		? [
-				"Een stempel met naam en tijdstip, een controlegetal van het bestand en een",
-				"digitale handtekening (PAdES) gemaakt met het certificaat hierboven. Een PDF-lezer",
-				"toont of het bestand sinds de ondertekening is gewijzigd en door wie het is getekend.",
-			]
-		: [
-				"Een afbeelding van een handtekening, een tijdstip en een controlegetal van",
-				"het ondertekende bestand. Daarmee is achteraf vast te stellen of het bestand",
-				"nadien is gewijzigd.",
-			]) {
-		line(value);
-	}
-	y -= 6;
-	line("Wat deze ondertekening niet is", 11, true, 18);
-	for (const value of [
-		"Dit is geen gekwalificeerde elektronische handtekening in de zin van de",
-		"eIDAS-verordening. Voor overeenkomsten waar dat vereist is, gebruik een",
-		"daartoe erkende dienstverlener.",
-	]) {
-		line(value);
-	}
-
-	if (options.isSpecimen) {
-		y -= 10;
-		audit.drawText("LET OP: VOORBEELDDOCUMENT, NIET JURIDISCH NAGEKEKEN.", {
-			x: 60,
-			y,
-			size: 10,
-			font: helveticaBold,
-			color: rgb(0.56, 0.13, 0.13),
-		});
-	}
-
 	let output: Uint8Array;
 	if (options.digital) {
 		// Object streams off: the signature has to be able to find its own
@@ -235,8 +269,17 @@ export async function signPdf(options: SignOptions): Promise<SignResult> {
 
 	writeFileSync(options.outputPath, output);
 
+	const signedHash = createHash("sha256").update(output).digest("hex");
+	const certificatePath = options.certificatePath ?? certificatePathFor(options.outputPath);
+	writeFileSync(
+		certificatePath,
+		await certificatePdf(options, { documentHash, signedHash, placement, pageCount: pages.length }),
+	);
+
 	return {
 		documentHash,
+		signedHash,
+		certificatePath,
 		audit: {
 			documentTitle: options.documentTitle,
 			templateName: options.templateName,
@@ -245,6 +288,7 @@ export async function signPdf(options: SignOptions): Promise<SignResult> {
 			signerRole: options.signerRole ?? null,
 			signedAt: options.signedAt,
 			documentHash,
+			signedHash,
 			isSpecimen: options.isSpecimen,
 			signatureImage: image ? "embedded" : "none",
 			placement,

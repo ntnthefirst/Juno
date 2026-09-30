@@ -12,6 +12,7 @@
  */
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import type {
 	DigitalSignatureInfo,
 	DocumentVersion,
@@ -158,6 +159,7 @@ export function list(documentId: string, db: Db = getDb()): DocumentVersion[] {
 			isLatest: index === rows.length - 1,
 			signerName: signature?.signerName ?? null,
 			digital: signature ? digitalOf(signature.auditJson) : null,
+			hasCertificate: Boolean(signature?.certificatePdfPath),
 		}))
 		.reverse();
 }
@@ -171,6 +173,19 @@ export function pathOf(versionId: string, db: Db = getDb()): string {
 		.get();
 	if (!row) throw new Error("That version no longer exists.");
 	return row.pdfPath;
+}
+
+/** The certificate beside one signed version. Older signatures have none: their details are on the file's last page. */
+export function certificatePathOf(versionId: string, db: Db = getDb()): string {
+	const row = db
+		.select({ path: documentSignatures.certificatePdfPath })
+		.from(documentVersions)
+		.innerJoin(documentSignatures, eq(documentVersions.signatureId, documentSignatures.id))
+		.where(and(eq(documentVersions.id, versionId), isNull(documentVersions.deletedAt)))
+		.get();
+	if (!row?.path) throw new Error("This version has no separate certificate.");
+	if (!existsSync(row.path)) throw new Error("The certificate file is no longer on this machine.");
+	return row.path;
 }
 
 /**

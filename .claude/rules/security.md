@@ -134,7 +134,7 @@ Decision 6 is explicit, and it decides where things belong.
 - A signature image plus timestamp plus audit trail (decision 8). **Do not write
   UI copy, a document footer or documentation claiming this is a qualified
   electronic signature under eIDAS.** It is not.
-- The audit page records what was signed, when, by whom and a hash of the source
+- The audit page (the `.cert.pdf` beside the signed file) records what was signed, when, by whom and a hash of the source
   file. Store the hash in the DB so a tampered PDF is detectable.
 - Generated documents are written under the userData root with a path the service
   builds from an id. A path supplied by the renderer or by an agent is never

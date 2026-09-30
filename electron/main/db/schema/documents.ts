@@ -118,6 +118,12 @@ export const documentSignatures = sqliteTable(
 		/** SHA-256 of the unsigned PDF, so later tampering is detectable. */
 		documentHash: text("document_hash").notNull(),
 		signedPdfPath: text("signed_pdf_path"),
+		/**
+		 * The signing details as a PDF of their own, `<name>.cert.pdf` beside the
+		 * signed file. Null for a signature made before certificates were separate,
+		 * whose details are on the last page of the signed PDF itself.
+		 */
+		certificatePdfPath: text("certificate_pdf_path"),
 		/** JSON: what was signed, by whom, from which template version. */
 		auditJson: text("audit_json"),
 	},

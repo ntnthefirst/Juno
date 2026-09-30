@@ -106,7 +106,9 @@ function toAttachment(row: typeof mailAttachments.$inferSelect): MailAttachment 
 		filename: row.filename,
 		mimeType: row.mimeType,
 		size: row.size,
-		isInline: row.isInline,
+		// Rows stored before an inline PDF stopped counting as inline are corrected
+		// here, so nothing has to be re-fetched to show their attachment.
+		isInline: row.isInline && row.mimeType.toLowerCase().startsWith("image/"),
 	};
 }
 

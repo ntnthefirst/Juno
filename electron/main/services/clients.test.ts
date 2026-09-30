@@ -145,6 +145,26 @@ describe("clients", () => {
 		expect(rows[0]?.city).toBe("Gent");
 		expect(rows[0]?.email).toBe("hallo@acme.example");
 	});
+
+	it("lists the client touched last first, counting its projects as activity", async () => {
+		const db = freshDb();
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(new Date("2026-03-01T09:00:00.000Z"));
+			const first = await clients.create({ name: "Aardvark" }, db);
+			vi.setSystemTime(new Date("2026-03-02T09:00:00.000Z"));
+			const second = await clients.create({ name: "Zebra" }, db);
+			expect((await clients.list({}, db)).map((row) => row.id)).toEqual([second.id, first.id]);
+
+			vi.setSystemTime(new Date("2026-03-05T09:00:00.000Z"));
+			await projects.create({ clientId: first.id, name: "Site" }, db);
+			const rows = await clients.list({}, db);
+			expect(rows.map((row) => row.id)).toEqual([first.id, second.id]);
+			expect(rows[0]?.lastActivityAt).toBe("2026-03-05T09:00:00.000Z");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });
 
 describe("status changes", () => {

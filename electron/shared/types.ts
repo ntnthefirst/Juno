@@ -137,6 +137,8 @@ export interface ClientSummary {
 	email: string | null;
 	projectCount: number;
 	openProjectCount: number;
+	/** The newest change to the client, its projects, documents or notes. UTC ISO-8601. */
+	lastActivityAt: Iso;
 }
 
 export type ClientInput = Partial<Omit<Client, keyof Standard | "sortName">> & { name: string };

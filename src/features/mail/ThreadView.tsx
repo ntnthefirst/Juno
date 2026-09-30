@@ -5,6 +5,7 @@ import { MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { MessageView } from "./MessageView";
+import { ConversationPanel, type ThreadEntry } from "./ConversationPanel";
 import { OutgoingMessageView } from "./OutgoingMessageView";
 import type { ThreadAction } from "./ThreadList";
 
@@ -20,19 +21,29 @@ type ThreadViewProps = {
 	onReply: (messageId: string, mode: MailReplyMode) => void;
 	/** Filing the whole thread. The screen owns it, the same as from a list row. */
 	onAction: (action: ThreadAction) => void;
+	/** Opens a draft, a message waiting for approval or a failed send in the composer. */
+	onEditDraft: (outboxId: string) => void;
 };
 
-type Entry =
-	| { kind: "message"; message: MailMessage }
-	| { kind: "outgoing"; message: MailThreadOutgoing };
+const OVERVIEW_KEY = "juno.mail.conversation-open";
+
+function noop() {}
+
+function readOverviewOpen(): boolean {
+	try {
+		return localStorage.getItem(OVERVIEW_KEY) !== "0";
+	} catch {
+		return true;
+	}
+}
 
 /**
  * Synced messages and the replies still waiting for their Sent copy, in date
  * order. Both lists arrive oldest first, so this is a merge, and on a tie the
  * synced message goes first because it is the record.
  */
-function interleave(messages: MailMessage[], outgoing: MailThreadOutgoing[]): Entry[] {
-	const out: Entry[] = [];
+function interleave(messages: MailMessage[], outgoing: MailThreadOutgoing[]): ThreadEntry[] {
+	const out: ThreadEntry[] = [];
 	let m = 0;
 	let o = 0;
 	while (m < messages.length || o < outgoing.length) {
@@ -62,9 +73,12 @@ export function ThreadView({
 	onNotice,
 	onReply,
 	onAction,
+	onEditDraft,
 }: ThreadViewProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [linking, setLinking] = useState(false);
+	// The overview of the whole conversation is a choice that holds between threads.
+	const [overviewOpen, setOverviewOpen] = useState(readOverviewOpen);
 	const [version, setVersion] = useState(0);
 	// The thread shows one open message at a time. Opening another collapses
 	// whichever was open, so there is always exactly one message whose content
@@ -107,6 +121,16 @@ export function ThreadView({
 
 	// A file action on one message (read, flag) or a client link change both
 	// mean the thread and the list behind it are out of date.
+	function toggleOverview() {
+		const next = !overviewOpen;
+		setOverviewOpen(next);
+		try {
+			localStorage.setItem(OVERVIEW_KEY, next ? "1" : "0");
+		} catch {
+			// The choice just does not outlive this window.
+		}
+	}
+
 	function refresh() {
 		setVersion((v) => v + 1);
 		onChanged();
@@ -153,16 +177,18 @@ export function ThreadView({
 	// the message represented by the clicked row rather than a later reply.
 	// Keep the current choice across a refresh as long as it still exists.
 	if (load.thread !== derivedFrom) {
-		const fallback = messages[0] ?? null;
+		const fallback = messages[0] ?? entries[0]?.message ?? null;
 		const next = openId && entries.some((e) => e.message.id === openId) ? openId : (fallback?.id ?? null);
 		setDerivedFrom(load.thread);
 		if (next !== openId) setOpenId(next);
 	}
 
+	const selected = entries.find((e) => e.message.id === openId) ?? null;
 	const openMessage = messages.find((m) => m.id === openId) ?? null;
 	const senderAddress = summary.participants[0]?.address ?? null;
 
 	const moreItems: MenuItem[] = [
+		{ id: "archive", label: "Archive", icon: "archive", onSelect: () => onAction("archive") },
 		{ id: "mark-unread", label: "Mark unread", icon: "unread", onSelect: () => onAction("markUnread") },
 		{ id: "move", label: "Move to folder", icon: "projects", onSelect: () => onAction("move") },
 		{ id: "junk", label: "Junk", icon: "junk", onSelect: () => onAction("junk") },
@@ -221,14 +247,15 @@ export function ThreadView({
 							</>
 						) : null}
 						<ToolbarAction
+							icon="branch"
+							label={overviewOpen ? "Hide the conversation" : "Show the conversation"}
+							pressed={overviewOpen}
+							onClick={toggleOverview}
+						/>
+						<ToolbarAction
 							icon="flag"
 							label={summary.isFlagged ? "Clear flag" : "Flag"}
 							onClick={() => onAction(summary.isFlagged ? "unflag" : "flag")}
-						/>
-						<ToolbarAction
-							icon="archive"
-							label="Archive"
-							onClick={() => onAction("archive")}
 						/>
 						<ToolbarAction
 							icon="remove"
@@ -258,28 +285,34 @@ export function ThreadView({
 				</div>
 			</div>
 
-			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-				{entries.map((entry) =>
-					entry.kind === "message" ? (
-						<MessageView
-							key={entry.message.id}
-							message={entry.message}
-							clientLinked={summary.clientId !== null}
-							open={entry.message.id === openId}
-							onToggle={() => setOpenId((current) => (current === entry.message.id ? null : entry.message.id))}
-							onNotice={onNotice}
-							onReply={onReply}
-							onChanged={refresh}
-						/>
-					) : (
-						<OutgoingMessageView
-							key={entry.message.id}
-							message={entry.message}
-							open={entry.message.id === openId}
-							onToggle={() => setOpenId((current) => (current === entry.message.id ? null : entry.message.id))}
-						/>
-					),
-				)}
+			<div className="flex min-h-0 flex-1">
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+					{selected ? (
+						selected.kind === "message" ? (
+							<MessageView
+								key={selected.message.id}
+								message={selected.message}
+								clientLinked={summary.clientId !== null}
+								open
+								onToggle={noop}
+								onNotice={onNotice}
+								onReply={onReply}
+								onChanged={refresh}
+							/>
+						) : (
+							<OutgoingMessageView
+								key={selected.message.id}
+								message={selected.message}
+								open
+								onToggle={noop}
+								onEdit={onEditDraft}
+							/>
+						)
+					) : null}
+				</div>
+				{overviewOpen ? (
+					<ConversationPanel entries={entries} openId={openId} onSelect={setOpenId} />
+				) : null}
 			</div>
 
 			{linking ? (
@@ -302,23 +335,28 @@ type ToolbarActionProps = {
 	icon: IconName;
 	label: string;
 	danger?: boolean;
+	/** A toggle that is on. */
+	pressed?: boolean;
 	onClick: () => void;
 };
 
 /** A 32px icon button in the reader's toolbar. The label is its only wording. */
-function ToolbarAction({ icon, label, danger = false, onClick }: ToolbarActionProps) {
+function ToolbarAction({ icon, label, danger = false, pressed, onClick }: ToolbarActionProps) {
 	return (
 		<button
 			type="button"
 			aria-label={label}
 			title={label}
+			aria-pressed={pressed}
 			onClick={onClick}
 			className={[
 				"inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)]",
 				"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 				danger
 					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
-					: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
+					: pressed
+						? "bg-[var(--accent-soft)] text-[var(--accent)]"
+						: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 			].join(" ")}
 		>
 			<Icon

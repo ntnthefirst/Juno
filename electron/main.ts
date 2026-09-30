@@ -3495,17 +3495,29 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: mail reader ${opened}`);
+									// The reader shows one message at a time and lists the whole
+									// conversation beside it, so the sent reply is a row of that list first.
 									const outgoingShown = await window.webContents.executeJavaScript(
 										`(async () => {
-											const cards = document.querySelectorAll("article[data-outgoing]");
-											if (cards.length !== 1) return "the sent reply is not listed in its thread";
-											cards[0].scrollIntoView({ block: "center" });
-											await new Promise((r) => setTimeout(r, 300));
+											const rows = [...document.querySelectorAll('aside[aria-label="Conversation"] ol button')];
+											const sent = rows.filter((el) => el.textContent.trim().startsWith("You"));
+											if (sent.length !== 1) return "the sent reply is not listed in its thread";
+											sent[0].click();
+											await new Promise((r) => setTimeout(r, 400));
+											if (document.querySelectorAll("article[data-outgoing]").length !== 1) return "the sent reply did not open";
 											return "ok";
 										})()`,
 									);
 									if (outgoingShown !== "ok") throw new Error(`Smoke: mail reader ${outgoingShown}`);
 									await shoot("mail-outgoing");
+									// Back to the received message, which is what the frame checks below read.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const rows = [...document.querySelectorAll('aside[aria-label="Conversation"] ol button')];
+											rows.find((el) => !el.textContent.trim().startsWith("You"))?.click();
+											await new Promise((r) => setTimeout(r, 1200));
+										})()`,
+									);
 									await window.webContents.executeJavaScript(`document.querySelector("article")?.closest(".overflow-y-auto")?.scrollTo(0, 0)`);
 									// A frame the CSP refused would sit on about:blank. One that
 									// navigated to the mail origin proves the scheme host answered

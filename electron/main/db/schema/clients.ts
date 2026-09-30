@@ -71,6 +71,32 @@ export const clientPhones = sqliteTable(
 	],
 );
 
+/**
+ * A client's profiles and pages elsewhere: a website, LinkedIn, Instagram. The
+ * kind picks an icon and a default label and nothing else, so it is plain text
+ * rather than a reference set the owner could hide rows out of.
+ */
+export const clientLinks = sqliteTable(
+	"client_links",
+	{
+		...standardColumns,
+		clientId: text("client_id")
+			.notNull()
+			.references(() => clients.id),
+		/** website, linkedin, instagram, facebook, x, youtube, github, other. */
+		kind: text("kind").notNull().default("website"),
+		/** Free text, for "Company page" or "Founder". Empty shows the kind. */
+		label: text("label"),
+		/** Always an absolute http or https address. */
+		url: text("url").notNull(),
+	},
+	(t) => [
+		index("client_links_client_idx").on(t.clientId),
+		index("client_links_owner_idx").on(t.ownerId),
+		index("client_links_deleted_idx").on(t.deletedAt),
+	],
+);
+
 export const clientAddresses = sqliteTable(
 	"client_addresses",
 	{

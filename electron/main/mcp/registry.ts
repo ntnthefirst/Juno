@@ -10,6 +10,7 @@ import { agentTools } from "./agent";
 import { calendarTools } from "./calendar";
 import { clientAddressTools } from "./client-addresses";
 import { clientEmailTools } from "./client-emails";
+import { clientLinkTools } from "./client-links";
 import { clientPhoneTools } from "./client-phones";
 import { clientTimelineTools } from "./client-timeline";
 import { clientTools } from "./clients";
@@ -32,6 +33,7 @@ const lists: ToolDescriptor[][] = [
 	clientTimelineTools,
 	clientEmailTools,
 	clientPhoneTools,
+	clientLinkTools,
 	clientAddressTools,
 	contactTools,
 	projectTools,

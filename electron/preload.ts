@@ -343,6 +343,7 @@ const api: JunoApi = {
 		versions: (documentId) => call("documents.versions", documentId),
 		openVersion: (versionId) => call("documents.openVersion", versionId),
 		revealVersion: (versionId) => call("documents.revealVersion", versionId),
+		openCertificate: (versionId) => call("documents.openCertificate", versionId),
 		readPdf: (id) => call("documents.readPdf", id),
 		setStatus: (id, statusId) => call("documents.setStatus", id, statusId),
 		remove: (id) => call("documents.remove", id),

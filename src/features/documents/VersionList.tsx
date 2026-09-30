@@ -126,6 +126,11 @@ export function VersionList({ documentId, nested = false }: VersionListProps) {
 							<Button size="dense" onClick={() => void run(() => window.juno.documents.openVersion(version.id))}>
 								Open
 							</Button>
+							{version.hasCertificate ? (
+								<Button size="dense" onClick={() => void run(() => window.juno.documents.openCertificate(version.id))}>
+									Certificate
+								</Button>
+							) : null}
 							<Button size="dense" onClick={() => void run(() => window.juno.documents.revealVersion(version.id))}>
 								Show in folder
 							</Button>

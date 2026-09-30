@@ -1514,6 +1514,8 @@ export interface DocumentVersion extends Standard {
 	/** Filled for a stamped or signed version. */
 	signerName: string | null;
 	digital: DigitalSignatureInfo | null;
+	/** A stamped or signed version has its signing details as a `.cert.pdf` of their own. */
+	hasCertificate: boolean;
 }
 
 /**
@@ -1644,6 +1646,8 @@ export interface DocumentSignature extends Standard {
 	/** SHA-256 of the unsigned PDF, so later tampering is detectable. */
 	documentHash: string;
 	signedPdfPath: string | null;
+	/** The signing details as their own PDF. Null for a signature that predates it. */
+	certificatePdfPath: string | null;
 	/** Null when the document was stamped only. */
 	digital: DigitalSignatureInfo | null;
 }

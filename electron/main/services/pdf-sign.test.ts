@@ -29,7 +29,7 @@ const base = {
 };
 
 describe("signPdf", () => {
-	it("stamps on the chosen page and appends the audit page", async () => {
+	it("stamps on the chosen page and leaves the page count alone", async () => {
 		const { dir, path } = await fixture(2);
 		const outputPath = join(dir, "out.pdf");
 		const result = await signPdf({
@@ -39,10 +39,22 @@ describe("signPdf", () => {
 			placement: { page: 1, x: 0.1, y: 0.2, width: 0.3 },
 		});
 		const out = await PDFDocument.load(readFileSync(outputPath));
-		expect(out.getPageCount()).toBe(3);
+		expect(out.getPageCount()).toBe(2);
 		expect(result.documentHash).toMatch(/^[0-9a-f]{64}$/);
 		expect(result.audit.digital).toBeNull();
 		expect(result.audit.placement).toEqual({ page: 1, x: 0.1, y: 0.2, width: 0.3 });
+	});
+
+	it("writes the signing details as a .cert.pdf beside the signed file", async () => {
+		const { dir, path } = await fixture(2);
+		const outputPath = join(dir, "contract-ondertekend.pdf");
+		const result = await signPdf({ ...base, pdfPath: path, outputPath });
+		expect(result.certificatePath).toBe(join(dir, "contract-ondertekend.cert.pdf"));
+		const cert = await PDFDocument.load(readFileSync(result.certificatePath));
+		expect(cert.getPageCount()).toBe(1);
+		// The hash of the signed file is what lets the certificate be checked against it.
+		expect(result.signedHash).toBe(createHash("sha256").update(readFileSync(outputPath)).digest("hex"));
+		expect(result.signedHash).not.toBe(result.documentHash);
 	});
 
 	it("refuses a page that does not exist", async () => {

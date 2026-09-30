@@ -44,8 +44,12 @@ import type {
 	DocumentTemplatePatch,
 	GenerateDocumentInput,
 	GenerateDocumentResult,
-	ImportDocumentInput,
-	ImportPdfBytesInput,
+	AddVersionInput,
+	DocumentVersion,
+	ImportAnalysis,
+	ImportFileInput,
+	ImportSource,
+	PickedPdf,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -546,12 +550,18 @@ export interface JunoApi {
 		list(query?: { clientId?: string }): Promise<DocumentRecord[]>;
 		get(id: string): Promise<DocumentRecord | null>;
 		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
-		/** Copies an existing PDF in and records it as an imported document. */
-		import(input: ImportDocumentInput): Promise<DocumentRecord>;
-		/** Opens a file picker filtered to PDF and imports the choice for a client. Null when cancelled. */
-		chooseImport(clientId: string): Promise<DocumentRecord | null>;
-		/** Imports a PDF the window read from a drop. Refuses a name the client already has. */
-		importBytes(input: ImportPdfBytesInput): Promise<DocumentRecord>;
+		/** Opens the file picker and hands back the chosen PDFs as bytes. Empty when cancelled. */
+		pickPdfs(): Promise<PickedPdf[]>;
+		/** Which existing documents an incoming file looks like, before anything is written. */
+		analyseImport(input: { source: ImportSource; clientId?: string | null }): Promise<ImportAnalysis>;
+		/** A new document from the file. Refuses a title the client already has. */
+		importFile(input: ImportFileInput): Promise<DocumentRecord>;
+		/** Adds the file to a document as a version, placed by the file's own date. */
+		addVersion(input: AddVersionInput): Promise<DocumentVersion>;
+		/** Newest first. */
+		versions(documentId: string): Promise<DocumentVersion[]>;
+		openVersion(versionId: string): Promise<void>;
+		revealVersion(versionId: string): Promise<void>;
 		/** The document's PDF, for the placement page. Never a path. */
 		readPdf(id: string): Promise<Uint8Array>;
 		setStatus(id: string, statusId: string | null): Promise<DocumentRecord>;

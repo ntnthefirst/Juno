@@ -6,26 +6,8 @@
  * especially after the client data it quoted has changed.
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
-import {
-	closeSync,
-	copyFileSync,
-	existsSync,
-	mkdirSync,
-	openSync,
-	readFileSync,
-	readSync,
-	statSync,
-	writeFileSync,
-} from "node:fs";
-import { basename, join } from "node:path";
-import type {
-	Client,
-	Contact,
-	DocumentSourceKind,
-	ImportDocumentInput,
-	ImportPdfBytesInput,
-	Project,
-} from "../../shared/types";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import type { Client, Contact, DocumentSourceKind, DocumentVersionKind, Project } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import {
@@ -40,6 +22,7 @@ import {
 } from "../db/schema";
 import { buildContext, todayIsoDate } from "./document-context";
 import * as templates from "./document-templates";
+import * as versions from "./document-versions";
 import * as settings from "./settings";
 
 /** The primary row of each, or null. A client need not have any of them yet. */
@@ -106,6 +89,8 @@ export interface DocumentRecord {
 	 * re-generates has to check this before it tries.
 	 */
 	sourceKind: DocumentSourceKind;
+	versionCount: number;
+	latestVersion: { id: string; kind: DocumentVersionKind; fileDate: string } | null;
 }
 
 export interface GenerateInput {
@@ -126,7 +111,7 @@ export interface GenerateResult {
 
 type Row = typeof documents.$inferSelect;
 
-function toRecord(row: Row, clientName: string): DocumentRecord {
+function toRecord(row: Row, clientName: string, summary?: versions.VersionSummary): DocumentRecord {
 	return {
 		id: row.id,
 		ownerId: row.ownerId,
@@ -145,6 +130,8 @@ function toRecord(row: Row, clientName: string): DocumentRecord {
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 		sourceKind: row.sourceKind as DocumentSourceKind,
+		versionCount: summary?.count ?? 0,
+		latestVersion: summary?.latest ?? null,
 	};
 }
 
@@ -181,24 +168,13 @@ export function configureDocumentStorage(directory: string): void {
 	importDirectory = directory;
 }
 
-function importStorageDir(): string {
+/** The folder imported files and new versions are copied into. */
+export function documentStorageDir(): string {
 	if (!importDirectory) {
 		throw new Error("configureDocumentStorage() was not called before a document was imported.");
 	}
 	if (!existsSync(importDirectory)) mkdirSync(importDirectory, { recursive: true });
 	return importDirectory;
-}
-
-/** True when the file at `path` starts with the five bytes every PDF starts with. */
-function looksLikePdf(path: string): boolean {
-	const fd = openSync(path, "r");
-	try {
-		const header = Buffer.alloc(5);
-		const read = readSync(fd, header, 0, 5, 0);
-		return read === 5 && header.toString("latin1") === "%PDF-";
-	} finally {
-		closeSync(fd);
-	}
 }
 
 export async function list(
@@ -216,7 +192,11 @@ export async function list(
 		)
 		.orderBy(desc(documents.createdAt))
 		.all();
-	return rows.map((row) => toRecord(row.document, row.clientName));
+	const summaries = versions.summaries(
+		rows.map((row) => row.document.id),
+		db,
+	);
+	return rows.map((row) => toRecord(row.document, row.clientName, summaries.get(row.document.id)));
 }
 
 export async function get(id: string, db: Db = getDb()): Promise<DocumentRecord | null> {
@@ -226,7 +206,8 @@ export async function get(id: string, db: Db = getDb()): Promise<DocumentRecord 
 		.innerJoin(clients, eq(documents.clientId, clients.id))
 		.where(and(eq(documents.id, id), isNull(documents.deletedAt)))
 		.get();
-	return row ? toRecord(row.document, row.clientName) : null;
+	if (!row) return null;
+	return toRecord(row.document, row.clientName, versions.summaries([id], db).get(id));
 }
 
 /**
@@ -327,143 +308,6 @@ export async function generate(
 }
 
 /**
- * Brings in a PDF that already exists, rather than one Juno generated. The
- * original file is copied, never moved and never deleted, and the copy is what
- * the record points at from then on.
- */
-/** Largest PDF that can be brought in. A contract does not need to be bigger. */
-export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
-
-/**
- * Throws when the client already has a live document with this title.
- *
- * Compared case-insensitively and trimmed, because "Contract.pdf" and
- * "contract.pdf " are the same file to the person who dropped both. A document
- * that was deleted does not count, so removing one frees its name again.
- * Lives here so the window, a drop and an agent all get the same answer.
- */
-function assertTitleFree(clientId: string, clientName: string, title: string, db: Db): void {
-	const wanted = title.trim().toLowerCase();
-	const taken = db
-		.select({ title: documents.title })
-		.from(documents)
-		.where(and(eq(documents.clientId, clientId), isNull(documents.deletedAt)))
-		.all()
-		.some((row) => row.title.trim().toLowerCase() === wanted);
-	if (taken) {
-		throw new Error(
-			`${clientName} already has a document named "${title.trim()}". Rename the file or delete the existing document first.`,
-		);
-	}
-}
-
-function resolveImportTarget(input: ImportDocumentInput | ImportPdfBytesInput, db: Db) {
-	const client = db
-		.select()
-		.from(clients)
-		.where(and(eq(clients.id, input.clientId), isNull(clients.deletedAt)))
-		.get();
-	if (!client) throw new Error("That client no longer exists.");
-
-	if (input.projectId) {
-		const project = db
-			.select()
-			.from(projects)
-			.where(and(eq(projects.id, input.projectId), isNull(projects.deletedAt)))
-			.get();
-		if (!project) throw new Error("That project no longer exists.");
-		if (project.clientId !== client.id) {
-			throw new Error("That project belongs to a different client.");
-		}
-	}
-	return client;
-}
-
-function insertImported(
-	client: { id: string; name: string },
-	title: string,
-	destination: string,
-	input: { projectId?: string | null; issuedOn?: string },
-	db: Db,
-): DocumentRecord {
-	const [row] = db
-		.insert(documents)
-		.values({
-			clientId: client.id,
-			projectId: input.projectId ?? null,
-			templateId: null,
-			templateVersion: null,
-			title,
-			bodyHtml: "",
-			issuedOn: input.issuedOn ?? todayIsoDate(),
-			pdfPath: destination,
-			isSpecimen: false,
-			sourceKind: "imported",
-		})
-		.returning()
-		.all();
-	return toRecord(row!, client.name);
-}
-
-export async function importPdf(
-	input: ImportDocumentInput,
-	db: Db = getDb(),
-): Promise<DocumentRecord> {
-	const client = resolveImportTarget(input, db);
-
-	const fileLabel = basename(input.sourcePath);
-	if (!existsSync(input.sourcePath) || !statSync(input.sourcePath).isFile()) {
-		throw new Error(`Could not find "${fileLabel}". Check the file still exists at that location.`);
-	}
-	if (!looksLikePdf(input.sourcePath)) {
-		throw new Error(`"${fileLabel}" is not a PDF. Choose a file that starts with a PDF header.`);
-	}
-
-	const title = input.title?.trim() || basename(input.sourcePath, ".pdf") || "Document";
-	assertTitleFree(client.id, client.name, title, db);
-
-	// The destination name comes from the title through fileNameFor, never from
-	// the source path, so a title carrying "../" cannot walk the copy outside
-	// the configured directory.
-	const destination = join(importStorageDir(), fileNameFor(title, "-import"));
-	copyFileSync(input.sourcePath, destination);
-
-	return insertImported(client, title, destination, input, db);
-}
-
-/**
- * Imports a PDF that arrived as bytes, which is what a drop gives the window.
- *
- * The renderer never supplies a path: a dropped file is read there and sent
- * across, so nothing here joins a renderer-chosen path onto the filesystem
- * (.claude/rules/security.md section 2). The name is only ever a title.
- */
-export async function importPdfBytes(
-	input: ImportPdfBytesInput,
-	db: Db = getDb(),
-): Promise<DocumentRecord> {
-	const client = resolveImportTarget(input, db);
-
-	const bytes = Buffer.from(input.data);
-	const fileLabel = input.fileName.trim() || "This file";
-	if (bytes.length === 0 || bytes.subarray(0, 5).toString("latin1") !== "%PDF-") {
-		throw new Error(`"${fileLabel}" is not a PDF. Drop a file that starts with a PDF header.`);
-	}
-	if (bytes.length > MAX_IMPORT_BYTES) {
-		throw new Error(`"${fileLabel}" is larger than 50 MB. Split it or compress it first.`);
-	}
-
-	const title =
-		input.title?.trim() || input.fileName.replace(/\.pdf$/i, "").trim() || "Document";
-	assertTitleFree(client.id, client.name, title, db);
-
-	const destination = join(importStorageDir(), fileNameFor(title, "-import"));
-	writeFileSync(destination, bytes);
-
-	return insertImported(client, title, destination, input, db);
-}
-
-/**
  * The bytes of a document's PDF, for the placement page. Resolved from the id,
  * so the renderer never names a file.
  */
@@ -533,20 +377,6 @@ export async function setStatus(
 ): Promise<DocumentRecord> {
 	db.update(documents)
 		.set({ statusId, updatedAt: now() })
-		.where(eq(documents.id, id))
-		.run();
-	const record = await get(id, db);
-	if (!record) throw new Error("That document no longer exists.");
-	return record;
-}
-
-export async function setPdfPath(
-	id: string,
-	pdfPath: string,
-	db: Db = getDb(),
-): Promise<DocumentRecord> {
-	db.update(documents)
-		.set({ pdfPath, updatedAt: now() })
 		.where(eq(documents.id, id))
 		.run();
 	const record = await get(id, db);

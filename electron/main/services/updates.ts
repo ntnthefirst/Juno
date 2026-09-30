@@ -300,7 +300,9 @@ async function download(options: { thenRestart: boolean }): Promise<void> {
  * waiting on a channel that no longer has anything behind it.
  */
 function restart(): void {
-	setTimeout(() => autoUpdater.quitAndInstall(), 100);
+	// Silent, and start Juno again afterwards: without the flags the installer
+	// wizard opens over the update and the app stays closed.
+	setTimeout(() => autoUpdater.quitAndInstall(true, true), 100);
 }
 
 export async function setAutoInstall(value: boolean): Promise<UpdateStatus> {

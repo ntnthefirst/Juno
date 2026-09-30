@@ -101,7 +101,9 @@ export function focusMainWindow(): void {
  */
 function childClosed(): void {
 	const main = getMainWindow();
-	if (!main) return;
+	// The children close with the main window when the app quits or an update
+	// installs, so by then there is nothing left to tell.
+	if (!main || main.webContents.isDestroyed()) return;
 	main.focus();
 	main.webContents.send("window.childClosed");
 }

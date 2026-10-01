@@ -2034,6 +2034,8 @@ export interface MailThreadSummary {
 	participants: MailAddress[];
 	/** The newest message's first line, or a search snippet when searching. */
 	snippet: string;
+	/** The message this row stands for. Clicking the row opens exactly this one. */
+	messageId: string;
 }
 
 export interface MailAttachment {

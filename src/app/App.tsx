@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
+import { AgentNotices } from "../features/agent/AgentNotices";
 import { AgentScreen } from "../features/agent/AgentScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
@@ -209,6 +210,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			</div>
 
 			<DocumentDropLayer />
+			<AgentNotices />
 
 			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 		</div>

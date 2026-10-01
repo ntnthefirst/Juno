@@ -280,13 +280,33 @@ const api: JunoApi = {
 	},
 
 	agent: {
-		status: () => call("agent.status"),
+		server: {
+			status: () => call("agent.server.status"),
+			setEnabled: (enabled) => call("agent.server.setEnabled", enabled),
+			setPort: (port) => call("agent.server.setPort", port),
+		},
 		install: {
 			targets: () => call("agent.install.targets"),
 			write: (clientId) => call("agent.install.write", clientId),
 		},
 		tools: () => call("agent.tools"),
-		revealConnectionFile: () => call("agent.revealConnectionFile"),
+		connections: {
+			list: () => call("agent.connections.list"),
+			revoke: (id) => call("agent.connections.revoke", id),
+			createToken: (name) => call("agent.connections.createToken", name),
+			onChange: (listener) => {
+				const handler = () => listener();
+				ipcRenderer.on("agent.connectionsChanged", handler);
+				return () => {
+					ipcRenderer.off("agent.connectionsChanged", handler);
+				};
+			},
+		},
+		pairing: {
+			list: () => call("agent.pairing.list"),
+			answer: (id, code) => call("agent.pairing.answer", id, code),
+			deny: (id) => call("agent.pairing.deny", id),
+		},
 		actions: {
 			list: (query) => call("agent.actions.list", query),
 			get: (id) => call("agent.actions.get", id),

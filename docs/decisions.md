@@ -542,6 +542,10 @@ already running, over a local transport that is not stdio. Then the bridge
 disappears and `socket.ts` becomes the server itself. Nothing else about the
 shape would change, which is why the bridge holds no logic.
 
+**Reversed by decision 42.** That condition was met: MCP clients connect to a
+server by URL. The bridge, the pipe and `mcp.json` are gone, and the rest of
+this decision (the gate, the audit table, automations) stands.
+
 ## 25. The product is called Juno, and the palette is iris on porcelain
 
 Juno Moneta was the aspect of the goddess who warned, and whose temple on the
@@ -657,11 +661,12 @@ then, so the two never overlap, and it lives outside the install folder so the
 update neither locks nor replaces it. Closing Juno with a downloaded update goes
 through the same path rather than the library's silent install-on-quit.
 
-The MCP bridge is the other thing that can stop an install. An agent runs it
-from Juno's own executable, so while it is alive the installer cannot replace
-that file, and an agent that restarts it on exit keeps it alive. Juno writes an
-`updating` marker in its data folder before handing over, and the bridge leaves
-as soon as it sees one. The agent's connection closes until Juno has restarted.
+The MCP bridge used to be the other thing that could stop an install: an agent
+ran it from Juno's own executable, so the installer could not replace that file.
+Juno wrote an `updating` marker for the bridge to see and leave. The bridge is
+gone (decision 42), so nothing of Juno's runs outside Juno any more and the
+marker went with it. An agent connected by URL just finds the server closed for
+the length of the update.
 
 **What would reverse this:** shipping to clients who cannot reach GitHub, or a
 signing certificate arriving with its own distribution channel.
@@ -756,8 +761,10 @@ stay visible and editable, and the connection test settles it.
 
 Connecting an agent meant copying JSON into a file whose path differs per
 client and per platform, and merging it by hand without breaking the servers
-already there. `services/agent-install.ts` does it instead, for Claude Desktop,
-Claude Code, Cursor, Windsurf, VS Code, Codex and Antigravity.
+already there. `services/agent-install.ts` does it instead, for Claude Code,
+Cursor, Windsurf, VS Code, Codex and Antigravity. (Claude Desktop was in the
+list while the entry was a command to start. It cannot be given an address, so
+it left with decision 42.)
 
 It edits files other programs own, so the rules are strict and they are tested:
 
@@ -768,8 +775,11 @@ It edits files other programs own, so the rules are strict and they are tested:
 - **A file that does not parse is refused, never replaced.** A parse error
   almost always means a format Juno has not seen, and overwriting it would
   destroy somebody's configuration.
-- The entry carries the environment a packaged bridge needs. Without it, the
-  client starts Juno's window instead of the bridge.
+- The entry is the server's URL and nothing else, in the shape each client
+  reads: `type` and `url`, or `serverUrl`, or `url` in Codex's table. An entry
+  from the design before this one has a command and no URL, so it shows as
+  configured but out of date, and Update replaces it. Nothing rewrites it
+  unasked.
 
 **Detection answers two questions, not one.** `installed` looks for the
 client's own data folder or install directory; `hasConfigFile` looks for the
@@ -780,8 +790,8 @@ file, and is still offered: writing it is what makes the client find Juno the
 next time it starts. A client that is not on the machine is offered too, at the
 bottom of the list and greyed.
 
-**Codex is TOML, so it is edited as text.** `[mcp_servers.juno]` and its `env`
-table are replaced in place or appended, every other line kept byte for byte,
+**Codex is TOML, so it is edited as text.** `[mcp_servers.juno]` and an old
+`env` table beside it are replaced in place or appended, every other line kept byte for byte,
 and a file that declares `mcp_servers` on one line is refused with the entry to
 paste, because a writer that cannot read a shape must not rewrite it. No TOML
 dependency: one section of one format, read and written by hand, is smaller
@@ -1199,3 +1209,85 @@ document's own `@page` rule, so they still print on A4.
 Revisit if: components (a block made once and placed in several templates, with
 inputs of its own) are built, which is in TODO.md; or a document needs a value
 from a record again, which would need the client chosen before the PDF.
+
+## 42. The agent server is a URL on this machine, and a client is let in with a code
+
+Decision 24 named what would end the bridge: an MCP client that can connect to
+something already running. They can. Streamable HTTP is how Figma's Dev Mode
+server works, and every client Juno configures takes a URL. So Juno now serves
+MCP itself, at `http://127.0.0.1:5866/mcp`, and an agent is pointed at that
+address the way it would be at any remote server. There is no bridge, no pipe,
+no `mcp.json` and no process started from Juno's folder, which also ends the
+install conflict decision 28 had to work around.
+
+**The port is 5866.** It is JUNO on a phone keypad, it has no assignment in the
+IANA registry, and it sits below 32768, where Linux and Windows start handing
+out ports for outgoing connections. A fixed port in that range can be taken by
+a browser tab at random. A development run uses 5867 so both can be open. A
+person may pick another from 1024 to 32767 in Settings > MCP. If the port is
+taken the server says so there and does not wander to another one, because the
+URL is what clients have written down.
+
+**It is on by default**, there is a switch for it in Settings > MCP, and each
+launch shows a short notice with the address and a Copy URL button. The switch
+and the port live in `settings.json`. Turning it off closes the listener and
+keeps who was let in.
+
+**A port is reachable by every program on the machine and by any web page**, so
+the listener is built around who may use it:
+
+- It binds to 127.0.0.1 only.
+- A request whose Host is not a loopback name on that port is refused, which
+  stops a web page reaching it through a name it controls (DNS rebinding).
+- A request carrying an Origin is refused unless it is this server's own. A
+  program sends none; a web page always does.
+- `/mcp` answers only to a token.
+
+**A token is handed out only after a person types a code.** The client does the
+standard MCP authorisation, OAuth 2.1 with PKCE and dynamic client
+registration, because the clients already speak it and so connecting one is a
+URL and nothing else. The step that matters is the middle of it: the client
+opens a page in the browser that shows a six digit code, and Juno shows a
+prompt that does not. The person types the code from the browser into Juno.
+A program that started this unasked leaves a prompt the person has no code for,
+where a button to press would be answered by habit. Three wrong tries end the
+request, it lapses after three minutes, at most five wait at once, and the code
+is never in anything the app shows. A client is only ever sent back to this
+machine or to an app address it registered, never to a web address, so the
+code cannot be delivered to a server somewhere. The prompt is in both windows
+because the settings window is modal and would bury it.
+
+A client's id is its name and redirect addresses, signed with a secret kept in
+`agent-connections.json`, so registering costs the server nothing and survives
+a restart. A token is 256 random bits, only its hash is stored, and Settings
+lists who was let in, when, and when they last used it, with a button to take one
+out. A client that cannot do the handshake gets a token made by hand in the
+same screen, shown once.
+
+**This file is beside `settings.json`, not in the database**, for the reason
+settings is (decision 14) and one more: restoring a backup of the records must
+not bring back a token that was taken out since.
+
+**No tool lets a client in, makes a token or switches the server.** They are
+IPC only, for the reason `approve` has no tool: the thing being gated is what
+would call it. Every call still checks the lock first, and a client cannot start
+the handshake while Juno is locked.
+
+What this does not stop is a program running as this user, which can read a
+client's stored token the way it could read `juno.sqlite`. The lock and the
+confirmation gate are the controls that matter, as before.
+
+The MCP server is stateless: each request is answered by a fresh server, with
+no session kept, and replies are plain JSON rather than a stream. The SDK now
+runs in the main process, which settles the size worry in decision 24: the
+cost was already in the installer.
+
+**What it costs.** Claude Desktop cannot be offered. Its configuration file
+takes only a program to start, and the connectors it does take are reached by
+Anthropic's servers, which cannot see this machine. An entry written by the
+earlier design shows as out of date until Update is pressed.
+
+**What would reverse this:** a client class that cannot be given a URL and
+matters more than the ones that can, or a reason to keep a listener from
+existing at all. The first is answered by a bridge that forwards to this
+address, not by a second server.

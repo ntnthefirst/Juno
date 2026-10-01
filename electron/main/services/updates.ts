@@ -14,8 +14,6 @@
  * build that exists only as a tag is invisible here on purpose.
  */
 import { app, type Event as ElectronEvent } from "electron";
-import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 // The named import, not the default one. electron-updater is CommonJS, and the
 // main process compiles to CommonJS too, so a default import resolves to an
 // undefined `.default` and throws on the first line that touches it.
@@ -46,30 +44,6 @@ let wired = false;
 let installWhenReady = false;
 /** True from the moment Juno starts closing for the installer. */
 let installing = false;
-
-/**
- * Written before the installer runs and read by the MCP bridge, which an agent
- * runs from Juno's own executable. While that process is alive the installer
- * cannot replace the file, and some agents start it again as soon as it exits,
- * so the bridge has to notice this and leave on its own (scripts/mcp-bridge.mjs).
- */
-const UPDATING_MARKER = "updating";
-
-function markUpdating(): void {
-	try {
-		writeFileSync(join(app.getPath("userData"), UPDATING_MARKER), new Date().toISOString());
-	} catch {
-		// Without the marker the installer still tries to end the bridge itself.
-	}
-}
-
-function clearUpdating(): void {
-	try {
-		rmSync(join(app.getPath("userData"), UPDATING_MARKER), { force: true });
-	} catch {
-		// A stale marker expires on its own after a few minutes.
-	}
-}
 
 /**
  * The updater only works from a packaged build: an unpackaged run has no
@@ -133,8 +107,7 @@ function fail(cause: unknown): void {
 	// leave the next one to restart the app unasked.
 	installWhenReady = false;
 	installing = false;
-	clearUpdating();
-	stage = "error";
+
 	percent = 0;
 	broadcast();
 }
@@ -221,8 +194,6 @@ function schedule(): void {
  * settings window draws the toggle correctly, and schedules nothing.
  */
 export async function startUpdates(): Promise<void> {
-	// A marker left by an install that did not finish must not keep the bridge away.
-	clearUpdating();
 	const stored = await settings.getUpdates();
 	autoInstall = stored.autoInstall;
 	lastCheckedAt = stored.lastCheckedAt;
@@ -355,7 +326,6 @@ function versionLine(): string | null {
 function restart(options: { relaunch: boolean }): void {
 	if (installing) return;
 	installing = true;
-	markUpdating();
 	setStage("installing");
 	startInstallAnimation({ relaunch: options.relaunch, version: versionLine() });
 	setTimeout(() => {

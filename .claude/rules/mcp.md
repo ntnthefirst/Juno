@@ -139,3 +139,6 @@ If step 3 cannot be one line, stop and fix the service first.
   it, question whether it should exist.
 - Don't version tools by suffix (`clients.list_v2`). Change the schema and the
   description together, in one commit.
+- Don't add a tool that lets a client in, makes an access token, removes one or
+  switches the server on or off. Those are a person's decisions, over IPC only,
+  for the reason `agent.approve` has no tool ([security.md](security.md) section 9).

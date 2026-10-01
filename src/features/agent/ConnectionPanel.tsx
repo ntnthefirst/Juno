@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { McpServerStatus, ToolSummary } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
+import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { ClientInstaller } from "./ClientInstaller";
+import { ConnectedClients } from "./ConnectedClients";
 import { ManualSetup } from "./ManualSetup";
 
 type ConnectionPanelProps = {
@@ -19,15 +21,11 @@ const ROUTES: { id: Route; label: string; hint: string }[] = [
 ];
 
 /**
- * How an agent reaches Juno, and what it can do when it does.
+ * How an agent reaches Juno, who has been let in, and what it can do.
  *
- * Two routes to the same entry, and one of them is showing at a time: the
- * installers, or the block of configuration to paste. Printing both at once
- * was the old shape, and it read as two jobs rather than one choice, with the
- * paste-it-yourself block sitting under a list that had already done the job.
- *
- * The block is printed with this machine's real paths, because the one thing
- * that makes this feature unusable is guessing at them.
+ * The server is an address, the way Figma's is: a client is given the URL and
+ * nothing else. The first time it connects it opens a page with a code and
+ * Juno asks for that code, so there is no key to copy and none to leak.
  */
 export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 	const [status, setStatus] = useState<McpServerStatus | null>(null);
@@ -35,10 +33,11 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [route, setRoute] = useState<Route>("install");
 	const [filter, setFilter] = useState("");
+	const [switching, setSwitching] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.juno.agent.status(), window.juno.agent.tools()])
+		Promise.all([window.juno.agent.server.status(), window.juno.agent.tools()])
 			.then(([current, toolRows]) => {
 				if (cancelled) return;
 				setStatus(current);
@@ -52,10 +51,24 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 		};
 	}, []);
 
-	async function recheckStatus() {
+	const run = useCallback(
+		async (change: () => Promise<McpServerStatus>) => {
+			setSwitching(true);
+			try {
+				setStatus(await change());
+			} catch (cause: unknown) {
+				onNotice(messageOf(cause));
+			} finally {
+				setSwitching(false);
+			}
+		},
+		[onNotice],
+	);
+
+	async function copy(text: string, done: string) {
 		try {
-			const current = await window.juno.agent.status();
-			setStatus(current);
+			await navigator.clipboard.writeText(text);
+			onNotice(done);
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
 		}
@@ -81,39 +94,63 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 
 	return (
 		<div className="mx-auto w-full max-w-[var(--content-width)]">
-			<section data-setting="mcp-connect" className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
-				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">
-					Connecting an agent
-				</h2>
+			<section data-setting="mcp-server" className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">MCP server</h2>
+
+				<div className="mt-4">
+					<Toggle
+						label="Let agents connect"
+						description="Juno answers on this computer only. An agent has to be let in once, with a code."
+						checked={status.enabled}
+						disabled={switching}
+						onChange={(next) => void run(() => window.juno.agent.server.setEnabled(next))}
+					/>
+				</div>
 
 				<div className="mt-4 flex flex-wrap items-center gap-3">
 					<span
-						className={`inline-block h-2 w-2 rounded-[var(--radius-full)] ${status.running ? "bg-[var(--ok)]" : "bg-[var(--risk)]"}`}
+						className={`inline-block h-2 w-2 rounded-[var(--radius-full)] ${status.running ? "bg-[var(--ok)]" : status.enabled ? "bg-[var(--risk)]" : "bg-[var(--ink-faint)]"}`}
 						aria-hidden
 					/>
 					<p className="text-[length:var(--text-dense)]">
 						{status.running
-							? status.connections === 0
-								? `Listening, ${status.toolCount} tools, no agent connected.`
-								: `Listening. ${status.connections} connected, ${status.toolCount} tools.`
-							: "Not listening."}
+							? `Listening, ${status.toolCount} tools.`
+							: status.enabled
+								? "Not listening."
+								: "Off. Nothing can connect."}
 					</p>
-					<Button size="dense" onClick={() => void recheckStatus()}>
-						<Icon name="sync" />
-						Check again
-					</Button>
 				</div>
 				{status.error ? (
-					<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p data-selectable role="alert" className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">
 						{status.error}
 					</p>
 				) : null}
+
+				<div className="mt-4 flex items-center gap-2">
+					<p
+						data-selectable
+						className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-[length:var(--text-dense)] text-[var(--ink)]"
+					>
+						{status.url}
+					</p>
+					<Button size="dense" onClick={() => void copy(status.url, "URL copied.")}>
+						<Icon name="copy" />
+						Copy URL
+					</Button>
+				</div>
 				<p className="mt-2 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					Juno has to be running and unlocked. Just connected one? Restart it, then check again.
+					Paste this into any client that takes an MCP server URL. Juno has to be running and unlocked.
 				</p>
+
+				<PortRow status={status} busy={switching} onChange={(port) => void run(() => window.juno.agent.server.setPort(port))} />
 			</section>
 
-			<section data-setting="mcp-tools" className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+			<section data-setting="mcp-clients" className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Connected clients</h2>
+				<ConnectedClients onNotice={onNotice} />
+			</section>
+
+			<section data-setting="mcp-connect" className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
 				<div className="flex flex-wrap items-center justify-between gap-3">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Connect a client</h2>
 					<RouteSwitch route={route} onChange={setRoute} />
@@ -122,31 +159,21 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 				<div className="mt-4 flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2.5">
 					<Icon name="info" className="mt-0.5 flex-none text-[var(--ink-muted)]" />
 					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-						Juno runs on this machine, so there is no server address. "Add custom connector"
-						is for remote servers and will not accept Juno.
+						The first time a client connects it opens a page with a code. Type that code into the prompt
+						Juno shows. Claude Desktop only takes servers on the internet, so it cannot use this address.
 					</p>
 				</div>
 
 				<div className="mt-4">
 					{route === "install" ? (
-						<ClientInstaller onNotice={onNotice} />
+						<ClientInstaller onNotice={onNotice} serverRunning={status.running} />
 					) : (
-						<ManualSetup status={status} onNotice={onNotice} />
+						<ManualSetup onNotice={onNotice} />
 					)}
-				</div>
-
-				<div className="mt-6 flex flex-wrap items-start justify-between gap-4">
-					<p className="max-w-[60ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						An agent without the token in this file is refused. The lock is the control that matters.
-					</p>
-					<Button size="dense" onClick={() => void window.juno.agent.revealConnectionFile()}>
-						<Icon name="external" />
-						Show the connection file
-					</Button>
 				</div>
 			</section>
 
-			<section className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
+			<section data-setting="mcp-tools" className="mt-10 border-t border-[var(--line-strong)] pt-8 first:mt-0 first:border-t-0 first:pt-0">
 				<div className="flex items-baseline justify-between gap-4">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">
 						What an agent can do
@@ -203,6 +230,66 @@ export function ConnectionPanel({ onNotice }: ConnectionPanelProps) {
 					) : null}
 				</div>
 			</section>
+		</div>
+	);
+}
+
+type PortRowProps = {
+	status: McpServerStatus;
+	busy: boolean;
+	/** A port, or null for the default. */
+	onChange: (port: number | null) => void;
+};
+
+/**
+ * The port is a small thing most people never touch, so it is one quiet line
+ * rather than a form. Changing it moves the URL, and every client already
+ * pointed at the old one has to be pointed again, which the line says.
+ */
+function PortRow({ status, busy, onChange }: PortRowProps) {
+	const [draft, setDraft] = useState(String(status.port));
+
+	const parsed = Number(draft);
+	const valid = Number.isInteger(parsed) && parsed >= 1024 && parsed <= 32767;
+	const changed = valid && parsed !== status.port;
+	const custom = status.port !== status.defaultPort;
+
+	return (
+		<div className="mt-5">
+			<div className="flex flex-wrap items-end gap-2">
+				<label className="block">
+					<span className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">Port</span>
+					<input
+						type="number"
+						inputMode="numeric"
+						min={1024}
+						max={32767}
+						value={draft}
+						onChange={(event) => setDraft(event.target.value)}
+						className="tabular w-[110px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+					/>
+				</label>
+				<Button size="dense" disabled={busy || !changed} onClick={() => onChange(parsed)}>
+					Change port
+				</Button>
+				{custom ? (
+					<Button
+						size="dense"
+						disabled={busy}
+						onClick={() => {
+							setDraft(String(status.defaultPort));
+							onChange(null);
+						}}
+					>
+						Use {status.defaultPort}
+					</Button>
+				) : null}
+			</div>
+			<p className="mt-2 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				{draft !== "" && !valid
+					? "Pick a port from 1024 to 32767. Higher ones are handed out to other programs at random."
+					: "Changing the port changes the URL, so clients have to be pointed at it again."}
+			</p>
 		</div>
 	);
 }

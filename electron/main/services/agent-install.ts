@@ -2,8 +2,16 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, join } from "node:path";
 import type { AgentClientTarget, AgentConfigFormat, McpServerStatus } from "../../shared/types";
 
+/** The part of the server's state this file needs. */
+export type ServerInfo = Pick<McpServerStatus, "enabled" | "running" | "url">;
+
 /**
  * Writing Juno into the MCP configuration of the agent clients on this machine.
+ *
+ * What gets written is the address of the agent server and nothing else: every
+ * client here can be given a URL, and the handshake that lets it in happens
+ * when it first connects. Claude Desktop is not in the list because it can only
+ * be given a program to start, not an address.
  *
  * The alternative is what this replaces: copy a block of JSON or TOML, find a
  * file whose path differs per client and per platform, work out whether it
@@ -28,6 +36,11 @@ type ClientSpec = {
 	id: string;
 	name: string;
 	format: AgentConfigFormat;
+	/**
+	 * What the entry looks like for this client. Every one takes a URL, and they
+	 * disagree about the rest: some want a type, some call the field serverUrl.
+	 */
+	entry: (url: string) => Record<string, unknown>;
 	/**
 	 * The object (json) or table (toml) servers live under. VS Code calls it
 	 * "servers", everyone else copied Claude Desktop and calls it "mcpServers".
@@ -56,30 +69,12 @@ const LOCALAPPDATA = (home: string) => join(home, "AppData", "Local");
 
 const CLIENTS: ClientSpec[] = [
 	{
-		id: "claude-desktop",
-		name: "Claude Desktop",
-		format: "json",
-		key: "mcpServers",
-		after: "Quit Claude Desktop and start it again. It reads this file once, at launch.",
-		configCandidates: (home, platform) =>
-			platform === "win32"
-				? [join(APPDATA(home), "Claude", "claude_desktop_config.json")]
-				: platform === "darwin"
-					? [join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json")]
-					: [join(home, ".config", "Claude", "claude_desktop_config.json")],
-		installMarkers: (home, platform) =>
-			platform === "win32"
-				? [join(APPDATA(home), "Claude"), join(LOCALAPPDATA(home), "AnthropicClaude")]
-				: platform === "darwin"
-					? ["/Applications/Claude.app", join(home, "Library", "Application Support", "Claude")]
-					: [join(home, ".config", "Claude")],
-	},
-	{
 		id: "claude-code",
 		name: "Claude Code",
 		format: "json",
 		key: "mcpServers",
-		after: "Open a new Claude Code session. Run /mcp in it to check Juno is listed.",
+		entry: (url) => ({ type: "http", url }),
+		after: "Open a new Claude Code session, run /mcp and choose Juno. It opens a page with a code to type into Juno.",
 		// The user-scope config, so Juno is available in every project rather
 		// than in whichever directory it happened to be added from.
 		configCandidates: (home) => [join(home, ".claude.json")],
@@ -90,7 +85,8 @@ const CLIENTS: ClientSpec[] = [
 		name: "Cursor",
 		format: "json",
 		key: "mcpServers",
-		after: "Restart Cursor, then enable Juno under Settings > MCP.",
+		entry: (url) => ({ url }),
+		after: "Restart Cursor, then enable Juno under Settings > MCP and sign in. It opens a page with a code to type into Juno.",
 		configCandidates: (home) => [join(home, ".cursor", "mcp.json")],
 		installMarkers: (home, platform) => [
 			join(home, ".cursor"),
@@ -103,7 +99,8 @@ const CLIENTS: ClientSpec[] = [
 		name: "Windsurf",
 		format: "json",
 		key: "mcpServers",
-		after: "Restart Windsurf, then press refresh in the Cascade MCP panel.",
+		entry: (url) => ({ serverUrl: url }),
+		after: "Restart Windsurf, then press refresh in the Cascade MCP panel and sign in to Juno.",
 		configCandidates: (home) => [join(home, ".codeium", "windsurf", "mcp_config.json")],
 		installMarkers: (home, platform) => [
 			join(home, ".codeium", "windsurf"),
@@ -116,7 +113,8 @@ const CLIENTS: ClientSpec[] = [
 		name: "VS Code",
 		format: "json",
 		key: "servers",
-		after: "Reload the window, then pick Juno from the tools menu in Copilot Chat.",
+		entry: (url) => ({ type: "http", url }),
+		after: "Reload the window, then start Juno from the MCP servers list. It opens a page with a code to type into Juno.",
 		// Stable first, then Insiders. The first candidate that exists wins, so
 		// a machine with both is configured for the one it actually has a file
 		// for, and a machine with only Insiders is not told VS Code is missing.
@@ -157,7 +155,8 @@ const CLIENTS: ClientSpec[] = [
 		name: "Codex",
 		format: "toml",
 		key: "mcp_servers",
-		after: "Start a new Codex session. Run /mcp in it to check Juno is listed.",
+		entry: (url) => ({ url }),
+		after: "Start a new Codex session and sign in to Juno when it asks. It opens a page with a code to type into Juno.",
 		configCandidates: (home) => [join(home, ".codex", "config.toml")],
 		installMarkers: (home) => [join(home, ".codex")],
 	},
@@ -166,7 +165,8 @@ const CLIENTS: ClientSpec[] = [
 		name: "Antigravity",
 		format: "json",
 		key: "mcpServers",
-		after: "Restart Antigravity, then press refresh in its MCP servers panel.",
+		entry: (url) => ({ serverUrl: url }),
+		after: "Restart Antigravity, then press refresh in its MCP servers panel and sign in to Juno.",
 		// The real file, then the machine-specific symlinks that point at it.
 		configCandidates: (home) => [
 			join(home, ".gemini", "config", "mcp_config.json"),
@@ -184,15 +184,9 @@ const CLIENTS: ClientSpec[] = [
 	},
 ];
 
-/** The entry Juno writes. Matches what the connection panel prints. */
-function entryOf(status: McpServerStatus): Record<string, unknown> {
-	return {
-		command: status.command,
-		args: [...status.args],
-		// Only when there is one. An empty env object in a config file reads as
-		// something that was meant to be filled in.
-		...(Object.keys(status.env).length > 0 ? { env: { ...status.env } } : {}),
-	};
+/** The entry Juno writes for one client. */
+function entryOf(client: ClientSpec, status: ServerInfo): Record<string, unknown> {
+	return client.entry(status.url);
 }
 
 function parseJson(path: string): Record<string, unknown> {
@@ -277,29 +271,6 @@ function unescapeTomlString(raw: string): string {
 	return out;
 }
 
-/** Splits `["a", "b"]` into its quoted items, respecting quotes around commas. */
-function parseTomlStringArray(raw: string): string[] {
-	const inner = raw.trim().replace(/^\[/, "").replace(/\]\s*$/, "");
-	if (inner.trim().length === 0) return [];
-	const items: string[] = [];
-	let current = "";
-	let inString = false;
-	for (let i = 0; i < inner.length; i++) {
-		const ch = inner[i];
-		if (ch === '"' && inner[i - 1] !== "\\") {
-			inString = !inString;
-			current += ch;
-		} else if (ch === "," && !inString) {
-			items.push(current.trim());
-			current = "";
-		} else {
-			current += ch;
-		}
-	}
-	if (current.trim().length > 0) items.push(current.trim());
-	return items.map(unescapeTomlString);
-}
-
 function parseTomlBody(body: string): Map<string, string> {
 	const values = new Map<string, string>();
 	for (const line of body.split(/\r?\n/)) {
@@ -312,52 +283,27 @@ function parseTomlBody(body: string): Map<string, string> {
 	return values;
 }
 
-type TomlJunoSection = { command: string; args: string[]; env: Record<string, string> };
+type TomlJunoSection = { url: string | null };
 
-/** Reads the `[<key>.juno]` table and its `.env` sub-table, if any. */
+/** Reads the `[<key>.juno]` table, if the file has one. */
 function readTomlJunoSection(text: string, key: string): TomlJunoSection | null {
 	const sections = tomlSections(text);
 	const junoIndex = sections.findIndex((section) => section.header === `${key}.juno`);
 	if (junoIndex === -1) return null;
 
 	const body = parseTomlBody(sectionBody(text, sections[junoIndex]));
-	const command = body.has("command") ? unescapeTomlString(body.get("command")!) : "";
-	const args = body.has("args") ? parseTomlStringArray(body.get("args")!) : [];
-
-	const env: Record<string, string> = {};
-	const next = sections[junoIndex + 1];
-	if (next && next.header === `${key}.juno.env`) {
-		for (const [envKey, raw] of parseTomlBody(sectionBody(text, next))) {
-			env[envKey] = unescapeTomlString(raw);
-		}
-	}
-
-	return { command, args, env };
+	// An entry from the design before this one has a command and no url, so it
+	// reads as null and is reported as configured but not up to date.
+	return { url: body.has("url") ? unescapeTomlString(body.get("url")!) : null };
 }
 
-function tomlJunoMatches(section: TomlJunoSection, status: McpServerStatus): boolean {
-	if (section.command !== status.command) return false;
-	if (section.args.length !== status.args.length) return false;
-	if (section.args.some((value, i) => value !== status.args[i])) return false;
-	const envKeys = Object.keys(status.env);
-	if (Object.keys(section.env).length !== envKeys.length) return false;
-	return envKeys.every((envKey) => section.env[envKey] === status.env[envKey]);
+function tomlJunoMatches(section: TomlJunoSection, status: ServerInfo): boolean {
+	return section.url === status.url;
 }
 
 /** The `[<key>.juno]` block this install would write, with no trailing newline. */
-function tomlJunoBlock(key: string, status: McpServerStatus): string {
-	const lines = [
-		`[${key}.juno]`,
-		`command = ${tomlString(status.command)}`,
-		`args = [${status.args.map(tomlString).join(", ")}]`,
-	];
-	if (Object.keys(status.env).length > 0) {
-		lines.push("", `[${key}.juno.env]`);
-		for (const [envKey, value] of Object.entries(status.env)) {
-			lines.push(`${envKey} = ${tomlString(value)}`);
-		}
-	}
-	return lines.join("\n");
+function tomlJunoBlock(key: string, status: ServerInfo): string {
+	return [`[${key}.juno]`, `url = ${tomlString(status.url)}`].join("\n");
 }
 
 /**
@@ -378,7 +324,7 @@ function declaresServersInline(text: string, key: string): boolean {
  * Every other line, including comments and other servers, is carried over
  * exactly as it was.
  */
-function spliceTomlJunoSection(text: string, key: string, status: McpServerStatus): string {
+function spliceTomlJunoSection(text: string, key: string, status: ServerInfo): string {
 	const block = tomlJunoBlock(key, status);
 	const sections = tomlSections(text);
 	const junoIndex = sections.findIndex((section) => section.header === `${key}.juno`);
@@ -411,10 +357,10 @@ function spliceTomlJunoSection(text: string, key: string, status: McpServerStatu
  * has no file yet, and writing it is what makes the client pick Juno up on
  * its next launch.
  */
-export function targetsIn(status: McpServerStatus, home: string, platform: Platform): AgentClientTarget[] {
-	const wanted = entryOf(status);
-
+export function targetsIn(status: ServerInfo, home: string, platform: Platform): AgentClientTarget[] {
 	return CLIENTS.map((client) => {
+		const wanted = entryOf(client, status);
+		const snippet = snippetOf(client, status);
 		const candidates = client.configCandidates(home, platform);
 		const path = candidates.find(existsSync) ?? candidates[0] ?? null;
 		const installed = client.installMarkers(home, platform).some(existsSync);
@@ -430,6 +376,7 @@ export function targetsIn(status: McpServerStatus, home: string, platform: Platf
 				upToDate: false,
 				format: client.format,
 				configKey: client.key,
+				snippet,
 				after: client.after,
 			};
 		}
@@ -464,9 +411,16 @@ export function targetsIn(status: McpServerStatus, home: string, platform: Platf
 			upToDate,
 			format: client.format,
 			configKey: client.key,
+			snippet,
 			after: client.after,
 		};
 	});
+}
+
+/** What a person pastes for this client: the same entry a click on Connect writes. */
+function snippetOf(client: ClientSpec, status: ServerInfo): string {
+	if (client.format === "toml") return tomlJunoBlock(client.key, status);
+	return JSON.stringify({ [client.key]: { juno: entryOf(client, status) } }, null, "\t");
 }
 
 export type InstallResult = {
@@ -478,7 +432,7 @@ export type InstallResult = {
 	after: string;
 };
 
-function installJson(client: ClientSpec, path: string, status: McpServerStatus): InstallResult {
+function installJson(client: ClientSpec, path: string, status: ServerInfo): InstallResult {
 	const existed = existsSync(path);
 	const config = parseJson(path);
 
@@ -492,7 +446,7 @@ function installJson(client: ClientSpec, path: string, status: McpServerStatus):
 
 	// Everything else in the file is read and written back untouched. Only the
 	// one entry named "juno" is ours to replace.
-	const servers = { ...serversIn(config, client.key), juno: entryOf(status) };
+	const servers = { ...serversIn(config, client.key), juno: entryOf(client, status) };
 	const next = { ...config, [client.key]: servers };
 
 	writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
@@ -500,7 +454,7 @@ function installJson(client: ClientSpec, path: string, status: McpServerStatus):
 	return { name: client.name, path, backupPath, created: !existed, after: client.after };
 }
 
-function installToml(client: ClientSpec, path: string, status: McpServerStatus): InstallResult {
+function installToml(client: ClientSpec, path: string, status: ServerInfo): InstallResult {
 	const existed = existsSync(path);
 	let text = "";
 	if (existed) {
@@ -539,7 +493,7 @@ function installToml(client: ClientSpec, path: string, status: McpServerStatus):
  * Side-effectful, and on a file another program owns, so it is never called
  * without the person naming that client. See the rules at the top.
  */
-export function installIn(clientId: string, status: McpServerStatus, home: string, platform: Platform): InstallResult {
+export function installIn(clientId: string, status: ServerInfo, home: string, platform: Platform): InstallResult {
 	const client = CLIENTS.find((candidate) => candidate.id === clientId);
 	if (!client) throw new Error(`Juno does not know how to configure ${clientId}.`);
 
@@ -549,7 +503,9 @@ export function installIn(clientId: string, status: McpServerStatus, home: strin
 
 	if (!status.running) {
 		throw new Error(
-			"The Juno agent server is not listening, so there is nothing to point a client at yet.",
+			status.enabled
+				? "The Juno agent server could not start, so there is no address to give a client yet. Settings > MCP says why."
+				: "The Juno agent server is switched off. Turn it on in Settings > MCP, then connect the client.",
 		);
 	}
 
@@ -583,8 +539,8 @@ export function sameEntry(a: unknown, b: unknown): boolean {
 /* ------------------------------------------------------------------ wiring */
 
 type Deps = {
-	/** Read fresh on every call: the bridge path moves with an update. */
-	status: () => McpServerStatus;
+	/** Read fresh on every call: the port can be changed while Juno runs. */
+	status: () => Promise<ServerInfo>;
 	home: string;
 	platform: Platform;
 };
@@ -606,13 +562,13 @@ function required(): Deps {
 }
 
 /** Every agent client Juno knows about, and where it stands with each. */
-export function targets(): AgentClientTarget[] {
+export async function targets(): Promise<AgentClientTarget[]> {
 	const { status, home, platform } = required();
-	return targetsIn(status(), home, platform);
+	return targetsIn(await status(), home, platform);
 }
 
 /** Writes Juno into one named client. See the rules at the top of this file. */
-export function install(clientId: string): InstallResult {
+export async function install(clientId: string): Promise<InstallResult> {
 	const { status, home, platform } = required();
-	return installIn(clientId, status(), home, platform);
+	return installIn(clientId, await status(), home, platform);
 }

@@ -659,10 +659,21 @@ export async function updateDraft(id: string, patch: MailDraftPatch, db: Db = ge
 /** The marker the template renderer leaves where a value was missing. */
 const MISSING_MARKER = /\[ontbreekt: ([\w.]+)\]/g;
 
-function validateSendable(row: Row, account: typeof mailAccounts.$inferSelect): void {
+/** Documents attached to a message that has not gone out. */
+function attachmentCount(db: Db, outboxId: string): number {
+	return db
+		.select({ id: mailOutboxAttachments.id })
+		.from(mailOutboxAttachments)
+		.where(and(eq(mailOutboxAttachments.outboxId, outboxId), isNull(mailOutboxAttachments.deletedAt)))
+		.all().length;
+}
+
+function validateSendable(row: Row, account: typeof mailAccounts.$inferSelect, attachments: number): void {
 	if (parseAddresses(row.toJson).length === 0) throw new Error("The message has nobody in To.");
 	if (!row.subject.trim()) throw new Error("The message has no subject.");
-	if (!row.bodyText.trim() && !row.bodyHtml) throw new Error("The message is empty.");
+	// A document sent on its own is a message: the body may be empty when there is
+	// something attached to carry it.
+	if (!row.bodyText.trim() && !row.bodyHtml && attachments === 0) throw new Error("The message is empty.");
 	// A template gap must never reach a client. The marker is visible in the
 	// composer for exactly this reason, and the gate is where it is enforced.
 	const gaps = new Set<string>();
@@ -691,7 +702,7 @@ export async function requestSend(id: string, options: { actor: Actor }, db: Db 
 	}
 	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, row.accountId)).get();
 	if (!account || account.deletedAt) throw new Error("The account this message belongs to no longer exists.");
-	validateSendable(row, account);
+	validateSendable(row, account, attachmentCount(db, row.id));
 
 	const stamp = now();
 	if (options.actor === "agent") {
@@ -717,7 +728,7 @@ export async function approve(id: string, db: Db = getDb()): Promise<MailOutboxM
 	if (row.state !== "pending") throw new Error("Only a pending message can be approved.");
 	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, row.accountId)).get();
 	if (!account || account.deletedAt) throw new Error("The account this message belongs to no longer exists.");
-	validateSendable(row, account);
+	validateSendable(row, account, attachmentCount(db, row.id));
 	const stamp = now();
 	db.update(mailOutbox)
 		.set({ state: "queued", approvedAt: stamp, queuedAt: stamp, lastError: null, updatedAt: stamp })

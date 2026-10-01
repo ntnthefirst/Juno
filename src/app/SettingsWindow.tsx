@@ -16,6 +16,7 @@ import type { SettingEntry } from "../features/settings/search";
 import { SignatureSection } from "../features/settings/SignatureSection";
 import { UpdatesSection } from "../features/settings/UpdatesSection";
 import { ConnectionPanel } from "../features/agent/ConnectionPanel";
+import { PairingDialog } from "../features/agent/PairingDialog";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
 import { useTheme } from "../lib/theme";
@@ -201,6 +202,8 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 					)}
 				</main>
 			</div>
+
+			<PairingDialog onConnected={(name) => setToast(`${name} connected.`)} />
 
 			{toast ? (
 				<Toast

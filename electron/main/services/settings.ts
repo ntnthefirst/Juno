@@ -26,6 +26,7 @@ import type {
 	AccountingTool,
 	AppSettings,
 	LockSettings,
+	McpServerSettings,
 	OnboardingPatch,
 	OnboardingState,
 	OwnerEmail,
@@ -116,6 +117,16 @@ const DEFAULT_ONBOARDING: OnboardingState = {
  */
 const DEFAULT_UPDATES: UpdateSettings = { autoInstall: true, lastCheckedAt: null };
 
+/**
+ * The agent server starts on its own: it is what lets an agent be pointed at
+ * Juno with one address, and an off switch is one click away in Settings.
+ */
+const DEFAULT_MCP_SERVER: McpServerSettings = { enabled: true, port: null };
+
+/** Below the operating systems' ephemeral ranges, so nothing else is handed it. */
+export const MIN_MCP_PORT = 1024;
+export const MAX_MCP_PORT = 32767;
+
 const DEFAULTS: AppSettings = {
 	theme: "system",
 	sidebarAutoCollapse: true,
@@ -130,6 +141,7 @@ const DEFAULTS: AppSettings = {
 	onboarding: DEFAULT_ONBOARDING,
 	projectsView: DEFAULT_PROJECTS_VIEW,
 	updates: DEFAULT_UPDATES,
+	mcpServer: DEFAULT_MCP_SERVER,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -245,6 +257,7 @@ function normalise(raw: unknown): AppSettings {
 			owner: { ...DEFAULT_OWNER },
 			projectsView: { ...DEFAULT_PROJECTS_VIEW },
 			updates: { ...DEFAULT_UPDATES },
+			mcpServer: { ...DEFAULT_MCP_SERVER },
 		};
 	}
 
@@ -315,6 +328,17 @@ function normalise(raw: unknown): AppSettings {
 		},
 		projectsView: normaliseProjectsView(raw.projectsView),
 		updates: normaliseUpdates(raw.updates),
+		mcpServer: normaliseMcpServer(raw.mcpServer),
+	};
+}
+
+/** A port outside the range is dropped to the default rather than trusted. */
+function normaliseMcpServer(raw: unknown): McpServerSettings {
+	const server = isRecord(raw) ? raw : {};
+	const port = typeof server.port === "number" && Number.isInteger(server.port) ? server.port : null;
+	return {
+		enabled: bool(server.enabled, DEFAULT_MCP_SERVER.enabled),
+		port: port !== null && port >= MIN_MCP_PORT && port <= MAX_MCP_PORT ? port : null,
 	};
 }
 
@@ -377,6 +401,7 @@ export async function get(): Promise<AppSettings> {
 		owner: cloneOwner(current.owner),
 		projectsView: { ...current.projectsView },
 		updates: { ...current.updates },
+		mcpServer: { ...current.mcpServer },
 	};
 }
 
@@ -406,6 +431,28 @@ export async function setUpdates(patch: Partial<UpdateSettings>): Promise<Update
 	const current = read();
 	const next = normaliseUpdates({ ...current.updates, ...patch });
 	return { ...write({ ...current, updates: next }).updates };
+}
+
+export async function getMcpServer(): Promise<McpServerSettings> {
+	return { ...read().mcpServer };
+}
+
+/**
+ * A patch, because the switch and the port are two controls. A port outside
+ * the range is refused rather than quietly replaced: the person typed it, and
+ * a different number in the URL than the one they asked for is a surprise.
+ */
+export async function setMcpServer(patch: Partial<McpServerSettings>): Promise<McpServerSettings> {
+	if (patch.port !== undefined && patch.port !== null) {
+		if (!Number.isInteger(patch.port) || patch.port < MIN_MCP_PORT || patch.port > MAX_MCP_PORT) {
+			throw new Error(
+				`Pick a port between ${MIN_MCP_PORT} and ${MAX_MCP_PORT}. Higher ones are handed out to other programs at random.`,
+			);
+		}
+	}
+	const current = read();
+	const next = normaliseMcpServer({ ...current.mcpServer, ...patch });
+	return { ...write({ ...current, mcpServer: next }).mcpServer };
 }
 
 export async function getTheme(): Promise<ThemeSetting> {

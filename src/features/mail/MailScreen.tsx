@@ -715,6 +715,7 @@ export function MailScreen() {
 					<ThreadView
 						key={selectedThreadId}
 						threadId={selectedThreadId}
+						folderId={selection?.folderId ?? null}
 						onBack={() => setReaderOpen(false)}
 						inTrash={inTrash}
 						onChanged={() => setAccountsVersion((v) => v + 1)}

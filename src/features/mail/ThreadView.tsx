@@ -11,6 +11,12 @@ import type { ThreadAction } from "./ThreadList";
 
 type ThreadViewProps = {
 	threadId: string;
+	/**
+	 * The folder the row was clicked in. The message that opens is the newest one
+	 * filed there, which is the one the row was showing: the inbox opens the last
+	 * mail received, Sent the last mail sent.
+	 */
+	folderId?: string | null;
 	/** Back to the list. Reading a thread replaces it rather than floating over it. */
 	onBack: () => void;
 	/** Whether this thread is in the trash, where the delete is the final one. */
@@ -69,6 +75,7 @@ type Load =
 
 export function ThreadView({
 	threadId,
+	folderId = null,
 	onBack,
 	inTrash = false,
 	onChanged,
@@ -176,11 +183,13 @@ export function ThreadView({
 	const { summary, messages, outgoing } = load.thread;
 	const entries = interleave(messages, outgoing);
 
-	// Start with the first message in the thread, so opening a conversation shows
-	// the message represented by the clicked row rather than a later reply.
-	// Keep the current choice across a refresh as long as it still exists.
+	// Open the message the clicked row stood for: the newest one in the folder it
+	// was clicked in, or the newest in the thread when the list spans folders
+	// (a search) or none of the thread's mail is filed there. Keep the current
+	// choice across a refresh as long as it still exists.
 	if (load.thread !== derivedFrom) {
-		const fallback = messages[0] ?? entries[0]?.message ?? null;
+		const inFolder = folderId ? messages.filter((m) => m.folderId === folderId) : [];
+		const fallback = inFolder.at(-1) ?? messages.at(-1) ?? entries[0]?.message ?? null;
 		const next = openId && entries.some((e) => e.message.id === openId) ? openId : (fallback?.id ?? null);
 		setDerivedFrom(load.thread);
 		if (next !== openId) setOpenId(next);

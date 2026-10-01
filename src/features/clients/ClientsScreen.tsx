@@ -18,6 +18,7 @@ import { AddButton } from "../../components/AddButton";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { clearPendingClient, peekPendingClient } from "../../lib/open-client";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { ClientAddressPanel } from "./ClientAddressPanel";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -55,12 +56,15 @@ type Load =
 export function ClientsScreen() {
 	const [search, setSearch] = useState("");
 	const [load, setLoad] = useState<Load>({ status: "loading" });
-	const [selectedId, setSelectedId] = useState<string | null>(null);
+	// A client opened from another screen (the mail reader) arrives as a pending
+	// request, and is cleared once this screen has taken it.
+	const [selectedId, setSelectedId] = useState<string | null>(() => peekPendingClient()?.id ?? null);
 	// Held alongside the id so the title bar has a name to show the moment a row
 	// is clicked, with no fetch and no flash of a stale label. A save that
 	// renames the client corrects it through `saved`, which is the only other
 	// place the full row comes back from the main process.
-	const [selectedName, setSelectedName] = useState<string | null>(null);
+	const [selectedName, setSelectedName] = useState<string | null>(() => peekPendingClient()?.name ?? null);
+	useEffect(() => clearPendingClient, []);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const bumpDetail = () => setDetailVersion((current) => current + 1);
 	const [form, setForm] = useState<{ client: Client | null } | null>(null);

@@ -476,6 +476,32 @@ describe("attachments", () => {
 	});
 });
 
+describe("a message with no text", () => {
+	it("is refused when nothing is attached, and sent when a document is", async () => {
+		const bare = await outbox.createDraft(
+			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Leeg", bodyText: "" },
+			db,
+		);
+		await expect(outbox.requestSend(bare.id, { actor: "user" }, db)).rejects.toThrow(/message is empty/);
+
+		const client = await clientsService.create({ name: "obet" }, db);
+		const pdfPath = join(dir, "contract.pdf");
+		writeFileSync(pdfPath, "%PDF-1.4 test");
+		const documentId = db
+			.insert(documents)
+			.values({ clientId: client.id, title: "Contract", bodyHtml: "<p>x</p>", pdfPath })
+			.returning({ id: documents.id })
+			.get().id;
+
+		const withDocument = await outbox.createDraft(
+			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Contract", bodyText: "", documentIds: [documentId] },
+			db,
+		);
+		const queued = await outbox.requestSend(withDocument.id, { actor: "user" }, db);
+		expect(queued.state).toBe("queued");
+	});
+});
+
 describe("a sent reply in its thread", () => {
 	/** The thread the stored original sits in, and the original's id. */
 	function threadOf(messageId: string): string {

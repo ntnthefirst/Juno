@@ -7,6 +7,7 @@ import { Dialog } from "../../components/Dialog";
 import { IconAction } from "../../components/IconAction";
 import { InlineAdd } from "../../components/InlineAdd";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
+import { PdfViewer } from "../../components/PdfViewer";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { messageOf } from "../../lib/errors";
 import {
@@ -14,7 +15,10 @@ import {
 	NO_DOCUMENT_TEMPLATE_FILTERS,
 	type DocumentTemplateFilters,
 } from "./document-template-filters";
+import { DocumentCanvasEditor } from "./CanvasTemplateEditor";
+import { paperLabel } from "@shared/paper";
 import { TemplateEditor } from "./TemplateEditor";
+import { UseCanvasTemplateScreen } from "./UseCanvasTemplateScreen";
 import { UseDocumentTemplateScreen } from "./UseDocumentTemplateScreen";
 
 type Load =
@@ -25,7 +29,8 @@ type Load =
 type View =
 	| { status: "list" }
 	| { status: "preview"; id: string }
-	| { status: "edit"; id: string }
+	/** `flow` for a template just made from a Word file, which lands on one page. */
+	| { status: "edit"; id: string; flow?: boolean }
 	| { status: "use"; id: string };
 
 function matches(template: DocumentTemplate, needle: string): boolean {
@@ -42,6 +47,7 @@ export function DocumentTemplatesScreen() {
 	const [removeError, setRemoveError] = useState<string | null>(null);
 	const [creating, setCreating] = useState(false);
 	const [createError, setCreateError] = useState<string | null>(null);
+	const [importing, setImporting] = useState(false);
 
 	const fetchRows = useCallback(() => window.juno.templates.list(), []);
 
@@ -85,6 +91,26 @@ export function DocumentTemplatesScreen() {
 			setCreateError(messageOf(cause));
 		} finally {
 			setCreating(false);
+		}
+	}
+
+	/**
+	 * A template from a Word file. Opened in the editor straight away, which
+	 * flows what the import put on one page onto as many as it needs.
+	 */
+	async function importWord(): Promise<void> {
+		setCreateError(null);
+		setImporting(true);
+		try {
+			const created = await window.juno.templates.pickDocx();
+			if (!created) return;
+			const rows = await fetchRows();
+			setLoad({ status: "ready", rows });
+			setView({ status: "edit", id: created.id, flow: true });
+		} catch (cause: unknown) {
+			setCreateError(messageOf(cause));
+		} finally {
+			setImporting(false);
 		}
 	}
 
@@ -156,6 +182,20 @@ export function DocumentTemplatesScreen() {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [effectiveView.status]);
 
+	if (effectiveView.status === "edit" && selected && selected.canvas) {
+		return (
+			<div className="h-full min-h-0">
+				<DocumentCanvasEditor
+					key={selected.id}
+					templateId={selected.id}
+					flowOnOpen={effectiveView.flow === true}
+					onSaved={refresh}
+					onBack={() => setView({ status: "preview", id: selected.id })}
+				/>
+			</div>
+		);
+	}
+
 	if (effectiveView.status === "edit" && selected) {
 		return (
 			<div className="h-full min-h-0">
@@ -164,6 +204,22 @@ export function DocumentTemplatesScreen() {
 					templateId={selected.id}
 					onSaved={refresh}
 					onBack={() => setView({ status: "preview", id: selected.id })}
+				/>
+			</div>
+		);
+	}
+
+	if (effectiveView.status === "use" && selected && selected.canvas) {
+		return (
+			<div className="h-full min-h-0">
+				<UseCanvasTemplateScreen
+					key={selected.id}
+					template={selected}
+					onBack={() => setView({ status: "preview", id: selected.id })}
+					onDone={() => {
+						refresh();
+						setView({ status: "list" });
+					}}
 				/>
 			</div>
 		);
@@ -211,6 +267,9 @@ export function DocumentTemplatesScreen() {
 						</span>
 					) : null}
 					<span className="ml-auto" />
+					<Button size="dense" disabled={importing} onClick={() => void importWord()}>
+						{importing ? "Importing" : "Import Word file"}
+					</Button>
 					<InlineAdd
 						label="New document template"
 						placeholder="Template name"
@@ -219,9 +278,9 @@ export function DocumentTemplatesScreen() {
 					/>
 				</div>
 				<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					The contract texts that get rendered into the PDFs you send clients. The texts that ship
-					are invented, so read one, correct it, and mark it as reviewed before anything generated
-					from it goes out.
+					The documents you make again and again, laid out on paper and printed to PDF. Each one asks
+					for what changes every time, and you connect it to a client once the PDF is made. Mark a
+					template as reviewed once you have read its text.
 				</p>
 				{createError ? (
 					<p
@@ -405,7 +464,9 @@ function DocumentTemplateRow({ template, checked, hasSelection, onToggle, onSele
 					<span className="tabular mt-0.5 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 						Version {template.version}
 						{"  ·  "}
-						{count} {count === 1 ? "placeholder" : "placeholders"}
+						{template.canvas
+							? `${paperLabel(template.canvas.paper).split(",")[0]}, ${template.inputs.length} ${template.inputs.length === 1 ? "input" : "inputs"}`
+							: `${count} ${count === 1 ? "placeholder" : "placeholders"}`}
 					</span>
 				</button>
 			</div>
@@ -438,8 +499,34 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 	// begins from this initial state rather than needing a reset inside the
 	// effect below.
 	const [preview, setPreview] = useState<PreviewState>({ status: "loading" });
+	// A canvas template is previewed as the PDF it prints as.
+	const [printed, setPrinted] = useState<{ stamp: number; pdf: Uint8Array; missing: string[] } | null>(null);
+	const [printError, setPrintError] = useState<string | null>(null);
+	const readPrinted = useCallback(async () => printed?.pdf ?? new Uint8Array(), [printed]);
 
 	useEffect(() => {
+		if (!template.canvas) return;
+		let cancelled = false;
+		window.juno.templates
+			.renderPdf({
+				templateId: template.id,
+				values: Object.fromEntries(
+					template.inputs.filter((input) => input.defaultValue).map((input) => [input.key, input.defaultValue ?? ""]),
+				),
+			})
+			.then((result) => {
+				if (!cancelled) setPrinted({ stamp: Date.now(), pdf: result.pdf, missing: result.missing });
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setPrintError(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [template.id, template.canvas, template.inputs, template.updatedAt]);
+
+	useEffect(() => {
+		if (template.canvas) return;
 		let cancelled = false;
 		window.juno.templates
 			.preview({ bodyHtml: template.bodyHtml, clientId: null, isSpecimen: template.reviewedAt === null })
@@ -452,7 +539,7 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 		return () => {
 			cancelled = true;
 		};
-	}, [template.id, template.bodyHtml, template.reviewedAt]);
+	}, [template.id, template.bodyHtml, template.reviewedAt, template.canvas]);
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -498,7 +585,7 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 						</h2>
 						{template.inputs.length === 0 ? (
 							<p className="mt-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-								Nothing beyond a client and a project.
+								{template.canvas ? "Nothing. It prints as it is." : "Nothing beyond a client and a project."}
 							</p>
 						) : (
 							<ul className="mt-3 flex flex-col gap-1">
@@ -524,7 +611,25 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 							</p>
 						) : null}
 
-						{preview.status === "loading" ? (
+						{template.canvas ? (
+							<div className="mt-4 flex h-[66vh] min-h-[420px] flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--line)]">
+								<PdfViewer
+									fileKey={printed ? String(printed.stamp) : null}
+									read={readPrinted}
+									caption={
+										<span className="truncate text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+											{paperLabel(template.canvas.paper)}
+											{printed && printed.missing.length > 0 ? `. No value for: ${printed.missing.join(", ")}` : ""}
+										</span>
+									}
+									empty={
+										<p className="p-6 text-center text-[var(--ink-muted)]">
+											{printError ?? "Making the PDF."}
+										</p>
+									}
+								/>
+							</div>
+						) : preview.status === "loading" ? (
 							<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">Rendering.</p>
 						) : preview.status === "error" ? (
 							<p

@@ -196,6 +196,8 @@ export interface JunoApi {
 			cut(): Promise<void>;
 			copy(): Promise<void>;
 			paste(): Promise<void>;
+			/** Pastes the clipboard as plain text in the style of where it lands. */
+			pasteAsText(): Promise<void>;
 			selectAll(): Promise<void>;
 		};
 	};

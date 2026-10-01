@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import type { PDFDocumentProxy } from "../../lib/pdf";
+import type { PDFDocumentProxy } from "../lib/pdf";
 
 type PdfPageViewProps = {
 	pdf: PDFDocumentProxy;

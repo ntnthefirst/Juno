@@ -17,6 +17,7 @@ import type {
 	MailOutboxListQuery,
 	MailReplyMode,
 	MailTemplateDraft,
+	MailTemplateSendInput,
 	MailTemplateInput,
 	MailTemplatePatch,
 	MailThreadListQuery,
@@ -127,6 +128,14 @@ export function registerMailIpc(): void {
 		shell.showItemInFolder(threads.attachmentPath(id).path);
 	});
 
+	// Opened only for the short list of plain document, image and media types
+	// the service allows. The window offers it for a trusted sender or mail
+	// the person sent.
+	ipcMain.handle("mail.attachments.open", async (_event, id: string) => {
+		const error = await shell.openPath(threads.openableAttachmentPath(id));
+		if (error) throw new Error("No app on this machine could open that file. Use Save as instead.");
+	});
+
 	ipcMain.handle("mail.attachments.save", async (event, id: string) => {
 		const { path, filename } = threads.attachmentPath(id);
 		const owner = BrowserWindow.fromWebContents(event.sender);
@@ -171,6 +180,9 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.outbox.list", (_event, query?: MailOutboxListQuery) => outbox.list(query ?? {}));
 	ipcMain.handle("mail.outbox.get", (_event, id: string) => outbox.get(id));
 	ipcMain.handle("mail.outbox.counts", (_event, accountId?: string) => outbox.counts(accountId));
+	ipcMain.handle("mail.outbox.sendFromTemplate", (_event, input: MailTemplateSendInput) =>
+		outbox.sendFromTemplate(input, { actor: "user" }),
+	);
 	ipcMain.handle("mail.outbox.createDraft", (_event, input: MailDraftInput) => outbox.createDraft(input));
 	ipcMain.handle("mail.outbox.updateDraft", (_event, id: string, patch: MailDraftPatch) =>
 		outbox.updateDraft(id, patch),

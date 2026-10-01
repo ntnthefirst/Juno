@@ -2034,6 +2034,8 @@ export interface MailThreadSummary {
 	participants: MailAddress[];
 	/** The newest message's first line, or a search snippet when searching. */
 	snippet: string;
+	/** The message this row stands for. Clicking the row opens exactly this one. */
+	messageId: string;
 }
 
 export interface MailAttachment {
@@ -2337,6 +2339,20 @@ export interface MailDraftInput {
 	projectId?: string | null;
 	templateId?: string | null;
 	/** Documents to attach. Their PDF is rendered at send time if needed. */
+	documentIds?: string[];
+}
+
+/** A template filled and sent in one step. There is no draft in between. */
+export interface MailTemplateSendInput {
+	accountId: string;
+	to: MailAddress[];
+	cc?: MailAddress[];
+	bcc?: MailAddress[];
+	templateId: string;
+	clientId?: string | null;
+	projectId?: string | null;
+	/** Values no record holds, by placeholder name under document. */
+	extras?: Record<string, string>;
 	documentIds?: string[];
 }
 

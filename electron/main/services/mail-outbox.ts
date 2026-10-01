@@ -25,6 +25,7 @@ import type {
 	MailThreadOutgoing,
 	MailReplyMode,
 	MailReplySeed,
+	MailTemplateSendInput,
 } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now, uuidv7 } from "../db/columns";
@@ -41,7 +42,7 @@ import {
 import { formatDateTime } from "./document-context";
 import { htmlToText, mailShell, quoteForReply, textToHtml } from "./mail-html";
 import { clientsFor } from "./mail-recipients";
-import { footerLines } from "./mail-templates";
+import { footerLines, renderTemplate } from "./mail-templates";
 
 export type Actor = "user" | "agent";
 
@@ -481,7 +482,19 @@ function replyHeaders(db: Db, replyToMessageId: string | null | undefined): {
 	};
 }
 
+/**
+ * A plain draft. A template is never saved as one: it is filled and sent in one
+ * step by sendFromTemplate, so a draft that names a template is refused here
+ * for the window and for an agent alike.
+ */
 export async function createDraft(input: MailDraftInput, db: Db = getDb()): Promise<MailOutboxMessage> {
+	if (input.templateId) {
+		throw new Error("A template cannot be saved as a draft. Fill it and send it in one step instead.");
+	}
+	return insertDraft(input, db);
+}
+
+async function insertDraft(input: MailDraftInput, db: Db): Promise<MailOutboxMessage> {
 	const account = db
 		.select()
 		.from(mailAccounts)
@@ -539,6 +552,50 @@ export async function createDraft(input: MailDraftInput, db: Db = getDb()): Prom
 	const record = await requireRecord(id, db);
 	notifyChanged(record);
 	return record;
+}
+
+/**
+ * Fills a template and asks to send it, as one operation. Not a reply: a
+ * template starts a new message, and nothing of it is kept as a draft, so when
+ * the send is refused (a recipient missing, a placeholder with no value) the
+ * row made along the way is removed again.
+ */
+export async function sendFromTemplate(
+	input: MailTemplateSendInput,
+	options: { actor: Actor },
+	db: Db = getDb(),
+): Promise<MailOutboxMessage> {
+	const rendered = await renderTemplate(
+		{
+			templateId: input.templateId,
+			clientId: input.clientId ?? null,
+			projectId: input.projectId ?? null,
+			...(input.extras ? { extras: input.extras } : {}),
+		},
+		db,
+	);
+	const made = await insertDraft(
+		{
+			accountId: input.accountId,
+			to: input.to,
+			...(input.cc ? { cc: input.cc } : {}),
+			...(input.bcc ? { bcc: input.bcc } : {}),
+			subject: rendered.subject,
+			bodyText: rendered.bodyText,
+			bodyHtml: rendered.bodyHtml,
+			clientId: input.clientId ?? null,
+			projectId: input.projectId ?? null,
+			templateId: input.templateId,
+			documentIds: input.documentIds ?? [],
+		},
+		db,
+	);
+	try {
+		return await requestSend(made.id, options, db);
+	} catch (cause) {
+		await remove(made.id, db);
+		throw cause;
+	}
 }
 
 export async function updateDraft(id: string, patch: MailDraftPatch, db: Db = getDb()): Promise<MailOutboxMessage> {

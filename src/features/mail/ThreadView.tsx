@@ -11,6 +11,8 @@ import type { ThreadAction } from "./ThreadList";
 
 type ThreadViewProps = {
 	threadId: string;
+	/** The message the clicked row stood for. It is the one that opens. */
+	messageId?: string | null;
 	/** Back to the list. Reading a thread replaces it rather than floating over it. */
 	onBack: () => void;
 	/** Whether this thread is in the trash, where the delete is the final one. */
@@ -69,6 +71,7 @@ type Load =
 
 export function ThreadView({
 	threadId,
+	messageId = null,
 	onBack,
 	inTrash = false,
 	onChanged,
@@ -176,12 +179,13 @@ export function ThreadView({
 	const { summary, messages, outgoing } = load.thread;
 	const entries = interleave(messages, outgoing);
 
-	// Start with the first message in the thread, so opening a conversation shows
-	// the message represented by the clicked row rather than a later reply.
-	// Keep the current choice across a refresh as long as it still exists.
+	// Open the message the clicked row stood for. Keep the current choice across
+	// a refresh as long as it still exists.
 	if (load.thread !== derivedFrom) {
-		const fallback = messages[0] ?? entries[0]?.message ?? null;
-		const next = openId && entries.some((e) => e.message.id === openId) ? openId : (fallback?.id ?? null);
+		const wanted = messageId && entries.some((e) => e.message.id === messageId) ? messageId : null;
+		const fallback = messages.at(-1) ?? entries[0]?.message ?? null;
+		const kept = openId && entries.some((e) => e.message.id === openId) ? openId : null;
+		const next = kept ?? wanted ?? fallback?.id ?? null;
 		setDerivedFrom(load.thread);
 		if (next !== openId) setOpenId(next);
 	}

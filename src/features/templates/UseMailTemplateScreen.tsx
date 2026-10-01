@@ -20,7 +20,7 @@ import { useCanvasFonts } from "./mail/canvas/use-canvas-fonts";
 type UseMailTemplateScreenProps = {
 	template: MailTemplate;
 	onBack: () => void;
-	/** The draft was created. This screen never sends anything. */
+	/** The message was queued. A template is never kept as a draft. */
 	onCreated: () => void;
 };
 
@@ -67,7 +67,7 @@ function parseAddressLine(line: string): MailAddress[] {
 }
 
 /**
- * Fill, Link, Review and create: docs/editors.md section 4. A template with
+ * Fill, Link, Review and send: docs/editors.md section 4. A template with
  * no declared inputs skips straight to Link, because a step with nothing on
  * it is not a step, it is a confirmation nobody asked for.
  */
@@ -124,7 +124,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 	const [reviewRender, setReviewRender] = useState<ReviewRenderState | null>(null);
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [createdDraft, setCreatedDraft] = useState<MailOutboxMessage | null>(null);
+	const [sentMessage, setSentMessage] = useState<MailOutboxMessage | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -196,17 +196,15 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 		setCreating(true);
 		setError(null);
 		try {
-			const draft = await window.juno.mail.outbox.createDraft({
+			const sent = await window.juno.mail.outbox.sendFromTemplate({
 				accountId,
 				to: parseAddressLine(to),
-				subject: rendered.subject,
-				bodyText: rendered.bodyText,
-				bodyHtml: rendered.bodyHtml,
+				templateId: template.id,
 				clientId: clientId || null,
 				projectId: projectId || null,
-				templateId: template.id,
+				extras: values,
 			});
-			setCreatedDraft(draft);
+			setSentMessage(sent);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		} finally {
@@ -214,11 +212,11 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 		}
 	}
 
-	if (createdDraft) {
+	if (sentMessage) {
 		return (
 			<FormPage title={template.name} onBack={onCreated} backLabel="Done" width="wide">
 				<p className="text-[var(--ink)]">
-					Draft created. It waits in the outbox until you send it; nothing has gone out yet.
+					Message queued. It goes out in a moment, and you can follow it in the outbox.
 				</p>
 			</FormPage>
 		);
@@ -246,7 +244,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 							title={!to.trim() ? "Add a recipient on the Link step first." : undefined}
 							onClick={() => void create()}
 						>
-							{creating ? "Creating" : "Create draft"}
+							{creating ? "Sending" : "Send"}
 						</Button>
 					) : (
 						<Button variant="primary" onClick={() => setStep(step + 1)}>
@@ -316,7 +314,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 							<p className="font-[var(--weight-medium)]">{rendered.subject}</p>
 							{rendered.missing.length > 0 ? (
 								<p className="mt-2 text-[length:var(--text-sm)] text-[var(--risk)]">
-									No value for: {rendered.missing.join(", ")}. You can still create the draft; a blank one is sometimes correct.
+									No value for: {rendered.missing.join(", ")}. Fill these in before sending: a message with a gap in it is refused.
 								</p>
 							) : null}
 							<div className="mt-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">

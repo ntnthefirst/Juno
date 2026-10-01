@@ -1,4 +1,4 @@
-import type { MailAddress, MailDraftInput, MailOutboxState } from "../../shared/types";
+import type { MailAddress, MailDraftInput, MailOutboxState, MailTemplateSendInput } from "../../shared/types";
 import * as outbox from "../services/mail-outbox";
 import * as templates from "../services/mail-templates";
 import type { ToolDescriptor } from "./types";
@@ -124,7 +124,7 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		description:
 			"Fills a template against a client and project and returns the subject, the HTML body " +
 			"in the house style and its text twin, plus the placeholders that had no value. Stores " +
-			"nothing; put the result in mail.draft.",
+			"nothing: a check before mail.send_from_template. A template is never put in a draft.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -333,9 +333,10 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		name: "mail.draft",
 		title: "Write a draft",
 		description:
-			"Creates a draft in the outbox. Nothing is sent. Plain text is turned into HTML in the " +
-			"house style; pass body_html from mail.templates.render to keep a template's layout. " +
-			"reply_to_message_id threads it under a received message. document_ids attach PDFs.",
+			"Creates a plain draft in the outbox. Nothing is sent. The text is turned into HTML in the " +
+			"house style. Use it for a new mail and for a reply or a forward: reply_to_message_id " +
+			"threads it under a received message. Templates are not used here, and a template is " +
+			"never saved as a draft: use mail.send_from_template. document_ids attach PDFs.",
 		readOnly: false,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -347,11 +348,9 @@ export const mailOutboxTools: ToolDescriptor[] = [
 				bcc: ADDRESS_LIST,
 				subject: { type: "string" },
 				body_text: { type: "string" },
-				body_html: { type: ["string", "null"] },
 				reply_to_message_id: { type: ["string", "null"], description: "A mail.messages id." },
 				client_id: { type: ["string", "null"] },
 				project_id: { type: ["string", "null"] },
-				template_id: { type: ["string", "null"] },
 				document_ids: { type: "array", items: { type: "string" } },
 			},
 			required: ["account_id", "to", "subject", "body_text"],
@@ -365,14 +364,65 @@ export const mailOutboxTools: ToolDescriptor[] = [
 				bcc: addresses(args.bcc),
 				subject: String(args.subject),
 				bodyText: String(args.body_text),
-				bodyHtml: (args.body_html as string | null) ?? null,
 				replyToMessageId: (args.reply_to_message_id as string | null) ?? null,
 				clientId: (args.client_id as string | null) ?? null,
 				projectId: (args.project_id as string | null) ?? null,
-				templateId: (args.template_id as string | null) ?? null,
 				documentIds: Array.isArray(args.document_ids) ? args.document_ids.map(String) : [],
 			};
 			return outbox.createDraft(input);
+		},
+	},
+	{
+		name: "mail.send_from_template",
+		title: "Ask to send a mail from a template",
+		description:
+			"Fills a mail template for a client and project and asks to send it as a new message, in " +
+			"one step. It does not send: the filled message becomes pending and a person approves or " +
+			"rejects it in the app, seeing the whole message. A template is never saved as a draft " +
+			"and cannot be used for a reply or a forward; for those use mail.draft. Check the result " +
+			"with mail.templates.render first when values may be missing, because a placeholder " +
+			"without a value is refused. Returns the message in its pending state.",
+		readOnly: false,
+		requiresConfirmation: true,
+		// Gated in the service for the same reason as mail.send: the person
+		// approves the real message, not an argument list.
+		gatedInService: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				account_id: { type: "string" },
+				template_id: { type: "string" },
+				to: ADDRESS_LIST,
+				cc: ADDRESS_LIST,
+				bcc: ADDRESS_LIST,
+				client_id: { type: ["string", "null"] },
+				project_id: { type: ["string", "null"] },
+				extras: {
+					type: "object",
+					description:
+						"Values no record holds, by placeholder name under document: title, dueOn (YYYY-MM-DD), amount.",
+					additionalProperties: { type: "string" },
+				},
+				document_ids: { type: "array", items: { type: "string" } },
+			},
+			required: ["account_id", "template_id", "to"],
+			additionalProperties: false,
+		},
+		handler: async (args) => {
+			const input: MailTemplateSendInput = {
+				accountId: String(args.account_id),
+				templateId: String(args.template_id),
+				to: addresses(args.to),
+				cc: addresses(args.cc),
+				bcc: addresses(args.bcc),
+				clientId: (args.client_id as string | null) ?? null,
+				projectId: (args.project_id as string | null) ?? null,
+				...(args.extras && typeof args.extras === "object"
+					? { extras: args.extras as Record<string, string> }
+					: {}),
+				documentIds: Array.isArray(args.document_ids) ? args.document_ids.map(String) : [],
+			};
+			return outbox.sendFromTemplate(input, { actor: "agent" });
 		},
 	},
 	{

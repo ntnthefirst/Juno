@@ -17,6 +17,7 @@ import type {
 	MailThreadListQuery,
 	MailThreadSummary,
 } from "../../shared/types";
+import { isOpenableAttachment } from "../../shared/attachment-kind";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
@@ -137,17 +138,22 @@ interface Summarised {
 	hasAttachments: boolean;
 	isFlagged: boolean;
 	snippet: string;
+	/** The message the row stands for, which is the one that opens when it is clicked. */
+	messageId: string;
 	participants: MailAddress[];
 }
 
 function summarise(
 	db: Db,
-	threads: { thread: ThreadRow; clientName: string | null; snippet?: string }[],
+	threads: { thread: ThreadRow; clientName: string | null; snippet?: string; messageId?: string }[],
+	folderId?: string,
 ): MailThreadSummary[] {
 	if (threads.length === 0) return [];
 	const ids = threads.map((t) => t.thread.id);
 	const messages = db
 		.select({
+			id: mailMessages.id,
+			folderId: mailMessages.folderId,
 			threadId: mailMessages.threadId,
 			fromName: mailMessages.fromName,
 			fromAddress: mailMessages.fromAddress,
@@ -181,6 +187,7 @@ function summarise(
 			hasAttachments: false,
 			isFlagged: false,
 			snippet: entry.snippet ?? "",
+			messageId: entry.messageId ?? "",
 			participants: [],
 		});
 	}
@@ -191,7 +198,13 @@ function summarise(
 		if (!message.isSeen) group.unreadCount += 1;
 		if (message.hasAttachments) group.hasAttachments = true;
 		if (message.isFlagged) group.isFlagged = true;
-		if (!group.snippet && message.snippet) group.snippet = message.snippet;
+		// Newest first, so the first message that qualifies is the newest one. A row
+		// stands for the newest message in the folder it is listed in (or in the
+		// thread, when the list spans folders), and a search names its own hit.
+		if (!group.messageId && (!folderId || message.folderId === folderId)) {
+			group.messageId = message.id;
+			if (!group.snippet && message.snippet) group.snippet = message.snippet;
+		}
 		const people = [
 			...(message.fromAddress ? [{ name: message.fromName, address: message.fromAddress }] : []),
 			...parseAddresses(message.toJson),
@@ -202,6 +215,10 @@ function summarise(
 			group.participants.push(person);
 		}
 	}
+
+	// A thread with nothing filed in the listed folder still needs a message.
+	const fallbackIds = new Map<string, string>();
+	for (const message of messages) if (!fallbackIds.has(message.threadId)) fallbackIds.set(message.threadId, message.id);
 
 	return threads.map(({ thread }) => {
 		const group = grouped.get(thread.id)!;
@@ -220,6 +237,7 @@ function summarise(
 			isFlagged: group.isFlagged,
 			participants: group.participants,
 			snippet: group.snippet,
+			messageId: group.messageId || fallbackIds.get(thread.id) || "",
 		};
 	});
 }
@@ -280,7 +298,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 		// planner flattens a plain subquery into the join, which breaks that. A
 		// materialized CTE keeps the ranking inside the full-text scan. SQLite
 		// fills the bare snippet column from the row that produced min(rank).
-		const hits = db.all<{ thread_id: string; snippet: string; rank: number }>(sql`
+		const hits = db.all<{ thread_id: string; message_id: string; snippet: string; rank: number }>(sql`
 			with f as materialized (
 				select message_id,
 					snippet(mail_messages_fts, 2, '', '', '...', 12) as snippet,
@@ -288,7 +306,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 				from mail_messages_fts
 				where mail_messages_fts match ${match}
 			)
-			select m.thread_id as thread_id, f.snippet as snippet, min(f.rank) as rank
+			select m.thread_id as thread_id, m.id as message_id, f.snippet as snippet, min(f.rank) as rank
 			from f
 			join mail_messages m on m.id = f.message_id
 			where m.deleted_at is null
@@ -315,7 +333,9 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 		const ordered = hits
 			.map((hit) => {
 				const row = byId.get(hit.thread_id);
-				return row ? { ...row, snippet: hit.snippet.replace(/\s+/g, " ").trim() } : null;
+				return row
+					? { ...row, snippet: hit.snippet.replace(/\s+/g, " ").trim(), messageId: hit.message_id }
+					: null;
 			})
 			.filter((r): r is NonNullable<typeof r> => r !== null)
 			.slice(0, limit);
@@ -330,7 +350,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 		.orderBy(desc(mailThreads.lastMessageAt))
 		.limit(limit)
 		.all();
-	return summarise(db, rows);
+	return summarise(db, rows, query.folderId);
 }
 
 function attachmentsFor(db: Db, messageIds: string[]): Map<string, MailAttachment[]> {
@@ -407,6 +427,19 @@ export function attachmentPath(id: string, db: Db = getDb()): { path: string; fi
 		throw new Error("That attachment's path is outside the mail folder, so Juno will not open it.");
 	}
 	return { path: target, filename: row.filename };
+}
+
+/**
+ * The path of an attachment the operating system may open. Throws for a type
+ * outside the short list, which is the only gate: the window hides the button
+ * for an untrusted sender, but a renderer's word is not enough.
+ */
+export function openableAttachmentPath(id: string, db: Db = getDb()): string {
+	const { path, filename } = attachmentPath(id, db);
+	if (!isOpenableAttachment(filename)) {
+		throw new Error(`${filename} cannot be opened from Juno. Use Show in folder instead.`);
+	}
+	return path;
 }
 
 function inlineImages(db: Db, messageId: string): Map<string, string> {

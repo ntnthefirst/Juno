@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type WheelEvent } from "react";
+import { isOpenableAttachment } from "@shared/attachment-kind";
 import {
 	MAIL_FRAME_ORIGIN,
 	type ClientSummary,
@@ -8,11 +9,12 @@ import {
 	type MailReplyMode,
 } from "@shared/types";
 import { Button } from "../../components/Button";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
 import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
 import { ImportFlow } from "../documents/ImportFlow";
+import { AttachmentIcon } from "./AttachmentIcon";
 import { PersonChip } from "./PersonChip";
 import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 
@@ -27,6 +29,12 @@ type MessageViewProps = {
 	/** A file action on this message changed it (read, flagged): reload the thread. */
 	onChanged: () => void;
 };
+
+/** Lets a plain mouse wheel move a row that only scrolls sideways. */
+function scrollSideways(event: WheelEvent<HTMLElement>) {
+	if (event.deltaY === 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+	event.currentTarget.scrollLeft += event.deltaY;
+}
 
 function isPdf(attachment: MailAttachment): boolean {
 	return attachment.mimeType === "application/pdf" || attachment.filename.toLowerCase().endsWith(".pdf");
@@ -190,6 +198,14 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		}
 	}
 
+	async function openFile(id: string) {
+		try {
+			await window.juno.mail.attachments.open(id);
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		}
+	}
+
 	async function save(id: string) {
 		try {
 			const path = await window.juno.mail.attachments.save(id);
@@ -218,6 +234,9 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		}
 	}
 
+	// Trusted senders, and mail the person sent themselves. The main process
+	// still refuses types outside its short list.
+	const canOpenHere = trusted || (senderAddress !== null && mine.has(senderAddress));
 	const from = message.from ? displayName(message.from) : "(unknown sender)";
 	const visibleAttachments = message.attachments.filter((a) => !a.isInline);
 	const frameSrc = `${MAIL_FRAME_ORIGIN}/message/${message.id}${remoteImages ? "?images=1" : ""}`;
@@ -364,54 +383,85 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 							<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 								Attachments
 							</h3>
-							<ul className="mt-2 flex flex-col">
-								{visibleAttachments.map((attachment) => (
-									<li
-										key={attachment.id}
-										className="flex items-center gap-3 text-[length:var(--text-dense)]"
-										style={{ height: "var(--row-height)" }}
-									>
-										<span
-											className="min-w-0 flex-1 truncate"
-											title={attachment.mimeType}
+							<ul
+								className="mt-2 flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0"
+								onWheel={scrollSideways}
+							>
+								{visibleAttachments.map((attachment) => {
+									const canOpen = canOpenHere && isOpenableAttachment(attachment.filename);
+									const items: MenuItem[] = [
+										{
+											id: "open",
+											label: "Open",
+											icon: "external",
+											disabled: !canOpen,
+											onSelect: () => void openFile(attachment.id),
+										},
+										{
+											id: "reveal",
+											label: "Show in folder",
+											icon: "folder-open",
+											onSelect: () => void reveal(attachment.id),
+										},
+										{
+											id: "save",
+											label: "Save as",
+											icon: "export",
+											onSelect: () => void save(attachment.id),
+										},
+										...(isPdf(attachment)
+											? [
+													{
+														id: "import",
+														label: "Add to documents",
+														icon: "documents" as const,
+														onSelect: () =>
+															setImportItems([
+																{
+																	label: attachment.filename,
+																	source: { kind: "attachment" as const, attachmentId: attachment.id },
+																},
+															]),
+													},
+												]
+											: []),
+									];
+									return (
+										<li
+											key={attachment.id}
+											className="flex shrink-0 items-center gap-1 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] pl-3 pr-1"
+											style={{ height: 40 }}
 										>
-											{attachment.filename}
-										</span>
-										<span className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-											{formatBytes(attachment.size)}
-										</span>
-										<Button
-											size="dense"
-											onClick={() => void reveal(attachment.id)}
-										>
-											Show in folder
-										</Button>
-										<Button
-											size="dense"
-											onClick={() => void save(attachment.id)}
-										>
-											Save as
-										</Button>
-										{isPdf(attachment) ? (
-											<Button
-												size="dense"
-												onClick={() =>
-													setImportItems([
-														{
-															label: attachment.filename,
-															source: { kind: "attachment", attachmentId: attachment.id },
-														},
-													])
-												}
+											<button
+												type="button"
+												disabled={!canOpen}
+												onClick={() => void openFile(attachment.id)}
+												title={canOpen ? `Open ${attachment.filename}` : attachment.mimeType}
+												className="flex min-w-0 items-center gap-2 text-left disabled:cursor-default"
 											>
-												Add to documents
-											</Button>
-										) : null}
-									</li>
-								))}
+												<AttachmentIcon filename={attachment.filename} mimeType={attachment.mimeType} />
+												<span className="flex min-w-0 max-w-[220px] flex-col">
+													<span className="truncate text-[length:var(--text-dense)] leading-tight">
+														{attachment.filename}
+													</span>
+													<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+														{formatBytes(attachment.size)}
+													</span>
+												</span>
+											</button>
+											<MenuButton
+												icon="chevron-down"
+												ariaLabel={`Actions for ${attachment.filename}`}
+												items={items}
+											/>
+										</li>
+									);
+								})}
 							</ul>
 							<p className="mt-1 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
-								Attachments are never opened from here.
+								{canOpenHere
+									? "Documents, images and media open in your default app. Anything else is shown in its folder."
+									: "Trust the sender to open attachments from here."}
 							</p>
 						</div>
 					) : null}

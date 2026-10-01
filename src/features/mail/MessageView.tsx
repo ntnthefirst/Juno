@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
 	MAIL_FRAME_ORIGIN,
+	type ClientSummary,
 	type MailAttachment,
 	type MailMessage,
 	type MailMessageBody,
@@ -12,6 +13,7 @@ import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
 import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
 import { ImportFlow } from "../documents/ImportFlow";
+import { PersonChip } from "./PersonChip";
 import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 
 type MessageViewProps = {
@@ -80,6 +82,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 	const trusted = clientLinked || trustDecision === "trusted";
 	const [remoteImages, setRemoteImages] = useState(emailTrusted || senderTrusted);
 	const [linksOpen, setLinksOpen] = useState(false);
+	const [mine, setMine] = useState<ReadonlySet<string>>(() => new Set());
 	const [measuredFrame, setMeasuredFrame] = useState<{ messageId: string; height: number } | null>(null);
 	const frame = useRef<HTMLIFrameElement>(null);
 	const menu = useContextMenu();
@@ -113,6 +116,41 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		window.addEventListener("message", receiveHeight);
 		return () => window.removeEventListener("message", receiveHeight);
 	}, [message.id]);
+
+	// The owner's addresses and the accounts', which are not someone to look up.
+	useEffect(() => {
+		let cancelled = false;
+		Promise.all([window.juno.settings.getOwner(), window.juno.mail.accounts.list()])
+			.then(([owner, accounts]) => {
+				if (cancelled) return;
+				setMine(
+					new Set([
+						...owner.emails.map((entry) => entry.email.toLowerCase()),
+						...accounts.map((account) => account.email.toLowerCase()),
+					]),
+				);
+			})
+			.catch(() => {
+				// Without the list every address is offered, which is the safe direction.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	async function connected(client: ClientSummary, address: string) {
+		try {
+			// The sender's address now matches a client, so the conversation is filed
+			// under it too, which is also what lifts the trust prompt.
+			if (!clientLinked && address.toLowerCase() === senderAddress) {
+				await window.juno.mail.threads.linkClient(message.threadId, client.id);
+				onChanged();
+			}
+			onNotice(`Connected to ${client.name}.`);
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		}
+	}
 
 	function trustEmail() {
 		addTrust(TRUSTED_EMAILS_KEY, message.id);
@@ -205,45 +243,94 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 			className={`border-t border-[var(--line)] first:border-t-0 ${open ? "flex flex-1 flex-col" : ""}`}
 			onContextMenu={menu.open}
 		>
-			<button
-				type="button"
-				onClick={onToggle}
-				aria-expanded={open}
-				className={`flex w-full shrink-0 items-start gap-3 px-8 py-3 text-left ${open ? "bg-[var(--hover)]" : "hover:bg-[var(--hover)]"}`}
-			>
-				<div className="min-w-0 flex-1">
-					<div className="flex items-baseline gap-2">
-						<span
-							className={`truncate ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
-						>
-							{from}
-						</span>
+			{open ? (
+				// Not a button while open: the sender is a control of its own, and a
+				// button cannot hold another one.
+				<div className="flex w-full shrink-0 items-start gap-3 bg-[var(--hover)] px-8 py-3">
+					<div className="flex min-w-0 flex-1 items-baseline gap-2">
 						{message.from ? (
+							<span
+								className={`min-w-0 truncate ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
+							>
+								<PersonChip
+									person={message.from}
+									label={from}
+									mine={mine}
+									trust={{
+										trusted,
+										viaClient: clientLinked,
+										onChange: (next) => (next ? trustSender() : blockSender()),
+									}}
+									onNotice={onNotice}
+									onConnected={(client) => void connected(client, message.from?.address ?? "")}
+								/>
+							</span>
+						) : (
+							<span className="font-[var(--weight-medium)]">{from}</span>
+						)}
+						{message.from && !mine.has(senderAddress ?? "") ? (
 							<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 								{message.from.address}
 							</span>
 						) : null}
 					</div>
-					{!open ? (
+					<span
+						className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						title={formatFull(message.internalDate)}
+					>
+						{formatWhen(message.sentAt ?? message.internalDate)}
+					</span>
+				</div>
+			) : (
+				<button
+					type="button"
+					onClick={onToggle}
+					aria-expanded={open}
+					className="flex w-full shrink-0 items-start gap-3 px-8 py-3 text-left hover:bg-[var(--hover)]"
+				>
+					<div className="min-w-0 flex-1">
+						<div className="flex items-baseline gap-2">
+							<span
+								className={`truncate ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
+							>
+								{from}
+							</span>
+							{message.from ? (
+								<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									{message.from.address}
+								</span>
+							) : null}
+						</div>
 						<span className="mt-0.5 block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 							{message.snippet}
 						</span>
-					) : null}
-				</div>
-				<span
-					className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
-					title={formatFull(message.internalDate)}
-				>
-					{formatWhen(message.sentAt ?? message.internalDate)}
-				</span>
-			</button>
+					</div>
+					<span
+						className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						title={formatFull(message.internalDate)}
+					>
+						{formatWhen(message.sentAt ?? message.internalDate)}
+					</span>
+				</button>
+			)}
 
 			{open ? (
 				<div className="flex flex-1 flex-col px-8">
 					<div className="-mx-8 bg-[var(--hover)] px-8">
 						<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							<span className="min-w-0 flex-1 truncate">
-								To {participantsLine(message.to, "(nobody)")}
+							<span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
+								<span>To</span>
+								{message.to.length === 0 ? <span>(nobody)</span> : null}
+								{message.to.map((person) => (
+									<PersonChip
+										key={person.address}
+										person={person}
+										label={participantsLine([person])}
+										mine={mine}
+										onNotice={onNotice}
+										onConnected={(client) => void connected(client, person.address)}
+									/>
+								))}
 							</span>
 							<button
 								type="button"
@@ -252,15 +339,6 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 							>
 								{detailsOpen ? "Hide" : "Details"}
 							</button>
-							{!clientLinked ? (
-								<button
-									type="button"
-									onClick={trustDecision === "trusted" ? blockSender : trustSender}
-									className="shrink-0 hover:text-[var(--ink)] hover:underline"
-								>
-									{trustDecision === "trusted" ? "Don't trust sender" : "Trust sender"}
-								</button>
-							) : null}
 						</div>
 
 						{detailsOpen ? (

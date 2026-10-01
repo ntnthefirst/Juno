@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
@@ -18,8 +18,17 @@ import { addVersion, analyseImport, importFile, importPdf } from "./document-imp
 import * as versions from "./document-versions";
 import { configureDocumentStorage } from "./documents";
 import { configureMailThreads } from "./mail-threads";
+import { extractText } from "./pdf-text";
 
 const MIGRATIONS = resolve(process.cwd(), "electron/main/db/migrations");
+
+// Importing reads the file's text, and the first read loads pdf.js. That load
+// is a second here and has run past five on a busy Windows runner, which then
+// failed whichever test happened to read a PDF first. It is paid once, before
+// the tests, so each test's own limit measures what the test does.
+beforeAll(async () => {
+	await extractText(new Uint8Array());
+}, 60_000);
 
 function freshDb(): Db {
 	const connection = openDatabase(":memory:");

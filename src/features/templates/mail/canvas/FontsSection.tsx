@@ -16,6 +16,8 @@ type FontsSectionProps = {
 	onChange: (fonts: MailFont[]) => void;
 	status: (font: MailFont) => FontStatus;
 	onRetry: (font: MailFont) => void;
+	/** A document: its Google fonts are printed into the PDF rather than linked. */
+	printed?: boolean;
 };
 
 /** Matches MAX_FONTS in services/mail-layout.ts. */
@@ -86,7 +88,7 @@ function StatusLine({ font, status, onRetry }: StatusLineProps) {
  * because neither loads a web font at all, and that is why every font has to
  * name one.
  */
-export function FontsSection({ fonts, onChange, status, onRetry }: FontsSectionProps) {
+export function FontsSection({ fonts, onChange, status, onRetry, printed = false }: FontsSectionProps) {
 	const [adding, setAdding] = useState(false);
 	const [source, setSource] = useState<MailFont["source"]>("google");
 	const [family, setFamily] = useState("");
@@ -177,7 +179,9 @@ export function FontsSection({ fonts, onChange, status, onRetry }: FontsSectionP
 
 			{fonts.length === 0 && !adding ? (
 				<PanelNote>
-					No linked fonts. The message is set in its own font and in the families every mail client has.
+					{printed
+						? "No added fonts. The document is set in Inter and in the families every computer has. A Google font is printed into the PDF."
+						: "No linked fonts. The message is set in its own font and in the families every mail client has."}
 				</PanelNote>
 			) : null}
 

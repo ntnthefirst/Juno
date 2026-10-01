@@ -39,6 +39,13 @@ export function documentsDir(): string {
 	return dir;
 }
 
+/** The pictures document templates carry, one file each, named after its id. */
+export function templateAssetsDir(): string {
+	const dir = join(userDataDir(), "template-assets");
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
 /**
  * A project's own files, one folder per project. A project can be pointed at a
  * folder outside this one when its files are large, which is why the service

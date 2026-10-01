@@ -13,7 +13,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
-import { backupsDir, databasePath, documentsDir, mailDir, projectsDir, userDataDir } from "./main/db/paths";
+import {
+	backupsDir,
+	databasePath,
+	documentsDir,
+	mailDir,
+	projectsDir,
+	templateAssetsDir,
+	userDataDir,
+} from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import { mcpStatus } from "./main/ipc/agent";
@@ -25,6 +33,7 @@ import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
+import { configureTemplateAssets } from "./main/services/document-template-assets";
 import { configureProjectStorage } from "./main/services/project-storage";
 import * as projectRunner from "./main/services/project-runner";
 import * as notifications from "./main/services/notifications";
@@ -82,6 +91,7 @@ if (!app.requestSingleInstanceLock()) {
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
 		configureDocuments(documentsDir());
 		configureDocumentStorage(documentsDir());
+		configureTemplateAssets(templateAssetsDir());
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
 		// Sync never starts while locked and stops at the next step when the lock

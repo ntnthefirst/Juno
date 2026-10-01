@@ -127,6 +127,13 @@
       "when": 1790808038346,
       "tag": "0017_client_links",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790814195618,
+      "tag": "0018_document_template_canvas",
+      "breakpoints": true
     }
   ]
 }

@@ -19,7 +19,8 @@
  * that is an image, for a thumbnail. It takes an asset id and resolves the path
  * itself, so the renderer never names a file. Anything that is not an image it
  * is willing to decode is a 404 rather than a download, because a response this
- * origin serves is only ever the source of an `<img>`.
+ * origin serves is only ever the source of an `<img>`. A document template's
+ * pictures come from the same host under `/template/<id>`, by the same rule.
  */
 import { net, protocol } from "electron";
 import { normalize, resolve, sep } from "node:path";
@@ -28,6 +29,7 @@ import { isLocked } from "./services/lock";
 import { renderBody } from "./services/mail-threads";
 import { frameCsp } from "./services/mail-sanitise";
 import * as projectAssets from "./services/project-assets";
+import * as templateAssets from "./services/document-template-assets";
 
 export const APP_ORIGIN = "app://bundle";
 
@@ -102,12 +104,12 @@ async function serveAsset(url: URL): Promise<Response> {
 	// Same reasoning as the mail host: the lock guard covers IPC, not a URL.
 	if (isLocked()) return new Response("Locked", { status: 423 });
 
-	const match = /^\/file\/([a-z0-9-]+)$/i.exec(url.pathname);
+	const match = /^\/(file|template)\/([a-z0-9-]+)$/i.exec(url.pathname);
 	if (!match) return new Response("Not found", { status: 404 });
 
 	let file: { path: string; mimeType: string | null };
 	try {
-		file = projectAssets.pathOf(match[1]!);
+		file = match[1] === "template" ? templateAssets.pathOf(match[2]!) : projectAssets.pathOf(match[2]!);
 	} catch {
 		// A missing file is an ordinary state here, not an error worth a message:
 		// a linked asset whose original moved is exactly this.

@@ -39,7 +39,11 @@ import type {
 	CalendarRangeQuery,
 	DocumentRecord,
 	DocumentSignature,
+	DocumentCanvasPdf,
+	DocumentCanvasRender,
 	DocumentTemplate,
+	DocumentTemplateAsset,
+	DocumentTemplateAssetInput,
 	DocumentTemplateInput,
 	DocumentTemplatePatch,
 	DocumentTimelineEntry,
@@ -561,6 +565,23 @@ export interface JunoApi {
 			projectId?: string | null;
 			isSpecimen: boolean;
 		}): Promise<{ html: string; missing: string[] }>;
+		/**
+		 * A canvas template, or a draft of one, filled in with values typed by
+		 * hand and printed. Stores nothing.
+		 */
+		renderPdf(input: DocumentCanvasRender): Promise<DocumentCanvasPdf>;
+		/** Saves that PDF where the person chooses, for no client. The path, or null when cancelled. */
+		savePdf(input: DocumentCanvasRender): Promise<string | null>;
+		/** Asks for a .docx and makes a template of it. Null when cancelled. */
+		pickDocx(): Promise<DocumentTemplate | null>;
+		/** Makes a template of a .docx dropped on the window. */
+		importDocx(input: { fileName: string; data: Uint8Array }): Promise<DocumentTemplate>;
+		assets: {
+			list(templateId: string): Promise<DocumentTemplateAsset[]>;
+			/** Stores a picture for the template. The same bytes twice give the same picture. */
+			add(input: DocumentTemplateAssetInput): Promise<DocumentTemplateAsset>;
+			remove(id: string): Promise<DocumentTemplateAsset>;
+		};
 	};
 
 	documents: {

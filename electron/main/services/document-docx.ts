@@ -62,7 +62,7 @@ export function fieldKey(raw: string): string | null {
 	const name = raw.trim().replace(/^document\./i, "");
 	const key = name
 		.normalize("NFKD")
-		.replace(/[̀-ͯ]/g, "")
+		.replace(/[\u0300-\u036f]/g, "")
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "_")
 		.replace(/^_+|_+$/g, "");

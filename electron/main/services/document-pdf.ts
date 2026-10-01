@@ -60,13 +60,13 @@ export interface RenderOptions {
 }
 
 /**
- * Renders HTML to a PDF file and returns its path.
+ * Prints a rendered body to PDF bytes, in a window nobody sees.
  *
  * The waiting matters. printToPDF on a window that has not finished loading
  * produces a blank or half-rendered page and does not error, which is the single
  * most likely way for this to fail silently. See .claude/rules/verify.md.
  */
-export async function renderPdf(options: RenderOptions): Promise<string> {
+export async function printPdf(options: Omit<RenderOptions, "fileName">): Promise<Buffer> {
 	const html = documentShell({
 		title: options.title,
 		bodyHtml: options.bodyHtml,
@@ -97,21 +97,29 @@ export async function renderPdf(options: RenderOptions): Promise<string> {
 		// fallback face.
 		await new Promise((resolve) => setTimeout(resolve, 350));
 
-		const pdf = await window.webContents.printToPDF({
+		return await window.webContents.printToPDF({
+			// The paper is the document's own `@page` size: A4 for a template
+			// written as HTML, whatever its paper says for one laid out on a
+			// canvas. A4 is what is used when a document names none.
 			pageSize: "A4",
+			preferCSSPageSize: true,
 			printBackground: true,
 			// The stylesheet owns the margins through @page, so Electron adds none.
 			margins: { marginType: "none" },
 		});
-
-		const path = join(outputDir(), options.fileName);
-		writeFileSync(path, pdf);
-		return path;
 	} finally {
 		// An offscreen window that is never closed leaks a renderer process, and
 		// generating a few documents in a row would leave several running.
 		if (!window.isDestroyed()) window.destroy();
 	}
+}
+
+/** Renders HTML to a PDF file and returns its path. */
+export async function renderPdf(options: RenderOptions): Promise<string> {
+	const pdf = await printPdf(options);
+	const path = join(outputDir(), options.fileName);
+	writeFileSync(path, pdf);
+	return path;
 }
 
 export function hashFile(path: string): string {

@@ -1118,7 +1118,7 @@ care as any delete (it changes what the document opens as).
 
 ## 40. A document opens as its PDF, and older versions are read, not used
 
-Opening a document opens the viewer (`src/features/documents/PdfViewer.tsx`)
+Opening a document opens the viewer (`src/components/PdfViewer.tsx`)
 on the newest version, with everything else about it in a column on the right:
 details, a version picker and a timeline. Picking an older version shows it and
 nothing more. It never changes which version the document opens as.
@@ -1140,3 +1140,45 @@ outside for that.
 
 Revisit if: an email should carry an older version on purpose, which needs the
 outbox attachment to name a version and a migration to hold it.
+
+## 41. A document template on paper fills in only what it asks for
+
+A document template can be laid out on the mail template's canvas, on paper of
+a fixed size: A3, A4, A5, A6, Letter or Legal, portrait or landscape
+(`DocumentCanvas` in `electron/shared/types.ts`, the rules in
+`electron/shared/paper.ts`). Every top-level container is a page exactly the
+size of the sheet, its padding is the page margin, and it prints as one sheet
+and clips what runs past its foot. Content does not reflow between pages on its
+own, for the reason docs/editors.md gives for the page model: a clause that
+moves on its own moves the signature block. The editor flags a page that runs
+over and moves what runs over onto the pages after it when asked, and once on
+its own after a Word file is imported.
+
+**Nothing in such a template is filled in from a record.** Every value it
+prints is one of its own declared inputs, typed by a person or by an agent when
+it is used, or a picture it keeps. A placeholder naming a client, a project or
+the owner is refused when the template is saved. That is what lets the PDF be
+made before anybody chooses who it is for: the client is asked for afterwards,
+and choosing one only decides where the document is kept. Making it again for
+the client gives the same pages.
+
+**Its pictures are files Juno keeps** (`document_template_assets`), unlike a
+mail template's, which are addresses a reader's client loads (decision 36).
+The canvas names one as `{{asset.<key>}}`, and rendering writes the bytes into
+the document inline, so a generated document's frozen body and its PDF never
+depend on a file that can move. A picture an input asks for is the picture's
+bytes too, never an address Juno would fetch.
+
+**A Word file is a way in, not a format.** Decision 19 still holds: the canvas
+is the template and HTML is what prints. Mammoth reads a `.docx` into its
+headings, paragraphs, lists, tables and pictures, those become canvas blocks,
+and a field written `{{ name }}` becomes an input. Word's own look is not
+carried across.
+
+Templates without a canvas, the page model and hand-written HTML, keep working
+exactly as before, record values included. The PDF takes its paper from the
+document's own `@page` rule, so they still print on A4.
+
+Revisit if: components (a block made once and placed in several templates, with
+inputs of its own) are built, which is in TODO.md; or a document needs a value
+from a record again, which would need the client chosen before the PDF.

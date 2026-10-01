@@ -1,4 +1,6 @@
+import { useId } from "react";
 import type { TemplateInput } from "@shared/types";
+import { Button } from "./Button";
 import { Field } from "./Field";
 import { Select } from "./Select";
 
@@ -9,6 +11,12 @@ type TemplateInputFieldsProps = {
 	/** Keys the caller has decided are missing, so they can be marked at once. */
 	missing?: string[];
 	disabled?: boolean;
+	/**
+	 * A picture is a file chosen here rather than an address, for a document,
+	 * which prints the picture itself. The value is then the picture's bytes
+	 * as a `data:` address.
+	 */
+	pictureFiles?: boolean;
 };
 
 /**
@@ -23,6 +31,7 @@ export function TemplateInputFields({
 	onChange,
 	missing = [],
 	disabled = false,
+	pictureFiles = false,
 }: TemplateInputFieldsProps) {
 	if (inputs.length === 0) return null;
 
@@ -36,6 +45,7 @@ export function TemplateInputFields({
 					onChange={(value) => onChange(input.key, value)}
 					error={missing.includes(input.key) ? "This one is needed." : null}
 					disabled={disabled}
+					pictureFiles={pictureFiles}
 				/>
 			))}
 		</div>
@@ -48,9 +58,10 @@ type TemplateInputFieldProps = {
 	onChange: (value: string) => void;
 	error: string | null;
 	disabled: boolean;
+	pictureFiles: boolean;
 };
 
-function TemplateInputField({ input, value, onChange, error, disabled }: TemplateInputFieldProps) {
+function TemplateInputField({ input, value, onChange, error, disabled, pictureFiles }: TemplateInputFieldProps) {
 	const shared = {
 		label: input.label || input.key,
 		value,
@@ -105,6 +116,10 @@ function TemplateInputField({ input, value, onChange, error, disabled }: Templat
 		);
 	}
 
+	if (input.kind === "image" && pictureFiles) {
+		return <PictureField {...shared} />;
+	}
+
 	// An image and a link are both an https address typed in when the template
 	// is used. The kind decides what the body does with it, not how it is asked
 	// for, so both are a url field here.
@@ -113,4 +128,65 @@ function TemplateInputField({ input, value, onChange, error, disabled }: Templat
 	}
 
 	return <Field {...shared} />;
+}
+
+type PictureFieldProps = {
+	label: string;
+	value: string;
+	onChange: (value: string) => void;
+	error: string | null;
+	help: string | null;
+	required: boolean;
+	disabled: boolean;
+};
+
+/**
+ * A picture chosen from a file, read into a `data:` address in the window. The
+ * bytes go to the main process with the other values and are checked there;
+ * nothing here names a path.
+ */
+function PictureField({ label, value, onChange, error, help, required, disabled }: PictureFieldProps) {
+	const id = useId();
+	const chosen = value.startsWith("data:image/");
+	return (
+		<div>
+			<label htmlFor={id} className="block text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink)]">
+				{label}
+				{required ? <span className="text-[var(--ink-muted)]"> (required)</span> : null}
+			</label>
+			<div className="mt-1.5 flex items-center gap-3">
+				{chosen ? (
+					<img
+						src={value}
+						alt=""
+						className="h-[48px] w-[48px] flex-none rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] object-contain"
+					/>
+				) : null}
+				<input
+					id={id}
+					type="file"
+					accept="image/png,image/jpeg,image/gif,image/webp"
+					disabled={disabled}
+					onChange={(event) => {
+						const file = event.target.files?.[0];
+						event.target.value = "";
+						if (!file) return;
+						const reader = new FileReader();
+						reader.onload = () => {
+							if (typeof reader.result === "string") onChange(reader.result);
+						};
+						reader.readAsDataURL(file);
+					}}
+					className="min-w-0 flex-1 text-[length:var(--text-sm)] text-[var(--ink-muted)] file:mr-3 file:h-[32px] file:rounded-[var(--radius-md)] file:border file:border-[var(--line)] file:bg-[var(--surface)] file:px-3 file:text-[var(--ink)]"
+				/>
+				{chosen ? (
+					<Button size="dense" disabled={disabled} onClick={() => onChange("")}>
+						Remove
+					</Button>
+				) : null}
+			</div>
+			{help ? <p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{help}</p> : null}
+			{error ? <p className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">{error}</p> : null}
+		</div>
+	);
 }

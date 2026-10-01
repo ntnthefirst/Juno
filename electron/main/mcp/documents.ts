@@ -1,6 +1,8 @@
 import type { GenerateDocumentInput, ImportDocumentInput } from "../../shared/types";
 import * as actions from "../services/document-actions";
 import * as templates from "../services/document-templates";
+import { importDocxFile } from "../services/document-docx";
+import * as templateAssets from "../services/document-template-assets";
 import * as imports from "../services/document-import";
 import * as timeline from "../services/document-timeline";
 import * as versions from "../services/document-versions";
@@ -23,6 +25,38 @@ import type { ToolDescriptor } from "./types";
  *   typing the certificate passphrase are things somebody at the keyboard does.
  */
 
+/**
+ * A document canvas, as an argument. Declared loosely for the reason the mail
+ * canvas is (mcp/mail-outbox.ts): `normaliseDocumentCanvas` decides what is
+ * valid, and a second copy of those rules here would be the one that drifts.
+ */
+const CANVAS_SCHEMA = {
+	type: ["object", "null"],
+	description:
+		"A template laid out on paper: { version: 1, paper: { size: A3, A4, A5, A6, letter or legal, " +
+		"orientation: portrait or landscape }, layout }. layout is the mail template canvas (read " +
+		"mail.templates.get or the description of the layout argument of mail.templates.create for the " +
+		"node shapes), with one difference: every top-level node is a page, a section container the size " +
+		"of the paper whose padding is the page margin. Its width, height, place and clip are set from the " +
+		"paper and anything sent for them is replaced; a block sent at the top level goes onto the page " +
+		"before it. Pages print one per sheet and clip what runs past the bottom, so split long text over " +
+		"pages. There are no breakpoints. A canvas template fills in its own inputs and nothing else: every " +
+		"placeholder is {{document.<input key>}} for an input it declares, and a picture it carries is " +
+		"{{asset.<key>}} as the src of an image block, from templates.add_image. A placeholder naming a " +
+		"client, a project or the owner is refused. Call templates.fill to check one before proposing it. " +
+		"Null drops the canvas and keeps the HTML it compiled to.",
+};
+
+const INPUTS_SCHEMA = {
+	type: "array",
+	description:
+		"What the template asks for when it is used: [{ key, label, kind: text, textarea, number, money, " +
+		"date, choice, image or url, required, help, defaultValue, options for a choice }]. The key is " +
+		"lowercase letters, digits and underscores and is written {{document.<key>}} in the canvas. An " +
+		"image input is filled with a picture as a data:image/png;base64 or jpeg, gif or webp address, " +
+		"never a web address.",
+};
+
 const templateProperties: Record<string, unknown> = {
 	name: { type: "string", description: "Display name, for example Ontwikkelovereenkomst." },
 	description: { type: ["string", "null"], description: "One line on what the template is for." },
@@ -31,8 +65,11 @@ const templateProperties: Record<string, unknown> = {
 		description:
 			"The body as HTML with placeholders, for example {{ client.name }} and " +
 			"{{#if client.vatNumber}}...{{/if}}. Values are escaped; a missing one renders a visible marker. " +
-			"Left out on create, the template gets one empty page, ready to be filled in in the editor.",
+			"Ignored when a canvas is given or the template has one. Left out on create with no canvas, the " +
+			"template gets one empty page of A4 on the canvas, ready to be filled in in the editor.",
 	},
+	canvas: CANVAS_SCHEMA,
+	inputs: INPUTS_SCHEMA,
 };
 
 export const templateTools: ToolDescriptor[] = [
@@ -80,6 +117,8 @@ export const templateTools: ToolDescriptor[] = [
 				name: String(args.name),
 				...(args.body_html === undefined ? {} : { bodyHtml: String(args.body_html) }),
 				description: args.description === undefined ? null : (args.description as string | null),
+				...(args.canvas !== undefined ? { canvas: args.canvas as never } : {}),
+				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
 			}),
 	},
 	{
@@ -87,7 +126,9 @@ export const templateTools: ToolDescriptor[] = [
 		title: "Edit a document template",
 		description:
 			"Changes a template. Editing the body clears the review flag and bumps the version, " +
-			"because a review applies to text that has not changed since.",
+			"because a review applies to text that has not changed since. A canvas replaces the whole " +
+			"canvas rather than merging into it, so read the template with templates.get first and send it " +
+			"back with the change made.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -103,6 +144,8 @@ export const templateTools: ToolDescriptor[] = [
 					? { description: args.description as string | null }
 					: {}),
 				...(args.body_html !== undefined ? { bodyHtml: String(args.body_html) } : {}),
+				...(args.canvas !== undefined ? { canvas: args.canvas as never } : {}),
+				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
 			}),
 	},
 	{
@@ -130,6 +173,101 @@ export const templateTools: ToolDescriptor[] = [
 				projectId: (args.project_id as string | null) ?? null,
 				isSpecimen: true,
 			}),
+	},
+	{
+		name: "templates.fill",
+		title: "Fill in a canvas template",
+		description:
+			"Fills a template laid out on paper with values, without storing anything, and returns the HTML " +
+			"it prints as and the inputs that had no value. A draft canvas and inputs may be given to check an " +
+			"edit before proposing it. A canvas template takes nothing from a client or a project: every value " +
+			"is in values.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				template_id: { type: "string" },
+				values: {
+					type: "object",
+					description: "Values by input key. A picture input takes a data:image address.",
+					additionalProperties: { type: "string" },
+				},
+				canvas: CANVAS_SCHEMA,
+				inputs: INPUTS_SCHEMA,
+			},
+			required: ["template_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			templates.fillCanvas({
+				templateId: String(args.template_id),
+				values: (args.values as Record<string, string> | undefined) ?? {},
+				...(args.canvas ? { canvas: args.canvas as never } : {}),
+				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
+			}),
+	},
+	{
+		name: "templates.list_images",
+		title: "List a template's pictures",
+		description:
+			"The pictures a document template carries, each with the token to write as an image block's src " +
+			"on its canvas.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: { template_id: { type: "string" } },
+			required: ["template_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => templateAssets.list(String(args.template_id)),
+	},
+	{
+		name: "templates.add_image",
+		title: "Add a picture to a template",
+		description:
+			"Stores a PNG, JPEG, GIF or WebP picture of at most 10 MB for a document template and returns it " +
+			"with its token, {{asset.<key>}}, to use as the src of an image block on the canvas. Adding the " +
+			"same picture twice gives back the one already there.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				template_id: { type: "string" },
+				file_name: { type: "string", description: "Shown in the editor, for example logo.png." },
+				data_base64: { type: "string", description: "The picture's bytes, base64 encoded." },
+			},
+			required: ["template_id", "file_name", "data_base64"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			templateAssets.add({
+				templateId: String(args.template_id),
+				fileName: String(args.file_name),
+				data: new Uint8Array(Buffer.from(String(args.data_base64), "base64")),
+			}),
+	},
+	{
+		name: "templates.import_docx",
+		title: "Make a template from a Word file",
+		description:
+			"Reads a .docx on this machine into a new document template on A4: its headings, paragraphs, " +
+			"lists, tables and pictures become blocks on the canvas, and every field written {{ name }} in it " +
+			"becomes a required input. Everything lands on the first page; opening it in the editor flows it " +
+			"onto as many pages as it needs. It starts unreviewed.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				source_path: { type: "string", description: "Absolute path to the .docx on this machine." },
+			},
+			required: ["source_path"],
+			additionalProperties: false,
+		},
+		handler: async (args) => importDocxFile(String(args.source_path)),
 	},
 ];
 
@@ -166,8 +304,10 @@ export const documentTools: ToolDescriptor[] = [
 		name: "documents.generate",
 		title: "Generate a document",
 		description:
-			"Renders a template against a client and stores the result as a draft. Nothing is sent. " +
-			"Placeholders that cannot be filled are rendered as visible markers and reported.",
+			"Renders a template for a client and stores the result as a draft with its PDF. Nothing is sent. " +
+			"Placeholders that cannot be filled are rendered as visible markers and reported. A template laid " +
+			"out on paper (one with a canvas) takes every value from extras, keyed by its input keys, and " +
+			"nothing from the client: the client is who the document belongs to.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {

@@ -98,6 +98,18 @@ li { margin: 0 0 1mm; }
 	margin: 0;
 }
 
+/* A canvas document is made of full sheets too, with no top margin to put the
+   banner in, so it sits over the top of the first sheet instead. */
+.juno-specimen:has(~ .juno-sheets) {
+	position: absolute;
+	z-index: 1;
+	top: 4mm;
+	left: 8mm;
+	right: 8mm;
+	margin: 0;
+	padding: 1.5mm 3mm;
+}
+
 .juno-signatures {
 	margin-top: 10mm;
 	display: flex;

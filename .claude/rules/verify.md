@@ -76,6 +76,12 @@ A clean typecheck is not proof a screen works.
   `electron-rebuild` (or the builder's install step) runs after every `npm install`
   and after every Electron version bump. If the app worked yesterday and throws on
   startup today, check this first.
+- **Run the tests with `npm run test`, never `npx vitest` or a bare `vitest`.**
+  The script runs them under Electron's own Node, which has the SQLite build
+  the app ships, FTS5 included. Plain Node's SQLite has no `fts5`, so the mail
+  and reference tests fail on "no such module: fts5": hundreds of red tests
+  that say nothing about the change. If a run shows that error, it is the wrong
+  runner, not a bug.
 - **Drizzle migration ordering is file order, and a merge breaks it.** Two
   migrations generated on two branches get the same number or apply in the wrong
   sequence, and the journal will disagree with the folder. After any merge that

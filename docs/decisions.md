@@ -646,13 +646,16 @@ the agent's `updates.check`, so neither a stuck finger nor a loop hammers the
 feed. There is no MCP tool that installs: restarting the application somebody is
 working in is a person's decision, the same answer as the lock.
 
-An install is never invisible. A silent installer leaves nothing on screen
-between Juno closing and the new version opening, which reads as a crash, so
-the updater runs the installer with its progress page showing (it skips its
-welcome and finish pages for an update, `build/installer.nsh`), and a small
-update window covers the stretch before that: the download, then closing down.
-Closing Juno with a downloaded update goes through the same path rather than
-the library's silent install-on-quit.
+An install is never invisible, and it never looks like an installer. A silent
+installer leaves nothing on screen between Juno closing and the new version
+opening, which reads as a crash, and its wizard looks like somebody else's
+software. So the installer runs silent and Juno draws the wait itself: a small
+update window covers the download and the shutdown, and on Windows a PowerShell
+helper (`update-animation.ts`) shows the same window once Juno's process has
+exited, until the new version is up. It starts early but stays hidden until
+then, so the two never overlap, and it lives outside the install folder so the
+update neither locks nor replaces it. Closing Juno with a downloaded update goes
+through the same path rather than the library's silent install-on-quit.
 
 The MCP bridge is the other thing that can stop an install. An agent runs it
 from Juno's own executable, so while it is alive the installer cannot replace

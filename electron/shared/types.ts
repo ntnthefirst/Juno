@@ -641,6 +641,8 @@ export type UpdateStage =
 	| "downloading"
 	/** Downloaded and waiting. Installing is a restart away. */
 	| "ready"
+	/** Closing Juno so the installer can replace it. Nothing is cancellable from here. */
+	| "installing"
 	| "error";
 
 export interface UpdateStatus {
@@ -657,6 +659,8 @@ export interface UpdateStatus {
 	/** When the next automatic check is due. Null when none is scheduled. */
 	nextCheckAt: Iso | null;
 	autoInstall: boolean;
+	/** A person asked for the install, so the app restarts the moment the download lands. */
+	installRequested: boolean;
 	/** One sentence, set only while the stage is error. */
 	error: string | null;
 }
@@ -2369,6 +2373,8 @@ export interface MailReplySeed {
 	subject: string;
 	/** The original, quoted, for under the reply. */
 	quotedText: string;
+	/** The same quote as markup: a blockquote, which is what the editor shows instead of arrows. */
+	quotedHtml: string;
 	/** Null for a forward: it starts a conversation rather than continuing one. */
 	replyToMessageId: string | null;
 	clientId: string | null;

@@ -18,7 +18,7 @@
  * corrupts the stream and the client disconnects with an unhelpful error, so
  * everything diagnostic goes to stderr.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -51,6 +51,34 @@ function userDataDir() {
 }
 
 const dir = userDataDir();
+
+/**
+ * Juno writes this file just before it hands over to the installer. This process
+ * runs from Juno's own executable, so while it is alive the installer cannot
+ * replace that file, and an agent that restarts it on exit would keep it alive
+ * for good. So it leaves, at start and while running, until the marker is gone
+ * (Juno removes it on its next launch, and a stale one stops counting after
+ * ten minutes).
+ */
+const UPDATING_MAX_AGE_MS = 10 * 60 * 1000;
+
+function updateInProgress() {
+	try {
+		return Date.now() - statSync(join(dir, "updating")).mtimeMs < UPDATING_MAX_AGE_MS;
+	} catch {
+		return false;
+	}
+}
+
+function leaveForUpdate() {
+	process.stderr.write("Juno is installing an update, so this connection closes. Reconnect once Juno has restarted.\n");
+	process.exit(0);
+}
+
+if (updateInProgress()) leaveForUpdate();
+setInterval(() => {
+	if (updateInProgress()) leaveForUpdate();
+}, 500).unref();
 
 function readConnection() {
 	const raw = readFileSync(join(dir, "mcp.json"), "utf8");

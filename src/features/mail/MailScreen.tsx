@@ -286,6 +286,7 @@ export function MailScreen() {
 				cc: seed.cc,
 				subject: seed.subject,
 				bodyText: `\n\n${seed.quotedText}`,
+				bodyHtml: `<p><br></p>${seed.quotedHtml}`,
 				replyToMessageId: seed.replyToMessageId,
 				clientId: seed.clientId,
 			});
@@ -312,6 +313,7 @@ export function MailScreen() {
 				cc: seed.cc,
 				subject: seed.subject,
 				bodyText: `\n\n${seed.quotedText}`,
+				bodyHtml: `<p><br></p>${seed.quotedHtml}`,
 				replyToMessageId: seed.replyToMessageId,
 				clientId: seed.clientId,
 			});

@@ -40,7 +40,7 @@ import {
 	mailThreads,
 } from "../db/schema";
 import { formatDateTime } from "./document-context";
-import { htmlToText, mailShell, quoteForReply, textToHtml } from "./mail-html";
+import { htmlToText, mailShell, quoteForReply, quoteHtmlForReply, textToHtml } from "./mail-html";
 import { clientsFor } from "./mail-recipients";
 import { footerLines, renderTemplate } from "./mail-templates";
 
@@ -839,6 +839,11 @@ export async function replySeed(
 			sentAt: formatDateTime(message.sentAt ?? message.internalDate),
 			text: message.bodyText ?? message.snippet,
 		}),
+		quotedHtml: quoteHtmlForReply({
+			fromLine,
+			sentAt: formatDateTime(message.sentAt ?? message.internalDate),
+			text: message.bodyText ?? message.snippet,
+		}),
 		replyToMessageId: forwarding ? null : message.id,
 		clientId: row.clientId ?? null,
 	};
@@ -894,6 +899,11 @@ export async function replySeedForOutgoing(
 		cc,
 		subject,
 		quotedText: quoteForReply({
+			fromLine: account.fromName ? `${account.fromName} <${account.email}>` : account.email,
+			sentAt: formatDateTime(row.sentAt ?? row.queuedAt ?? row.createdAt),
+			text: row.bodyText,
+		}),
+		quotedHtml: quoteHtmlForReply({
 			fromLine: account.fromName ? `${account.fromName} <${account.email}>` : account.email,
 			sentAt: formatDateTime(row.sentAt ?? row.queuedAt ?? row.createdAt),
 			text: row.bodyText,

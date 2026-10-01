@@ -18,7 +18,25 @@
 !macro customWelcomePage
   !define MUI_WELCOMEPAGE_TITLE "Install Juno"
   !define MUI_WELCOMEPAGE_TEXT "Juno keeps your clients, contracts, mail, calendar and reminders on this machine.$\r$\n$\r$\nIt works offline. Nothing is sent anywhere unless you set up a mail account yourself.$\r$\n$\r$\nClick Next to continue."
+  ; An update shows the progress page and nothing else. The app starts the
+  ; installer without silent mode for this reason: a silent one leaves nothing
+  ; on screen between Juno closing and the new version opening.
+  !insertmacro skipPageIfUpdated
   !insertmacro MUI_PAGE_WELCOME
+!macroend
+
+; Starts Juno once an update has installed. The finish page that normally
+; offers this is skipped for an update, and the installer only starts the app
+; by itself in silent mode, so it is done here, and only when the updater asked
+; for a relaunch (not when somebody closed Juno and it updated on the way out).
+!macro customInstall
+  ; Silent mode has its own start further down, so only the visible one is
+  ; handled here.
+  ${if} ${isUpdated}
+  ${andIfNot} ${Silent}
+  ${andIf} ${isForceRun}
+    ${StdUtils.ExecShellAsUser} $0 "$launchLink" "open" "--updated"
+  ${endIf}
 !macroend
 
 !macro customFinishPage
@@ -26,6 +44,7 @@
   !define MUI_FINISHPAGE_TEXT "Your data lives in your user folder, separate from the program itself. Uninstalling Juno leaves it untouched."
   !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
   !define MUI_FINISHPAGE_RUN_TEXT "Open Juno"
+  !insertmacro skipPageIfUpdated
   !insertmacro MUI_PAGE_FINISH
 !macroend
 

@@ -161,6 +161,34 @@ export function textToHtml(text: string): string {
 	return renderLines(text.replace(/\r\n/g, "\n").split("\n").map(splitQuote));
 }
 
+/**
+ * A received plain-text message as markup for the reader: its own line breaks
+ * kept, and every quoted run ("> ", "> > ", ">>", whatever depth the sending
+ * client reached) as a nested blockquote, so a text mail and an HTML mail show
+ * their history the same way. Unstyled on purpose: the frame's stylesheet owns
+ * how a blockquote looks.
+ */
+export function plainTextToQuotedMarkup(text: string): string {
+	const render = (lines: TextLine[]): string => {
+		const out: string[] = [];
+		let index = 0;
+		while (index < lines.length) {
+			let end = index;
+			if (lines[index]!.depth > 0) {
+				while (end < lines.length && lines[end]!.depth > 0) end += 1;
+				const inner = lines.slice(index, end).map((line) => ({ depth: line.depth - 1, text: line.text }));
+				out.push(`<blockquote>${render(inner)}</blockquote>`);
+			} else {
+				while (end < lines.length && lines[end]!.depth === 0) end += 1;
+				out.push(`<div>${lines.slice(index, end).map((line) => escapeHtml(line.text)).join("\n")}</div>`);
+			}
+			index = end;
+		}
+		return out.join("");
+	};
+	return render(text.replace(/\r\n/g, "\n").split("\n").map(splitQuote));
+}
+
 /** The text alternative of an HTML body, for clients that show text and for the search. */
 export function htmlToText(html: string): string {
 	return convert(html, {

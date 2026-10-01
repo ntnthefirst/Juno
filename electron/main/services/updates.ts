@@ -23,6 +23,7 @@ import { autoUpdater } from "electron-updater";
 import type { UpdateStage, UpdateStatus } from "../../shared/types";
 import { isLocked } from "./lock";
 import * as settings from "./settings";
+import { startInstallAnimation } from "./update-animation";
 import { allowManualCheck, MANUAL_LIMIT, nextCheckDelay } from "./update-policy";
 
 type Listener = (status: UpdateStatus) => void;
@@ -334,15 +335,20 @@ async function download(options: { thenRestart: boolean }): Promise<void> {
 	}
 }
 
+function versionLine(): string | null {
+	return newVersion ? `${app.getVersion()} to ${newVersion}` : null;
+}
+
 /**
  * Not inside the call that asked for it. quitAndInstall tears the window down,
  * so the IPC reply has to be on its way out first or the renderer is left
  * waiting on a channel that no longer has anything behind it. The pause also
  * gives the update window a moment to paint before the application goes.
  *
- * Not silent: the installer shows its own progress, which is what stops the
- * gap between Juno closing and the new version opening from looking like a
- * crash. It skips its welcome and finish pages for an update (installer.nsh).
+ * The installer runs silent, and what is on screen while it works is
+ * update-animation.ts: Juno's own window until the application exits, then a
+ * small branded one until the new version is up. The installer's wizard would
+ * fill the same gap, but it looks like an installer rather than like Juno.
  * `relaunch` is false when the person closed Juno themselves, because an app
  * that opens again after being closed is not what they asked for.
  */
@@ -351,9 +357,10 @@ function restart(options: { relaunch: boolean }): void {
 	installing = true;
 	markUpdating();
 	setStage("installing");
+	startInstallAnimation({ relaunch: options.relaunch, version: versionLine() });
 	setTimeout(() => {
 		try {
-			autoUpdater.quitAndInstall(false, options.relaunch);
+			autoUpdater.quitAndInstall(true, options.relaunch);
 		} catch (cause: unknown) {
 			fail(cause);
 		}

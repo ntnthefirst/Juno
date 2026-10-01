@@ -1977,6 +1977,8 @@ export interface MailMessage {
 	threadId: string;
 	uid: number;
 	messageId: string | null;
+	/** The Message-ID this one answers, which is what draws a conversation as branches. */
+	inReplyTo: string | null;
 	from: MailAddress | null;
 	to: MailAddress[];
 	cc: MailAddress[];
@@ -2040,7 +2042,7 @@ export interface MailThreadOutgoing {
 	/** The outbox row's id. Not a mail message id, so nothing else accepts it. */
 	id: string;
 	accountId: string;
-	state: "queued" | "sending" | "sent";
+	state: "draft" | "pending" | "queued" | "sending" | "sent" | "failed";
 	from: MailAddress;
 	to: MailAddress[];
 	cc: MailAddress[];
@@ -2048,6 +2050,7 @@ export interface MailThreadOutgoing {
 	bodyText: string;
 	bodyHtml: string | null;
 	messageId: string;
+	inReplyTo: string | null;
 	/** When it went out, or when it was queued while it has not gone yet. */
 	date: Iso;
 	attachments: MailOutboxAttachment[];

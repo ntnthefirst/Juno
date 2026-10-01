@@ -1,12 +1,16 @@
 import type { MailThreadOutgoing } from "@shared/types";
+import { Button } from "../../components/Button";
 import { framed } from "../../lib/framed-preview";
 import { displayName, formatFull, formatWhen, participantsLine } from "./format";
+import { STATE_LABELS, STATE_TONES } from "./outbox-format";
 
 type OutgoingMessageViewProps = {
 	message: MailThreadOutgoing;
 	/** One message of a thread is open at a time; the thread decides which. */
 	open: boolean;
 	onToggle: () => void;
+	/** Opens a draft, a message waiting for approval or a failed send in the composer. */
+	onEdit?: (id: string) => void;
 };
 
 /**
@@ -16,10 +20,10 @@ type OutgoingMessageViewProps = {
  * mail message. The frame is the outbox preview's, so a remote picture is a
  * box here as it is there (lib/framed-preview.ts).
  */
-export function OutgoingMessageView({ message, open, onToggle }: OutgoingMessageViewProps) {
+export function OutgoingMessageView({ message, open, onToggle, onEdit }: OutgoingMessageViewProps) {
 	const from = displayName(message.from);
 	const preview = message.bodyHtml ? framed(message.bodyHtml, "") : null;
-	const sending = message.state !== "sent";
+	const editable = message.state === "draft" || message.state === "pending" || message.state === "failed";
 
 	return (
 		<article
@@ -35,6 +39,13 @@ export function OutgoingMessageView({ message, open, onToggle }: OutgoingMessage
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
 						<span className="truncate font-[var(--weight-medium)]">{from}</span>
+						{message.state !== "sent" ? (
+							<span
+								className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[length:var(--text-micro)] ${STATE_TONES[message.state]}`}
+							>
+								{STATE_LABELS[message.state]}
+							</span>
+						) : null}
 						{message.from.name ? (
 							<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 								{message.from.address}
@@ -85,10 +96,25 @@ export function OutgoingMessageView({ message, open, onToggle }: OutgoingMessage
 						</p>
 					) : null}
 					<p className="border-t border-[var(--line)] py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						{sending
-							? "Sending"
-							: "Sent from Juno. The copy in Sent takes its place after the next sync."}
+						{message.state === "sent"
+							? "Sent from Juno. The copy in Sent takes its place after the next sync."
+							: message.state === "draft"
+								? "Not sent yet. It stays here until you send it."
+								: message.state === "pending"
+									? "Waiting for you. Open it to read the whole message and send or reject it."
+									: message.state === "failed"
+										? "This message could not be sent. Open it to try again."
+										: message.state === "queued"
+											? "Queued. It goes out in a moment."
+											: "Sending"}
 					</p>
+					{editable && onEdit ? (
+						<div className="border-t border-[var(--line)] py-3">
+							<Button size="dense" onClick={() => onEdit(message.id)}>
+								Open in the composer
+							</Button>
+						</div>
+					) : null}
 				</div>
 			) : null}
 		</article>

@@ -556,7 +556,7 @@ describe("a sent reply in its thread", () => {
 		expect(thread.outgoing).toEqual([]);
 	});
 
-	it("leaves out drafts, failed and cancelled messages, and a deleted one", async () => {
+	it("lists drafts, waiting and failed messages, and leaves out cancelled and deleted ones", async () => {
 		const originalId = storeOriginal(db);
 		const threadId = threadOf(originalId);
 		const make = () =>
@@ -564,17 +564,50 @@ describe("a sent reply in its thread", () => {
 				{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Re: Offerte", bodyText: "x", replyToMessageId: originalId },
 				db,
 			);
-		await make();
+		const draft = await make();
 		const failed = await make();
 		const cancelled = await make();
 		db.update(mailOutbox).set({ state: "failed" }).where(eq(mailOutbox.id, failed.id)).run();
 		await outbox.cancel(cancelled.id, db);
-		expect((await threads.getThread(threadId, db))!.outgoing).toEqual([]);
+		const shown = (await threads.getThread(threadId, db))!.outgoing;
+		expect(shown.map((o) => [o.id, o.state])).toEqual(
+			expect.arrayContaining([
+				[draft.id, "draft"],
+				[failed.id, "failed"],
+			]),
+		);
+		expect(shown.some((o) => o.id === cancelled.id)).toBe(false);
 
 		const gone = await sentReply(originalId);
-		expect((await threads.getThread(threadId, db))!.outgoing).toHaveLength(1);
+		expect((await threads.getThread(threadId, db))!.outgoing.some((o) => o.id === gone.id)).toBe(true);
 		db.update(mailOutbox).set({ deletedAt: "2026-09-02T00:00:00.000Z" }).where(eq(mailOutbox.id, gone.id)).run();
-		expect((await threads.getThread(threadId, db))!.outgoing).toEqual([]);
+		expect((await threads.getThread(threadId, db))!.outgoing.some((o) => o.id === gone.id)).toBe(false);
+	});
+
+	it("answers and forwards a sent message that has not synced back yet", async () => {
+		const originalId = storeOriginal(db);
+		const reply = await sentReply(originalId);
+
+		const answer = await outbox.replySeedForOutgoing(reply.id, { mode: "reply" }, db);
+		expect(answer).toMatchObject({
+			accountId,
+			to: [{ name: null, address: "laura@obet.be" }],
+			subject: "Re: Offerte",
+			replyToMessageId: originalId,
+		});
+		expect(answer.quotedText).toContain("Zeker.");
+
+		const forward = await outbox.replySeedForOutgoing(reply.id, { mode: "forward" }, db);
+		expect(forward).toMatchObject({ to: [], subject: "Fw: Re: Offerte", replyToMessageId: null });
+	});
+
+	it("refuses to answer a draft", async () => {
+		const originalId = storeOriginal(db);
+		const draft = await outbox.createDraft(
+			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Re: Offerte", bodyText: "x", replyToMessageId: originalId },
+			db,
+		);
+		await expect(outbox.replySeedForOutgoing(draft.id, { mode: "reply" }, db)).rejects.toThrow(/has been sent/);
 	});
 
 	it("lists more than one, oldest first", async () => {

@@ -127,6 +127,7 @@ export type IconName =
 	| "link"
 	| "flag"
 	| "filter"
+	| "branch"
 	| "read"
 	| "unread"
 	| "reply"
@@ -414,6 +415,14 @@ const DRAWN = {
 			<circle cx="12" cy="12" r="8" strokeDasharray="2 3" />
 		</>,
 	),
+	branch: glyph(
+		<>
+			<circle cx="6" cy="5.5" r="2" />
+			<circle cx="6" cy="18.5" r="2" />
+			<circle cx="18" cy="9" r="2" />
+			<path d="M6 7.5v9M18 11c0 4-6 3-10.5 6.5" />
+		</>,
+	),
 	wrap: glyph(<path d="M4 7h12.5a3 3 0 0 1 0 6H9m2.5-2.5L9 13l2.5 2.5M4 17h4" />),
 	keyboard: glyph(
 		<>
@@ -457,6 +466,7 @@ const ICONS: Record<IconName, Glyph> = {
 	link: LinkIcon,
 	flag: FlagIcon,
 	filter: FunnelIcon,
+	branch: DRAWN.branch,
 	read: EnvelopeOpenIcon,
 	unread: EyeIcon,
 	reply: ArrowUturnLeftIcon,

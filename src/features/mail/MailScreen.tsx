@@ -276,6 +276,33 @@ export function MailScreen() {
 		}
 	}
 
+	/** A message Juno sent that has not synced back yet is answered from its outbox row. */
+	async function replyOutgoing(outboxId: string, mode: MailReplyMode) {
+		try {
+			const seed = await window.juno.mail.outbox.replySeedOutgoing(outboxId, mode);
+			setCompose({
+				accountId: seed.accountId,
+				to: seed.to,
+				cc: seed.cc,
+				subject: seed.subject,
+				bodyText: `\n\n${seed.quotedText}`,
+				replyToMessageId: seed.replyToMessageId,
+				clientId: seed.clientId,
+			});
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	async function editOutgoing(outboxId: string) {
+		try {
+			const draft = await window.juno.mail.outbox.get(outboxId);
+			if (draft) setCompose({ draft });
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
 	async function reply(messageId: string, mode: MailReplyMode) {
 		try {
 			const seed = await window.juno.mail.outbox.replySeed(messageId, mode);
@@ -689,6 +716,8 @@ export function MailScreen() {
 						onNotice={setNotice}
 						onReply={(messageId, mode) => void reply(messageId, mode)}
 						onAction={(action) => handleThreadAction(action, [selectedThreadId])}
+						onEditDraft={(id) => void editOutgoing(id)}
+						onReplyOutgoing={(id, mode) => void replyOutgoing(id, mode)}
 					/>
 				) : showingDrafts && selectedOutbox ? (
 					<OutboxDetail

@@ -341,8 +341,9 @@ export async function counts(accountId?: string, db: Db = getDb()): Promise<Mail
  * them, which covers a row whose thread link was lost with the message it
  * answered. Once a live message in the thread carries the row's Message-ID the
  * synced copy is the record and the row steps aside, so nothing shows twice.
- * Drafts, pending, failed and cancelled rows are not in the conversation yet
- * or any more, and a deleted row never is.
+ * Drafts, rows waiting for approval and failed sends are listed, marked by
+ * their state, so the overview shows the whole conversation. A cancelled row is
+ * not in it any more, and a deleted row never is.
  */
 export function outgoingForThread(threadId: string, db: Db = getDb()): MailThreadOutgoing[] {
 	const synced = db
@@ -369,7 +370,7 @@ export function outgoingForThread(threadId: string, db: Db = getDb()): MailThrea
 		.where(
 			and(
 				isNull(mailOutbox.deletedAt),
-				inArray(mailOutbox.state, ["queued", "sending", "sent"]),
+				inArray(mailOutbox.state, ["draft", "pending", "queued", "sending", "sent", "failed"]),
 				or(...belongs),
 			),
 		)
@@ -395,6 +396,7 @@ export function outgoingForThread(threadId: string, db: Db = getDb()): MailThrea
 				bodyText: row.bodyText,
 				bodyHtml: row.bodyHtml,
 				messageId: row.messageId,
+				inReplyTo: row.inReplyTo,
 				date: row.sentAt ?? row.queuedAt ?? row.createdAt,
 				attachments: attachments.get(row.id) ?? [],
 			};
@@ -781,6 +783,65 @@ export async function replySeed(
 			text: message.bodyText ?? message.snippet,
 		}),
 		replyToMessageId: forwarding ? null : message.id,
+		clientId: row.clientId ?? null,
+	};
+}
+
+/**
+ * The same seed for answering or forwarding something Juno sent that has not
+ * come back from the Sent folder yet, so it is an outbox row and not a mail
+ * message. An answer goes to whoever it was sent to, since answering yourself
+ * means carrying on with them, and it threads under the message the sent one
+ * answered, because that is the only synced message it has.
+ */
+export async function replySeedForOutgoing(
+	outboxId: string,
+	options: { mode: MailReplyMode },
+	db: Db = getDb(),
+): Promise<MailReplySeed> {
+	const row = db
+		.select()
+		.from(mailOutbox)
+		.where(and(eq(mailOutbox.id, outboxId), isNull(mailOutbox.deletedAt)))
+		.get();
+	if (!row) throw new Error("That message does not exist.");
+	if (row.state !== "queued" && row.state !== "sending" && row.state !== "sent") {
+		throw new Error("Only a message that has been sent can be answered or forwarded. Open a draft to edit it.");
+	}
+	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, row.accountId)).get();
+	if (!account) throw new Error("The account this message belongs to no longer exists.");
+
+	const own = new Set([account.email.toLowerCase(), account.username.toLowerCase()]);
+	const forwarding = options.mode === "forward";
+	const to: MailAddress[] = [];
+	const cc: MailAddress[] = [];
+	if (!forwarding) {
+		const seen = new Set<string>();
+		const push = (list: MailAddress[], entries: MailAddress[]) => {
+			for (const entry of entries) {
+				const address = entry.address.toLowerCase();
+				if (own.has(address) || seen.has(address)) continue;
+				seen.add(address);
+				list.push({ name: entry.name ?? null, address });
+			}
+		};
+		push(to, parseAddresses(row.toJson));
+		if (options.mode === "reply_all") push(cc, parseAddresses(row.ccJson));
+	}
+
+	const prefix = forwarding ? /^\s*(fw|fwd|doorst)\s*:/i : /^\s*(re|antw|aw)\s*:/i;
+	const subject = prefix.test(row.subject) ? row.subject : `${forwarding ? "Fw" : "Re"}: ${row.subject}`;
+	return {
+		accountId: row.accountId,
+		to,
+		cc,
+		subject,
+		quotedText: quoteForReply({
+			fromLine: account.fromName ? `${account.fromName} <${account.email}>` : account.email,
+			sentAt: formatDateTime(row.sentAt ?? row.queuedAt ?? row.createdAt),
+			text: row.bodyText,
+		}),
+		replyToMessageId: forwarding ? null : row.replyToMessageId,
 		clientId: row.clientId ?? null,
 	};
 }

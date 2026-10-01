@@ -175,6 +175,9 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.outbox.updateDraft", (_event, id: string, patch: MailDraftPatch) =>
 		outbox.updateDraft(id, patch),
 	);
+	ipcMain.handle("mail.outbox.replySeedOutgoing", (_event, outboxId: string, mode: MailReplyMode) =>
+		outbox.replySeedForOutgoing(outboxId, { mode }),
+	);
 	ipcMain.handle("mail.outbox.replySeed", (_event, messageId: string, mode: MailReplyMode) =>
 		outbox.replySeed(messageId, { mode }),
 	);

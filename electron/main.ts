@@ -56,7 +56,7 @@ import * as settings from "./main/services/settings";
 import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
 import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
-import { startUpdates } from "./main/services/updates";
+import { installOnQuit, startUpdates } from "./main/services/updates";
 import { devDataDir } from "./main/dev-data";
 
 const isDev = Boolean(process.env.JUNO_DEV);
@@ -4071,7 +4071,10 @@ if (!app.requestSingleInstanceLock()) {
 		if (process.platform !== "darwin") app.quit();
 	});
 
-	app.on("before-quit", () => {
+	app.on("before-quit", (event) => {
+		// A downloaded update is installed here, with a window saying so. That
+		// pass quits again and lands below on its second visit.
+		if (installOnQuit(event)) return;
 		notifications.stop();
 		// A dev server left behind by a closed app is a port nobody can explain.
 		projectRunner.stopAll();

@@ -13,7 +13,9 @@
  * published release has no installer behind it and nothing to verify, so a
  * build that exists only as a tag is invisible here on purpose.
  */
-import { app } from "electron";
+import { app, type Event as ElectronEvent } from "electron";
+import { rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 // The named import, not the default one. electron-updater is CommonJS, and the
 // main process compiles to CommonJS too, so a default import resolves to an
 // undefined `.default` and throws on the first line that touches it.
@@ -41,6 +43,32 @@ let timer: NodeJS.Timeout | null = null;
 let wired = false;
 /** Set by a person pressing Install, so the download restarts the app when it lands. */
 let installWhenReady = false;
+/** True from the moment Juno starts closing for the installer. */
+let installing = false;
+
+/**
+ * Written before the installer runs and read by the MCP bridge, which an agent
+ * runs from Juno's own executable. While that process is alive the installer
+ * cannot replace the file, and some agents start it again as soon as it exits,
+ * so the bridge has to notice this and leave on its own (scripts/mcp-bridge.mjs).
+ */
+const UPDATING_MARKER = "updating";
+
+function markUpdating(): void {
+	try {
+		writeFileSync(join(app.getPath("userData"), UPDATING_MARKER), new Date().toISOString());
+	} catch {
+		// Without the marker the installer still tries to end the bridge itself.
+	}
+}
+
+function clearUpdating(): void {
+	try {
+		rmSync(join(app.getPath("userData"), UPDATING_MARKER), { force: true });
+	} catch {
+		// A stale marker expires on its own after a few minutes.
+	}
+}
 
 /**
  * The updater only works from a packaged build: an unpackaged run has no
@@ -61,6 +89,7 @@ export function status(): UpdateStatus {
 		lastCheckedAt,
 		nextCheckAt,
 		autoInstall,
+		installRequested: installWhenReady || installing,
 		error: stage === "error" ? failure : null,
 	};
 }
@@ -99,6 +128,11 @@ function fail(cause: unknown): void {
 		failure = `The update failed (${name}). Try again in a moment.`;
 	}
 
+	// Whatever was heading for a restart is off: a failed download must not
+	// leave the next one to restart the app unasked.
+	installWhenReady = false;
+	installing = false;
+	clearUpdating();
 	stage = "error";
 	percent = 0;
 	broadcast();
@@ -140,7 +174,7 @@ function ensureWired(): void {
 		// worth making.
 		if (installWhenReady) {
 			installWhenReady = false;
-			restart();
+			restart({ relaunch: true });
 		}
 	});
 }
@@ -150,7 +184,9 @@ function applyAutoInstall(): void {
 	// there until somebody asks for it; autoInstallOnAppQuit false means a
 	// download that did happen is not applied behind their back either.
 	autoUpdater.autoDownload = autoInstall;
-	autoUpdater.autoInstallOnAppQuit = autoInstall;
+	// Off in the library on purpose: its own install-on-quit runs silently with
+	// nothing on screen. installOnQuit below does the same job with a window.
+	autoUpdater.autoInstallOnAppQuit = false;
 }
 
 function schedule(): void {
@@ -184,6 +220,8 @@ function schedule(): void {
  * settings window draws the toggle correctly, and schedules nothing.
  */
 export async function startUpdates(): Promise<void> {
+	// A marker left by an install that did not finish must not keep the bridge away.
+	clearUpdating();
 	const stored = await settings.getUpdates();
 	autoInstall = stored.autoInstall;
 	lastCheckedAt = stored.lastCheckedAt;
@@ -259,15 +297,17 @@ export async function install(): Promise<UpdateStatus> {
 	requireSupported();
 
 	if (stage === "ready") {
-		restart();
+		restart({ relaunch: true });
 		return status();
 	}
 	if (stage === "downloading") {
 		// Already coming down on its own. Press Install and it restarts when it
 		// lands rather than waiting for the close.
 		installWhenReady = true;
+		broadcast();
 		return status();
 	}
+	if (stage === "installing") return status();
 	if (stage !== "available") {
 		throw new Error("There is no update to install. Check for updates first.");
 	}
@@ -297,12 +337,41 @@ async function download(options: { thenRestart: boolean }): Promise<void> {
 /**
  * Not inside the call that asked for it. quitAndInstall tears the window down,
  * so the IPC reply has to be on its way out first or the renderer is left
- * waiting on a channel that no longer has anything behind it.
+ * waiting on a channel that no longer has anything behind it. The pause also
+ * gives the update window a moment to paint before the application goes.
+ *
+ * Not silent: the installer shows its own progress, which is what stops the
+ * gap between Juno closing and the new version opening from looking like a
+ * crash. It skips its welcome and finish pages for an update (installer.nsh).
+ * `relaunch` is false when the person closed Juno themselves, because an app
+ * that opens again after being closed is not what they asked for.
  */
-function restart(): void {
-	// Silent, and start Juno again afterwards: without the flags the installer
-	// wizard opens over the update and the app stays closed.
-	setTimeout(() => autoUpdater.quitAndInstall(true, true), 100);
+function restart(options: { relaunch: boolean }): void {
+	if (installing) return;
+	installing = true;
+	markUpdating();
+	setStage("installing");
+	setTimeout(() => {
+		try {
+			autoUpdater.quitAndInstall(false, options.relaunch);
+		} catch (cause: unknown) {
+			fail(cause);
+		}
+	}, 1500);
+}
+
+/**
+ * Called from before-quit. A downloaded update is applied when the person
+ * closes Juno, which is what "install automatically" promises, but through
+ * restart() so there is a window saying so instead of nothing. Returns true
+ * when it took over the quit; the second pass of the quit then runs the rest
+ * of the shutdown.
+ */
+export function installOnQuit(event: ElectronEvent): boolean {
+	if (!supported() || installing || !autoInstall || stage !== "ready") return false;
+	event.preventDefault();
+	restart({ relaunch: false });
+	return true;
 }
 
 export async function setAutoInstall(value: boolean): Promise<UpdateStatus> {

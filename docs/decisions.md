@@ -646,6 +646,20 @@ the agent's `updates.check`, so neither a stuck finger nor a loop hammers the
 feed. There is no MCP tool that installs: restarting the application somebody is
 working in is a person's decision, the same answer as the lock.
 
+An install is never invisible. A silent installer leaves nothing on screen
+between Juno closing and the new version opening, which reads as a crash, so
+the updater runs the installer with its progress page showing (it skips its
+welcome and finish pages for an update, `build/installer.nsh`), and a small
+update window covers the stretch before that: the download, then closing down.
+Closing Juno with a downloaded update goes through the same path rather than
+the library's silent install-on-quit.
+
+The MCP bridge is the other thing that can stop an install. An agent runs it
+from Juno's own executable, so while it is alive the installer cannot replace
+that file, and an agent that restarts it on exit keeps it alive. Juno writes an
+`updating` marker in its data folder before handing over, and the bridge leaves
+as soon as it sees one. The agent's connection closes until Juno has restarted.
+
 **What would reverse this:** shipping to clients who cannot reach GitHub, or a
 signing certificate arriving with its own distribution channel.
 

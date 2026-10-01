@@ -36,6 +36,8 @@ function describe(status: UpdateStatus): string {
 			return status.autoInstall
 				? `Version ${status.newVersion} is ready. It installs the next time Juno closes.`
 				: `Version ${status.newVersion} is downloaded and waiting.`;
+		case "installing":
+			return `Closing Juno to install version ${status.newVersion}.`;
 		case "error":
 			return "The last check did not finish.";
 	}
@@ -78,7 +80,7 @@ export function UpdatesSection() {
 	}
 
 	const stage = status?.stage ?? "idle";
-	const working = busy || stage === "checking" || stage === "downloading";
+	const working = busy || stage === "checking" || stage === "downloading" || stage === "installing";
 	const canInstall = stage === "available" || stage === "ready";
 
 	return (

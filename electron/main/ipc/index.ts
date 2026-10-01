@@ -31,7 +31,7 @@ import { registerTemplatesIpc } from "./templates";
 import { registerUpdatesIpc } from "./updates";
 import { registerWindowIpc } from "./window";
 
-export function registerAllIpc(userDataDir: string): void {
+export function registerAllIpc(): void {
 	installLockGuard();
 
 	registerAppIpc();
@@ -57,5 +57,5 @@ export function registerAllIpc(userDataDir: string): void {
 	registerMailIpc();
 	registerCalendarIpc();
 	registerGeocodingIpc();
-	registerAgentIpc(userDataDir);
+	registerAgentIpc();
 }

@@ -7,6 +7,8 @@ import { ClientLogo } from "./client-logos";
 
 type ClientInstallerProps = {
 	onNotice: (message: string) => void;
+	/** Without a listening server there is no address to write. */
+	serverRunning: boolean;
 };
 
 type Done = { target: AgentClientTarget; result: AgentInstallResult };
@@ -35,7 +37,7 @@ function standingOf(target: AgentClientTarget): Standing {
  * installed Claude Desktop reads as "Juno cannot find Claude", which was never
  * what it meant.
  */
-export function ClientInstaller({ onNotice }: ClientInstallerProps) {
+export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProps) {
 	const [targets, setTargets] = useState<AgentClientTarget[] | null>(null);
 	const [busy, setBusy] = useState<string | null>(null);
 	const [done, setDone] = useState<Done | null>(null);
@@ -87,7 +89,8 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 	return (
 		<div>
 			<p className="max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-				Juno adds itself to the client's configuration and keeps a copy of the old file.
+				Juno adds its address to the client's configuration and keeps a copy of the old file.
+				{serverRunning ? "" : " Switch the server on first."}
 			</p>
 
 			{loadError ? (
@@ -149,7 +152,7 @@ export function ClientInstaller({ onNotice }: ClientInstallerProps) {
 						<Button
 							size="dense"
 							variant={target.upToDate || !target.installed ? "quiet" : "primary"}
-							disabled={busy !== null || target.path === null}
+							disabled={busy !== null || target.path === null || !serverRunning}
 							onClick={() => void write(target)}
 						>
 							{busy === target.id

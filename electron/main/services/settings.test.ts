@@ -183,3 +183,45 @@ describe("the sidebar auto-collapse", () => {
 		expect(await settings.getSidebarAutoCollapse()).toBe(true);
 	});
 });
+
+describe("the agent server", () => {
+	it("is on, on the default port, until somebody changes it", async () => {
+		freshStore();
+		expect(await settings.getMcpServer()).toEqual({ enabled: true, port: null });
+	});
+
+	it("keeps the switch and the port across a fresh read", async () => {
+		const dir = freshStore();
+		await settings.setMcpServer({ enabled: false });
+		await settings.setMcpServer({ port: 7001 });
+		configureSettings(dir);
+		expect(await settings.getMcpServer()).toEqual({ enabled: false, port: 7001 });
+	});
+
+	it("patches one field without clearing the other", async () => {
+		freshStore();
+		await settings.setMcpServer({ port: 7001 });
+		expect(await settings.setMcpServer({ enabled: false })).toEqual({ enabled: false, port: 7001 });
+		expect(await settings.setMcpServer({ port: null })).toEqual({ enabled: false, port: null });
+	});
+
+	it("refuses a port the operating system hands out at random, or one that is not a port", async () => {
+		freshStore();
+		await expect(settings.setMcpServer({ port: 80 })).rejects.toThrow(/between 1024 and 32767/);
+		await expect(settings.setMcpServer({ port: 40000 })).rejects.toThrow(/between 1024 and 32767/);
+		await expect(settings.setMcpServer({ port: 5866.5 })).rejects.toThrow(/between 1024 and 32767/);
+		expect((await settings.getMcpServer()).port).toBeNull();
+	});
+
+	it("falls back to the defaults when the stored values are the wrong type or out of range", async () => {
+		freshStore({ mcpServer: { enabled: "off", port: 99999 } });
+		expect(await settings.getMcpServer()).toEqual({ enabled: true, port: null });
+	});
+
+	it("comes back with the rest of the settings, and as a copy", async () => {
+		freshStore();
+		const all = await settings.get();
+		all.mcpServer.enabled = false;
+		expect((await settings.getMcpServer()).enabled).toBe(true);
+	});
+});

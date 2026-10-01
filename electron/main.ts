@@ -24,10 +24,9 @@ import {
 } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
-import { mcpStatus } from "./main/ipc/agent";
 import * as agentAudit from "./main/services/agent-audit";
 import { configureAgentInstall } from "./main/services/agent-install";
-import { startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
+import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
@@ -169,19 +168,26 @@ if (!app.requestSingleInstanceLock()) {
 		lock.start(await settings.getLock());
 
 		splashStep("Starting services");
-		registerAllIpc(userDataDir());
+		registerAllIpc();
 
-		// The agent surface comes up after IPC, because the gate it enforces is
-		// answered over IPC, and after the lock, because every tool checks it.
-		startAgentSurface({ userDataDir: userDataDir(), instanceKey: databasePath() });
-
-		// Writing Juno into the agent clients on this machine needs the same
-		// connection details the settings screen prints, so it is given the same
-		// builder rather than working them out a second time.
+		// Writing Juno into the agent clients on this machine needs the address
+		// the settings screen shows, so it is given the same answer rather than
+		// working it out a second time.
 		configureAgentInstall({
-			status: () => mcpStatus(userDataDir()),
+			status: () => serverStatus(),
 			home: homedir(),
 			platform: process.platform,
+		});
+
+		// The agent surface comes up after IPC, because the gate it enforces is
+		// answered over IPC, and after the lock, because every tool checks it. A
+		// development run listens on its own port, so it can be open beside the
+		// installed one, and a smoke run lets the system choose.
+		await startAgentSurface({
+			userDataDir: userDataDir(),
+			defaultPort: app.isPackaged ? 5866 : 5867,
+			version: app.getVersion(),
+			ephemeralPort: Boolean(process.env.JUNO_SMOKE),
 		});
 
 		// In development only the mail host is served; the window comes from Vite.
@@ -228,6 +234,36 @@ if (!app.requestSingleInstanceLock()) {
 						// Drives the real preload bridge, so this exercises IPC, the services
 						// and the database exactly as a person clicking would. Verifying the
 						// interface against a mock would prove nothing about any of them.
+
+						// The line Juno says when it starts, with the address and the button
+						// that copies it. It stays up for a few seconds only, so it is looked
+						// for first, before anything slow.
+						const startupNotice = (await window.webContents.executeJavaScript(
+							`new Promise(async (resolve) => {
+								for (let i = 0; i < 30; i++) {
+									const toast = document.querySelector("[role=status]");
+									if (toast && toast.textContent.includes("MCP server enabled on http://127.0.0.1:")) {
+										return resolve(toast.textContent);
+									}
+									await new Promise((r) => setTimeout(r, 200));
+								}
+								resolve("");
+							})`,
+						)) as string;
+						if (!startupNotice.includes("Copy URL")) {
+							throw new Error(`Smoke: Juno did not say where the agent server listens: "${startupNotice}"`);
+						}
+						console.log(`SMOKE_DEMO startup notice=${startupNotice}`);
+						if (process.env.JUNO_SMOKE_SHOT) {
+							const { mkdirSync, writeFileSync } = await import("node:fs");
+							const { join: joinPath } = await import("node:path");
+							mkdirSync(process.env.JUNO_SMOKE_SHOT, { recursive: true });
+							writeFileSync(
+								joinPath(process.env.JUNO_SMOKE_SHOT, "mcp-notice.png"),
+								(await window.webContents.capturePage()).toPNG(),
+							);
+						}
+
 						if (process.env.JUNO_SMOKE_DEMO) {
 							// No server in a smoke run: the sync reads from a mailbox in memory.
 							const { openSmokeMailbox, smokeTransport, smokeAppender } =
@@ -509,94 +545,57 @@ if (!app.requestSingleInstanceLock()) {
 							}
 							console.log(`SMOKE_DEMO agent pending=${waiting.length}`);
 
-							// The bridge, for real: a child process speaking MCP over stdio,
-							// exactly as an agent's client would start it. This is the only
-							// check that covers the socket, the token and the wire.
-							await new Promise<void>((resolve, reject) => {
-								void (async () => {
-									const { spawn } = await import("node:child_process");
-									const bridge = spawn(
-										process.execPath,
-										[
-											join(app.getAppPath(), "scripts", "mcp-bridge.mjs"),
-											"--user-data-dir",
-											userDataDir(),
-										],
-										{
-											env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-											stdio: ["pipe", "pipe", "pipe"],
+							// The server, for real: the listener, the token and the protocol over
+							// HTTP, exactly as a client sends it. The handshake that hands a token
+							// out is covered by its own tests; here a token is made the way the
+							// settings screen makes one.
+							{
+								const server = await serverStatus();
+								if (!server.running) throw new Error(`Smoke: the agent server is not listening: ${server.error}`);
+								const post = (body: unknown, token: string | null) =>
+									fetch(server.url, {
+										method: "POST",
+										headers: {
+											"Content-Type": "application/json",
+											Accept: "application/json, text/event-stream",
+											...(token ? { Authorization: `Bearer ${token}` } : {}),
 										},
-									);
-									let out = "";
-									let stderr = "";
-									const timer = setTimeout(() => {
-										bridge.kill();
-										reject(new Error(`Smoke: the bridge did not answer. ${stderr}`));
-									}, 20_000);
-									const send = (message: unknown) =>
-										bridge.stdin.write(`${JSON.stringify(message)}\n`);
-
-									bridge.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-									bridge.stdout.on("data", (chunk: Buffer) => {
-										out += chunk.toString();
-										let index = out.indexOf("\n");
-										while (index !== -1) {
-											const line = out.slice(0, index);
-											out = out.slice(index + 1);
-											index = out.indexOf("\n");
-											if (!line.trim()) continue;
-											const message = JSON.parse(line) as {
-												id?: number;
-												result?: {
-													tools?: unknown[];
-													content?: { text: string }[];
-													isError?: boolean;
-												};
-											};
-											if (message.id === 1) {
-												send({ jsonrpc: "2.0", method: "notifications/initialized" });
-												send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-											} else if (message.id === 2) {
-												const tools = message.result?.tools ?? [];
-												if (tools.length < 90) {
-													clearTimeout(timer);
-													bridge.kill();
-													reject(new Error(`Smoke: the bridge listed ${tools.length} tools`));
-													return;
-												}
-												console.log(`SMOKE_DEMO bridge tools=${tools.length}`);
-												send({
-													jsonrpc: "2.0",
-													id: 3,
-													method: "tools/call",
-													params: { name: "briefing.today", arguments: {} },
-												});
-											} else if (message.id === 3) {
-												clearTimeout(timer);
-												bridge.kill();
-												const text = message.result?.content?.[0]?.text ?? "";
-												if (message.result?.isError || !text.includes("headline")) {
-													reject(new Error(`Smoke: the bridge call failed: ${text}`));
-													return;
-												}
-												console.log(`SMOKE_DEMO bridge briefing=ok`);
-												resolve();
-											}
-										}
+										body: JSON.stringify(body),
 									});
 
-									send({
-										jsonrpc: "2.0",
-										id: 1,
-										method: "initialize",
-										params: {
-											protocolVersion: "2024-11-05",
-											capabilities: {},
-											clientInfo: { name: "smoke", version: "1" },
-										},
-									});
-								})();
-							});
+								const refused = await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, null);
+								if (refused.status !== 401) throw new Error(`Smoke: a client with no token got ${refused.status}`);
+
+								const { createToken, revoke } = await import("./main/services/agent-connections");
+								const made = createToken("smoke");
+								try {
+									const listed = (await (
+										await post({ jsonrpc: "2.0", id: 2, method: "tools/list" }, made.token)
+									).json()) as { result?: { tools?: unknown[] } };
+									const count = listed.result?.tools?.length ?? 0;
+									if (count < 90) throw new Error(`Smoke: the server listed ${count} tools`);
+									console.log(`SMOKE_DEMO server tools=${count}`);
+
+									const called = (await (
+										await post(
+											{
+												jsonrpc: "2.0",
+												id: 3,
+												method: "tools/call",
+												params: { name: "briefing.today", arguments: {} },
+											},
+											made.token,
+										)
+									).json()) as { result?: { isError?: boolean; content?: { text: string }[] } };
+									const reply = called.result?.content?.[0]?.text ?? "";
+									if (called.result?.isError || !reply.includes("headline")) {
+										throw new Error(`Smoke: the server call failed: ${reply}`);
+									}
+									console.log("SMOKE_DEMO server briefing=ok");
+								} finally {
+									revoke(made.connection.id);
+								}
+							}
 							// The sender is not scheduled in a smoke run, so it is asked directly,
 							// and the row has to come out the other side as sent.
 							const sentCount = await mailSend.processQueue();
@@ -1127,15 +1126,18 @@ if (!app.requestSingleInstanceLock()) {
 											await new Promise((r) => setTimeout(r, 700));
 											const main = document.querySelector("main");
 											if (!main.textContent.includes("Listening")) return "not listening";
+											if (!main.textContent.includes("http://127.0.0.1:")) return "no server address";
+											const power = main.querySelector("button[role=switch]");
+											if (!power || power.getAttribute("aria-checked") !== "true") return "the server switch is not on";
 											// The installers are one of two routes and the block of
 											// configuration is the other, so both sides of the switch
 											// are checked here rather than assuming which one is up.
-											if (!main.textContent.includes("Claude Desktop")) return "no client list";
+											if (!main.textContent.includes("Claude Code")) return "no client list";
 											const manual = [...main.querySelectorAll("button[role=radio]")].find((el) => el.textContent.trim() === "Do it myself");
 											if (!manual) return "no manual route";
 											manual.click();
 											await new Promise((r) => setTimeout(r, 400));
-											if (!main.textContent.includes("mcpServers")) return "no configuration block";
+											if (!(main.querySelector("pre")?.textContent ?? "").includes("http://127.0.0.1:")) return "no configuration block";
 											const installers = [...main.querySelectorAll("button[role=radio]")].find((el) => el.textContent.trim() === "Let Juno do it");
 											if (installers) installers.click();
 											await new Promise((r) => setTimeout(r, 400));
@@ -1143,6 +1145,65 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: agent connection ${opened}`);
+
+										// The prompt a client's first connection raises, answered the
+										// way a person answers it: the code is typed, not clicked. The
+										// request is made through the service, as the listener does
+										// when a client opens the authorisation page.
+										const { createHash } = await import("node:crypto");
+										const agentConnections = await import("./main/services/agent-connections");
+										const redirectUri = "http://127.0.0.1:53682/callback";
+										const smokeClient = agentConnections.registerClient({
+											clientName: "Smoke client",
+											redirectUris: [redirectUri],
+										});
+										const started = agentConnections.beginPairing({
+											clientId: smokeClient.clientId,
+											redirectUri,
+											codeChallenge: createHash("sha256").update("smoke".repeat(10)).digest("base64url"),
+											codeChallengeMethod: "S256",
+											state: "smoke",
+										});
+										await new Promise((r) => setTimeout(r, 700));
+										const prompt = (await window.webContents.executeJavaScript(
+											`(() => document.querySelector("[role=dialog]")?.textContent ?? "")()`,
+										)) as string;
+										if (!prompt.includes("Smoke client") || !prompt.includes("Connect an app")) {
+											throw new Error("Smoke: the connection prompt did not appear");
+										}
+										if (prompt.includes(started.code)) {
+											throw new Error("Smoke: the connection prompt shows the code it is asking for");
+										}
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 300));
+											const image = await capture(window.webContents);
+											writeFileSync(joinPath(shotDir, `agent-pairing-${theme}.png`), image.toPNG());
+										}
+										// A wrong code first, which has to be refused and counted.
+										window.webContents.focus();
+										const wrong = started.code === "000000" ? "111111" : "000000";
+										await window.webContents.insertText(wrong);
+										await new Promise((r) => setTimeout(r, 700));
+										const refused = (await window.webContents.executeJavaScript(
+											`(() => document.querySelector("[role=dialog]")?.textContent ?? "")()`,
+										)) as string;
+										if (!refused.includes("2 tries left")) {
+											throw new Error(`Smoke: a wrong code was not refused: ${refused}`);
+										}
+										await window.webContents.insertText(started.code);
+										await new Promise((r) => setTimeout(r, 900));
+										const gone = (await window.webContents.executeJavaScript(
+											`document.querySelector("[role=dialog]") === null`,
+										)) as boolean;
+										const outcome = agentConnections.pairingStatus(started.pairingId);
+										if (!gone || outcome.status !== "done" || outcome.denied) {
+											throw new Error(`Smoke: typing the code did not let the client in: ${JSON.stringify(outcome)}`);
+										}
+										console.log("SMOKE_DEMO pairing=typed");
 								}
 								if (screen === "Clients") {
 									// A notes field is CodeMirror now, not a textarea, and the only
@@ -3908,7 +3969,7 @@ if (!app.requestSingleInstanceLock()) {
 										throw new Error("Smoke: the MCP section had no way to the manual route");
 									await new Promise((r) => setTimeout(r, 350));
 									const pasted = (await settingsWindow.webContents.executeJavaScript(
-										`(document.querySelector("pre")?.textContent ?? "").includes("mcpServers")`,
+										`(document.querySelector("pre")?.textContent ?? "").includes("http://127.0.0.1:")`,
 									)) as boolean;
 									if (!pasted) throw new Error("Smoke: the manual route printed no configuration");
 									for (const theme of ["light", "dark"] as const) {
@@ -4080,7 +4141,7 @@ if (!app.requestSingleInstanceLock()) {
 		projectRunner.stopAll();
 		mailSync.stopScheduler();
 		mailSend.stopScheduler();
-		stopAgentSurface({ userDataDir: userDataDir(), instanceKey: databasePath() });
+		stopAgentSurface();
 		closeDb();
 	});
 }

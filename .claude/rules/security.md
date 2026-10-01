@@ -179,3 +179,26 @@ theatre.
   that a forgotten passphrase means the data is unrecoverable and there is no reset.
 - An MCP tool may lock Juno and may never unlock it. There is no `app.unlock`
   ([mcp.md](mcp.md) section 4). Unlocking is a person at the keyboard.
+
+## 9. The agent server is a port, and who may use it is the whole job
+
+Decision 42 in [../../docs/decisions.md](../../docs/decisions.md). Juno listens on
+127.0.0.1 for MCP clients. A port on a laptop is reachable by every program on it
+and by any web page in the browser, so:
+
+- **Bind to 127.0.0.1 and nothing else.** Never 0.0.0.0, never a configurable host.
+- **Check Host and Origin before routing.** A Host that is not a loopback name on
+  this port is refused (DNS rebinding), and so is any Origin that is not the
+  server's own. A program sends no Origin; a web page always does.
+- **`/mcp` answers to a token and nothing else.** Only a hash of a token is kept,
+  in `agent-connections.json` beside settings, never in the database.
+- **A token is handed out after a person types a code.** The code is on the page
+  the client opened in the browser and never in anything the app shows. Three
+  wrong tries end the request. A button to press instead is the bug.
+- **A client is sent back to this machine or an app address, never a web address.**
+  Otherwise the authorisation code is delivered to a server somewhere.
+- **No tool lets a client in, makes a token, removes one or switches the server.**
+  IPC only, like `agent.approve`.
+- **Refuse the handshake while locked**, and keep checking the lock on every call.
+- Everything a client chose to call itself (its name, its redirect) is escaped
+  where it is drawn, in the app and in the page the server serves.

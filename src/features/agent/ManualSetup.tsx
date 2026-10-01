@@ -1,13 +1,11 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import type { AgentClientTarget, McpServerStatus } from "@shared/types";
+import type { AgentClientTarget } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
-import { snippetFor } from "./format";
 
 type ManualSetupProps = {
-	status: McpServerStatus;
 	onNotice: (message: string) => void;
 };
 
@@ -21,7 +19,7 @@ type ManualSetupProps = {
  * "here is what to do", because the file, the key inside it and what to
  * restart afterwards are different for every one of them.
  */
-export function ManualSetup({ status, onNotice }: ManualSetupProps) {
+export function ManualSetup({ onNotice }: ManualSetupProps) {
 	const [targets, setTargets] = useState<AgentClientTarget[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [selected, setSelected] = useState<string | null>(null);
@@ -64,7 +62,7 @@ export function ManualSetup({ status, onNotice }: ManualSetupProps) {
 	const rows = [...targets].sort((a, b) => Number(b.installed) - Number(a.installed));
 	const target = rows.find((row) => row.id === selected) ?? rows[0] ?? null;
 	const key = target?.configKey ?? "mcpServers";
-	const snippet = target && target.path ? snippetFor(target, status) : "";
+	const snippet = target && target.path ? target.snippet : "";
 
 	return (
 		<div>
@@ -96,12 +94,6 @@ export function ManualSetup({ status, onNotice }: ManualSetupProps) {
 								? "This file already exists on this machine. Open it in a text editor."
 								: "This file does not exist yet. Create it, and any folders in the path that are missing, when you save."}
 						</p>
-						{target.id === "claude-desktop" ? (
-							<p>
-								Or from inside Claude Desktop itself: open Settings, then Developer, then Edit
-								config. That opens this same file.
-							</p>
-						) : null}
 					</Step>
 
 					<Step number={2} title="Add the Juno entry">

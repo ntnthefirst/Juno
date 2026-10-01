@@ -8,74 +8,63 @@
  * file (.claude/rules/mcp.md section 4, and decision 22 for the same shape in
  * the outbox).
  */
-import { app, BrowserWindow, ipcMain, shell } from "electron";
-import { join } from "node:path";
+import { BrowserWindow, ipcMain } from "electron";
 import type {
 	AgentActionListQuery,
 	AuditListQuery,
 	AutomationInput,
 	AutomationPatch,
-	McpServerStatus,
 } from "../../shared/types";
 import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
+import * as connections from "../services/agent-connections";
 import * as automations from "../services/automations";
 import * as briefing from "../services/briefing";
 import * as clientInstall from "../services/agent-install";
-import { socketStatus, summaries, toolCount } from "../mcp";
-
-/** Where the bridge lives, packaged or in the repo. */
-function bridgePath(): string {
-	return app.isPackaged
-		? join(process.resourcesPath, "app.asar", "scripts", "mcp-bridge.mjs")
-		: join(app.getAppPath(), "scripts", "mcp-bridge.mjs");
-}
+import { serverStatus, setServerEnabled, setServerPort, summaries } from "../mcp";
+import { getMainWindow, getSettingsWindow } from "../windows";
 
 /**
- * The command an agent is configured with.
- *
- * The packaged app has no Node beside it, so its own binary runs the bridge as
- * plain Node, which is what ELECTRON_RUN_AS_NODE does. In development the host
- * Node is there and is simpler to read.
+ * A client started the handshake, and whoever is looking at Juno has to see the
+ * prompt. The settings window is modal, so while it is open it is the only
+ * window that takes input, and it carries the prompt itself.
  */
-export function mcpStatus(userDataDir: string): McpServerStatus {
-	const socket = socketStatus();
-	const packaged = app.isPackaged;
-	const command = packaged ? process.execPath : "node";
-	const args = [bridgePath(), "--user-data-dir", userDataDir];
-	const env: Record<string, string> = packaged ? { ELECTRON_RUN_AS_NODE: "1" } : {};
-	const config = {
-		mcpServers: {
-			juno: {
-				command,
-				args,
-				...(packaged ? { env } : {}),
-			},
-		},
-	};
-	return {
-		running: socket.running,
-		address: socket.address,
-		connections: socket.connections,
-		command,
-		args,
-		env,
-		configJson: JSON.stringify(config, null, "\t"),
-		error: socket.error,
-		toolCount: toolCount(),
-	};
+function bringForward(): void {
+	const window = getSettingsWindow() ?? getMainWindow();
+	if (!window) return;
+	if (window.isMinimized()) window.restore();
+	window.show();
+	window.focus();
+	window.flashFrame(true);
 }
 
-export function registerAgentIpc(userDataDir: string): void {
-	ipcMain.handle("agent.status", () => mcpStatus(userDataDir));
+export function registerAgentIpc(): void {
+	ipcMain.handle("agent.server.status", () => serverStatus());
+	ipcMain.handle("agent.server.setEnabled", (_event, enabled: boolean) => setServerEnabled(enabled === true));
+	ipcMain.handle("agent.server.setPort", (_event, port: number | null) => setServerPort(port));
 	ipcMain.handle("agent.install.targets", () => clientInstall.targets());
-	ipcMain.handle("agent.install.write", (_event, clientId: string) =>
-		clientInstall.install(clientId),
-	);
+	ipcMain.handle("agent.install.write", (_event, clientId: string) => clientInstall.install(clientId));
 	ipcMain.handle("agent.tools", () => summaries());
-	ipcMain.handle("agent.revealConnectionFile", () =>
-		shell.showItemInFolder(join(userDataDir, "mcp.json")),
+
+	// Letting a client in is a person's decision. These have no tool, and there
+	// will not be one: the thing being gated is what would call it.
+	ipcMain.handle("agent.connections.list", () => connections.list());
+	ipcMain.handle("agent.connections.revoke", (_event, id: string) => connections.revoke(id));
+	ipcMain.handle("agent.connections.createToken", (_event, name: string) => connections.createToken(name));
+	ipcMain.handle("agent.pairing.list", () => connections.listPairings());
+	ipcMain.handle("agent.pairing.answer", (_event, id: string, code: string) =>
+		connections.answerPairing(id, code),
 	);
+	ipcMain.handle("agent.pairing.deny", (_event, id: string) => connections.denyPairing(id));
+
+	// Pushed, because a request arrives while somebody is on another screen. The
+	// listing is read again on the other end, so the event carries nothing.
+	connections.onChange(() => {
+		for (const window of BrowserWindow.getAllWindows()) {
+			if (!window.isDestroyed()) window.webContents.send("agent.connectionsChanged");
+		}
+	});
+	connections.onPairingRequested(() => bringForward());
 
 	ipcMain.handle("agent.actions.list", (_event, query?: AgentActionListQuery) =>
 		actions.list(query ?? {}),

@@ -15,6 +15,8 @@
  */
 import type {
 	AgentClientTarget,
+	AgentConnection,
+	AgentTokenCreated,
 	AgentInstallResult,
 	AgentAction,
 	AgentActionListQuery,
@@ -28,6 +30,8 @@ import type {
 	AutomationRun,
 	Briefing,
 	McpServerStatus,
+	PairingAnswer,
+	PairingRequest,
 	SearchQuery,
 	ToolSummary,
 	CalendarEditTarget,
@@ -496,8 +500,14 @@ export interface JunoApi {
 	};
 
 	agent: {
-		/** Whether an agent can reach Juno, and the config block to paste. */
-		status(): Promise<McpServerStatus>;
+		server: {
+			/** Whether an agent can reach Juno, and at what address. */
+			status(): Promise<McpServerStatus>;
+			/** The switch. Off stops the listener; the clients already let in are kept. */
+			setEnabled(enabled: boolean): Promise<McpServerStatus>;
+			/** A port of the person's choosing, or null for the default. */
+			setPort(port: number | null): Promise<McpServerStatus>;
+		};
 		/**
 		 * Writing Juno into the agent clients on this machine, rather than
 		 * leaving a person to find five config files and merge JSON by hand.
@@ -509,7 +519,24 @@ export interface JunoApi {
 		};
 		/** Every tool, for the screen that lists the surface. No handlers cross. */
 		tools(): Promise<ToolSummary[]>;
-		revealConnectionFile(): Promise<void>;
+		/**
+		 * Who was let in. Letting a client in, and taking it out again, are a
+		 * person's decisions: there is no MCP tool for any of this.
+		 */
+		connections: {
+			list(): Promise<AgentConnection[]>;
+			revoke(id: string): Promise<void>;
+			/** For a client that cannot do the handshake. The token is readable once, here. */
+			createToken(name: string): Promise<AgentTokenCreated>;
+			/** Fires when a client is let in, taken out or starts the handshake. */
+			onChange(listener: () => void): () => void;
+		};
+		/** A client asking in, waiting for the code its browser page shows. */
+		pairing: {
+			list(): Promise<PairingRequest[]>;
+			answer(id: string, code: string): Promise<PairingAnswer>;
+			deny(id: string): Promise<void>;
+		};
 		actions: {
 			list(query?: AgentActionListQuery): Promise<AgentAction[]>;
 			get(id: string): Promise<AgentAction | null>;

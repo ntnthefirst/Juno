@@ -595,6 +595,15 @@ export interface AppSettings {
 	projectsView: ProjectsView;
 	/** Whether updates install themselves, and when the last check ran. */
 	updates: UpdateSettings;
+	/** Whether the agent server is on, and the port it was given if it was given one. */
+	mcpServer: McpServerSettings;
+}
+
+export interface McpServerSettings {
+	/** On by default: the point of it is that an agent can just be pointed at it. */
+	enabled: boolean;
+	/** Null means the default for this build. */
+	port: number | null;
 }
 
 export interface OnboardingState {
@@ -2763,6 +2772,12 @@ export interface AgentClientTarget {
 	 * where to paste something by hand.
 	 */
 	configKey: string;
+	/**
+	 * The entry this client would be given, in the shape its file uses, ready to
+	 * paste. Built by the same code that writes it, so a person copying it by
+	 * hand and a click on Connect cannot end up with two different entries.
+	 */
+	snippet: string;
 	/** What the person has to do after the file changes, in one sentence. */
 	after: string;
 }
@@ -2777,26 +2792,60 @@ export interface AgentInstallResult {
 	after: string;
 }
 
+/**
+ * The agent server: a listener on this machine's loopback address that an MCP
+ * client reaches with a URL.
+ */
 export interface McpServerStatus {
-	/** False when the server could not start. Everything else is still true. */
+	/** The switch. Off means nothing listens, whatever else is true. */
+	enabled: boolean;
+	/** Listening right now. False when it is off, or when it could not start. */
 	running: boolean;
-	/** The named pipe or socket the bridge connects to. */
-	address: string;
-	/** How many agents are connected right now. */
-	connections: number;
-	/** The command an agent should be configured with. */
-	command: string;
-	args: string[];
-	/**
-	 * Environment the bridge needs. Empty in development; a packaged build has
-	 * no Node beside it and runs the bridge through its own binary, which is
-	 * what ELECTRON_RUN_AS_NODE does. Writing the entry without this produces a
-	 * client that starts Juno's window instead of the bridge.
-	 */
-	env: Record<string, string>;
-	/** The whole config block, ready to paste. */
-	configJson: string;
-	/** Why it is not running, when it is not. */
+	/** The port it listens on, or will try to when it is switched on. */
+	port: number;
+	/** The port Juno uses when nobody picked one. */
+	defaultPort: number;
+	/** What a client is pointed at. */
+	url: string;
+	/** Why it is not running, when it is enabled and is not. */
 	error: string | null;
 	toolCount: number;
+}
+
+/**
+ * A client that was allowed in, and what it is called. The credential itself
+ * never leaves the main process: only a hash of it is stored, and the one time
+ * a token is shown is when it is made.
+ */
+export interface AgentConnection {
+	id: string;
+	/** What the client called itself. Not verified, which is why a person confirms it. */
+	name: string;
+	/** "signed-in" went through the code handshake, "token" was made here by hand. */
+	kind: "signed-in" | "token";
+	createdAt: Iso;
+	lastUsedAt: Iso | null;
+}
+
+/** A client asking to be let in, waiting for a person to type the code. */
+export interface PairingRequest {
+	id: string;
+	/** What the client called itself. Anyone can claim any name. */
+	clientName: string;
+	/** Where the browser is sent afterwards, shown so a strange destination is visible. */
+	redirectHost: string;
+	createdAt: Iso;
+	expiresAt: Iso;
+	attemptsLeft: number;
+}
+
+/** What typing a code did. A wrong code is an answer, not an error. */
+export type PairingAnswer =
+	| { accepted: true; clientName: string }
+	| { accepted: false; reason: "wrong-code" | "too-many-attempts" | "expired" | "unknown"; attemptsLeft: number };
+
+/** A token made by hand, shown once. */
+export interface AgentTokenCreated {
+	connection: AgentConnection;
+	token: string;
 }

@@ -40,9 +40,9 @@ import {
 	mailThreads,
 } from "../db/schema";
 import { formatDateTime } from "./document-context";
-import { htmlToText, mailShell, quoteForReply, quoteHtmlForReply, textToHtml } from "./mail-html";
+import { htmlToText, quoteForReply, quoteHtmlForReply, textToHtml } from "./mail-html";
 import { clientsFor } from "./mail-recipients";
-import { footerLines, renderTemplate } from "./mail-templates";
+import { renderTemplate } from "./mail-templates";
 
 export type Actor = "user" | "agent";
 
@@ -419,7 +419,10 @@ async function bodies(input: { bodyText: string; bodyHtml?: string | null }): Pr
 	}
 	return {
 		bodyText: input.bodyText,
-		bodyHtml: mailShell(textToHtml(input.bodyText), { footerLines: await footerLines() }),
+		// Bare paragraphs, the same as what the editor produces for a mail somebody
+		// types. The house card, accent line and footer belong to templates: a plain
+		// mail from an agent must not look different from one written by hand.
+		bodyHtml: textToHtml(input.bodyText),
 	};
 }
 

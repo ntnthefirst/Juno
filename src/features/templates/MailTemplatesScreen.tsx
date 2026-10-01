@@ -14,7 +14,7 @@ import {
 	NO_MAIL_TEMPLATE_FILTERS,
 	type MailTemplateFilters,
 } from "./mail-template-filters";
-import { MailTemplateEditor } from "./MailTemplateEditor";
+import { MailTemplateEditor } from "./CanvasTemplateEditor";
 import { MailTemplateList, type TemplateAction } from "./mail/MailTemplateList";
 import { MailTemplatePanel } from "./mail/MailTemplatePanel";
 import { UseMailTemplateScreen } from "./UseMailTemplateScreen";

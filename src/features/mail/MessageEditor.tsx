@@ -4,6 +4,8 @@ import { Button } from "../../components/Button";
 import { EmojiPicker } from "../../components/EmojiPicker";
 import { Field } from "../../components/Field";
 import { InsertImageControl } from "../../components/InsertImageControl";
+import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { useContextMenu } from "../../lib/use-context-menu";
 import { TOOLBAR_BUTTON, TOOLBAR_BUTTON_ACTIVE } from "../../components/toolbar-styles";
 import { escapeAttribute, isDrawable, REMOTE_IMAGE_NOTE } from "../../lib/remote-image";
 
@@ -68,6 +70,8 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 	const hostRef = useRef<HTMLDivElement>(null);
 	const toolbarRef = useRef<HTMLDivElement>(null);
 	const savedRangeRef = useRef<Range | null>(null);
+	const menu = useContextMenu();
+	const [hasSelection, setHasSelection] = useState(false);
 
 	const [linkOpen, setLinkOpen] = useState(false);
 	const [linkUrl, setLinkUrl] = useState("");
@@ -177,6 +181,48 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 		setLinkOpen(false);
 		setLinkUrl("");
 	}
+
+	// The right-click menu. The selection is taken when it opens, because pressing
+	// a menu item moves focus off the message, and the edit then has to land
+	// where the person right-clicked rather than nowhere.
+	function openEditMenu(event: React.MouseEvent<HTMLDivElement>) {
+		captureSelection();
+		setHasSelection(Boolean(savedRangeRef.current && !savedRangeRef.current.collapsed));
+		menu.open(event);
+	}
+
+	// The edit itself fires an input event, so the message state follows on its own.
+	function runEdit(kind: "cut" | "copy" | "paste" | "pasteAsText" | "selectAll") {
+		restoreSelection();
+		void window.juno.app.edit[kind]();
+	}
+
+	const editItems: MenuItem[] = [
+		{ id: "cut", label: "Cut", icon: "cut", hint: "Ctrl+X", disabled: !hasSelection, onSelect: () => runEdit("cut") },
+		{ id: "copy", label: "Copy", icon: "copy", hint: "Ctrl+C", disabled: !hasSelection, onSelect: () => runEdit("copy") },
+		{
+			id: "paste",
+			label: "Paste with formatting",
+			icon: "paste",
+			hint: "Ctrl+V",
+			separatorBefore: true,
+			onSelect: () => runEdit("paste"),
+		},
+		{
+			id: "paste-text",
+			label: "Paste as plain text",
+			icon: "paste",
+			hint: "Ctrl+Shift+V",
+			onSelect: () => runEdit("pasteAsText"),
+		},
+		{
+			id: "select-all",
+			label: "Select all",
+			separatorBefore: true,
+			hint: "Ctrl+A",
+			onSelect: () => runEdit("selectAll"),
+		},
+	];
 
 	function handlePaste(event: React.ClipboardEvent<HTMLDivElement>) {
 		const image = [...event.clipboardData.items].find((item) => item.type.startsWith("image/"));
@@ -309,6 +355,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 				aria-multiline="true"
 				onInput={update}
 				onPaste={handlePaste}
+				onContextMenu={openEditMenu}
 				onKeyUp={refreshActiveFormats}
 				onMouseUp={refreshActiveFormats}
 				onFocus={refreshActiveFormats}
@@ -316,6 +363,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 				data-placeholder="Write your message"
 				className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-4 text-[length:var(--text-lg)] leading-[var(--leading-relaxed)] text-[var(--ink)] outline-none empty:before:text-[var(--ink-faint)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--accent)] [&_a]:underline [&_img]:max-w-full [&_img]:rounded-[var(--radius-md)] [&_img[data-juno-src]]:inline-block [&_img[data-juno-src]]:min-h-12 [&_img[data-juno-src]]:min-w-32 [&_img[data-juno-src]]:border [&_img[data-juno-src]]:border-dashed [&_img[data-juno-src]]:border-[var(--line-strong)] [&_img[data-juno-src]]:bg-[var(--sunken)] [&_img[data-juno-src]]:p-2 [&_img[data-juno-src]]:text-[length:var(--text-sm)] [&_img[data-juno-src]]:text-[var(--ink-muted)]"
 			/>
+			{menu.at ? <ContextMenu at={menu.at} items={editItems} onClose={menu.close} ariaLabel="Edit message" /> : null}
 		</div>
 	);
 }

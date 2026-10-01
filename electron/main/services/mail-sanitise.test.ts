@@ -86,10 +86,10 @@ describe("extractStyles", () => {
 });
 
 describe("textDocument", () => {
-	it("escapes markup and marks quoted lines", () => {
+	it("escapes markup and shows quoted lines as a blockquote", () => {
 		const document = textDocument("Hallo <b>\n> vorige");
 		expect(document).toContain("Hallo &lt;b&gt;");
-		expect(document).toContain('<span class="q">&gt; vorige</span>');
+		expect(document).toContain("<blockquote><div>vorige</div></blockquote>");
 	});
 });
 

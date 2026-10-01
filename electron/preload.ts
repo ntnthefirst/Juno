@@ -36,6 +36,7 @@ const api: JunoApi = {
 			cut: () => call("app.edit.cut"),
 			copy: () => call("app.edit.copy"),
 			paste: () => call("app.edit.paste"),
+			pasteAsText: () => call("app.edit.pasteAsText"),
 			selectAll: () => call("app.edit.selectAll"),
 		},
 	},

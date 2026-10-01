@@ -21,6 +21,8 @@
  */
 import { randomBytes } from "node:crypto";
 import sanitizeHtml from "sanitize-html";
+import { QUOTE_SCRIPT } from "./mail-frame-script";
+import { plainTextToQuotedMarkup } from "./mail-html";
 
 export interface SanitiseOptions {
 	/** Keep http(s) image sources. Only ever set by a person, per message. */
@@ -169,7 +171,8 @@ h1:first-child, h2:first-child, h3:first-child, h4:first-child, h5:first-child, 
 p { margin: 0 0 1em; }
 img { max-width: 100%; height: auto; }
 a[data-href] { color: #4a3fa0; text-decoration: underline; cursor: default; }
-blockquote { margin: 8px 0 8px 8px; padding-left: 12px; border-left: 2px solid #d9d6cf; color: #5c5a55; }
+/* !important because clients style their own quotes inline, each differently, and a thread should read the same whoever wrote each turn. */
+blockquote { margin: 8px 0 8px 8px !important; padding: 0 0 0 12px !important; border: 0 !important; border-left: 2px solid #d9d6cf !important; color: #5c5a55 !important; }
 pre { white-space: pre-wrap; }
 table { max-width: 100%; }
 `;
@@ -310,13 +313,9 @@ export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): Saniti
 		'<!doctype html><html><head><meta charset="utf-8">' +
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(Boolean(options.allowRemoteImages), scriptNonce))}">` +
 		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body>` +
-		`<script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
+		`<script nonce="${scriptNonce}">${QUOTE_SCRIPT}${HEIGHT_SCRIPT}</script></html>`;
 
 	return { document, scriptNonce, remoteImages, suspicious, links };
-}
-
-function escapeText(value: string): string {
-	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /**
@@ -328,7 +327,7 @@ function escapeText(value: string): string {
  * setting (decision 14).
  */
 const TEXT_DARK_CSS =
-	"@media (prefers-color-scheme: dark) { body { background: #1c1b19; color: #e8e6e1; } .q { color: #9a978f; } a[data-href] { color: #8fb0dc; } }";
+	"@media (prefers-color-scheme: dark) { body { background: #1c1b19; color: #e8e6e1; } blockquote { color: #9a978f !important; } a[data-href] { color: #8fb0dc; } }";
 
 export function textDocument(text: string): string {
 	return textDocumentBody(text).document;
@@ -336,14 +335,11 @@ export function textDocument(text: string): string {
 
 export function textDocumentBody(text: string): SanitisedBody {
 	const scriptNonce = createNonce();
-	const body = text
-		.split(/\r?\n/)
-		.map((line) => (/^\s*>/.test(line) ? `<span class="q">${escapeText(line)}</span>` : escapeText(line)))
-		.join("\n");
+	const body = plainTextToQuotedMarkup(text);
 	const document =
 		'<!doctype html><html><head><meta charset="utf-8">' +
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false, scriptNonce))}">` +
-		`<style>${BASE_CSS} body { white-space: pre-wrap; } .q { color: #5c5a55; } ${TEXT_DARK_CSS}</style></head>` +
+		`<style>${BASE_CSS} body { white-space: pre-wrap; } ${TEXT_DARK_CSS}</style></head>` +
 		`<body>${body}</body><script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
 	return { document, scriptNonce, remoteImages: 0, suspicious: false, links: [] };
 }

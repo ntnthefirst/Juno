@@ -24,6 +24,11 @@ export function registerAppIpc(): void {
 	ipcMain.handle("app.edit.paste", (event) => {
 		event.sender.paste();
 	});
+	// Keeps the text and drops the source's fonts, colours and sizes, so what
+	// comes from a web page or a document does not bring its look along.
+	ipcMain.handle("app.edit.pasteAsText", (event) => {
+		event.sender.pasteAndMatchStyle();
+	});
 	ipcMain.handle("app.edit.selectAll", (event) => {
 		event.sender.selectAll();
 	});

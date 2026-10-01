@@ -112,7 +112,7 @@ afterEach(() => {
 });
 
 describe("drafts", () => {
-	it("stores a text draft with an HTML twin in the house shell and a stable Message-ID", async () => {
+	it("stores a text draft with a plain HTML twin, no template shell, and a stable Message-ID", async () => {
 		const draft = await outbox.createDraft(
 			{
 				accountId,
@@ -129,6 +129,8 @@ describe("drafts", () => {
 		expect(draft.bodyHtml).toContain("Hierbij de offerte.");
 		expect(draft.bodyHtml).toContain("<blockquote");
 		expect(draft.bodyHtml).not.toContain("<script");
+		expect(draft.bodyHtml).not.toContain("<table");
+		expect(draft.bodyHtml).not.toContain("<!doctype");
 	});
 
 	it("refuses an address that is not one", async () => {

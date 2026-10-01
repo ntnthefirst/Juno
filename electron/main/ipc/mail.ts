@@ -17,6 +17,7 @@ import type {
 	MailOutboxListQuery,
 	MailReplyMode,
 	MailTemplateDraft,
+	MailTemplateSendInput,
 	MailTemplateInput,
 	MailTemplatePatch,
 	MailThreadListQuery,
@@ -179,6 +180,9 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.outbox.list", (_event, query?: MailOutboxListQuery) => outbox.list(query ?? {}));
 	ipcMain.handle("mail.outbox.get", (_event, id: string) => outbox.get(id));
 	ipcMain.handle("mail.outbox.counts", (_event, accountId?: string) => outbox.counts(accountId));
+	ipcMain.handle("mail.outbox.sendFromTemplate", (_event, input: MailTemplateSendInput) =>
+		outbox.sendFromTemplate(input, { actor: "user" }),
+	);
 	ipcMain.handle("mail.outbox.createDraft", (_event, input: MailDraftInput) => outbox.createDraft(input));
 	ipcMain.handle("mail.outbox.updateDraft", (_event, id: string, patch: MailDraftPatch) =>
 		outbox.updateDraft(id, patch),

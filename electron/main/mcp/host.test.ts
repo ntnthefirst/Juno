@@ -119,12 +119,12 @@ describe("calling a tool", () => {
 });
 
 describe("the one tool whose service holds its own gate", () => {
-	it("is mail.send, and nothing else", () => {
+	it("is mail.send and mail.send_from_template, and nothing else", () => {
 		const gated = listTools()
 			.map((tool) => toolByName(tool.name))
 			.filter((tool) => tool?.gatedInService === true)
 			.map((tool) => tool!.name);
-		expect(gated).toEqual(["mail.send"]);
+		expect(gated).toEqual(["mail.send", "mail.send_from_template"]);
 	});
 
 	it("goes to the service rather than the generic gate", async () => {

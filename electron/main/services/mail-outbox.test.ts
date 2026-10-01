@@ -392,6 +392,37 @@ describe("templates", () => {
 		expect(rendered.missing).toContain("owner.contactName");
 	});
 
+	it("fills and sends a template in one step, and never leaves a draft behind", async () => {
+		const plain = await templates.create({ name: "Groet", subject: "Dag", bodyHtml: "<p>Beste Laura, tot snel.</p>" }, db);
+		const input = { accountId, to: [{ name: null, address: "laura@obet.be" }], templateId: plain.id };
+
+		const asPerson = await outbox.sendFromTemplate(input, { actor: "user" }, db);
+		expect(asPerson.state).toBe("queued");
+		expect(asPerson.bodyText).toContain("Beste Laura");
+
+		const asAgent = await outbox.sendFromTemplate(input, { actor: "agent" }, db);
+		expect(asAgent.state).toBe("pending");
+
+		// Refused for no recipient, and for a gap the template could not fill.
+		const cover = await coverTemplate();
+		const before = (await outbox.list({ states: ["draft"] }, db)).length;
+		await expect(outbox.sendFromTemplate({ ...input, to: [] }, { actor: "user" }, db)).rejects.toThrow(/nobody in To/);
+		await expect(
+			outbox.sendFromTemplate({ ...input, templateId: cover.id }, { actor: "user" }, db),
+		).rejects.toThrow(/placeholder without a value/);
+		expect((await outbox.list({ states: ["draft"] }, db)).length).toBe(before);
+	});
+
+	it("does not save a template as a draft", async () => {
+		const cover = await coverTemplate();
+		await expect(
+			outbox.createDraft(
+				{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "x", bodyText: "x", templateId: cover.id },
+				db,
+			),
+		).rejects.toThrow(/cannot be saved as a draft/);
+	});
+
 	it("keeps an edited template through a re-seed", async () => {
 		const cover = await coverTemplate();
 		const edited = await templates.update(cover.id, { subject: "Mijn onderwerp" }, db);

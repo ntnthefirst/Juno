@@ -2342,6 +2342,20 @@ export interface MailDraftInput {
 	documentIds?: string[];
 }
 
+/** A template filled and sent in one step. There is no draft in between. */
+export interface MailTemplateSendInput {
+	accountId: string;
+	to: MailAddress[];
+	cc?: MailAddress[];
+	bcc?: MailAddress[];
+	templateId: string;
+	clientId?: string | null;
+	projectId?: string | null;
+	/** Values no record holds, by placeholder name under document. */
+	extras?: Record<string, string>;
+	documentIds?: string[];
+}
+
 export type MailDraftPatch = Partial<Omit<MailDraftInput, "accountId">>;
 
 /** What a reply starts from: the addresses and subject, worked out from the original. */

@@ -128,6 +128,7 @@ import type {
 	MailTemplateRender,
 	MailThread,
 	MailThreadListQuery,
+	MailTemplateSendInput,
 	MailThreadSummary,
 	RemovedMailAccount,
 	Project,
@@ -848,6 +849,8 @@ export interface JunoApi {
 			get(id: string): Promise<MailOutboxMessage | null>;
 			counts(accountId?: string): Promise<MailOutboxCounts>;
 			createDraft(input: MailDraftInput): Promise<MailOutboxMessage>;
+			/** Fills a template and queues it at once. A template is never kept as a draft. */
+			sendFromTemplate(input: MailTemplateSendInput): Promise<MailOutboxMessage>;
 			updateDraft(id: string, patch: MailDraftPatch): Promise<MailOutboxMessage>;
 			/** The addresses, subject and quote an answer starts from. */
 			replySeed(messageId: string, mode: MailReplyMode): Promise<MailReplySeed>;

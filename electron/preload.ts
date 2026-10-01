@@ -503,6 +503,7 @@ const api: JunoApi = {
 			get: (id) => call("mail.outbox.get", id),
 			counts: (accountId) => call("mail.outbox.counts", accountId),
 			createDraft: (input) => call("mail.outbox.createDraft", input),
+			sendFromTemplate: (input) => call("mail.outbox.sendFromTemplate", input),
 			updateDraft: (id, patch) => call("mail.outbox.updateDraft", id, patch),
 			replySeed: (messageId, mode) => call("mail.outbox.replySeed", messageId, mode),
 			replySeedOutgoing: (outboxId, mode) => call("mail.outbox.replySeedOutgoing", outboxId, mode),

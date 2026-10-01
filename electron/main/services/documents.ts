@@ -221,6 +221,8 @@ export async function get(id: string, db: Db = getDb()): Promise<DocumentRecord 
 export async function generate(
 	input: GenerateInput,
 	db: Db = getDb(),
+	/** The fonts a canvas document carries inline. Worked out by document-actions.ts, never taken from a caller. */
+	options: { fontCss?: string } = {},
 ): Promise<GenerateResult> {
 	const template = await templates.get(input.templateId, db);
 	if (!template) throw new Error("That template no longer exists.");
@@ -272,7 +274,21 @@ export async function generate(
 		title,
 	});
 
-	const rendered = templates.renderTemplate(template, context);
+	// A canvas template fills in what was typed for it and nothing else
+	// (docs/templates.md), so the records gathered above only decide who the
+	// document belongs to and what it is called.
+	const rendered = template.canvas
+		? templates.renderCanvas(
+				{
+					templateId: template.id,
+					canvas: template.canvas,
+					inputs: template.inputs,
+					values: input.extras ?? {},
+					fontCss: options.fontCss,
+				},
+				db,
+			)
+		: templates.renderTemplate(template, context);
 
 	const status = db
 		.select()

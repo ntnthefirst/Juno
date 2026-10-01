@@ -29,6 +29,13 @@ export const documentTemplates = sqliteTable(
 		 */
 		layoutJson: text("layout_json"),
 		/**
+		 * The canvas the document editor works on: a paper size and a tree of
+		 * pages, the same tree a mail template is laid out in. When present,
+		 * `bodyHtml` is compiled from this and `layoutJson` is ignored, and the
+		 * template fills in its declared inputs and nothing else.
+		 */
+		canvasJson: text("canvas_json"),
+		/**
 		 * The values this template asks for when it is used, beyond what the client
 		 * and the project already answer. JSON array of input declarations.
 		 */
@@ -46,6 +53,36 @@ export const documentTemplates = sqliteTable(
 		index("document_templates_key_idx").on(t.key),
 		index("document_templates_owner_idx").on(t.ownerId),
 		index("document_templates_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
+ * A picture a document template carries, as a file on disk under the userData
+ * root. The canvas names it as `{{asset.<key>}}`, and the bytes are written
+ * into the document inline when it is rendered, so a PDF never depends on a
+ * file that can move. Blobs stay out of SQLite (data.md section 8).
+ */
+export const documentTemplateAssets = sqliteTable(
+	"document_template_assets",
+	{
+		...standardColumns,
+		templateId: text("template_id")
+			.notNull()
+			.references(() => documentTemplates.id),
+		/** The name the file had when it was added, for showing it. */
+		fileName: text("file_name").notNull(),
+		mimeType: text("mime_type").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		/** SHA-256 of the bytes, so the same picture added twice is stored once. */
+		fileHash: text("file_hash").notNull(),
+		/** Relative to the assets folder, built by the service from the id. */
+		relativePath: text("relative_path").notNull(),
+	},
+	(t) => [
+		index("document_template_assets_template_idx").on(t.templateId),
+		index("document_template_assets_hash_idx").on(t.fileHash),
+		index("document_template_assets_owner_idx").on(t.ownerId),
+		index("document_template_assets_deleted_idx").on(t.deletedAt),
 	],
 );
 

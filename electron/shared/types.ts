@@ -1430,6 +1430,75 @@ export interface DocumentLayout {
 	pages: LayoutPage[];
 }
 
+/* ------------------------------------------- document templates: the canvas */
+
+/** The paper sizes a document template can be laid out on. */
+export type PaperSize = "A3" | "A4" | "A5" | "A6" | "letter" | "legal";
+
+export type PaperOrientation = "portrait" | "landscape";
+
+export interface DocumentPaper {
+	size: PaperSize;
+	orientation: PaperOrientation;
+}
+
+/**
+ * A document template laid out on the same canvas as a mail template, on paper
+ * of a fixed size. Every top-level node of `layout` is a page: a section
+ * exactly the size of the paper, whose padding is the page margin. The page
+ * sizes are kept in step with `paper` by `normaliseCanvas`
+ * (shared/paper.ts), whoever wrote the canvas.
+ *
+ * A canvas template fills in what it declares as inputs and nothing else: no
+ * value is taken from a client, a project or the owner's details, so every
+ * placeholder in it is `{{document.<input key>}}`, or a picture it carries,
+ * `{{asset.<key>}}`.
+ *
+ * `version` is the shape of this object.
+ */
+export interface DocumentCanvas {
+	version: 1;
+	paper: DocumentPaper;
+	layout: MailLayout;
+}
+
+/** A picture a document template carries, stored as a file Juno holds. */
+export interface DocumentTemplateAsset extends Standard {
+	templateId: string;
+	fileName: string;
+	mimeType: string;
+	byteSize: number;
+	/** What the canvas writes as an image's source: `{{asset.<key>}}`. */
+	token: string;
+	/** Where the window draws it from. Never a path. */
+	url: string;
+}
+
+/** A picture to add to a template: its name and its bytes. */
+export interface DocumentTemplateAssetInput {
+	templateId: string;
+	fileName: string;
+	data: Uint8Array;
+}
+
+/**
+ * A canvas template, or a draft of one, filled in with values typed by hand.
+ * Nothing is stored. `values` are keyed by input key.
+ */
+export interface DocumentCanvasRender {
+	templateId: string;
+	/** A draft canvas and inputs to render instead of the stored ones, for the editor. */
+	canvas?: DocumentCanvas;
+	inputs?: TemplateInput[];
+	values: Record<string, string>;
+}
+
+export interface DocumentCanvasPdf {
+	pdf: Uint8Array;
+	/** Inputs with no value, by key. Each one is a marked gap in the PDF. */
+	missing: string[];
+}
+
 /* ---------------------------------------------------------------- documents */
 
 export interface DocumentTemplate extends Standard {
@@ -1454,6 +1523,11 @@ export interface DocumentTemplate extends Standard {
 	 * true for a template somebody prefers to keep as HTML.
 	 */
 	layout: DocumentLayout | null;
+	/**
+	 * The canvas, for a template laid out on paper of a fixed size. When set it
+	 * is what the editor shows and what the body is compiled from.
+	 */
+	canvas: DocumentCanvas | null;
 	/** What the template asks for when it is used. Empty when it asks nothing. */
 	inputs: TemplateInput[];
 }
@@ -1467,11 +1541,13 @@ export type DocumentTemplateInput = {
 	language?: string;
 	/** Passing a layout compiles the body from it and ignores `bodyHtml`. */
 	layout?: DocumentLayout | null;
+	/** Passing a canvas compiles the body from it and ignores `layout` and `bodyHtml`. */
+	canvas?: DocumentCanvas | null;
 	inputs?: TemplateInput[];
 };
 
 export type DocumentTemplatePatch = Partial<
-	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language" | "layout" | "inputs">
+	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language" | "layout" | "canvas" | "inputs">
 >;
 
 export interface DocumentRecord extends Standard {

@@ -24,7 +24,7 @@ typed text, so raw HTML in it is still left as plain text.
 
 ## 2. Mail templates: a canvas, or the HTML under it
 
-`src/features/templates/MailTemplateEditor.tsx`, over the model in
+`src/features/templates/CanvasTemplateEditor.tsx`, over the model in
 `electron/shared/types.ts` (`MailLayout`) and the compiler in
 `electron/main/services/mail-layout.ts`.
 

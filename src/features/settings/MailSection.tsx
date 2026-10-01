@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { MailAccount, MailFolder } from "@shared/types";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
@@ -8,8 +8,15 @@ import { formatWhen } from "../mail/format";
 import { MailAccountForm } from "./MailAccountForm";
 import { RemovedAccounts } from "./RemovedAccounts";
 import { Section, SectionError } from "./Section";
+import { PAGE_PADDING } from "./section-layout";
 
-export function MailSection({ onSaved }: { onSaved: (message: string) => void }) {
+type MailSectionProps = {
+	onSaved: (message: string) => void;
+	/** The page title. It is drawn here, because the account form replaces the whole page, header included. */
+	header: ReactNode;
+};
+
+export function MailSection({ onSaved, header }: MailSectionProps) {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [form, setForm] = useState<{ account: MailAccount | null } | null>(null);
@@ -81,89 +88,93 @@ export function MailSection({ onSaved }: { onSaved: (message: string) => void })
 
 	// The list keeps its own padding, because the form above reaches the edges.
 	return (
-		<div className="px-6 py-5">
-			<Section
-				title="Mail accounts"
-				anchor="mail-accounts"
-				description="Passwords are kept in the operating system keychain."
-				action={
-					<AddButton label="Add account" onClick={() => setForm({ account: null })} />
-				}
-			>
-				{accounts === null ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
-				) : accounts.length === 0 ? (
-					<p className="text-[var(--ink-muted)]">No accounts yet.</p>
-				) : (
-					<ul className="flex flex-col">
-						{accounts.map((account) => (
-							<li
-								key={account.id}
-								className="flex items-center gap-4 border-b border-[var(--line)]/60 py-2 last:border-b-0"
-							>
-								<div className="min-w-0 flex-1">
-									<div className="flex items-baseline gap-2">
-										<span className="truncate font-[var(--weight-medium)]">{account.label}</span>
-										{account.label !== account.email ? (
-											<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-												{account.email}
-											</span>
+		<div className={PAGE_PADDING}>
+			{header}
+			{/* Wrapped, so the first section is the first child and drops its rule. */}
+			<div>
+				<Section
+					title="Accounts"
+					anchor="mail-accounts"
+					description="Passwords are kept in the operating system keychain."
+					action={
+						<AddButton label="Add account" onClick={() => setForm({ account: null })} />
+					}
+				>
+					{accounts === null ? (
+						<p className="text-[var(--ink-muted)]">Loading.</p>
+					) : accounts.length === 0 ? (
+						<p className="text-[var(--ink-muted)]">No accounts yet.</p>
+					) : (
+						<ul className="flex flex-col">
+							{accounts.map((account) => (
+								<li
+									key={account.id}
+									className="flex items-center gap-4 border-b border-[var(--line)]/60 py-2 last:border-b-0"
+								>
+									<div className="min-w-0 flex-1">
+										<div className="flex items-baseline gap-2">
+											<span className="truncate font-[var(--weight-medium)]">{account.label}</span>
+											{account.label !== account.email ? (
+												<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+													{account.email}
+												</span>
+											) : null}
+										</div>
+										<div className="mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											{account.imapHost}:{account.imapPort} {account.imapSecurity.toUpperCase()}
+											{", "}
+											{account.hasCredential ? "password set" : "no password"}
+											{", "}
+											{account.smtpHost ? `sends via ${account.smtpHost}:${account.smtpPort}` : "read only"}
+											{", "}
+											{account.syncEnabled
+												? `every ${account.syncIntervalMinutes} min, ${account.horizonDays} days back`
+												: "sync off"}
+											{account.lastSyncAt ? `, last synced ${formatWhen(account.lastSyncAt)}` : ""}
+										</div>
+										{account.lastSyncError ? (
+											<p data-selectable className="mt-0.5 text-[length:var(--text-sm)] text-[var(--risk)]">
+												{account.lastSyncError}
+											</p>
 										) : null}
 									</div>
-									<div className="mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-										{account.imapHost}:{account.imapPort} {account.imapSecurity.toUpperCase()}
-										{", "}
-										{account.hasCredential ? "password set" : "no password"}
-										{", "}
-										{account.smtpHost ? `sends via ${account.smtpHost}:${account.smtpPort}` : "read only"}
-										{", "}
-										{account.syncEnabled
-											? `every ${account.syncIntervalMinutes} min, ${account.horizonDays} days back`
-											: "sync off"}
-										{account.lastSyncAt ? `, last synced ${formatWhen(account.lastSyncAt)}` : ""}
-									</div>
-									{account.lastSyncError ? (
-										<p data-selectable className="mt-0.5 text-[length:var(--text-sm)] text-[var(--risk)]">
-											{account.lastSyncError}
-										</p>
-									) : null}
-								</div>
-								<Button size="dense" onClick={() => setFoldersFor(account.id)}>
-									Folders
-								</Button>
-								<Button size="dense" onClick={() => void toggleSync(account)}>
-									{account.syncEnabled ? "Pause" : "Resume"}
-								</Button>
-								<Button size="dense" onClick={() => setForm({ account })}>
-									Edit
-								</Button>
-								<Button size="dense" variant="danger" onClick={() => setRemoving(account)}>
+									<Button size="dense" onClick={() => setFoldersFor(account.id)}>
+										Folders
+									</Button>
+									<Button size="dense" onClick={() => void toggleSync(account)}>
+										{account.syncEnabled ? "Pause" : "Resume"}
+									</Button>
+									<Button size="dense" onClick={() => setForm({ account })}>
+										Edit
+									</Button>
+									<Button size="dense" variant="danger" onClick={() => setRemoving(account)}>
+										Remove
+									</Button>
+								</li>
+							))}
+						</ul>
+					)}
+					<SectionError message={error} />
+
+					{foldersFor ? <FoldersDialog accountId={foldersFor} onClose={() => setFoldersFor(null)} /> : null}
+
+					{removing ? (
+						<Dialog title="Remove account" onClose={() => setRemoving(null)} width="narrow">
+							<p className="mt-4 text-[var(--ink-muted)]">
+								Remove {removing.label} and forget its password? The mail already on this machine
+								stays. Nothing changes on the server.
+							</p>
+							<div className="mt-6 flex justify-end gap-2">
+								<Button onClick={() => setRemoving(null)}>Cancel</Button>
+								<Button variant="danger" onClick={() => void remove()}>
 									Remove
 								</Button>
-							</li>
-						))}
-					</ul>
-				)}
-				<SectionError message={error} />
-
-				{foldersFor ? <FoldersDialog accountId={foldersFor} onClose={() => setFoldersFor(null)} /> : null}
-
-				{removing ? (
-					<Dialog title="Remove account" onClose={() => setRemoving(null)} width="narrow">
-						<p className="mt-4 text-[var(--ink-muted)]">
-							Remove {removing.label} and forget its password? The mail already on this machine
-							stays. Nothing changes on the server.
-						</p>
-						<div className="mt-6 flex justify-end gap-2">
-							<Button onClick={() => setRemoving(null)}>Cancel</Button>
-							<Button variant="danger" onClick={() => void remove()}>
-								Remove
-							</Button>
-						</div>
-					</Dialog>
-				) : null}
-			</Section>
-			<RemovedAccounts refreshKey={removedVersion} onDone={onSaved} />
+							</div>
+						</Dialog>
+					) : null}
+				</Section>
+				<RemovedAccounts refreshKey={removedVersion} onDone={onSaved} />
+			</div>
 		</div>
 	);
 }

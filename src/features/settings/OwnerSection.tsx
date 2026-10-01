@@ -6,9 +6,17 @@ import { messageOf } from "../../lib/errors";
 import { OwnerContactList } from "./OwnerContacts";
 import { Section, SectionError } from "./Section";
 
-type OwnerSectionProps = { onSaved: (message: string) => void };
+type OwnerSectionProps = {
+	/**
+	 * Which page this is. The details and the two contact lists are one profile
+	 * and one component, drawn as two pages so neither is a long scroll.
+	 */
+	part: "details" | "contact";
+	onSaved: (message: string) => void;
+};
 
-const FIELDS: { key: keyof Omit<OwnerProfile, "emails" | "phones">; label: string; help?: string }[] = [
+/** `narrow` fields share a row three to a line. The rest share it two to a line. */
+const FIELDS: { key: keyof Omit<OwnerProfile, "emails" | "phones">; label: string; help?: string; narrow?: boolean }[] = [
 	{ key: "firstName", label: "First name" },
 	{ key: "lastName", label: "Last name" },
 	{ key: "businessName", label: "Business name" },
@@ -21,12 +29,12 @@ const FIELDS: { key: keyof Omit<OwnerProfile, "emails" | "phones">; label: strin
 	{ key: "iban", label: "IBAN" },
 	{ key: "addressLine1", label: "Address" },
 	{ key: "addressLine2", label: "Address, second line" },
-	{ key: "postalCode", label: "Postal code" },
-	{ key: "city", label: "City" },
-	{ key: "country", label: "Country" },
+	{ key: "postalCode", label: "Postal code", narrow: true },
+	{ key: "city", label: "City", narrow: true },
+	{ key: "country", label: "Country", narrow: true },
 ];
 
-export function OwnerSection({ onSaved }: OwnerSectionProps) {
+export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 	const [profile, setProfile] = useState<OwnerProfile | null>(null);
 	const [mailAccounts, setMailAccounts] = useState<MailAccount[] | null>(null);
 	const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -101,107 +109,114 @@ export function OwnerSection({ onSaved }: OwnerSectionProps) {
 
 	return (
 		<>
-			<Section
-				title="Your details"
-				anchor="owner-details"
-				description="Printed on the contracts and emails you send clients."
-				action={
-					<Button size="dense" variant="primary" disabled={!profile || busy} onClick={() => void save()}>
-						Save
-					</Button>
-				}
-			>
-				{profile === null ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
-				) : (
-					<div className="grid max-w-[720px] grid-cols-1 gap-4 sm:grid-cols-2">
-						{FIELDS.map((field) => (
-							<Field
-								key={field.key}
-								label={field.label}
-								help={field.help}
-								value={profile[field.key]}
-								onChange={(value) => setProfile({ ...profile, [field.key]: value })}
+			{part === "details" ? (
+				<Section
+					title="Your details"
+					anchor="owner-details"
+					description="Printed on the contracts and emails you send clients."
+					action={
+						<Button size="dense" variant="primary" disabled={!profile || busy} onClick={() => void save()}>
+							Save
+						</Button>
+					}
+				>
+					{profile === null ? (
+						<p className="text-[var(--ink-muted)]">Loading.</p>
+					) : (
+						<div className="grid max-w-[720px] grid-cols-1 gap-4 sm:grid-cols-6">
+							{FIELDS.map((field) => (
+								<div key={field.key} className={field.narrow ? "sm:col-span-2" : "sm:col-span-3"}>
+									<Field
+										label={field.label}
+										help={field.help}
+										value={profile[field.key]}
+										onChange={(value) => setProfile({ ...profile, [field.key]: value })}
+									/>
+								</div>
+							))}
+						</div>
+					)}
+					<SectionError message={detailsError} />
+				</Section>
+			) : null}
+
+			{part === "contact" ? (
+				<>
+					<Section
+						title="Email addresses"
+						anchor="owner-emails"
+						description="Documents print the primary one."
+					>
+						{profile === null ? (
+							<p className="text-[var(--ink-muted)]">Loading.</p>
+						) : (
+							<OwnerContactList<OwnerEmail>
+								items={profile.emails}
+								getValue={(item) => item.email}
+								inputType="email"
+								valueLabel="Email address"
+								valuePlaceholder="name@example.com"
+								labelPlaceholder="invoices, ..."
+								emptyText="No email addresses yet."
+								markedValues={markedEmails}
+								markedText="Mail account"
+								onAdd={(email, label) =>
+									applyEmail(() => window.juno.settings.addOwnerEmail({ email, label }), "Email address added.")
+								}
+								onUpdate={(id, email, label) =>
+									applyEmail(
+										() => window.juno.settings.updateOwnerEmail(id, { email, label }),
+										"Email address saved.",
+									)
+								}
+								onMakePrimary={(id) =>
+									applyEmail(() => window.juno.settings.updateOwnerEmail(id, { isPrimary: true }))
+								}
+								onRemove={(id) =>
+									applyEmail(() => window.juno.settings.removeOwnerEmail(id), "Email address removed.")
+								}
 							/>
-						))}
-					</div>
-				)}
-				<SectionError message={detailsError} />
-			</Section>
+						)}
+						<SectionError message={emailsError} />
+					</Section>
 
-			<Section
-				title="Email addresses"
-				anchor="owner-emails"
-				description="Documents print the primary one."
-			>
-				{profile === null ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
-				) : (
-					<OwnerContactList<OwnerEmail>
-						items={profile.emails}
-						getValue={(item) => item.email}
-						inputType="email"
-						valueLabel="Email address"
-						valuePlaceholder="name@example.com"
-						labelPlaceholder="invoices, ..."
-						emptyText="No email addresses yet."
-						markedValues={markedEmails}
-						markedText="Mail account"
-						onAdd={(email, label) =>
-							applyEmail(() => window.juno.settings.addOwnerEmail({ email, label }), "Email address added.")
-						}
-						onUpdate={(id, email, label) =>
-							applyEmail(
-								() => window.juno.settings.updateOwnerEmail(id, { email, label }),
-								"Email address saved.",
-							)
-						}
-						onMakePrimary={(id) =>
-							applyEmail(() => window.juno.settings.updateOwnerEmail(id, { isPrimary: true }))
-						}
-						onRemove={(id) =>
-							applyEmail(() => window.juno.settings.removeOwnerEmail(id), "Email address removed.")
-						}
-					/>
-				)}
-				<SectionError message={emailsError} />
-			</Section>
-
-			<Section
-				title="Phone numbers"
-				anchor="owner-phones"
-				description="Documents print the primary one."
-			>
-				{profile === null ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
-				) : (
-					<OwnerContactList<OwnerPhone>
-						items={profile.phones}
-						getValue={(item) => item.phone}
-						inputType="tel"
-						valueLabel="Phone number"
-						valuePlaceholder="+32 ..."
-						labelPlaceholder="gsm, office, ..."
-						emptyText="No phone numbers yet."
-						onAdd={(phone, label) =>
-							applyPhone(() => window.juno.settings.addOwnerPhone({ phone, label }), "Phone number added.")
-						}
-						onUpdate={(id, phone, label) =>
-							applyPhone(
-								() => window.juno.settings.updateOwnerPhone(id, { phone, label }),
-								"Phone number saved.",
-							)
-						}
-						onMakePrimary={(id) =>
-							applyPhone(() => window.juno.settings.updateOwnerPhone(id, { isPrimary: true }))
-						}
-						onRemove={(id) =>
-							applyPhone(() => window.juno.settings.removeOwnerPhone(id), "Phone number removed.")
-						}
-					/>
-				)}
-				<SectionError message={phonesError} />
-			</Section>
+					<Section
+						title="Phone numbers"
+						anchor="owner-phones"
+						description="Documents print the primary one."
+					>
+						{profile === null ? (
+							<p className="text-[var(--ink-muted)]">Loading.</p>
+						) : (
+							<OwnerContactList<OwnerPhone>
+								items={profile.phones}
+								getValue={(item) => item.phone}
+								inputType="tel"
+								valueLabel="Phone number"
+								valuePlaceholder="+32 ..."
+								labelPlaceholder="gsm, office, ..."
+								emptyText="No phone numbers yet."
+								onAdd={(phone, label) =>
+									applyPhone(() => window.juno.settings.addOwnerPhone({ phone, label }), "Phone number added.")
+								}
+								onUpdate={(id, phone, label) =>
+									applyPhone(
+										() => window.juno.settings.updateOwnerPhone(id, { phone, label }),
+										"Phone number saved.",
+									)
+								}
+								onMakePrimary={(id) =>
+									applyPhone(() => window.juno.settings.updateOwnerPhone(id, { isPrimary: true }))
+								}
+								onRemove={(id) =>
+									applyPhone(() => window.juno.settings.removeOwnerPhone(id), "Phone number removed.")
+								}
+							/>
+						)}
+						<SectionError message={phonesError} />
+					</Section>
+				</>
+			) : null}
 		</>
 	);
 }

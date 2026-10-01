@@ -11,11 +11,12 @@ import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
  * (accounts, reference data, the lock), and letting someone edit a client on one
  * side while removing its status on the other is a race with no good outcome.
  *
- * Fixed size, deliberately. Every section is a single column of fields, so there
- * is nothing a wider window would show and nothing a taller one would fix.
+ * Fixed size, deliberately. The window is cut into short pages, each one a
+ * column of fields beside a navigation column, so there is nothing a wider
+ * window would show. It is as tall as a small laptop screen allows.
  */
-const WIDTH = 920;
-const HEIGHT = 680;
+const WIDTH = 980;
+const HEIGHT = 700;
 
 export function createSettingsWindow(
 	parent: BrowserWindow,

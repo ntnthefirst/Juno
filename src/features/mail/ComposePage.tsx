@@ -14,6 +14,8 @@ export type ComposeSeed = {
 	cc?: MailAddress[];
 	subject?: string;
 	bodyText?: string;
+	/** The same body as markup, for a reply that quotes the original in a blockquote. */
+	bodyHtml?: string;
 	replyToMessageId?: string | null;
 	clientId?: string | null;
 	projectId?: string | null;
@@ -48,7 +50,7 @@ export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
 	);
 	const [subject, setSubject] = useState(seed.draft?.subject ?? seed.subject ?? "");
 	const [bodyText, setBodyText] = useState(seed.draft?.bodyText ?? seed.bodyText ?? "");
-	const [bodyHtml, setBodyHtml] = useState<string | null>(seed.draft?.bodyHtml ?? null);
+	const [bodyHtml, setBodyHtml] = useState<string | null>(seed.draft?.bodyHtml ?? seed.bodyHtml ?? null);
 	const [clientId, setClientId] = useState(seed.draft?.clientId ?? seed.clientId ?? "");
 	const [documentIds, setDocumentIds] = useState<string[]>(
 		seed.draft?.attachments.map((attachment) => attachment.documentId) ?? seed.documentIds ?? [],

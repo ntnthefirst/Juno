@@ -101,27 +101,64 @@ export function canvasShell(bodyHtml: string, options: CanvasShellOptions = {}):
 	].join("");
 }
 
+type TextLine = { depth: number; text: string };
+
+/** How deep a line is quoted ("> > x" is two) and what is left once the markers are off. */
+function splitQuote(line: string): TextLine {
+	let depth = 0;
+	let rest = line;
+	for (;;) {
+		const marker = /^\s*>\s?/.exec(rest);
+		if (!marker) break;
+		depth += 1;
+		rest = rest.slice(marker[0].length);
+	}
+	return { depth, text: rest };
+}
+
+const QUOTE_STYLE = `margin:8px 0 8px 0;padding-left:12px;border-left:2px solid ${LINE};color:${INK_MUTED};`;
+
+/**
+ * Lines as HTML. Runs of plain lines are paragraphs, split on blank lines, and
+ * a run of quoted lines is a blockquote holding the same thing one level
+ * shallower, so "> > x" is a quote inside a quote rather than a line that
+ * happens to start with two arrows.
+ */
+function renderLines(lines: TextLine[]): string {
+	const out: string[] = [];
+	let index = 0;
+	while (index < lines.length) {
+		let end = index;
+		if (lines[index]!.depth > 0) {
+			while (end < lines.length && lines[end]!.depth > 0) end += 1;
+			const inner = lines.slice(index, end).map((line) => ({ depth: line.depth - 1, text: line.text }));
+			out.push(`<blockquote style="${QUOTE_STYLE}">${renderLines(inner)}</blockquote>`);
+		} else {
+			while (end < lines.length && lines[end]!.depth === 0) end += 1;
+			const run = lines.slice(index, end).map((line) => line.text);
+			for (const paragraph of run.join("\n").split(/\n\s*\n/)) {
+				const trimmed = paragraph.trim();
+				if (!trimmed) continue;
+				const body = trimmed
+					.split("\n")
+					.map((line) => escapeHtml(line))
+					.join("<br>");
+				out.push(`<p style="margin:0 0 12px 0;">${body}</p>`);
+			}
+		}
+		index = end;
+	}
+	return out.join("");
+}
+
 /**
  * A plain-text message as HTML paragraphs in the shell. Typed text is not
- * markup: every line is escaped, blank lines make paragraphs, and a quoted
- * line stays a quoted line.
+ * markup: every line is escaped, blank lines make paragraphs, and quoted lines
+ * ("> ...", at any depth) become real blockquotes, so a reply that carries the
+ * original under it does not show its arrows to the person reading it.
  */
 export function textToHtml(text: string): string {
-	const paragraphs = text.replace(/\r\n/g, "\n").split(/\n{2,}/);
-	return paragraphs
-		.map((paragraph) => paragraph.trim())
-		.filter(Boolean)
-		.map((paragraph) => {
-			const quoted = paragraph.split("\n").every((line) => /^\s*>/.test(line));
-			const lines = paragraph
-				.split("\n")
-				.map((line) => escapeHtml(quoted ? line.replace(/^\s*>\s?/, "") : line))
-				.join("<br>");
-			return quoted
-				? `<blockquote style="margin:8px 0 8px 0;padding-left:12px;border-left:2px solid ${LINE};color:${INK_MUTED};">${lines}</blockquote>`
-				: `<p style="margin:0 0 12px 0;">${lines}</p>`;
-		})
-		.join("");
+	return renderLines(text.replace(/\r\n/g, "\n").split("\n").map(splitQuote));
 }
 
 /** The text alternative of an HTML body, for clients that show text and for the search. */
@@ -145,4 +182,17 @@ export function quoteForReply(original: { fromLine: string; sentAt: string; text
 		.map((line) => `> ${line}`)
 		.join("\n");
 	return `${header}\n${quoted}`;
+}
+
+/**
+ * The same quoted original as markup, for the editor: the attribution line,
+ * then the original in a blockquote with whatever it quoted nested inside.
+ */
+export function quoteHtmlForReply(original: { fromLine: string; sentAt: string; text: string }): string {
+	const header = `Op ${original.sentAt} schreef ${original.fromLine}:`;
+	const quoted = original.text
+		.replace(/\r\n/g, "\n")
+		.split("\n")
+		.map((line) => splitQuote(`> ${line}`));
+	return `<p style="margin:0 0 12px 0;">${escapeHtml(header)}</p>${renderLines(quoted)}`;
 }

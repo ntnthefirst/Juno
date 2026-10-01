@@ -2373,6 +2373,8 @@ export interface MailReplySeed {
 	subject: string;
 	/** The original, quoted, for under the reply. */
 	quotedText: string;
+	/** The same quote as markup: a blockquote, which is what the editor shows instead of arrows. */
+	quotedHtml: string;
 	/** Null for a forward: it starts a conversation rather than continuing one. */
 	replyToMessageId: string | null;
 	clientId: string | null;

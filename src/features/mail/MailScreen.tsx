@@ -664,7 +664,12 @@ export function MailScreen() {
 
 	return (
 		<div className="flex h-full min-h-0">
-			<div className="flex w-[264px] shrink-0 flex-col border-r border-[var(--line)]">
+			<div
+				className={[
+					"w-[264px] shrink-0 flex-col border-r border-[var(--line)]",
+					readerOpen ? "hidden min-[1100px]:flex" : "flex",
+				].join(" ")}
+			>
 				{/*
 					Writing is the one thing this pane is for that is not a folder, so it
 					sits on the title line as a plus rather than spending a row of its own

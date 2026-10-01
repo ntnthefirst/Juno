@@ -8,19 +8,19 @@ let pending: PendingClient | null = null;
 
 /** Asks the shell to show the clients screen with this client open. */
 export function requestOpenClient(id: string, name: string): void {
-  pending = { id, name };
-  window.dispatchEvent(new CustomEvent(EVENT));
+	pending = { id, name };
+	window.dispatchEvent(new CustomEvent(EVENT));
 }
 
 export function peekPendingClient(): PendingClient | null {
-  return pending;
+	return pending;
 }
 
 export function clearPendingClient(): void {
-  pending = null;
+	pending = null;
 }
 
 export function onOpenClientRequest(listener: () => void): () => void {
-  window.addEventListener(EVENT, listener);
-  return () => window.removeEventListener(EVENT, listener);
+	window.addEventListener(EVENT, listener);
+	return () => window.removeEventListener(EVENT, listener);
 }

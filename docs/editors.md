@@ -651,9 +651,44 @@ into it, fonts and appearance included, so the tool description tells a caller
 to read the template first. Loading a Google font for the canvas is not a tool,
 and decision 36 says why.
 
-## 3. Document templates: a page, not a textarea
+## 3. Document templates: the canvas, on paper
 
-`src/features/templates/DocumentTemplateEditor.tsx`, over the model in
+`src/features/templates/CanvasTemplateEditor.tsx`, the mail template's editor,
+given a `CanvasSource` that loads, saves and previews a document template, over
+`DocumentCanvas` in `electron/shared/types.ts`, the paper rules in
+`electron/shared/paper.ts` and the compiler in
+`electron/main/services/document-canvas.ts`. Decision 41.
+
+Everything in section 2 holds, the keyboard, the layers, the design panel and
+undo included, except what paper changes:
+
+| | |
+| --- | --- |
+| **Paper** | A3, A4, A5, A6, Letter or Legal, portrait or landscape, chosen in the design panel with nothing selected. Changing it resizes every page and keeps what is on them |
+| **Pages** | Every top-level container is a page: a section the size of the sheet, whose padding is the page margin. Its size and place are the paper's, and `normaliseCanvas` puts them back whoever wrote the canvas. A block that would land at the top level lands on the last page instead. "Add page" in the layers adds one at the end with the last page's margin and fill |
+| **Overflow** | A page prints as one sheet and clips what runs past its foot, so the canvas flags a page that runs over, and "Flow onto the next pages" moves the first block that does not fit, and everything after it, onto a new page, until every page fits. A block taller than a page stays where it is and stays flagged |
+| **Pictures** | Files the template keeps, PNG, JPEG, GIF or WebP, chosen from the toolbar's picture tools or the design panel. The canvas draws one from `app://asset/template/<id>`; rendering writes its bytes into the document inline |
+| **Inputs** | The only values it fills in. A placeholder naming a record is refused on save. An image input is a picture chosen when the template is used |
+| **Not here** | Breakpoints, the HTML code view and the page's own position and size controls. Hover actions are offered and do nothing on paper |
+| **Preview** | The PDF it prints as, with each input at its starting value |
+
+**Importing a Word file.** "Import Word file" on the list reads a `.docx`
+(`services/document-docx.ts`): headings, paragraphs with their bold, italics,
+underlines and links, lists, tables as a columns table with a stroke on each
+cell, and pictures, all onto the first page, which the editor then flows onto
+as many pages as it needs. A field written `{{ name }}` or
+`{{ document.name }}` becomes a required text input keyed `name`. Fonts,
+spacing and Word's own page layout are not carried.
+
+**Using one** is three steps (`UseCanvasTemplateScreen.tsx`): fill in the
+inputs, see the PDF, and then, asked as soon as the PDF is made, connect it to a
+client and a project, which keeps it as one of their documents, or save the PDF
+as a file Juno does not keep.
+
+## 3b. Document templates: the page model
+
+The editor every document template had before the canvas, and still the one a
+template without a canvas opens in. `src/features/templates/TemplateEditor.tsx`, over the model in
 `electron/shared/types.ts` (`DocumentLayout`) and the compiler in
 `electron/main/services/document-layout.ts`.
 
@@ -676,10 +711,9 @@ as HTML. That stays supported. Converting one is a deliberate act, because
 compiling a hand-written contract into blocks would lose whatever the author
 did by hand.
 
-A new template does not: the plus on the list opens into a name field, Enter
-creates the template with that name and one empty page as its layout, and it
-opens straight into the page editor on that page rather than into the
-plain-HTML mode above.
+A new template is neither: the plus on the list opens into a name field, and
+Enter creates the template with one empty page of A4 on the canvas (section 3)
+and opens it there.
 
 ### What the editor must not pretend
 

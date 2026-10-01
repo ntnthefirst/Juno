@@ -495,6 +495,7 @@ const api: JunoApi = {
 			createDraft: (input) => call("mail.outbox.createDraft", input),
 			updateDraft: (id, patch) => call("mail.outbox.updateDraft", id, patch),
 			replySeed: (messageId, mode) => call("mail.outbox.replySeed", messageId, mode),
+			replySeedOutgoing: (outboxId, mode) => call("mail.outbox.replySeedOutgoing", outboxId, mode),
 			send: (id) => call("mail.outbox.send", id),
 			approve: (id) => call("mail.outbox.approve", id),
 			cancel: (id) => call("mail.outbox.cancel", id),

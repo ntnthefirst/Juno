@@ -828,6 +828,8 @@ export interface JunoApi {
 			updateDraft(id: string, patch: MailDraftPatch): Promise<MailOutboxMessage>;
 			/** The addresses, subject and quote an answer starts from. */
 			replySeed(messageId: string, mode: MailReplyMode): Promise<MailReplySeed>;
+			/** The same for a message Juno sent that has not synced back yet. Takes the outbox row's id. */
+			replySeedOutgoing(outboxId: string, mode: MailReplyMode): Promise<MailReplySeed>;
 			/** The person's press. Queues the message; the sender picks it up at once. */
 			send(id: string): Promise<MailOutboxMessage>;
 			/** Approves what an agent prepared. Only a person can reach this. */

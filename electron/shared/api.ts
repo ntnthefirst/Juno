@@ -801,8 +801,10 @@ export interface JunoApi {
 			body(id: string): Promise<MailMessageBody | null>;
 		};
 		attachments: {
-			/** Shows the file in the file manager. Never opens it. */
+			/** Shows the file in the file manager. */
 			reveal(id: string): Promise<void>;
+			/** Opens it in the default app. Only plain document, image and media types. */
+			open(id: string): Promise<void>;
 			/** Copies it wherever the person chooses. Null when they cancel. */
 			save(id: string): Promise<string | null>;
 		};

@@ -127,6 +127,14 @@ export function registerMailIpc(): void {
 		shell.showItemInFolder(threads.attachmentPath(id).path);
 	});
 
+	// Opened only for the short list of plain document, image and media types
+	// the service allows. The window offers it for a trusted sender or mail
+	// the person sent.
+	ipcMain.handle("mail.attachments.open", async (_event, id: string) => {
+		const error = await shell.openPath(threads.openableAttachmentPath(id));
+		if (error) throw new Error("No app on this machine could open that file. Use Save as instead.");
+	});
+
 	ipcMain.handle("mail.attachments.save", async (event, id: string) => {
 		const { path, filename } = threads.attachmentPath(id);
 		const owner = BrowserWindow.fromWebContents(event.sender);

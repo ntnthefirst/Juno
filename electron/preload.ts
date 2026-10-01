@@ -478,6 +478,7 @@ const api: JunoApi = {
 		},
 		attachments: {
 			reveal: (id) => call("mail.attachments.reveal", id),
+			open: (id) => call("mail.attachments.open", id),
 			save: (id) => call("mail.attachments.save", id),
 		},
 		openLink: (url) => call("mail.openLink", url),

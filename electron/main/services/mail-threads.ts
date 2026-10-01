@@ -17,6 +17,7 @@ import type {
 	MailThreadListQuery,
 	MailThreadSummary,
 } from "../../shared/types";
+import { isOpenableAttachment } from "../../shared/attachment-kind";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
@@ -407,6 +408,19 @@ export function attachmentPath(id: string, db: Db = getDb()): { path: string; fi
 		throw new Error("That attachment's path is outside the mail folder, so Juno will not open it.");
 	}
 	return { path: target, filename: row.filename };
+}
+
+/**
+ * The path of an attachment the operating system may open. Throws for a type
+ * outside the short list, which is the only gate: the window hides the button
+ * for an untrusted sender, but a renderer's word is not enough.
+ */
+export function openableAttachmentPath(id: string, db: Db = getDb()): string {
+	const { path, filename } = attachmentPath(id, db);
+	if (!isOpenableAttachment(filename)) {
+		throw new Error(`${filename} cannot be opened from Juno. Use Show in folder instead.`);
+	}
+	return path;
 }
 
 function inlineImages(db: Db, messageId: string): Map<string, string> {

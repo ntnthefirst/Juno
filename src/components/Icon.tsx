@@ -36,6 +36,7 @@ import {
 	ComputerDesktopIcon,
 	CubeIcon,
 	DocumentDuplicateIcon,
+	DocumentIcon,
 	DocumentTextIcon,
 	EllipsisHorizontalIcon,
 	EnvelopeIcon,
@@ -43,6 +44,7 @@ import {
 	ExclamationTriangleIcon,
 	EyeIcon,
 	EyeSlashIcon,
+	FilmIcon,
 	FlagIcon,
 	FunnelIcon,
 	FolderIcon,
@@ -62,6 +64,7 @@ import {
 	MapPinIcon,
 	MinusIcon,
 	MoonIcon,
+	MusicalNoteIcon,
 	NoSymbolIcon,
 	PaintBrushIcon,
 	PaperAirplaneIcon,
@@ -72,6 +75,7 @@ import {
 	PhotoIcon,
 	PlayIcon,
 	PlusIcon,
+	PresentationChartBarIcon,
 	ScissorsIcon,
 	SparklesIcon,
 	Squares2X2Icon,
@@ -80,6 +84,7 @@ import {
 	StrikethroughIcon,
 	SunIcon,
 	SwatchIcon,
+	TableCellsIcon,
 	TrashIcon,
 	UnderlineIcon,
 	UsersIcon,
@@ -226,7 +231,13 @@ export type IconName =
 	| "effect-blur"
 	| "wrap"
 	| "keyboard"
-	| "minus";
+	| "minus"
+	// File types, for the attachments of a message.
+	| "file"
+	| "file-sheet"
+	| "file-slides"
+	| "file-audio"
+	| "file-video";
 
 type GlyphProps = {
 	width?: number;
@@ -572,6 +583,11 @@ const ICONS: Record<IconName, Glyph> = {
 	wrap: DRAWN.wrap,
 	keyboard: DRAWN.keyboard,
 	minus: MinusIcon,
+	file: DocumentIcon,
+	"file-sheet": TableCellsIcon,
+	"file-slides": PresentationChartBarIcon,
+	"file-audio": MusicalNoteIcon,
+	"file-video": FilmIcon,
 };
 
 type IconProps = {

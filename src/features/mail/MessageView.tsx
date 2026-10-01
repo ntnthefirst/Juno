@@ -248,9 +248,10 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 				// button cannot hold another one.
 				<div className="flex w-full shrink-0 items-start gap-3 bg-[var(--hover)] px-8 py-3">
 					<div className="flex min-w-0 flex-1 items-baseline gap-2">
+						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">From</span>
 						{message.from ? (
 							<span
-								className={`min-w-0 truncate ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
+								className={`min-w-0 ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
 							>
 								<PersonChip
 									person={message.from}
@@ -268,9 +269,9 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 						) : (
 							<span className="font-[var(--weight-medium)]">{from}</span>
 						)}
-						{message.from && !mine.has(senderAddress ?? "") ? (
-							<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								{message.from.address}
+						{detailsOpen && message.from ? (
+							<span data-selectable className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								{"<"}{message.from.address}{">"}
 							</span>
 						) : null}
 					</div>
@@ -278,7 +279,9 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 						className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
 						title={formatFull(message.internalDate)}
 					>
-						{formatWhen(message.sentAt ?? message.internalDate)}
+						{detailsOpen
+							? formatFull(message.sentAt ?? message.internalDate)
+							: formatWhen(message.sentAt ?? message.internalDate)}
 					</span>
 				</div>
 			) : (
@@ -318,20 +321,33 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 				<div className="flex flex-1 flex-col px-8">
 					<div className="-mx-8 bg-[var(--hover)] px-8">
 						<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							<span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
-								<span>To</span>
-								{message.to.length === 0 ? <span>(nobody)</span> : null}
-								{message.to.map((person) => (
-									<PersonChip
-										key={person.address}
-										person={person}
-										label={participantsLine([person])}
-										mine={mine}
-										onNotice={onNotice}
-										onConnected={(client) => void connected(client, person.address)}
-									/>
-								))}
-							</span>
+								<span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
+									<span>To</span>
+									{message.to.length === 0 ? <span>(nobody)</span> : null}
+									{message.to.map((person) => (
+										<PersonChip
+											key={person.address}
+											person={person}
+											label={detailsOpen ? person.address : participantsLine([person])}
+											mine={mine}
+											onNotice={onNotice}
+											onConnected={(client) => void connected(client, person.address)}
+										/>
+									))}
+									{detailsOpen && message.cc.length > 0 ? <span className="ml-2">Cc</span> : null}
+									{detailsOpen
+										? message.cc.map((person) => (
+												<PersonChip
+													key={person.address}
+													person={person}
+													label={person.address}
+													mine={mine}
+													onNotice={onNotice}
+													onConnected={(client) => void connected(client, person.address)}
+												/>
+											))
+										: null}
+								</span>
 							<button
 								type="button"
 								onClick={() => setDetailsOpen((current) => !current)}
@@ -341,41 +357,6 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 							</button>
 						</div>
 
-						{detailsOpen ? (
-							<dl className="grid shrink-0 grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 pb-3 text-[length:var(--text-sm)]">
-								<dt className="text-[var(--ink-muted)]">From</dt>
-								<dd
-									data-selectable
-									className="truncate"
-								>
-									{message.from ? `${from} <${message.from.address}>` : "(unknown sender)"}
-								</dd>
-								{message.to.length > 0 ? (
-									<>
-										<dt className="text-[var(--ink-muted)]">To</dt>
-										<dd
-											data-selectable
-											className="truncate"
-										>
-											{message.to.map((a) => a.address).join(", ")}
-										</dd>
-									</>
-								) : null}
-								{message.cc.length > 0 ? (
-									<>
-										<dt className="text-[var(--ink-muted)]">Cc</dt>
-										<dd
-											data-selectable
-											className="truncate"
-										>
-											{message.cc.map((a) => a.address).join(", ")}
-										</dd>
-									</>
-								) : null}
-								<dt className="text-[var(--ink-muted)]">Date</dt>
-								<dd className="tabular">{formatFull(message.sentAt ?? message.internalDate)}</dd>
-							</dl>
-						) : null}
 					</div>
 
 					{visibleAttachments.length > 0 ? (

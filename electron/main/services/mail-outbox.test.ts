@@ -584,6 +584,32 @@ describe("a sent reply in its thread", () => {
 		expect((await threads.getThread(threadId, db))!.outgoing.some((o) => o.id === gone.id)).toBe(false);
 	});
 
+	it("answers and forwards a sent message that has not synced back yet", async () => {
+		const originalId = storeOriginal(db);
+		const reply = await sentReply(originalId);
+
+		const answer = await outbox.replySeedForOutgoing(reply.id, { mode: "reply" }, db);
+		expect(answer).toMatchObject({
+			accountId,
+			to: [{ name: null, address: "laura@obet.be" }],
+			subject: "Re: Offerte",
+			replyToMessageId: originalId,
+		});
+		expect(answer.quotedText).toContain("Zeker.");
+
+		const forward = await outbox.replySeedForOutgoing(reply.id, { mode: "forward" }, db);
+		expect(forward).toMatchObject({ to: [], subject: "Fw: Re: Offerte", replyToMessageId: null });
+	});
+
+	it("refuses to answer a draft", async () => {
+		const originalId = storeOriginal(db);
+		const draft = await outbox.createDraft(
+			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Re: Offerte", bodyText: "x", replyToMessageId: originalId },
+			db,
+		);
+		await expect(outbox.replySeedForOutgoing(draft.id, { mode: "reply" }, db)).rejects.toThrow(/has been sent/);
+	});
+
 	it("lists more than one, oldest first", async () => {
 		const originalId = storeOriginal(db);
 		const first = await sentReply(originalId, "Een.");

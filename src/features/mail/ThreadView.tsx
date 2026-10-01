@@ -23,6 +23,8 @@ type ThreadViewProps = {
 	onAction: (action: ThreadAction) => void;
 	/** Opens a draft, a message waiting for approval or a failed send in the composer. */
 	onEditDraft: (outboxId: string) => void;
+	/** Answering or forwarding something sent from Juno that has not synced back yet. */
+	onReplyOutgoing: (outboxId: string, mode: MailReplyMode) => void;
 };
 
 const OVERVIEW_KEY = "juno.mail.conversation-open";
@@ -74,6 +76,7 @@ export function ThreadView({
 	onReply,
 	onAction,
 	onEditDraft,
+	onReplyOutgoing,
 }: ThreadViewProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [linking, setLinking] = useState(false);
@@ -243,6 +246,19 @@ export function ThreadView({
 									icon="forward"
 									label="Forward"
 									onClick={() => onReply(openMessage.id, "forward")}
+								/>
+							</>
+						) : selected && selected.kind === "outgoing" && ["queued", "sending", "sent"].includes(selected.message.state) ? (
+							<>
+								<ToolbarAction
+									icon="reply"
+									label="Reply"
+									onClick={() => onReplyOutgoing(selected.message.id, "reply")}
+								/>
+								<ToolbarAction
+									icon="forward"
+									label="Forward"
+									onClick={() => onReplyOutgoing(selected.message.id, "forward")}
 								/>
 							</>
 						) : null}

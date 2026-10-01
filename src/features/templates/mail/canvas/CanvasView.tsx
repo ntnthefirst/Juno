@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent, type HTMLAttributes } from "react";
 import type { MailBlock, MailColumns, MailColumnsCell, MailContainer, MailFont, MailLayout, MailNode, TemplateInput } from "@shared/types";
+import { assetKeyOf } from "@shared/paper";
 import { Icon } from "../../../../components/Icon";
 import { asListItems, canMoveInto, firstChildOf } from "./canvas-actions";
 import {
@@ -61,6 +62,10 @@ type CanvasViewProps = {
 	onContentHeight: (height: number) => void;
 	/** The size of what is selected, for the W and H fields. */
 	onMeasure: (size: Measured | null) => void;
+	/** A document: the pages are the sheets, so nothing is drawn behind them. */
+	sheets?: boolean;
+	/** A document's pictures, by the key an image block names them with (`{{asset.<key>}}`). */
+	pictures?: Record<string, string>;
 };
 
 /**
@@ -79,7 +84,10 @@ type BlockViewProps = {
 	inputs: TemplateInput[];
 	fonts: MailFont[];
 	host: Host;
+	pictures: Record<string, string>;
 };
+
+const NO_PICTURES: Record<string, string> = {};
 
 /**
  * One block, drawn as the element the compiler writes for it.
@@ -90,7 +98,7 @@ type BlockViewProps = {
  * selection would outline the room the block was given rather than the block:
  * a text block fixed at 100 pixels would be drawn as a line across the frame.
  */
-function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
+function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 	const own = { ...host.attrs, "data-canvas-id": host.id };
 	switch (block.kind) {
 		case "heading": {
@@ -174,10 +182,13 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 		case "image": {
 			// Only a picture Juno holds is drawn. A web address is the reader's
 			// mail client's to load, so it gets a box that says so (remote-image.ts).
-			const picture = block.src ? (
-				isDrawable(block.src) ? (
+			// A document's own picture is named by its key and drawn from Juno.
+			const key = assetKeyOf(block.src);
+			const src = key ? (pictures[key] ?? "") : block.src;
+			const picture = src ? (
+				isDrawable(src) ? (
 					<img
-						src={block.src}
+						src={src}
 						alt={block.alt}
 						style={{
 							display: "block",
@@ -210,7 +221,7 @@ function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 					style={host.place}
 					className={`flex items-center gap-1.5 text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)] ${host.className}`}
 				>
-					<Icon name="image" size={14} /> No image address yet
+					<Icon name="image" size={14} /> {key ? "This picture is no longer stored" : "No image address yet"}
 				</span>
 			);
 		}
@@ -366,6 +377,8 @@ export function CanvasView({
 	onEditing,
 	onContentHeight,
 	onMeasure,
+	sheets = false,
+	pictures = NO_PICTURES,
 }: CanvasViewProps) {
 	const content = useRef<HTMLDivElement>(null);
 	const [over, setOver] = useState<DropTarget | null>(null);
@@ -538,6 +551,7 @@ export function CanvasView({
 				inputs={inputs}
 				fonts={layout.fonts}
 				host={{ id: block.id, attrs, place, className: marks(selected, overThis) }}
+				pictures={pictures}
 			/>
 		);
 	};
@@ -666,9 +680,9 @@ export function CanvasView({
 				color: "var(--canvas-ink)",
 				...MAIL_SHELL,
 				...fillCss(layout.fill),
-				background: layout.fill ? undefined : "var(--canvas-paper)",
+				background: sheets ? "transparent" : layout.fill ? undefined : "var(--canvas-paper)",
 			}}
-			className="shadow-[var(--shadow-popover)]"
+			className={sheets ? undefined : "shadow-[var(--shadow-popover)]"}
 			onClick={() => onSelect(null)}
 			onDragOver={(event) => dragOverTarget(event, { parentId: null, beforeId: null })}
 			onDrop={(event) => finishDrag(event, { parentId: null, beforeId: null })}

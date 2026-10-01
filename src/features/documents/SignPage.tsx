@@ -10,7 +10,7 @@ import { SplitButton } from "../../components/SplitButton";
 import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { openPdf, type PDFDocumentProxy } from "../../lib/pdf";
-import { PdfPageView } from "./PdfPageView";
+import { PdfPageView } from "../../components/PdfPageView";
 import { StampBox } from "./StampBox";
 
 type SignPageProps = {

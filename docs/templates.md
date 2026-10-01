@@ -26,6 +26,34 @@ An install that has the five older templates keeps them exactly as they are, and
 a new one never gets them. Nothing may look a template up by key, because most
 installs will not have the one you want.
 
+## A template on paper
+
+A new template is laid out on the canvas, on paper of a fixed size
+([editors.md](editors.md) section 3, decision 41), and it works differently
+from everything below in one way: **it fills in only what it asks for.** None
+of the `owner.*`, `client.*`, `project.*` or `document.*` values listed under
+"Available values" reach it. Every value it prints is one of its own inputs,
+written `{{document.<key>}}`, typed by a person or an agent when it is used. A
+placeholder naming anything else is refused when the template is saved, with a
+message saying which. The conditionals still work on inputs:
+`{{#if document.vat}}...{{/if}}`.
+
+So if a document should carry the client's name, give it an input for the
+name. The PDF is then made before anybody chooses a client, and choosing one
+only decides where the document is kept.
+
+A picture the template always carries, a logo or a signature line, is added on
+the canvas and kept as a file; it is written `{{asset.<key>}}` as an image's
+source and you never type that yourself. A picture that changes each time is an
+input of kind image, chosen from a file when the template is used.
+
+An agent has the same surface: `templates.create` and `templates.update` take a
+`canvas` and `inputs`, `templates.add_image` stores a picture, `templates.fill`
+checks the values against a canvas without storing anything,
+`templates.import_docx` reads a Word file, and `documents.generate` makes the
+document for a client from `extras`. Everything that writes parks for a person
+to approve.
+
 ## Syntax
 
 Four forms, and deliberately no more. A contract needs substitution and "leave

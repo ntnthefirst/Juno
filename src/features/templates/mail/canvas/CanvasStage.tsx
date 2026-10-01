@@ -6,7 +6,8 @@ import {
 	type PointerEvent as ReactPointerEvent,
 	type WheelEvent,
 } from "react";
-import type { MailBlock, MailLayout, TemplateInput } from "@shared/types";
+import type { DocumentPaper, MailBlock, MailLayout, TemplateInput } from "@shared/types";
+import { pagesOf, paperLabel } from "@shared/paper";
 import { CanvasView, type DropTarget, type Editing, type Measured, type Selection } from "./CanvasView";
 import { isTyping, keysFor, shortcutFor } from "./shortcuts";
 
@@ -30,6 +31,10 @@ type CanvasStageProps = {
 	onHeight: (height: number) => void;
 	contentHeight: number;
 	onContentHeight: (height: number) => void;
+	/** A document's paper. Its pages are the paper's size, so the sheet has no height of its own to drag. */
+	paper?: DocumentPaper | null;
+	/** A document's pictures, by the key an image block names them with. */
+	pictures?: Record<string, string>;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -59,6 +64,8 @@ export function CanvasStage({
 	onHeight,
 	contentHeight,
 	onContentHeight,
+	paper = null,
+	pictures,
 }: CanvasStageProps) {
 	const [zoom, setZoom] = useState(1);
 	// Whether the zoom is the author's rather than the one the stage picked. A
@@ -287,9 +294,16 @@ export function CanvasStage({
 						className="flex flex-col"
 						style={{ width, transform: `scale(${zoom})`, transformOrigin: "top left" }}
 					>
-						<p className="tabular pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-							<span className="font-[var(--weight-medium)] text-[var(--ink)]">{label}</span> {width} x {height}
-						</p>
+						{paper ? (
+							<p className="tabular pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+								<span className="font-[var(--weight-medium)] text-[var(--ink)]">{paperLabel(paper)}</span>{" "}
+								{pagesOf(layout).length === 1 ? "1 page" : `${pagesOf(layout).length} pages`}
+							</p>
+						) : (
+							<p className="tabular pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+								<span className="font-[var(--weight-medium)] text-[var(--ink)]">{label}</span> {width} x {height}
+							</p>
+						)}
 
 						<CanvasView
 							layout={layout}
@@ -303,8 +317,11 @@ export function CanvasStage({
 							onEditing={onEditing}
 							onContentHeight={onContentHeight}
 							onMeasure={onMeasure}
+							sheets={paper !== null}
+							pictures={pictures}
 						/>
 
+						{paper ? null : (
 						<button
 							type="button"
 							aria-label="Drag to change the height of the sheet"
@@ -321,6 +338,7 @@ export function CanvasStage({
 						>
 							<span className="h-[3px] w-[48px] rounded-full bg-[var(--line-strong)]" />
 						</button>
+						)}
 					</div>
 				</div>
 			</div>

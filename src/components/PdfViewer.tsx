@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { IconAction } from "../../components/IconAction";
-import { messageOf } from "../../lib/errors";
-import { openPdf, type PDFDocumentProxy } from "../../lib/pdf";
+import { IconAction } from "./IconAction";
+import { messageOf } from "../lib/errors";
+import { openPdf, type PDFDocumentProxy } from "../lib/pdf";
 import { PdfPageView } from "./PdfPageView";
 
 type PdfViewerProps = {

@@ -338,6 +338,15 @@ const api: JunoApi = {
 		setReviewed: (id, reviewed) => call("templates.setReviewed", id, reviewed),
 		remove: (id) => call("templates.remove", id),
 		preview: (input) => call("templates.preview", input),
+		renderPdf: (input) => call("templates.renderPdf", input),
+		savePdf: (input) => call("templates.savePdf", input),
+		pickDocx: () => call("templates.pickDocx"),
+		importDocx: (input) => call("templates.importDocx", input),
+		assets: {
+			list: (templateId) => call("templates.assets.list", templateId),
+			add: (input) => call("templates.assets.add", input),
+			remove: (id) => call("templates.assets.remove", id),
+		},
 	},
 
 	documents: {

@@ -145,6 +145,41 @@ The way Outlook does signatures. Nothing to do with templates.
 - Every action a rule takes writes an audit row naming the rule, so "why did
   this message move" always has an answer.
 
+## 6. Components for document templates on paper
+
+Parked on purpose: the paper canvas shipped first (decision 41), and
+components come after it if there is time.
+
+- **A component is a piece of a page made once and placed in many templates**:
+  a letterhead, a signature block, a price table. It is made in the same canvas
+  editor, as a container rather than a page, and stored in its own table with
+  the five columns, behind a service, IPC channels and MCP tools.
+- **A component declares inputs of its own.** Placing one in a template asks
+  for its values there, or passes one of the template's own inputs through, so
+  a letterhead can ask for a reference number without every template declaring
+  it by hand.
+- **Placed, not pasted.** A template holds a reference to the component and the
+  values given to it, so editing the component changes every template that uses
+  it. A template can detach one, which copies its nodes in and drops the link.
+- **Pictures** a component keeps belong to the component, not to each template.
+- **What has to be decided first:** whether editing a component clears the
+  review flag of every template that uses it (it changes their text, so it
+  probably should), and whether a document already generated keeps the
+  component as it was (it does today for everything else: the body is frozen).
+
+## 7. Document templates on paper: smaller things left
+
+- **The example that ships is still on the page model.** A first install gets
+  one example document template laid out as pages, and it uses record values.
+  Rewriting it on the canvas, with inputs for what it now reads from the
+  records, would make the first thing a new owner opens the editor they will
+  use.
+- **No real Word file has been imported yet.** The reader is tested against
+  Mammoth's own output and a hand-built `.docx`. Import one of your contracts
+  and write down what comes across wrong.
+- **Hover actions are offered on paper** and do nothing there. The design panel
+  could leave them out for a document.
+
 ---
 
 ## Signing: what is deliberately not there

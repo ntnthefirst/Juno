@@ -11,7 +11,8 @@ export type EditorMode = "canvas" | "preview" | "code" | "inputs";
 type EditorSidebarProps = {
 	name: string;
 	description: string;
-	subject: string;
+	/** A mail template's subject. Null for a document, which has none. */
+	subject: string | null;
 	onName: (name: string) => void;
 	onDescription: (description: string) => void;
 	onSubject: (subject: string) => void;
@@ -22,8 +23,10 @@ type EditorSidebarProps = {
 	onHidden: (id: string, hidden: boolean) => void;
 	onDrop: (id: string, target: DropTarget) => void;
 	onStep: (id: string, by: -1 | 1) => void;
-	/** Swaps the whole canvas for hand-written HTML, and back. */
-	onConvert: () => void;
+	/** Swaps the whole canvas for hand-written HTML, and back. Null where a canvas is all there is. */
+	onConvert: (() => void) | null;
+	/** Adds a page at the end, for a document. Null for a mail template. */
+	onAddPage: (() => void) | null;
 
 	unreviewed: boolean;
 
@@ -65,6 +68,7 @@ export function EditorSidebar({
 	onDrop,
 	onStep,
 	onConvert,
+	onAddPage,
 	unreviewed,
 	autosave,
 	onAutosave,
@@ -118,6 +122,7 @@ export function EditorSidebar({
 				/>
 			</div>
 
+			{subject !== null ? (
 			<div className="flex-none border-t border-[var(--line)] px-1.5 py-1.5">
 				<label htmlFor={subjectId} className="block px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
 					Subject
@@ -145,12 +150,23 @@ export function EditorSidebar({
 					</p>
 				) : null}
 			</div>
+			) : null}
 
 			<div className="flex min-h-0 flex-1 flex-col border-t border-[var(--line)]">
 				<div className="flex h-[28px] flex-none items-center px-3">
 					<h2 className="text-[length:var(--text-micro)] font-[var(--weight-semibold)] tracking-[0.04em] text-[var(--ink-muted)] uppercase">
 						Layers
 					</h2>
+					{onAddPage ? (
+						<button
+							type="button"
+							onClick={onAddPage}
+							title="Add a page at the end"
+							className="ml-auto flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
+						>
+							<Icon name="add" size={12} /> Add page
+						</button>
+					) : null}
 				</div>
 				<div className="relative min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
 					{layout ? (
@@ -168,6 +184,7 @@ export function EditorSidebar({
 						</p>
 					)}
 				</div>
+				{onConvert ? (
 				<div className="flex-none px-1.5 pb-1.5">
 					<button
 						type="button"
@@ -177,6 +194,7 @@ export function EditorSidebar({
 						{layout ? "Turn the whole template into hand-written HTML" : "Lay this out on a canvas"}
 					</button>
 				</div>
+				) : null}
 			</div>
 
 			<div className="flex flex-none items-center gap-2 border-t border-[var(--line)] px-3 py-1.5">

@@ -13,7 +13,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
-import { backupsDir, databasePath, documentsDir, mailDir, projectsDir, userDataDir } from "./main/db/paths";
+import {
+	backupsDir,
+	databasePath,
+	documentsDir,
+	mailDir,
+	projectsDir,
+	templateAssetsDir,
+	userDataDir,
+} from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import { mcpStatus } from "./main/ipc/agent";
@@ -25,6 +33,7 @@ import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
+import { configureTemplateAssets } from "./main/services/document-template-assets";
 import { configureProjectStorage } from "./main/services/project-storage";
 import * as projectRunner from "./main/services/project-runner";
 import * as notifications from "./main/services/notifications";
@@ -82,6 +91,7 @@ if (!app.requestSingleInstanceLock()) {
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
 		configureDocuments(documentsDir());
 		configureDocumentStorage(documentsDir());
+		configureTemplateAssets(templateAssetsDir());
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
 		// Sync never starts while locked and stops at the next step when the lock
@@ -276,6 +286,43 @@ if (!app.requestSingleInstanceLock()) {
 									name: "Handgeschreven overeenkomst",
 									bodyHtml: "<h1>Overeenkomst</h1><p>Tussen {{ owner.businessName }} en {{ client.name }}.</p>",
 								});
+								// A template laid out on paper, which fills in what it asks for and
+								// nothing else. Printed through the bridge before anyone is chosen to
+								// receive it, then generated for a client, which must give a document
+								// that says what was typed and nothing taken from the client.
+								const paperTemplate = await b.templates.create({ name: "Offerte op papier" });
+								if (!paperTemplate.canvas) throw new Error("Smoke: a new document template is not laid out on paper");
+								const firstPage = paperTemplate.canvas.layout.children[0];
+								if (!firstPage || firstPage.kind !== "container") throw new Error("Smoke: a new canvas has no page");
+								const scopeText = {
+									id: "smoke-scope", kind: "text", tag: "p", grow: 0, alignSelf: "auto", hidden: false, actions: [],
+									html: "Omvang: {{document.omvang}}",
+									text: { color: null, fontFamily: null, fontSize: null, lineHeight: null, letterSpacing: null, weight: "normal", italic: false, decoration: "none", transform: "none", align: "left", verticalAlign: "top" },
+									box: { ...firstPage.box, fill: null, padding: { top: 0, right: 0, bottom: 0, left: 0 }, margin: { top: 0, right: 0, bottom: 0, left: 0 }, width: null, minHeight: null, clip: false },
+								};
+								await b.templates.update(paperTemplate.id, {
+									inputs: [{ key: "omvang", label: "Omvang", kind: "textarea", required: true }],
+									canvas: { ...paperTemplate.canvas, layout: { ...paperTemplate.canvas.layout, children: [{ ...firstPage, children: [scopeText] }] } },
+								});
+								const printedPaper = await b.templates.renderPdf({ templateId: paperTemplate.id, values: { omvang: "Een website" } });
+								if (printedPaper.missing.length !== 0 || String.fromCharCode(...printedPaper.pdf.slice(0, 4)) !== "%PDF") {
+									throw new Error("Smoke: a canvas template did not print: " + printedPaper.missing.join(", "));
+								}
+								// A long text on one page with a picture the template keeps, for the
+								// editor's page flow and the picture route below.
+								const longTemplate = await b.templates.create({ name: "Lange tekst op papier" });
+								const longPage = longTemplate.canvas.layout.children[0];
+								const pixel = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
+								const logo = await b.templates.assets.add({ templateId: longTemplate.id, fileName: "logo.png", data: pixel });
+								const logoBlock = { id: "smoke-logo", kind: "image", src: logo.token, alt: "Logo", width: 48, align: "left", grow: 0, alignSelf: "start", hidden: false, actions: [], box: scopeText.box };
+								const paragraphs = Array.from({ length: 70 }, (_, index) => ({ ...scopeText, id: "smoke-long-" + index, html: "Artikel " + (index + 1) + ". Deze tekst loopt door tot ver voorbij de onderkant van het blad." }));
+								await b.templates.update(longTemplate.id, {
+									canvas: { ...longTemplate.canvas, layout: { ...longTemplate.canvas.layout, children: [{ ...longPage, children: [logoBlock, ...paragraphs] }] } },
+								});
+								const paperDocument = await b.documents.generate({ clientId: made[0].id, templateId: paperTemplate.id, extras: { omvang: "Een website" } });
+								if (paperDocument.pdfError !== null || !paperDocument.document.bodyHtml.includes("Omvang: Een website")) {
+									throw new Error("Smoke: a canvas template did not generate its document: " + paperDocument.pdfError);
+								}
 								// Generating writes the PDF now, so this call is only here to
 								// prove the explicit path still works. What generating produced is
 								// checked from the main process below, where the file is reachable.
@@ -569,8 +616,11 @@ if (!app.requestSingleInstanceLock()) {
 							// contract is several.
 							{
 								const { statSync, readFileSync: readPdfBytes } = await import("node:fs");
-								const generated = (await (await import("./main/services/documents")).list({})).find(
-									(row) => row.sourceKind === "generated" && row.pdfPath !== null,
+								const generatedRows = await (await import("./main/services/documents")).list({});
+								// The example is the one laid out as pages; the one on paper is
+								// checked on its own below.
+								const generated = generatedRows.find(
+									(row) => row.sourceKind === "generated" && row.pdfPath !== null && !row.bodyHtml.includes("juno-sheets"),
 								);
 								if (!generated?.pdfPath) throw new Error("Smoke: no generated document has a PDF");
 								const size = statSync(generated.pdfPath).size;
@@ -588,6 +638,15 @@ if (!app.requestSingleInstanceLock()) {
 								const sheets = (await PDFDocument.load(readPdfBytes(generated.pdfPath))).getPageCount();
 								if (sheets !== 2) throw new Error(`Smoke: the example printed on ${sheets} sheets, not its two pages`);
 								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheets}`);
+								// A template on paper prints one sheet per page, at the paper's
+								// size, whatever A4 the printer was told to default to.
+								const onPaper = generatedRows.find((row) => row.pdfPath !== null && row.bodyHtml.includes("juno-sheets"));
+								if (!onPaper?.pdfPath) throw new Error("Smoke: the document on paper has no PDF");
+								const paperPdf = await PDFDocument.load(readPdfBytes(onPaper.pdfPath));
+								const { width: sheetWidth, height: sheetHeight } = paperPdf.getPage(0).getSize();
+								if (paperPdf.getPageCount() !== 1 || Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842) {
+									throw new Error(`Smoke: the document on paper printed ${paperPdf.getPageCount()} sheets of ${sheetWidth} x ${sheetHeight}, not one A4`);
+								}
 							}
 							window.webContents.reload();
 							await new Promise((r) => {
@@ -1459,11 +1518,11 @@ if (!app.requestSingleInstanceLock()) {
 											let canvas = null;
 											for (let tries = 0; tries < 20 && !canvas; tries++) {
 												await wait(150);
-												canvas = document.querySelector("button[aria-label^='Page 1']");
+												canvas = document.querySelector("[data-canvas-content]");
 											}
 											if (!canvas) {
 												const alert = document.querySelector("[role=alert]");
-												return "the new template did not open a page canvas" + (alert ? ": " + alert.textContent.trim() : "");
+												return "the new template did not open on paper" + (alert ? ": " + alert.textContent.trim() : "");
 											}
 											return "ok";
 										})()`,
@@ -1473,11 +1532,12 @@ if (!app.requestSingleInstanceLock()) {
 
 									// Leaves without editing further, back to that template's own
 									// preview, which is where the screenshots below expect to be.
+									// The canvas editor has no back button over the canvas: Escape
+									// with nothing selected is the way out, as it is in the mail one.
 									await window.webContents.executeJavaScript(
 										`(async () => {
-											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
-											if (back) back.click();
-											await new Promise((r) => setTimeout(r, 400));
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 500));
 										})()`,
 									);
 
@@ -1517,6 +1577,150 @@ if (!app.requestSingleInstanceLock()) {
 									)) as string;
 									if (searched !== "ok")
 										throw new Error(`Smoke: document templates list ${searched}`);
+
+									// The template laid out on paper: its preview is the PDF it
+									// prints as, its editor is the canvas with a page of A4 on it,
+									// and using it makes the PDF first and then asks about a client.
+									const paperPreview = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Offerte op papier"));
+											if (!row) return "no row for the template on paper";
+											row.click();
+											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
+											return document.querySelector("main canvas") ? "ok" : "the preview drew no PDF";
+										})()`,
+									)) as string;
+									if (paperPreview !== "ok") throw new Error(`Smoke: document template on paper ${paperPreview}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-paper-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									const paperEditor = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
+											const content = document.querySelector("[data-canvas-content]");
+											if (!content) return "no canvas";
+											if (!content.textContent.includes("Omvang")) return "the page does not show its text";
+											if (!document.body.textContent.includes("A4 portrait")) return "the sheet does not say its paper";
+											return "ok";
+										})()`,
+									)) as string;
+									if (paperEditor !== "ok") throw new Error(`Smoke: document canvas editor ${paperEditor}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-paper-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									const paperUse = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(500);
+											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
+											if (!use) return "no use action on the preview";
+											use.click();
+											await wait(500);
+											const field = document.querySelector("main textarea");
+											if (!field) return "no field to fill";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+											setValue.call(field, "Een website");
+											field.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(200);
+											const make = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Make the PDF");
+											if (!make) return "no make-the-PDF action";
+											make.click();
+											for (let tries = 0; tries < 40 && !document.querySelector("[role=dialog]"); tries++) await wait(150);
+											const dialog = document.querySelector("[role=dialog]");
+											if (!dialog) return "no question about a client once the PDF was made";
+											return "ok";
+										})()`,
+									)) as string;
+									if (paperUse !== "ok") throw new Error(`Smoke: using a document template on paper ${paperUse}`);
+									writeFileSync(joinPath(shotDir, `use-document-template-paper.png`), (await capture(window.webContents)).toPNG());
+									const paperLeft = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const dialog = document.querySelector("[role=dialog]");
+											const connect = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Connect a client");
+											if (!connect) return "the question has no way to connect a client";
+											connect.click();
+											await wait(400);
+											if (![...document.querySelectorAll("label")].some((el) => el.textContent.trim().startsWith("Client"))) return "no client step";
+											const leave = () => {
+												const b = [...document.querySelectorAll("button")].find((el) => ["Previous", "Cancel"].includes(el.textContent.trim()));
+												if (b) b.click();
+												return Boolean(b);
+											};
+											for (let step = 0; step < 3; step++) {
+												leave();
+												await wait(400);
+											}
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											if (back) back.click();
+											await wait(500);
+											return document.querySelector("main ul li button") ? "ok" : "did not return to the list";
+										})()`,
+									)) as string;
+									if (paperLeft !== "ok") throw new Error(`Smoke: leaving the document template on paper ${paperLeft}`);
+
+									// Seventy paragraphs on one A4 page run past its foot: the editor
+									// says so, flows them onto the pages after it when asked, and draws
+									// the picture the template keeps from Juno's own origin.
+									const flowed = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Lange tekst op papier"));
+											if (!row) return "no row for the long template";
+											row.click();
+											await wait(700);
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
+											const picture = document.querySelector("[data-canvas-content] img");
+											if (!picture) return "the kept picture is not on the canvas";
+											for (let tries = 0; tries < 20 && !picture.complete; tries++) await wait(100);
+											if (!picture.src.startsWith("app://asset/template/") || picture.naturalWidth !== 1) return "the kept picture did not load: " + picture.src;
+											let flow = null;
+											for (let tries = 0; tries < 20 && !flow; tries++) {
+												await wait(150);
+												flow = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Flow onto the next pages");
+											}
+											if (!flow) return "no warning that the page runs past the paper";
+											flow.click();
+											for (let tries = 0; tries < 60 && document.querySelector("[role=status]"); tries++) await wait(150);
+											if (document.querySelector("[role=status]")) return "a page still runs past the paper after the flow";
+											const pages = document.body.textContent.match(/(\\d+) pages/);
+											if (!pages || Number(pages[1]) < 2) return "the text was not flowed onto more pages";
+											return "ok";
+										})()`,
+									)) as string;
+									if (flowed !== "ok") throw new Error(`Smoke: flowing a document onto pages ${flowed}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-paper-flowed-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									// Leaves the flow unsaved: Escape lets go of nothing and goes back.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(500);
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											if (back) back.click();
+											await wait(500);
+										})()`,
+									);
 								}
 								if (screen === "Mail templates") {
 									// One document underneath every view (docs/editors.md section 2):

@@ -14,7 +14,7 @@ import { messageOf } from "../../lib/errors";
 import { announceDocumentsChanged } from "../../lib/pdf-drop";
 import { ComposePage } from "../mail/ComposePage";
 import { DocumentTimeline } from "./DocumentTimeline";
-import { PdfViewer } from "./PdfViewer";
+import { PdfViewer } from "../../components/PdfViewer";
 import { useDocumentHistory } from "./use-document-history";
 import { KIND_LABELS } from "./version-format";
 import { VersionSwitcher } from "./VersionSwitcher";

@@ -37,14 +37,15 @@ function freshDb(): Db {
 }
 
 describe("document-templates", () => {
-	it("creates a template from a name alone, with one empty page and no review", async () => {
+	it("creates a template from a name alone, as one empty page of A4 on the canvas and no review", async () => {
 		const db = freshDb();
 		const created = await templates.create({ name: "Test template" }, db);
 		expect(created.name).toBe("Test template");
 		expect(created.key).toBe("test_template");
 		expect(created.reviewedAt).toBeNull();
-		expect(created.layout).not.toBeNull();
-		expect(created.layout?.pages).toHaveLength(1);
+		expect(created.layout).toBeNull();
+		expect(created.canvas?.paper).toEqual({ size: "A4", orientation: "portrait" });
+		expect(created.canvas?.layout.children).toHaveLength(1);
 	});
 
 	it("gives a second template with the same name a distinct key", async () => {

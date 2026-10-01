@@ -12,6 +12,7 @@ import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { TodayScreen } from "../features/today/TodayScreen";
+import { onOpenClientRequest } from "../lib/open-client";
 import { useTheme } from "../lib/theme";
 import { DocumentDropLayer } from "./DocumentDropLayer";
 import { BreadcrumbProvider } from "./breadcrumb";
@@ -131,6 +132,20 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 		// wider one, close() collapses it only when auto-collapse is on.
 		sidebar.close();
 	};
+
+	// Another screen asked for a client to be shown. The request is read by the
+	// clients screen when it mounts, so this only has to bring that screen up.
+	const closeSidebar = sidebar.close;
+	useEffect(
+		() =>
+			onOpenClientRequest(() => {
+				// Remounts the clients screen when it is already open, so it re-reads the request.
+				setVisit((count) => count + 1);
+				setScreen("clients");
+				closeSidebar();
+			}),
+		[closeSidebar],
+	);
 
 	return (
 		<div className="flex h-full flex-col bg-[var(--paper)]">

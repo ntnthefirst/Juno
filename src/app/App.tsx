@@ -15,6 +15,7 @@ import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { TodayScreen } from "../features/today/TodayScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
+import { currentRequest, onOpenRequest } from "../lib/open-entity";
 import { useTheme } from "../lib/theme";
 import { DocumentDropLayer } from "./DocumentDropLayer";
 import { BreadcrumbProvider } from "./breadcrumb";
@@ -144,6 +145,22 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 				// Remounts the clients screen when it is already open, so it re-reads the request.
 				setVisit((count) => count + 1);
 				setScreen("clients");
+				closeSidebar();
+			}),
+		[closeSidebar],
+	);
+
+	// A link in the Agent tab. The screen it names is brought up fresh, and reads
+	// the request when it mounts.
+	useEffect(
+		() =>
+			onOpenRequest(() => {
+				const target = currentRequest();
+				if (!target) return;
+				const next: ScreenId =
+					target.kind === "project" ? "projects" : target.kind === "document" ? "documents" : target.kind === "thread" ? "mail" : target.screen;
+				setVisit((count) => count + 1);
+				setScreen(next);
 				closeSidebar();
 			}),
 		[closeSidebar],

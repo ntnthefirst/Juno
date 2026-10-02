@@ -17,6 +17,7 @@ import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
 import { describeMailFileResult } from "./format";
 import { onDraftOffered, takeOfferedDraft } from "../../lib/open-draft";
+import { clearPending, peekPending } from "../../lib/open-entity";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { NO_FILTERS, type MailFilters } from "./mail-filters";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
@@ -75,11 +76,17 @@ export function MailScreen() {
 	const [outboxRows, setOutboxRows] = useState<MailOutboxMessage[] | null>(null);
 	const [listError, setListError] = useState<string | null>(null);
 	const [outboxError, setOutboxError] = useState<string | null>(null);
-	const [opened, setOpened] = useState<Opened | null>(null);
+	// A conversation opened from a link elsewhere (the Agent tab) arrives as a
+	// request, and is read once as this screen mounts.
+	const [opened, setOpened] = useState<Opened | null>(() => {
+		const request = peekPending("thread");
+		return request ? { kind: "thread", id: request.id, messageId: request.messageId, opens: 1 } : null;
+	});
 	// Kept apart from `opened`, which also drives the highlight in the list:
 	// going back closes the reader but leaves the row you read marked, so it
 	// stays clear which one that was.
-	const [readerOpen, setReaderOpen] = useState(false);
+	const [readerOpen, setReaderOpen] = useState(() => peekPending("thread") !== null);
+	useEffect(() => clearPending, []);
 	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [lastPicked, setLastPicked] = useState<string | null>(null);
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});
@@ -96,7 +103,7 @@ export function MailScreen() {
 	const [folderDelete, setFolderDelete] = useState<MailFolder | null>(null);
 	const [folderEmpty, setFolderEmpty] = useState<MailFolder | null>(null);
 	const [folderBusy, setFolderBusy] = useState(false);
-	const openCount = useRef(0);
+	const openCount = useRef(1);
 	const composeOpen = useRef(false);
 	useEffect(() => {
 		composeOpen.current = compose !== null;

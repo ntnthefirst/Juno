@@ -9,6 +9,7 @@ import { Select } from "../../components/Select";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { Toast } from "../../components/Toast";
 import { useContextMenu } from "../../lib/use-context-menu";
+import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
 import { activeDocumentFilterCount, NO_DOCUMENT_FILTERS, type DocumentFilters } from "./document-filters";
 import { DocumentDetail, SpecimenMark } from "./DocumentDetail";
@@ -51,10 +52,11 @@ type Load =
 
 export function DocumentsScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
-	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const [selectedId, setSelectedId] = useState<string | null>(() => peekPending("document")?.id ?? null);
 	// Seeded from the clicked row so the trail never flashes empty, then kept
 	// current by DocumentDetail once the real record has loaded.
-	const [selectedTitle, setSelectedTitle] = useState<string | null>(null);
+	const [selectedTitle, setSelectedTitle] = useState<string | null>(() => peekPending("document")?.name ?? null);
+	useEffect(() => clearPending, []);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [generating, setGenerating] = useState(false);
 	const [importItems, setImportItems] = useState<ImportItem[] | null>(null);

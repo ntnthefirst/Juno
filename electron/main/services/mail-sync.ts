@@ -336,6 +336,37 @@ export async function syncAccount(accountId: string, db: Db = getDb()): Promise<
 	}
 }
 
+/**
+ * Pulls one folder now, on its own connection, without waiting for a whole
+ * account pass. A move or a delete uses it to show a message in the folder it
+ * went to when the server did not say where it landed.
+ *
+ * It does nothing when the account is already syncing, because that run is
+ * either about to reach the folder or has just left it, and a second connection
+ * to the same server is how an account gets locked out. A failure is returned
+ * to the caller to ignore: the message is already where it was moved to.
+ */
+export async function syncOneFolder(accountId: string, folderId: string, db: Db = getDb()): Promise<void> {
+	if (running.has(accountId) || paused()) return;
+	const account = await accounts.get(accountId, db);
+	if (!account) return;
+	const folder = db.select().from(mailFolders).where(eq(mailFolders.id, folderId)).get();
+	if (!folder || folder.accountId !== accountId || folder.deletedAt || !folder.syncEnabled) return;
+
+	running.add(accountId);
+	const progress: MailSyncStatus = { ...idle(accountId), phase: "headers", startedAt: now() };
+	let source: MailboxSource | null = null;
+	try {
+		const details = accounts.connectionFor(accountId, db);
+		source = await openMailbox(details);
+		await syncFolder(db, source, account, folder, progress);
+		publish({ ...progress, phase: "done", folderPath: null, finishedAt: now() });
+	} finally {
+		running.delete(accountId);
+		await source?.close().catch(() => undefined);
+	}
+}
+
 /** Every enabled account, one after another. Two servers at once is fine; one server twice is not. */
 export async function syncAll(db: Db = getDb()): Promise<MailSyncStatus[]> {
 	const all = await accounts.list(db);

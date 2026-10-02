@@ -316,7 +316,7 @@ describe("archiving", () => {
 		expect(liveMessage(messageId)?.folderId).toBe(folderIdOf("archive"));
 	});
 
-	it("forgets the row when the server does not say where it landed", async () => {
+	it("pulls the destination at once when the server does not say where it landed", async () => {
 		box.reportsNewUids = false;
 		const { threadId, messageId } = await syncedThread();
 
@@ -325,9 +325,16 @@ describe("archiving", () => {
 		expect(result.moved).toBe(1);
 		expect(result.remembered).toBe(0);
 		expect(box.messages.get("Archive")).toHaveLength(1);
-		// Gone from here rather than pointing at a uid Juno cannot know. The next
-		// sync of Archive finds it again.
+		// The old row is gone rather than pointing at a uid Juno cannot know, and
+		// the message is already in Archive under its new uid. Nobody has to sync.
 		expect(liveMessage(messageId)).toBeUndefined();
+		const inArchive = db
+			.select()
+			.from(mailMessages)
+			.where(and(eq(mailMessages.folderId, folderIdOf("archive")), isNull(mailMessages.deletedAt)))
+			.all();
+		expect(inArchive).toHaveLength(1);
+		expect(inArchive[0]!.uid).toBe(box.messages.get("Archive")![0]!.uid);
 	});
 
 	it("makes the archive folder when the account has none", async () => {

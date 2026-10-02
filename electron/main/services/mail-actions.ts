@@ -16,9 +16,10 @@
  * - A server with UIDPLUS answers the MOVE with the new uid, so the local row
  *   is repointed at the destination folder and shows up there immediately.
  * - A server without it says nothing, so the local row is forgotten and the
- *   next sync of the destination folder finds the message again. Until then it
- *   is out of the folder it left, which is what was asked for, and absent from
- *   the one it went to, which is the honest reading of "Juno does not know".
+ *   destination folder is pulled straight away, which finds the message under
+ *   its new uid. If that pull fails the message is out of the folder it left,
+ *   which is what was asked for, and shows in the one it went to at the next
+ *   sync.
  *
  * Deleting for good is the one call that destroys something. It is confirmed by
  * a person in the window, or parked for approval when an agent asks, and it
@@ -30,6 +31,7 @@ import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { mailFolders, mailMessages, mailThreads } from "../db/schema";
 import { ensureSpecialFolder } from "./mail-folders";
+import { syncOneFolder } from "./mail-sync";
 import { refreshFolderCounts } from "./mail-store";
 import { withWriter } from "./mail-writer";
 
@@ -262,6 +264,12 @@ export async function move(
 
 		refreshFolderCounts(db, group.folder.id);
 		refreshFolderCounts(db, destination.id);
+
+		// Some of these have no row in the destination yet. Pull it now, so a
+		// moved message is there when the list reloads and not at the next sync.
+		if (group.messages.some((message) => !uidMap.has(message.uid))) {
+			await syncOneFolder(group.accountId, destination.id, db).catch(() => undefined);
+		}
 	}
 
 	tidyEmptyThreads(db, [...new Set(rows.map((row) => row.message.threadId))]);

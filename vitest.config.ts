@@ -13,5 +13,8 @@ export default defineConfig({
 		// runs every test twice and fails on require("vitest").
 		exclude: ["node_modules/**", "dist/**", "dist-electron/**", "release/**"],
 		environment: "node",
+		// The first PDF import of a file loads pdf.js, which alone takes a few seconds
+		// on a busy machine. The 5 s default failed good runs on a loaded CI runner.
+		testTimeout: 15_000,
 	},
 });

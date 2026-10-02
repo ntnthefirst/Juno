@@ -44,7 +44,7 @@ Lowercase, dot separated, the domain matching the service file name.
 | `clients.create` | `clients.new` | Verbs, not adjectives |
 | `documents.render_preview` | `documents.preview` | Say what it does; snake_case inside a segment |
 | `mail.list_messages` | `mail.get` | Get what? |
-| `mail.write_message` | `mail.draft` | Explicit about the object |
+| `mail.send_message` | `mail.send` | Explicit about the object |
 
 Use the same verb across domains for the same shape of operation: `list`, `get`,
 `create`, `update`, `archive`, `search`. An agent that learns `clients.list`
@@ -84,7 +84,7 @@ Every tool declares which it is. There is no third category and no default.
 speculatively, safe to retry, safe to call in a loop.
 
 **Side-effectful** writes, sends or produces a file. `clients.create`,
-`reminders.complete`, `documents.render`, `mail.draft`.
+`reminders.complete`, `documents.render`, `mail.send`.
 
 Careful with the ones that look read-only:
 

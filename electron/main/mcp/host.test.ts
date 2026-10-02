@@ -27,7 +27,7 @@ beforeEach(() => {
 	openDb(":memory:");
 	runMigrations(getConnection(), migrations);
 	actions.resetForTests();
-	actions.configureAgentActions((tool, args) => executeApproved(tool, args));
+	actions.configureAgentActions((tool, args, seal) => executeApproved(tool, args, seal));
 });
 
 afterEach(() => {
@@ -119,12 +119,18 @@ describe("calling a tool", () => {
 });
 
 describe("sending", () => {
-	it("is not something an agent can ask for: no tool sends, queues, approves or retries", () => {
-		const names = listTools().map((tool) => tool.name);
-		expect(names.filter((name) => /send|queue|approve|retry/i.test(name))).toEqual([]);
-		expect(names).toContain("mail.draft");
-		expect(names).toContain("mail.reply");
-		expect(names).toContain("mail.draft_from_template");
+	it("can only be asked for as a draft or a template, and both wait for a person", () => {
+		const sends = listTools().filter((tool) => /send|queue|approve|retry/i.test(tool.name));
+		expect(sends.map((tool) => tool.name).sort()).toEqual(["mail.send", "mail.send_from_template"]);
+		// Both are confirmed, so neither runs when it is called.
+		expect(sends.every((tool) => tool.requiresConfirmation)).toBe(true);
+		// A template is never a draft.
+		expect(listTools().map((tool) => tool.name)).not.toContain("mail.draft_from_template");
+	});
+
+	it("refuses at once a send that could never go, instead of parking a dead request", async () => {
+		await expect(callTool("mail.send", { id: "nope" })).rejects.toThrow(/does not exist/);
+		expect(await actions.list({})).toHaveLength(0);
 	});
 });
 
@@ -145,7 +151,7 @@ describe("what the declarations promise", () => {
 					!localOnly.has(tool.name),
 			)
 			.map((tool) => tool.name);
-		expect(unguarded).toEqual(["mail.draft", "mail.draft_from_template", "mail.reply"]);
+		expect(unguarded).toEqual(["mail.draft", "mail.reply"]);
 	});
 
 	it("has no tool that unlocks Juno or approves an action", () => {

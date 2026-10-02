@@ -73,15 +73,17 @@ the registration. There is no third category.
 **signs, deletes or files something**: `documents.sign`, `documents.file`,
 `clients.delete`, `calendar.create_event` when it invites someone.
 
-**Sending mail is not on this list because an agent cannot do it** (decision 43).
-It writes drafts (`mail.draft`, `mail.reply`, `mail.draft_from_template`), the
-window opens the draft in the editor, and a person presses Send. Do not add a
-tool that sends, asks to send, queues, approves or retries a send. The host test
-fails if one is named like that.
+**Sending mail is on this list, in exactly two shapes** (decision 44). An agent
+writes drafts (`mail.draft`, `mail.reply`), which open in the editor, and asks to
+send one with `mail.send`, or asks to send a template with
+`mail.send_from_template`. A template is never a draft. Both park in the Agent
+tab with the whole message as a preview, and nothing shows in the mail screen.
+Do not add a tool that queues or retries a send, or a way to send that is
+neither a draft nor a template. The host test names the two that exist.
 
 The rule, and it does not bend:
 
-> A tool that signs, deletes or files something requires explicit
+> A tool that sends, signs, deletes or files something requires explicit
 > confirmation from the user in the app before it executes, and must never fire
 > unattended. Not on a timer, not as a step inside an automation, not because the
 > agent is confident.

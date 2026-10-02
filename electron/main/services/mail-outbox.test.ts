@@ -229,6 +229,29 @@ describe("the gate", () => {
 		}
 	});
 
+	it("shows an agent's request to send the whole message, and refuses it if the draft changed", async () => {
+		const id = await draft();
+		const review = await outbox.reviewForSend(id, db);
+		expect(review.summary).toBe('Send "Offerte" to laura@obet.be');
+		expect(review.preview).toContain("From: Nathan <hallo@juno.test>");
+		expect(review.preview).toContain("Subject: Offerte");
+		expect(review.preview).toContain("Hallo.");
+		// Reviewing sends nothing and changes nothing.
+		expect((await outbox.get(id, db))!.state).toBe("draft");
+		expect(await sender.processQueue(db)).toBe(0);
+
+		await outbox.verifyDraftUnchanged(id, review.seal, db);
+		await outbox.updateDraft(id, { bodyText: "Iets heel anders." }, db);
+		await expect(outbox.verifyDraftUnchanged(id, review.seal, db)).rejects.toThrow(/changed after it was asked for/);
+		await expect(outbox.verifyDraftUnchanged(id, null, db)).rejects.toThrow(/changed after it was asked for/);
+	});
+
+	it("refuses to review a draft that could not be sent", async () => {
+		const empty = await outbox.createDraft({ accountId, to: [], subject: "x", bodyText: "x" }, db);
+		await expect(outbox.reviewForSend(empty.id, db)).rejects.toThrow(/nobody in To/);
+		await expect(outbox.reviewForSend("nope", db)).rejects.toThrow(/does not exist/);
+	});
+
 	it("turns an edited pending message from an older version back into a draft", async () => {
 		const id = await draft();
 		db.update(mailOutbox).set({ state: "pending", requestedBy: "agent" }).where(eq(mailOutbox.id, id)).run();
@@ -467,25 +490,30 @@ describe("templates", () => {
 		expect((await outbox.list({ states: ["draft"] }, db)).length).toBe(before);
 	});
 
-	it("lets an agent fill a template into a draft for the editor, never into a send", async () => {
+	it("reviews a template for an agent's request without keeping anything", async () => {
 		const plain = await templates.create({ name: "Groet", subject: "Dag", bodyHtml: "<p>Beste Laura, tot snel.</p>" }, db);
-		const offered: string[] = [];
-		const off = outbox.onAgentDraft((message) => offered.push(message.id));
-		try {
-			const made = await outbox.draftFromTemplate(
-				{ accountId, to: [{ name: null, address: "laura@obet.be" }], templateId: plain.id },
-				db,
-			);
-			expect(made.state).toBe("draft");
-			expect(made.requestedBy).toBe("agent");
-			expect(made.bodyText).toContain("Beste Laura");
-			// The draft is the finished message, not a link back to the template.
-			expect(made.templateId).toBeNull();
-			expect(offered).toEqual([made.id]);
-			expect(await sender.processQueue(db)).toBe(0);
-		} finally {
-			off();
-		}
+		const input = { accountId, to: [{ name: "Laura", address: "laura@obet.be" }], templateId: plain.id };
+		const before = (await outbox.list({}, db)).length;
+
+		const review = await outbox.reviewTemplateSend(input, db);
+		expect(review.summary).toBe('Send "Dag" to Laura');
+		expect(review.preview).toContain("From: Nathan <hallo@juno.test>");
+		expect(review.preview).toContain("To: Laura <laura@obet.be>");
+		expect(review.preview).toContain("Subject: Dag");
+		expect(review.preview).toContain("Beste Laura, tot snel.");
+		// Nothing was written: a template is never a draft.
+		expect((await outbox.list({}, db)).length).toBe(before);
+
+		await outbox.verifyTemplateUnchanged(input, review.seal, db);
+		await templates.update(plain.id, { bodyHtml: "<p>Beste Laura, tot later.</p>" }, db);
+		await expect(outbox.verifyTemplateUnchanged(input, review.seal, db)).rejects.toThrow(/something different/);
+	});
+
+	it("refuses to review a template send that could not go", async () => {
+		const cover = await coverTemplate();
+		const input = { accountId, to: [{ name: null, address: "laura@obet.be" }], templateId: cover.id };
+		await expect(outbox.reviewTemplateSend({ ...input, to: [] }, db)).rejects.toThrow(/nobody in To/);
+		await expect(outbox.reviewTemplateSend(input, db)).rejects.toThrow(/placeholder without a value/);
 	});
 
 	it("does not save a template as a draft", async () => {

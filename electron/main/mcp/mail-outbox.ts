@@ -4,13 +4,16 @@ import * as templates from "../services/mail-templates";
 import type { ToolDescriptor } from "./types";
 
 /**
- * Writing tools. An agent writes mail and a person sends it.
+ * Writing and sending tools.
  *
- * Every tool here that makes a message makes a draft, and the draft opens in the
- * editor in the window the way one a person started would. There is no tool
- * that sends, asks to send, queues, approves or retries a send, and there will
- * not be one: pressing Send in the editor is the only way a message reaches the
- * queue (.claude/rules/mcp.md section 4).
+ * An agent can send mail in exactly two ways: a draft it wrote (`mail.send`) or
+ * a template (`mail.send_from_template`). A template is never a draft, so it is
+ * filled and sent in one step. Neither runs when it is called. The request is
+ * parked under Agent with the whole message as a preview, nothing shows up in
+ * the mail screen, and a person approves or rejects it there
+ * (.claude/rules/mcp.md section 4). There is no tool that approves.
+ *
+ * The drafts an agent writes open in the editor like ones a person started.
  *
  * Read receipts and tracking are permanently out of scope, so there is nothing
  * here that could ask for one.
@@ -38,6 +41,20 @@ const ADDRESS_LIST = {
 		additionalProperties: false,
 	},
 };
+
+function templateInput(args: Record<string, unknown>): MailTemplateSendInput {
+	return {
+		accountId: String(args.account_id),
+		templateId: String(args.template_id),
+		to: addresses(args.to),
+		cc: addresses(args.cc),
+		bcc: addresses(args.bcc),
+		clientId: (args.client_id as string | null) ?? null,
+		projectId: (args.project_id as string | null) ?? null,
+		...(args.extras && typeof args.extras === "object" ? { extras: args.extras as Record<string, string> } : {}),
+		documentIds: Array.isArray(args.document_ids) ? args.document_ids.map(String) : [],
+	};
+}
 
 function addresses(value: unknown): MailAddress[] {
 	if (!Array.isArray(value)) return [];
@@ -124,7 +141,7 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		description:
 			"Fills a template against a client and project and returns the subject, the HTML body " +
 			"in the house style and its text twin, plus the placeholders that had no value. Stores " +
-			"nothing: a check before mail.draft_from_template.",
+			"nothing: a check before mail.send_from_template.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -333,12 +350,12 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		name: "mail.draft",
 		title: "Write a draft",
 		description:
-			"Writes a plain draft and opens it in the editor for a person, who reads it and presses " +
-			"Send. Nothing is sent and nothing here can send it. The text is turned into HTML in the " +
-			"house style. Use it for a new mail. To answer a received message use mail.reply, which " +
-			"works out the recipients, subject and quote itself; reply_to_message_id here only " +
-			"threads a draft whose addresses you chose. To start from a template use " +
-			"mail.draft_from_template. document_ids attach PDFs.",
+			"Writes a plain draft and opens it in the editor for a person. Nothing is sent. The text is " +
+			"turned into HTML in the house style. Use it for a new mail. To answer a received message " +
+			"use mail.reply, which works out the recipients, subject and quote itself; " +
+			"reply_to_message_id here only threads a draft whose addresses you chose. To send the " +
+			"draft ask with mail.send. A template is never a draft: use mail.send_from_template. " +
+			"document_ids attach PDFs.",
 		readOnly: false,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -385,8 +402,8 @@ export const mailOutboxTools: ToolDescriptor[] = [
 			"the thread first with mail.threads.get and mail.messages.body, then pass the id of the " +
 			"message you are answering. body_text is plain text, never HTML, and only your part: do " +
 			"not repeat the quote. mode reply_all keeps everyone on the original, and forward needs " +
-			"a to. It writes a draft and opens it in the editor for a person, who reads it and presses " +
-			"Send. Nothing is sent and nothing here can send it.",
+			"a to. It writes a draft and opens it in the editor for a person. Nothing is sent: to send " +
+			"it ask with mail.send.",
 		readOnly: false,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -420,17 +437,19 @@ export const mailOutboxTools: ToolDescriptor[] = [
 			}),
 	},
 	{
-		name: "mail.draft_from_template",
-		title: "Write a draft from a template",
+		name: "mail.send_from_template",
+		title: "Ask to send a mail from a template",
 		description:
-			"Fills a mail template for a client and project and writes the result as a draft, opened in " +
-			"the editor for a person, who reads it and presses Send. Nothing is sent and nothing here " +
-			"can send it. The draft is the finished message, not a template, so it can be edited " +
-			"freely. It starts a new message and cannot be a reply or a forward; for those use " +
-			"mail.reply. Check the result with mail.templates.render first when values may be " +
-			"missing: a placeholder without a value stays visible in the draft and blocks sending.",
+			"Fills a mail template for a client and project and asks to send it as a new message, in " +
+			"one step. It does not send: the request waits under Agent in Juno, where a person reads " +
+			"the whole filled message and approves or rejects it, and nothing appears in the mail " +
+			"screen. A template is never saved as a draft and cannot be used for a reply or a " +
+			"forward; for those write a draft with mail.reply and ask with mail.send. A request that " +
+			"could not be sent, such as a placeholder without a value or a recipient missing, is " +
+			"refused at once. Check the result with mail.templates.render first when values may be " +
+			"missing. Returns pending.",
 		readOnly: false,
-		requiresConfirmation: false,
+		requiresConfirmation: true,
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -452,22 +471,31 @@ export const mailOutboxTools: ToolDescriptor[] = [
 			required: ["account_id", "template_id", "to"],
 			additionalProperties: false,
 		},
-		handler: async (args) => {
-			const input: MailTemplateSendInput = {
-				accountId: String(args.account_id),
-				templateId: String(args.template_id),
-				to: addresses(args.to),
-				cc: addresses(args.cc),
-				bcc: addresses(args.bcc),
-				clientId: (args.client_id as string | null) ?? null,
-				projectId: (args.project_id as string | null) ?? null,
-				...(args.extras && typeof args.extras === "object"
-					? { extras: args.extras as Record<string, string> }
-					: {}),
-				documentIds: Array.isArray(args.document_ids) ? args.document_ids.map(String) : [],
-			};
-			return outbox.draftFromTemplate(input);
+		prepare: (args) => outbox.reviewTemplateSend(templateInput(args)),
+		verify: (args, seal) => outbox.verifyTemplateUnchanged(templateInput(args), seal),
+		handler: async (args) => outbox.sendFromTemplate(templateInput(args)),
+	},
+	{
+		name: "mail.send",
+		title: "Ask to send a draft",
+		description:
+			"Asks for a draft to be sent. It does not send: the request waits under Agent in Juno, " +
+			"where a person reads the whole message and approves or rejects it, and nothing appears " +
+			"in the mail screen. The draft has to be complete (a recipient, a subject, some text or " +
+			"an attachment) or the request is refused at once. If the draft is edited after you ask, " +
+			"the approval is refused and you have to ask again. Returns pending. A template is not a " +
+			"draft: use mail.send_from_template.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string", description: "A draft's id, from mail.draft or mail.outbox.list." } },
+			required: ["id"],
+			additionalProperties: false,
 		},
+		prepare: (args) => outbox.reviewForSend(String(args.id)),
+		verify: (args, seal) => outbox.verifyDraftUnchanged(String(args.id), seal),
+		handler: async (args) => outbox.requestSend(String(args.id)),
 	},
 	{
 		name: "mail.outbox.cancel",

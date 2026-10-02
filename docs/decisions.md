@@ -1313,6 +1313,9 @@ address, not by a second server.
 
 ## 43. An agent writes mail and a person sends it
 
+**Amended by decision 44.** The writing half stands: an agent's drafts open in
+the editor. The half that said an agent cannot ask to send at all was reversed.
+
 Decision 22 let an agent ask to send: `mail.send` parked a draft in `pending`
 and the window showed a banner to approve or reject it. It was the right gate
 and the wrong experience. A person wanted the message in front of them as if
@@ -1344,3 +1347,33 @@ What follows from it:
 **What would reverse this:** a reason for mail to leave without a person
 looking at the finished message. Nothing in the product has asked for that, and
 decision 9 and the confirmation rule both argue against it.
+
+## 44. An agent sends a draft or a template, and a person approves it under Agent
+
+Decision 43 took sending away from the agent altogether. That went further than
+the problem. What was wrong with decision 22 was where the approval lived: a
+banner in the mail screen. What was right was that a person sees the real message
+and decides. So an agent may send, in exactly two ways, and the approval is the
+same one every other confirmed tool has, in the Agent tab.
+
+- `mail.send` asks to send a draft the agent wrote. `mail.send_from_template`
+  fills a template and asks to send it. Neither runs when called. Each parks in
+  `agent_actions` like any confirmed tool, and nothing appears in the mail
+  screen.
+- A template is never a draft. It is filled and sent in one step, as decision 22
+  said, and `draftFromTemplate` is gone again.
+- The Agent tab shows the whole message, not an id. A tool that needs more than
+  its arguments to be approved declares `prepare`, which builds that text when
+  the call is made, and `verify`, which checks at approval that it is still what
+  would run. Both are written down on the action (`preview`, `seal`).
+- `prepare` also refuses a send that could never go (no recipient, a
+  placeholder with no value, no outgoing server), so the agent learns that at
+  once and no dead request waits for a person.
+- The seal is the draft's last change, or a fingerprint of what the template says
+  now. Edit the draft or the record after the request and the approval is
+  refused: the text that was read is not the text that would go.
+- The outbox has no `pending` banner and nothing writes `pending` any more. An
+  older row in that state opens in the editor as a draft.
+
+**What would reverse this:** an agent that has to send without a person reading
+the message. Nothing in the product has asked for that.

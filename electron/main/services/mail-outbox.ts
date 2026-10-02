@@ -13,6 +13,7 @@
  * Decision 9 still holds here: an invoice nudge carries a title and an amount
  * typed by the owner, and Juno never numbers or issues one.
  */
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type {
 	MailAddress,
@@ -654,16 +655,6 @@ export async function sendFromTemplate(input: MailTemplateSendInput, db: Db = ge
 	}
 }
 
-/**
- * The agent's way to use a template: the filled message is written as a plain
- * draft and opened in the editor, where a person reads it and presses Send.
- * The template is not kept on the draft, so what is in the editor is the whole
- * message and editing it never re-renders the template over the changes.
- */
-export async function draftFromTemplate(input: MailTemplateSendInput, db: Db = getDb()): Promise<MailOutboxMessage> {
-	return insertDraft({ ...(await draftOf(input, db)), actor: "agent" }, db);
-}
-
 export async function updateDraft(id: string, patch: MailDraftPatch, db: Db = getDb()): Promise<MailOutboxMessage> {
 	const row = requireRow(id, db);
 	if (row.state !== "draft" && row.state !== "failed" && row.state !== "pending") {
@@ -750,6 +741,160 @@ function validateSendable(row: Row, account: typeof mailAccounts.$inferSelect, a
 	}
 	if (!account.smtpHost) {
 		throw new Error(`${account.email} has no outgoing server. Add one in account settings.`);
+	}
+}
+
+/** What an agent's request to send is shown as, in the Agent tab: the message as it would go out. */
+export interface SendReview {
+	summary: string;
+	preview: string;
+	/** What the preview was built from, checked again when a person approves. */
+	seal: string;
+}
+
+const PREVIEW_BODY_MAX = 6000;
+
+function describeAddresses(list: MailAddress[]): string {
+	return list.map((a) => (a.name ? `${a.name} <${a.address}>` : a.address)).join(", ");
+}
+
+function messagePreview(parts: {
+	from: string;
+	to: MailAddress[];
+	cc: MailAddress[];
+	bcc: MailAddress[];
+	subject: string;
+	attachments: string[];
+	bodyText: string;
+}): string {
+	const lines = [`From: ${parts.from}`, `To: ${describeAddresses(parts.to)}`];
+	if (parts.cc.length > 0) lines.push(`Cc: ${describeAddresses(parts.cc)}`);
+	if (parts.bcc.length > 0) lines.push(`Bcc: ${describeAddresses(parts.bcc)}`);
+	lines.push(`Subject: ${parts.subject}`);
+	if (parts.attachments.length > 0) lines.push(`Attached: ${parts.attachments.join(", ")}`);
+	const body = parts.bodyText.trim();
+	lines.push("", body.length > PREVIEW_BODY_MAX ? `${body.slice(0, PREVIEW_BODY_MAX)}\n[cut here, the message is longer]` : body);
+	return lines.join("\n");
+}
+
+function summaryOf(subject: string, to: MailAddress[]): string {
+	const first = to[0];
+	const who = first ? (first.name ?? first.address) : "nobody";
+	return `Send "${subject}" to ${who}${to.length > 1 ? ` and ${to.length - 1} more` : ""}`;
+}
+
+/**
+ * What a person reads before approving an agent's request to send this draft,
+ * and the refusal when it could not be sent anyway. The seal is the draft's
+ * last change: if it moves before they approve, the request is refused,
+ * because the text they read is not the text that would go.
+ */
+export async function reviewForSend(id: string, db: Db = getDb()): Promise<SendReview> {
+	const row = requireRow(id, db);
+	if (row.state !== "draft" && row.state !== "failed" && row.state !== "pending") {
+		throw new Error(`A ${row.state} message cannot be sent again.`);
+	}
+	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, row.accountId)).get();
+	if (!account || account.deletedAt) throw new Error("The account this message belongs to no longer exists.");
+	validateSendable(row, account, attachmentCount(db, row.id));
+	const record = await requireRecord(id, db);
+	return {
+		summary: summaryOf(record.subject, record.to),
+		preview: messagePreview({
+			from: account.fromName ? `${account.fromName} <${account.email}>` : account.email,
+			to: record.to,
+			cc: record.cc,
+			bcc: record.bcc,
+			subject: record.subject,
+			attachments: record.attachments.map((a) => a.filename),
+			bodyText: record.bodyText,
+		}),
+		seal: row.updatedAt,
+	};
+}
+
+/** Refuses an approval of a draft that has been edited since it was asked for. */
+export async function verifyDraftUnchanged(id: string, seal: string | null, db: Db = getDb()): Promise<void> {
+	const row = requireRow(id, db);
+	if (seal === null || row.updatedAt !== seal) {
+		throw new Error("The draft was changed after it was asked for, so what was approved is not what would go. Ask again.");
+	}
+}
+
+function templateSeal(subject: string, bodyHtml: string): string {
+	return createHash("sha256").update(subject).update("\n").update(bodyHtml).digest("hex");
+}
+
+/**
+ * The same for a template: the message the template makes right now, for this
+ * client and project, which is what is sent if it is approved. Nothing is
+ * written; a template is never kept as a draft.
+ */
+export async function reviewTemplateSend(input: MailTemplateSendInput, db: Db = getDb()): Promise<SendReview> {
+	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, input.accountId)).get();
+	if (!account || account.deletedAt) throw new Error("That mail account does not exist.");
+	const to = cleanAddresses(input.to, "To");
+	const cc = cleanAddresses(input.cc, "Cc");
+	const bcc = cleanAddresses(input.bcc, "Bcc");
+	if (to.length === 0) throw new Error("The message has nobody in To.");
+	if (!account.smtpHost) throw new Error(`${account.email} has no outgoing server. Add one in account settings.`);
+
+	const rendered = await renderTemplate(
+		{
+			templateId: input.templateId,
+			clientId: input.clientId ?? null,
+			projectId: input.projectId ?? null,
+			...(input.extras ? { extras: input.extras } : {}),
+		},
+		db,
+	);
+	if (rendered.missing.length > 0) {
+		throw new Error(
+			`The template still has a placeholder without a value: ${rendered.missing.join(", ")}. Fill in the record or pass it in extras.`,
+		);
+	}
+	const attachments: string[] = [];
+	for (const documentId of new Set(input.documentIds ?? [])) {
+		const document = db
+			.select({ title: documents.title })
+			.from(documents)
+			.where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
+			.get();
+		if (!document) throw new Error("One of the documents to attach does not exist.");
+		attachments.push(`${document.title}.pdf`);
+	}
+	return {
+		summary: summaryOf(rendered.subject, to),
+		preview: messagePreview({
+			from: account.fromName ? `${account.fromName} <${account.email}>` : account.email,
+			to,
+			cc,
+			bcc,
+			subject: rendered.subject,
+			attachments,
+			bodyText: rendered.bodyText,
+		}),
+		seal: templateSeal(rendered.subject, rendered.bodyHtml),
+	};
+}
+
+/** Refuses an approval when the template, the client or the project changed what it would say. */
+export async function verifyTemplateUnchanged(
+	input: MailTemplateSendInput,
+	seal: string | null,
+	db: Db = getDb(),
+): Promise<void> {
+	const rendered = await renderTemplate(
+		{
+			templateId: input.templateId,
+			clientId: input.clientId ?? null,
+			projectId: input.projectId ?? null,
+			...(input.extras ? { extras: input.extras } : {}),
+		},
+		db,
+	);
+	if (seal === null || templateSeal(rendered.subject, rendered.bodyHtml) !== seal) {
+		throw new Error("The template now says something different from what was approved. Ask again.");
 	}
 }
 

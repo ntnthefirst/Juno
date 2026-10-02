@@ -498,6 +498,10 @@ export function DocumentDetail({
 						subject: record.title,
 					}}
 					onClose={() => setSending(false)}
+					onDeleted={() => {
+						setSending(false);
+						setNotice("Draft deleted.");
+					}}
 					onDone={(_message, queued) => {
 						setSending(false);
 						setNotice(queued ? "Message queued. Follow it in the mail outbox." : "Draft saved in the mail outbox.");

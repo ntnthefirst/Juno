@@ -26,6 +26,7 @@ export type ComposeSeed = {
 type ComposePageProps = {
 	seed: ComposeSeed;
 	onClose: () => void;
+	onDeleted: () => void;
 	onDone: (message: MailOutboxMessage, queued: boolean) => void;
 };
 
@@ -37,7 +38,7 @@ type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
  * form; this reads as a blank message the way a mail client's own compose
  * window does, on any size of screen.
  */
-export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
+export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePageProps) {
 	const [accounts, setAccounts] = useState<MailAccount[]>([]);
 	const [templates, setTemplates] = useState<MailTemplate[]>([]);
 	const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -59,7 +60,7 @@ export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
 	const [extras, setExtras] = useState<Record<string, string>>({});
 	const [missing, setMissing] = useState<string[]>([]);
 	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState<"send" | "render" | null>(null);
+	const [busy, setBusy] = useState<"send" | "render" | "delete" | null>(null);
 	const [templateApplied, setTemplateApplied] = useState(Boolean(seed.draft?.templateId));
 	const [savedMessage, setSavedMessage] = useState<MailOutboxMessage | null>(seed.draft ?? null);
 	const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -297,6 +298,24 @@ export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
 		}
 	}
 
+	async function handleDelete() {
+		const existing = savedMessageRef.current;
+		if (busy) return;
+		if (!existing) {
+			onDeleted();
+			return;
+		}
+		setBusy("delete");
+		setError(null);
+		try {
+			await window.juno.mail.outbox.remove(existing.id);
+			onDeleted();
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+			setBusy(null);
+		}
+	}
+
 	const handleClose = useCallback(async () => {
 		if (busy) return;
 		if (saveState === "pending") await persist(false);
@@ -382,13 +401,18 @@ export function ComposePage({ seed, onClose, onDone }: ComposePageProps) {
 									{statusLabel}
 								</span>
 							</div>
-							<Button
-								variant="primary"
-								disabled={busy !== null || !canSend}
-								onClick={() => void handleSend()}
-							>
-								{busy === "send" ? "Sending" : "Send"}
-							</Button>
+							<div className="flex gap-2">
+								<Button variant="danger" disabled={busy !== null} onClick={() => void handleDelete()}>
+									Delete
+								</Button>
+								<Button
+									variant="primary"
+									disabled={busy !== null || !canSend}
+									onClick={() => void handleSend()}
+								>
+									{busy === "send" ? "Sending" : "Send"}
+								</Button>
+							</div>
 						</div>
 					</div>
 					{showCopies ? (

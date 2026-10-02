@@ -334,8 +334,9 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		title: "Write a draft",
 		description:
 			"Creates a plain draft in the outbox. Nothing is sent. The text is turned into HTML in the " +
-			"house style. Use it for a new mail and for a reply or a forward: reply_to_message_id " +
-			"threads it under a received message. Templates are not used here, and a template is " +
+			"house style. Use it for a new mail. To answer a received message use mail.reply, which " +
+			"works out the recipients, subject and quote itself; reply_to_message_id here only " +
+			"threads a draft whose addresses you chose. Templates are not used here, and a template is " +
 			"never saved as a draft: use mail.send_from_template. document_ids attach PDFs.",
 		readOnly: false,
 		requiresConfirmation: false,
@@ -373,13 +374,55 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		},
 	},
 	{
+		name: "mail.reply",
+		title: "Reply to a message",
+		description:
+			"Writes a reply to a received message the way the Reply button does, from the new text " +
+			"alone. Juno works out the recipients (the sender, or Reply-To), the Re: subject, the " +
+			"threading headers and the client, and puts the original quoted under your text. Read " +
+			"the thread first with mail.threads.get and mail.messages.body, then pass the id of the " +
+			"message you are answering. body_text is plain text, never HTML, and only your part: do " +
+			"not repeat the quote. mode reply_all keeps everyone on the original, and forward needs " +
+			"a to. Nothing is sent: it returns a draft, and mail.send asks a person to approve it.",
+		readOnly: false,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				message_id: { type: "string", description: "A mail.messages id, the message being answered." },
+				body_text: { type: "string", description: "The new text, plain, without the quoted original." },
+				mode: { type: "string", enum: ["reply", "reply_all", "forward"], description: "Default reply." },
+				to: { ...ADDRESS_LIST, description: "Only to replace the worked-out recipients. Required for a forward." },
+				cc: { ...ADDRESS_LIST, description: "Only to replace the worked-out Cc." },
+				bcc: ADDRESS_LIST,
+				include_quote: { type: "boolean", description: "Default true." },
+				document_ids: { type: "array", items: { type: "string" } },
+			},
+			required: ["message_id", "body_text"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			outbox.createReply({
+				messageId: String(args.message_id),
+				bodyText: String(args.body_text),
+				...(args.mode === "reply" || args.mode === "reply_all" || args.mode === "forward"
+					? { mode: args.mode }
+					: {}),
+				...(args.to !== undefined ? { to: addresses(args.to) } : {}),
+				...(args.cc !== undefined ? { cc: addresses(args.cc) } : {}),
+				...(args.bcc !== undefined ? { bcc: addresses(args.bcc) } : {}),
+				...(args.include_quote !== undefined ? { includeQuote: Boolean(args.include_quote) } : {}),
+				documentIds: Array.isArray(args.document_ids) ? args.document_ids.map(String) : [],
+			}),
+	},
+	{
 		name: "mail.send_from_template",
 		title: "Ask to send a mail from a template",
 		description:
 			"Fills a mail template for a client and project and asks to send it as a new message, in " +
 			"one step. It does not send: the filled message becomes pending and a person approves or " +
 			"rejects it in the app, seeing the whole message. A template is never saved as a draft " +
-			"and cannot be used for a reply or a forward; for those use mail.draft. Check the result " +
+			"and cannot be used for a reply or a forward; for those use mail.reply. Check the result " +
 			"with mail.templates.render first when values may be missing, because a placeholder " +
 			"without a value is refused. Returns the message in its pending state.",
 		readOnly: false,

@@ -3516,9 +3516,9 @@ if (!app.requestSingleInstanceLock()) {
 									if (switched !== "ok") throw new Error(`Smoke: calendar week view ${switched}`);
 								}
 								if (screen === "Drafts") {
-									// A draft with a picture at a web address: the frame draws a
-									// box for it and the composer parks it, so the window fetches
-									// nothing, and saving from the composer puts the address back.
+									// A draft with a picture at a web address opens in the composer,
+									// which parks it so the window fetches nothing, and saving from
+									// the composer puts the address back.
 									const pictured = await window.webContents.executeJavaScript(
 										`(async () => {
 											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Drafts"));
@@ -3534,13 +3534,6 @@ if (!app.requestSingleInstanceLock()) {
 											if (!row) return "no draft with a picture";
 											row.click();
 											await new Promise((r) => setTimeout(r, 600));
-											const frame = document.querySelector("iframe[title='Message as it will be sent']");
-											if (!frame) return "no frame";
-											const doc = frame.getAttribute("srcdoc") || "";
-											if (/<img[^>]*https:/.test(doc) || !doc.includes("data-juno-remote-image")) return "the frame loads the picture: " + doc.slice(0, 200);
-											const edit = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit button";
-											edit.click();
 											await new Promise((r) => setTimeout(r, 900));
 											const host = document.querySelector("[contenteditable][aria-label=Message]");
 											if (!host) return "no editor";

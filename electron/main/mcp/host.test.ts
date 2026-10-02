@@ -154,7 +154,7 @@ describe("what the declarations promise", () => {
 					!localOnly.has(tool.name),
 			)
 			.map((tool) => tool.name);
-		expect(unguarded).toEqual(["mail.draft"]);
+		expect(unguarded).toEqual(["mail.draft", "mail.reply"]);
 	});
 
 	it("has no tool that unlocks Juno or approves an action", () => {

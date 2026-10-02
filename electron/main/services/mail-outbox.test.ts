@@ -376,6 +376,47 @@ describe("replies", () => {
 	});
 });
 
+describe("createReply", () => {
+	it("makes a threaded draft from the text alone, with the original quoted under it", async () => {
+		const originalId = storeOriginal(db);
+		const draft = await outbox.createReply({ messageId: originalId, bodyText: "Zeker, ik kijk ernaar." }, db);
+
+		expect(draft.state).toBe("draft");
+		expect(draft.to).toEqual([{ name: "Laura", address: "laura@obet.be" }]);
+		expect(draft.subject).toBe("Re: Offerte");
+		expect(draft.inReplyTo).toBe("<orig@obet.be>");
+		expect(draft.threadId).not.toBeNull();
+		expect(draft.bodyText.startsWith("Zeker, ik kijk ernaar.\n\nOp ")).toBe(true);
+		expect(draft.bodyText).toContain("> Kunnen we de offerte bekijken?");
+		expect(draft.bodyHtml).toContain("<blockquote");
+	});
+
+	it("answers everyone on reply-all, and leaves the quote out when asked", async () => {
+		const originalId = storeOriginal(db);
+		const draft = await outbox.createReply(
+			{ messageId: originalId, mode: "reply_all", bodyText: "Akkoord.", includeQuote: false },
+			db,
+		);
+		expect(draft.to.map((a) => a.address)).toEqual(["laura@obet.be", "tom@obet.be"]);
+		expect(draft.cc.map((a) => a.address)).toEqual(["cc@elders.be"]);
+		expect(draft.bodyText).toBe("Akkoord.");
+	});
+
+	it("refuses an empty reply and a forward with nobody to send it to", async () => {
+		const originalId = storeOriginal(db);
+		await expect(outbox.createReply({ messageId: originalId, bodyText: "  " }, db)).rejects.toThrow(/needs some text/);
+		await expect(
+			outbox.createReply({ messageId: originalId, mode: "forward", bodyText: "Zie hieronder." }, db),
+		).rejects.toThrow(/needs a recipient/);
+		const forward = await outbox.createReply(
+			{ messageId: originalId, mode: "forward", bodyText: "Zie hieronder.", to: [{ address: "an@elders.be" }] },
+			db,
+		);
+		expect(forward.subject).toBe("Fw: Offerte");
+		expect(forward.inReplyTo).toBeNull();
+	});
+});
+
 describe("templates", () => {
 	it("renders a template in Dutch against a client", async () => {
 		const client = await clientsService.create({ name: "obet" }, db);

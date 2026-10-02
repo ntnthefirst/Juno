@@ -629,6 +629,12 @@ export function MailScreen() {
 			<ComposePage
 				seed={compose}
 				onClose={() => setCompose(null)}
+				onDeleted={() => {
+					setCompose(null);
+					setNotice("Draft deleted.");
+					setOutboxVersion((v) => v + 1);
+					setOpened(null);
+				}}
 				onDone={(message, queued) => {
 					setCompose(null);
 					setNotice(queued ? "Message queued." : "Draft saved.");
@@ -780,7 +786,13 @@ export function MailScreen() {
 											outbox: {
 												messages: outboxRows,
 												selectedId: selectedOutboxId,
-												onSelect: (id: string) => setOpened({ kind: "outbox", id }),
+												onSelect: (id: string) => {
+													// A draft has nothing to read before it is edited, so it opens
+													// in the editor. The rest still show their state.
+													const row = outboxRows?.find((m) => m.id === id);
+													if (row?.state === "draft") setCompose({ draft: row });
+													else setOpened({ kind: "outbox", id });
+												},
 											},
 										}
 									: {})}

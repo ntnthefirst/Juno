@@ -8,6 +8,8 @@ import type {
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
+import { Icon } from "../../components/Icon";
+import { IconAction } from "../../components/IconAction";
 import { StatusBadge } from "../../components/StatusBadge";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
@@ -22,6 +24,8 @@ export function ReferenceSection() {
 	const [sets, setSets] = useState<ReferenceSetWithItems[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [pending, setPending] = useState<Pending | null>(null);
+	// One set at a time. Four lists under each other was the whole page.
+	const [selected, setSelected] = useState<ReferenceSetKey | null>(null);
 
 	const refresh = useCallback(async () => {
 		try {
@@ -66,6 +70,8 @@ export function ReferenceSection() {
 		}
 	}
 
+	const current = sets?.find((entry) => entry.set.key === selected) ?? sets?.[0] ?? null;
+
 	return (
 		<Section
 			title="Statuses and labels"
@@ -84,25 +90,20 @@ export function ReferenceSection() {
 			{sets === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : (
-				<div className="flex flex-col gap-10">
-					{sets.map((entry) => (
+				<div>
+					<SetPicker sets={sets} selected={current?.set.key ?? null} onSelect={setSelected} />
+					{current ? (
 						<SetEditor
-							key={entry.set.id}
-							entry={entry}
+							key={current.set.id}
+							entry={current}
 							onHide={(item) => void askToHide(item)}
 							onUnhide={(item) => void run(() => window.juno.reference.unhideItem(item.id))}
 							onRename={(item) => setPending({ kind: "rename", item })}
-							onAdd={() =>
-								setPending({ kind: "add", setId: entry.set.id, label: entry.set.label })
-							}
-							onReorder={(ordered) =>
-								void run(() => window.juno.reference.reorder(entry.set.id, ordered))
-							}
-							onReset={() =>
-								setPending({ kind: "reset", setKey: entry.set.key, label: entry.set.label })
-							}
+							onAdd={() => setPending({ kind: "add", setId: current.set.id, label: current.set.label })}
+							onReorder={(ordered) => void run(() => window.juno.reference.reorder(current.set.id, ordered))}
+							onReset={() => setPending({ kind: "reset", setKey: current.set.key, label: current.set.label })}
 						/>
-					))}
+					) : null}
 				</div>
 			)}
 
@@ -165,6 +166,46 @@ export function ReferenceSection() {
 	);
 }
 
+type SetPickerProps = {
+	sets: ReferenceSetWithItems[];
+	selected: ReferenceSetKey | null;
+	onSelect: (key: ReferenceSetKey) => void;
+};
+
+/** The lists as one row of tabs, each with how many values it shows. */
+function SetPicker({ sets, selected, onSelect }: SetPickerProps) {
+	return (
+		<div
+			role="tablist"
+			aria-label="Which list"
+			className="flex gap-0.5 rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5"
+		>
+			{sets.map((entry) => {
+				const active = entry.set.key === selected;
+				const shown = entry.items.filter((item) => item.hiddenAt === null).length;
+				return (
+					<button
+						key={entry.set.id}
+						type="button"
+						role="tab"
+						aria-selected={active}
+						onClick={() => onSelect(entry.set.key)}
+						className={[
+							"flex h-8 min-w-0 flex-1 items-center justify-center gap-2 rounded-[var(--radius-sm)] px-3 text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]",
+							active
+								? "bg-[var(--surface)] font-[var(--weight-medium)] text-[var(--ink)] shadow-[0_0_0_1px_var(--line)]"
+								: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
+						].join(" ")}
+					>
+						<span className="truncate">{entry.set.label}</span>
+						<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">{shown}</span>
+					</button>
+				);
+			})}
+		</div>
+	);
+}
+
 function SetEditor({
 	entry,
 	onHide,
@@ -183,6 +224,7 @@ function SetEditor({
 	onReset: () => void;
 }) {
 	const items = entry.items;
+	const hiddenCount = items.filter((item) => item.hiddenAt !== null).length;
 
 	function move(index: number, delta: number) {
 		const next = [...items];
@@ -194,12 +236,16 @@ function SetEditor({
 	}
 
 	return (
-		<div>
-			<div className="flex items-baseline justify-between gap-4">
-				<h3 className="font-[var(--weight-medium)]">{entry.set.label}</h3>
-				<div className="flex gap-1">
+		<div className="mt-5">
+			<div className="flex items-center justify-between gap-4">
+				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					{entry.set.description ?? `${items.length - hiddenCount} shown.`}
+					{hiddenCount > 0 ? ` ${hiddenCount} hidden.` : ""}
+				</p>
+				<div className="flex flex-none gap-1">
 					{entry.set.allowsCustomItems ? (
 						<Button size="dense" onClick={onAdd}>
+							<Icon name="add" size={14} />
 							Add
 						</Button>
 					) : null}
@@ -209,58 +255,49 @@ function SetEditor({
 				</div>
 			</div>
 
-			<ul className="mt-2">
+			<ul className="mt-3 border-t border-[var(--line)]">
 				{items.map((item, index) => {
 					const hidden = item.hiddenAt !== null;
 					return (
 						<li
 							key={item.id}
-							className={`flex items-center justify-between gap-3 border-b py-2 text-[length:var(--text-dense)] ${
-								hidden ? "border-dashed border-[var(--line)]" : "border-[var(--line)]"
+							style={{ minHeight: "var(--row-height)" }}
+							className={`flex items-center justify-between gap-3 border-b text-[length:var(--text-dense)] hover:bg-[var(--hover)] ${
+								hidden ? "border-dashed border-[var(--line)] opacity-70" : "border-[var(--line)]"
 							}`}
 						>
-							<span className="flex min-w-0 items-center gap-2">
+							<span className="flex min-w-0 items-center gap-2 pl-1">
 								<StatusBadge label={item.label} tone={item.tone} />
 								{hidden ? (
-									<span className="text-[length:var(--text-micro)] text-[var(--ink-faint)]">
-										Hidden, still shown on records that use it
+									<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										Hidden. Records that use it still show it.
 									</span>
 								) : null}
 								{item.isSystem ? null : (
-									<span className="text-[length:var(--text-micro)] text-[var(--ink-faint)]">
-										Yours
-									</span>
+									<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">Yours</span>
 								)}
 							</span>
 
-							<span className="flex shrink-0 gap-1">
-								<Button
-									size="dense"
+							<span className="flex shrink-0 items-center">
+								<IconAction
+									icon="move-up"
+									label={`Move ${item.label} up`}
 									disabled={index === 0}
-									aria-label={`Move ${item.label} up`}
 									onClick={() => move(index, -1)}
-								>
-									Up
-								</Button>
-								<Button
-									size="dense"
+								/>
+								<IconAction
+									icon="move-down"
+									label={`Move ${item.label} down`}
 									disabled={index === items.length - 1}
-									aria-label={`Move ${item.label} down`}
 									onClick={() => move(index, 1)}
-								>
-									Down
-								</Button>
-								<Button size="dense" onClick={() => onRename(item)}>
-									Rename
-								</Button>
+								/>
+								<IconAction icon="edit" label={`Rename ${item.label}`} onClick={() => onRename(item)} />
 								{hidden ? (
 									<Button size="dense" onClick={() => onUnhide(item)}>
 										Bring back
 									</Button>
 								) : (
-									<Button size="dense" variant="danger" onClick={() => onHide(item)}>
-										Remove
-									</Button>
+									<IconAction icon="remove" danger label={`Remove ${item.label}`} onClick={() => onHide(item)} />
 								)}
 							</span>
 						</li>

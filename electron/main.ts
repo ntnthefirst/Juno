@@ -897,7 +897,12 @@ if (!app.requestSingleInstanceLock()) {
 									throw new Error("Smoke: closing the walkthrough did not reveal the application");
 							}
 
-							const screens = process.env.JUNO_SMOKE_DEMO
+							// JUNO_SMOKE_ONLY=settings skips the walk over the screens and goes
+							// straight to the settings window, which is what a change to settings
+							// needs to look at and what the full walk makes eight minutes of waiting.
+							const screens = process.env.JUNO_SMOKE_ONLY === "settings"
+								? []
+								: process.env.JUNO_SMOKE_DEMO
 								? [
 										"Today",
 										"Reminders",
@@ -3847,6 +3852,13 @@ if (!app.requestSingleInstanceLock()) {
 								openSettingsWindow();
 								const settingsWindow = getSettingsWindow();
 								if (!settingsWindow) throw new Error("Smoke: the settings window did not open");
+								// Its own renderer, so its errors are not the main window's and have
+								// to be listened for separately or a crash there is only a blank page.
+								settingsWindow.webContents.on("console-message", (event) => {
+									if (event.level === "warning" || event.level === "error") {
+										console.error(`renderer: ${event.message}`);
+									}
+								});
 
 								await new Promise<void>((resolve) => {
 									if (!settingsWindow.webContents.isLoading()) {
@@ -3856,107 +3868,99 @@ if (!app.requestSingleInstanceLock()) {
 									settingsWindow.webContents.once("did-finish-load", () => setTimeout(resolve, 900));
 								});
 
-								const TABS = `document.querySelectorAll("nav[aria-label='Settings sections'] button")`;
-								const tabs = (await settingsWindow.webContents.executeJavaScript(
-									`[...${TABS}].map((b) => b.textContent.trim())`,
+								const inSettings = (code: string) => settingsWindow.webContents.executeJavaScript(code);
+								const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+								/** Both themes, the way every other screen is photographed. */
+								const photograph = async (name: string, wait = 350) => {
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await inSettings(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await pause(wait);
+										const image = await capture(settingsWindow.webContents);
+										writeFileSync(joinPath(shotDir, `settings-${name}-${theme}.png`), image.toPNG());
+									}
+								};
+								/**
+								 * A page is opened the way a person opens it: its group first, which unfolds
+								 * the pages of that group, then the page.
+								 */
+								const openPage = async (id: string, group?: string) => {
+									if (group) await inSettings(`document.querySelector("[data-group='${group}']").click()`);
+									await pause(150);
+									const found = await inSettings(`(() => { const b = document.querySelector("[data-page='${id}']"); if (!b) return false; b.click(); return true; })()`);
+									if (!found) throw new Error(`Smoke: the settings window has no page "${id}"`);
+									await pause(300);
+								};
+
+								const groups = (await inSettings(
+									`[...document.querySelectorAll("nav[aria-label='Settings sections'] [data-group]")].map((b) => b.dataset.group)`,
 								)) as string[];
-								if (tabs.length < 5) {
-									throw new Error(`Smoke: the settings window showed ${tabs.length} sections`);
+								if (groups.length !== 6) {
+									throw new Error(`Smoke: the settings window showed ${groups.length} groups`);
 								}
 
-								for (const [index, tab] of tabs.entries()) {
-									await settingsWindow.webContents.executeJavaScript(`${TABS}[${index}].click()`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await settingsWindow.webContents.executeJavaScript(
-											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
-										);
-										await new Promise((r) => setTimeout(r, 350));
-										const image = await capture(settingsWindow.webContents);
-										const name = tab.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-										writeFileSync(
-											joinPath(shotDir, `settings-${name}-${theme}.png`),
-											image.toPNG(),
-										);
+								// Every page of every group, in both themes. A group is clicked and then the
+								// pages it unfolded are read from the navigation, so the list is whatever the
+								// window actually offers rather than a copy of it here.
+								const pages: string[] = [];
+								for (const group of groups) {
+									await inSettings(`document.querySelector("[data-group='${group}']").click()`);
+									await pause(200);
+									const ids = (await inSettings(
+										`(() => { const own = document.querySelector("[data-group='${group}']").dataset.page; return own ? [own] : [...document.querySelectorAll("nav[aria-label='Settings sections'] ul [data-page]")].map((b) => b.dataset.page); })()`,
+									)) as string[];
+									for (const id of ids) {
+										await openPage(id);
+										pages.push(id);
+										await photograph(id);
 									}
 								}
-								// Your business is taller than the window, so the loop above
-								// photographs the fields and never the two contact lists under
-								// them, which is where the primary and the mail-account mark are.
+								if (pages.length < 14) throw new Error(`Smoke: the settings window offered ${pages.length} pages`);
+
+
+								// The two contact lists are where the primary and the mail-account mark are.
 								{
-									const business = tabs.findIndex((tab) => tab === "Your business");
-									if (business === -1)
-										throw new Error("Smoke: the settings window has no business section");
-									await settingsWindow.webContents.executeJavaScript(`${TABS}[${business}].click()`);
-									await new Promise((r) => setTimeout(r, 300));
-									const listed = (await settingsWindow.webContents.executeJavaScript(
-										`(() => {
-											const main = document.querySelector("main");
-											main.scrollTop = main.scrollHeight;
-											return main.textContent.includes("Email addresses") && main.textContent.includes("Mail account");
-										})()`,
+									await openPage("contact", "business");
+									const listed = (await inSettings(
+										`(() => { const text = document.querySelector("main").textContent; return text.includes("Email addresses") && text.includes("Phone numbers") && text.includes("Mail account"); })()`,
 									)) as boolean;
-									if (!listed) {
-										throw new Error(
-											"Smoke: the business section did not list the owner's addresses",
-										);
-									}
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await settingsWindow.webContents.executeJavaScript(
-											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
-										);
-										await new Promise((r) => setTimeout(r, 300));
-										const image = await capture(settingsWindow.webContents);
-										writeFileSync(
-											joinPath(shotDir, `settings-your-contacts-${theme}.png`),
-											image.toPNG(),
-										);
-									}
+									if (!listed) throw new Error("Smoke: the contact page did not list the owner's addresses");
 								}
 
-								// General is taller than the window too, and what falls off the
-								// bottom is the whole update section: the version, what the last
-								// check found, and the automatic-install toggle.
+								// The update settings are on their own page now, not under the fold.
 								{
-									const general = tabs.findIndex((tab) => tab === "General");
-									if (general === -1)
-										throw new Error("Smoke: the settings window has no general section");
-									await settingsWindow.webContents.executeJavaScript(`${TABS}[${general}].click()`);
-									await new Promise((r) => setTimeout(r, 300));
-									const shown = (await settingsWindow.webContents.executeJavaScript(
-										`(() => {
-											const main = document.querySelector("main");
-											main.scrollTop = main.scrollHeight;
-											return main.textContent.includes("Install updates automatically");
-										})()`,
+									await openPage("updates", "general");
+									const shown = (await inSettings(
+										`document.querySelector("main").textContent.includes("Install updates automatically")`,
 									)) as boolean;
-									if (!shown) {
-										throw new Error("Smoke: the general section did not show the update settings");
-									}
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await settingsWindow.webContents.executeJavaScript(
-											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
-										);
-										await new Promise((r) => setTimeout(r, 300));
-										const image = await capture(settingsWindow.webContents);
-										writeFileSync(
-											joinPath(shotDir, `settings-updates-${theme}.png`),
-											image.toPNG(),
-										);
-									}
+									if (!shown) throw new Error("Smoke: the updates page did not show the update settings");
 								}
 
-								// The MCP tab hides half of itself behind a two-way switch, so the
-								// loop above only ever photographs the installers. The other side
-								// is the block someone pastes by hand, and it has broken before.
+								// Statuses and labels shows one list at a time, and switching is a tab.
 								{
-									const mcp = tabs.findIndex((tab) => tab === "MCP");
-									if (mcp === -1) throw new Error("Smoke: the settings window has no MCP section");
-									await settingsWindow.webContents.executeJavaScript(`${TABS}[${mcp}].click()`);
-									await new Promise((r) => setTimeout(r, 250));
-									const switched = (await settingsWindow.webContents.executeJavaScript(
+									await openPage("statuses", "documents");
+									const picked = (await inSettings(
+										`(async () => {
+											const tabs = [...document.querySelectorAll("[role=tablist][aria-label='Which list'] [role=tab]")];
+											if (tabs.length < 4) return "only " + tabs.length + " lists";
+											const before = document.querySelector("main").textContent;
+											tabs[1].click();
+											await new Promise((r) => setTimeout(r, 250));
+											if (document.querySelector("main").textContent === before) return "the list did not change";
+											if (tabs[1].getAttribute("aria-selected") !== "true") return "the tab did not select";
+											return "ok";
+										})()`,
+									)) as string;
+									if (picked !== "ok") throw new Error(`Smoke: statuses and labels ${picked}`);
+									await photograph("statuses-project");
+								}
+
+								// The MCP connect page hides half of itself behind a two-way switch, so the
+								// loop above only ever photographs the installers. The other side is the
+								// block someone pastes by hand, and it has broken before.
+								{
+									await openPage("mcp-connect", "mcp");
+									const switched = (await inSettings(
 										`(() => {
 											const b = [...document.querySelectorAll("button[role=radio]")]
 												.find((el) => el.textContent.trim() === "Do it myself");
@@ -3965,34 +3969,77 @@ if (!app.requestSingleInstanceLock()) {
 											return true;
 										})()`,
 									)) as boolean;
-									if (!switched)
-										throw new Error("Smoke: the MCP section had no way to the manual route");
-									await new Promise((r) => setTimeout(r, 350));
-									const pasted = (await settingsWindow.webContents.executeJavaScript(
+									if (!switched) throw new Error("Smoke: the MCP page had no way to the manual route");
+									await pause(350);
+									const pasted = (await inSettings(
 										`(document.querySelector("pre")?.textContent ?? "").includes("http://127.0.0.1:")`,
 									)) as boolean;
 									if (!pasted) throw new Error("Smoke: the manual route printed no configuration");
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await settingsWindow.webContents.executeJavaScript(
-											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
-										);
-										await new Promise((r) => setTimeout(r, 300));
-										const image = await capture(settingsWindow.webContents);
-										writeFileSync(
-											joinPath(shotDir, `settings-mcp-manual-${theme}.png`),
-											image.toPNG(),
-										);
-									}
+									await photograph("mcp-manual", 300);
 								}
+
+								// The search lives above the groups and answers on a page of its own. It is
+								// typed into the way a person types: focused, then characters, then keys.
+								{
+									const type = async (word: string) => {
+										await inSettings(
+											`(() => { const f = document.querySelector("input[aria-label='Search settings']"); f.focus(); f.select(); })()`,
+										);
+										settingsWindow.webContents.focus();
+										await settingsWindow.webContents.insertText(word);
+										await pause(350);
+									};
+									const read = (expr: string) => inSettings(expr);
+
+									await type("lock");
+									const first = (await read(
+										`(() => ({ rows: document.querySelectorAll("[role=listbox] [role=option]").length, text: document.querySelector("main").textContent, selected: document.querySelector("[role=option][aria-selected=true]")?.textContent ?? "" }))()`,
+									)) as { rows: number; text: string; selected: string };
+									if (first.rows < 1 || !first.text.includes("match") || !first.selected.includes("Lock")) {
+										throw new Error(`Smoke: searching for lock showed ${JSON.stringify(first)}`);
+									}
+									await photograph("search", 300);
+
+									// Enter opens the chosen result: the page, with the lock section on it.
+									settingsWindow.webContents.sendInputEvent({ type: "keyDown", keyCode: "Enter" });
+									settingsWindow.webContents.sendInputEvent({ type: "keyUp", keyCode: "Enter" });
+									await pause(500);
+									const opened = (await read(
+										`(() => ({ page: document.querySelector("[data-page][aria-current=page]")?.dataset.page ?? "", field: document.querySelector("input[aria-label='Search settings']").value, lock: document.querySelector("[data-setting='lock']") !== null }))()`,
+									)) as { page: string; field: string; lock: boolean };
+									if (opened.page !== "lock" || opened.field !== "" || !opened.lock) {
+										throw new Error(`Smoke: Enter on a result opened ${JSON.stringify(opened)}`);
+									}
+
+									// A slip of the finger still lands, and nothing at all says so out loud.
+									await type("lokc");
+									const typo = (await read(
+										`document.querySelector("[role=option][aria-selected=true]")?.textContent ?? ""`,
+									)) as string;
+									if (!typo.includes("Lock")) throw new Error(`Smoke: a typo did not find the lock: ${typo}`);
+
+									await type("qqqqqq");
+									const none = (await read(`document.querySelector("main").textContent`)) as string;
+									if (!none.includes("Nothing matches")) throw new Error("Smoke: a search with no answer said nothing");
+									await photograph("search-empty", 300);
+
+									// Escape clears the search first, and only then would close the window.
+									settingsWindow.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+									settingsWindow.webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+									await pause(300);
+									const cleared = (await read(
+										`document.querySelector("input[aria-label='Search settings']").value === ""`,
+									)) as boolean;
+									if (!cleared) throw new Error("Smoke: Escape did not clear the search");
+									if (settingsWindow.isDestroyed()) throw new Error("Smoke: Escape in the search closed the window");
+								}
+
 								// The removed account's mail is deleted the way a person does it: the
 								// button, the dialog, the confirm. The tab loop above photographed the
 								// section with the account still in it.
 								{
 									const { existsSync: exists } = await import("node:fs");
-									const mailTab = tabs.findIndex((tab) => tab === "Mail accounts");
-									if (mailTab === -1) throw new Error("Smoke: the settings window has no mail section");
-									await settingsWindow.webContents.executeJavaScript(`${TABS}[${mailTab}].click()`);
+									await openPage("mail", "mail");
 									await new Promise((r) => setTimeout(r, 400));
 									const listed = (await settingsWindow.webContents.executeJavaScript(
 										`(() => { const text = document.querySelector("main").textContent; return text.includes("Removed accounts") && text.includes("oud@juno.test") && text.includes("Delete stored mail"); })()`,
@@ -4032,7 +4079,7 @@ if (!app.requestSingleInstanceLock()) {
 									}
 									console.log("SMOKE_DEMO removed account purged");
 								}
-								console.log(`SMOKE_DEMO settings tabs=${tabs.length}`);
+								console.log(`SMOKE_DEMO settings pages=${pages.length}`);
 								closeSettingsWindow();
 
 								// The sidebar goes back to the rail on its own, and the setting

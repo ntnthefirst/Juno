@@ -1,4 +1,5 @@
 import type { SettingsSection } from "@shared/types";
+import { pageOfAnchor } from "./pages";
 
 /**
  * One thing a person might go looking for in settings.
@@ -482,7 +483,7 @@ export const SETTING_ENTRIES: SettingEntry[] = [
 ];
 
 /** Lowercase with accents removed, so "réminder" and "reminder" are the same word. */
-function normalise(text: string): string {
+export function normalise(text: string): string {
 	return text
 		.normalize("NFD")
 		.replace(/[̀-ͯ]/g, "")
@@ -499,11 +500,36 @@ function wordMatches(text: string, word: string): boolean {
 	return word.length >= 3 && text.includes(word);
 }
 
+/**
+ * Whether two words are one slip apart: a letter wrong, missing, extra, or two
+ * neighbours swapped. "lokc" is near "lock" and "passwrd" is near "password".
+ */
+export function isNear(a: string, b: string): boolean {
+	if (a === b) return true;
+	if (Math.abs(a.length - b.length) > 1) return false;
+	let at = 0;
+	while (at < a.length && at < b.length && a[at] === b[at]) at++;
+	if (a.length === b.length) {
+		if (a.slice(at + 1) === b.slice(at + 1)) return true;
+		return a[at] === b[at + 1] && a[at + 1] === b[at] && a.slice(at + 2) === b.slice(at + 2);
+	}
+	return a.length > b.length ? a.slice(at + 1) === b.slice(at) : a.slice(at) === b.slice(at + 1);
+}
+
+/** The words a typo has to be near: the title's and the keywords', one by one. */
+function tokensOf(entry: SettingEntry): string[] {
+	return [entry.title, ...entry.keywords]
+		.flatMap((text) => normalise(text).split(/[^a-z0-9]+/))
+		.filter((token) => token.length >= 3);
+}
+
 function scoreEntry(entry: SettingEntry, words: string[]): number {
 	const title = normalise(entry.title);
 	const keywords = entry.keywords.map(normalise);
 	const description = normalise(entry.description);
 	const tab = normalise(TAB_LABELS[entry.tab]);
+	const page = normalise(pageOfAnchor(entry.anchor)?.label ?? "");
+	let tokens: string[] | null = null;
 
 	let total = 0;
 	for (const word of words) {
@@ -513,7 +539,12 @@ function scoreEntry(entry: SettingEntry, words: string[]): number {
 		else if (keywords.some((keyword) => wordMatches(keyword, word))) best = 6;
 		else if (title.includes(word)) best = 5;
 		else if (wordMatches(description, word)) best = 3;
-		else if (wordMatches(tab, word)) best = 1;
+		else if (wordMatches(page, word) || wordMatches(tab, word)) best = 1;
+		// A slip of the finger still finds it, below everything that matched as typed.
+		else if (word.length >= 4) {
+			tokens ??= tokensOf(entry);
+			if (tokens.some((token) => isNear(token, word))) best = 2;
+		}
 		// Every word has to land somewhere, or the entry is not what was asked for.
 		if (best === 0) return 0;
 		total += best;
@@ -525,8 +556,24 @@ function scoreEntry(entry: SettingEntry, words: string[]): number {
  * The entries that match every word of the query, best first. Ties keep the
  * order the entries are declared in, which is the order of the tabs.
  */
+/** The id one result carries, so the search field can say which one is current. */
+export function resultId(listId: string, index: number): string {
+	return `${listId}-${index}`;
+}
+
+export function queryWords(query: string): string[] {
+	return normalise(query).split(/\s+/).filter(Boolean);
+}
+
+/** Where a result lives, the way it is written under it: "Documents > Signing". */
+export function locationOf(entry: SettingEntry): string {
+	const group = TAB_LABELS[entry.tab];
+	const page = pageOfAnchor(entry.anchor)?.label;
+	return page && page !== group ? `${group} > ${page}` : group;
+}
+
 export function searchSettings(query: string, entries: SettingEntry[] = SETTING_ENTRIES): SettingEntry[] {
-	const words = normalise(query).split(/\s+/).filter(Boolean);
+	const words = queryWords(query);
 	if (words.length === 0) return [];
 	return entries
 		.map((entry, index) => ({ entry, index, score: scoreEntry(entry, words) }))

@@ -15,12 +15,13 @@ import electron from "electron";
 
 const userData = mkdtempSync(join(tmpdir(), "juno-smoke-"));
 // The demo run walks seventeen screens in two themes, the setup window and the
-// walkthrough after it, both template editors, every settings tab and both
-// sides of the MCP switch, and it sends real MCP requests to the listener.
-// Each capture also waits for a composited frame first, which is what stops
-// the screenshots being one step stale. Five minutes is the headroom that
-// leaves; a run that takes longer than this is stuck rather than slow.
-const TIMEOUT_MS = 300_000;
+// walkthrough after it, both template editors, every page of the settings
+// window in two themes plus the search, and it sends real MCP requests to the
+// listener. Each capture also waits for a composited frame first, which is what
+// stops the screenshots being one step stale. Eight minutes is the headroom
+// that leaves on a machine that is also doing other things; a run that takes
+// longer than this is stuck rather than slow.
+const TIMEOUT_MS = 480_000;
 
 const child = spawn(
 	electron,

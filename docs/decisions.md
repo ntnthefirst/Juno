@@ -589,6 +589,23 @@ Both windows load the same bundle and pick their shell from the URL rather than
 asking over IPC, so the right one paints on the first frame and a locked
 application still knows what it is drawing.
 
+**How it is cut to fit.** Six groups down the left, and each group is made of
+short pages that show one subject (`features/settings/pages.ts` lists them).
+Only the group being shown unfolds its pages, so the column never has to
+scroll to say where you are. A page with one section drops that section's
+heading, since the page's title says it. Several lists that used to sit under
+each other, like the four sets of statuses and labels, are behind a picker
+instead. The window is 980 by 700, which is as tall as a small laptop screen
+allows. It was one long column per tab before, and every tab overflowed.
+
+**The search is above the groups, not in the title bar**, and it answers with a
+page of its own rather than a drop-down: every result with what it does and
+where it lives, the matched words picked out, the first already chosen. Typos
+within one letter still land, below anything that matched as typed. Every
+search entry names an anchor, and `pages.ts` says which page draws that
+anchor, which is how a result opens the right page; a test holds the two
+together.
+
 **What would reverse this:** settings growing a view that has to be read
 alongside the work, like a live sync log. That is an argument for moving that
 one view into the app, not for dissolving the window.

@@ -17,6 +17,7 @@ import type {
 } from "../../shared/types";
 import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
+import * as describe from "../services/agent-describe";
 import * as connections from "../services/agent-connections";
 import * as automations from "../services/automations";
 import * as briefing from "../services/briefing";
@@ -77,6 +78,19 @@ export function registerAgentIpc(): void {
 	ipcMain.handle("agent.actions.remove", (_event, id: string) => actions.remove(id));
 
 	ipcMain.handle("agent.audit.list", (_event, query?: AuditListQuery) => audit.list(query ?? {}));
+
+	// What a request or a log row is, in words: the records it names instead of
+	// their ids. Reads only.
+	const titleOf = (toolName: string) => summaries().find((tool) => tool.name === toolName)?.title ?? toolName;
+	ipcMain.handle("agent.actions.describe", async (_event, ids: string[]) => {
+		const rows = (await Promise.all(ids.map((id) => actions.get(id)))).filter((row) => row !== null);
+		return describe.describeActions(rows, titleOf);
+	});
+	ipcMain.handle("agent.audit.describe", async (_event, ids: string[]) => {
+		const wanted = new Set(ids);
+		const rows = (await audit.list({ limit: 500 })).filter((row) => wanted.has(row.id));
+		return describe.describeAudit(rows, titleOf);
+	});
 
 	ipcMain.handle("automations.list", () => automations.list());
 	ipcMain.handle("automations.get", (_event, id: string) => automations.get(id));

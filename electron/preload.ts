@@ -314,6 +314,7 @@ const api: JunoApi = {
 			approve: (id) => call("agent.actions.approve", id),
 			reject: (id) => call("agent.actions.reject", id),
 			remove: (id) => call("agent.actions.remove", id),
+			describe: (ids) => call("agent.actions.describe", ids),
 			onChange: (listener) => {
 				const handler = (_event: Electron.IpcRendererEvent, action: AgentAction) => listener(action);
 				ipcRenderer.on("agent.actionChanged", handler);
@@ -324,6 +325,7 @@ const api: JunoApi = {
 		},
 		audit: {
 			list: (query) => call("agent.audit.list", query),
+			describe: (ids) => call("agent.audit.describe", ids),
 		},
 	},
 

@@ -2629,6 +2629,61 @@ export interface AgentAction extends Standard {
 	error: string | null;
 }
 
+/** The kinds of record an agent's request can point at, which the window can name and open. */
+export type AgentEntityKind =
+	| "client"
+	| "contact"
+	| "project"
+	| "mailAccount"
+	| "mailFolder"
+	| "mailThread"
+	| "mailMessage"
+	| "mailDraft"
+	| "mailTemplate"
+	| "documentTemplate"
+	| "document"
+	| "reminder"
+	| "event"
+	| "automation";
+
+/** A record named in a request, by what it is called rather than by its id. */
+export interface AgentEntityRef {
+	/** What it is to this request, in words: "Client", "Draft", "Conversation". */
+	role: string;
+	kind: AgentEntityKind;
+	id: string;
+	/** Null when the record is gone. */
+	label: string | null;
+	/** A second line: the project's client, a draft's recipients, a reminder's date. */
+	detail: string | null;
+	/** True when the record no longer exists or was deleted. */
+	gone: boolean;
+}
+
+/** One argument of a request, read as a label and a value instead of JSON. */
+export interface AgentField {
+	label: string;
+	value: string;
+	/** Several lines or a long run of text, shown as a block. */
+	long: boolean;
+}
+
+/** What a request is, in words: the records it names and the values it carries. */
+export interface AgentActionView {
+	actionId: string;
+	/** The tool's title, "Cancel an outbox message", with no ids in it. */
+	title: string;
+	entities: AgentEntityRef[];
+	fields: AgentField[];
+}
+
+/** The same for a row of the log, which keeps no arguments and so names only what it touched. */
+export interface AgentAuditView {
+	eventId: string;
+	title: string;
+	entity: AgentEntityRef | null;
+}
+
 export interface AgentActionListQuery {
 	states?: AgentActionState[];
 	limit?: number;

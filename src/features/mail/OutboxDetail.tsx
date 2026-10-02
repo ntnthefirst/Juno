@@ -130,12 +130,12 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 						Edit
 					</Button>
 				) : null}
-				{message.state === "draft" || message.state === "queued" || message.state === "failed" ? (
+				{message.state === "queued" ? (
 					<Button variant="danger" disabled={busy} onClick={() => setConfirmingCancel(true)}>
-						Cancel message
+						Cancel sending
 					</Button>
 				) : null}
-				{message.state === "cancelled" || message.state === "draft" ? (
+				{message.state === "cancelled" || message.state === "draft" || message.state === "failed" ? (
 					<Button variant="danger" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.remove(message.id), "Removed.")}>
 						Delete
 					</Button>
@@ -159,9 +159,9 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 			)}
 
 			{confirmingCancel ? (
-				<Dialog title="Cancel message" onClose={() => setConfirmingCancel(false)} width="narrow">
+				<Dialog title="Cancel sending" onClose={() => setConfirmingCancel(false)} width="narrow">
 					<p className="mt-4 text-[var(--ink-muted)]">
-						Cancel this message to {message.to.map((a) => a.address).join(", ")}? It stays in the outbox as cancelled and is not sent.
+						Stop sending this message to {message.to.map((a) => a.address).join(", ")}? It stays in the outbox as cancelled.
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
 						<Button onClick={() => setConfirmingCancel(false)}>Keep</Button>

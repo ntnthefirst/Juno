@@ -1065,6 +1065,15 @@ if (!app.requestSingleInstanceLock()) {
 											const main = document.querySelector("main");
 											if (!main.textContent.includes("Repository")) return "the links are not shown";
 											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
+											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the project";
+											const addDate = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add date");
+											if (!addDate) return "no add date button on the project";
+											addDate.click();
+											await wait(600);
+											if (!document.querySelector("main").textContent.includes("New event")) return "the date form did not open from the project";
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(700);
+											if (!document.querySelector("main").textContent.includes("Dates and reminders")) return "back did not return to the project";
 											const start = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start");
 											if (!start) return "no start button";
 											const files = main.textContent.includes("Files");
@@ -1096,6 +1105,18 @@ if (!app.requestSingleInstanceLock()) {
 											await new Promise((r) => setTimeout(r, 700));
 											const main = document.querySelector("main");
 											if (!main.querySelector("[role=tablist]")) return "no tabs";
+											// Dates and reminders belong to the client too: the section is
+											// there, and adding one opens a page, not a dialog, and back
+											// returns to the client.
+											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the client";
+											const addReminder = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add reminder");
+											if (!addReminder) return "no add reminder button on the client";
+											addReminder.click();
+											await new Promise((r) => setTimeout(r, 600));
+											if (!document.querySelector("main").textContent.includes("New reminder")) return "the reminder form did not open from the client";
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 700));
+											if (!document.querySelector("main [role=tablist]")) return "back did not return to the client";
 											const timeline = [...main.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().startsWith("Timeline"));
 											if (!timeline) return "no timeline tab";
 											timeline.click();
@@ -3499,6 +3520,32 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: event form ${opened}`);
+								}
+								if (screen === "Calendar") {
+									// A reminder on the grid is not read-only: its panel offers the
+									// same actions as the Reminders screen, and deleting it can be
+									// undone from the toast.
+									const acted = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const chip = () => [...document.querySelectorAll("button[title]")].find((b) => b.getAttribute("title") === "Send hyge the proposal");
+											const named = (text) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === text);
+											if (!chip()) return "no reminder chip";
+											chip().click();
+											await wait(500);
+											for (const need of ["Mark done", "Snooze", "Edit", "Delete"]) {
+												if (!named(need)) return "the reminder panel has no " + need;
+											}
+											named("Delete").click();
+											await wait(700);
+											if (chip()) return "the reminder is still on the grid after delete";
+											if (!document.body.textContent.includes("Send hyge the proposal deleted.")) return "no undo toast";
+											named("Undo").click();
+											await wait(700);
+											return chip() ? "ok" : "undo did not bring the reminder back";
+										})()`,
+									);
+									if (acted !== "ok") throw new Error(`Smoke: calendar reminder actions ${acted}`);
 								}
 								if (screen === "Week") {
 									const switched = await window.webContents.executeJavaScript(

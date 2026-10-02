@@ -22,6 +22,8 @@ import { formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
 import { LinkPanel } from "./LinkPanel";
 import { RunConsole } from "./RunConsole";
 import { StorageDialog } from "./StorageDialog";
+import { ScheduleSection } from "../calendar/ScheduleSection";
+import type { ScheduleForm } from "../calendar/schedule-form";
 
 type ProjectDetailProps = {
 	projectId: string;
@@ -29,6 +31,8 @@ type ProjectDetailProps = {
 	/** The list behind this has to read again: a name, a status or a cover changed. */
 	onChanged: () => void;
 	onEdit: (project: Project) => void;
+	/** A date or a reminder is a form, so the screen draws it as a page. */
+	onSchedule: (form: ScheduleForm) => void;
 	onNameChange: (name: string) => void;
 	onDeleted: (project: ProjectSummary) => void;
 };
@@ -57,6 +61,7 @@ export function ProjectDetail({
 	onBack,
 	onChanged,
 	onEdit,
+	onSchedule,
 	onNameChange,
 	onDeleted,
 }: ProjectDetailProps) {
@@ -323,6 +328,14 @@ export function ProjectDetail({
 						<MarkdownNotes text={project.description} />
 					</section>
 				) : null}
+
+				<div className="mt-8">
+					<ScheduleSection
+						projectId={project.id}
+						{...(project.clientId ? { clientId: project.clientId } : {})}
+						onOpenForm={onSchedule}
+					/>
+				</div>
 
 				<section className="mt-8">
 					<SectionHeading

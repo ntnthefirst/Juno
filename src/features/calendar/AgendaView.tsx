@@ -5,7 +5,7 @@ import {
 	useState,
 	type MouseEvent as ReactMouseEvent,
 } from "react";
-import type { CalendarItem, CalendarOccurrence } from "@shared/types";
+import type { CalendarItem, CalendarReminderItem } from "@shared/types";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { formatDateLong, formatMinutes } from "./dates";
@@ -18,8 +18,10 @@ type AgendaViewProps = {
 	today: string;
 	placed: Map<string, Placed[]>;
 	onOpen: (item: CalendarItem) => void;
-	onEdit: (item: CalendarOccurrence) => void;
-	onDelete: (item: CalendarOccurrence) => void;
+	onEdit: (item: CalendarItem) => void;
+	onDelete: (item: CalendarItem) => void;
+	onComplete: (item: CalendarReminderItem) => void;
+	onSnooze: (item: CalendarReminderItem) => void;
 	/** A wheel gesture past the top or bottom of the list: page the range. */
 	onStep: (direction: -1 | 1) => void;
 	/**
@@ -50,6 +52,8 @@ export function AgendaView({
 	onOpen,
 	onEdit,
 	onDelete,
+	onComplete,
+	onSnooze,
 	onStep,
 	direction,
 }: AgendaViewProps) {
@@ -91,7 +95,7 @@ export function AgendaView({
 		menu.open(event);
 	}
 
-	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete }) : [];
+	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete, onComplete, onSnooze }) : [];
 
 	return (
 		<div ref={scroller} className="h-full overflow-y-auto overscroll-contain">

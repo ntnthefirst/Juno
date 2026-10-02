@@ -5,7 +5,7 @@ import {
 	type MouseEvent,
 	type PointerEvent,
 } from "react";
-import type { CalendarItem, CalendarOccurrence } from "@shared/types";
+import type { CalendarItem, CalendarOccurrence, CalendarReminderItem } from "@shared/types";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { formatMinutes, snap, weekdayShort } from "./dates";
@@ -25,8 +25,10 @@ type WeekViewProps = {
 	onMove: (item: CalendarOccurrence, dayDelta: number, minuteDelta: number) => void;
 	/** Bottom edge dragged: the end moves by this many minutes. */
 	onResize: (item: CalendarOccurrence, minuteDelta: number) => void;
-	onEdit: (item: CalendarOccurrence) => void;
-	onDelete: (item: CalendarOccurrence) => void;
+	onEdit: (item: CalendarItem) => void;
+	onDelete: (item: CalendarItem) => void;
+	onComplete: (item: CalendarReminderItem) => void;
+	onSnooze: (item: CalendarReminderItem) => void;
 	/** A wheel gesture over the header, the all-day row or an edge: page a week. */
 	onStep: (direction: -1 | 1) => void;
 };
@@ -63,6 +65,8 @@ export function WeekView({
 	onResize,
 	onEdit,
 	onDelete,
+	onComplete,
+	onSnooze,
 	onStep,
 }: WeekViewProps) {
 	const root = useRef<HTMLDivElement>(null);
@@ -158,7 +162,7 @@ export function WeekView({
 		onCreateAt(date, Math.min(23 * 60 + 30, Math.max(0, minute)));
 	}
 
-	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete }) : [];
+	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete, onComplete, onSnooze }) : [];
 
 	return (
 		<div ref={root} className="flex h-full min-h-0 flex-col">

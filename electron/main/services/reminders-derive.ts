@@ -17,7 +17,7 @@ import { formatDate, formatEuros, todayIsoDate } from "./document-context";
 import { SEED_REMINDERS, type SeedReminder } from "./reminders-seed";
 import * as settings from "./settings";
 import { addDays, compare, nextOccurrence } from "./recurrence";
-import type { ReminderCategory } from "./reminders";
+import { create, type ReminderCategory, type ReminderRecord } from "./reminders";
 
 export interface ReminderSuggestion {
 	/** Stable, so accepting the same suggestion twice is detectable. */
@@ -146,6 +146,36 @@ export async function suggestions(
 		deadlineSuggestions(db, today),
 	]);
 	return [...invoices, ...deadlines].sort((a, b) => compare(a.dueOn, b.dueOn));
+}
+
+/**
+ * Turns one suggestion into a real reminder, found by its key. Looked up again
+ * here rather than trusted from the caller, so the reminder is the one the
+ * records produce now, and a suggestion that has since gone away is refused.
+ */
+export async function accept(
+	key: string,
+	db: Db = getDb(),
+	today: string = todayIsoDate(),
+): Promise<ReminderRecord> {
+	const found = (await suggestions(db, today)).find((s) => s.key === key);
+	if (!found) {
+		throw new Error("That suggestion is gone, because the record behind it changed. List the suggestions again.");
+	}
+	return create(
+		{
+			title: found.title,
+			dueOn: found.dueOn,
+			notes: found.notes,
+			category: found.category,
+			clientId: found.clientId,
+			projectId: found.projectId,
+			actionUrl: found.actionUrl,
+			actionLabel: found.actionLabel,
+		},
+		db,
+		today,
+	);
 }
 
 /**

@@ -85,6 +85,31 @@ export const calendarTools: ToolDescriptor[] = [
 			}),
 	},
 	{
+		name: "calendar.upcoming",
+		title: "What is coming up",
+		description:
+			"Events, open reminders and project deadlines from today, in order, in one call. Give " +
+			"client_id or project_id to see only that client's or that project's dates and reminders. " +
+			"Default 14 days, at most 366.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				days: { type: "integer", minimum: 1, maximum: 366, description: "How many days ahead, today included." },
+				client_id: { type: "string" },
+				project_id: { type: "string" },
+			},
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			calendar.upcoming({
+				...(args.days !== undefined ? { days: Number(args.days) } : {}),
+				...(args.client_id ? { clientId: String(args.client_id) } : {}),
+				...(args.project_id ? { projectId: String(args.project_id) } : {}),
+			}),
+	},
+	{
 		name: "calendar.get_event",
 		title: "Read an event",
 		description:

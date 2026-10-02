@@ -6,7 +6,7 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { clients, projects } from "../db/schema";
-import { create, exportIcs, get, importIcs, listRange, remove, restore, update } from "./calendar";
+import { create, exportIcs, get, importIcs, listRange, remove, restore, update, upcoming } from "./calendar";
 import * as reminders from "./reminders";
 
 const migrations = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
@@ -135,6 +135,32 @@ describe("listRange", () => {
 
 		const plain = await listRange({ from: "2026-09-21", to: "2026-09-27", timezone: BRU }, db, "2026-09-21");
 		expect(plain).toHaveLength(0);
+	});
+
+	it("lists what is coming up from today, for one project when asked", async () => {
+		const [c] = db.insert(clients).values({ name: "obet", sortName: "obet" }).returning().all();
+		const [site] = db.insert(projects).values({ clientId: c!.id, name: "Site", dueOn: "2026-09-25" }).returning().all();
+		const [shop] = db.insert(projects).values({ clientId: c!.id, name: "Shop", dueOn: "2026-09-26" }).returning().all();
+		await create({ title: "Kickoff", startLocal: "2026-09-22T10:00", timezone: BRU, projectId: site!.id, clientId: c!.id }, db);
+		await create({ title: "Yesterday", startLocal: "2026-09-20T10:00", timezone: BRU, projectId: site!.id }, db);
+		await create({ title: "Elsewhere", startLocal: "2026-09-22T11:00", timezone: BRU, projectId: shop!.id }, db);
+		await reminders.create({ title: "Send the draft", dueOn: "2026-09-23", projectId: site!.id }, db, "2026-09-21");
+
+		const all = await upcoming({ days: 7 }, db, "2026-09-21");
+		expect(all.map((i) => (i.kind === "deadline" ? `${i.projectName} due` : i.title))).toEqual([
+			"Kickoff",
+			"Elsewhere",
+			"Send the draft",
+			"Site due",
+			"Shop due",
+		]);
+
+		const only = await upcoming({ days: 7, projectId: site!.id }, db, "2026-09-21");
+		expect(only.map((i) => (i.kind === "deadline" ? `${i.projectName} due` : i.title))).toEqual([
+			"Kickoff",
+			"Send the draft",
+			"Site due",
+		]);
 	});
 
 	it("refuses a bad range", async () => {

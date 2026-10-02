@@ -1,4 +1,4 @@
-import type { CalendarItem, CalendarOccurrence } from "@shared/types";
+import type { CalendarItem, CalendarOccurrence, CalendarReminderItem } from "@shared/types";
 import type { MenuItem } from "../../components/Menu";
 import { addDays, dateOf, daysBetween, localDateOfInstant, localMinuteOfInstant } from "./dates";
 
@@ -139,35 +139,46 @@ export function dotTone(item: CalendarItem): string {
 	}
 }
 
-type ItemMenuActions = {
+export type ItemActions = {
 	onOpen: (item: CalendarItem) => void;
-	onEdit: (item: CalendarOccurrence) => void;
-	onDelete: (item: CalendarOccurrence) => void;
+	onEdit: (item: CalendarItem) => void;
+	onDelete: (item: CalendarItem) => void;
+	onComplete: (item: CalendarReminderItem) => void;
+	onSnooze: (item: CalendarReminderItem) => void;
 };
 
 /**
  * The right-click menu for a chip on the grid, in Month, Week or Agenda.
  *
- * Every item opens. Only an event can be edited or deleted here: a reminder
- * or a deadline is read-only on the calendar and says so in its own panel.
+ * Every kind of item can be opened, edited and removed from here. What
+ * "delete" means differs by kind and the label says so: an event is deleted, a
+ * reminder is deleted, and a project deadline is cleared, which leaves the
+ * project and only takes its date away.
  */
-export function itemMenuItems(item: CalendarItem, actions: ItemMenuActions): MenuItem[] {
+export function itemMenuItems(item: CalendarItem, actions: ItemActions): MenuItem[] {
 	const items: MenuItem[] = [
 		{ id: "open", label: "Open", icon: "external", onSelect: () => actions.onOpen(item) },
 	];
-	if (item.kind === "event") {
+	if (item.kind === "reminder") {
 		items.push(
-			{ id: "edit", label: "Edit", icon: "edit", onSelect: () => actions.onEdit(item) },
-			{
-				id: "delete",
-				label: "Delete",
-				icon: "remove",
-				danger: true,
-				separatorBefore: true,
-				onSelect: () => actions.onDelete(item),
-			},
+			{ id: "complete", label: "Mark done", icon: "check", onSelect: () => actions.onComplete(item) },
+			{ id: "snooze", label: "Snooze", icon: "calendar", onSelect: () => actions.onSnooze(item) },
 		);
 	}
+	items.push({
+		id: "edit",
+		label: item.kind === "deadline" ? "Edit project" : "Edit",
+		icon: "edit",
+		onSelect: () => actions.onEdit(item),
+	});
+	items.push({
+		id: "delete",
+		label: item.kind === "deadline" ? "Clear deadline" : "Delete",
+		icon: "remove",
+		danger: true,
+		separatorBefore: true,
+		onSelect: () => actions.onDelete(item),
+	});
 	return items;
 }
 

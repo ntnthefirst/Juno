@@ -2521,18 +2521,23 @@ export interface CalendarOccurrence {
 	projectName: string | null;
 }
 
-/** A reminder shown on the grid. Read-only here; it is managed on the Reminders screen. */
+/** A reminder shown on the grid. It can be completed, snoozed, edited and deleted from there. */
 export interface CalendarReminderItem {
 	kind: "reminder";
 	reminderId: string;
 	title: string;
+	notes: string | null;
 	dueOn: IsoDate;
 	bucket: ReminderBucket;
 	category: ReminderCategory;
+	recurrenceLabel: string;
+	clientId: string | null;
 	clientName: string | null;
+	projectId: string | null;
+	projectName: string | null;
 }
 
-/** A project deadline shown on the grid. Read-only here; it is managed on the client. */
+/** A project deadline shown on the grid. Its date is edited or cleared from there. */
 export interface CalendarDeadlineItem {
 	kind: "deadline";
 	projectId: string;

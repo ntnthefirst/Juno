@@ -10,6 +10,9 @@ type EventDetailProps = {
 	item: CalendarItem;
 	onEdit: () => void;
 	onDelete: () => void;
+	/** Only a reminder is completed or snoozed. */
+	onComplete: () => void;
+	onSnooze: () => void;
 	onClose: () => void;
 };
 
@@ -42,7 +45,7 @@ function whenOf(item: Extract<CalendarItem, { kind: "event" }>): { line: string;
 	return { line, own };
 }
 
-export function EventDetail({ item, onEdit, onDelete, onClose }: EventDetailProps) {
+export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onClose }: EventDetailProps) {
 	const title = itemTitle(item);
 
 	return (
@@ -51,16 +54,20 @@ export function EventDetail({ item, onEdit, onDelete, onClose }: EventDetailProp
 			subtitle={KIND_LABELS[item.kind]}
 			onClose={onClose}
 			actions={
-				item.kind === "event" ? (
-					<>
-						<Button variant="danger" onClick={onDelete}>
-							Delete
+				<>
+					<Button variant="danger" onClick={onDelete}>
+						{item.kind === "deadline" ? "Clear deadline" : "Delete"}
+					</Button>
+					{item.kind === "reminder" ? <Button onClick={onSnooze}>Snooze</Button> : null}
+					<Button variant={item.kind === "reminder" ? "quiet" : "primary"} onClick={onEdit}>
+						{item.kind === "deadline" ? "Edit project" : "Edit"}
+					</Button>
+					{item.kind === "reminder" ? (
+						<Button variant="primary" onClick={onComplete}>
+							Mark done
 						</Button>
-						<Button variant="primary" onClick={onEdit}>
-							Edit
-						</Button>
-					</>
-				) : null
+					) : null}
+				</>
 			}
 		>
 			<div>
@@ -105,19 +112,26 @@ export function EventDetail({ item, onEdit, onDelete, onClose }: EventDetailProp
 						<Row label="Due">
 							<span className="tabular">{formatDateLong(item.dueOn)}</span>
 						</Row>
-						{item.clientName ? <Row label="Client">{item.clientName}</Row> : null}
-						<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							Shown from Reminders. Complete, snooze or edit it there.
-						</p>
+						{item.recurrenceLabel && item.recurrenceLabel !== "Once" ? (
+							<Row label="Repeats">{item.recurrenceLabel}</Row>
+						) : null}
+						{item.clientName ? (
+							<Row label="Client">{[item.clientName, item.projectName].filter(Boolean).join(" / ")}</Row>
+						) : null}
+						{item.notes ? (
+							<Row label="Notes">
+								<MarkdownNotes text={item.notes} />
+							</Row>
+						) : null}
 					</>
 				) : (
 					<>
 						<Row label="Due">
 							<span className="tabular">{formatDateLong(item.dueOn)}</span>
 						</Row>
-						<Row label="Client">{item.clientName}</Row>
+						{item.clientName ? <Row label="Client">{item.clientName}</Row> : null}
 						<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							Shown from the project. Change the date on the client's project.
+							This is the project's own due date. Clearing it keeps the project.
 						</p>
 					</>
 				)}

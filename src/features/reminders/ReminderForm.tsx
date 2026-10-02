@@ -15,9 +15,19 @@ import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { CATEGORIES, PATTERNS, describeRecurrence, takesInterval } from "./format";
 
+/** What a new reminder starts from, when it is made from a day on the calendar or from a client or project. */
+export type ReminderSeed = {
+	dueOn?: string;
+	clientId?: string;
+	projectId?: string;
+};
+
 type ReminderFormProps = {
 	/** Null creates, a reminder edits. */
 	reminder: Reminder | null;
+	seed?: ReminderSeed | null;
+	/** Where back goes, in words. "Reminders" unless the form was reached from somewhere else. */
+	backLabel?: string;
 	onClose: () => void;
 	onSaved: () => void;
 };
@@ -34,17 +44,17 @@ type Values = {
 	projectId: string;
 };
 
-function toValues(reminder: Reminder | null): Values {
+function toValues(reminder: Reminder | null, seed: ReminderSeed | null): Values {
 	return {
 		title: reminder?.title ?? "",
 		notes: reminder?.notes ?? "",
-		dueOn: reminder?.dueOn ?? "",
+		dueOn: reminder?.dueOn ?? seed?.dueOn ?? "",
 		category: reminder?.category ?? "paperwork",
 		pattern: reminder?.pattern ?? "once",
 		interval: String(reminder?.interval ?? 1),
 		leadDays: String(reminder?.leadDays ?? 0),
-		clientId: reminder?.clientId ?? "",
-		projectId: reminder?.projectId ?? "",
+		clientId: reminder?.clientId ?? seed?.clientId ?? "",
+		projectId: reminder?.projectId ?? seed?.projectId ?? "",
 	};
 }
 
@@ -54,11 +64,11 @@ function parseCount(raw: string): number | null {
 	return Number.parseInt(trimmed, 10);
 }
 
-export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) {
+export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSaved }: ReminderFormProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
 	const notesId = useId();
-	const [values, setValues] = useState<Values>(() => toValues(reminder));
+	const [values, setValues] = useState<Values>(() => toValues(reminder, seed));
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
 	const [titleError, setTitleError] = useState<string | null>(null);
@@ -163,7 +173,7 @@ export function ReminderForm({ reminder, onClose, onSaved }: ReminderFormProps) 
 		<FormPage
 			title={reminder ? "Edit reminder" : "New reminder"}
 			onBack={onClose}
-			backLabel="Reminders"
+			backLabel={backLabel ?? "Reminders"}
 			actions={
 				<>
 					<Button onClick={onClose}>Cancel</Button>

@@ -3500,6 +3500,32 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (opened !== "ok") throw new Error(`Smoke: event form ${opened}`);
 								}
+								if (screen === "Calendar") {
+									// A reminder on the grid is not read-only: its panel offers the
+									// same actions as the Reminders screen, and deleting it can be
+									// undone from the toast.
+									const acted = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const chip = () => [...document.querySelectorAll("button[title]")].find((b) => b.getAttribute("title") === "Send hyge the proposal");
+											const named = (text) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === text);
+											if (!chip()) return "no reminder chip";
+											chip().click();
+											await wait(500);
+											for (const need of ["Mark done", "Snooze", "Edit", "Delete"]) {
+												if (!named(need)) return "the reminder panel has no " + need;
+											}
+											named("Delete").click();
+											await wait(700);
+											if (chip()) return "the reminder is still on the grid after delete";
+											if (!document.body.textContent.includes("Send hyge the proposal deleted.")) return "no undo toast";
+											named("Undo").click();
+											await wait(700);
+											return chip() ? "ok" : "undo did not bring the reminder back";
+										})()`,
+									);
+									if (acted !== "ok") throw new Error(`Smoke: calendar reminder actions ${acted}`);
+								}
 								if (screen === "Week") {
 									const switched = await window.webContents.executeJavaScript(
 										`(async () => {

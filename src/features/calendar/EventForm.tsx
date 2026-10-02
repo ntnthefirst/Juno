@@ -23,6 +23,9 @@ export type EventSeed = {
 	startLocal: string;
 	endLocal: string;
 	allDay: boolean;
+	/** Set when the event is made from a client or a project, which is what it belongs to. */
+	clientId?: string;
+	projectId?: string;
 };
 
 type EventFormProps = {
@@ -33,6 +36,8 @@ type EventFormProps = {
 	scope?: CalendarScope;
 	/** Where a click on the grid landed, when creating. */
 	seed?: EventSeed | null;
+	/** Where back goes, in words. "Calendar" unless the form was reached from a client or project. */
+	backLabel?: string;
 	onClose: () => void;
 	onSaved: (event: CalendarEvent) => void;
 };
@@ -78,8 +83,8 @@ function toValues(event: CalendarEvent | null, occurrence: CalendarOccurrence | 
 		recurrence: recurrenceOf(event?.rrule ?? null, startLocal),
 		location: source?.location ?? "",
 		notes: source?.notes ?? "",
-		clientId: event?.clientId ?? "",
-		projectId: event?.projectId ?? "",
+		clientId: event?.clientId ?? seed?.clientId ?? "",
+		projectId: event?.projectId ?? seed?.projectId ?? "",
 	};
 }
 
@@ -100,7 +105,7 @@ const STEPS: FormStep[] = [
 	{ label: "Who", hint: "Who it is for. Everything here is optional." },
 ];
 
-export function EventForm({ event, occurrence = null, scope = "all", seed = null, onClose, onSaved }: EventFormProps) {
+export function EventForm({ event, occurrence = null, scope = "all", seed = null, backLabel, onClose, onSaved }: EventFormProps) {
 	const [initial] = useState<Values>(() => toValues(event, occurrence, scope, seed));
 	const [step, setStep] = useState(0);
 	// The submit button sits in the page footer, outside the form element.
@@ -307,7 +312,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 		<FormPage
 			title={title}
 			onBack={onClose}
-			backLabel="Calendar"
+			backLabel={backLabel ?? "Calendar"}
 			steps={STEPS}
 			step={step}
 			onStep={setStep}

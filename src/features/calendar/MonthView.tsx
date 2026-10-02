@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
-import type { CalendarItem, CalendarOccurrence } from "@shared/types";
+import type { CalendarItem, CalendarReminderItem } from "@shared/types";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { daysBetween, formatTime, weekdayShort } from "./dates";
@@ -15,11 +15,14 @@ type MonthViewProps = {
 	placed: Map<string, Placed[]>;
 	onOpen: (item: CalendarItem) => void;
 	onCreateAt: (date: string) => void;
+	onCreateReminderAt: (date: string) => void;
 	onOpenDay: (date: string) => void;
-	/** An event dragged onto another day. Whole days only; the time stays. */
-	onMove: (item: CalendarOccurrence, dayDelta: number) => void;
-	onEdit: (item: CalendarOccurrence) => void;
-	onDelete: (item: CalendarOccurrence) => void;
+	/** An item dragged onto another day. Whole days only; an event keeps its time. */
+	onMove: (item: CalendarItem, dayDelta: number) => void;
+	onEdit: (item: CalendarItem) => void;
+	onDelete: (item: CalendarItem) => void;
+	onComplete: (item: CalendarReminderItem) => void;
+	onSnooze: (item: CalendarReminderItem) => void;
 	/** A wheel gesture past a step apart, over any part of the grid: page a month. */
 	onStep: (direction: -1 | 1) => void;
 };
@@ -39,13 +42,16 @@ export function MonthView({
 	placed,
 	onOpen,
 	onCreateAt,
+	onCreateReminderAt,
 	onOpenDay,
 	onMove,
 	onEdit,
 	onDelete,
+	onComplete,
+	onSnooze,
 	onStep,
 }: MonthViewProps) {
-	const [dragging, setDragging] = useState<{ item: CalendarOccurrence; fromDate: string } | null>(null);
+	const [dragging, setDragging] = useState<{ item: CalendarItem; fromDate: string } | null>(null);
 	const [over, setOver] = useState<string | null>(null);
 	const root = useRef<HTMLDivElement>(null);
 	const menu = useContextMenu();
@@ -76,13 +82,20 @@ export function MonthView({
 
 	const menuItems: MenuItem[] =
 		menuTarget?.kind === "item"
-			? itemMenuItems(menuTarget.item, { onOpen, onEdit, onDelete })
+			? itemMenuItems(menuTarget.item, { onOpen, onEdit, onDelete, onComplete, onSnooze })
 			: menuTarget?.kind === "cell"
-				? [{ id: "new-event", label: "New event here", icon: "add", onSelect: () => onCreateAt(menuTarget.date) }]
+				? [
+						{ id: "new-event", label: "New event here", icon: "add", onSelect: () => onCreateAt(menuTarget.date) },
+						{
+							id: "new-reminder",
+							label: "New reminder here",
+							icon: "reminders",
+							onSelect: () => onCreateReminderAt(menuTarget.date),
+						},
+					]
 				: [];
 
 	function startDrag(event: DragEvent, p: Placed) {
-		if (p.item.kind !== "event") return;
 		event.dataTransfer.effectAllowed = "move";
 		event.dataTransfer.setData("text/plain", p.key);
 		setDragging({ item: p.item, fromDate: p.date });
@@ -221,7 +234,7 @@ type ChipProps = {
 
 function Chip({ placed, onOpen, onDragStart, onDragEnd, onContextMenu }: ChipProps) {
 	const { item } = placed;
-	const draggable = item.kind === "event";
+	const draggable = true;
 	const time = item.kind === "event" && !item.allDay && !placed.continued ? formatTime(item.startUtc) : null;
 	return (
 		<button

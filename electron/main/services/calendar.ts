@@ -424,10 +424,15 @@ export async function listRange(
 				kind: "reminder",
 				reminderId: reminder.id,
 				title: reminder.title,
+				notes: reminder.notes,
 				dueOn: reminder.dueOn,
 				bucket: reminder.bucket,
 				category: reminder.category,
+				recurrenceLabel: reminder.recurrenceLabel,
+				clientId: reminder.clientId,
 				clientName: reminder.clientName,
+				projectId: reminder.projectId,
+				projectName: reminder.projectName,
 			};
 			items.push({ ...item, sortKey: localDateStartUtc(reminder.dueOn, zone) });
 		}

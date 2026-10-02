@@ -1,17 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CalendarEvent, CalendarItem, CalendarOccurrence, CalendarScope } from "@shared/types";
+import type {
+	CalendarEvent,
+	CalendarItem,
+	CalendarOccurrence,
+	CalendarReminderItem,
+	CalendarScope,
+	Project,
+	Reminder,
+} from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
-import { Icon } from "../../components/Icon";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { ProjectForm } from "../projects/ProjectForm";
+import { ReminderForm, type ReminderSeed } from "../reminders/ReminderForm";
+import { SnoozeDialog } from "../reminders/SnoozeDialog";
 import { AgendaView } from "./AgendaView";
 import {
 	addDays,
 	addLocalDays,
 	addLocalMinutes,
 	addMonths,
+	formatDate,
 	formatDayShort,
 	formatMinutes,
 	joinLocal,
@@ -41,6 +52,9 @@ type FormState = {
 	scope: CalendarScope;
 	seed: EventSeed | null;
 };
+
+/** What the Undo toast does. Deleting an event, a reminder or a deadline each undo differently. */
+type Undo = { message: string; run: () => Promise<unknown> };
 
 type ScopeQuestion = {
 	verb: string;
@@ -74,7 +88,10 @@ export function CalendarScreen() {
 	const [form, setForm] = useState<FormState | null>(null);
 	const [detail, setDetail] = useState<CalendarItem | null>(null);
 	const [question, setQuestion] = useState<ScopeQuestion | null>(null);
-	const [deleted, setDeleted] = useState<CalendarEvent | null>(null);
+	const [undo, setUndo] = useState<Undo | null>(null);
+	const [reminderForm, setReminderForm] = useState<{ reminder: Reminder | null; seed: ReminderSeed | null } | null>(null);
+	const [projectForm, setProjectForm] = useState<Project | null>(null);
+	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [warnings, setWarnings] = useState<string[] | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	// Which way the range last moved, for the agenda's entrance. Held here
@@ -179,7 +196,7 @@ export function CalendarScreen() {
 		setForm({ event: null, occurrence: null, scope: "all", seed });
 	}
 
-	async function edit(item: CalendarOccurrence) {
+	async function editEvent(item: CalendarOccurrence) {
 		setDetail(null);
 		let event: CalendarEvent | null;
 		try {
@@ -199,7 +216,7 @@ export function CalendarScreen() {
 		});
 	}
 
-	function remove(item: CalendarOccurrence) {
+	function removeEvent(item: CalendarOccurrence) {
 		setDetail(null);
 		withScope(item, "delete", (scope) => {
 			setQuestion(null);
@@ -209,20 +226,98 @@ export function CalendarScreen() {
 					occurrenceStartLocal: item.occurrenceStartLocal,
 				});
 				// Only a whole removal can be undone; the other two edit the series.
-				if (result.deletedAt) setDeleted(result);
+				if (result.deletedAt) {
+					setUndo({
+						message: `${result.title} deleted.`,
+						run: () => window.juno.calendar.restore(result.id),
+					});
+				}
 			});
 		});
 	}
 
+	/** Edit whatever kind of item this is: an event, a reminder, or the project a deadline belongs to. */
+	async function edit(item: CalendarItem) {
+		if (item.kind === "event") return editEvent(item);
+		setDetail(null);
+		try {
+			if (item.kind === "reminder") {
+				const reminder = await window.juno.reminders.get(item.reminderId);
+				if (!reminder) throw new Error("That reminder no longer exists.");
+				setReminderForm({ reminder, seed: null });
+			} else {
+				const project = await window.juno.projects.get(item.projectId);
+				if (!project) throw new Error("That project no longer exists.");
+				setProjectForm(project);
+			}
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+			refresh();
+		}
+	}
+
+	/**
+	 * Delete whatever kind of item this is. A deadline is the project's own
+	 * date, so deleting it clears the date and leaves the project alone.
+	 */
+	function remove(item: CalendarItem) {
+		if (item.kind === "event") return removeEvent(item);
+		setDetail(null);
+		if (item.kind === "reminder") {
+			void run(async () => {
+				await window.juno.reminders.remove(item.reminderId);
+				setUndo({
+					message: `${item.title} deleted.`,
+					run: () => window.juno.reminders.restore(item.reminderId),
+				});
+			});
+			return;
+		}
+		const previous = item.dueOn;
+		void run(async () => {
+			await window.juno.projects.update(item.projectId, { dueOn: null });
+			setUndo({
+				message: `Deadline of ${item.projectName} cleared.`,
+				run: () => window.juno.projects.update(item.projectId, { dueOn: previous }),
+			});
+		});
+	}
+
+	function complete(item: CalendarReminderItem) {
+		setDetail(null);
+		void run(async () => {
+			const done = await window.juno.reminders.complete(item.reminderId);
+			setNotice(
+				done.completedAt ? `${item.title} done.` : `${item.title} done. Next one is due ${formatDate(done.dueOn)}.`,
+			);
+		});
+	}
+
+	async function snooze(item: CalendarReminderItem) {
+		setDetail(null);
+		try {
+			const reminder = await window.juno.reminders.get(item.reminderId);
+			if (!reminder) throw new Error("That reminder no longer exists.");
+			setSnoozing(reminder);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+			refresh();
+		}
+	}
+
 	async function restore() {
-		if (!deleted) return;
-		const id = deleted.id;
-		setDeleted(null);
-		await run(() => window.juno.calendar.restore(id));
+		if (!undo) return;
+		const { run: undoIt } = undo;
+		setUndo(null);
+		await run(undoIt);
+	}
+
+	function createReminderAt(date: string) {
+		setReminderForm({ reminder: null, seed: { dueOn: date } });
 	}
 
 	/** A drag, turned into a wall-clock edit on the event's own zone. */
-	function move(item: CalendarOccurrence, dayDelta: number, minuteDelta: number) {
+	function moveEvent(item: CalendarOccurrence, dayDelta: number, minuteDelta: number) {
 		const shift = (local: string) =>
 			item.allDay ? addLocalDays(local, dayDelta) : addLocalMinutes(local, dayDelta * 1440 + minuteDelta);
 		withScope(item, "move", (scope) => {
@@ -243,6 +338,16 @@ export function CalendarScreen() {
 				);
 			});
 		});
+	}
+
+	/** A drag onto another day. Reminders and deadlines are dates, so only whole days apply. */
+	function move(item: CalendarItem, dayDelta: number, minuteDelta: number) {
+		if (item.kind === "event") return moveEvent(item, dayDelta, minuteDelta);
+		const dueOn = addDays(item.dueOn, dayDelta);
+		void run(async () => {
+			if (item.kind === "reminder") await window.juno.reminders.update(item.reminderId, { dueOn });
+			else await window.juno.projects.update(item.projectId, { dueOn });
+		}, item.kind === "reminder" ? `${item.title} moved to ${formatDate(dueOn)}.` : `Deadline of ${item.projectName} moved to ${formatDate(dueOn)}.`);
 	}
 
 	function resize(item: CalendarOccurrence, minuteDelta: number) {
@@ -299,7 +404,7 @@ export function CalendarScreen() {
 	}
 
 	const dismissNotice = useCallback(() => setNotice(null), []);
-	const dismissUndo = useCallback(() => setDeleted(null), []);
+	const dismissUndo = useCallback(() => setUndo(null), []);
 
 	const heading =
 		!anchor || !from || !to
@@ -309,6 +414,35 @@ export function CalendarScreen() {
 				: view === "week"
 					? weekLabel(anchor)
 					: `${formatDayShort(from)} to ${formatDayShort(to)} ${to.slice(0, 4)}`;
+
+	if (reminderForm) {
+		return (
+			<ReminderForm
+				reminder={reminderForm.reminder}
+				seed={reminderForm.seed}
+				backLabel="Calendar"
+				onClose={() => setReminderForm(null)}
+				onSaved={() => {
+					setReminderForm(null);
+					refresh();
+				}}
+			/>
+		);
+	}
+
+	if (projectForm) {
+		return (
+			<ProjectForm
+				project={projectForm}
+				backLabel="Calendar"
+				onClose={() => setProjectForm(null)}
+				onSaved={() => {
+					setProjectForm(null);
+					refresh();
+				}}
+			/>
+		);
+	}
 
 	// The form replaces the calendar rather than covering it. There is nothing
 	// behind it worth reading while filling it in, and a month grid seen through
@@ -411,15 +545,26 @@ export function CalendarScreen() {
 				</div>
 
 				<div className="ml-auto flex shrink-0 items-center gap-1">
-					<Button
-						variant="primary"
+					<MenuButton
+						items={[
+							{
+								id: "new-event",
+								label: "New event",
+								icon: "calendar",
+								onSelect: () => anchor && createAt(view === "month" ? (today ?? anchor) : anchor, 9 * 60),
+							},
+							{
+								id: "new-reminder",
+								label: "New reminder",
+								icon: "reminders",
+								onSelect: () => anchor && createReminderAt(view === "month" ? (today ?? anchor) : anchor),
+							},
+						]}
+						ariaLabel="New"
+						label="New"
+						icon="add"
 						size="dense"
-						aria-label="New event"
-						title="New event"
-						onClick={() => anchor && createAt(view === "month" ? (today ?? anchor) : anchor, 9 * 60)}
-					>
-						<Icon name="add" />
-					</Button>
+					/>
 					<MenuButton items={overflowItems} ariaLabel="More" icon="more" />
 				</div>
 			</div>
@@ -441,6 +586,7 @@ export function CalendarScreen() {
 						placed={placed}
 						onOpen={setDetail}
 						onCreateAt={(date) => createAt(date, 9 * 60)}
+						onCreateReminderAt={createReminderAt}
 						onOpenDay={(date) => {
 							setAnchor(date);
 							setView("week");
@@ -448,6 +594,8 @@ export function CalendarScreen() {
 						onMove={(item, dayDelta) => move(item, dayDelta, 0)}
 						onEdit={(item) => void edit(item)}
 						onDelete={(item) => remove(item)}
+						onComplete={complete}
+						onSnooze={(item) => void snooze(item)}
 						onStep={step}
 					/>
 				) : view === "week" ? (
@@ -462,6 +610,8 @@ export function CalendarScreen() {
 						onResize={resize}
 						onEdit={(item) => void edit(item)}
 						onDelete={(item) => remove(item)}
+						onComplete={complete}
+						onSnooze={(item) => void snooze(item)}
 						onStep={step}
 					/>
 				) : (
@@ -473,6 +623,8 @@ export function CalendarScreen() {
 						onOpen={setDetail}
 						onEdit={(item) => void edit(item)}
 						onDelete={(item) => remove(item)}
+						onComplete={complete}
+						onSnooze={(item) => void snooze(item)}
 						onStep={step}
 					/>
 				)}
@@ -482,11 +634,13 @@ export function CalendarScreen() {
 					<EventDetail
 						item={detail}
 						onClose={() => setDetail(null)}
-						onEdit={() => {
-							if (detail.kind === "event") void edit(detail);
+						onEdit={() => void edit(detail)}
+						onDelete={() => remove(detail)}
+						onComplete={() => {
+							if (detail.kind === "reminder") complete(detail);
 						}}
-						onDelete={() => {
-							if (detail.kind === "event") remove(detail);
+						onSnooze={() => {
+							if (detail.kind === "reminder") void snooze(detail);
 						}}
 					/>
 				) : null}
@@ -513,11 +667,23 @@ export function CalendarScreen() {
 				</Dialog>
 			) : null}
 
-			{deleted ? (
-				<Toast message={`${deleted.title} deleted.`} actionLabel="Undo" onAction={() => void restore()} onDismiss={dismissUndo} />
+			{snoozing ? (
+				<SnoozeDialog
+					reminder={snoozing}
+					onClose={() => setSnoozing(null)}
+					onSnoozed={() => {
+						setSnoozing(null);
+						setNotice("Reminder snoozed.");
+						refresh();
+					}}
+				/>
 			) : null}
 
-			{deleted === null && notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
+			{undo ? (
+				<Toast message={undo.message} actionLabel="Undo" onAction={() => void restore()} onDismiss={dismissUndo} />
+			) : null}
+
+			{undo === null && notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
 		</div>
 	);
 }

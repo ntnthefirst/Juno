@@ -534,7 +534,6 @@ const api: JunoApi = {
 			replySeed: (messageId, mode) => call("mail.outbox.replySeed", messageId, mode),
 			replySeedOutgoing: (outboxId, mode) => call("mail.outbox.replySeedOutgoing", outboxId, mode),
 			send: (id) => call("mail.outbox.send", id),
-			approve: (id) => call("mail.outbox.approve", id),
 			cancel: (id) => call("mail.outbox.cancel", id),
 			retry: (id) => call("mail.outbox.retry", id),
 			remove: (id) => call("mail.outbox.remove", id),
@@ -544,6 +543,14 @@ const api: JunoApi = {
 				ipcRenderer.on("mail.outboxChanged", handler);
 				return () => {
 					ipcRenderer.off("mail.outboxChanged", handler);
+				};
+			},
+			onAgentDraft: (listener) => {
+				const handler = (_event: Electron.IpcRendererEvent, message: MailOutboxMessage) =>
+					listener(message);
+				ipcRenderer.on("mail.agentDraft", handler);
+				return () => {
+					ipcRenderer.off("mail.agentDraft", handler);
 				};
 			},
 		},

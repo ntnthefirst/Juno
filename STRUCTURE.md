@@ -133,10 +133,12 @@ scripts/                dev, build, smoke, the MCP bridge, icon generation
    sandbox, and the window's CSP handler must leave those responses alone
    (decision 20). Widening either policy to make something work is the wrong
    fix.
-7. **Nothing an agent can call produces a queued message.** The outbox state is
-   the gate (decision 22): `mail.send` parks a draft in `pending`, and approve
-   has an IPC channel and no tool. Adding a tool that queues is the one change
-   that would make [.claude/rules/mcp.md](.claude/rules/mcp.md) section 4 false.
+7. **Nothing an agent can call produces a queued message.** An agent writes
+   drafts (`mail.draft`, `mail.reply`, `mail.draft_from_template`), the window
+   opens them in the editor, and only `requestSend`, reached over IPC when a
+   person presses Send, queues one (decision 43). Adding a tool that sends,
+   asks to send or queues is the one change that would make
+   [.claude/rules/mcp.md](.claude/rules/mcp.md) section 4 false.
 8. **An agent's call does not run when it is made.** Anything side-effectful
    parks in `agent_actions` and returns a pending envelope; a person approves
    it under Agent and only then does the handler run (decision 24). The host

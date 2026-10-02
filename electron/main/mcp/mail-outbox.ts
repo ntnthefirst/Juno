@@ -4,13 +4,13 @@ import * as templates from "../services/mail-templates";
 import type { ToolDescriptor } from "./types";
 
 /**
- * Sending tools.
+ * Writing tools. An agent writes mail and a person sends it.
  *
- * `mail.send` does not send. It moves a draft to `pending`, where a person sees
- * the whole message in the app and approves or rejects it. There is no
- * `mail.outbox.approve` tool and there will not be one: the service only queues
- * a message for a caller that says it is a person, and this file never says
- * that (.claude/rules/mcp.md section 4).
+ * Every tool here that makes a message makes a draft, and the draft opens in the
+ * editor in the window the way one a person started would. There is no tool
+ * that sends, asks to send, queues, approves or retries a send, and there will
+ * not be one: pressing Send in the editor is the only way a message reaches the
+ * queue (.claude/rules/mcp.md section 4).
  *
  * Read receipts and tracking are permanently out of scope, so there is nothing
  * here that could ask for one.
@@ -124,7 +124,7 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		description:
 			"Fills a template against a client and project and returns the subject, the HTML body " +
 			"in the house style and its text twin, plus the placeholders that had no value. Stores " +
-			"nothing: a check before mail.send_from_template. A template is never put in a draft.",
+			"nothing: a check before mail.draft_from_template.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -333,11 +333,12 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		name: "mail.draft",
 		title: "Write a draft",
 		description:
-			"Creates a plain draft in the outbox. Nothing is sent. The text is turned into HTML in the " +
+			"Writes a plain draft and opens it in the editor for a person, who reads it and presses " +
+			"Send. Nothing is sent and nothing here can send it. The text is turned into HTML in the " +
 			"house style. Use it for a new mail. To answer a received message use mail.reply, which " +
 			"works out the recipients, subject and quote itself; reply_to_message_id here only " +
-			"threads a draft whose addresses you chose. Templates are not used here, and a template is " +
-			"never saved as a draft: use mail.send_from_template. document_ids attach PDFs.",
+			"threads a draft whose addresses you chose. To start from a template use " +
+			"mail.draft_from_template. document_ids attach PDFs.",
 		readOnly: false,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -369,6 +370,7 @@ export const mailOutboxTools: ToolDescriptor[] = [
 				clientId: (args.client_id as string | null) ?? null,
 				projectId: (args.project_id as string | null) ?? null,
 				documentIds: Array.isArray(args.document_ids) ? args.document_ids.map(String) : [],
+				actor: "agent",
 			};
 			return outbox.createDraft(input);
 		},
@@ -383,7 +385,8 @@ export const mailOutboxTools: ToolDescriptor[] = [
 			"the thread first with mail.threads.get and mail.messages.body, then pass the id of the " +
 			"message you are answering. body_text is plain text, never HTML, and only your part: do " +
 			"not repeat the quote. mode reply_all keeps everyone on the original, and forward needs " +
-			"a to. Nothing is sent: it returns a draft, and mail.send asks a person to approve it.",
+			"a to. It writes a draft and opens it in the editor for a person, who reads it and presses " +
+			"Send. Nothing is sent and nothing here can send it.",
 		readOnly: false,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -413,23 +416,21 @@ export const mailOutboxTools: ToolDescriptor[] = [
 				...(args.bcc !== undefined ? { bcc: addresses(args.bcc) } : {}),
 				...(args.include_quote !== undefined ? { includeQuote: Boolean(args.include_quote) } : {}),
 				documentIds: Array.isArray(args.document_ids) ? args.document_ids.map(String) : [],
+				actor: "agent",
 			}),
 	},
 	{
-		name: "mail.send_from_template",
-		title: "Ask to send a mail from a template",
+		name: "mail.draft_from_template",
+		title: "Write a draft from a template",
 		description:
-			"Fills a mail template for a client and project and asks to send it as a new message, in " +
-			"one step. It does not send: the filled message becomes pending and a person approves or " +
-			"rejects it in the app, seeing the whole message. A template is never saved as a draft " +
-			"and cannot be used for a reply or a forward; for those use mail.reply. Check the result " +
-			"with mail.templates.render first when values may be missing, because a placeholder " +
-			"without a value is refused. Returns the message in its pending state.",
+			"Fills a mail template for a client and project and writes the result as a draft, opened in " +
+			"the editor for a person, who reads it and presses Send. Nothing is sent and nothing here " +
+			"can send it. The draft is the finished message, not a template, so it can be edited " +
+			"freely. It starts a new message and cannot be a reply or a forward; for those use " +
+			"mail.reply. Check the result with mail.templates.render first when values may be " +
+			"missing: a placeholder without a value stays visible in the draft and blocks sending.",
 		readOnly: false,
-		requiresConfirmation: true,
-		// Gated in the service for the same reason as mail.send: the person
-		// approves the real message, not an argument list.
-		gatedInService: true,
+		requiresConfirmation: false,
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -465,29 +466,8 @@ export const mailOutboxTools: ToolDescriptor[] = [
 					: {}),
 				documentIds: Array.isArray(args.document_ids) ? args.document_ids.map(String) : [],
 			};
-			return outbox.sendFromTemplate(input, { actor: "agent" });
+			return outbox.draftFromTemplate(input);
 		},
-	},
-	{
-		name: "mail.send",
-		title: "Ask to send a draft",
-		description:
-			"Asks for a draft to be sent. It does not send: the message becomes pending and a person " +
-			"approves or rejects it in the app, seeing the full message. Returns the message in its " +
-			"pending state. A rejected or edited message is not retried.",
-		readOnly: false,
-		requiresConfirmation: true,
-		// The outbox is the gate for this one, and it shows the real message
-		// rather than an argument list (decision 22). Parking it in the generic
-		// gate as well would ask a person twice about one send.
-		gatedInService: true,
-		inputSchema: {
-			type: "object",
-			properties: { id: { type: "string" } },
-			required: ["id"],
-			additionalProperties: false,
-		},
-		handler: async (args) => outbox.requestSend(String(args.id), { actor: "agent" }),
 	},
 	{
 		name: "mail.outbox.cancel",
@@ -503,21 +483,5 @@ export const mailOutboxTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => outbox.cancel(String(args.id)),
-	},
-	{
-		name: "mail.outbox.retry",
-		title: "Retry a failed message",
-		description:
-			"Puts a failed message back in the queue under the same Message-ID. It was approved " +
-			"once already, so no second approval is asked.",
-		readOnly: false,
-		requiresConfirmation: true,
-		inputSchema: {
-			type: "object",
-			properties: { id: { type: "string" } },
-			required: ["id"],
-			additionalProperties: false,
-		},
-		handler: async (args) => outbox.retry(String(args.id)),
 	},
 ];

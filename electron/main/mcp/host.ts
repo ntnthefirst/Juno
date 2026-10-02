@@ -84,7 +84,6 @@ export function toolCount(): number {
  */
 function describe(tool: ToolDescriptor): string {
 	if (tool.readOnly) return tool.description;
-	if (tool.gatedInService) return tool.description;
 	if (!tool.requiresConfirmation) return tool.description;
 	return `${tool.description} Requires approval: this call does not run, it asks. A person approves or rejects it in Juno and the reply says pending.`;
 }
@@ -135,7 +134,7 @@ export async function callTool(
 
 	const source = options.source ?? "mcp";
 
-	if (!tool.readOnly && tool.requiresConfirmation && tool.gatedInService !== true) {
+	if (!tool.readOnly && tool.requiresConfirmation) {
 		const action = await actions.request({
 			toolName: tool.name,
 			args,

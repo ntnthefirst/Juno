@@ -29,7 +29,7 @@ Lowercase, dot-separated, singular domain, one verb.
 clients.list          clients.get          clients.create
 clients.update        clients.archive
 mail.sync             mail.search          mail.get_thread
-mail.send
+mail.draft            mail.reply
 documents.render      documents.sign       documents.list_templates
 calendar.list_events  calendar.create_event
 reminders.list        reminders.complete
@@ -70,13 +70,18 @@ the registration. There is no third category.
 `reminders.list`, `documents.list_templates`.
 
 **Side-effectful**: everything that writes, and in particular everything that
-**sends, signs, deletes or files something**: `mail.send`, `documents.sign`,
-`documents.file`, `clients.delete`, `calendar.create_event` when it invites
-someone.
+**signs, deletes or files something**: `documents.sign`, `documents.file`,
+`clients.delete`, `calendar.create_event` when it invites someone.
+
+**Sending mail is not on this list because an agent cannot do it** (decision 43).
+It writes drafts (`mail.draft`, `mail.reply`, `mail.draft_from_template`), the
+window opens the draft in the editor, and a person presses Send. Do not add a
+tool that sends, asks to send, queues, approves or retries a send. The host test
+fails if one is named like that.
 
 The rule, and it does not bend:
 
-> A tool that sends, signs, deletes or files something requires explicit
+> A tool that signs, deletes or files something requires explicit
 > confirmation from the user in the app before it executes, and must never fire
 > unattended. Not on a timer, not as a step inside an automation, not because the
 > agent is confident.

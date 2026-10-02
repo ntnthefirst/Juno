@@ -125,7 +125,7 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 		}
 	}
 
-	const gated = tools.filter((tool) => !tool.readOnly && (tool.requiresConfirmation || tool.gatedInService));
+	const gated = tools.filter((tool) => !tool.readOnly && (tool.requiresConfirmation));
 	const stepTools = (() => {
 		try {
 			const parsed: unknown = JSON.parse(stepsText);

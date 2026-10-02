@@ -118,21 +118,13 @@ describe("calling a tool", () => {
 	});
 });
 
-describe("the one tool whose service holds its own gate", () => {
-	it("is mail.send and mail.send_from_template, and nothing else", () => {
-		const gated = listTools()
-			.map((tool) => toolByName(tool.name))
-			.filter((tool) => tool?.gatedInService === true)
-			.map((tool) => tool!.name);
-		expect(gated).toEqual(["mail.send", "mail.send_from_template"]);
-	});
-
-	it("goes to the service rather than the generic gate", async () => {
-		// No such draft, so the service refuses. What matters is that the call
-		// reached the service at all: a generic gate would have parked it and
-		// returned pending without touching the outbox.
-		await expect(callTool("mail.send", { id: "nope" })).rejects.toThrow(/does not exist/);
-		expect(await actions.list({})).toHaveLength(0);
+describe("sending", () => {
+	it("is not something an agent can ask for: no tool sends, queues, approves or retries", () => {
+		const names = listTools().map((tool) => tool.name);
+		expect(names.filter((name) => /send|queue|approve|retry/i.test(name))).toEqual([]);
+		expect(names).toContain("mail.draft");
+		expect(names).toContain("mail.reply");
+		expect(names).toContain("mail.draft_from_template");
 	});
 });
 
@@ -150,11 +142,10 @@ describe("what the declarations promise", () => {
 				(tool) =>
 					!tool.readOnly &&
 					!tool.requiresConfirmation &&
-					tool.gatedInService !== true &&
 					!localOnly.has(tool.name),
 			)
 			.map((tool) => tool.name);
-		expect(unguarded).toEqual(["mail.draft", "mail.reply"]);
+		expect(unguarded).toEqual(["mail.draft", "mail.draft_from_template", "mail.reply"]);
 	});
 
 	it("has no tool that unlocks Juno or approves an action", () => {

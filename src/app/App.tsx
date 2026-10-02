@@ -14,6 +14,7 @@ import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplates
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { TodayScreen } from "../features/today/TodayScreen";
 import { onOpenClientRequest } from "../lib/open-client";
+import { offerDraft } from "../lib/open-draft";
 import { useTheme } from "../lib/theme";
 import { DocumentDropLayer } from "./DocumentDropLayer";
 import { BreadcrumbProvider } from "./breadcrumb";
@@ -143,6 +144,18 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 				// Remounts the clients screen when it is already open, so it re-reads the request.
 				setVisit((count) => count + 1);
 				setScreen("clients");
+				closeSidebar();
+			}),
+		[closeSidebar],
+	);
+
+	// An agent wrote a draft. It opens in the editor on the mail screen, the way
+	// one a person started would, and it is the person who sends it.
+	useEffect(
+		() =>
+			window.juno.mail.outbox.onAgentDraft((draft) => {
+				offerDraft(draft);
+				setScreen("mail");
 				closeSidebar();
 			}),
 		[closeSidebar],

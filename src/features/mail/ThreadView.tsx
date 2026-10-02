@@ -138,7 +138,11 @@ export function ThreadView({
 				setVersion((v) => v + 1);
 				latest.current.onChanged();
 			})
-			.catch((cause: unknown) => latest.current.onNotice(messageOf(cause)));
+			// Silent on purpose. The server is written first, so offline or behind a
+			// wrong password this fails, and an error every time a message is read
+			// would be louder than the thing it reports. It stays unread and is
+			// tried again the next time the thread is opened.
+			.catch(() => undefined);
 	}, [load, threadId]);
 
 	// A reply to this thread moving from queued to sent, or being sent from
@@ -234,7 +238,7 @@ export function ThreadView({
 		window.juno.mail.file
 			.setSeen([id], true)
 			.then(refresh)
-			.catch((cause: unknown) => onNotice(messageOf(cause)));
+			.catch(() => undefined);
 	}
 
 	/** After a message left, either the conversation is empty or the rest is shown. */

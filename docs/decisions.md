@@ -406,6 +406,10 @@ CTE for that reason, and `mail-threads.ts` says so.
 
 ## 22. Sending is a queue with a gate, and the gate is a state
 
+**Amended by decision 43.** An agent no longer asks to send at all. The state
+table below is still how a message gets queued, but the `pending` route for an
+agent, `approve` and `gatedInService` are gone.
+
 Phase 4 sends mail, and `mcp.md` section 4 says a tool that sends requires a
 person's explicit confirmation, enforced in the service, never in the adapter.
 That rule became a table rather than a flag.
@@ -509,11 +513,9 @@ with its arguments rendered for a person, and the caller gets back a pending
 action rather than a result. Approving runs the handler; rejecting, expiring
 or ignoring it does not. `approve` has an IPC channel and no MCP tool, for the
 same reason there is no `app.unlock`: the thing being gated is what would call
-it. This is decision 22's shape generalised, and `mail.send` keeps its own gate
-rather than being wrapped in this one, because the outbox shows a person the
-real message instead of an argument list. A tool says so in its declaration
-with `gatedInService`, so the exception is visible in the same place as the
-rest.
+it. This is decision 22's shape generalised. (An agent could once also ask to
+send through the outbox, which kept its own gate; decision 43 removed that, so
+every confirmed tool goes through this one.)
 
 An automation is a stored list of those same calls. It has no interpreter: a
 step is a tool name and an argument object, replayed through the same host, so
@@ -1308,3 +1310,37 @@ earlier design shows as out of date until Update is pressed.
 matters more than the ones that can, or a reason to keep a listener from
 existing at all. The first is answered by a bridge that forwards to this
 address, not by a second server.
+
+## 43. An agent writes mail and a person sends it
+
+Decision 22 let an agent ask to send: `mail.send` parked a draft in `pending`
+and the window showed a banner to approve or reject it. It was the right gate
+and the wrong experience. A person wanted the message in front of them as if
+they had written it, in the editor, and a screen that said an assistant had
+prepared something and offered a yes or a no was a detour.
+
+So an agent only writes. `mail.draft`, `mail.reply` and
+`mail.draft_from_template` create a draft and the window opens it in the editor
+on the mail screen, the same page a person writing mail gets. There is no MCP
+tool that sends, asks to send, queues, approves or retries a send. A message
+reaches `queued` through `requestSend`, which only the IPC adapter calls, when a
+person presses Send. The gate is now that the route does not exist rather than
+that a state holds it.
+
+What follows from it:
+
+- `requestSend` has no actor and `approve` is gone. `pending` stays in the type
+  because older versions wrote it, and such a row opens in the editor like a
+  draft; editing it makes it the person's.
+- The service says who wrote a draft (`requestedBy`) and announces an agent's
+  draft to the window (`onAgentDraft`). If a message is already being written,
+  the new draft is left in Drafts with a notice rather than replacing the
+  editor.
+- A template filled by an agent is written as a plain draft with no link back to
+  the template, so editing it never renders the template over the changes.
+- `gatedInService` had one user and goes with it. Every tool that is not
+  read-only is either confirmed through `agent_actions` or a local write.
+
+**What would reverse this:** a reason for mail to leave without a person
+looking at the finished message. Nothing in the product has asked for that, and
+decision 9 and the confirmation rule both argue against it.

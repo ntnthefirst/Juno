@@ -893,13 +893,17 @@ export interface JunoApi {
 			replySeedOutgoing(outboxId: string, mode: MailReplyMode): Promise<MailReplySeed>;
 			/** The person's press. Queues the message; the sender picks it up at once. */
 			send(id: string): Promise<MailOutboxMessage>;
-			/** Approves what an agent prepared. Only a person can reach this. */
-			approve(id: string): Promise<MailOutboxMessage>;
 			cancel(id: string): Promise<MailOutboxMessage>;
 			retry(id: string): Promise<MailOutboxMessage>;
 			remove(id: string): Promise<MailOutboxMessage>;
 			/** State changes, pushed by the sender as it works. */
 			onChange(listener: (message: MailOutboxMessage) => void): () => void;
+			/**
+			 * A draft an agent just wrote. The window opens it in the editor, like
+			 * one a person started. It has not been sent and nothing can send it
+			 * but the person pressing Send there.
+			 */
+			onAgentDraft(listener: (message: MailOutboxMessage) => void): () => void;
 		};
 	};
 }

@@ -223,20 +223,16 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 									className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${
 										tool.readOnly
 											? "bg-[var(--sunken)] text-[var(--ink-muted)]"
-											: tool.gatedInService
-												? "bg-[var(--seal-soft)] text-[var(--seal)]"
-												: tool.requiresConfirmation
-													? "bg-[var(--warn-soft)] text-[var(--warn)]"
-													: "bg-[var(--accent-soft)] text-[var(--accent)]"
+											: tool.requiresConfirmation
+												? "bg-[var(--warn-soft)] text-[var(--warn)]"
+												: "bg-[var(--accent-soft)] text-[var(--accent)]"
 									}`}
 								>
 									{tool.readOnly
 										? "reads"
-										: tool.gatedInService
-											? "you approve the message"
-											: tool.requiresConfirmation
-												? "you approve"
-												: "runs"}
+										: tool.requiresConfirmation
+											? "you approve"
+											: "runs"}
 								</span>
 							</div>
 						))}

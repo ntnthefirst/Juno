@@ -17,6 +17,7 @@ Run from the repo root. The project uses npm.
 | `npm run test` | Vitest. Service functions and migrations | After every change to a service, a query or the schema |
 | `npm run check` | lint, typecheck and test in one go | Before a commit |
 | `npm run smoke` | Compiles, launches the packaged-mode app, asserts the DB opened, migrations ran and both windows painted, exits | Before any commit touching main, preload, the schema, the windows or a native module |
+| `npm run smoke:packaged` | Compiles, packages an unpacked Windows build and launches that executable instead of the source tree | After touching `electron-builder.yml` or moving anything between `dependencies` and `devDependencies`. CI runs it on every pull request |
 | `npm run compile` | Main process plus renderer, no installer | When you only need built output, not a package |
 | `npm run build` | Everything, then an installer for the current platform, into `release/` | Before claiming the app ships, and after touching a native dependency |
 | `npm run build:win` / `build:mac` / `build:linux` | The same for one named platform | CI. Each runner builds the platform it is |
@@ -70,6 +71,13 @@ A clean typecheck is not proof a screen works.
 
 ## 4. Traps in this stack
 
+- **`dependencies` is what ships, `devDependencies` is what does not.** electron-builder packs every runtime
+  dependency into the app archive, and the renderer is already bundled by Vite, so React,
+  CodeMirror, the fonts and the icons sit in `devDependencies`. A package the main process
+  `require`s or `import`s belongs in `dependencies`, and `electron-builder.yml` lists what
+  is filtered out of the rest (source maps, type declarations, the parts of pdf.js and
+  pdf-lib the app never loads). The source smoke cannot see a mistake here, because it
+  runs against the full `node_modules`. `npm run smoke:packaged` can.
 - **`better-sqlite3` is a native module and must be rebuilt against Electron's
   ABI, not Node's.** Installing it normally builds for your system Node, and then
   `npm run dev` throws `NODE_MODULE_VERSION mismatch` on the first query.

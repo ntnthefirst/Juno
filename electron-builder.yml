@@ -13,6 +13,28 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - package.json
+  # What is left out, and why. Every line is a file the running app never opens,
+  # so it only makes the installer and every update bigger.
+  # Source maps: nothing loads them in a packaged build.
+  - "!**/*.map"
+  # Type declarations and docs shipped inside dependencies.
+  - "!**/node_modules/**/*.d.ts"
+  - "!**/node_modules/**/*.d.cts"
+  - "!**/node_modules/**/*.d.mts"
+  - "!**/node_modules/**/*.md"
+  # pdf.js is only used to read text out of a PDF, through its legacy build.
+  # The canvas it can optionally use for drawing is 38 MB and never loaded, and
+  # pdf.js logs a warning and carries on when it is missing.
+  - "!**/node_modules/@napi-rs/**"
+  - "!**/node_modules/pdfjs-dist/build/**"
+  - "!**/node_modules/pdfjs-dist/web/**"
+  - "!**/node_modules/pdfjs-dist/types/**"
+  - "!**/node_modules/pdfjs-dist/image_decoders/**"
+  # pdf-lib is required as CommonJS. Its ES build, bundles and sources are not.
+  - "!**/node_modules/pdf-lib/es/**"
+  - "!**/node_modules/pdf-lib/dist/**"
+  - "!**/node_modules/pdf-lib/src/**"
+  - "!**/node_modules/pdf-lib/ts3.4/**"
 
 # Updates come from the repository's public releases. electron-builder writes
 # the latest.yml / latest-mac.yml that electron-updater reads, and main/updates.ts

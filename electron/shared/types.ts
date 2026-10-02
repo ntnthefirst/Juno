@@ -2371,6 +2371,25 @@ export interface MailTemplateSendInput {
 
 export type MailDraftPatch = Partial<Omit<MailDraftInput, "accountId">>;
 
+/**
+ * An answer written without choosing its addresses. The recipients, subject,
+ * threading and quoted original come from the message being answered, the same
+ * as pressing Reply in the window; only the new text is the caller's.
+ */
+export interface MailReplyInput {
+	messageId: string;
+	mode?: MailReplyMode;
+	/** Plain text, the new part only. The quoted original is added under it. */
+	bodyText: string;
+	/** Replaces the worked-out recipients. Required for a forward. */
+	to?: MailAddress[];
+	cc?: MailAddress[];
+	bcc?: MailAddress[];
+	/** Default true. False leaves the original out of the body. */
+	includeQuote?: boolean;
+	documentIds?: string[];
+}
+
 /** What a reply starts from: the addresses and subject, worked out from the original. */
 /** Reply to the sender, reply to everyone, or forward it to somebody new. */
 export type MailReplyMode = "reply" | "reply_all" | "forward";

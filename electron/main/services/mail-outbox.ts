@@ -23,6 +23,7 @@ import type {
 	MailOutboxMessage,
 	MailOutboxState,
 	MailThreadOutgoing,
+	MailReplyInput,
 	MailReplyMode,
 	MailReplySeed,
 	MailTemplateSendInput,
@@ -555,6 +556,43 @@ async function insertDraft(input: MailDraftInput, db: Db): Promise<MailOutboxMes
 	const record = await requireRecord(id, db);
 	notifyChanged(record);
 	return record;
+}
+
+/**
+ * Answers or forwards a received message from the new text alone. It does what
+ * the window does on Reply (replySeed, then a draft with the quote under the
+ * typed text) so an agent and a person end up with the same message. It stays a
+ * draft: sending it is a separate, confirmed step.
+ */
+export async function createReply(input: MailReplyInput, db: Db = getDb()): Promise<MailOutboxMessage> {
+	const text = input.bodyText.trim();
+	if (!text) throw new Error("A reply needs some text. Write what you want to say above the quoted message.");
+	const mode = input.mode ?? "reply";
+	const seed = await replySeed(input.messageId, { mode }, db);
+	const to = input.to ?? seed.to;
+	if (to.length === 0) {
+		throw new Error(
+			mode === "forward"
+				? "A forward needs a recipient. Pass to with the address it goes to."
+				: "This message has no address to answer. Pass to with the address it goes to.",
+		);
+	}
+	const quote = input.includeQuote !== false;
+	return insertDraft(
+		{
+			accountId: seed.accountId,
+			to,
+			cc: input.cc ?? seed.cc,
+			...(input.bcc ? { bcc: input.bcc } : {}),
+			subject: seed.subject,
+			bodyText: quote ? `${text}\n\n${seed.quotedText}` : text,
+			bodyHtml: `${textToHtml(text)}${quote ? seed.quotedHtml : ""}`,
+			replyToMessageId: seed.replyToMessageId,
+			clientId: seed.clientId,
+			documentIds: input.documentIds ?? [],
+		},
+		db,
+	);
 }
 
 /**

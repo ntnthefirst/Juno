@@ -817,6 +817,12 @@ export interface JunoApi {
 			junk(threadIds: string[]): Promise<MailFileResult>;
 			moveToFolder(threadIds: string[], folderId: string): Promise<MailFileResult>;
 			deleteForever(threadIds: string[]): Promise<number>;
+			/** The same filing for single messages, which is what the reader's buttons do. */
+			archiveMessages(messageIds: string[]): Promise<MailFileResult>;
+			trashMessages(messageIds: string[]): Promise<MailFileResult>;
+			junkMessages(messageIds: string[]): Promise<MailFileResult>;
+			moveMessagesToFolder(messageIds: string[], folderId: string): Promise<MailFileResult>;
+			deleteMessagesForever(messageIds: string[]): Promise<number>;
 			setSeen(messageIds: string[], seen: boolean): Promise<number>;
 			setThreadsSeen(threadIds: string[], seen: boolean): Promise<number>;
 			setFlagged(messageIds: string[], flagged: boolean): Promise<number>;

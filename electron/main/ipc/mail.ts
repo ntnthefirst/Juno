@@ -104,6 +104,17 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.file.deleteForever", (_event, threadIds: string[]) =>
 		actions.deleteThreadsForever(threadIds),
 	);
+	ipcMain.handle("mail.file.archiveMessages", (_event, messageIds: string[]) =>
+		actions.archiveMessages(messageIds),
+	);
+	ipcMain.handle("mail.file.trashMessages", (_event, messageIds: string[]) => actions.trashMessages(messageIds));
+	ipcMain.handle("mail.file.junkMessages", (_event, messageIds: string[]) => actions.junkMessages(messageIds));
+	ipcMain.handle("mail.file.moveMessagesToFolder", (_event, messageIds: string[], folderId: string) =>
+		actions.move(messageIds, { folderId }),
+	);
+	ipcMain.handle("mail.file.deleteMessagesForever", (_event, messageIds: string[]) =>
+		actions.deleteForever(messageIds),
+	);
 	ipcMain.handle("mail.file.setSeen", (_event, messageIds: string[], seen: boolean) =>
 		actions.setSeen(messageIds, seen),
 	);

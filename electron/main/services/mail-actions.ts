@@ -267,8 +267,25 @@ export async function move(
 
 		// Some of these have no row in the destination yet. Pull it now, so a
 		// moved message is there when the list reloads and not at the next sync.
-		if (group.messages.some((message) => !uidMap.has(message.uid))) {
+		const unplaced = group.messages.filter((message) => !uidMap.has(message.uid));
+		if (unplaced.length > 0) {
 			await syncOneFolder(group.accountId, destination.id, db).catch(() => undefined);
+			// Counted by Message-ID, the one thing the move did not change, so the
+			// caller is only told a message is there when it really is.
+			const wanted = unplaced.map((message) => message.messageId).filter((id): id is string => id !== null);
+			if (wanted.length > 0) {
+				remembered += db
+					.select({ id: mailMessages.id })
+					.from(mailMessages)
+					.where(
+						and(
+							eq(mailMessages.folderId, destination.id),
+							inArray(mailMessages.messageId, wanted),
+							isNull(mailMessages.deletedAt),
+						),
+					)
+					.all().length;
+			}
 		}
 	}
 
@@ -334,6 +351,25 @@ export async function trashThreads(threadIds: string[], db: Db = getDb()): Promi
 
 export async function junkThreads(threadIds: string[], db: Db = getDb()): Promise<MailFileResult> {
 	return moveThreads(threadIds, { specialUse: "junk" }, db);
+}
+
+/* ------------------------------------------------- one message at a time */
+
+/**
+ * The same filing for single messages. A conversation spans folders, so
+ * deleting the reply you sent must not take the message you received with it:
+ * the reader files the message that is open, and the list files whole threads.
+ */
+export async function archiveMessages(messageIds: string[], db: Db = getDb()): Promise<MailFileResult> {
+	return move(messageIds, { specialUse: "archive" }, db);
+}
+
+export async function trashMessages(messageIds: string[], db: Db = getDb()): Promise<MailFileResult> {
+	return move(messageIds, { specialUse: "trash" }, db);
+}
+
+export async function junkMessages(messageIds: string[], db: Db = getDb()): Promise<MailFileResult> {
+	return move(messageIds, { specialUse: "junk" }, db);
 }
 
 /* -------------------------------------------------------------- deleting */

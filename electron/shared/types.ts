@@ -2065,6 +2065,9 @@ export interface MailMessage {
 	id: string;
 	accountId: string;
 	folderId: string;
+	/** Where it lives. A conversation spans folders: Inbox for what came in, Sent for the answer, Trash for what was deleted. */
+	folderName: string;
+	folderUse: MailSpecialUse | null;
 	threadId: string;
 	uid: number;
 	messageId: string | null;

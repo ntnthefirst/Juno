@@ -1,3 +1,5 @@
+import { ScheduleSection } from "../calendar/ScheduleSection";
+import type { ScheduleForm } from "../calendar/schedule-form";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CLIENT_LINK_KIND_LABELS, isClientLinkKind } from "@shared/client-links";
 import type {
@@ -184,6 +186,8 @@ type ClientDetailProps = {
 	 */
 	onEditContact: (contact: Contact | null) => void;
 	onEditProject: (project: Project | null) => void;
+	/** A date or a reminder is a page of its own, so the screen owns it. */
+	onSchedule: (form: ScheduleForm) => void;
 	/**
 	 * An email, a phone number, an address or a note is a row of something
 	 * still being browsed, so it opens in a side panel rather than taking the
@@ -210,6 +214,7 @@ export function ClientDetail({
 	onDelete,
 	onEditContact,
 	onEditProject,
+	onSchedule,
 	onEditEmail,
 	onEditPhone,
 	onEditAddress,
@@ -583,6 +588,8 @@ export function ClientDetail({
 								<MarkdownNotes text={client.notes} />
 							</div>
 						) : null}
+
+						<ScheduleSection clientId={clientId} showProject onOpenForm={onSchedule} />
 
 						<EmailsSection
 							emails={emails}

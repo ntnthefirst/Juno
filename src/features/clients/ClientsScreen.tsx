@@ -22,6 +22,8 @@ import { clearPendingClient, peekPendingClient } from "../../lib/open-client";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { ClientAddressPanel } from "./ClientAddressPanel";
 import { StatusBadge } from "../../components/StatusBadge";
+import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
+import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
 import { ClientDetail, type TabId } from "./ClientDetail";
 import {
 	applyView,
@@ -73,6 +75,7 @@ export function ClientsScreen() {
 	// that is too narrow to hold one.
 	const [contactForm, setContactForm] = useState<{ contact: Contact | null } | null>(null);
 	const [projectForm, setProjectForm] = useState<{ project: Project | null } | null>(null);
+	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
 	// A document from a template is a page too. Coming back from it lands on the
 	// Documents tab, where it was started from.
 	const [documentForm, setDocumentForm] = useState(false);
@@ -232,6 +235,12 @@ export function ClientsScreen() {
 			{ label: selectedName ?? "Client", onSelect: () => setProjectForm(null) },
 			{ label: projectForm.project ? "Edit project" : "New project" },
 		];
+	} else if (scheduleForm && selectedId) {
+		trail = [
+			clientCrumb,
+			{ label: selectedName ?? "Client", onSelect: () => setScheduleForm(null) },
+			{ label: scheduleFormLabel(scheduleForm) },
+		];
 	} else if (openDocument && selectedId) {
 		trail = [
 			clientCrumb,
@@ -258,7 +267,7 @@ export function ClientsScreen() {
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			if (selectedId === null) return;
-			if (form || contactForm || projectForm || documentForm || signingRecord) return;
+			if (form || contactForm || projectForm || scheduleForm || documentForm || signingRecord) return;
 			if (openDocument) {
 				if (!document.querySelector("[role='dialog']")) closeDocument();
 				return;
@@ -269,7 +278,7 @@ export function ClientsScreen() {
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, form, contactForm, projectForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
+	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
 
 	// The form takes the screen rather than covering it. Nothing in the list
 	// behind it is worth reading while a client is being filled in.
@@ -285,6 +294,20 @@ export function ClientsScreen() {
 				onClose={() => setContactForm(null)}
 				onSaved={() => {
 					setContactForm(null);
+					bumpDetail();
+				}}
+			/>
+		);
+	}
+
+	if (scheduleForm && selectedId) {
+		return (
+			<ScheduleFormPage
+				form={scheduleForm}
+				backLabel="Client"
+				onClose={() => setScheduleForm(null)}
+				onSaved={() => {
+					setScheduleForm(null);
 					bumpDetail();
 				}}
 			/>
@@ -368,6 +391,7 @@ export function ClientsScreen() {
 							onDelete={(client) => void remove(client)}
 							onEditContact={(contact) => setContactForm({ contact })}
 							onEditProject={(project) => setProjectForm({ project })}
+							onSchedule={setScheduleForm}
 							onEditEmail={(email) => setEmailPanel({ email })}
 							onEditPhone={(phone) => setPhonePanel({ phone })}
 							onEditLink={(link) => setLinkPanel({ link })}

@@ -6,6 +6,8 @@ import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
+import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
 import { ProjectDetail } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 import { ProjectGrid } from "./ProjectGrid";
@@ -66,6 +68,7 @@ export function ProjectsScreen() {
 	const [selectedName, setSelectedName] = useState<string | null>(null);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [editing, setEditing] = useState<Project | null | "new">(null);
+	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
 	const [deleted, setDeleted] = useState<ProjectSummary | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
@@ -162,7 +165,7 @@ export function ProjectsScreen() {
 	// nothing floats above it: a dialog on top handles Escape itself, and
 	// without this guard both would fire.
 	useEffect(() => {
-		if (selectedId === null || editing !== null) return;
+		if (selectedId === null || editing !== null || scheduleForm !== null) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			if (document.querySelector("[role='dialog']")) return;
@@ -170,7 +173,7 @@ export function ProjectsScreen() {
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, editing, clearSelection]);
+	}, [selectedId, editing, scheduleForm, clearSelection]);
 
 	const rows = load.status === "ready" ? load.rows : null;
 	const needle = term.trim().toLowerCase();
@@ -190,9 +193,15 @@ export function ProjectsScreen() {
 					{ label: "Projects", onSelect: () => setEditing(null) },
 					{ label: editing === "new" ? "New project" : "Edit project" },
 				]
-			: selectedId !== null
-				? [{ label: "Projects", onSelect: clearSelection }, { label: selectedName ?? "Project" }]
-				: [],
+			: selectedId !== null && scheduleForm !== null
+				? [
+						{ label: "Projects", onSelect: clearSelection },
+						{ label: selectedName ?? "Project", onSelect: () => setScheduleForm(null) },
+						{ label: scheduleFormLabel(scheduleForm) },
+					]
+				: selectedId !== null
+					? [{ label: "Projects", onSelect: clearSelection }, { label: selectedName ?? "Project" }]
+					: [],
 	);
 
 	if (editing !== null) {
@@ -205,6 +214,20 @@ export function ProjectsScreen() {
 		);
 	}
 
+	if (selectedId !== null && scheduleForm !== null) {
+		return (
+			<ScheduleFormPage
+				form={scheduleForm}
+				backLabel="Project"
+				onClose={() => setScheduleForm(null)}
+				onSaved={() => {
+					setScheduleForm(null);
+					setDetailVersion((version) => version + 1);
+				}}
+			/>
+		);
+	}
+
 	if (selectedId !== null) {
 		return (
 			<ProjectDetail
@@ -213,6 +236,7 @@ export function ProjectsScreen() {
 				onBack={clearSelection}
 				onChanged={refreshList}
 				onEdit={(project) => setEditing(project)}
+				onSchedule={setScheduleForm}
 				onNameChange={setSelectedName}
 				onDeleted={(project) => {
 					clearSelection();

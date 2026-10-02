@@ -3599,6 +3599,29 @@ if (!app.requestSingleInstanceLock()) {
 										throw new Error(`Smoke: the composer did not save the picture's address: ${saved?.bodyHtml}`);
 									}
 									console.log("SMOKE_DEMO draft picture parked and restored");
+									// A draft an agent writes opens in the editor, the way one a person
+									// started would. There is no banner to approve and no send for it.
+									await (await import("./main/services/mail-outbox")).createDraft({
+										accountId: saved.accountId,
+										to: [{ name: null, address: "kris@example.test" }],
+										subject: "Written by the agent",
+										bodyText: "Hello Kris.",
+										actor: "agent",
+									});
+									const agentEditor = await window.webContents.executeJavaScript(
+										`(async () => {
+											await new Promise((r) => setTimeout(r, 1200));
+											const host = document.querySelector("[contenteditable][aria-label=Message]");
+											const subject = [...document.querySelectorAll("input")].some((el) => el.value === "Written by the agent");
+											if (!host || !subject) return "the agent's draft did not open in the editor";
+											if (document.body.textContent.includes("An assistant prepared")) return "the old approval banner is back";
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 900));
+											return "ok";
+										})()`,
+									);
+									if (agentEditor !== "ok") throw new Error(`Smoke: agent draft ${agentEditor}`);
+									console.log("SMOKE_DEMO agent draft opened in the editor");
 									// The merged list itself, in both themes, before a row takes the pane.
 									await window.webContents.executeJavaScript(
 										`(async () => {
@@ -3774,7 +3797,7 @@ if (!app.requestSingleInstanceLock()) {
 										bodyText: "Smoke reply, sent before the Sent folder is synced.",
 										replyToMessageId: answered.id,
 									});
-									await smokeOutbox.requestSend(smokeReply.id, { actor: "user" });
+									await smokeOutbox.requestSend(smokeReply.id);
 									await mailSend.processQueue();
 									if ((await smokeOutbox.get(smokeReply.id))?.state !== "sent") throw new Error("Smoke: the reply did not send");
 

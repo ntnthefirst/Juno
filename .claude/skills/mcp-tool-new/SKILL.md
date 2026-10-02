@@ -84,7 +84,7 @@ Every tool declares which it is. There is no third category and no default.
 speculatively, safe to retry, safe to call in a loop.
 
 **Side-effectful** writes, sends or produces a file. `clients.create`,
-`reminders.complete`, `documents.render`, `mail.send_message`.
+`reminders.complete`, `documents.render`, `mail.send`.
 
 Careful with the ones that look read-only:
 

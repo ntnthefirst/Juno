@@ -1,16 +1,19 @@
 /**
- * The outbox: drafts, the confirmation gate, and the queue the sender reads.
+ * The outbox: drafts, the way a message is queued, and the queue the sender
+ * reads.
  *
- * The gate is the reason this file exists. A message reaches `queued` through
- * `requestSend` and `approve` and nothing else, and `requestSend` puts an
- * agent's message in `pending` rather than `queued`. `approve` has no MCP tool
- * and never will: a person in the app is the only thing that turns pending
- * into queued (.claude/rules/mcp.md section 4). The sender in ./mail-send.ts
- * reads `queued` and nothing else.
+ * An agent writes drafts and nothing else. A message reaches `queued` through
+ * `requestSend`, which only the window calls, when a person presses Send in the
+ * editor, and there is no MCP tool that sends, queues or approves one
+ * (.claude/rules/mcp.md section 4). The sender in ./mail-send.ts reads `queued`
+ * and nothing else. `pending` is a state older versions wrote for a message an
+ * agent had asked to send; nothing writes it any more, and such a row opens in
+ * the editor like a draft.
  *
  * Decision 9 still holds here: an invoice nudge carries a title and an amount
  * typed by the owner, and Juno never numbers or issues one.
  */
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type {
 	MailAddress,
@@ -79,6 +82,17 @@ export function onChange(listener: (message: MailOutboxMessage) => void): () => 
 
 function notifyChanged(message: MailOutboxMessage): void {
 	for (const listener of changeListeners) listener(message);
+}
+
+/**
+ * Fired when an agent has written a draft, so the window can open it in the
+ * editor the way it would open one a person started. Nothing here sends it.
+ */
+const agentDraftListeners = new Set<(message: MailOutboxMessage) => void>();
+
+export function onAgentDraft(listener: (message: MailOutboxMessage) => void): () => void {
+	agentDraftListeners.add(listener);
+	return () => agentDraftListeners.delete(listener);
 }
 
 type Row = typeof mailOutbox.$inferSelect;
@@ -534,7 +548,7 @@ async function insertDraft(input: MailDraftInput, db: Db): Promise<MailOutboxMes
 				clientId: input.clientId ?? reply.clientId,
 				projectId: input.projectId ?? null,
 				templateId: input.templateId ?? null,
-				requestedBy: "user",
+				requestedBy: input.actor ?? "user",
 				createdAt: stamp,
 				updatedAt: stamp,
 			})
@@ -555,6 +569,7 @@ async function insertDraft(input: MailDraftInput, db: Db): Promise<MailOutboxMes
 	}
 	const record = await requireRecord(id, db);
 	notifyChanged(record);
+	if (input.actor === "agent") for (const listener of agentDraftListeners) listener(record);
 	return record;
 }
 
@@ -590,22 +605,17 @@ export async function createReply(input: MailReplyInput, db: Db = getDb()): Prom
 			replyToMessageId: seed.replyToMessageId,
 			clientId: seed.clientId,
 			documentIds: input.documentIds ?? [],
+			...(input.actor ? { actor: input.actor } : {}),
 		},
 		db,
 	);
 }
 
 /**
- * Fills a template and asks to send it, as one operation. Not a reply: a
- * template starts a new message, and nothing of it is kept as a draft, so when
- * the send is refused (a recipient missing, a placeholder with no value) the
- * row made along the way is removed again.
+ * What a template makes of a client and a project, as the draft input it would
+ * be sent from. A template starts a new message; it is never a reply.
  */
-export async function sendFromTemplate(
-	input: MailTemplateSendInput,
-	options: { actor: Actor },
-	db: Db = getDb(),
-): Promise<MailOutboxMessage> {
+async function draftOf(input: MailTemplateSendInput, db: Db): Promise<MailDraftInput> {
 	const rendered = await renderTemplate(
 		{
 			templateId: input.templateId,
@@ -615,24 +625,30 @@ export async function sendFromTemplate(
 		},
 		db,
 	);
-	const made = await insertDraft(
-		{
-			accountId: input.accountId,
-			to: input.to,
-			...(input.cc ? { cc: input.cc } : {}),
-			...(input.bcc ? { bcc: input.bcc } : {}),
-			subject: rendered.subject,
-			bodyText: rendered.bodyText,
-			bodyHtml: rendered.bodyHtml,
-			clientId: input.clientId ?? null,
-			projectId: input.projectId ?? null,
-			templateId: input.templateId,
-			documentIds: input.documentIds ?? [],
-		},
-		db,
-	);
+	return {
+		accountId: input.accountId,
+		to: input.to,
+		...(input.cc ? { cc: input.cc } : {}),
+		...(input.bcc ? { bcc: input.bcc } : {}),
+		subject: rendered.subject,
+		bodyText: rendered.bodyText,
+		bodyHtml: rendered.bodyHtml,
+		clientId: input.clientId ?? null,
+		projectId: input.projectId ?? null,
+		documentIds: input.documentIds ?? [],
+	};
+}
+
+/**
+ * Fills a template and queues it, as one operation, for a person who pressed
+ * the button for it. Nothing of it is kept as a draft, so when the send is
+ * refused (a recipient missing, a placeholder with no value) the row made along
+ * the way is removed again.
+ */
+export async function sendFromTemplate(input: MailTemplateSendInput, db: Db = getDb()): Promise<MailOutboxMessage> {
+	const made = await insertDraft({ ...(await draftOf(input, db)), templateId: input.templateId }, db);
 	try {
-		return await requestSend(made.id, options, db);
+		return await requestSend(made.id, db);
 	} catch (cause) {
 		await remove(made.id, db);
 		throw cause;
@@ -728,12 +744,166 @@ function validateSendable(row: Row, account: typeof mailAccounts.$inferSelect, a
 	}
 }
 
+/** What an agent's request to send is shown as, in the Agent tab: the message as it would go out. */
+export interface SendReview {
+	summary: string;
+	preview: string;
+	/** What the preview was built from, checked again when a person approves. */
+	seal: string;
+}
+
+const PREVIEW_BODY_MAX = 6000;
+
+function describeAddresses(list: MailAddress[]): string {
+	return list.map((a) => (a.name ? `${a.name} <${a.address}>` : a.address)).join(", ");
+}
+
+function messagePreview(parts: {
+	from: string;
+	to: MailAddress[];
+	cc: MailAddress[];
+	bcc: MailAddress[];
+	subject: string;
+	attachments: string[];
+	bodyText: string;
+}): string {
+	const lines = [`From: ${parts.from}`, `To: ${describeAddresses(parts.to)}`];
+	if (parts.cc.length > 0) lines.push(`Cc: ${describeAddresses(parts.cc)}`);
+	if (parts.bcc.length > 0) lines.push(`Bcc: ${describeAddresses(parts.bcc)}`);
+	lines.push(`Subject: ${parts.subject}`);
+	if (parts.attachments.length > 0) lines.push(`Attached: ${parts.attachments.join(", ")}`);
+	const body = parts.bodyText.trim();
+	lines.push("", body.length > PREVIEW_BODY_MAX ? `${body.slice(0, PREVIEW_BODY_MAX)}\n[cut here, the message is longer]` : body);
+	return lines.join("\n");
+}
+
+function summaryOf(subject: string, to: MailAddress[]): string {
+	const first = to[0];
+	const who = first ? (first.name ?? first.address) : "nobody";
+	return `Send "${subject}" to ${who}${to.length > 1 ? ` and ${to.length - 1} more` : ""}`;
+}
+
 /**
- * The gate. A person's request goes straight to the queue: the press was the
- * confirmation. An agent's request waits in `pending` until a person approves
- * it in the app, and nothing an agent can call moves it further.
+ * What a person reads before approving an agent's request to send this draft,
+ * and the refusal when it could not be sent anyway. The seal is the draft's
+ * last change: if it moves before they approve, the request is refused,
+ * because the text they read is not the text that would go.
  */
-export async function requestSend(id: string, options: { actor: Actor }, db: Db = getDb()): Promise<MailOutboxMessage> {
+export async function reviewForSend(id: string, db: Db = getDb()): Promise<SendReview> {
+	const row = requireRow(id, db);
+	if (row.state !== "draft" && row.state !== "failed" && row.state !== "pending") {
+		throw new Error(`A ${row.state} message cannot be sent again.`);
+	}
+	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, row.accountId)).get();
+	if (!account || account.deletedAt) throw new Error("The account this message belongs to no longer exists.");
+	validateSendable(row, account, attachmentCount(db, row.id));
+	const record = await requireRecord(id, db);
+	return {
+		summary: summaryOf(record.subject, record.to),
+		preview: messagePreview({
+			from: account.fromName ? `${account.fromName} <${account.email}>` : account.email,
+			to: record.to,
+			cc: record.cc,
+			bcc: record.bcc,
+			subject: record.subject,
+			attachments: record.attachments.map((a) => a.filename),
+			bodyText: record.bodyText,
+		}),
+		seal: row.updatedAt,
+	};
+}
+
+/** Refuses an approval of a draft that has been edited since it was asked for. */
+export async function verifyDraftUnchanged(id: string, seal: string | null, db: Db = getDb()): Promise<void> {
+	const row = requireRow(id, db);
+	if (seal === null || row.updatedAt !== seal) {
+		throw new Error("The draft was changed after it was asked for, so what was approved is not what would go. Ask again.");
+	}
+}
+
+function templateSeal(subject: string, bodyHtml: string): string {
+	return createHash("sha256").update(subject).update("\n").update(bodyHtml).digest("hex");
+}
+
+/**
+ * The same for a template: the message the template makes right now, for this
+ * client and project, which is what is sent if it is approved. Nothing is
+ * written; a template is never kept as a draft.
+ */
+export async function reviewTemplateSend(input: MailTemplateSendInput, db: Db = getDb()): Promise<SendReview> {
+	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, input.accountId)).get();
+	if (!account || account.deletedAt) throw new Error("That mail account does not exist.");
+	const to = cleanAddresses(input.to, "To");
+	const cc = cleanAddresses(input.cc, "Cc");
+	const bcc = cleanAddresses(input.bcc, "Bcc");
+	if (to.length === 0) throw new Error("The message has nobody in To.");
+	if (!account.smtpHost) throw new Error(`${account.email} has no outgoing server. Add one in account settings.`);
+
+	const rendered = await renderTemplate(
+		{
+			templateId: input.templateId,
+			clientId: input.clientId ?? null,
+			projectId: input.projectId ?? null,
+			...(input.extras ? { extras: input.extras } : {}),
+		},
+		db,
+	);
+	if (rendered.missing.length > 0) {
+		throw new Error(
+			`The template still has a placeholder without a value: ${rendered.missing.join(", ")}. Fill in the record or pass it in extras.`,
+		);
+	}
+	const attachments: string[] = [];
+	for (const documentId of new Set(input.documentIds ?? [])) {
+		const document = db
+			.select({ title: documents.title })
+			.from(documents)
+			.where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
+			.get();
+		if (!document) throw new Error("One of the documents to attach does not exist.");
+		attachments.push(`${document.title}.pdf`);
+	}
+	return {
+		summary: summaryOf(rendered.subject, to),
+		preview: messagePreview({
+			from: account.fromName ? `${account.fromName} <${account.email}>` : account.email,
+			to,
+			cc,
+			bcc,
+			subject: rendered.subject,
+			attachments,
+			bodyText: rendered.bodyText,
+		}),
+		seal: templateSeal(rendered.subject, rendered.bodyHtml),
+	};
+}
+
+/** Refuses an approval when the template, the client or the project changed what it would say. */
+export async function verifyTemplateUnchanged(
+	input: MailTemplateSendInput,
+	seal: string | null,
+	db: Db = getDb(),
+): Promise<void> {
+	const rendered = await renderTemplate(
+		{
+			templateId: input.templateId,
+			clientId: input.clientId ?? null,
+			projectId: input.projectId ?? null,
+			...(input.extras ? { extras: input.extras } : {}),
+		},
+		db,
+	);
+	if (seal === null || templateSeal(rendered.subject, rendered.bodyHtml) !== seal) {
+		throw new Error("The template now says something different from what was approved. Ask again.");
+	}
+}
+
+/**
+ * Queues a message for sending. Only the window calls this, when a person
+ * presses Send, so the press is the confirmation and there is nothing for an
+ * agent to ask for: it has no route here.
+ */
+export async function requestSend(id: string, db: Db = getDb()): Promise<MailOutboxMessage> {
 	const row = requireRow(id, db);
 	if (row.state !== "draft" && row.state !== "failed" && row.state !== "pending") {
 		throw new Error(`A ${row.state} message cannot be sent again.`);
@@ -743,33 +913,8 @@ export async function requestSend(id: string, options: { actor: Actor }, db: Db 
 	validateSendable(row, account, attachmentCount(db, row.id));
 
 	const stamp = now();
-	if (options.actor === "agent") {
-		db.update(mailOutbox)
-			.set({ state: "pending", requestedBy: "agent", approvedAt: null, updatedAt: stamp })
-			.where(eq(mailOutbox.id, id))
-			.run();
-	} else {
-		db.update(mailOutbox)
-			.set({ state: "queued", requestedBy: "user", approvedAt: stamp, queuedAt: stamp, lastError: null, updatedAt: stamp })
-			.where(eq(mailOutbox.id, id))
-			.run();
-		notifyQueued();
-	}
-	const record = await requireRecord(id, db);
-	notifyChanged(record);
-	return record;
-}
-
-/** A person approving what an agent prepared. No MCP tool calls this. */
-export async function approve(id: string, db: Db = getDb()): Promise<MailOutboxMessage> {
-	const row = requireRow(id, db);
-	if (row.state !== "pending") throw new Error("Only a pending message can be approved.");
-	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, row.accountId)).get();
-	if (!account || account.deletedAt) throw new Error("The account this message belongs to no longer exists.");
-	validateSendable(row, account, attachmentCount(db, row.id));
-	const stamp = now();
 	db.update(mailOutbox)
-		.set({ state: "queued", approvedAt: stamp, queuedAt: stamp, lastError: null, updatedAt: stamp })
+		.set({ state: "queued", requestedBy: "user", approvedAt: stamp, queuedAt: stamp, lastError: null, updatedAt: stamp })
 		.where(eq(mailOutbox.id, id))
 		.run();
 	notifyQueued();

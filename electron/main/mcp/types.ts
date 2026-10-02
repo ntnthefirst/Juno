@@ -9,17 +9,28 @@ export interface ToolDescriptor {
 	 * caller back a pending action instead of a result.
 	 */
 	requiresConfirmation: boolean;
-	/**
-	 * The service behind this tool holds its own gate, so the generic one would
-	 * ask twice for one act. `mail.send` is the only tool that sets this: it
-	 * parks a draft in the outbox for a person to approve, seeing the real
-	 * message rather than an argument list (decision 22).
-	 *
-	 * This is a statement about where the gate is, not permission to skip one.
-	 * A tool that sets it without a service that refuses to act unapproved is
-	 * the bug .claude/rules/mcp.md section 4 exists to prevent.
-	 */
-	gatedInService?: boolean;
 	inputSchema: Record<string, unknown>;
 	handler: (args: Record<string, unknown>) => Promise<unknown>;
+	/**
+	 * For a confirmed tool whose arguments do not say enough to approve: what a
+	 * person should read first, built when the call is made and before it is
+	 * parked. `mail.send` takes a draft's id, so this is where the whole message
+	 * is put in front of them. It also refuses a call that could never run, so
+	 * the agent learns that at once instead of leaving a dead request waiting.
+	 */
+	prepare?: (args: Record<string, unknown>) => Promise<ToolPreparation>;
+	/**
+	 * Runs when a person approves, before the handler, with the seal `prepare`
+	 * made. Throws when what was approved is no longer what would run.
+	 */
+	verify?: (args: Record<string, unknown>, seal: string | null) => Promise<void>;
+}
+
+export interface ToolPreparation {
+	/** Replaces the generic one-line summary. */
+	summary?: string;
+	/** The full text a person reads before approving. */
+	preview: string;
+	/** A fingerprint of what the preview was built from. */
+	seal?: string;
 }

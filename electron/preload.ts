@@ -487,6 +487,11 @@ const api: JunoApi = {
 			junk: (threadIds) => call("mail.file.junk", threadIds),
 			moveToFolder: (threadIds, folderId) => call("mail.file.moveToFolder", threadIds, folderId),
 			deleteForever: (threadIds) => call("mail.file.deleteForever", threadIds),
+			archiveMessages: (messageIds) => call("mail.file.archiveMessages", messageIds),
+			trashMessages: (messageIds) => call("mail.file.trashMessages", messageIds),
+			junkMessages: (messageIds) => call("mail.file.junkMessages", messageIds),
+			moveMessagesToFolder: (messageIds, folderId) => call("mail.file.moveMessagesToFolder", messageIds, folderId),
+			deleteMessagesForever: (messageIds) => call("mail.file.deleteMessagesForever", messageIds),
 			setSeen: (messageIds, seen) => call("mail.file.setSeen", messageIds, seen),
 			setThreadsSeen: (threadIds, seen) => call("mail.file.setThreadsSeen", threadIds, seen),
 			setFlagged: (messageIds, flagged) => call("mail.file.setFlagged", messageIds, flagged),
@@ -529,7 +534,6 @@ const api: JunoApi = {
 			replySeed: (messageId, mode) => call("mail.outbox.replySeed", messageId, mode),
 			replySeedOutgoing: (outboxId, mode) => call("mail.outbox.replySeedOutgoing", outboxId, mode),
 			send: (id) => call("mail.outbox.send", id),
-			approve: (id) => call("mail.outbox.approve", id),
 			cancel: (id) => call("mail.outbox.cancel", id),
 			retry: (id) => call("mail.outbox.retry", id),
 			remove: (id) => call("mail.outbox.remove", id),
@@ -539,6 +543,14 @@ const api: JunoApi = {
 				ipcRenderer.on("mail.outboxChanged", handler);
 				return () => {
 					ipcRenderer.off("mail.outboxChanged", handler);
+				};
+			},
+			onAgentDraft: (listener) => {
+				const handler = (_event: Electron.IpcRendererEvent, message: MailOutboxMessage) =>
+					listener(message);
+				ipcRenderer.on("mail.agentDraft", handler);
+				return () => {
+					ipcRenderer.off("mail.agentDraft", handler);
 				};
 			},
 		},

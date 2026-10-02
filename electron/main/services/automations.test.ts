@@ -48,7 +48,7 @@ beforeEach(() => {
 	handlers = {
 		"reminders.list": async () => [{ id: "r1" }, { id: "r2" }],
 		"clients.create": async (args) => ({ id: "c1", name: args.name }),
-		"mail.send": async () => ({ id: "m1" }),
+		"mail.draft": async () => ({ id: "m1" }),
 		"broken.tool": async () => {
 			throw new Error("The server said no.");
 		},

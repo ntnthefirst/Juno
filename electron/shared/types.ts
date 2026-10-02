@@ -2065,6 +2065,9 @@ export interface MailMessage {
 	id: string;
 	accountId: string;
 	folderId: string;
+	/** Where it lives. A conversation spans folders: Inbox for what came in, Sent for the answer, Trash for what was deleted. */
+	folderName: string;
+	folderUse: MailSpecialUse | null;
 	threadId: string;
 	uid: number;
 	messageId: string | null;
@@ -2353,6 +2356,8 @@ export interface MailDraftInput {
 	templateId?: string | null;
 	/** Documents to attach. Their PDF is rendered at send time if needed. */
 	documentIds?: string[];
+	/** Who wrote it. An agent's draft is opened in the editor for a person; it is never sent. */
+	actor?: "user" | "agent";
 }
 
 /** A template filled and sent in one step. There is no draft in between. */
@@ -2388,6 +2393,7 @@ export interface MailReplyInput {
 	/** Default true. False leaves the original out of the body. */
 	includeQuote?: boolean;
 	documentIds?: string[];
+	actor?: "user" | "agent";
 }
 
 /** What a reply starts from: the addresses and subject, worked out from the original. */
@@ -2610,6 +2616,8 @@ export interface AgentAction extends Standard {
 	args: Record<string, unknown>;
 	/** One line describing what will happen, built when the action was made. */
 	summary: string;
+	/** The whole of what is being approved, when the arguments do not say it: a mail's text. */
+	preview: string | null;
 	state: AgentActionState;
 	source: AgentActionSource;
 	automationRunId: string | null;
@@ -2658,11 +2666,6 @@ export interface ToolSummary {
 	readOnly: boolean;
 	/** True when a person has to approve each call before it runs. */
 	requiresConfirmation: boolean;
-	/**
-	 * True when the service behind it holds its own gate, so the generic one
-	 * would ask twice. `mail.send` is the only one (decision 22).
-	 */
-	gatedInService: boolean;
 }
 
 /* -------------------------------------------------------------- automations */

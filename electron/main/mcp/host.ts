@@ -11,9 +11,10 @@
  *    agree to first (.claude/rules/mcp.md section 4). The caller gets a
  *    pending action back, never a result.
  *
- * Step 4's enforcement lives in services/agent-actions.ts, not here, and the
- * one tool whose service holds its own gate says so in its declaration rather
- * than being special-cased in this file.
+ * Step 4's enforcement lives in services/agent-actions.ts, not here. A tool
+ * that needs more than its arguments to be approved, a mail being the case,
+ * declares how to build that text (`prepare`) and how to check it is still what
+ * will run (`verify`), so nothing mail-shaped is special-cased in this file.
  *
  * A write that runs writes an audit row. Reads do not: a log of every list
  * call buries the one line that mattered.
@@ -84,7 +85,6 @@ export function toolCount(): number {
  */
 function describe(tool: ToolDescriptor): string {
 	if (tool.readOnly) return tool.description;
-	if (tool.gatedInService) return tool.description;
 	if (!tool.requiresConfirmation) return tool.description;
 	return `${tool.description} Requires approval: this call does not run, it asks. A person approves or rejects it in Juno and the reply says pending.`;
 }
@@ -135,11 +135,21 @@ export async function callTool(
 
 	const source = options.source ?? "mcp";
 
-	if (!tool.readOnly && tool.requiresConfirmation && tool.gatedInService !== true) {
+	if (!tool.readOnly && tool.requiresConfirmation) {
+		let prepared: Awaited<ReturnType<NonNullable<ToolDescriptor["prepare"]>>> | null = null;
+		if (tool.prepare) {
+			try {
+				prepared = await tool.prepare(args);
+			} catch (cause: unknown) {
+				throw new ToolError("TOOL_FAILED", cause instanceof Error ? cause.message : String(cause));
+			}
+		}
 		const action = await actions.request({
 			toolName: tool.name,
 			args,
-			summary: summarise(tool, args),
+			summary: prepared?.summary ?? summarise(tool, args),
+			preview: prepared?.preview ?? null,
+			seal: prepared?.seal ?? null,
 			source,
 			automationRunId: options.automationRunId ?? null,
 		});
@@ -200,8 +210,13 @@ function entityOf(result: unknown): { entityId?: string } {
  * The only caller is the approval path in services/agent-actions.ts, which
  * reaches here after a person said yes. Nothing else may call it.
  */
-export async function executeApproved(name: string, args: Record<string, unknown>): Promise<unknown> {
+export async function executeApproved(
+	name: string,
+	args: Record<string, unknown>,
+	seal: string | null = null,
+): Promise<unknown> {
 	const tool = toolByName(name);
 	if (!tool) throw new ToolError("UNKNOWN_TOOL", `There is no tool called "${name}".`);
+	await tool.verify?.(args, seal);
 	return tool.handler(args);
 }

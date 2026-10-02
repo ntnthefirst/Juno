@@ -77,6 +77,5 @@ export function toolSummaries(): ToolSummary[] {
 		description: tool.description,
 		readOnly: tool.readOnly,
 		requiresConfirmation: tool.requiresConfirmation,
-		gatedInService: tool.gatedInService === true,
 	}));
 }

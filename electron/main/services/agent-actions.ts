@@ -47,7 +47,11 @@ export const EXPIRES_AFTER_MS = 24 * 60 * 60 * 1000;
 const STATES: AgentActionState[] = ["pending", "approved", "rejected", "expired", "executed", "failed"];
 
 /** Runs the tool behind an approved action. Injected at startup. */
-export type ActionExecutor = (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
+export type ActionExecutor = (
+	toolName: string,
+	args: Record<string, unknown>,
+	seal: string | null,
+) => Promise<unknown>;
 
 let execute: ActionExecutor | null = null;
 
@@ -106,6 +110,7 @@ function toRecord(row: Row): AgentAction {
 		toolName: row.toolName,
 		args: parseArgs(row.argsJson),
 		summary: row.summary,
+		preview: row.preview,
 		state: row.state as AgentActionState,
 		source: row.source as AgentActionSource,
 		automationRunId: row.automationRunId,
@@ -162,6 +167,10 @@ export interface RequestInput {
 	args: Record<string, unknown>;
 	/** One line a person reads before approving. */
 	summary: string;
+	/** The whole of what they are approving, when the arguments do not say it. */
+	preview?: string | null;
+	/** What the preview was built from, checked again at approval. */
+	seal?: string | null;
 	source: AgentActionSource;
 	automationRunId?: string | null;
 }
@@ -178,6 +187,8 @@ export async function request(input: RequestInput, db: Db = getDb()): Promise<Ag
 			toolName: input.toolName,
 			argsJson: JSON.stringify(input.args ?? {}),
 			summary: input.summary,
+			preview: input.preview ?? null,
+			seal: input.seal ?? null,
 			state: "pending",
 			source: input.source,
 			automationRunId: input.automationRunId ?? null,
@@ -268,7 +279,7 @@ export async function approve(id: string, db: Db = getDb()): Promise<AgentAction
 
 	const args = parseArgs(row.argsJson);
 	try {
-		const result = await execute(row.toolName, args);
+		const result = await execute(row.toolName, args, row.seal);
 		const [updated] = db
 			.update(agentActions)
 			.set({

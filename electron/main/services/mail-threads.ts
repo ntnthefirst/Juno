@@ -13,6 +13,7 @@ import type {
 	MailAttachment,
 	MailMessage,
 	MailMessageBody,
+	MailSpecialUse,
 	MailThread,
 	MailThreadListQuery,
 	MailThreadSummary,
@@ -73,11 +74,15 @@ function parseAddresses(json: string): MailAddress[] {
 	}
 }
 
-function toMessage(row: MessageRow, attachments: MailAttachment[]): MailMessage {
+type FolderLabel = { name: string; use: MailSpecialUse | null };
+
+function toMessage(row: MessageRow, attachments: MailAttachment[], folder: FolderLabel | undefined): MailMessage {
 	return {
 		id: row.id,
 		accountId: row.accountId,
 		folderId: row.folderId,
+		folderName: folder?.name ?? "",
+		folderUse: folder?.use ?? null,
 		threadId: row.threadId,
 		uid: row.uid,
 		messageId: row.messageId,
@@ -99,6 +104,20 @@ function toMessage(row: MessageRow, attachments: MailAttachment[]): MailMessage 
 		bodyError: row.bodyError,
 		attachments,
 	};
+}
+
+/** Display names for the folders these messages are in, trash and junk included. */
+function folderLabels(db: Db, folderIds: string[]): Map<string, FolderLabel> {
+	const out = new Map<string, FolderLabel>();
+	const unique = [...new Set(folderIds)];
+	if (unique.length === 0) return out;
+	const rows = db
+		.select({ id: mailFolders.id, name: mailFolders.name, use: mailFolders.specialUse })
+		.from(mailFolders)
+		.where(inArray(mailFolders.id, unique))
+		.all();
+	for (const row of rows) out.set(row.id, { name: row.name, use: row.use as MailSpecialUse | null });
+	return out;
 }
 
 function toAttachment(row: typeof mailAttachments.$inferSelect): MailAttachment {
@@ -143,10 +162,33 @@ interface Summarised {
 	participants: MailAddress[];
 }
 
+/**
+ * The folders a list is looking at, or null when it spans every folder.
+ *
+ * A thread lives in every folder one of its messages lives in, so the same
+ * conversation is in Inbox for what came in and in Trash for the reply that
+ * was deleted. A row counts and shows only what is in the folder it is listed
+ * under, otherwise Inbox claims a message that was trashed.
+ */
+function scopeOf(db: Db, query: MailThreadListQuery): Set<string> | null {
+	if (query.folderId) return new Set([query.folderId]);
+	if (!query.folderSpecialUse) return null;
+	const conditions = [eq(mailFolders.specialUse, query.folderSpecialUse), isNull(mailFolders.deletedAt)];
+	if (query.accountId) conditions.push(eq(mailFolders.accountId, query.accountId));
+	return new Set(
+		db
+			.select({ id: mailFolders.id })
+			.from(mailFolders)
+			.where(and(...conditions))
+			.all()
+			.map((row) => row.id),
+	);
+}
+
 function summarise(
 	db: Db,
 	threads: { thread: ThreadRow; clientName: string | null; snippet?: string; messageId?: string }[],
-	folderId?: string,
+	scope: Set<string> | null = null,
 ): MailThreadSummary[] {
 	if (threads.length === 0) return [];
 	const ids = threads.map((t) => t.thread.id);
@@ -194,6 +236,7 @@ function summarise(
 	for (const message of messages) {
 		const group = grouped.get(message.threadId);
 		if (!group) continue;
+		if (scope && !scope.has(message.folderId)) continue;
 		group.messageCount += 1;
 		if (!message.isSeen) group.unreadCount += 1;
 		if (message.hasAttachments) group.hasAttachments = true;
@@ -201,7 +244,7 @@ function summarise(
 		// Newest first, so the first message that qualifies is the newest one. A row
 		// stands for the newest message in the folder it is listed in (or in the
 		// thread, when the list spans folders), and a search names its own hit.
-		if (!group.messageId && (!folderId || message.folderId === folderId)) {
+		if (!group.messageId) {
 			group.messageId = message.id;
 			if (!group.snippet && message.snippet) group.snippet = message.snippet;
 		}
@@ -245,6 +288,7 @@ function summarise(
 export async function listThreads(query: MailThreadListQuery = {}, db: Db = getDb()): Promise<MailThreadSummary[]> {
 	const limit = Math.min(Math.max(query.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 	const term = query.search?.trim() ?? "";
+	const scope = scopeOf(db, query);
 
 	const conditions = [isNull(mailThreads.deletedAt)];
 	if (query.accountId) conditions.push(eq(mailThreads.accountId, query.accountId));
@@ -293,6 +337,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 	if (term) {
 		const match = ftsQuery(term);
 		if (!match) return [];
+		if (scope && scope.size === 0) return [];
 		// The best-ranked message per thread decides the order and the snippet.
 		// bm25 and snippet only work in the query that runs the MATCH, and the
 		// planner flattens a plain subquery into the join, which breaks that. A
@@ -310,6 +355,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 			from f
 			join mail_messages m on m.id = f.message_id
 			where m.deleted_at is null
+			${scope ? sql`and m.folder_id in (${sql.join([...scope].map((id) => sql`${id}`), sql`, `)})` : sql``}
 			group by m.thread_id
 			order by rank
 			limit ${limit * 4}
@@ -339,7 +385,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 			})
 			.filter((r): r is NonNullable<typeof r> => r !== null)
 			.slice(0, limit);
-		return summarise(db, ordered);
+		return summarise(db, ordered, scope);
 	}
 
 	const rows = db
@@ -350,7 +396,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 		.orderBy(desc(mailThreads.lastMessageAt))
 		.limit(limit)
 		.all();
-	return summarise(db, rows, query.folderId);
+	return summarise(db, rows, scope);
 }
 
 function attachmentsFor(db: Db, messageIds: string[]): Map<string, MailAttachment[]> {
@@ -388,11 +434,15 @@ export async function getThread(id: string, db: Db = getDb()): Promise<MailThrea
 		db,
 		messages.map((m) => m.id),
 	);
+	const labels = folderLabels(
+		db,
+		messages.map((m) => m.folderId),
+	);
 
 	const [summary] = summarise(db, [row]);
 	return {
 		summary: summary!,
-		messages: messages.map((m) => toMessage(m, attachments.get(m.id) ?? [])),
+		messages: messages.map((m) => toMessage(m, attachments.get(m.id) ?? [], labels.get(m.folderId))),
 		// The reader shows a reply from the moment it is sent, not from the next
 		// sync of Sent (see outgoingForThread).
 		outgoing: outgoingForThread(id, db),
@@ -406,7 +456,7 @@ export async function getMessage(id: string, db: Db = getDb()): Promise<MailMess
 		.where(and(eq(mailMessages.id, id), isNull(mailMessages.deletedAt)))
 		.get();
 	if (!row) return null;
-	return toMessage(row, attachmentsFor(db, [id]).get(id) ?? []);
+	return toMessage(row, attachmentsFor(db, [id]).get(id) ?? [], folderLabels(db, [row.folderId]).get(row.folderId));
 }
 
 /**

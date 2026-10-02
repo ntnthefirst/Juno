@@ -63,6 +63,26 @@ describe("the gate", () => {
 		expect(await pendingCount(db)).toBe(0);
 	});
 
+	it("keeps what a person is shown beside the arguments, and hands the seal back at approval", async () => {
+		const ran = vi.fn(async () => ({ id: "m1" }));
+		configureAgentActions(ran);
+		const action = await request(
+			{
+				toolName: "mail.send",
+				args: { id: "draft-1" },
+				summary: 'Send "Offerte" to laura@obet.be',
+				preview: "To: laura@obet.be\nSubject: Offerte\n\nHallo.",
+				seal: "2026-10-02T10:00:00.000Z",
+				source: "mcp",
+			},
+			db,
+		);
+		expect(action.preview).toContain("Subject: Offerte");
+
+		await approve(action.id, db);
+		expect(ran).toHaveBeenCalledWith("mail.send", { id: "draft-1" }, "2026-10-02T10:00:00.000Z");
+	});
+
 	it("does not run a rejected call, and will not approve it afterwards", async () => {
 		const ran = vi.fn(async () => ({}));
 		configureAgentActions(ran);

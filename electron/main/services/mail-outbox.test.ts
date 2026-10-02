@@ -181,7 +181,7 @@ describe("the gate", () => {
 
 	it("queues a person's message and sends it, then copies it to Sent", async () => {
 		const id = await draft();
-		const queued = await outbox.requestSend(id, { actor: "user" }, db);
+		const queued = await outbox.requestSend(id, db);
 		expect(queued.state).toBe("queued");
 		expect(queued.approvedAt).not.toBeNull();
 
@@ -198,38 +198,75 @@ describe("the gate", () => {
 		expect(appended[0]!.folder).toBe("Sent");
 	});
 
-	it("holds an agent's message until a person approves it", async () => {
-		const id = await draft();
-		const pending = await outbox.requestSend(id, { actor: "agent" }, db);
-		expect(pending.state).toBe("pending");
-		expect(pending.requestedBy).toBe("agent");
+	it("keeps an agent's message a draft that nothing sends until a person presses Send", async () => {
+		const offered: string[] = [];
+		const off = outbox.onAgentDraft((message) => offered.push(message.id));
+		try {
+			const made = await outbox.createDraft(
+				{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Offerte", bodyText: "Hallo.", actor: "agent" },
+				db,
+			);
+			expect(made.state).toBe("draft");
+			expect(made.requestedBy).toBe("agent");
+			// The window is told, so it can open the draft in the editor.
+			expect(offered).toEqual([made.id]);
 
-		// The sender does not see it.
-		expect(await sender.processQueue(db)).toBe(0);
-		expect(sentMessages).toHaveLength(0);
+			// The sender does not see it, and there is no route for an agent to the queue.
+			expect(await sender.processQueue(db)).toBe(0);
+			expect(sentMessages).toHaveLength(0);
 
-		const approved = await outbox.approve(id, db);
-		expect(approved.state).toBe("queued");
-		expect(await sender.processQueue(db)).toBe(1);
-		expect((await outbox.get(id, db))!.state).toBe("sent");
+			// A person's draft does not announce itself.
+			await draft();
+			expect(offered).toHaveLength(1);
+
+			// The person presses Send in the editor, and then it goes.
+			const queued = await outbox.requestSend(made.id, db);
+			expect(queued.state).toBe("queued");
+			expect(queued.requestedBy).toBe("user");
+			expect(await sender.processQueue(db)).toBe(1);
+		} finally {
+			off();
+		}
 	});
 
-	it("turns an edited pending message back into a draft", async () => {
+	it("shows an agent's request to send the whole message, and refuses it if the draft changed", async () => {
 		const id = await draft();
-		await outbox.requestSend(id, { actor: "agent" }, db);
+		const review = await outbox.reviewForSend(id, db);
+		expect(review.summary).toBe('Send "Offerte" to laura@obet.be');
+		expect(review.preview).toContain("From: Nathan <hallo@juno.test>");
+		expect(review.preview).toContain("Subject: Offerte");
+		expect(review.preview).toContain("Hallo.");
+		// Reviewing sends nothing and changes nothing.
+		expect((await outbox.get(id, db))!.state).toBe("draft");
+		expect(await sender.processQueue(db)).toBe(0);
+
+		await outbox.verifyDraftUnchanged(id, review.seal, db);
+		await outbox.updateDraft(id, { bodyText: "Iets heel anders." }, db);
+		await expect(outbox.verifyDraftUnchanged(id, review.seal, db)).rejects.toThrow(/changed after it was asked for/);
+		await expect(outbox.verifyDraftUnchanged(id, null, db)).rejects.toThrow(/changed after it was asked for/);
+	});
+
+	it("refuses to review a draft that could not be sent", async () => {
+		const empty = await outbox.createDraft({ accountId, to: [], subject: "x", bodyText: "x" }, db);
+		await expect(outbox.reviewForSend(empty.id, db)).rejects.toThrow(/nobody in To/);
+		await expect(outbox.reviewForSend("nope", db)).rejects.toThrow(/does not exist/);
+	});
+
+	it("turns an edited pending message from an older version back into a draft", async () => {
+		const id = await draft();
+		db.update(mailOutbox).set({ state: "pending", requestedBy: "agent" }).where(eq(mailOutbox.id, id)).run();
 		const edited = await outbox.updateDraft(id, { subject: "Iets anders" }, db);
 		expect(edited.state).toBe("draft");
 		expect(edited.requestedBy).toBe("user");
-		await expect(outbox.approve(id, db)).rejects.toThrow(/Only a pending/);
 	});
 
 	it("refuses to queue a message with nobody in To, and one from an account that cannot send", async () => {
 		const empty = await outbox.createDraft({ accountId, to: [], subject: "x", bodyText: "x" }, db);
-		await expect(outbox.requestSend(empty.id, { actor: "user" }, db)).rejects.toThrow(/nobody in To/);
+		await expect(outbox.requestSend(empty.id, db)).rejects.toThrow(/nobody in To/);
 
 		await accounts.update(accountId, { smtpHost: null }, db);
 		const id = await draft();
-		await expect(outbox.requestSend(id, { actor: "user" }, db)).rejects.toThrow(/no outgoing server/);
+		await expect(outbox.requestSend(id, db)).rejects.toThrow(/no outgoing server/);
 	});
 
 	it("refuses to send a template gap to a client", async () => {
@@ -242,24 +279,23 @@ describe("the gate", () => {
 			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: rendered.subject, bodyText: rendered.bodyText, bodyHtml: rendered.bodyHtml },
 			db,
 		);
-		await expect(outbox.requestSend(made.id, { actor: "user" }, db)).rejects.toThrow(/placeholder without a value: client.contactName/);
+		await expect(outbox.requestSend(made.id, db)).rejects.toThrow(/placeholder without a value: client.contactName/);
 		expect((await outbox.get(made.id, db))!.state).toBe("draft");
 	});
 
 	it("cancels anything that has not gone out, and nothing that has", async () => {
 		const id = await draft();
-		await outbox.requestSend(id, { actor: "agent" }, db);
 		expect((await outbox.cancel(id, db)).state).toBe("cancelled");
 
 		const other = await draft();
-		await outbox.requestSend(other, { actor: "user" }, db);
+		await outbox.requestSend(other, db);
 		await sender.processQueue(db);
 		await expect(outbox.cancel(other, db)).rejects.toThrow(/cannot be cancelled/);
 	});
 
 	it("retries a connection failure on its own and a refusal only when asked", async () => {
 		const id = await draft();
-		await outbox.requestSend(id, { actor: "user" }, db);
+		await outbox.requestSend(id, db);
 
 		failNext = Object.assign(new Error("x"), { code: "ECONNREFUSED" });
 		await sender.processQueue(db);
@@ -286,13 +322,14 @@ describe("the gate", () => {
 	it("does not send while paused", async () => {
 		sender.configureMailSend({ isPaused: () => true });
 		const id = await draft();
-		await outbox.requestSend(id, { actor: "user" }, db);
+		await outbox.requestSend(id, db);
 		expect(await sender.processQueue(db)).toBe(0);
 		expect((await outbox.get(id, db))!.state).toBe("queued");
 	});
 
 	it("counts what is waiting on whom", async () => {
-		await outbox.requestSend(await draft(), { actor: "agent" }, db);
+		const waiting = await draft();
+		db.update(mailOutbox).set({ state: "pending" }).where(eq(mailOutbox.id, waiting)).run();
 		await draft();
 		expect(await outbox.counts(accountId, db)).toEqual({ pending: 1, queued: 0, failed: 0, drafts: 1 });
 	});
@@ -369,7 +406,7 @@ describe("replies", () => {
 		);
 		expect(draft.inReplyTo).toBe("<orig@obet.be>");
 		expect(draft.threadId).not.toBeNull();
-		await outbox.requestSend(draft.id, { actor: "user" }, db);
+		await outbox.requestSend(draft.id, db);
 		await sender.processQueue(db);
 		expect(sentMessages[0]!.message.references).toEqual(["<root@obet.be>", "<orig@obet.be>"]);
 		expect(sentMessages[0]!.message.inReplyTo).toBe("<orig@obet.be>");
@@ -439,21 +476,44 @@ describe("templates", () => {
 		const plain = await templates.create({ name: "Groet", subject: "Dag", bodyHtml: "<p>Beste Laura, tot snel.</p>" }, db);
 		const input = { accountId, to: [{ name: null, address: "laura@obet.be" }], templateId: plain.id };
 
-		const asPerson = await outbox.sendFromTemplate(input, { actor: "user" }, db);
+		const asPerson = await outbox.sendFromTemplate(input, db);
 		expect(asPerson.state).toBe("queued");
 		expect(asPerson.bodyText).toContain("Beste Laura");
-
-		const asAgent = await outbox.sendFromTemplate(input, { actor: "agent" }, db);
-		expect(asAgent.state).toBe("pending");
 
 		// Refused for no recipient, and for a gap the template could not fill.
 		const cover = await coverTemplate();
 		const before = (await outbox.list({ states: ["draft"] }, db)).length;
-		await expect(outbox.sendFromTemplate({ ...input, to: [] }, { actor: "user" }, db)).rejects.toThrow(/nobody in To/);
+		await expect(outbox.sendFromTemplate({ ...input, to: [] }, db)).rejects.toThrow(/nobody in To/);
 		await expect(
-			outbox.sendFromTemplate({ ...input, templateId: cover.id }, { actor: "user" }, db),
+			outbox.sendFromTemplate({ ...input, templateId: cover.id }, db),
 		).rejects.toThrow(/placeholder without a value/);
 		expect((await outbox.list({ states: ["draft"] }, db)).length).toBe(before);
+	});
+
+	it("reviews a template for an agent's request without keeping anything", async () => {
+		const plain = await templates.create({ name: "Groet", subject: "Dag", bodyHtml: "<p>Beste Laura, tot snel.</p>" }, db);
+		const input = { accountId, to: [{ name: "Laura", address: "laura@obet.be" }], templateId: plain.id };
+		const before = (await outbox.list({}, db)).length;
+
+		const review = await outbox.reviewTemplateSend(input, db);
+		expect(review.summary).toBe('Send "Dag" to Laura');
+		expect(review.preview).toContain("From: Nathan <hallo@juno.test>");
+		expect(review.preview).toContain("To: Laura <laura@obet.be>");
+		expect(review.preview).toContain("Subject: Dag");
+		expect(review.preview).toContain("Beste Laura, tot snel.");
+		// Nothing was written: a template is never a draft.
+		expect((await outbox.list({}, db)).length).toBe(before);
+
+		await outbox.verifyTemplateUnchanged(input, review.seal, db);
+		await templates.update(plain.id, { bodyHtml: "<p>Beste Laura, tot later.</p>" }, db);
+		await expect(outbox.verifyTemplateUnchanged(input, review.seal, db)).rejects.toThrow(/something different/);
+	});
+
+	it("refuses to review a template send that could not go", async () => {
+		const cover = await coverTemplate();
+		const input = { accountId, to: [{ name: null, address: "laura@obet.be" }], templateId: cover.id };
+		await expect(outbox.reviewTemplateSend({ ...input, to: [] }, db)).rejects.toThrow(/nobody in To/);
+		await expect(outbox.reviewTemplateSend(input, db)).rejects.toThrow(/placeholder without a value/);
 	});
 
 	it("does not save a template as a draft", async () => {
@@ -507,7 +567,7 @@ describe("attachments", () => {
 			db,
 		);
 		expect(draft.attachments.map((a) => a.filename)).toEqual(["Offerte_ v1.pdf", "NDA.pdf"]);
-		await outbox.requestSend(draft.id, { actor: "user" }, db);
+		await outbox.requestSend(draft.id, db);
 		await sender.processQueue(db);
 
 		expect(rendered).toEqual([withoutPdf]);
@@ -523,7 +583,7 @@ describe("a message with no text", () => {
 			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Leeg", bodyText: "" },
 			db,
 		);
-		await expect(outbox.requestSend(bare.id, { actor: "user" }, db)).rejects.toThrow(/message is empty/);
+		await expect(outbox.requestSend(bare.id, db)).rejects.toThrow(/message is empty/);
 
 		const client = await clientsService.create({ name: "obet" }, db);
 		const pdfPath = join(dir, "contract.pdf");
@@ -538,7 +598,7 @@ describe("a message with no text", () => {
 			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Contract", bodyText: "", documentIds: [documentId] },
 			db,
 		);
-		const queued = await outbox.requestSend(withDocument.id, { actor: "user" }, db);
+		const queued = await outbox.requestSend(withDocument.id, db);
 		expect(queued.state).toBe("queued");
 	});
 });
@@ -554,7 +614,7 @@ describe("a sent reply in its thread", () => {
 			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Re: Offerte", bodyText, replyToMessageId: originalId },
 			db,
 		);
-		await outbox.requestSend(draft.id, { actor: "user" }, db);
+		await outbox.requestSend(draft.id, db);
 		await sender.processQueue(db);
 		return (await outbox.get(draft.id, db))!;
 	}
@@ -587,7 +647,7 @@ describe("a sent reply in its thread", () => {
 			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Re: Offerte", bodyText: "Zeker.", replyToMessageId: originalId },
 			db,
 		);
-		await outbox.requestSend(draft.id, { actor: "user" }, db);
+		await outbox.requestSend(draft.id, db);
 		const thread = (await threads.getThread(threadOf(originalId), db))!;
 		expect(thread.outgoing.map((o) => o.state)).toEqual(["queued"]);
 	});

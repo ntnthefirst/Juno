@@ -104,6 +104,17 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.file.deleteForever", (_event, threadIds: string[]) =>
 		actions.deleteThreadsForever(threadIds),
 	);
+	ipcMain.handle("mail.file.archiveMessages", (_event, messageIds: string[]) =>
+		actions.archiveMessages(messageIds),
+	);
+	ipcMain.handle("mail.file.trashMessages", (_event, messageIds: string[]) => actions.trashMessages(messageIds));
+	ipcMain.handle("mail.file.junkMessages", (_event, messageIds: string[]) => actions.junkMessages(messageIds));
+	ipcMain.handle("mail.file.moveMessagesToFolder", (_event, messageIds: string[], folderId: string) =>
+		actions.move(messageIds, { folderId }),
+	);
+	ipcMain.handle("mail.file.deleteMessagesForever", (_event, messageIds: string[]) =>
+		actions.deleteForever(messageIds),
+	);
 	ipcMain.handle("mail.file.setSeen", (_event, messageIds: string[], seen: boolean) =>
 		actions.setSeen(messageIds, seen),
 	);
@@ -181,7 +192,7 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.outbox.get", (_event, id: string) => outbox.get(id));
 	ipcMain.handle("mail.outbox.counts", (_event, accountId?: string) => outbox.counts(accountId));
 	ipcMain.handle("mail.outbox.sendFromTemplate", (_event, input: MailTemplateSendInput) =>
-		outbox.sendFromTemplate(input, { actor: "user" }),
+		outbox.sendFromTemplate(input),
 	);
 	ipcMain.handle("mail.outbox.createDraft", (_event, input: MailDraftInput) => outbox.createDraft(input));
 	ipcMain.handle("mail.outbox.updateDraft", (_event, id: string, patch: MailDraftPatch) =>
@@ -193,13 +204,10 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.outbox.replySeed", (_event, messageId: string, mode: MailReplyMode) =>
 		outbox.replySeed(messageId, { mode }),
 	);
-	// A person pressed Send. The actor is the one thing the adapter states, and
-	// it is a fact about the caller, not a decision: this channel is only
-	// reachable from the window. The agent's equivalent lives in ../mcp/mail.ts
-	// and says "agent", which the service turns into a pending message.
-	ipcMain.handle("mail.outbox.send", (_event, id: string) => outbox.requestSend(id, { actor: "user" }));
-	// Approval has no MCP counterpart. A person in the app is the only approver.
-	ipcMain.handle("mail.outbox.approve", (_event, id: string) => outbox.approve(id));
+	// A person pressed Send. This channel is only reachable from the window, and
+	// an agent has no tool that reaches the queue at all (../mcp/mail-outbox.ts
+	// writes drafts and nothing else).
+	ipcMain.handle("mail.outbox.send", (_event, id: string) => outbox.requestSend(id));
 	ipcMain.handle("mail.outbox.cancel", (_event, id: string) => outbox.cancel(id));
 	ipcMain.handle("mail.outbox.retry", (_event, id: string) => outbox.retry(id));
 	ipcMain.handle("mail.outbox.remove", (_event, id: string) => outbox.remove(id));
@@ -213,6 +221,13 @@ export function registerMailIpc(): void {
 	sender.onChange((message) => {
 		for (const window of BrowserWindow.getAllWindows()) {
 			if (!window.isDestroyed()) window.webContents.send("mail.outboxChanged", message);
+		}
+	});
+	// A draft an agent wrote opens in the editor, the way one a person started
+	// would. The window decides what to do with it; nothing here sends it.
+	outbox.onAgentDraft((message) => {
+		for (const window of BrowserWindow.getAllWindows()) {
+			if (!window.isDestroyed()) window.webContents.send("mail.agentDraft", message);
 		}
 	});
 	// A draft autosaved, edited, cancelled, retried or removed: the sender never

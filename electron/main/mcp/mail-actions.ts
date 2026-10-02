@@ -130,6 +130,90 @@ export const mailActionTools: ToolDescriptor[] = [
 		handler: async (args) => actions.deleteThreadsForever(ids(args, "thread_ids")),
 	},
 	{
+		name: "mail.file.archive_messages",
+		title: "Archive single messages",
+		description:
+			"Moves these messages, and only these, to the account's Archive folder, on the server. A " +
+			"conversation spans folders, so use this to file one reply without taking the rest of the " +
+			"thread with it. Message ids come from mail.threads.get.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: messageIds,
+			required: ["message_ids"],
+			additionalProperties: false,
+		},
+		handler: async (args) => actions.archiveMessages(ids(args, "message_ids")),
+	},
+	{
+		name: "mail.file.trash_messages",
+		title: "Move single messages to trash",
+		description:
+			"Moves these messages, and only these, to the account's Trash folder, on the server. The " +
+			"rest of the thread stays where it is. Reversible by moving them back out; " +
+			"mail.file.delete_messages is the one that is not.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: messageIds,
+			required: ["message_ids"],
+			additionalProperties: false,
+		},
+		handler: async (args) => actions.trashMessages(ids(args, "message_ids")),
+	},
+	{
+		name: "mail.file.junk_messages",
+		title: "Move single messages to junk",
+		description: "Moves these messages, and only these, to the account's Junk folder, on the server.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: messageIds,
+			required: ["message_ids"],
+			additionalProperties: false,
+		},
+		handler: async (args) => actions.junkMessages(ids(args, "message_ids")),
+	},
+	{
+		name: "mail.file.move_messages",
+		title: "Move single messages to a folder",
+		description:
+			"Moves these messages, and only these, to a named folder on the same account, on the server. " +
+			"Folder ids come from mail.folders.list.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				...messageIds,
+				folder_id: { type: "string", description: "A folder id from mail.folders.list." },
+			},
+			required: ["message_ids", "folder_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => actions.move(ids(args, "message_ids"), { folderId: String(args.folder_id) }),
+	},
+	{
+		name: "mail.file.delete_messages",
+		title: "Delete single messages for good",
+		description:
+			"Deletes these messages, and only these, from the mail server as well as from this machine. " +
+			"There is no undo and no copy left anywhere. Use mail.file.trash_messages unless permanent " +
+			"is what was asked for.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: messageIds,
+			required: ["message_ids"],
+			additionalProperties: false,
+		},
+		handler: async (args) => actions.deleteForever(ids(args, "message_ids")),
+	},
+	{
 		name: "mail.file.set_seen",
 		title: "Mark messages read or unread",
 		description: "Sets or clears the read flag on messages, on the server and here.",

@@ -15,9 +15,9 @@ type OutboxDetailProps = {
 };
 
 /**
- * A composed message and what can be done with it. A pending one shows the
- * full message and asks for a yes or a no, because that is what an agent's
- * request waits on (.claude/rules/mcp.md section 4).
+ * A composed message that is not a draft, and what can be done with it: where
+ * it is in the queue, why it failed, and retrying or deleting it. A draft opens
+ * in the editor instead, so there is nothing to read first.
  */
 export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDetailProps) {
 	const [busy, setBusy] = useState(false);
@@ -51,26 +51,6 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 					{STATE_LABELS[message.state]}
 				</span>
 			</div>
-
-			{message.state === "pending" ? (
-				<div className="mt-4 border-l-2 border-[var(--warn)] pl-4">
-					<p className="font-[var(--weight-medium)]">An assistant prepared this message and asked to send it.</p>
-					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						Read it below. Nothing goes out until you press Send. Reject it and it stays here as cancelled.
-					</p>
-					<div className="mt-3 flex gap-2">
-						<Button variant="primary" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.approve(message.id), "Message queued.")}>
-							Send
-						</Button>
-						<Button disabled={busy} onClick={() => onEdit(message)}>
-							Edit first
-						</Button>
-						<Button variant="danger" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.cancel(message.id), "Message rejected.")}>
-							Reject
-						</Button>
-					</div>
-				</div>
-			) : null}
 
 			{message.lastError ? (
 				<p data-selectable className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">

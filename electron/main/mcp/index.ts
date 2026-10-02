@@ -69,7 +69,7 @@ export async function startAgentSurface(next: AgentSurfaceConfig): Promise<void>
 	connections.configureAgentConnections(next.userDataDir);
 	removeLeftovers(next.userDataDir);
 
-	actions.configureAgentActions((tool, args) => executeApproved(tool, args));
+	actions.configureAgentActions((tool, args, seal) => executeApproved(tool, args, seal));
 
 	automations.configureAutomations({
 		callTool: (tool, args, options) =>

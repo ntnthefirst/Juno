@@ -120,8 +120,13 @@ export function isSyncing(status: MailSyncStatus | null): boolean {
  * sync brings it back in its new folder. That is worth saying out loud
  * rather than letting the count alone imply it is already sitting there.
  */
-export function describeMailFileResult(verb: string, count: number, result: MailFileResult): string {
-	const noun = count === 1 ? "thread" : "threads";
+export function describeMailFileResult(
+	verb: string,
+	count: number,
+	result: MailFileResult,
+	kind: "thread" | "message" = "thread",
+): string {
+	const noun = count === 1 ? kind : `${kind}s`;
 	const base = `${count} ${noun} ${verb}.`;
 	if (result.moved > 0 && result.remembered === 0) {
 		const pronoun = count === 1 ? "It" : "They";

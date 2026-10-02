@@ -29,7 +29,7 @@ Lowercase, dot-separated, singular domain, one verb.
 clients.list          clients.get          clients.create
 clients.update        clients.archive
 mail.sync             mail.search          mail.get_thread
-mail.send
+mail.draft            mail.reply
 documents.render      documents.sign       documents.list_templates
 calendar.list_events  calendar.create_event
 reminders.list        reminders.complete
@@ -70,9 +70,16 @@ the registration. There is no third category.
 `reminders.list`, `documents.list_templates`.
 
 **Side-effectful**: everything that writes, and in particular everything that
-**sends, signs, deletes or files something**: `mail.send`, `documents.sign`,
-`documents.file`, `clients.delete`, `calendar.create_event` when it invites
-someone.
+**signs, deletes or files something**: `documents.sign`, `documents.file`,
+`clients.delete`, `calendar.create_event` when it invites someone.
+
+**Sending mail is on this list, in exactly two shapes** (decision 44). An agent
+writes drafts (`mail.draft`, `mail.reply`), which open in the editor, and asks to
+send one with `mail.send`, or asks to send a template with
+`mail.send_from_template`. A template is never a draft. Both park in the Agent
+tab with the whole message as a preview, and nothing shows in the mail screen.
+Do not add a tool that queues or retries a send, or a way to send that is
+neither a draft nor a template. The host test names the two that exist.
 
 The rule, and it does not bend:
 

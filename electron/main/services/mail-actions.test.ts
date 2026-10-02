@@ -45,6 +45,8 @@ type FakeMessage = {
 	messageId: string;
 	date: string;
 	flags: string[];
+	/** The Message-ID this one answers, which is what puts it in the same thread. */
+	inReplyTo?: string;
 };
 
 const REMOTE_FOLDERS: RemoteFolder[] = [
@@ -132,8 +134,8 @@ function sourceOver(box: FakeMailbox): MailboxSource {
 						date: m.date,
 						subject: m.subject,
 						messageId: m.messageId,
-						inReplyTo: null,
-						references: [],
+						inReplyTo: m.inReplyTo ?? null,
+						references: m.inReplyTo ? [m.inReplyTo] : [],
 						from: { name: null, address: m.from },
 						to: [{ name: null, address: "me@juno.test" }],
 						cc: [],
@@ -300,6 +302,61 @@ afterEach(() => {
 	rmSync(mailDir, { recursive: true, force: true });
 });
 
+describe("one message of a conversation", () => {
+	/** A reply in the same conversation, synced in beside the first message. */
+	async function twoMessageThread() {
+		box.messages.get("INBOX")!.push({
+			uid: 12,
+			from: "me@juno.test",
+			subject: "Re: The roof",
+			messageId: "<b@juno.test>",
+			inReplyTo: "<a@example.be>",
+			date: new Date(Date.now() + 60_000).toISOString(),
+			flags: [],
+		});
+		await sync.syncAccount(accountId, db);
+		const [summary] = await threads.listThreads({ accountId }, db);
+		const thread = await threads.getThread(summary!.id, db);
+		expect(thread!.messages).toHaveLength(2);
+		return { threadId: summary!.id, first: thread!.messages[0]!, reply: thread!.messages[1]! };
+	}
+
+	it("trashes only the message asked for, and the thread shows in both folders", async () => {
+		const { threadId, first, reply } = await twoMessageThread();
+
+		const result = await actions.trashMessages([reply.id], db);
+
+		expect(result.moved).toBe(1);
+		expect(box.messages.get("Trash")).toHaveLength(1);
+		expect(box.messages.get("INBOX")).toHaveLength(1);
+		expect(liveMessage(first.id)?.folderId).toBe(folderIdOf("inbox"));
+		expect(liveMessage(reply.id)?.folderId).toBe(folderIdOf("trash"));
+
+		// Each folder lists the conversation for what is in it and nothing else.
+		const inbox = await threads.listThreads({ accountId, folderSpecialUse: "inbox" }, db);
+		const trash = await threads.listThreads({ accountId, folderSpecialUse: "trash" }, db);
+		expect(inbox.map((t) => [t.id, t.messageCount, t.messageId])).toEqual([[threadId, 1, first.id]]);
+		expect(trash.map((t) => [t.id, t.messageCount, t.messageId])).toEqual([[threadId, 1, reply.id]]);
+
+		// The reader still has the whole conversation, with where each one lives.
+		const whole = await threads.getThread(threadId, db);
+		expect(whole!.messages.map((m) => [m.id, m.folderUse])).toEqual([
+			[first.id, "inbox"],
+			[reply.id, "trash"],
+		]);
+	});
+
+	it("keeps a search inside the folder it is asked in", async () => {
+		const { reply } = await twoMessageThread();
+		await actions.trashMessages([reply.id], db);
+
+		const trash = await threads.listThreads({ accountId, folderSpecialUse: "trash", search: "roof" }, db);
+		expect(trash.map((t) => t.messageId)).toEqual([reply.id]);
+		const sent = await threads.listThreads({ accountId, folderSpecialUse: "sent", search: "roof" }, db);
+		expect(sent).toEqual([]);
+	});
+});
+
 describe("archiving", () => {
 	it("moves the message on the server and follows it locally", async () => {
 		const { threadId, messageId } = await syncedThread();
@@ -316,18 +373,26 @@ describe("archiving", () => {
 		expect(liveMessage(messageId)?.folderId).toBe(folderIdOf("archive"));
 	});
 
-	it("forgets the row when the server does not say where it landed", async () => {
+	it("pulls the destination at once when the server does not say where it landed", async () => {
 		box.reportsNewUids = false;
 		const { threadId, messageId } = await syncedThread();
 
 		const result = await actions.archiveThreads([threadId], db);
 
 		expect(result.moved).toBe(1);
-		expect(result.remembered).toBe(0);
+		// Found again in Archive by its Message-ID, so the caller is told it is there.
+		expect(result.remembered).toBe(1);
 		expect(box.messages.get("Archive")).toHaveLength(1);
-		// Gone from here rather than pointing at a uid Juno cannot know. The next
-		// sync of Archive finds it again.
+		// The old row is gone rather than pointing at a uid Juno cannot know, and
+		// the message is already in Archive under its new uid. Nobody has to sync.
 		expect(liveMessage(messageId)).toBeUndefined();
+		const inArchive = db
+			.select()
+			.from(mailMessages)
+			.where(and(eq(mailMessages.folderId, folderIdOf("archive")), isNull(mailMessages.deletedAt)))
+			.all();
+		expect(inArchive).toHaveLength(1);
+		expect(inArchive[0]!.uid).toBe(box.messages.get("Archive")![0]!.uid);
 	});
 
 	it("makes the archive folder when the account has none", async () => {

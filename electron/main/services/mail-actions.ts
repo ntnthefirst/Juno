@@ -16,9 +16,10 @@
  * - A server with UIDPLUS answers the MOVE with the new uid, so the local row
  *   is repointed at the destination folder and shows up there immediately.
  * - A server without it says nothing, so the local row is forgotten and the
- *   next sync of the destination folder finds the message again. Until then it
- *   is out of the folder it left, which is what was asked for, and absent from
- *   the one it went to, which is the honest reading of "Juno does not know".
+ *   destination folder is pulled straight away, which finds the message under
+ *   its new uid. If that pull fails the message is out of the folder it left,
+ *   which is what was asked for, and shows in the one it went to at the next
+ *   sync.
  *
  * Deleting for good is the one call that destroys something. It is confirmed by
  * a person in the window, or parked for approval when an agent asks, and it
@@ -30,6 +31,7 @@ import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { mailFolders, mailMessages, mailThreads } from "../db/schema";
 import { ensureSpecialFolder } from "./mail-folders";
+import { syncOneFolder } from "./mail-sync";
 import { refreshFolderCounts } from "./mail-store";
 import { withWriter } from "./mail-writer";
 
@@ -262,6 +264,29 @@ export async function move(
 
 		refreshFolderCounts(db, group.folder.id);
 		refreshFolderCounts(db, destination.id);
+
+		// Some of these have no row in the destination yet. Pull it now, so a
+		// moved message is there when the list reloads and not at the next sync.
+		const unplaced = group.messages.filter((message) => !uidMap.has(message.uid));
+		if (unplaced.length > 0) {
+			await syncOneFolder(group.accountId, destination.id, db).catch(() => undefined);
+			// Counted by Message-ID, the one thing the move did not change, so the
+			// caller is only told a message is there when it really is.
+			const wanted = unplaced.map((message) => message.messageId).filter((id): id is string => id !== null);
+			if (wanted.length > 0) {
+				remembered += db
+					.select({ id: mailMessages.id })
+					.from(mailMessages)
+					.where(
+						and(
+							eq(mailMessages.folderId, destination.id),
+							inArray(mailMessages.messageId, wanted),
+							isNull(mailMessages.deletedAt),
+						),
+					)
+					.all().length;
+			}
+		}
 	}
 
 	tidyEmptyThreads(db, [...new Set(rows.map((row) => row.message.threadId))]);
@@ -326,6 +351,25 @@ export async function trashThreads(threadIds: string[], db: Db = getDb()): Promi
 
 export async function junkThreads(threadIds: string[], db: Db = getDb()): Promise<MailFileResult> {
 	return moveThreads(threadIds, { specialUse: "junk" }, db);
+}
+
+/* ------------------------------------------------- one message at a time */
+
+/**
+ * The same filing for single messages. A conversation spans folders, so
+ * deleting the reply you sent must not take the message you received with it:
+ * the reader files the message that is open, and the list files whole threads.
+ */
+export async function archiveMessages(messageIds: string[], db: Db = getDb()): Promise<MailFileResult> {
+	return move(messageIds, { specialUse: "archive" }, db);
+}
+
+export async function trashMessages(messageIds: string[], db: Db = getDb()): Promise<MailFileResult> {
+	return move(messageIds, { specialUse: "trash" }, db);
+}
+
+export async function junkMessages(messageIds: string[], db: Db = getDb()): Promise<MailFileResult> {
+	return move(messageIds, { specialUse: "junk" }, db);
 }
 
 /* -------------------------------------------------------------- deleting */

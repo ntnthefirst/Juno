@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	MailAccount,
 	MailFolder,
@@ -16,6 +16,7 @@ import { ComposePage, type ComposeSeed } from "./ComposePage";
 import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
 import { describeMailFileResult } from "./format";
+import { onDraftOffered, takeOfferedDraft } from "../../lib/open-draft";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { NO_FILTERS, type MailFilters } from "./mail-filters";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
@@ -31,7 +32,16 @@ type LinkTarget = { threadId: string; currentClientId: string | null; senderAddr
  * message Juno has not sent and a thread in the server's Drafts folder, and
  * only one of them is ever open, so the two cannot be set together.
  */
-type Opened = { kind: "thread"; id: string } | { kind: "outbox"; id: string };
+type Opened =
+	| {
+			kind: "thread";
+			id: string;
+			/** The message the clicked row stood for, which is the one that opens. */
+			messageId: string | null;
+			/** Counts every click, so choosing a row again reopens its message even in the same thread. */
+			opens: number;
+	  }
+	| { kind: "outbox"; id: string };
 
 /** The widest horizon mail-accounts.ts accepts, which is ten years of mail. */
 const EVERYTHING_DAYS = 3650;
@@ -86,6 +96,30 @@ export function MailScreen() {
 	const [folderDelete, setFolderDelete] = useState<MailFolder | null>(null);
 	const [folderEmpty, setFolderEmpty] = useState<MailFolder | null>(null);
 	const [folderBusy, setFolderBusy] = useState(false);
+	const openCount = useRef(0);
+	const composeOpen = useRef(false);
+	useEffect(() => {
+		composeOpen.current = compose !== null;
+	}, [compose]);
+
+	// A draft an agent wrote opens in the editor, like one a person started. If
+	// a message is already being written it is left alone, since the draft is
+	// saved in Drafts either way and replacing the editor would take that over.
+	useEffect(() => {
+		function open() {
+			const draft = takeOfferedDraft();
+			if (!draft) return;
+			setSelection({ accountId: draft.accountId, folderId: null, view: "drafts" });
+			if (composeOpen.current) {
+				setNotice("A draft from your assistant is waiting in Drafts.");
+				setOutboxVersion((v) => v + 1);
+				return;
+			}
+			setCompose({ draft });
+		}
+		open();
+		return onDraftOffered(open);
+	}, []);
 
 	const loadAccounts = useCallback(async () => {
 		const list = await window.juno.mail.accounts.list();
@@ -162,7 +196,13 @@ export function MailScreen() {
 	const selectedOutboxId = opened?.kind === "outbox" ? opened.id : null;
 
 	function openThread(id: string | null) {
-		setOpened(id ? { kind: "thread", id } : null);
+		// The row's own message is taken now, at the click. The same conversation
+		// is listed under Inbox for what came in and under Sent for the answer, and
+		// each row has to open the message it stands for, not whichever of them was
+		// open last.
+		const messageId = id ? (threads?.find((t) => t.id === id)?.messageId ?? null) : null;
+		openCount.current += 1;
+		setOpened(id ? { kind: "thread", id, messageId, opens: openCount.current } : null);
 		setReaderOpen(id !== null);
 		if (id) {
 			setSelectedThreadIds([]);
@@ -175,11 +215,11 @@ export function MailScreen() {
 		const active = showingDrafts ? NO_FILTERS : filters;
 		return window.juno.mail.threads.list({
 			...(selection.accountId ? { accountId: selection.accountId } : {}),
-			...(term
-				? { search: term }
-				: selection.folderId
-					? { folderId: selection.folderId }
-					: { folderSpecialUse: selection.view }),
+			// A search stays in the folder it was typed in. Dropping the folder
+			// showed the same conversation under Inbox, Sent and Trash alike, and
+			// made it look as if a deleted message was still in all three.
+			...(term ? { search: term } : {}),
+			...(selection.folderId ? { folderId: selection.folderId } : { folderSpecialUse: selection.view }),
 			unreadOnly: active.unreadOnly,
 			flaggedOnly: active.flaggedOnly,
 			withAttachments: active.withAttachments,
@@ -721,15 +761,13 @@ export function MailScreen() {
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
 				{selectedThreadId && readerOpen ? (
 					<ThreadView
-						key={selectedThreadId}
+						key={`${selectedThreadId}:${opened?.kind === "thread" ? opened.opens : 0}`}
 						threadId={selectedThreadId}
-						messageId={threads?.find((t) => t.id === selectedThreadId)?.messageId ?? null}
+						messageId={opened?.kind === "thread" ? opened.messageId : null}
 						onBack={() => setReaderOpen(false)}
-						inTrash={inTrash}
 						onChanged={() => setAccountsVersion((v) => v + 1)}
 						onNotice={setNotice}
 						onReply={(messageId, mode) => void reply(messageId, mode)}
-						onAction={(action) => handleThreadAction(action, [selectedThreadId])}
 						onEditDraft={(id) => void editOutgoing(id)}
 						onReplyOutgoing={(id, mode) => void replyOutgoing(id, mode)}
 					/>
@@ -790,7 +828,7 @@ export function MailScreen() {
 													// A draft has nothing to read before it is edited, so it opens
 													// in the editor. The rest still show their state.
 													const row = outboxRows?.find((m) => m.id === id);
-													if (row?.state === "draft") setCompose({ draft: row });
+													if (row?.state === "draft" || row?.state === "pending") setCompose({ draft: row });
 													else setOpened({ kind: "outbox", id });
 												},
 											},

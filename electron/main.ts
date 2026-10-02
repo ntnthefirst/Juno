@@ -3585,6 +3585,7 @@ if (!app.requestSingleInstanceLock()) {
 									if (acted !== "panel") throw new Error(`Smoke: calendar reminder actions ${acted}`);
 									// The panel as it is: Edit and Delete beside the close cross, and
 									// Snooze beside Mark done at the bottom.
+									await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, "calendar-panel.png"), (await capture(window.webContents)).toPNG());
 									const deleted = await window.webContents.executeJavaScript(
 										`(async () => {

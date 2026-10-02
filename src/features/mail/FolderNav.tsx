@@ -8,6 +8,7 @@ import {
 	buildFolderTree,
 	SPECIAL_ICONS,
 	SPECIAL_LABELS,
+	SPECIAL_ORDER,
 	specialFolders,
 	type FolderNode,
 } from "./folder-tree";
@@ -72,6 +73,8 @@ export function FolderNav({
 	const [target, setTarget] = useState<MailFolder | null>(null);
 	const [dropOn, setDropOn] = useState<string | null>(null);
 	const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+	// Per account, keyed by account id. Folder ids and account ids never collide.
+	const [accountsClosed, setAccountsClosed] = useState<Record<string, boolean>>({});
 
 	const items: MenuItem[] = target
 		? [
@@ -246,6 +249,38 @@ export function FolderNav({
 
 	return (
 		<div className="flex flex-col gap-4">
+			{accounts.length > 1 ? (
+				<div>
+					<div className="flex items-center px-3" style={{ height: "var(--row-height)" }}>
+						<p className="min-w-0 truncate text-[length:var(--text-sm)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+							All accounts
+						</p>
+					</div>
+					<div className="flex flex-col gap-px">
+						{SPECIAL_ORDER.filter((use) =>
+							accounts.some((a) => (folders[a.id] ?? []).some((f) => f.specialUse === use)),
+						).map((use) =>
+							row({
+								key: `all:${use}`,
+								folder: null,
+								label: SPECIAL_LABELS[use],
+								icon: SPECIAL_ICONS[use],
+								depth: 0,
+								active: selection?.accountId === null && selection.folderId === null && selection.view === use,
+								badge: accounts.reduce(
+									(total, a) =>
+										total +
+										(folders[a.id] ?? [])
+											.filter((f) => f.specialUse === use)
+											.reduce((sum, f) => sum + f.unreadCount, 0),
+									0,
+								),
+								onClick: () => onSelect({ accountId: null, folderId: null, view: use }),
+							}),
+						)}
+					</div>
+				</div>
+			) : null}
 			{accounts.map((account) => {
 				const status = sync[account.id] ?? null;
 				const failed = status?.phase === "failed" || (!isSyncing(status) && account.lastSyncError);
@@ -262,6 +297,7 @@ export function FolderNav({
 							? formatSyncWhen(account.lastSyncAt)
 							: "Never";
 				const list = folders[account.id] ?? [];
+				const open = !accountsClosed[account.id];
 
 				return (
 					<div key={account.id}>
@@ -294,9 +330,18 @@ export function FolderNav({
 								<Icon name="sync" size={12} />
 								<span className="tabular">{stamp}</span>
 							</button>
+							<button
+								type="button"
+								aria-label={open ? `Collapse ${account.label}` : `Expand ${account.label}`}
+								aria-expanded={open}
+								onClick={() => setAccountsClosed((current) => ({ ...current, [account.id]: open }))}
+								className="ml-auto flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--ink-faint)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+							>
+								<Icon name={open ? "chevron-down" : "chevron-right"} size={12} />
+							</button>
 						</div>
 
-						{list.length === 0 ? (
+						{!open ? null : list.length === 0 ? (
 							<p className="px-3 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 								No folders yet. Sync to list them.
 							</p>
@@ -318,15 +363,17 @@ export function FolderNav({
 							</div>
 						)}
 
-						<button
-							type="button"
-							onClick={() => onNewFolder(account.id)}
-							style={{ height: "var(--row-height)" }}
-							className="mt-px flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
-						>
-							<Icon name="add" size={14} />
-							<span>New folder</span>
-						</button>
+						{open ? (
+							<button
+								type="button"
+								onClick={() => onNewFolder(account.id)}
+								style={{ height: "var(--row-height)" }}
+								className="mt-px flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+							>
+								<Icon name="add" size={14} />
+								<span>New folder</span>
+							</button>
+						) : null}
 
 					</div>
 				);

@@ -85,6 +85,22 @@ export const reminderTools: ToolDescriptor[] = [
 		handler: async () => derive.suggestions(),
 	},
 	{
+		name: "reminders.accept",
+		title: "Accept a suggested reminder",
+		description:
+			"Turns one suggestion from reminders.suggestions into a real reminder, by its key. A " +
+			"suggestion that no longer applies is refused.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { key: { type: "string", description: "The key of a suggestion." } },
+			required: ["key"],
+			additionalProperties: false,
+		},
+		handler: async (args) => derive.accept(String(args.key)),
+	},
+	{
 		name: "reminders.create",
 		title: "Create a reminder",
 		description:
@@ -219,6 +235,36 @@ export const reminderTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => reminders.reopen(String(args.id)),
+	},
+	{
+		name: "reminders.remove",
+		title: "Delete a reminder",
+		description:
+			"Removes a reminder from every list. Reversible with reminders.restore. To keep it and " +
+			"say it is done, use reminders.complete instead.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string" } },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => reminders.remove(String(args.id)),
+	},
+	{
+		name: "reminders.restore",
+		title: "Restore a deleted reminder",
+		description: "Brings back a reminder removed with reminders.remove.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string" } },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => reminders.restore(String(args.id)),
 	},
 	{
 		name: "reminders.history",

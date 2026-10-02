@@ -33,16 +33,7 @@ export function registerRemindersIpc(): void {
 	ipcMain.handle("reminders.suggestions", () => derive.suggestions());
 
 	ipcMain.handle("reminders.accept", (_event, suggestion: ReminderSuggestion) =>
-		reminders.create({
-			title: suggestion.title,
-			dueOn: suggestion.dueOn,
-			notes: suggestion.notes,
-			category: suggestion.category,
-			clientId: suggestion.clientId,
-			projectId: suggestion.projectId,
-			actionUrl: suggestion.actionUrl,
-			actionLabel: suggestion.actionLabel,
-		}),
+		derive.accept(suggestion.key),
 	);
 
 	ipcMain.handle("reminders.openAction", async (_event, id: string) => {

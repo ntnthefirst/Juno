@@ -7,7 +7,7 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { clients, projects, referenceItems, referenceSets, reminders } from "../db/schema";
-import { ensureRemindersSeeded, invoiceSuggestions, suggestions } from "./reminders-derive";
+import { accept, ensureRemindersSeeded, invoiceSuggestions, suggestions } from "./reminders-derive";
 import { create } from "./reminders";
 import { configureSettings, setAccountingTool } from "./settings";
 
@@ -85,6 +85,22 @@ describe("ensureRemindersSeeded", () => {
 		const rows = db.select().from(reminders).all();
 		// Juno does not know anyone's filing deadlines. Saying so is the point.
 		expect(rows.every((row) => (row.notes ?? "").length > 0)).toBe(true);
+	});
+});
+
+describe("accept", () => {
+	it("makes the suggestion a real reminder, and then it is no longer suggested", async () => {
+		const { project } = makeProject("delivered", 210000);
+		const [offer] = await suggestions(db, "2026-05-10");
+		const made = await accept(offer!.key, db, "2026-05-10");
+		expect(made.title).toBe(offer!.title);
+		expect(made.projectId).toBe(project.id);
+		expect(made.category).toBe("invoice");
+		expect(await suggestions(db, "2026-05-10")).toHaveLength(0);
+	});
+
+	it("refuses a suggestion that has gone away", async () => {
+		await expect(accept("invoice:nothing", db, "2026-05-10")).rejects.toThrow(/gone/);
 	});
 });
 

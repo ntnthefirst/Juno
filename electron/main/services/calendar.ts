@@ -59,6 +59,7 @@ import {
 } from "./calendar-time";
 import { requireClient } from "./clients";
 import { todayIsoDate } from "./document-context";
+import { addDays } from "./recurrence";
 import * as reminders from "./reminders";
 
 type EventRow = typeof calendarEvents.$inferSelect;
@@ -475,6 +476,39 @@ export async function listRange(
 		delete rest.sortKey;
 		return rest;
 	});
+}
+
+export interface UpcomingQuery {
+	/** How many days ahead, today included. Default 14, at most 366. */
+	days?: number;
+	clientId?: string;
+	projectId?: string;
+}
+
+/**
+ * What is coming up: events, open reminders and project deadlines from today,
+ * in order. One call for "what is on my plate", with the same client and
+ * project filters as the range query, so a project's or a client's own
+ * schedule is this with an id.
+ */
+export async function upcoming(
+	query: UpcomingQuery = {},
+	db: Db = getDb(),
+	today: string = todayIsoDate(),
+): Promise<CalendarItem[]> {
+	const days = Math.min(Math.max(Math.trunc(query.days ?? 14), 1), 366);
+	return listRange(
+		{
+			from: today,
+			to: addDays(today, days - 1),
+			includeReminders: true,
+			includeDeadlines: true,
+			...(query.clientId ? { clientId: query.clientId } : {}),
+			...(query.projectId ? { projectId: query.projectId } : {}),
+		},
+		db,
+		today,
+	);
 }
 
 /* ---------------------------------------------------------------- writes */

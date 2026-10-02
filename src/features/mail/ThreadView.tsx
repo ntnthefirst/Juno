@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
-import type { MailMessage, MailReplyMode, MailThread, MailThreadOutgoing } from "@shared/types";
+import { useEffect, useRef, useState } from "react";
+import type { MailFolder, MailMessage, MailReplyMode, MailThread, MailThreadOutgoing } from "@shared/types";
+import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
 import { Icon, type IconName } from "../../components/Icon";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
+import { describeMailFileResult } from "./format";
 import { LinkClientDialog } from "./LinkClientDialog";
+import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { MessageView } from "./MessageView";
 import { ConversationPanel, type ThreadEntry } from "./ConversationPanel";
 import { OutgoingMessageView } from "./OutgoingMessageView";
-import type { ThreadAction } from "./ThreadList";
 
 type ThreadViewProps = {
 	threadId: string;
@@ -15,14 +18,10 @@ type ThreadViewProps = {
 	messageId?: string | null;
 	/** Back to the list. Reading a thread replaces it rather than floating over it. */
 	onBack: () => void;
-	/** Whether this thread is in the trash, where the delete is the final one. */
-	inTrash?: boolean;
 	/** The thread's link changed, so the list needs a refresh. */
 	onChanged: () => void;
 	onNotice: (message: string) => void;
 	onReply: (messageId: string, mode: MailReplyMode) => void;
-	/** Filing the whole thread. The screen owns it, the same as from a list row. */
-	onAction: (action: ThreadAction) => void;
 	/** Opens a draft, a message waiting for approval or a failed send in the composer. */
 	onEditDraft: (outboxId: string) => void;
 	/** Answering or forwarding something sent from Juno that has not synced back yet. */
@@ -73,11 +72,9 @@ export function ThreadView({
 	threadId,
 	messageId = null,
 	onBack,
-	inTrash = false,
 	onChanged,
 	onNotice,
 	onReply,
-	onAction,
 	onEditDraft,
 	onReplyOutgoing,
 }: ThreadViewProps) {
@@ -94,6 +91,16 @@ export function ThreadView({
 	// first one, or a refresh after a version bump) settles openId in the same
 	// render rather than through an effect.
 	const [derivedFrom, setDerivedFrom] = useState<MailThread | null>(null);
+	const [moving, setMoving] = useState<MailFolder[] | null>(null);
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const [busy, setBusy] = useState(false);
+	// Read from here rather than listed as dependencies: the screen passes fresh
+	// functions every render, and the effect below must run once per thread.
+	const latest = useRef({ onChanged, onNotice });
+	useEffect(() => {
+		latest.current = { onChanged, onNotice };
+	});
+	const markedRead = useRef<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -114,6 +121,25 @@ export function ThreadView({
 			cancelled = true;
 		};
 	}, [threadId, version]);
+
+	// Opening a conversation reads all of it. A thread is one thing to the person
+	// reading it, so one unread message left behind in it keeps the whole row bold
+	// in the list, and the messages in the folders they filed away count too.
+	// Once per thread: marking one unread afterwards on purpose must stay unread
+	// until it is opened again.
+	useEffect(() => {
+		if (load.status !== "ready" || load.threadId !== threadId) return;
+		if (markedRead.current === threadId) return;
+		markedRead.current = threadId;
+		if (!load.thread.messages.some((message) => !message.isSeen)) return;
+		window.juno.mail.file
+			.setThreadsSeen([threadId], true)
+			.then(() => {
+				setVersion((v) => v + 1);
+				latest.current.onChanged();
+			})
+			.catch((cause: unknown) => latest.current.onNotice(messageOf(cause)));
+	}, [load, threadId]);
 
 	// A reply to this thread moving from queued to sent, or being sent from
 	// another window, changes what the reader lists as outgoing.
@@ -193,12 +219,124 @@ export function ThreadView({
 	const selected = entries.find((e) => e.message.id === openId) ?? null;
 	const openMessage = messages.find((m) => m.id === openId) ?? null;
 	const senderAddress = summary.participants[0]?.address ?? null;
+	// The buttons below act on the message that is open, never on the whole
+	// conversation: it spans folders, so deleting the reply you sent must not
+	// take the message you received with it. An entry that is not a synced
+	// message (a reply still on its way to Sent) has nothing to file, so it gets
+	// no filing buttons at all.
+	const inTrash = openMessage?.folderUse === "trash";
+
+	/** Reads the message that was just picked, if it was left unread. */
+	function select(id: string) {
+		setOpenId(id);
+		const picked = messages.find((message) => message.id === id);
+		if (!picked || picked.isSeen) return;
+		window.juno.mail.file
+			.setSeen([id], true)
+			.then(refresh)
+			.catch((cause: unknown) => onNotice(messageOf(cause)));
+	}
+
+	/** After a message left, either the conversation is empty or the rest is shown. */
+	function afterFiled() {
+		if (entries.length <= 1) onBack();
+		refresh();
+	}
+
+	async function fileOpen(action: "archive" | "junk" | "trash") {
+		if (!openMessage || busy) return;
+		const verbs = { archive: "archived", junk: "moved to junk", trash: "moved to trash" };
+		setBusy(true);
+		try {
+			const result = await window.juno.mail.file[`${action}Messages`]([openMessage.id]);
+			onNotice(describeMailFileResult(verbs[action], 1, result, "message"));
+			afterFiled();
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function deleteOpenForever() {
+		if (!openMessage || busy) return;
+		setBusy(true);
+		try {
+			await window.juno.mail.file.deleteMessagesForever([openMessage.id]);
+			setConfirmingDelete(false);
+			onNotice("Message deleted.");
+			afterFiled();
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function chooseFolder() {
+		if (!openMessage) return;
+		try {
+			setMoving(await window.juno.mail.folders.list(openMessage.accountId));
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		}
+	}
+
+	async function moveOpenTo(folderId: string) {
+		if (!openMessage || busy) return;
+		setBusy(true);
+		try {
+			const result = await window.juno.mail.file.moveMessagesToFolder([openMessage.id], folderId);
+			onNotice(describeMailFileResult(`moved to ${result.folderName}`, 1, result, "message"));
+			setMoving(null);
+			afterFiled();
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function markOpen(change: { seen: boolean } | { flagged: boolean }) {
+		if (!openMessage) return;
+		try {
+			if ("seen" in change) await window.juno.mail.file.setSeen([openMessage.id], change.seen);
+			else await window.juno.mail.file.setFlagged([openMessage.id], change.flagged);
+			refresh();
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		}
+	}
 
 	const moreItems: MenuItem[] = [
-		{ id: "archive", label: "Archive", icon: "archive", onSelect: () => onAction("archive") },
-		{ id: "mark-unread", label: "Mark unread", icon: "unread", onSelect: () => onAction("markUnread") },
-		{ id: "move", label: "Move to folder", icon: "projects", onSelect: () => onAction("move") },
-		{ id: "junk", label: "Junk", icon: "junk", onSelect: () => onAction("junk") },
+		{
+			id: "archive",
+			label: "Archive",
+			icon: "archive",
+			disabled: !openMessage || openMessage.folderUse === "archive",
+			onSelect: () => void fileOpen("archive"),
+		},
+		{
+			id: "mark-unread",
+			label: "Mark unread",
+			icon: "unread",
+			disabled: !openMessage || !openMessage.isSeen,
+			onSelect: () => void markOpen({ seen: false }),
+		},
+		{
+			id: "move",
+			label: "Move to folder",
+			icon: "projects",
+			disabled: !openMessage,
+			onSelect: () => void chooseFolder(),
+		},
+		{
+			id: "junk",
+			label: "Junk",
+			icon: "junk",
+			disabled: !openMessage || openMessage.folderUse === "junk",
+			onSelect: () => void fileOpen("junk"),
+		},
 		{
 			id: "link-client",
 			label: summary.clientName ? "Change client" : "Link to client",
@@ -272,17 +410,21 @@ export function ThreadView({
 							pressed={overviewOpen}
 							onClick={toggleOverview}
 						/>
-						<ToolbarAction
-							icon="flag"
-							label={summary.isFlagged ? "Clear flag" : "Flag"}
-							onClick={() => onAction(summary.isFlagged ? "unflag" : "flag")}
-						/>
-						<ToolbarAction
-							icon="remove"
-							label={inTrash ? "Delete forever" : "Move to trash"}
-							danger
-							onClick={() => onAction(inTrash ? "deleteForever" : "trash")}
-						/>
+						{openMessage ? (
+							<>
+								<ToolbarAction
+									icon="flag"
+									label={openMessage.isFlagged ? "Clear flag" : "Flag"}
+									onClick={() => void markOpen({ flagged: !openMessage.isFlagged })}
+								/>
+								<ToolbarAction
+									icon="remove"
+									label={inTrash ? "Delete this message forever" : "Move this message to trash"}
+									danger
+									onClick={() => (inTrash ? setConfirmingDelete(true) : void fileOpen("trash"))}
+								/>
+							</>
+						) : null}
 						<MenuButton
 							items={moreItems}
 							ariaLabel="More options"
@@ -331,9 +473,37 @@ export function ThreadView({
 					) : null}
 				</div>
 				{overviewOpen ? (
-					<ConversationPanel entries={entries} openId={openId} onSelect={setOpenId} />
+					<ConversationPanel entries={entries} openId={openId} onSelect={select} />
 				) : null}
 			</div>
+
+			{moving ? (
+				<MoveToFolderDialog
+					folders={moving}
+					count={1}
+					kind="message"
+					busy={busy}
+					onClose={() => (!busy ? setMoving(null) : undefined)}
+					onMove={(folderId) => void moveOpenTo(folderId)}
+				/>
+			) : null}
+
+			{confirmingDelete && openMessage ? (
+				<Dialog title="Delete message" width="narrow" onClose={() => (!busy ? setConfirmingDelete(false) : undefined)}>
+					<p className="mt-3 text-[var(--ink-muted)]">
+						Delete this message from {openMessage.from?.address ?? "this sender"} forever? It is removed from the
+						mail server as well as from this machine, and the rest of the conversation stays.
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button disabled={busy} onClick={() => setConfirmingDelete(false)}>
+							Keep
+						</Button>
+						<Button variant="danger" disabled={busy} onClick={() => void deleteOpenForever()}>
+							{busy ? "Deleting" : "Delete forever"}
+						</Button>
+					</div>
+				</Dialog>
+			) : null}
 
 			{linking ? (
 				<LinkClientDialog

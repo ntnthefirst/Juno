@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { MailMessage, MailThreadOutgoing } from "@shared/types";
 import { Icon } from "../../components/Icon";
 import { layoutConversation } from "./conversation-graph";
+import { SPECIAL_LABELS } from "./folder-tree";
 import { displayName, formatWhen, participantsLine } from "./format";
 import { STATE_LABELS, STATE_TONES } from "./outbox-format";
 
@@ -124,7 +125,7 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 									>
 										<span className="flex items-center gap-2 text-[length:var(--text-dense)]">
 											<Icon
-												name={outgoing ? "sent" : "inbox"}
+												name={outgoing || entry.message.folderUse === "sent" ? "sent" : "inbox"}
 												size={12}
 												className={outgoing ? "shrink-0 text-[var(--accent)]" : "shrink-0 text-[var(--ink-muted)]"}
 											/>
@@ -149,6 +150,20 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 											</span>
 										) : null}
 										<span className="flex items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											{entry.kind === "message" && entry.message.folderName ? (
+												<span
+													title={`In ${entry.message.folderName}`}
+													className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] ${
+														entry.message.folderUse === "trash"
+															? "bg-[var(--risk-soft)] text-[var(--risk)]"
+															: "bg-[var(--sunken)] text-[var(--ink-muted)]"
+													}`}
+												>
+													{entry.message.folderUse
+														? SPECIAL_LABELS[entry.message.folderUse]
+														: entry.message.folderName}
+												</span>
+											) : null}
 											{state !== null && state !== "sent" ? (
 												<span
 													className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] ${STATE_TONES[state]}`}

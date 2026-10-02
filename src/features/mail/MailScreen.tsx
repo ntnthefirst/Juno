@@ -175,11 +175,11 @@ export function MailScreen() {
 		const active = showingDrafts ? NO_FILTERS : filters;
 		return window.juno.mail.threads.list({
 			...(selection.accountId ? { accountId: selection.accountId } : {}),
-			...(term
-				? { search: term }
-				: selection.folderId
-					? { folderId: selection.folderId }
-					: { folderSpecialUse: selection.view }),
+			// A search stays in the folder it was typed in. Dropping the folder
+			// showed the same conversation under Inbox, Sent and Trash alike, and
+			// made it look as if a deleted message was still in all three.
+			...(term ? { search: term } : {}),
+			...(selection.folderId ? { folderId: selection.folderId } : { folderSpecialUse: selection.view }),
 			unreadOnly: active.unreadOnly,
 			flaggedOnly: active.flaggedOnly,
 			withAttachments: active.withAttachments,
@@ -725,11 +725,9 @@ export function MailScreen() {
 						threadId={selectedThreadId}
 						messageId={threads?.find((t) => t.id === selectedThreadId)?.messageId ?? null}
 						onBack={() => setReaderOpen(false)}
-						inTrash={inTrash}
 						onChanged={() => setAccountsVersion((v) => v + 1)}
 						onNotice={setNotice}
 						onReply={(messageId, mode) => void reply(messageId, mode)}
-						onAction={(action) => handleThreadAction(action, [selectedThreadId])}
 						onEditDraft={(id) => void editOutgoing(id)}
 						onReplyOutgoing={(id, mode) => void replyOutgoing(id, mode)}
 					/>

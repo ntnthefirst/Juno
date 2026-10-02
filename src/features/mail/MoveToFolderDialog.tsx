@@ -8,18 +8,20 @@ import { buildFolderTree, flattenTree, SPECIAL_ICONS, SPECIAL_LABELS, specialFol
 type MoveToFolderDialogProps = {
 	folders: MailFolder[];
 	count: number;
+	/** What is being moved. A thread from the list, a message from the reader. */
+	kind?: "thread" | "message";
 	busy: boolean;
 	onClose: () => void;
 	onMove: (folderId: string) => void;
 };
 
 /**
- * Where a thread goes, picked from the folders the account actually has, in the
+ * Where a thread or a message goes, picked from the folders the account actually has, in the
  * shape the sidebar shows them. With more than a handful of folders the list is
  * filtered by typing, because scrolling a mailbox's folder list to find one is
  * the slow way round.
  */
-export function MoveToFolderDialog({ folders, count, busy, onClose, onMove }: MoveToFolderDialogProps) {
+export function MoveToFolderDialog({ folders, count, kind = "thread", busy, onClose, onMove }: MoveToFolderDialogProps) {
 	const [term, setTerm] = useState("");
 
 	const rows = [
@@ -46,7 +48,7 @@ export function MoveToFolderDialog({ folders, count, busy, onClose, onMove }: Mo
 	return (
 		<Dialog title="Move to folder" onClose={onClose} width="narrow">
 			<p className="mt-4 text-[var(--ink-muted)]">
-				Move {count} {count === 1 ? "thread" : "threads"} to:
+				Move {count} {count === 1 ? kind : `${kind}s`} to:
 			</p>
 			{rows.length > 6 ? (
 				<input

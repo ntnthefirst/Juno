@@ -23,6 +23,8 @@ import type {
 	AppInfo,
 	AppSettings,
 	AuditEvent,
+	AgentActionView,
+	AgentAuditView,
 	AuditListQuery,
 	Automation,
 	AutomationInput,
@@ -549,11 +551,15 @@ export interface JunoApi {
 			reject(id: string): Promise<AgentAction>;
 			/** Clears an answered request from the list. The audit row stays. */
 			remove(id: string): Promise<AgentAction>;
+			/** The records a request names, by name, and its other values as labels. Reads only. */
+			describe(ids: string[]): Promise<AgentActionView[]>;
 			/** Fires when a request appears or is answered. */
 			onChange(listener: (action: AgentAction) => void): () => void;
 		};
 		audit: {
 			list(query?: AuditListQuery): Promise<AuditEvent[]>;
+			/** The record each row touched, by name. */
+			describe(ids: string[]): Promise<AgentAuditView[]>;
 		};
 	};
 

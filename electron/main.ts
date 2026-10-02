@@ -545,6 +545,38 @@ if (!app.requestSingleInstanceLock()) {
 							}
 							console.log(`SMOKE_DEMO agent pending=${waiting.length}`);
 
+							// What a real request carries: a mail to send, a record to change
+							// and a message to cancel, so the Agent screen is drawn with the
+							// records named and the whole mail shown, not with ids.
+							{
+								const accountService = await import("./main/services/mail-accounts");
+								const outboxService = await import("./main/services/mail-outbox");
+								const [account] = await accountService.list();
+								const [target] = await clientService.list();
+								if (account && target) {
+									const offer = await outboxService.createDraft({
+										accountId: account.id,
+										to: [{ name: "Laura", address: "laura@obet.test" }],
+										subject: "Offerte website",
+										bodyText: "Beste Laura,\n\nIn bijlage de aangepaste offerte.\n\nMet vriendelijke groeten,\nNathan",
+										clientId: target.id,
+									});
+									const sendRequest = (await callTool("mail.send", { id: offer.id }, { source: "mcp" })) as { status?: string };
+									if (sendRequest.status !== "pending") {
+										throw new Error(`Smoke: mail.send did not park: ${JSON.stringify(sendRequest)}`);
+									}
+									await callTool("clients.update", { id: target.id, notes: "Prefers email over phone." }, { source: "mcp" });
+									const spare = await outboxService.createDraft({
+										accountId: account.id,
+										to: [{ name: null, address: "tom@obet.test" }],
+										subject: "Herinnering",
+										bodyText: "Hallo.",
+									});
+									await callTool("mail.outbox.cancel", { id: spare.id }, { source: "mcp" });
+									console.log("SMOKE_DEMO agent requests with records and a mail preview");
+								}
+							}
+
 							// The server, for real: the listener, the token and the protocol over
 							// HTTP, exactly as a client sends it. The handshake that hands a token
 							// out is covered by its own tests; here a token is made the way the
@@ -999,6 +1031,10 @@ if (!app.requestSingleInstanceLock()) {
 											const text = document.querySelector("main").textContent;
 											if (!text.includes("Waiting for you")) return "no waiting section";
 											if (!text.includes("parked-by-agent")) return "the request is not shown";
+											// A request is written in words: the mail it would send and
+											// the records it names as buttons that open them, not ids.
+											if (!text.includes("Offerte website") || !text.includes("Beste Laura")) return "the mail to send is not shown";
+											if (!document.querySelector("main button[title^='Open ']")) return "no record is named as a link";
 											const approve = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Approve");
 											return approve ? "ok" : "no approve button";
 										})()`,

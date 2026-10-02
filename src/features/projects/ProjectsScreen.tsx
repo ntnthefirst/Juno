@@ -5,6 +5,7 @@ import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
+import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
 import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
@@ -62,10 +63,11 @@ export function ProjectsScreen() {
 	const [view, setView] = useState<ProjectsView | null>(null);
 	const [term, setTerm] = useState("");
 	const [statusFilter, setStatusFilter] = useState<string>("");
-	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const [selectedId, setSelectedId] = useState<string | null>(() => peekPending("project")?.id ?? null);
 	// Seeded from the clicked row so the trail never flashes empty, then kept
 	// current by ProjectDetail once the real record has loaded.
-	const [selectedName, setSelectedName] = useState<string | null>(null);
+	const [selectedName, setSelectedName] = useState<string | null>(() => peekPending("project")?.name ?? null);
+	useEffect(() => clearPending, []);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [editing, setEditing] = useState<Project | null | "new">(null);
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);

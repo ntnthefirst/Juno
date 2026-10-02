@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import type { AgentAction, AuditEvent } from "@shared/types";
+import type { AgentAction, AgentAuditView, AuditEvent } from "@shared/types";
+import { Icon, type IconName } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { AutomationList } from "./AutomationList";
 import { ConnectionPanel } from "./ConnectionPanel";
+import { EntityChip } from "./EntityChip";
 import { formatWhen, RESULT_TONES } from "./format";
 import { RequestList } from "./RequestList";
+import { ToolTile } from "./ToolTile";
 
 type Tab = "requests" | "automations" | "log" | "connection";
 
@@ -16,11 +19,11 @@ type Tab = "requests" | "automations" | "log" | "connection";
  * the tool list and the pending requests beside it as the thing being
  * connected to.
  */
-const TABS: { id: Tab; label: string }[] = [
-	{ id: "requests", label: "Requests" },
-	{ id: "automations", label: "Automations" },
-	{ id: "log", label: "Log" },
-	{ id: "connection", label: "Connection" },
+const TABS: { id: Tab; label: string; icon: IconName }[] = [
+	{ id: "requests", label: "Requests", icon: "inbox" },
+	{ id: "automations", label: "Automations", icon: "play" },
+	{ id: "log", label: "Log", icon: "list" },
+	{ id: "connection", label: "Connection", icon: "link" },
 ];
 
 /**
@@ -65,11 +68,20 @@ export function AgentScreen() {
 	return (
 		<div className="h-full overflow-y-auto p-8">
 			<div className="mx-auto w-full max-w-[var(--content-width)]">
-				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">Agent</h1>
-				<p className="mt-2 max-w-[68ch] text-[var(--ink-muted)]">
-					Juno exposes everything it can do to an agent on this machine. Reading happens freely; anything that
-					changes a record waits here for you.
-				</p>
+				<div className="flex items-center gap-4">
+					<span className="flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--accent-soft)] text-[var(--accent)]">
+						<Icon name="agent" size={24} />
+					</span>
+					<div>
+						<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.02em]">
+							Agent
+						</h1>
+						<p className="mt-1 max-w-[68ch] text-[var(--ink-muted)]">
+							Juno exposes everything it can do to an agent on this machine. Reading happens freely; anything
+							that changes a record or sends a mail waits here for you.
+						</p>
+					</div>
+				</div>
 
 				<div
 					className="mt-6 flex items-center gap-px border-b border-[var(--line)]"
@@ -89,6 +101,7 @@ export function AgentScreen() {
 									: "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
 							}`}
 						>
+							<Icon name={entry.icon} size={14} />
 							{entry.label}
 							{entry.id === "requests" && pending > 0 ? (
 								<span className="tabular rounded-[var(--radius-full)] bg-[var(--warn-soft)] px-1.5 text-[length:var(--text-micro)] text-[var(--warn)]">
@@ -113,7 +126,7 @@ export function AgentScreen() {
 							onChanged={refresh}
 						/>
 					) : tab === "log" ? (
-						<AuditLog />
+						<AuditLog onNotice={setNotice} />
 					) : (
 						<ConnectionPanel onNotice={setNotice} />
 					)}
@@ -130,17 +143,31 @@ export function AgentScreen() {
 	);
 }
 
+const ACTOR_LABELS: Record<AuditEvent["actor"], string> = {
+	user: "You",
+	agent: "Agent",
+	automation: "Automation",
+};
+
 /** Everything that changed a record, whoever changed it. */
-function AuditLog() {
+function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 	const [rows, setRows] = useState<AuditEvent[] | null>(null);
+	const [views, setViews] = useState<Map<string, AgentAuditView>>(new Map());
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
 		window.juno.agent.audit
 			.list({ limit: 200 })
-			.then((value) => {
-				if (!cancelled) setRows(value);
+			.then(async (value) => {
+				if (cancelled) return;
+				setRows(value);
+				try {
+					const described = await window.juno.agent.audit.describe(value.map((row) => row.id));
+					if (!cancelled) setViews(new Map(described.map((view) => [view.eventId, view])));
+				} catch {
+					// A log without the names is still a log.
+				}
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setError(messageOf(cause));
@@ -174,31 +201,52 @@ function AuditLog() {
 	}
 
 	return (
-		<div className="mx-auto w-full max-w-[var(--content-width)]">
-			{rows.map((row) => (
-				<div
-					key={row.id}
-					className="flex items-center gap-3 border-b border-[var(--line)] px-2"
-					style={{ height: "var(--row-height)" }}
-				>
-					<span className="tabular w-[92px] shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						{formatWhen(row.createdAt)}
-					</span>
-					<span className="w-[78px] shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						{row.actor}
-					</span>
-					<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{row.summary}</span>
-					<span className="w-[150px] shrink-0 truncate font-mono text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						{row.toolName}
-					</span>
-					<span
-						className={`w-[60px] shrink-0 text-right text-[length:var(--text-sm)] ${RESULT_TONES[row.result]}`}
-						title={row.error ?? undefined}
+		<div className="mx-auto w-full max-w-[var(--content-width)] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
+			{rows.map((row) => {
+				const view = views.get(row.id) ?? null;
+				return (
+					<div
+						key={row.id}
+						className="flex items-center gap-3 border-b border-[var(--line)] px-3 py-2.5 last:border-b-0 hover:bg-[var(--hover)]"
 					>
-						{row.result}
-					</span>
-				</div>
-			))}
+						<ToolTile toolName={row.toolName} size="small" />
+						<div className="min-w-0 flex-1">
+							<p className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+								{view?.title ?? row.summary}
+							</p>
+							{view?.entity ? (
+								<div className="mt-1">
+									<EntityChip entity={view.entity} compact onNotice={onNotice} />
+								</div>
+							) : null}
+							{row.error ? (
+								<p data-selectable className="mt-1 truncate text-[length:var(--text-sm)] text-[var(--risk)]">
+									{row.error}
+								</p>
+							) : null}
+						</div>
+						<span className="w-[78px] shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							{ACTOR_LABELS[row.actor]}
+						</span>
+						<span
+							className={`w-[64px] shrink-0 text-right text-[length:var(--text-sm)] font-[var(--weight-medium)] ${RESULT_TONES[row.result]}`}
+						>
+							{RESULT_LABELS[row.result]}
+						</span>
+						<span className="tabular w-[92px] shrink-0 text-right text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							{formatWhen(row.createdAt)}
+						</span>
+					</div>
+				);
+			})}
 		</div>
 	);
 }
+
+const RESULT_LABELS: Record<AuditEvent["result"], string> = {
+	ok: "Done",
+	failed: "Failed",
+	pending: "Waiting",
+	rejected: "Rejected",
+	expired: "Expired",
+};

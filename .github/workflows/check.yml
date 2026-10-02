@@ -1,18 +1,29 @@
 name: Check
 
-# Every push and every pull request. This is the gate: lint, types, tests, and
-# a real packaged launch. A clean typecheck proves nothing about a native
-# module or the custom scheme, which is what the smoke run is for.
+# Every push to main and every pull request. This is the gate: lint, types,
+# tests, and a real launch of both the source tree and the packaged app. A
+# clean typecheck proves nothing about a native module or the custom scheme,
+# which is what the smoke runs are for.
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
 
+# A newer push to the same branch makes the older run pointless. Without this,
+# every push in a row of fixes pays for a full Windows run nobody will read.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
-    runs-on: windows-latest
-    timeout-minutes: 25
+  # Needs no display and no Electron binary, so it runs on the cheapest runner
+  # in parallel with the app job instead of in front of it.
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -31,11 +42,45 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+  app:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The Electron zip and the tools electron-builder fetches are the largest
+      # downloads in the run. They are keyed on the lockfile, so a new Electron
+      # version fetches once and every run after that reads them from here.
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-
+
+      - name: Install
+        run: npm ci
+
       - name: Test
         run: npm test
 
-      # Launches the packaged-mode app against a throwaway data directory and
-      # fails on any renderer error or main-process throw. Needs a display, so
-      # it runs on Windows rather than headless Linux.
+      # Launches the app against a throwaway data directory and fails on any
+      # renderer error or main-process throw. Needs a display, so it runs on
+      # Windows rather than headless Linux. This also compiles, which the
+      # packaged run below reuses.
       - name: Smoke
         run: npm run smoke
+
+      # The same launch against the installer's contents. electron-builder
+      # leaves files out of the package on purpose (electron-builder.yml), and
+      # only this run notices a runtime dependency that went missing with them.
+      - name: Package and smoke the packaged app
+        run: npx electron-builder --win --dir --publish never && npx cross-env JUNO_SMOKE_EXE=release/win-unpacked/Juno.exe node scripts/smoke.mjs

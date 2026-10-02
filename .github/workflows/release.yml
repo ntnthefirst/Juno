@@ -66,8 +66,14 @@ jobs:
         include:
           - os: windows-latest
             script: build:win
+            cache: |
+              ~\AppData\Local\electron\Cache
+              ~\AppData\Local\electron-builder\Cache
           - os: macos-latest
             script: build:mac
+            cache: |
+              ~/Library/Caches/electron
+              ~/Library/Caches/electron-builder
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
@@ -84,6 +90,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      # The Electron zip and the signing and installer tools electron-builder
+      # downloads, keyed on the lockfile so they are fetched once per Electron
+      # version instead of once per release.
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.cache }}
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-
 
       - name: Install
         run: npm ci

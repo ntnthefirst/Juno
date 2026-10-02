@@ -130,6 +130,15 @@ function RequestCard({ action, onChanged, onNotice }: CardProps) {
 				</div>
 			</div>
 
+			{action.preview ? (
+				<pre
+					data-selectable
+					className="mt-3 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-sans text-[length:var(--text-dense)] leading-[var(--leading-relaxed)]"
+				>
+					{action.preview}
+				</pre>
+			) : null}
+
 			<details className="mt-3">
 				<summary className="cursor-default text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 					What it will be given

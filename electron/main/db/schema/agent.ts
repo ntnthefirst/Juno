@@ -27,6 +27,18 @@ export const agentActions = sqliteTable(
 		argsJson: text("args_json").notNull().default("{}"),
 		/** One line a person reads before approving. Built when the action is made. */
 		summary: text("summary").notNull(),
+		/**
+		 * What a person reads before approving, when one line and a JSON object
+		 * are not enough: the whole message for a mail. Built when the action is
+		 * made, from the records as they were then.
+		 */
+		preview: text("preview"),
+		/**
+		 * A fingerprint of what the preview was built from. Checked again when a
+		 * person approves, so a draft that was edited in between is not sent
+		 * under the approval of the text that was read.
+		 */
+		seal: text("seal"),
 
 		/** pending, approved, rejected, expired, executed, failed. */
 		state: text("state").notNull().default("pending"),

@@ -2616,6 +2616,8 @@ export interface AgentAction extends Standard {
 	args: Record<string, unknown>;
 	/** One line describing what will happen, built when the action was made. */
 	summary: string;
+	/** The whole of what is being approved, when the arguments do not say it: a mail's text. */
+	preview: string | null;
 	state: AgentActionState;
 	source: AgentActionSource;
 	automationRunId: string | null;

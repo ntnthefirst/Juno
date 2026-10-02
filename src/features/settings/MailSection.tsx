@@ -1,3 +1,4 @@
+import { IconButton } from "../../components/IconButton";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { MailAccount, MailFolder } from "@shared/types";
 import { AddButton } from "../../components/AddButton";
@@ -144,12 +145,8 @@ export function MailSection({ onSaved, header }: MailSectionProps) {
 									<Button size="dense" onClick={() => void toggleSync(account)}>
 										{account.syncEnabled ? "Pause" : "Resume"}
 									</Button>
-									<Button size="dense" onClick={() => setForm({ account })}>
-										Edit
-									</Button>
-									<Button size="dense" variant="danger" onClick={() => setRemoving(account)}>
-										Remove
-									</Button>
+									<IconButton icon="edit" label="Edit" onClick={() => setForm({ account })} />
+									<IconButton icon="remove" label="Remove" danger onClick={() => setRemoving(account)} />
 								</li>
 							))}
 						</ul>

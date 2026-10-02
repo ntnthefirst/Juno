@@ -1,3 +1,4 @@
+import { IconButton } from "../../components/IconButton";
 import { ScheduleSection } from "../calendar/ScheduleSection";
 import type { ScheduleForm } from "../calendar/schedule-form";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -802,12 +803,8 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 										Make primary
 									</Button>
 								)}
-								<Button size="dense" data-opens-panel onClick={() => onEdit(email)}>
-									Edit
-								</Button>
-								<Button size="dense" variant="danger" onClick={() => onRemove(email)}>
-									Remove
-								</Button>
+								<IconButton icon="edit" label="Edit" opensPanel onClick={() => onEdit(email)} />
+								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(email)} />
 							</span>
 						</li>
 					))}
@@ -863,12 +860,8 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 										Make primary
 									</Button>
 								)}
-								<Button size="dense" data-opens-panel onClick={() => onEdit(phone)}>
-									Edit
-								</Button>
-								<Button size="dense" variant="danger" onClick={() => onRemove(phone)}>
-									Remove
-								</Button>
+								<IconButton icon="edit" label="Edit" opensPanel onClick={() => onEdit(phone)} />
+								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(phone)} />
 							</span>
 						</li>
 					))}
@@ -949,12 +942,8 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 								<Button size="dense" onClick={() => void open(link.id)}>
 									Open
 								</Button>
-								<Button size="dense" data-opens-panel onClick={() => onEdit(link)}>
-									Edit
-								</Button>
-								<Button size="dense" variant="danger" onClick={() => onRemove(link)}>
-									Remove
-								</Button>
+								<IconButton icon="edit" label="Edit" opensPanel onClick={() => onEdit(link)} />
+								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(link)} />
 							</span>
 						</li>
 					))}
@@ -1021,12 +1010,8 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 											Make primary
 										</Button>
 									)}
-									<Button size="dense" data-opens-panel onClick={() => onEdit(address)}>
-										Edit
-									</Button>
-									<Button size="dense" variant="danger" onClick={() => onRemove(address, line)}>
-										Remove
-									</Button>
+									<IconButton icon="edit" label="Edit" opensPanel onClick={() => onEdit(address)} />
+									<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(address, line)} />
 								</span>
 							</li>
 						);
@@ -1088,12 +1073,8 @@ function ContactsSection({ contacts, onAdd, onEdit, onMakePrimary, onRemove }: C
 										Make primary
 									</Button>
 								)}
-								<Button size="dense" onClick={() => onEdit(contact)}>
-									Edit
-								</Button>
-								<Button size="dense" variant="danger" onClick={() => onRemove(contact)}>
-									Remove
-								</Button>
+								<IconButton icon="edit" label="Edit" onClick={() => onEdit(contact)} />
+								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(contact)} />
 							</span>
 						</li>
 					))}
@@ -1152,12 +1133,8 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 								</div>
 							</div>
 							<span className="flex shrink-0 gap-1">
-								<Button size="dense" onClick={() => onEdit(project.id)}>
-									Edit
-								</Button>
-								<Button size="dense" variant="danger" onClick={() => onRemove(project)}>
-									Remove
-								</Button>
+								<IconButton icon="edit" label="Edit" onClick={() => onEdit(project.id)} />
+								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(project)} />
 							</span>
 						</li>
 					))}

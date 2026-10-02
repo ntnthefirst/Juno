@@ -8,6 +8,8 @@ type SidePanelProps = {
 	onClose: () => void;
 	/** Buttons along the bottom edge. */
 	actions?: ReactNode;
+	/** Small icon buttons (`PanelTool`) in the header, beside the close cross. */
+	tools?: ReactNode;
 	children: ReactNode;
 };
 
@@ -64,7 +66,7 @@ const OUTSIDE_CLICK_IGNORE =
  * blur belongs to the screen that opened the panel, not to the whole window,
  * so the sidebar and the title bar stay sharp.
  */
-export function SidePanel({ title, subtitle, onClose, actions, children }: SidePanelProps) {
+export function SidePanel({ title, subtitle, onClose, actions, tools, children }: SidePanelProps) {
 	const panel = useRef<HTMLElement>(null);
 
 	// Escape closes it, and calls the exact same `onClose` a click outside
@@ -124,6 +126,7 @@ export function SidePanel({ title, subtitle, onClose, actions, children }: SideP
 							</p>
 						) : null}
 					</div>
+					{tools ? <div className="flex flex-none items-center">{tools}</div> : null}
 					<button
 						type="button"
 						onClick={onClose}

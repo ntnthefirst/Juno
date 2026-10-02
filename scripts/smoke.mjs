@@ -23,9 +23,13 @@ const userData = mkdtempSync(join(tmpdir(), "juno-smoke-"));
 // longer than this is stuck rather than slow.
 const TIMEOUT_MS = 480_000;
 
+// With JUNO_SMOKE_EXE set, the packaged executable is launched instead of the
+// source tree. That is the only run that sees the files electron-builder left
+// out: a runtime dependency filtered out of the package passes everything else.
+const packagedExe = process.env.JUNO_SMOKE_EXE;
 const child = spawn(
-	electron,
-	[".", "--user-data-dir=" + userData, "--no-sandbox"],
+	packagedExe ?? electron,
+	[...(packagedExe ? [] : ["."]), "--user-data-dir=" + userData, "--no-sandbox"],
 	{
 		env: {
 			...process.env,

@@ -85,11 +85,12 @@ already dense; don't reach past it.
   it at all. A section heading is `--text-h3`.
 - `--leading-tight` for headings and table rows, `--leading-normal` for UI text,
   `--leading-relaxed` only for long-form: document body and email text.
-- Sidebar is `--sidebar-width` (248px), collapsed to `--sidebar-rail-width`
-  (56px), titlebar `--titlebar-height` (40px). All three are tokens because other
-  things are measured against them, and because the title bar height is also the
-  height of the native caption-button overlay
-  ([architecture.md](architecture.md) section 4b).
+- The sidebar is `--sidebar-rail-width` (56px) and never wider, and the titlebar
+  is `--titlebar-height`. Both are tokens because other things are measured
+  against them, and because the title bar height is also the height of the
+  native caption-button overlay ([architecture.md](architecture.md) section 4b).
+- A row that carries an avatar is `--row-height-roomy` (44px). A row with no
+  avatar is still `--row-height`.
 - Padding inside a dense row is `--space-2` / `--space-3`. Marketing-page
   breathing room (`--space-12` and up) belongs to empty states and onboarding,
   nowhere else.
@@ -123,29 +124,46 @@ not resolving the OS preference yourself.
 - Images, logo variants and any generated PDF preview need checking too. There is
   a paper wordmark and an ink wordmark in `brand/logo/` for exactly this.
 
-## 5b. The sidebar has three states, and the window picks two of them
+## 5b. The sidebar is a rail, and it never opens
 
-`src/app/use-sidebar-layout.ts` owns this, and a screen never second-guesses it.
+`src/app/Sidebar.tsx` is a column of icons at `--sidebar-rail-width`. There is
+no expanded state, no toggle, no drawer and no setting for any of them: the
+name of an entry is in its tooltip (`components/Tooltip.tsx`, drawn by the
+application, not the native `title`) and in its `aria-label`.
 
-| Window width | Behaviour |
-| --- | --- |
-| >= 760px | Beside the content, a rail by default. The toggle opens it fully |
-| < 760px | Out of the layout. The toggle floats it over the content as a drawer |
+- **Six places on top, two entries at the bottom.** Overview, Calendar, Clients,
+  Projects, Mail, Documents; then Agent and Settings. `app/screens.ts` lists
+  them. A seventh entry is a decision, not an edit.
+- **An entry has three colours and nothing else.** Soft (`--ink-faint`) at rest,
+  firm (`--ink`) under the pointer, iris (`--accent`) when it is the page. No
+  fill, no outline, no indicator bar. The one ring is the global
+  `:focus-visible` one, which only a keyboard triggers, and it stays.
+- **Icons are 20px with a 2.0 stroke.** Heroicons draw at 1.5, which is a hairline
+  at this size next to the soft colour.
+- **A badge is a dot,** and the count goes in the tooltip and the accessible name.
+- **Screens without an entry** light the entry they belong to
+  (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail,
+  Templates under Documents.
 
-The drawer closes on Escape, on a click outside, and when something in it is
-chosen. Widening the window past 760px puts the sidebar back and closes the
-drawer, so a panel is never left hanging over the content.
+### The switch
 
-A docked sidebar opened fully goes back to the rail the same way, when an
-entry is chosen or anything beside it is pressed. That is the "Collapse the
-sidebar on its own" setting in Settings > General, on by default. Turned off,
-the sidebar stays open or collapsed the way the toggle left it, and that
-choice is remembered per machine. The main window reads the setting again
-when the settings window closes, which is the only way a change reaches it.
+Mail and Documents each hold a second screen. It is not a second sidebar entry:
+it is `components/SectionSwitch.tsx`, a two-sided control at the top of the page
+(Mailbox | Styled mail, Documents | Templates), reached through the shell with
+`requestOpen({ kind: "screen", screen })` so the target opens on its list. Add
+a pair by adding a `ScreenSwitch` in `app/screens.ts`. Screens a form or an
+editor has taken over show no switch, because they replace the page it sits on.
 
-Collapsed means icons only: the label moves into `aria-label` and `title`, and a
-group heading becomes a hairline rather than an abbreviation. Every entry keeps
-its 36px row height in both states, so nothing jumps when it toggles.
+### Avatars and the time split
+
+`components/Avatar.tsx` is initials on one of eight tints (`--tone-1` to
+`--tone-8`, each with its `-ink`). The tint comes from the name, so a name is the
+same colour everywhere. People are round, businesses and projects are squares.
+Brass is never an avatar tint.
+
+A list that is ordered by time is split with `lib/day-groups.ts`: Today,
+Yesterday, Last 7 days, Last 30 days, then a month each. A list ordered by
+relevance (a search) is not split, because the days would come out of order.
 
 ## 5c. Three shapes, and picking the wrong one is the bug
 

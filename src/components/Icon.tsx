@@ -52,6 +52,7 @@ import {
 	H2Icon,
 	H3Icon,
 	HashtagIcon,
+	HomeIcon,
 	FolderOpenIcon,
 	GlobeAltIcon,
 	InboxIcon,
@@ -104,6 +105,7 @@ import type { ComponentType, ReactNode } from "react";
  * named below are imported, so the rest of the set is not bundled.
  */
 export type IconName =
+	| "overview"
 	| "today"
 	| "clients"
 	| "client"
@@ -444,6 +446,7 @@ const DRAWN = {
 };
 
 const ICONS: Record<IconName, Glyph> = {
+	overview: HomeIcon,
 	today: ClockIcon,
 	clients: UsersIcon,
 	client: BuildingOffice2Icon,
@@ -594,10 +597,12 @@ type IconProps = {
 	name: IconName;
 	/** Square, in pixels. Defaults to 16, the dense-row size. */
 	size?: number;
+	/** On the 24 grid. Left out, it follows the size, as below. */
+	strokeWidth?: number;
 	className?: string;
 };
 
-export function Icon({ name, size = 16, className }: IconProps) {
+export function Icon({ name, size = 16, strokeWidth, className }: IconProps) {
 	const Glyph = ICONS[name];
 	return (
 		<Glyph
@@ -606,7 +611,7 @@ export function Icon({ name, size = 16, className }: IconProps) {
 			className={className}
 			// 1.5 on a 24 grid is 1.0 once drawn at 16, which reads as grey next to
 			// 14px text. This keeps the stroke roughly where the type weight is.
-			strokeWidth={size <= 20 ? 1.8 : 1.5}
+			strokeWidth={strokeWidth ?? (size <= 20 ? 1.8 : 1.5)}
 			aria-hidden
 			focusable="false"
 		/>

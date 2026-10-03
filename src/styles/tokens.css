@@ -51,6 +51,26 @@
 	--risk: #9c2f43;
 	--risk-soft: #f9e7ea;
 
+	/* ---- Tones: the tints behind an avatar. Eight, so a list of names is told
+	 * apart at a glance, and none of them is brass, which is for sealed. Each is
+	 * a soft ground with the ink that reads on it. ---- */
+	--tone-1: #e4e2f7;
+	--tone-1-ink: #4a3fa0;
+	--tone-2: #dfeaf7;
+	--tone-2-ink: #25598f;
+	--tone-3: #dcf0ee;
+	--tone-3-ink: #1d6a62;
+	--tone-4: #e3f0e2;
+	--tone-4-ink: #3a6a2e;
+	--tone-5: #f6ecd6;
+	--tone-5-ink: #7a5416;
+	--tone-6: #f6e3e8;
+	--tone-6-ink: #93334b;
+	--tone-7: #eee1f3;
+	--tone-7-ink: #7a3a8f;
+	--tone-8: #e4e6ee;
+	--tone-8-ink: #4c5266;
+
 	/* ---- Focus ring. Never remove it; restyle it. ---- */
 	--focus: #6b5cd6;
 
@@ -98,8 +118,6 @@
 	/* ---- Elevation: borders do the work. Shadow only for things that float. ---- */
 	--shadow-popover: 0 4px 16px -2px rgb(22 22 29 / 0.1), 0 2px 4px -2px rgb(22 22 29 / 0.06);
 	--shadow-modal: 0 16px 48px -8px rgb(22 22 29 / 0.18);
-	/* The sidebar drawer floating over the content on a narrow window. */
-	--shadow-drawer: 0 0 0 1px rgb(22 22 29 / 0.06), 8px 0 32px -8px rgb(22 22 29 / 0.22);
 
 	/* ---- Scrollbars ----
 	 * Drawn by the application rather than by the platform, because Windows
@@ -132,6 +150,8 @@
 	 * Changing one without the other puts the buttons off the bar. */
 	--titlebar-height: 41px;
 	--row-height: 36px;
+	/* A row that carries an avatar. The avatar is 28px, and 36 leaves it touching the rules. */
+	--row-height-roomy: 44px;
 
 	/* The reading column on a screen that is a single list or form. Centred in
 	 * whatever space is left rather than pinned to the left edge, so a wide
@@ -201,11 +221,27 @@
 		--risk: #e9919f;
 		--risk-soft: #2d1a20;
 
+		--tone-1: #262247;
+		--tone-1-ink: #b3aaf5;
+		--tone-2: #16273a;
+		--tone-2-ink: #8fbbe8;
+		--tone-3: #12302d;
+		--tone-3-ink: #7fcfc6;
+		--tone-4: #1c2d1b;
+		--tone-4-ink: #9bcf8c;
+		--tone-5: #302612;
+		--tone-5-ink: #e0b865;
+		--tone-6: #3a1c26;
+		--tone-6-ink: #eb9aae;
+		--tone-7: #2f1d38;
+		--tone-7-ink: #cf9ae0;
+		--tone-8: #23262f;
+		--tone-8-ink: #aab0c4;
+
 		--focus: #9a8bf2;
 
 		--shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
 		--shadow-modal: 0 16px 48px -8px rgb(0 0 0 / 0.6);
-		--shadow-drawer: 0 0 0 1px rgb(255 255 255 / 0.05), 8px 0 32px -8px rgb(0 0 0 / 0.65);
 
 		--scrollbar-thumb: #3a3a49;
 		--scrollbar-thumb-hover: #525266;
@@ -243,11 +279,27 @@
 	--risk: #e9919f;
 	--risk-soft: #2d1a20;
 
+	--tone-1: #262247;
+	--tone-1-ink: #b3aaf5;
+	--tone-2: #16273a;
+	--tone-2-ink: #8fbbe8;
+	--tone-3: #12302d;
+	--tone-3-ink: #7fcfc6;
+	--tone-4: #1c2d1b;
+	--tone-4-ink: #9bcf8c;
+	--tone-5: #302612;
+	--tone-5-ink: #e0b865;
+	--tone-6: #3a1c26;
+	--tone-6-ink: #eb9aae;
+	--tone-7: #2f1d38;
+	--tone-7-ink: #cf9ae0;
+	--tone-8: #23262f;
+	--tone-8-ink: #aab0c4;
+
 	--focus: #9a8bf2;
 
 	--shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
 	--shadow-modal: 0 16px 48px -8px rgb(0 0 0 / 0.6);
-	--shadow-drawer: 0 0 0 1px rgb(255 255 255 / 0.05), 8px 0 32px -8px rgb(0 0 0 / 0.65);
 
 	--scrollbar-thumb: #3a3a49;
 	--scrollbar-thumb-hover: #525266;
@@ -339,6 +391,22 @@
 	--color-warn-soft: var(--warn-soft);
 	--color-risk: var(--risk);
 	--color-risk-soft: var(--risk-soft);
+	--color-tone-1: var(--tone-1);
+	--color-tone-1-ink: var(--tone-1-ink);
+	--color-tone-2: var(--tone-2);
+	--color-tone-2-ink: var(--tone-2-ink);
+	--color-tone-3: var(--tone-3);
+	--color-tone-3-ink: var(--tone-3-ink);
+	--color-tone-4: var(--tone-4);
+	--color-tone-4-ink: var(--tone-4-ink);
+	--color-tone-5: var(--tone-5);
+	--color-tone-5-ink: var(--tone-5-ink);
+	--color-tone-6: var(--tone-6);
+	--color-tone-6-ink: var(--tone-6-ink);
+	--color-tone-7: var(--tone-7);
+	--color-tone-7-ink: var(--tone-7-ink);
+	--color-tone-8: var(--tone-8);
+	--color-tone-8-ink: var(--tone-8-ink);
 	--color-focus: var(--focus);
 	--color-scrollbar-thumb: var(--scrollbar-thumb);
 	--color-scrollbar-thumb-hover: var(--scrollbar-thumb-hover);
@@ -367,13 +435,13 @@
 
 	--shadow-popover: var(--shadow-popover);
 	--shadow-modal: var(--shadow-modal);
-	--shadow-drawer: var(--shadow-drawer);
 	--shadow-panel: var(--shadow-panel);
 
 	--spacing-sidebar: var(--sidebar-width);
 	--spacing-rail: var(--sidebar-rail-width);
 	--spacing-titlebar: var(--titlebar-height);
 	--spacing-row: var(--row-height);
+	--spacing-row-roomy: var(--row-height-roomy);
 
 	--ease-brand: var(--ease);
 	--animate-page-forward: juno-page-forward var(--duration-base) var(--ease);

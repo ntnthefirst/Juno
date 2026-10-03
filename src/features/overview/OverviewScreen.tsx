@@ -16,7 +16,7 @@ type Load<T> =
 	| { status: "ready"; value: T }
 	| { status: "error"; message: string };
 
-export function TodayScreen() {
+export function OverviewScreen() {
 	const [today, setToday] = useState<string | null>(null);
 	const [attention, setAttention] = useState<Load<Reminder[]>>({ status: "loading" });
 	const [suggestions, setSuggestions] = useState<ReminderSuggestion[]>([]);

@@ -12,7 +12,7 @@ import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
-import { TodayScreen } from "../features/today/TodayScreen";
+import { OverviewScreen } from "../features/overview/OverviewScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
 import { currentRequest, onOpenRequest } from "../lib/open-entity";
@@ -214,7 +214,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 				<main key={`${screen}:${visit}`} className="min-w-0 flex-1 overflow-hidden">
 					{screen === "today" ? (
-						<TodayScreen />
+						<OverviewScreen />
 					) : screen === "clients" ? (
 						<ClientsScreen />
 					) : screen === "projects" ? (

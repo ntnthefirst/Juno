@@ -10,7 +10,9 @@ import type {
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { SectionSwitch } from "../../components/SectionSwitch";
 import { Toast } from "../../components/Toast";
+import { MAIL_SWITCH } from "../../app/screens";
 import { messageOf } from "../../lib/errors";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
 import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
@@ -731,10 +733,8 @@ export function MailScreen() {
 					on a button. Syncing says so on the account it belongs to, which is
 					the only place the answer is useful when there are two of them.
 				*/}
-				<div className="flex items-center justify-between gap-2 px-5 pt-6 pb-3">
-					<h1 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
-						Mail
-					</h1>
+				<div className="flex items-center justify-between gap-2 px-4 pt-5 pb-3">
+					<SectionSwitch sections={MAIL_SWITCH} current="mail" label="Mail views" />
 					<AddButton
 						label="New message"
 						onClick={() => setCompose({ accountId: selection?.accountId ?? accounts[0]?.id })}

@@ -1,10 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { DocumentRecord, GenerateDocumentResult, ReferenceItem } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { DOCUMENT_SWITCH } from "../../app/screens";
 import { AddButton } from "../../components/AddButton";
 import { IconAction } from "../../components/IconAction";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { SectionSwitch } from "../../components/SectionSwitch";
 import { Select } from "../../components/Select";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { Toast } from "../../components/Toast";
@@ -274,10 +276,8 @@ export function DocumentsScreen() {
 			) : (
 				<>
 					<div className="mb-6 flex items-center justify-between gap-4 mx-auto w-full max-w-[var(--content-width)]">
-						<div className="flex items-baseline gap-3">
-							<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-								Documents
-							</h1>
+						<div className="flex items-center gap-3">
+							<SectionSwitch sections={DOCUMENT_SWITCH} current="documents" label="Document views" />
 							{load.status === "ready" ? (
 								<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 									{shown.length} {shown.length === 1 ? "document" : "documents"}

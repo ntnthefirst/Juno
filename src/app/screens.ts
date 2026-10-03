@@ -1,10 +1,10 @@
 import type { IconName } from "../components/Icon";
 
 export type ScreenId =
-	| "today"
+	| "overview"
 	| "calendar"
 	| "mail"
-	| "templates"
+	| "mail-templates"
 	| "documents"
 	| "document-templates"
 	| "clients"
@@ -13,55 +13,66 @@ export type ScreenId =
 	| "agent";
 
 export type ScreenItem = { id: ScreenId; label: string; icon: IconName };
-export type ScreenGroup = { heading: string | null; items: ScreenItem[] };
 
 /**
- * Ordered around the start of a workday: orient yourself, communicate, produce,
- * then manage the records behind that work.
+ * The sidebar is a rail of icons and nothing else, so it is two short lists:
+ * the places the work happens, then the two that are about Juno itself.
  *
- * Settings is deliberately absent. It is a window of its own, reached from the
- * footer of the sidebar, not a tenth destination in this list.
+ * Mail and Documents each hold a second screen behind a switch at the top of
+ * the page (`SCREEN_SWITCH`), and Reminders is reached from the overview, so
+ * none of the three has an entry of its own here. Settings is a window, not a
+ * screen, and is added by the sidebar rather than listed.
  */
-export const SCREEN_GROUPS: ScreenGroup[] = [
-	{
-		heading: null,
-		items: [
-			{ id: "today", label: "Today", icon: "today" },
-			{ id: "calendar", label: "Calendar", icon: "calendar" },
-		],
-	},
-	{
-		heading: "Work",
-		items: [
-			{ id: "clients", label: "Clients", icon: "clients" },
-			{ id: "projects", label: "Projects", icon: "projects" },
-		],
-	},
-	{
-		heading: "Mail",
-		items: [
-			{ id: "mail", label: "Inbox", icon: "mail" },
-			{ id: "templates", label: "Mail templates", icon: "templates" },
-		],
-	},
-	{
-		heading: "Documents",
-		items: [
-			{ id: "documents", label: "Documents", icon: "documents" },
-			{ id: "document-templates", label: "Document templates", icon: "templates" },
-		],
-	},
+export const SIDEBAR_TOP: ScreenItem[] = [
+	{ id: "overview", label: "Overview", icon: "overview" },
+	{ id: "calendar", label: "Calendar", icon: "calendar" },
+	{ id: "clients", label: "Clients", icon: "clients" },
+	{ id: "projects", label: "Projects", icon: "projects" },
+	{ id: "mail", label: "Mail", icon: "mail" },
+	{ id: "documents", label: "Documents", icon: "documents" },
 ];
 
+export const SIDEBAR_BOTTOM: ScreenItem[] = [{ id: "agent", label: "Agent", icon: "agent" }];
+
 export const SCREEN_LABELS: Record<ScreenId, string> = {
-	today: "Today",
+	overview: "Overview",
 	calendar: "Calendar",
-	mail: "Inbox",
-	templates: "Mail templates",
+	mail: "Mail",
+	"mail-templates": "Styled mail",
 	documents: "Documents",
-	"document-templates": "Document templates",
+	"document-templates": "Templates",
 	clients: "Clients",
 	projects: "Projects",
 	reminders: "Reminders",
 	agent: "Agent",
+};
+
+/** The sidebar entry that stays lit while a screen without an entry is open. */
+export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
+	overview: "overview",
+	calendar: "calendar",
+	mail: "mail",
+	"mail-templates": "mail",
+	documents: "documents",
+	"document-templates": "documents",
+	clients: "clients",
+	projects: "projects",
+	reminders: "overview",
+	agent: "agent",
+};
+
+/**
+ * Screens that share a page with another through a switch. Each pair names its
+ * two sides, in the order the switch draws them.
+ */
+export type ScreenSwitch = { left: { id: ScreenId; label: string }; right: { id: ScreenId; label: string } };
+
+export const MAIL_SWITCH: ScreenSwitch = {
+	left: { id: "mail", label: "Mailbox" },
+	right: { id: "mail-templates", label: "Styled mail" },
+};
+
+export const DOCUMENT_SWITCH: ScreenSwitch = {
+	left: { id: "documents", label: "Documents" },
+	right: { id: "document-templates", label: "Templates" },
 };

@@ -20,10 +20,9 @@ import { useTheme } from "../lib/theme";
 import { DocumentDropLayer } from "./DocumentDropLayer";
 import { BreadcrumbProvider } from "./breadcrumb";
 import { useBreadcrumbTrail } from "./breadcrumb-context";
-import { SCREEN_LABELS, type ScreenId } from "./screens";
+import { SCREEN_LABELS, SIDEBAR_ENTRY, type ScreenId } from "./screens";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
-import { useSidebarLayout } from "./use-sidebar-layout";
 
 export function App() {
 	return (
@@ -120,34 +119,27 @@ type MainShellProps = {
 
 /** The application proper: title bar, sidebar and the current screen. */
 function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProps) {
-	const [screen, setScreen] = useState<ScreenId>("today");
+	const [screen, setScreen] = useState<ScreenId>("overview");
 	// Bumped when the entry for the screen already open is chosen again, which
 	// remounts it and so returns it to its overview.
 	const [visit, setVisit] = useState(0);
-	const autoCollapse = useSidebarAutoCollapse();
-	const sidebar = useSidebarLayout(autoCollapse);
 	const trail = useBreadcrumbTrail();
 
 	const navigate = (id: ScreenId) => {
 		if (id === screen) setVisit((count) => count + 1);
 		setScreen(id);
-		// On a narrow window the sidebar is covering the thing just chosen. On a
-		// wider one, close() collapses it only when auto-collapse is on.
-		sidebar.close();
 	};
 
 	// Another screen asked for a client to be shown. The request is read by the
 	// clients screen when it mounts, so this only has to bring that screen up.
-	const closeSidebar = sidebar.close;
 	useEffect(
 		() =>
 			onOpenClientRequest(() => {
 				// Remounts the clients screen when it is already open, so it re-reads the request.
 				setVisit((count) => count + 1);
 				setScreen("clients");
-				closeSidebar();
 			}),
-		[closeSidebar],
+		[],
 	);
 
 	// A link in the Agent tab. The screen it names is brought up fresh, and reads
@@ -161,9 +153,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					target.kind === "project" ? "projects" : target.kind === "document" ? "documents" : target.kind === "thread" ? "mail" : target.screen;
 				setVisit((count) => count + 1);
 				setScreen(next);
-				closeSidebar();
 			}),
-		[closeSidebar],
+		[],
 	);
 
 	// An agent wrote a draft. It opens in the editor on the mail screen, the way
@@ -173,9 +164,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			window.juno.mail.outbox.onAgentDraft((draft) => {
 				offerDraft(draft);
 				setScreen("mail");
-				closeSidebar();
 			}),
-		[closeSidebar],
+		[],
 	);
 
 	return (
@@ -183,37 +173,18 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			<TitleBar
 				title={SCREEN_LABELS[screen]}
 				trail={trail}
-				sidebarCollapsed={sidebar.collapsed}
-				onToggleSidebar={sidebar.toggle}
-				onOpenReminders={() => setScreen("reminders")}
 				lockConfigured={lock.configured}
 				onLock={() => void window.juno.lock.lock()}
 			/>
 			<div className="relative flex min-h-0 flex-1">
-				{sidebar.visible ? (
-					<Sidebar
-						current={screen}
-						onNavigate={navigate}
-						collapsed={sidebar.collapsed}
-						floating={sidebar.floating}
-						onOpenSettings={() => void window.juno.window.openSettings()}
-					/>
-				) : null}
-
-				{sidebar.floating ? (
-					// Dismisses the drawer, and stops a click landing on whatever is
-					// underneath it. Not focusable: Escape already closes it.
-					<button
-						type="button"
-						tabIndex={-1}
-						aria-label="Close the sidebar"
-						onClick={sidebar.close}
-						className="absolute inset-0 z-10 bg-[var(--ink)]/20"
-					/>
-				) : null}
+				<Sidebar
+					current={SIDEBAR_ENTRY[screen]}
+					onNavigate={navigate}
+					onOpenSettings={() => void window.juno.window.openSettings()}
+				/>
 
 				<main key={`${screen}:${visit}`} className="min-w-0 flex-1 overflow-hidden">
-					{screen === "today" ? (
+					{screen === "overview" ? (
 						<OverviewScreen />
 					) : screen === "clients" ? (
 						<ClientsScreen />
@@ -227,7 +198,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 						<MailScreen />
 					) : screen === "calendar" ? (
 						<CalendarScreen />
-					) : screen === "templates" ? (
+					) : screen === "mail-templates" ? (
 						<MailTemplatesScreen />
 					) : screen === "document-templates" ? (
 						<DocumentTemplatesScreen />
@@ -245,36 +216,6 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 		</div>
 	);
-}
-
-/**
- * The auto-collapse setting, as the main window knows it. It is changed in the
- * settings window, which has no channel back (decision 26), so it is read again
- * whenever a modal child closes. Until the first answer arrives it is the
- * default, which is on.
- */
-function useSidebarAutoCollapse(): boolean {
-	const [value, setValue] = useState(true);
-	useEffect(() => {
-		let cancelled = false;
-		const read = () => {
-			void window.juno.settings
-				.getSidebarAutoCollapse()
-				.then((next) => {
-					if (!cancelled) setValue(next);
-				})
-				.catch(() => {
-					// Keeps the value it had. A sidebar is not worth an error on screen.
-				});
-		};
-		read();
-		const stop = window.juno.window.onChildClosed(read);
-		return () => {
-			cancelled = true;
-			stop();
-		};
-	}, []);
-	return value;
 }
 
 function Placeholder({ title }: { title: string }) {

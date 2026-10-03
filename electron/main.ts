@@ -883,8 +883,8 @@ if (!app.requestSingleInstanceLock()) {
 									) as Promise<string>;
 
 								const firstStop = await cardTitle();
-								if (firstStop !== "Today") {
-									throw new Error(`Smoke: the walkthrough opened on "${firstStop}", not Today`);
+								if (firstStop !== "Overview") {
+									throw new Error(`Smoke: the walkthrough opened on "${firstStop}", not Overview`);
 								}
 
 								// Two stops forward, checking the card actually changed each time
@@ -936,7 +936,7 @@ if (!app.requestSingleInstanceLock()) {
 								? []
 								: process.env.JUNO_SMOKE_DEMO
 								? [
-										"Today",
+										"Overview",
 										"Reminders",
 										"Clients",
 										"Client record",
@@ -961,68 +961,56 @@ if (!app.requestSingleInstanceLock()) {
 									`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 								);
 								// Drafts is a view inside Mail; Week and the event form live inside
-								// Calendar. None of the three is a sidebar entry.
+								// Calendar. Reminders is reached from the overview, and the two template
+								// screens from the switch at the top of Mail and Documents. None of
+								// them is a sidebar entry.
 								const sidebarEntry =
 									screen === "Client record"
 										? "Clients"
 										: screen === "Project record" || screen === "Projects as a list"
 											? "Projects"
-											: screen === "Drafts"
+											: screen === "Drafts" || screen === "Mail templates"
 												? "Mail"
-												: screen === "Week" || screen === "Event form"
-													? "Calendar"
-													: screen === "Connection"
-														? "Agent"
-														: screen;
-								// Matched on data-nav, never on the label. A collapsed sidebar
-								// renders icons only, and a display narrower than 1100px puts it
-								// in exactly that state, which is what a CI runner gives you.
-								// Two of these do not follow the label: the mail templates entry
-								// is still keyed `templates`, and the document one is hyphenated.
-								const navId =
-									sidebarEntry === "Mail templates"
-										? "templates"
-										: sidebarEntry === "Document templates"
-											? "document-templates"
-											: sidebarEntry.toLowerCase();
+												: screen === "Document templates"
+													? "Documents"
+													: screen === "Reminders"
+														? "Overview"
+														: screen === "Week" || screen === "Event form"
+															? "Calendar"
+															: screen === "Connection"
+																? "Agent"
+																: screen;
+								// Matched on data-nav, never on the label: the rail renders icons only.
+								const navId = sidebarEntry.toLowerCase();
 								const click = () =>
 									window.webContents.executeJavaScript(
 										`(() => { const b = document.querySelector("nav button[data-nav=" + JSON.stringify(${JSON.stringify(navId)}) + "]");
 											if (b) b.click(); return Boolean(b); })()`,
 									) as Promise<boolean>;
-
-								// Reminders has no sidebar row: it is reached from the bell in
-								// the title bar, which is also the only place that shows the count.
-								// Walking it the way a person does is what proves that path works.
-								if (screen === "Reminders") {
-									const reached = (await window.webContents.executeJavaScript(
+								// A press on a button in the page by its visible text, for the switch at
+								// the top of Mail and Documents and the link to every reminder.
+								const pressText = (text: string) =>
+									window.webContents.executeJavaScript(
 										`(async () => {
-											const bell = document.querySelector("button[aria-label='Show reminders']");
-											if (!bell) return "no reminders button";
-											bell.click();
-											await new Promise((r) => setTimeout(r, 400));
-											const all = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "View all");
-											if (!all) return "no view all";
-											all.click();
+											const b = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === ${JSON.stringify(text)});
+											if (!b) return false;
+											b.click();
 											await new Promise((r) => setTimeout(r, 600));
-											return "ok";
+											return true;
 										})()`,
-									)) as string;
-									if (reached !== "ok") throw new Error(`Smoke: reminders ${reached}`);
-								}
+									) as Promise<boolean>;
 
-								let clicked = screen === "Reminders" ? true : await click();
-								if (!clicked) {
-									// Below 760px the sidebar is a drawer and is not in the document
-									// at all. The toggle in the title bar is what puts it there.
-									await window.webContents.executeJavaScript(
-										`(() => { const t = document.querySelector("[data-sidebar-toggle]"); if (t) t.click(); })()`,
-									);
-									await new Promise((r) => setTimeout(r, 300));
-									clicked = await click();
-								}
+								const clicked = await click();
 								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
 								await new Promise((r) => setTimeout(r, 800));
+								const inPage: Record<string, string> = {
+									"Reminders": "All reminders",
+									"Mail templates": "Styled mail",
+									"Document templates": "Templates",
+								};
+								const route = inPage[screen];
+								if (route && !(await pressText(route)))
+									throw new Error(`Smoke: no "${route}" to press on the way to ${screen}`);
 								if (screen === "Agent") {
 									// The requests tab is the default, and the pending request from
 									// the agent call above has to be on it with its arguments.
@@ -4201,84 +4189,37 @@ if (!app.requestSingleInstanceLock()) {
 								console.log(`SMOKE_DEMO settings pages=${pages.length}`);
 								closeSettingsWindow();
 
-								// The sidebar goes back to the rail on its own, and the setting
-								// in the window just photographed turns that off. Only a docked
-								// sidebar does either: a window narrow enough for the drawer has
-								// nothing to prove here, and the screens loop covers the drawer.
-								const docked = (await window.webContents.executeJavaScript(
-									`Boolean(document.querySelector("nav[data-sidebar]")) && window.innerWidth >= 760`,
-								)) as boolean;
-								if (docked) {
-									await new Promise((r) => setTimeout(r, 500));
-									const sidebarState = () =>
-										window.webContents.executeJavaScript(
-											`document.querySelector("nav[data-sidebar]")?.getAttribute("data-collapsed") ?? "missing"`,
-										) as Promise<string>;
-									const expand = async () => {
-										if ((await sidebarState()) === "true") {
-											await window.webContents.executeJavaScript(
-												`document.querySelector("[data-sidebar-toggle]").click()`,
-											);
-											await new Promise((r) => setTimeout(r, 300));
-										}
-										if ((await sidebarState()) !== "false")
-											throw new Error("Smoke: the sidebar toggle did not open it");
-									};
-									const choose = async () => {
-										await window.webContents.executeJavaScript(
-											`document.querySelector("nav[data-sidebar] button[data-nav=clients]").click()`,
-										);
-										await new Promise((r) => setTimeout(r, 400));
-									};
-
-									await expand();
-									await choose();
-									if ((await sidebarState()) !== "true") {
-										throw new Error("Smoke: choosing a screen did not collapse the sidebar");
-									}
-									await expand();
-									await window.webContents.executeJavaScript(
-										`document.querySelector("main").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`,
-									);
-									await new Promise((r) => setTimeout(r, 300));
-									if ((await sidebarState()) !== "true") {
-										throw new Error("Smoke: a click beside the sidebar did not collapse it");
-									}
-
-									// Off, in the settings window, the way a person turns it off.
-									// Closing the window is what tells the main window.
-									openSettingsWindow("general");
-									const again = getSettingsWindow();
-									if (!again)
-										throw new Error("Smoke: the settings window did not open a second time");
-									await new Promise<void>((resolve) => {
-										if (!again.webContents.isLoading()) {
-											setTimeout(resolve, 900);
-											return;
-										}
-										again.webContents.once("did-finish-load", () => setTimeout(resolve, 900));
-									});
-									const unticked = (await again.webContents.executeJavaScript(
-										`(async () => {
-											const toggle = [...document.querySelectorAll("button[role=switch]")].find((el) => el.textContent.includes("Collapse the sidebar on its own"));
-											if (!toggle) return "no switch";
-											if (toggle.getAttribute("aria-checked") !== "true") return "the switch starts off";
-											toggle.click();
-											await new Promise((r) => setTimeout(r, 400));
-											return toggle.getAttribute("aria-checked") === "false" ? "ok" : "the switch did not change";
-										})()`,
-									)) as string;
-									if (unticked !== "ok") throw new Error(`Smoke: sidebar setting ${unticked}`);
-									closeSettingsWindow();
-									await new Promise((r) => setTimeout(r, 700));
-
-									await expand();
-									await choose();
-									if ((await sidebarState()) !== "false") {
-										throw new Error("Smoke: the sidebar collapsed with the setting turned off");
-									}
-									console.log("SMOKE_DEMO sidebar auto-collapse=ok");
-								}
+								// The sidebar is a rail of icons and never opens. Eight entries (six
+								// places, the agent and settings), no text of its own, and a label in a
+								// tooltip that appears when the pointer rests on one.
+								await new Promise((r) => setTimeout(r, 400));
+								const rail = (await window.webContents.executeJavaScript(
+									`(async () => {
+										const nav = document.querySelector("nav[data-sidebar]");
+										if (!nav) return "no sidebar";
+										const entries = nav.querySelectorAll("button[data-nav]").length;
+										if (entries !== 8) return "the sidebar has " + entries + " entries, not 8";
+										if (nav.textContent.trim() !== "") return "the sidebar draws text: " + nav.textContent.trim();
+										const width = Math.round(nav.getBoundingClientRect().width);
+										if (width > 64) return "the sidebar is " + width + "px wide";
+										// Back on the overview, so the picture shows the tooltip over the
+										// page the app opens on.
+										nav.querySelector("button[data-nav=overview]").click();
+										await new Promise((r) => setTimeout(r, 900));
+										const button = nav.querySelector("button[data-nav=clients]");
+										button.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+										await new Promise((r) => setTimeout(r, 700));
+										const tip = [...document.body.children].find((el) => el.tagName === "SPAN" && el.textContent.trim() === "Clients");
+										return tip ? "ok" : "no tooltip on hover";
+									})()`,
+								)) as string;
+								if (rail !== "ok") throw new Error(`Smoke: sidebar ${rail}`);
+								const tooltipImage = await capture(window.webContents);
+								writeFileSync(joinPath(shotDir, `sidebar-tooltip.png`), tooltipImage.toPNG());
+								await window.webContents.executeJavaScript(
+									`document.querySelector("nav[data-sidebar] button[data-nav=clients]").dispatchEvent(new PointerEvent("pointerout", { bubbles: true }))`,
+								);
+								console.log("SMOKE_DEMO sidebar rail=ok");
 							}
 						}
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);

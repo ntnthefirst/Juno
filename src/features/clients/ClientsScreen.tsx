@@ -15,6 +15,7 @@ import type {
 import type { Crumb } from "../../app/breadcrumb-context";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { AddButton } from "../../components/AddButton";
+import { Avatar } from "../../components/Avatar";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
@@ -473,7 +474,7 @@ export function ClientsScreen() {
 		<div className="relative flex h-full flex-col p-8">
 			<div className="mx-auto mb-6 flex w-full max-w-[var(--content-width)] items-center justify-between gap-4">
 				<div className="flex items-baseline gap-3">
-					<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
+					<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">
 						Clients
 					</h1>
 					{load.status === "ready" ? (
@@ -672,25 +673,26 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 								}`}
 							>
 								<td
-									className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)]"
-									style={{ height: "var(--row-height)" }}
+									className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]"
+									style={{ height: "var(--row-height-roomy)" }}
 								>
 									<button
 										type="button"
 										aria-current={selected ? "true" : undefined}
 										onClick={() => onSelect(row)}
-										className="block w-full truncate text-left"
+										className="flex w-full min-w-0 items-center gap-3 text-left"
 									>
-										{row.name}
+										<Avatar name={row.name} size={28} shape="square" />
+										<span className="truncate">{row.name}</span>
 									</button>
 								</td>
-								<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)]">
+								<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]">
 									{row.status ? <StatusBadge label={row.status.label} tone={row.status.tone} /> : null}
 								</td>
-								<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 									{row.city ?? ""}
 								</td>
-								<td className="tabular border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<td className="tabular border-b border-[var(--line)]/60 px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 									{row.openProjectCount} / {row.projectCount}
 								</td>
 							</tr>

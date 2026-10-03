@@ -254,7 +254,7 @@ export function ProjectsScreen() {
 			<div className="mb-6 flex w-full flex-col gap-4">
 				<div className="flex items-center justify-between gap-4">
 					<div className="flex items-baseline gap-3">
-						<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
+						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">
 							Projects
 						</h1>
 						{rows ? (

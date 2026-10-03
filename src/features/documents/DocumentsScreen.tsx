@@ -3,6 +3,7 @@ import type { DocumentRecord, GenerateDocumentResult, ReferenceItem } from "@sha
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { DOCUMENT_SWITCH } from "../../app/screens";
 import { AddButton } from "../../components/AddButton";
+import { Avatar } from "../../components/Avatar";
 import { IconAction } from "../../components/IconAction";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
@@ -10,6 +11,7 @@ import { SectionSwitch } from "../../components/SectionSwitch";
 import { Select } from "../../components/Select";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { Toast } from "../../components/Toast";
+import { groupByDay } from "../../lib/day-groups";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
@@ -463,6 +465,17 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 	const toggleVersions = (id: string) =>
 		setExpanded((current) => (current.includes(id) ? current.filter((other) => other !== id) : [...current, id]));
 
+	// Newest first and split by day, so the table reads as what changed lately
+	// and not as an archive in the order it happened to be filed.
+	const groups = useMemo(
+		() =>
+			groupByDay(
+				[...rows.records].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+				(record) => record.updatedAt,
+			),
+		[rows.records],
+	);
+
 	const items: MenuItem[] = target
 		? [
 				{
@@ -494,7 +507,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 						<th
 							key={head}
 							className={[
-								"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]",
+								"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]",
 								head === "Issued" ? "text-right" : "text-left",
 							].join(" ")}
 						>
@@ -504,7 +517,17 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 				</tr>
 			</thead>
 			<tbody>
-				{rows.records.map((row) => {
+				{groups.map((group) => (
+				<Fragment key={group.key}>
+				<tr aria-hidden>
+					<td
+						colSpan={HEADS.length + 1}
+						className="px-3 pt-5 pb-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]"
+					>
+						{group.label}
+					</td>
+				</tr>
+				{group.items.map((row) => {
 					const selected = row.id === selectedId;
 					const checked = selectedIds.includes(row.id);
 					// A plain click opens the record; once anything is ticked, the
@@ -524,8 +547,8 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 							}`}
 						>
 							<td
-								className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)]"
-								style={{ height: "var(--row-height)" }}
+								className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]"
+								style={{ height: "var(--row-height-roomy)" }}
 								onClick={(event) => event.stopPropagation()}
 							>
 								<input
@@ -539,10 +562,11 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 								/>
 							</td>
 							<td
-								className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)]"
-								style={{ height: "var(--row-height)" }}
+								className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]"
+								style={{ height: "var(--row-height-roomy)" }}
 							>
-								<div className="flex items-center gap-2">
+								<div className="flex items-center gap-3">
+									<Avatar name={row.clientName} size={28} shape="square" />
 									<button
 										type="button"
 										aria-current={selected ? "true" : undefined}
@@ -566,15 +590,15 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 									) : null}
 								</div>
 							</td>
-							<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 								<span className="block truncate">{row.clientName}</span>
 							</td>
-							<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 								<span className="block truncate">
 									{(row.statusId && labels.get(row.statusId)) || ""}
 								</span>
 							</td>
-							<td className="tabular whitespace-nowrap border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="tabular whitespace-nowrap border-b border-[var(--line)]/60 px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 								{formatDate(row.issuedOn)}
 							</td>
 						</tr>
@@ -589,6 +613,8 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 						</Fragment>
 					);
 				})}
+				</Fragment>
+				))}
 			</tbody>
 		</table>
 		{menu.at && target ? (

@@ -80,7 +80,7 @@ export function ColumnHeader({
 			ref={cell}
 			aria-sort={ariaSort}
 			className={[
-				"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]",
+				"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]",
 				align === "right" ? "text-right" : "text-left",
 			].join(" ")}
 		>
@@ -90,7 +90,7 @@ export function ColumnHeader({
 					onClick={onLabelClick}
 					onDoubleClick={onLabelDoubleClick}
 					title="Click to sort, double click for options"
-					className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] uppercase tracking-[0.06em] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+					className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 				>
 					{label}
 					{direction ? (

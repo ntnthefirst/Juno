@@ -73,7 +73,7 @@ export function AgentScreen() {
 						<Icon name="agent" size={24} />
 					</span>
 					<div>
-						<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.02em]">
+						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.02em]">
 							Agent
 						</h1>
 						<p className="mt-1 max-w-[68ch] text-[var(--ink-muted)]">

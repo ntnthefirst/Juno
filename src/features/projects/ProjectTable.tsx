@@ -71,7 +71,7 @@ export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: Pr
 							<th
 								key={head}
 								className={[
-									"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]",
+									"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]",
 									head === "Due" || head === "Value" ? "text-right" : "text-left",
 								].join(" ")}
 							>

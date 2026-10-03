@@ -1,11 +1,13 @@
-import { useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import type { MailOutboxMessage, MailThreadSummary } from "@shared/types";
+import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { groupByDay } from "../../lib/day-groups";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { startThreadDrag } from "./drag";
-import { formatWhen, participantsLine } from "./format";
+import { formatWhen, leadParticipant, participantsLine } from "./format";
 import { OutboxRow } from "./OutboxRow";
 
 export type ThreadAction =
@@ -104,6 +106,19 @@ export function ThreadList({
 	// The row buttons, so the arrow keys can move focus between them. A list you
 	// cannot walk with the keyboard is a list you have to aim at.
 	const rows = useRef(new Map<string, HTMLButtonElement>());
+	const merged = useMemo(
+		() => (threads === null ? [] : mergeEntries(threads, outbox ? outbox.messages : null)),
+		[threads, outbox],
+	);
+	// A search is ordered by how well a row matches, not by when it arrived, so
+	// splitting it by day would put the days out of order.
+	const sections = useMemo(
+		() =>
+			searching
+				? [{ key: "results", label: null as string | null, items: merged }]
+				: groupByDay(merged, (entry) => entry.at).map((group) => ({ ...group, label: group.label as string | null })),
+		[merged, searching],
+	);
 
 	if (error) {
 		return (
@@ -118,7 +133,7 @@ export function ThreadList({
 	if (threads === null || (outbox && outbox.messages === null)) {
 		return <p className="px-4 text-[var(--ink-muted)]">Loading.</p>;
 	}
-	const entries = mergeEntries(threads, outbox ? outbox.messages : null);
+	const entries = merged;
 	if (entries.length === 0) {
 		return (
 			<p className="px-4 text-[var(--ink-muted)]">
@@ -245,184 +260,203 @@ export function ThreadList({
 				One handler for the list rather than one per row: the keys act on
 				whichever row has focus, and a row is a button that already takes it.
 			*/}
-			<ul className="flex flex-col" onKeyDown={onListKeyDown}>
-				{entries.map((entry) => {
-					if (entry.kind === "outbox") {
-						return (
-							<OutboxRow
-								key={entry.id}
-								message={entry.message}
-								active={entry.id === outbox?.selectedId}
-								onSelect={(id) => outbox?.onSelect(id)}
-								buttonRef={(element) => {
-									if (element) rows.current.set(entry.id, element);
-									else rows.current.delete(entry.id);
-								}}
-							/>
-						);
-					}
-					const thread = entry.thread;
-					const active = thread.id === selectedId;
-					const checked = selectedIds.includes(thread.id);
-					const unread = thread.unreadCount > 0;
-					// A drag that starts on a row inside the selection carries the
-					// selection. Starting one outside it carries that row alone, which
-					// is what every file manager does.
-					const dragIds = checked ? selectedIds : [thread.id];
-					return (
-						<li
-							key={thread.id}
-							data-draft-kind={outbox ? "thread" : undefined}
-							draggable
-							onDragStart={(event) => startThreadDrag(event, dragIds, thread.subject || "1 thread")}
-							className="group relative border-b border-[var(--line)]/60"
-							onContextMenu={(event) => {
-								setTarget(thread);
-								menu.open(event);
-							}}
-						>
-							<div
-								className={[
-									"flex items-start gap-2 px-3 py-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-									active || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
-								].join(" ")}
+			<ul className="flex flex-col px-2" onKeyDown={onListKeyDown}>
+				{sections.map((section) => (
+					<Fragment key={section.key}>
+						{section.label ? (
+							<li
+								aria-hidden
+								className="px-3 pt-4 pb-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-2"
 							>
-								<span className="relative mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center">
-									<span
-										aria-hidden
-										className={[
-											"absolute h-1.5 w-1.5 rounded-full",
-											unread ? "bg-[var(--accent)]" : "bg-transparent",
-											hasSelection ? "hidden" : "group-hover:opacity-0 group-focus-within:opacity-0",
-										].join(" ")}
+								{section.label}
+							</li>
+						) : null}
+						{section.items.map((entry) => {
+							if (entry.kind === "outbox") {
+								return (
+									<OutboxRow
+										key={entry.id}
+										message={entry.message}
+										active={entry.id === outbox?.selectedId}
+										onSelect={(id) => outbox?.onSelect(id)}
+										buttonRef={(element) => {
+											if (element) rows.current.set(entry.id, element);
+											else rows.current.delete(entry.id);
+										}}
 									/>
-									<input
-										type="checkbox"
-										checked={checked}
-										onChange={(event) =>
-											onToggleSelect(thread.id, (event.nativeEvent as MouseEvent).shiftKey)
-										}
-										onClick={(event) => event.stopPropagation()}
-										aria-label={`Select ${participantsLine(thread.participants, "Me")}`}
-										className={[
-											"absolute h-3.5 w-3.5 rounded-[3px] border-[var(--line-strong)] accent-[var(--accent)]",
-											hasSelection
-												? "opacity-100"
-												: "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100",
-										].join(" ")}
-									/>
-								</span>
-								<button
-									type="button"
-									ref={(element) => {
-										if (element) rows.current.set(thread.id, element);
-										else rows.current.delete(thread.id);
+								);
+							}
+							const thread = entry.thread;
+							const active = thread.id === selectedId;
+							const checked = selectedIds.includes(thread.id);
+							const unread = thread.unreadCount > 0;
+							const lead = leadParticipant(thread.participants);
+							// A drag that starts on a row inside the selection carries the
+							// selection. Starting one outside it carries that row alone, which
+							// is what every file manager does.
+							const dragIds = checked ? selectedIds : [thread.id];
+							return (
+								<li
+									key={thread.id}
+									data-draft-kind={outbox ? "thread" : undefined}
+									draggable
+									onDragStart={(event) => startThreadDrag(event, dragIds, thread.subject || "1 thread")}
+									className="group relative"
+									onContextMenu={(event) => {
+										setTarget(thread);
+										menu.open(event);
 									}}
-									onClick={(event) => {
-										if (hasSelection) onToggleSelect(thread.id, event.shiftKey);
-										else onSelect(thread.id);
-									}}
-									aria-current={active && !hasSelection ? "true" : undefined}
-									aria-pressed={hasSelection ? checked : undefined}
-									className="min-w-0 flex-1 text-left"
 								>
-									<div className="flex items-baseline gap-2">
-										<span
-											className={`min-w-0 flex-1 truncate text-[length:var(--text-dense)] ${
-												unread ? "font-[var(--weight-semibold)] text-[var(--ink)]" : "text-[var(--ink)]"
-											}`}
+									<div
+										className={[
+											"flex items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+											active || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
+										].join(" ")}
+									>
+										{/* An unread row has a dot in the margin, so the avatar can stay a picture. */}
+										{unread ? (
+											<span
+												aria-hidden
+												className="absolute top-1/2 left-0.5 h-1.5 w-1.5 -translate-y-1/2 rounded-[var(--radius-full)] bg-[var(--accent)]"
+											/>
+										) : null}
+										{/*
+											The avatar doubles as the row's selector: hovering it, focusing
+											it with the keyboard, or selecting anything else in the list turns
+											it into a checkbox, so the list stays free of checkboxes until
+											somebody wants them.
+										*/}
+										<span className="relative flex h-8 w-8 flex-none items-center justify-center">
+											<span
+												className={
+													hasSelection ? "invisible" : "group-hover:invisible group-focus-within:invisible"
+												}
+											>
+												<Avatar name={lead} size={32} />
+											</span>
+											<input
+												type="checkbox"
+												checked={checked}
+												onChange={(event) =>
+													onToggleSelect(thread.id, (event.nativeEvent as MouseEvent).shiftKey)
+												}
+												onClick={(event) => event.stopPropagation()}
+												aria-label={`Select ${participantsLine(thread.participants, "Me")}`}
+												className={[
+													"absolute h-4 w-4 rounded-[3px] border-[var(--line-strong)] accent-[var(--accent)]",
+													hasSelection
+														? "opacity-100"
+														: "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100",
+												].join(" ")}
+											/>
+										</span>
+										<button
+											type="button"
+											ref={(element) => {
+												if (element) rows.current.set(thread.id, element);
+												else rows.current.delete(thread.id);
+											}}
+											onClick={(event) => {
+												if (hasSelection) onToggleSelect(thread.id, event.shiftKey);
+												else onSelect(thread.id);
+											}}
+											aria-current={active && !hasSelection ? "true" : undefined}
+											aria-pressed={hasSelection ? checked : undefined}
+											className="min-w-0 flex-1 text-left"
 										>
-											{participantsLine(thread.participants, "Me")}
-										</span>
-										{thread.messageCount > 1 ? (
-											<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-												{thread.messageCount}
-											</span>
-										) : null}
-										{/* The date gives way to the row's actions on hover. */}
-										<span
-											className={`tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)] ${
-												hasSelection ? "" : "group-hover:invisible"
-											}`}
-										>
-											{formatWhen(thread.lastMessageAt)}
-										</span>
+											<div className="flex items-baseline gap-2">
+												<span
+													className={`min-w-0 flex-1 truncate text-[length:var(--text-base)] ${
+														unread ? "font-[var(--weight-semibold)] text-[var(--ink)]" : "text-[var(--ink)]"
+													}`}
+												>
+													{participantsLine(thread.participants, "Me")}
+												</span>
+												{thread.messageCount > 1 ? (
+													<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+														{thread.messageCount}
+													</span>
+												) : null}
+												{thread.isFlagged ? (
+													<span className="shrink-0 text-[var(--seal)]" title="Flagged">
+														<Icon name="flag" size={12} />
+													</span>
+												) : null}
+												{thread.hasAttachments ? (
+													<span className="shrink-0 text-[var(--ink-muted)]" title="Has attachments">
+														<Icon name="attachment" size={12} />
+													</span>
+												) : null}
+												{/* The date gives way to the row's actions on hover. */}
+												<span
+													className={`tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)] ${
+														hasSelection ? "" : "group-hover:invisible"
+													}`}
+												>
+													{formatWhen(thread.lastMessageAt)}
+												</span>
+											</div>
+											<div className="mt-0.5 flex items-baseline gap-2">
+												<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+													<span className={unread ? "font-[var(--weight-medium)] text-[var(--ink)]" : "text-[var(--ink)]"}>
+														{thread.subject}
+													</span>
+													{thread.snippet ? ` ${thread.snippet}` : ""}
+												</span>
+												{/* Beside Juno's own unsent messages, the server's are told apart. */}
+												{outbox ? (
+													<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+														On the server
+													</span>
+												) : null}
+												{thread.clientName ? (
+													<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+														{thread.clientName}
+													</span>
+												) : null}
+											</div>
+										</button>
 									</div>
-									<div className="mt-0.5 flex items-baseline gap-2">
-										{thread.isFlagged ? (
-											<span className="shrink-0 text-[var(--seal)]" title="Flagged">
-												<Icon name="flag" size={12} />
-											</span>
-										) : null}
-										<span
-											className={`min-w-0 flex-1 truncate text-[length:var(--text-dense)] ${
-												unread ? "font-[var(--weight-medium)]" : ""
-											}`}
-										>
-											{thread.subject}
-										</span>
-										{thread.hasAttachments ? (
-											<span className="shrink-0 text-[var(--ink-muted)]" title="Has attachments">
-												<Icon name="attachment" size={12} />
-											</span>
-										) : null}
-									</div>
-									<div className="mt-0.5 flex items-baseline gap-2">
-										<span className="min-w-0 flex-1 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-											{thread.snippet}
-										</span>
-										{/* Beside Juno's own unsent messages, the server's are told apart. */}
-										{outbox ? (
-											<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-												On the server
-											</span>
-										) : null}
-										{thread.clientName ? (
-											<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-												{thread.clientName}
-											</span>
-										) : null}
-									</div>
-								</button>
-							</div>
 
-							{/*
-								Hover actions, in the row's top-right corner where the date is.
-								Hidden until the row is hovered or something in it has focus, so
-								the list is a list rather than a grid of buttons, and reachable
-								from the keyboard because focus counts as hover here. They stay
-								away entirely while something is selected: a row is then a thing
-								to tick, and an archive button that files one row out of six is
-								not what anybody was aiming at.
-							*/}
-							{hasSelection ? null : (
-								<div className="pointer-events-none absolute top-1 right-2 flex gap-0.5 opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
-									<IconAction
-										icon={unread ? "read" : "unread"}
-										label={unread ? "Mark read" : "Mark unread"}
-										onClick={() => onAction(unread ? "markRead" : "markUnread", [thread.id])}
-									/>
-									<IconAction
-										icon="flag"
-										label={thread.isFlagged ? "Clear flag" : "Flag"}
-										onClick={() => onAction(thread.isFlagged ? "unflag" : "flag", [thread.id])}
-									/>
-									<IconAction
-										icon="archive"
-										label="Archive"
-										onClick={() => onAction("archive", [thread.id])}
-									/>
-									<IconAction
-										icon="remove"
-										label={inTrash ? "Delete forever" : "Move to trash"}
-										danger
-										onClick={() => onAction(removeAction, [thread.id])}
-									/>
-								</div>
-							)}
-						</li>
-					);
-				})}
+									{/*
+										Hover actions, in the row's top-right corner where the date is.
+										Hidden until the row is hovered or something in it has focus, so
+										the list is a list rather than a grid of buttons, and reachable
+										from the keyboard because focus counts as hover here. They stay
+										away entirely while something is selected: a row is then a thing
+										to tick, and an archive button that files one row out of six is
+										not what anybody was aiming at.
+									*/}
+									{hasSelection ? null : (
+										<div className="pointer-events-none absolute top-1 right-3 flex gap-0.5 opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+											<IconAction
+												icon={unread ? "read" : "unread"}
+												label={unread ? "Mark read" : "Mark unread"}
+												onClick={() => onAction(unread ? "markRead" : "markUnread", [thread.id])}
+											/>
+											<IconAction
+												icon="flag"
+												label={thread.isFlagged ? "Clear flag" : "Flag"}
+												onClick={() => onAction(thread.isFlagged ? "unflag" : "flag", [thread.id])}
+											/>
+											<IconAction
+												icon="archive"
+												label="Archive"
+												onClick={() => onAction("archive", [thread.id])}
+											/>
+											<IconAction
+												icon="remove"
+												label={inTrash ? "Delete forever" : "Move to trash"}
+												danger
+												onClick={() => onAction(removeAction, [thread.id])}
+											/>
+										</div>
+									)}
+								</li>
+							);
+						})}
+					</Fragment>
+				))}
 			</ul>
 
 			{menu.at && target ? (

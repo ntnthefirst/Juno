@@ -1,29 +1,66 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Briefing, Reminder, ReminderSuggestion } from "@shared/types";
+import type { Reminder } from "@shared/types";
+import { AddButton } from "../../components/AddButton";
+import { Avatar } from "../../components/Avatar";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
-import { formatDate, plural, todayIso } from "../reminders/format";
+import { requestOpen } from "../../lib/open-entity";
+import { useLoaded } from "../../lib/use-loaded";
+import { BUCKET_LABELS, BUCKET_ORDER, todayIso } from "../reminders/format";
 import { ReminderForm } from "../reminders/ReminderForm";
 import { ReminderRow } from "../reminders/ReminderRow";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
 import { SuggestionList } from "../reminders/SuggestionList";
-import { BriefingPanel } from "./BriefingPanel";
+import { Card, CardError, CardLink, CardNote, GroupLabel } from "./Card";
+import { ClientsCard } from "./ClientsCard";
+import { RecentDocumentsCard } from "./RecentDocumentsCard";
+import { RecentMailCard } from "./RecentMailCard";
+import { StatTiles } from "./StatTiles";
+import { UpNextCard } from "./UpNextCard";
 
-type Counts = { documents: number; specimens: number; clients: number; projects: number };
+type Clock = { today: string; hour: number; dateLabel: string };
 
-type Load<T> =
-	| { status: "loading" }
-	| { status: "ready"; value: T }
-	| { status: "error"; message: string };
+function readClock(): Clock {
+	const now = new Date();
+	return {
+		today: todayIso(),
+		hour: now.getHours(),
+		dateLabel: now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }),
+	};
+}
 
+function greetingFor(hour: number): string {
+	if (hour < 5) return "Good night";
+	if (hour < 12) return "Good morning";
+	if (hour < 18) return "Good afternoon";
+	return "Good evening";
+}
+
+// Reads that take no arguments, kept outside the component so each is one
+// stable function and not a new read on every render.
+const loadClients = () => window.juno.clients.list();
+const loadProjects = () => window.juno.projects.list();
+const loadDocuments = () => window.juno.documents.list();
+const loadStatuses = () => window.juno.reference.getSet("document_status");
+const loadOwner = () => window.juno.settings.getOwner();
+const loadBriefing = () => window.juno.briefing.today();
+const loadAccounts = () => window.juno.mail.accounts.list();
+const loadAttention = () => window.juno.reminders.list({ actionableOnly: true });
+const loadSuggestions = () => window.juno.reminders.suggestions();
+const loadUnread = () =>
+	window.juno.mail.threads.list({ folderSpecialUse: "inbox", unreadOnly: true, limit: 200 });
+
+/**
+ * The page Juno opens on. It answers what needs doing, what is coming and what
+ * changed last, in that order, and every row on it opens the record it shows.
+ * The work itself happens on the other screens: this one reads and points.
+ *
+ * Each card reads for itself, so a mail server that is slow or a calendar that
+ * fails says so in its own card and the rest of the page is already there.
+ */
 export function OverviewScreen() {
-	const [today, setToday] = useState<string | null>(null);
-	const [attention, setAttention] = useState<Load<Reminder[]>>({ status: "loading" });
-	const [suggestions, setSuggestions] = useState<ReminderSuggestion[]>([]);
-	const [counts, setCounts] = useState<Counts | null>(null);
-	const [briefing, setBriefing] = useState<Briefing | null>(null);
-	const [briefingError, setBriefingError] = useState<string | null>(null);
-	const [editing, setEditing] = useState<Reminder | null>(null);
+	const [clock, setClock] = useState<Clock | null>(null);
+	const [form, setForm] = useState<{ reminder: Reminder | null } | null>(null);
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [deleted, setDeleted] = useState<Reminder | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -31,103 +68,31 @@ export function OverviewScreen() {
 	// The clock is impure, so it is read here rather than during render.
 	useEffect(() => {
 		let cancelled = false;
-		Promise.resolve(todayIso()).then((value) => {
-			if (!cancelled) setToday(value);
+		Promise.resolve(readClock()).then((value) => {
+			if (!cancelled) setClock(value);
 		});
 		return () => {
 			cancelled = true;
 		};
 	}, []);
 
-	useEffect(() => {
-		let cancelled = false;
-		window.juno.reminders
-			.list({ actionableOnly: true })
-			.then((rows) => {
-				if (!cancelled) setAttention({ status: "ready", value: rows });
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setAttention({ status: "error", message: messageOf(cause) });
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
+	const owner = useLoaded(loadOwner);
+	const briefing = useLoaded(loadBriefing);
+	const clients = useLoaded(loadClients);
+	const projects = useLoaded(loadProjects);
+	const documents = useLoaded(loadDocuments);
+	const statuses = useLoaded(loadStatuses);
+	const accounts = useLoaded(loadAccounts);
+	const unread = useLoaded(loadUnread);
+	const attention = useLoaded(loadAttention);
+	const suggestions = useLoaded(loadSuggestions);
 
-	useEffect(() => {
-		let cancelled = false;
-		window.juno.reminders
-			.suggestions()
-			.then((rows) => {
-				if (!cancelled) setSuggestions(rows);
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setNotice(messageOf(cause));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	useEffect(() => {
-		let cancelled = false;
-		Promise.all([
-			window.juno.documents.list(),
-			window.juno.clients.list(),
-			window.juno.projects.list(),
-		])
-			.then(([documents, clients, projects]) => {
-				if (cancelled) return;
-				setCounts({
-					documents: documents.length,
-					specimens: documents.filter((document) => document.isSpecimen).length,
-					clients: clients.length,
-					projects: projects.length,
-				});
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setNotice(messageOf(cause));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	// The day, worked out by the same service an agent calls, so the screen and
-	// the answer an agent gives cannot disagree.
-	useEffect(() => {
-		let cancelled = false;
-		window.juno.briefing
-			.today()
-			.then((value) => {
-				if (!cancelled) setBriefing(value);
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setBriefingError(messageOf(cause));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	const refreshAttention = useCallback(() => {
-		window.juno.reminders
-			.list({ actionableOnly: true })
-			.then((rows) => setAttention({ status: "ready", value: rows }))
-			.catch((cause: unknown) => setAttention({ status: "error", message: messageOf(cause) }));
-	}, []);
-
-	const refreshSuggestions = useCallback(() => {
-		window.juno.reminders
-			.suggestions()
-			.then(setSuggestions)
-			.catch((cause: unknown) => setNotice(messageOf(cause)));
-	}, []);
-
+	const reloadAttention = attention.reload;
+	const reloadSuggestions = suggestions.reload;
 	const accepted = useCallback(() => {
-		refreshSuggestions();
-		refreshAttention();
-	}, [refreshSuggestions, refreshAttention]);
+		reloadSuggestions();
+		reloadAttention();
+	}, [reloadSuggestions, reloadAttention]);
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 	const dismissNotice = useCallback(() => setNotice(null), []);
@@ -138,95 +103,128 @@ export function OverviewScreen() {
 		setDeleted(null);
 		try {
 			await window.juno.reminders.restore(id);
-			refreshAttention();
+			reloadAttention();
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 		}
 	}
 
-	return (
-		<div className="h-full overflow-y-auto p-8">
-			<div className="mx-auto w-full max-w-[var(--content-width)]">
-				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-					Today
-				</h1>
-				<p className="tabular mt-2 text-[var(--ink-muted)]">
-					{today ? `Today is ${formatDate(today)}.` : "Checking the date."}
-				</p>
+	if (form) {
+		return (
+			<ReminderForm
+				reminder={form.reminder}
+				onClose={() => setForm(null)}
+				onSaved={() => {
+					setForm(null);
+					reloadAttention();
+				}}
+			/>
+		);
+	}
 
-				<div className="mt-8">
-					<BriefingPanel
-						briefing={briefing}
-						error={briefingError}
-						sectionKeys={["today", "upcoming", "waiting"]}
+	const first = owner.status === "ready" ? owner.value.firstName.trim() : "";
+	const who =
+		owner.status === "ready"
+			? [owner.value.firstName, owner.value.lastName].join(" ").trim() || owner.value.businessName || "You"
+			: "You";
+	const greeting = clock ? `${greetingFor(clock.hour)}${first ? `, ${first}` : ""}` : "Welcome";
+	const headline = briefing.status === "ready" ? briefing.value.headline : "";
+
+	const reminders = attention.status === "ready" ? attention.value : [];
+	const suggested = suggestions.status === "ready" ? suggestions.value : [];
+
+	return (
+		<div className="h-full overflow-y-auto">
+			<div className="mx-auto w-full max-w-[1120px] px-10 pb-12 pt-8">
+				<header className="flex items-center gap-4">
+					<Avatar name={who} size={48} />
+					<div className="min-w-0">
+						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-tight tracking-[-0.02em]">
+							{greeting}
+						</h1>
+						<p className="mt-0.5 text-[length:var(--text-base)] text-[var(--ink-muted)]">
+							{clock?.dateLabel ?? "Checking the date."}
+							{headline ? ` · ${headline}` : ""}
+						</p>
+					</div>
+				</header>
+
+				<div className="mt-6">
+					<StatTiles
+						clients={clients.status === "ready" ? clients.value.length : null}
+						projects={projects.status === "ready" ? projects.value.length : null}
+						documents={documents.status === "ready" ? documents.value.length : null}
+						unread={unread.status === "ready" ? unread.value.length : null}
 					/>
 				</div>
 
-				<section className="mt-10">
-					<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
-						What needs attention
-					</h2>
-					<div className="mt-4">
-						{attention.status === "loading" ? (
-							<p className="text-[var(--ink-muted)]">Loading.</p>
-						) : attention.status === "error" ? (
-							<div className="border-l-2 border-[var(--risk)] pl-4">
-								<p className="font-[var(--weight-medium)] text-[var(--risk)]">
-									Could not load your reminders.
-								</p>
-								<p
-									data-selectable
-									className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
-								>
-									{attention.message}
-								</p>
-							</div>
-						) : attention.value.length === 0 ? (
-							<p className="text-[var(--ink-muted)]">Nothing is due or overdue.</p>
-						) : (
-							attention.value.map((row) => (
-								<ReminderRow
-									key={row.id}
-									reminder={row}
-									onChanged={refreshAttention}
-									onEdit={setEditing}
-									onSnooze={setSnoozing}
-									onDeleted={setDeleted}
-									onError={setNotice}
-								/>
-							))
-						)}
+				<div className="mt-6 grid gap-6 min-[1000px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+					<div className="flex min-w-0 flex-col gap-6">
+						<Card
+							title="Needs attention"
+							count={reminders.length}
+							action={
+								<>
+									<CardLink
+										label="All reminders"
+										onClick={() => requestOpen({ kind: "screen", screen: "reminders" })}
+									/>
+									<AddButton label="New reminder" onClick={() => setForm({ reminder: null })} />
+								</>
+							}
+						>
+							<CardError what="your reminders" state={attention} />
+							{attention.status === "loading" ? (
+								<CardNote>Loading.</CardNote>
+							) : attention.status === "ready" && reminders.length === 0 ? (
+								<CardNote>Nothing is due or overdue.</CardNote>
+							) : (
+								BUCKET_ORDER.map((bucket) => {
+									const group = reminders.filter((row) => row.bucket === bucket);
+									if (group.length === 0) return null;
+									return (
+										<div key={bucket}>
+											<GroupLabel>{BUCKET_LABELS[bucket]}</GroupLabel>
+											{group.map((row) => (
+												<ReminderRow
+													key={row.id}
+													reminder={row}
+													today={clock?.today ?? null}
+													onChanged={reloadAttention}
+													onEdit={(reminder) => setForm({ reminder })}
+													onSnooze={setSnoozing}
+													onDeleted={setDeleted}
+													onError={setNotice}
+												/>
+											))}
+										</div>
+									);
+								})
+							)}
+						</Card>
+
+						{suggested.length > 0 ? (
+							<Card title="Suggestions" count={suggested.length}>
+								<SuggestionList suggestions={suggested} onAccepted={accepted} />
+							</Card>
+						) : null}
+
+						<RecentMailCard
+							state={unread}
+							hasAccounts={accounts.status === "ready" ? accounts.value.length > 0 : null}
+						/>
 					</div>
-				</section>
 
-				{suggestions.length > 0 ? (
-					<section className="mt-10">
-						<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
-							Suggestions
-						</h2>
-						<div className="mt-4">
-							<SuggestionList suggestions={suggestions} onAccepted={accepted} />
-						</div>
-					</section>
-				) : null}
-
-				<p className="mt-10 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					{counts === null
-						? "Counting what is on file."
-						: `${plural(counts.clients, "client", "clients")}, ${plural(counts.projects, "project", "projects")}, ${plural(counts.documents, "document", "documents")}, ${counts.specimens} of them ${counts.specimens === 1 ? "a specimen" : "specimens"}.`}
-				</p>
+					<div className="flex min-w-0 flex-col gap-6">
+						<UpNextCard today={clock?.today ?? null} />
+						<RecentDocumentsCard
+							documents={documents}
+							statuses={statuses.status === "ready" && statuses.value ? statuses.value.items : []}
+						/>
+						<ClientsCard clients={clients} />
+					</div>
+				</div>
 			</div>
-
-			{editing ? (
-				<ReminderForm
-					reminder={editing}
-					onClose={() => setEditing(null)}
-					onSaved={() => {
-						setEditing(null);
-						refreshAttention();
-					}}
-				/>
-			) : null}
 
 			{snoozing ? (
 				<SnoozeDialog
@@ -234,7 +232,7 @@ export function OverviewScreen() {
 					onClose={() => setSnoozing(null)}
 					onSnoozed={() => {
 						setSnoozing(null);
-						refreshAttention();
+						reloadAttention();
 					}}
 				/>
 			) : null}

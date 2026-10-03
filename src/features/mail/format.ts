@@ -72,6 +72,13 @@ export function participantsLine(people: MailAddress[], fallback = "(nobody)"): 
 	return `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
 }
 
+/** Who a conversation is with, for its avatar: the first person on it, or the fallback when it is only you. */
+export function leadParticipant(people: MailAddress[], fallback = "Me"): string {
+	const first = people[0];
+	if (!first) return fallback;
+	return first.name?.trim() || first.address.split("@")[0] || first.address;
+}
+
 export function formatBytes(size: number): string {
 	if (size < 1024) return `${size} B`;
 	if (size < 1024 * 1024) return `${Math.round(size / 1024)} kB`;

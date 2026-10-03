@@ -4,7 +4,7 @@ import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
-import { BUCKET_LABELS, BUCKET_ORDER, plural } from "./format";
+import { BUCKET_LABELS, BUCKET_ORDER, plural, todayIso } from "./format";
 import { ReminderForm } from "./ReminderForm";
 import { ReminderRow } from "./ReminderRow";
 import { SnoozeDialog } from "./SnoozeDialog";
@@ -21,6 +21,18 @@ export function RemindersScreen() {
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [deleted, setDeleted] = useState<Reminder | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	const [today, setToday] = useState<string | null>(null);
+
+	// The clock is impure, so it is read here rather than during render.
+	useEffect(() => {
+		let cancelled = false;
+		Promise.resolve(todayIso()).then((value) => {
+			if (!cancelled) setToday(value);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	const fetchRows = useCallback(
 		() => window.juno.reminders.list({ includeDone }),
@@ -83,7 +95,7 @@ export function RemindersScreen() {
 			<div className="mx-auto w-full max-w-[var(--content-width)]">
 				<div className="mb-6 flex items-center justify-between gap-4">
 					<div className="flex items-baseline gap-3">
-						<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
+						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">
 							Reminders
 						</h1>
 						{load.status === "ready" ? (
@@ -125,20 +137,21 @@ export function RemindersScreen() {
 						const group = rows.filter((row) => row.bucket === bucket);
 						if (group.length === 0) return null;
 						return (
-							<section key={bucket} className="mt-10 first:mt-0">
-								<div className="flex items-baseline gap-3 border-b border-[var(--line)] pb-2">
-									<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+							<section key={bucket} className="mt-8 first:mt-0">
+								<div className="flex items-baseline gap-2 px-2">
+									<h2 className="text-[length:var(--text-base)] font-[var(--weight-semibold)]">
 										{BUCKET_LABELS[bucket]}
 									</h2>
 									<span className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 										{group.length}
 									</span>
 								</div>
-								<div className="mt-4">
+								<div className="mt-2">
 									{group.map((row) => (
 										<ReminderRow
 											key={row.id}
 											reminder={row}
+											today={today}
 											onChanged={refreshList}
 											onEdit={(reminder) => setForm({ reminder })}
 											onSnooze={setSnoozing}

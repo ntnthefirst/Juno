@@ -22,16 +22,6 @@ export const BUCKET_LABELS: Record<ReminderBucket, string> = {
 	done: "Completed",
 };
 
-/** Tone is a token name, never a hex. See brand/BRAND.md section 5. */
-export const BUCKET_TONES: Record<ReminderBucket, string> = {
-	overdue: "bg-[var(--risk-soft)] text-[var(--risk)]",
-	today: "bg-[var(--warn-soft)] text-[var(--warn)]",
-	soon: "bg-[var(--accent-soft)] text-[var(--accent)]",
-	later: "bg-[var(--sunken)] text-[var(--ink-muted)]",
-	snoozed: "bg-[var(--sunken)] text-[var(--ink-muted)]",
-	done: "bg-[var(--ok-soft)] text-[var(--ok)]",
-};
-
 export const CATEGORIES: { value: ReminderCategory; label: string }[] = [
 	{ value: "paperwork", label: "Paperwork" },
 	{ value: "invoice", label: "Invoice" },
@@ -109,4 +99,28 @@ export function addMonths(date: string, count: number): string {
 	const month = target.getUTCMonth() + 1;
 	const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
 	return `${pad(year, 4)}-${pad(month, 2)}-${pad(Math.min(p.day, last), 2)}`;
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * A due date the way a person says it: Today, Tomorrow, Yesterday, the weekday
+ * for the coming week, otherwise the day and month, with the year once it is
+ * not this one. Whole days are counted in UTC from the two plain dates, so a
+ * zone cannot move the answer.
+ */
+export function describeDue(dueOn: string, today: string): string {
+	const due = parts(dueOn);
+	const now = parts(today);
+	if (!due || !now) return formatDate(dueOn);
+	const days = Math.round(
+		(Date.UTC(due.year, due.month - 1, due.day) - Date.UTC(now.year, now.month - 1, now.day)) / 86_400_000,
+	);
+	if (days === 0) return "Today";
+	if (days === 1) return "Tomorrow";
+	if (days === -1) return "Yesterday";
+	if (days > 1 && days < 7) return WEEKDAYS[new Date(Date.UTC(due.year, due.month - 1, due.day)).getUTCDay()] ?? dueOn;
+	const month = MONTHS[due.month - 1] ?? "";
+	return due.year === now.year ? `${due.day} ${month}` : `${due.day} ${month} ${due.year}`;
 }

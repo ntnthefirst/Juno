@@ -56,10 +56,6 @@ export function registerSettingsIpc(): void {
 	ipcMain.handle("settings.get", () => settings.get());
 	ipcMain.handle("settings.getTheme", () => settings.getTheme());
 	ipcMain.handle("settings.setTheme", (_event, theme: ThemeSetting) => applyTheme(theme));
-	ipcMain.handle("settings.getSidebarAutoCollapse", () => settings.getSidebarAutoCollapse());
-	ipcMain.handle("settings.setSidebarAutoCollapse", (_event, value: boolean) =>
-		settings.setSidebarAutoCollapse(value),
-	);
 	ipcMain.handle("settings.getProjectsView", () => settings.getProjectsView());
 	ipcMain.handle("settings.setProjectsView", (_event, patch: Partial<ProjectsView>) =>
 		settings.setProjectsView(patch),

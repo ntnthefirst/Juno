@@ -43,9 +43,6 @@ type SettingsWindowProps = {
  */
 export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	const [theme, setTheme] = useTheme();
-	// Null until the stored value is in, so the checkbox does not flash a
-	// state it is about to leave.
-	const [autoCollapse, setAutoCollapse] = useState<boolean | null>(null);
 	const [page, setPage] = useState<SettingsPageId>(firstPageOf(initialSection ?? "general"));
 	const [toast, setToast] = useState<string | null>(null);
 	const [query, setQuery] = useState("");
@@ -73,21 +70,6 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, []);
-
-	useEffect(() => {
-		void window.juno.settings.getSidebarAutoCollapse().then(setAutoCollapse);
-	}, []);
-
-	function changeAutoCollapse(next: boolean) {
-		setAutoCollapse(next);
-		window.juno.settings
-			.setSidebarAutoCollapse(next)
-			.then(setAutoCollapse)
-			.catch((cause: unknown) => {
-				setAutoCollapse(!next);
-				setToast(messageOf(cause));
-			});
-	}
 
 	function changeQuery(next: string) {
 		setQuery(next);
@@ -225,8 +207,6 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 											page={page}
 											theme={theme}
 											onTheme={setTheme}
-											autoCollapse={autoCollapse}
-											onAutoCollapse={changeAutoCollapse}
 											onNotice={setToast}
 										/>
 									</div>
@@ -248,22 +228,15 @@ type PageBodyProps = {
 	page: SettingsPageId;
 	theme: ReturnType<typeof useTheme>[0];
 	onTheme: ReturnType<typeof useTheme>[1];
-	autoCollapse: boolean | null;
-	onAutoCollapse: (next: boolean) => void;
 	onNotice: (message: string) => void;
 };
 
 /** What each page holds. The mail page is drawn by the window, since it takes its own edges. */
-function PageBody({ page, theme, onTheme, autoCollapse, onAutoCollapse, onNotice }: PageBodyProps): ReactNode {
+function PageBody({ page, theme, onTheme, onNotice }: PageBodyProps): ReactNode {
 	switch (page) {
 		case "appearance":
 			return (
-				<AppearanceSection
-					theme={theme}
-					onChange={onTheme}
-					sidebarAutoCollapse={autoCollapse}
-					onSidebarAutoCollapseChange={onAutoCollapse}
-				/>
+				<AppearanceSection theme={theme} onChange={onTheme} />
 			);
 		case "updates":
 			return <UpdatesSection />;

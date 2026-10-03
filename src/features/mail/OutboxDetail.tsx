@@ -1,3 +1,4 @@
+import { IconButton } from "../../components/IconButton";
 import { useState } from "react";
 import type { MailOutboxMessage } from "@shared/types";
 import { Button } from "../../components/Button";
@@ -105,20 +106,20 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 						Retry
 					</Button>
 				) : null}
-				{editable ? (
-					<Button disabled={busy} onClick={() => onEdit(message)}>
-						Edit
-					</Button>
-				) : null}
+				{editable ? <IconButton icon="edit" label="Edit" disabled={busy} onClick={() => onEdit(message)} /> : null}
 				{message.state === "queued" ? (
 					<Button variant="danger" disabled={busy} onClick={() => setConfirmingCancel(true)}>
 						Cancel sending
 					</Button>
 				) : null}
 				{message.state === "cancelled" || message.state === "draft" || message.state === "failed" ? (
-					<Button variant="danger" disabled={busy} onClick={() => void run(() => window.juno.mail.outbox.remove(message.id), "Removed.")}>
-						Delete
-					</Button>
+					<IconButton
+						icon="remove"
+						label="Delete"
+						danger
+						disabled={busy}
+						onClick={() => void run(() => window.juno.mail.outbox.remove(message.id), "Removed.")}
+					/>
 				) : null}
 			</div>
 

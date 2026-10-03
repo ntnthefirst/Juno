@@ -1135,7 +1135,13 @@ if (!app.requestSingleInstanceLock()) {
 								if (screen === "Client record") {
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											const row = document.querySelector("main table tbody tr button");
+											// The list loads after the screen paints, and a busy machine
+											// can take a few seconds, so wait for a row instead of looking once.
+											let row = null;
+											for (let waited = 0; waited < 5000 && !row; waited += 250) {
+												row = document.querySelector("main table tbody tr button");
+												if (!row) await new Promise((r) => setTimeout(r, 250));
+											}
 											if (!row) return "no client rows";
 											row.click();
 											await new Promise((r) => setTimeout(r, 700));
@@ -1484,7 +1490,7 @@ if (!app.requestSingleInstanceLock()) {
 											const main = document.querySelector("main");
 											if (!main) return "no main";
 											const use = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Use");
-											const edit = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
+											const edit = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit" || el.getAttribute("aria-label") === "Edit");
 											if (!use || !edit) return "the preview has no use and edit actions";
 											if (!main.querySelector("iframe")) return "the preview has no frame";
 											return "ok";
@@ -1855,7 +1861,7 @@ if (!app.requestSingleInstanceLock()) {
 									const edited = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit" || el.getAttribute("aria-label") === "Edit");
 											if (!edit) return "no edit action";
 											edit.click();
 											// The editor loads the template before it paints anything, so
@@ -3364,7 +3370,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!row) return "no row for the example";
 											row.click();
 											await wait(900);
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit" || el.getAttribute("aria-label") === "Edit");
 											if (!edit) return "no edit action";
 											edit.click();
 											let ready = null;
@@ -3497,7 +3503,7 @@ if (!app.requestSingleInstanceLock()) {
 											await new Promise((r) => setTimeout(r, 400));
 											const reopened = document.querySelector("aside[aria-label]");
 											if (!reopened) return "the side panel did not reopen";
-											const edit = [...reopened.querySelectorAll("button")].find((el) => el.textContent.trim() === "Edit");
+											const edit = [...reopened.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Edit");
 											if (!edit) return "the side panel has no edit";
 											edit.click();
 											await new Promise((r) => setTimeout(r, 500));
@@ -3565,13 +3571,27 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const chip = () => [...document.querySelectorAll("button[title]")].find((b) => b.getAttribute("title") === "Send hyge the proposal");
-											const named = (text) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === text);
+											// The panel's actions are icon buttons beside the close cross, so they are found by name.
+											const named = (text) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === text || b.getAttribute("aria-label") === text);
 											if (!chip()) return "no reminder chip";
 											chip().click();
 											await wait(500);
 											for (const need of ["Mark done", "Snooze", "Edit", "Delete"]) {
 												if (!named(need)) return "the reminder panel has no " + need;
 											}
+											return "panel";
+										})()`,
+									);
+									if (acted !== "panel") throw new Error(`Smoke: calendar reminder actions ${acted}`);
+									// The panel as it is: Edit and Delete beside the close cross, and
+									// Snooze beside Mark done at the bottom.
+									await capture(window.webContents);
+									writeFileSync(joinPath(shotDir, "calendar-panel.png"), (await capture(window.webContents)).toPNG());
+									const deleted = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const chip = () => [...document.querySelectorAll("button[title]")].find((b) => b.getAttribute("title") === "Send hyge the proposal");
+											const named = (text) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === text || b.getAttribute("aria-label") === text);
 											named("Delete").click();
 											await wait(700);
 											if (chip()) return "the reminder is still on the grid after delete";
@@ -3581,7 +3601,7 @@ if (!app.requestSingleInstanceLock()) {
 											return chip() ? "ok" : "undo did not bring the reminder back";
 										})()`,
 									);
-									if (acted !== "ok") throw new Error(`Smoke: calendar reminder actions ${acted}`);
+									if (deleted !== "ok") throw new Error(`Smoke: calendar reminder actions ${deleted}`);
 								}
 								if (screen === "Week") {
 									const switched = await window.webContents.executeJavaScript(

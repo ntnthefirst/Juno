@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
+import { IconButton } from "../../components/IconButton";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { addDays, addLocalMinutes, formatDate, formatTime, joinLocal, todayIso } from "./dates";
@@ -272,25 +273,5 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 				<IconButton label={`Delete ${item.title}`} icon="remove" onClick={onRemove} />
 			</span>
 		</li>
-	);
-}
-
-type IconButtonProps = {
-	label: string;
-	icon: "check" | "edit" | "remove";
-	onClick: () => void;
-};
-
-function IconButton({ label, icon, onClick }: IconButtonProps) {
-	return (
-		<button
-			type="button"
-			aria-label={label}
-			title={label}
-			onClick={onClick}
-			className="inline-flex h-[32px] w-[32px] items-center justify-center rounded-[var(--radius-sm)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-		>
-			<Icon name={icon} size={16} />
-		</button>
 	);
 }

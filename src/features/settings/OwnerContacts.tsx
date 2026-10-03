@@ -1,3 +1,4 @@
+import { IconButton } from "../../components/IconButton";
 import { useState } from "react";
 import { Button } from "../../components/Button";
 
@@ -157,12 +158,8 @@ export function OwnerContactList<T extends OwnerContactRow>({
 											Make primary
 										</Button>
 									) : null}
-									<Button size="dense" onClick={() => startEdit(item)}>
-										Edit
-									</Button>
-									<Button size="dense" variant="danger" onClick={() => void onRemove(item.id)}>
-										Remove
-									</Button>
+									<IconButton icon="edit" label="Edit" onClick={() => startEdit(item)} />
+									<IconButton icon="remove" label="Remove" danger onClick={() => void onRemove(item.id)} />
 								</span>
 							</li>
 						);

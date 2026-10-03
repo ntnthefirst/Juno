@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MailTemplate } from "@shared/types";
+import { IconButton } from "../../../components/IconButton";
 import { Button } from "../../../components/Button";
 import { SidePanel } from "../../../components/SidePanel";
 import { messageOf } from "../../../lib/errors";
@@ -68,17 +69,11 @@ export function MailTemplatePanel({ template, onClose, onEdit, onUse }: MailTemp
 			title={template.name}
 			subtitle={template.hiddenAt ? "Hidden from the pickers" : undefined}
 			onClose={onClose}
+			tools={<IconButton icon="edit" label="Edit" onClick={onEdit} />}
 			actions={
-				<>
-					<span className="mr-auto">
-						<Button size="dense" onClick={onEdit}>
-							Edit
-						</Button>
-					</span>
-					<Button variant="primary" onClick={onUse}>
-						Use
-					</Button>
-				</>
+				<Button variant="primary" onClick={onUse}>
+					Use
+				</Button>
 			}
 		>
 			{unreviewed ? (

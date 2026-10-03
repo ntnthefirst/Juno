@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { CalendarItem } from "@shared/types";
 import { Button } from "../../components/Button";
+import { IconButton } from "../../components/IconButton";
 import { SidePanel } from "../../components/SidePanel";
 import { addDays, dateOf, formatDate, formatDateLong, formatTime, localDateOfInstant, machineTimeZone, timeOf } from "./dates";
 import { KIND_LABELS, itemTitle } from "./format";
@@ -53,21 +54,26 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 			title={title}
 			subtitle={KIND_LABELS[item.kind]}
 			onClose={onClose}
-			actions={
+			tools={
 				<>
-					<Button variant="danger" onClick={onDelete}>
-						{item.kind === "deadline" ? "Clear deadline" : "Delete"}
-					</Button>
-					{item.kind === "reminder" ? <Button onClick={onSnooze}>Snooze</Button> : null}
-					<Button variant={item.kind === "reminder" ? "quiet" : "primary"} onClick={onEdit}>
-						{item.kind === "deadline" ? "Edit project" : "Edit"}
-					</Button>
-					{item.kind === "reminder" ? (
+					<IconButton icon="edit" label={item.kind === "deadline" ? "Edit project" : "Edit"} onClick={onEdit} />
+					<IconButton
+						icon="remove"
+						label={item.kind === "deadline" ? "Clear deadline" : "Delete"}
+						danger
+						onClick={onDelete}
+					/>
+				</>
+			}
+			actions={
+				item.kind === "reminder" ? (
+					<>
+						<IconButton icon="reminders" label="Snooze" onClick={onSnooze} />
 						<Button variant="primary" onClick={onComplete}>
 							Mark done
 						</Button>
-					) : null}
-				</>
+					</>
+				) : null
 			}
 		>
 			<div>

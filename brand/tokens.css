@@ -19,19 +19,19 @@
 
 :root {
 	/* ---- Surfaces: cool porcelain, not clinical white ---- */
-	--paper: #f6f6fa; /* window background */
+	--paper: #f5f5f7; /* window background */
 	--surface: #ffffff; /* cards, rows, panels sitting on paper */
-	--sunken: #edecf3; /* wells, inset areas, table headers */
-	--hover: #ecebf4; /* row and control hover. Not a selected state */
+	--sunken: #eeeef1; /* wells, inset areas, table headers */
+	--hover: #ebebef; /* row and control hover. Not a selected state */
 
 	/* ---- Ink ---- */
-	--ink: #16161d; /* primary text */
-	--ink-muted: #5d5e70; /* secondary text, labels, passes AA */
-	--ink-faint: #8b8b9c; /* meta and large text only, NOT body copy. Clears 3:1 on every light surface including --hover */
+	--ink: #17171c; /* primary text */
+	--ink-muted: #5b5c66; /* secondary text, labels, passes AA */
+	--ink-faint: #868791; /* meta and large text only, NOT body copy. Clears 3:1 on every light surface including --hover */
 
 	/* ---- Lines ---- */
-	--line: #e3e2ec; /* default border, dividers */
-	--line-strong: #cbcad8; /* input borders, emphasised dividers */
+	--line: #e3e3e8; /* default border, dividers */
+	--line-strong: #cdcdd5; /* input borders, emphasised dividers */
 
 	/* ---- Accent: iris ---- */
 	--accent: #4a3fa0;
@@ -53,23 +53,25 @@
 
 	/* ---- Tones: the tints behind an avatar. Eight, so a list of names is told
 	 * apart at a glance, and none of them is brass, which is for sealed. Each is
-	 * a soft ground with the ink that reads on it. ---- */
-	--tone-1: #e4e2f7;
-	--tone-1-ink: #4a3fa0;
-	--tone-2: #dfeaf7;
-	--tone-2-ink: #25598f;
-	--tone-3: #dcf0ee;
-	--tone-3-ink: #1d6a62;
-	--tone-4: #e3f0e2;
-	--tone-4-ink: #3a6a2e;
-	--tone-5: #f6ecd6;
-	--tone-5-ink: #7a5416;
-	--tone-6: #f6e3e8;
-	--tone-6-ink: #93334b;
-	--tone-7: #eee1f3;
-	--tone-7-ink: #7a3a8f;
-	--tone-8: #e4e6ee;
-	--tone-8-ink: #4c5266;
+	 * a near-neutral ground with a trace of colour and the ink that reads on it.
+	 * Muted on purpose: a row of bright pastels is what makes a list look like a
+	 * toy, and the name is what should be read. ---- */
+	--tone-1: #e8e7f2;
+	--tone-1-ink: #4a4670;
+	--tone-2: #e3e9f1;
+	--tone-2-ink: #3d5673;
+	--tone-3: #e1ebea;
+	--tone-3-ink: #3b6561;
+	--tone-4: #e6ebe1;
+	--tone-4-ink: #55663f;
+	--tone-5: #eee9dd;
+	--tone-5-ink: #77623a;
+	--tone-6: #eee4e6;
+	--tone-6-ink: #7d4854;
+	--tone-7: #eae4ed;
+	--tone-7-ink: #66487a;
+	--tone-8: #e7e8eb;
+	--tone-8-ink: #4f5361;
 
 	/* ---- Focus ring. Never remove it; restyle it. ---- */
 	--focus: #6b5cd6;
@@ -111,8 +113,8 @@
 	/* ---- Radius: small. Minimalist means restrained, not pill-shaped. ---- */
 	--radius-sm: 4px; /* inputs, badges */
 	--radius-md: 6px; /* buttons, rows */
-	--radius-lg: 10px; /* cards, panels */
-	--radius-xl: 14px; /* modals, the app icon tile */
+	--radius-lg: 8px; /* cards, panels */
+	--radius-xl: 12px; /* modals, the app icon tile */
 	--radius-full: 9999px; /* avatars and nothing else */
 
 	/* ---- Elevation: borders do the work. Shadow only for things that float. ---- */
@@ -141,6 +143,14 @@
 	--ease: cubic-bezier(0.2, 0, 0.13, 1);
 	--duration-fast: 120ms;
 	--duration-base: 180ms;
+	/* Things that arrive: a screen, a card, a panel. Long enough to be seen, short
+	 * enough not to be waited for. */
+	--duration-slow: 360ms;
+	/* A strong decelerate: fast off the mark, long settle. The curve Apple's own
+	 * sheets and popovers use, and the reason a surface feels placed, not slid. */
+	--ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+	/* A hair of overshoot, for something small that should feel like it landed. */
+	--ease-spring: cubic-bezier(0.34, 1.35, 0.64, 1);
 
 	/* ---- Layout ---- */
 	--sidebar-width: 248px;
@@ -153,11 +163,6 @@
 	/* A row that carries an avatar. The avatar is 28px, and 36 leaves it touching the rules. */
 	--row-height-roomy: 44px;
 
-	/* The reading column on a screen that is a single list or form. Centred in
-	 * whatever space is left rather than pinned to the left edge, so a wide
-	 * window does not leave the content in one corner. Screens that are two
-	 * panels beside each other ignore this and use the full width. */
-	--content-width: 900px;
 
 	/* ---- Theme preview swatches ----
 	 * The miniature window drawn on each card in Settings > General. A card has
@@ -165,14 +170,14 @@
 	 * fixed literals and are deliberately NOT redefined in either dark block.
 	 * They are the only colours in this file that do not follow the theme, and
 	 * they mirror --paper, --surface, --line and --line-strong in each mode. */
-	--swatch-light-paper: #f6f6fa;
+	--swatch-light-paper: #f5f5f7;
 	--swatch-light-surface: #ffffff;
-	--swatch-light-line: #e3e2ec;
-	--swatch-light-mark: #cbcad8;
-	--swatch-dark-paper: #111117;
-	--swatch-dark-surface: #1a1a22;
-	--swatch-dark-line: #2a2a35;
-	--swatch-dark-mark: #3c3c4b;
+	--swatch-light-line: #e3e3e8;
+	--swatch-light-mark: #cdcdd5;
+	--swatch-dark-paper: #101013;
+	--swatch-dark-surface: #18181c;
+	--swatch-dark-line: #27272d;
+	--swatch-dark-mark: #393941;
 
 	/* ---- Canvas paper ----
 	 * The document page editor draws a sheet of A4 on screen, and the mail
@@ -194,17 +199,17 @@
 
 :root:not([data-theme="light"]) {
 	@media (prefers-color-scheme: dark) {
-		--paper: #111117;
-		--surface: #1a1a22;
-		--sunken: #0b0b10;
-		--hover: #23232d;
+		--paper: #101013;
+		--surface: #18181c;
+		--sunken: #0a0a0d;
+		--hover: #222227;
 
-		--ink: #eeeef5;
-		--ink-muted: #a3a4b5;
-		--ink-faint: #757589;
+		--ink: #f0f0f4;
+		--ink-muted: #a2a3ae;
+		--ink-faint: #74757f;
 
-		--line: #2a2a35;
-		--line-strong: #3c3c4b;
+		--line: #27272d;
+		--line-strong: #393941;
 
 		--accent: #a79df0;
 		--accent-hover: #c0b9f8;
@@ -221,22 +226,22 @@
 		--risk: #e9919f;
 		--risk-soft: #2d1a20;
 
-		--tone-1: #262247;
-		--tone-1-ink: #b3aaf5;
-		--tone-2: #16273a;
-		--tone-2-ink: #8fbbe8;
-		--tone-3: #12302d;
-		--tone-3-ink: #7fcfc6;
-		--tone-4: #1c2d1b;
-		--tone-4-ink: #9bcf8c;
-		--tone-5: #302612;
-		--tone-5-ink: #e0b865;
-		--tone-6: #3a1c26;
-		--tone-6-ink: #eb9aae;
-		--tone-7: #2f1d38;
-		--tone-7-ink: #cf9ae0;
-		--tone-8: #23262f;
-		--tone-8-ink: #aab0c4;
+		--tone-1: #24233a;
+		--tone-1-ink: #b5b1d8;
+		--tone-2: #1b2733;
+		--tone-2-ink: #9db8d4;
+		--tone-3: #1a2d2b;
+		--tone-3-ink: #93c4be;
+		--tone-4: #222c1c;
+		--tone-4-ink: #b2c79b;
+		--tone-5: #2d281b;
+		--tone-5-ink: #d3bb8a;
+		--tone-6: #32232a;
+		--tone-6-ink: #d6a1ae;
+		--tone-7: #2b2234;
+		--tone-7-ink: #c5a3d9;
+		--tone-8: #25262b;
+		--tone-8-ink: #b3b7c4;
 
 		--focus: #9a8bf2;
 
@@ -252,17 +257,17 @@
 }
 
 :root[data-theme="dark"] {
-	--paper: #111117;
-	--surface: #1a1a22;
-	--sunken: #0b0b10;
-	--hover: #23232d;
+	--paper: #101013;
+	--surface: #18181c;
+	--sunken: #0a0a0d;
+	--hover: #222227;
 
-	--ink: #eeeef5;
-	--ink-muted: #a3a4b5;
-	--ink-faint: #757589;
+	--ink: #f0f0f4;
+	--ink-muted: #a2a3ae;
+	--ink-faint: #74757f;
 
-	--line: #2a2a35;
-	--line-strong: #3c3c4b;
+	--line: #27272d;
+	--line-strong: #393941;
 
 	--accent: #a79df0;
 	--accent-hover: #c0b9f8;
@@ -279,22 +284,22 @@
 	--risk: #e9919f;
 	--risk-soft: #2d1a20;
 
-	--tone-1: #262247;
-	--tone-1-ink: #b3aaf5;
-	--tone-2: #16273a;
-	--tone-2-ink: #8fbbe8;
-	--tone-3: #12302d;
-	--tone-3-ink: #7fcfc6;
-	--tone-4: #1c2d1b;
-	--tone-4-ink: #9bcf8c;
-	--tone-5: #302612;
-	--tone-5-ink: #e0b865;
-	--tone-6: #3a1c26;
-	--tone-6-ink: #eb9aae;
-	--tone-7: #2f1d38;
-	--tone-7-ink: #cf9ae0;
-	--tone-8: #23262f;
-	--tone-8-ink: #aab0c4;
+	--tone-1: #24233a;
+	--tone-1-ink: #b5b1d8;
+	--tone-2: #1b2733;
+	--tone-2-ink: #9db8d4;
+	--tone-3: #1a2d2b;
+	--tone-3-ink: #93c4be;
+	--tone-4: #222c1c;
+	--tone-4-ink: #b2c79b;
+	--tone-5: #2d281b;
+	--tone-5-ink: #d3bb8a;
+	--tone-6: #32232a;
+	--tone-6-ink: #d6a1ae;
+	--tone-7: #2b2234;
+	--tone-7-ink: #c5a3d9;
+	--tone-8: #25262b;
+	--tone-8-ink: #b3b7c4;
 
 	--focus: #9a8bf2;
 
@@ -340,6 +345,50 @@
 @keyframes juno-pop {
 	from {
 		transform: translateY(-4px);
+		opacity: 0;
+	}
+}
+
+/* How things arrive. Transform and opacity only, like everything above: the
+ * layout never moves while one of these runs. The reduced-motion block in
+ * global.css cuts every one of them to nothing.
+ *
+ * rise    a card or a row, from just below
+ * screen  a whole screen, a shorter step than a card so a click is not a ride
+ * scale   a dialog or a palette, from a little smaller
+ * slide   a side panel, from the edge it lives on
+ * lift    a toast, from below with a hint of scale */
+@keyframes juno-rise {
+	from {
+		transform: translateY(10px);
+		opacity: 0;
+	}
+}
+
+@keyframes juno-screen {
+	from {
+		transform: translateY(6px);
+		opacity: 0;
+	}
+}
+
+@keyframes juno-scale {
+	from {
+		transform: scale(0.965);
+		opacity: 0;
+	}
+}
+
+@keyframes juno-slide {
+	from {
+		transform: translateX(28px);
+		opacity: 0;
+	}
+}
+
+@keyframes juno-lift {
+	from {
+		transform: translateY(14px) scale(0.98);
 		opacity: 0;
 	}
 }
@@ -438,8 +487,16 @@
 	--animate-page-forward: juno-page-forward var(--duration-base) var(--ease);
 	--animate-page-back: juno-page-back var(--duration-base) var(--ease);
 	--animate-pop: juno-pop var(--duration-fast) var(--ease);
+	--animate-rise: juno-rise var(--duration-slow) var(--ease-smooth) backwards;
+	--animate-screen: juno-screen 300ms var(--ease-smooth) backwards;
+	--animate-scale: juno-scale 260ms var(--ease-smooth) backwards;
+	--animate-slide: juno-slide 340ms var(--ease-smooth) backwards;
+	--animate-lift: juno-lift 320ms var(--ease-spring) backwards;
 	--duration-fast: var(--duration-fast);
 	--duration-base: var(--duration-base);
+	--duration-slow: var(--duration-slow);
+	--ease-smooth: var(--ease-smooth);
+	--ease-spring: var(--ease-spring);
 }
 
 /* Numbers that line up in a column: every amount, date, count and id.

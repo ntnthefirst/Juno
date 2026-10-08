@@ -20,7 +20,7 @@ export function Avatar({ name, size = 28, shape = "round" }: AvatarProps) {
 			aria-hidden
 			style={{ width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.38)) }}
 			className={[
-				"inline-flex flex-none select-none items-center justify-center font-[var(--weight-semibold)] leading-none",
+				"inline-flex flex-none select-none items-center justify-center font-[var(--weight-semibold)] leading-none ring-1 ring-inset ring-[var(--ink)]/[0.06]",
 				shape === "round" ? "rounded-[var(--radius-full)]" : "rounded-[var(--radius-md)]",
 				toneClassOf(name),
 			].join(" ")}

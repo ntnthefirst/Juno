@@ -16,13 +16,17 @@ import { OverviewScreen } from "../features/overview/OverviewScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
 import { currentRequest, onOpenRequest } from "../lib/open-entity";
+import { currentScreenAction, onScreenActionRequest, requestScreenAction } from "../lib/screen-actions";
 import { useTheme } from "../lib/theme";
+import { CommandPalette } from "./CommandPalette";
 import { DocumentDropLayer } from "./DocumentDropLayer";
 import { BreadcrumbProvider } from "./breadcrumb";
 import { useBreadcrumbTrail } from "./breadcrumb-context";
-import { SCREEN_LABELS, SIDEBAR_ENTRY, type ScreenId } from "./screens";
+import { NEW_ON, SCREEN_LABELS, SIDEBAR_ENTRY, type ScreenId } from "./screens";
+import { ShortcutsDialog } from "./ShortcutsDialog";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
+import { useShortcuts } from "./use-shortcuts";
 
 export function App() {
 	return (
@@ -124,11 +128,50 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	// remounts it and so returns it to its overview.
 	const [visit, setVisit] = useState(0);
 	const trail = useBreadcrumbTrail();
+	const [paletteOpen, setPaletteOpen] = useState(false);
+	const [helpOpen, setHelpOpen] = useState(false);
 
 	const navigate = (id: ScreenId) => {
 		if (id === screen) setVisit((count) => count + 1);
 		setScreen(id);
 	};
+
+	// A record is open over its list when the trail has more than one step. Back
+	// is the step before the last, which is the one that knows how to return.
+	const parent = trail.length > 1 ? trail[trail.length - 2] : undefined;
+	const back = parent?.onSelect ? { label: parent.label, onSelect: parent.onSelect } : null;
+
+	// "New" starts the record that belongs to the screen on show, by asking the
+	// screen that owns it to open its form. The screen is brought up fresh first,
+	// and opens the form once it has mounted.
+	const startNew = (target: ScreenId) => requestScreenAction(target, "new");
+	const newHere = () => {
+		const target = NEW_ON[screen];
+		if (target) startNew(target.screen);
+	};
+
+	useShortcuts({
+		palette: () => setPaletteOpen((open) => !open),
+		goTo: navigate,
+		newItem: newHere,
+		settings: () => void window.juno.window.openSettings(),
+		back: () => back?.onSelect(),
+		lock: lock.configured ? () => void window.juno.lock.lock() : null,
+		help: () => setHelpOpen(true),
+	});
+
+	// Something asked a screen to start a new record. The screen is read by its own
+	// mount, so this only has to bring it up.
+	useEffect(
+		() =>
+			onScreenActionRequest(() => {
+				const request = currentScreenAction();
+				if (!request) return;
+				setVisit((count) => count + 1);
+				setScreen(request.screen);
+			}),
+		[],
+	);
 
 	// Another screen asked for a client to be shown. The request is read by the
 	// clients screen when it mounts, so this only has to bring that screen up.
@@ -171,8 +214,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	return (
 		<div className="flex h-full flex-col bg-[var(--paper)]">
 			<TitleBar
-				title={SCREEN_LABELS[screen]}
-				trail={trail}
+				back={back}
+				onOpenPalette={() => setPaletteOpen(true)}
 				lockConfigured={lock.configured}
 				onLock={() => void window.juno.lock.lock()}
 			/>
@@ -183,7 +226,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					onOpenSettings={() => void window.juno.window.openSettings()}
 				/>
 
-				<main key={`${screen}:${visit}`} className="min-w-0 flex-1 overflow-hidden">
+				<main key={`${screen}:${visit}`} className="animate-screen min-w-0 flex-1 overflow-hidden">
 					{screen === "overview" ? (
 						<OverviewScreen />
 					) : screen === "clients" ? (
@@ -212,6 +255,18 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 			<DocumentDropLayer />
 			<AgentNotices />
+
+			{paletteOpen ? (
+				<CommandPalette
+					onClose={() => setPaletteOpen(false)}
+					onNavigate={navigate}
+					onNew={startNew}
+					onSettings={() => void window.juno.window.openSettings()}
+					onLock={lock.configured ? () => void window.juno.lock.lock() : null}
+					onHelp={() => setHelpOpen(true)}
+				/>
+			) : null}
+			{helpOpen ? <ShortcutsDialog onClose={() => setHelpOpen(false)} /> : null}
 
 			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 		</div>

@@ -5,13 +5,14 @@ import { Avatar } from "../../components/Avatar";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
+import { useScreenAction } from "../../lib/screen-actions";
 import { useLoaded } from "../../lib/use-loaded";
 import { BUCKET_LABELS, BUCKET_ORDER, todayIso } from "../reminders/format";
 import { ReminderForm } from "../reminders/ReminderForm";
 import { ReminderRow } from "../reminders/ReminderRow";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
 import { SuggestionList } from "../reminders/SuggestionList";
-import { Card, CardError, CardLink, CardNote, GroupLabel } from "./Card";
+import { Card, CardError, CardLink, CardNote, CardSkeleton, GroupLabel } from "./Card";
 import { ClientsCard } from "./ClientsCard";
 import { RecentDocumentsCard } from "./RecentDocumentsCard";
 import { RecentMailCard } from "./RecentMailCard";
@@ -61,6 +62,7 @@ const loadUnread = () =>
 export function OverviewScreen() {
 	const [clock, setClock] = useState<Clock | null>(null);
 	const [form, setForm] = useState<{ reminder: Reminder | null } | null>(null);
+	useScreenAction("overview", () => setForm({ reminder: null }));
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [deleted, setDeleted] = useState<Reminder | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -135,8 +137,8 @@ export function OverviewScreen() {
 
 	return (
 		<div className="h-full overflow-y-auto">
-			<div className="mx-auto w-full max-w-[1120px] px-10 pb-12 pt-8">
-				<header className="flex items-center gap-4">
+			<div className="w-full px-8 pb-12 pt-8">
+				<header className="animate-rise flex items-center gap-4">
 					<Avatar name={who} size={48} />
 					<div className="min-w-0">
 						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-tight tracking-[-0.02em]">
@@ -159,7 +161,7 @@ export function OverviewScreen() {
 				</div>
 
 				<div className="mt-6 grid gap-6 min-[1000px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-					<div className="flex min-w-0 flex-col gap-6">
+					<div className="flex min-w-0 flex-col gap-6 [&>*]:animate-rise [&>:nth-child(1)]:[animation-delay:150ms] [&>:nth-child(2)]:[animation-delay:200ms] [&>:nth-child(3)]:[animation-delay:250ms]">
 						<Card
 							title="Needs attention"
 							count={reminders.length}
@@ -175,7 +177,7 @@ export function OverviewScreen() {
 						>
 							<CardError what="your reminders" state={attention} />
 							{attention.status === "loading" ? (
-								<CardNote>Loading.</CardNote>
+								<CardSkeleton />
 							) : attention.status === "ready" && reminders.length === 0 ? (
 								<CardNote>Nothing is due or overdue.</CardNote>
 							) : (
@@ -215,7 +217,7 @@ export function OverviewScreen() {
 						/>
 					</div>
 
-					<div className="flex min-w-0 flex-col gap-6">
+					<div className="flex min-w-0 flex-col gap-6 [&>*]:animate-rise [&>:nth-child(1)]:[animation-delay:175ms] [&>:nth-child(2)]:[animation-delay:225ms] [&>:nth-child(3)]:[animation-delay:275ms]">
 						<UpNextCard today={clock?.today ?? null} />
 						<RecentDocumentsCard
 							documents={documents}

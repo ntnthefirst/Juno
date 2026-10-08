@@ -76,3 +76,20 @@ export const DOCUMENT_SWITCH: ScreenSwitch = {
 	left: { id: "documents", label: "Documents" },
 	right: { id: "document-templates", label: "Templates" },
 };
+
+/**
+ * What "new" means on each screen: the screen that holds the record being made,
+ * and what the command is called. A screen with no entry has nothing to start,
+ * and the shortcut does nothing there rather than guessing.
+ */
+export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string }>> = {
+	overview: { screen: "overview", label: "New reminder" },
+	reminders: { screen: "reminders", label: "New reminder" },
+	calendar: { screen: "calendar", label: "New event" },
+	clients: { screen: "clients", label: "New client" },
+	projects: { screen: "projects", label: "New project" },
+	mail: { screen: "mail", label: "New message" },
+	"mail-templates": { screen: "mail", label: "New message" },
+	documents: { screen: "documents", label: "New document" },
+	"document-templates": { screen: "documents", label: "New document" },
+};

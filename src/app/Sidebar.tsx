@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon, type IconName } from "../components/Icon";
 import { Tooltip } from "../components/Tooltip";
+import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
 import { SIDEBAR_BOTTOM, SIDEBAR_TOP, type ScreenId } from "./screens";
 
 type SidebarProps = {
@@ -46,6 +47,7 @@ export function Sidebar({ current, onNavigate, onOpenSettings }: SidebarProps) {
 						icon={item.icon}
 						label={item.label}
 						active={item.id === current}
+						combo={SCREEN_COMBOS[item.id]}
 						onClick={() => onNavigate(item.id)}
 					/>
 				))}
@@ -60,6 +62,7 @@ export function Sidebar({ current, onNavigate, onOpenSettings }: SidebarProps) {
 						label={item.label}
 						active={item.id === current}
 						badge={item.id === "agent" ? pending : 0}
+						combo={SCREEN_COMBOS[item.id]}
 						onClick={() => onNavigate(item.id)}
 					/>
 				))}
@@ -68,6 +71,7 @@ export function Sidebar({ current, onNavigate, onOpenSettings }: SidebarProps) {
 					icon="settings"
 					label="Settings"
 					active={false}
+					combo={COMBOS.settings}
 					onClick={onOpenSettings}
 				/>
 			</div>
@@ -86,14 +90,16 @@ type NavButtonProps = {
 	active: boolean;
 	/** A dot when more than zero, and the count in the name. Nothing else here counts. */
 	badge?: number;
+	/** The shortcut, drawn in the tooltip. */
+	combo?: string | undefined;
 	onClick: () => void;
 };
 
-function NavButton({ navId, icon, label, active, badge = 0, onClick }: NavButtonProps) {
+function NavButton({ navId, icon, label, active, badge = 0, combo, onClick }: NavButtonProps) {
 	const name = badge > 0 ? `${label}, ${badge} waiting for you` : label;
 
 	return (
-		<Tooltip label={name} className="flex w-full">
+		<Tooltip label={name} keys={combo ? formatCombo(combo) : undefined} className="flex w-full">
 			<button
 				type="button"
 				data-nav={navId}

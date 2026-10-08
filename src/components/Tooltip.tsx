@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Kbd } from "./Kbd";
 
 type TooltipProps = {
 	label: string;
+	/** The shortcut for what the trigger does, drawn beside the label. */
+	keys?: string[];
 	/** Which side of the trigger the label sits on. */
 	side?: "right" | "bottom";
 	/** Classes for the element wrapping the trigger, which the label is measured from. */
@@ -34,7 +37,7 @@ let lastHiddenAt = 0;
  * It closes on press as well as on leave, so the label does not hang over the
  * screen the click just opened.
  */
-export function Tooltip({ label, side = "right", className = "flex", children }: TooltipProps) {
+export function Tooltip({ label, keys, side = "right", className = "flex", children }: TooltipProps) {
 	const anchor = useRef<HTMLSpanElement>(null);
 	const timer = useRef<number | undefined>(undefined);
 	const [spot, setSpot] = useState<Spot | null>(null);
@@ -84,11 +87,12 @@ export function Tooltip({ label, side = "right", className = "flex", children }:
 							aria-hidden
 							style={{ left: spot.x, top: spot.y }}
 							className={[
-								"animate-pop pointer-events-none fixed z-[70] whitespace-nowrap rounded-[var(--radius-md)] bg-[var(--ink)] px-2 py-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--paper)] shadow-[var(--shadow-popover)]",
+								"animate-pop pointer-events-none fixed z-[70] inline-flex items-center gap-2 whitespace-nowrap rounded-[var(--radius-md)] bg-[var(--ink)] px-2 py-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--paper)] shadow-[var(--shadow-popover)]",
 								side === "right" ? "-translate-y-1/2" : "-translate-x-1/2",
 							].join(" ")}
 						>
 							{label}
+							{keys ? <Kbd keys={keys} tone="inverse" /> : null}
 						</span>,
 						document.body,
 					)

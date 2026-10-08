@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { DocumentRecord, GenerateDocumentResult, ReferenceItem } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { useScreenAction } from "../../lib/screen-actions";
 import { DOCUMENT_SWITCH } from "../../app/screens";
 import { AddButton } from "../../components/AddButton";
 import { Avatar } from "../../components/Avatar";
@@ -63,6 +64,7 @@ export function DocumentsScreen() {
 	useEffect(() => clearPending, []);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [generating, setGenerating] = useState(false);
+	useScreenAction("documents", () => setGenerating(true));
 	const [importItems, setImportItems] = useState<ImportItem[] | null>(null);
 	const [signingRecord, setSigningRecord] = useState<DocumentRecord | null>(null);
 	const [deleted, setDeleted] = useState<DocumentRecord[] | null>(null);
@@ -277,7 +279,7 @@ export function DocumentsScreen() {
 				</div>
 			) : (
 				<>
-					<div className="mb-6 flex items-center justify-between gap-4 mx-auto w-full max-w-[var(--content-width)]">
+					<div className="mb-6 flex items-center justify-between gap-4 w-full">
 						<div className="flex items-center gap-3">
 							<SectionSwitch sections={DOCUMENT_SWITCH} current="documents" label="Document views" />
 							{load.status === "ready" ? (
@@ -305,7 +307,7 @@ export function DocumentsScreen() {
 					</div>
 
 					{load.status === "ready" && load.rows.records.length > 0 ? (
-						<div className="mb-4 flex items-center gap-2 mx-auto w-full max-w-[var(--content-width)]">
+						<div className="mb-4 flex items-center gap-2 w-full">
 							<SelectAllButton
 								checked={allSelected}
 								indeterminate={someSelected}
@@ -369,7 +371,7 @@ export function DocumentsScreen() {
 						</div>
 					) : null}
 
-					<div className="mx-auto min-h-0 w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">
+					<div className="min-h-0 w-full flex-1 overflow-y-auto">
 						{load.status === "loading" ? (
 							<p className="text-[var(--ink-muted)]">Loading.</p>
 						) : load.status === "error" ? (

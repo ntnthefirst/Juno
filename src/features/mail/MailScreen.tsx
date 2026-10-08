@@ -14,6 +14,7 @@ import { SectionSwitch } from "../../components/SectionSwitch";
 import { Toast } from "../../components/Toast";
 import { MAIL_SWITCH } from "../../app/screens";
 import { messageOf } from "../../lib/errors";
+import { useScreenAction } from "../../lib/screen-actions";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
 import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
@@ -94,6 +95,7 @@ export function MailScreen() {
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});
 	const [notice, setNotice] = useState<string | null>(null);
 	const [compose, setCompose] = useState<ComposeSeed | null>(null);
+	useScreenAction("mail", () => setCompose({}));
 	const [accountsVersion, setAccountsVersion] = useState(0);
 	const [outboxVersion, setOutboxVersion] = useState(0);
 	const [deleteConfirm, setDeleteConfirm] = useState<string[] | null>(null);

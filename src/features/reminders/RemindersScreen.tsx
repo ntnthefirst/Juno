@@ -4,6 +4,7 @@ import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { useScreenAction } from "../../lib/screen-actions";
 import { BUCKET_LABELS, BUCKET_ORDER, plural, todayIso } from "./format";
 import { ReminderForm } from "./ReminderForm";
 import { ReminderRow } from "./ReminderRow";
@@ -18,6 +19,7 @@ export function RemindersScreen() {
 	const [includeDone, setIncludeDone] = useState(false);
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [form, setForm] = useState<{ reminder: Reminder | null } | null>(null);
+	useScreenAction("reminders", () => setForm({ reminder: null }));
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [deleted, setDeleted] = useState<Reminder | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export function RemindersScreen() {
 
 	return (
 		<div className="h-full overflow-y-auto p-8">
-			<div className="mx-auto w-full max-w-[var(--content-width)]">
+			<div className="w-full">
 				<div className="mb-6 flex items-center justify-between gap-4">
 					<div className="flex items-baseline gap-3">
 						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">

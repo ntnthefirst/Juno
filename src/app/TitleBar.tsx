@@ -1,17 +1,16 @@
 import { Icon } from "../components/Icon";
+import { Kbd } from "../components/Kbd";
 import { Tooltip } from "../components/Tooltip";
 import { overlayGutter } from "../lib/platform";
-import type { Crumb } from "./breadcrumb-context";
+import { COMBOS, formatCombo } from "../lib/shortcuts";
 
 type TitleBarProps = {
-	/** The screen currently open, shown after the wordmark when nothing deeper is. */
-	title: string;
 	/**
-	 * Where you are inside that screen, when a record is open full screen. The
-	 * screen publishes it through `usePublishBreadcrumb`, starting with its own
-	 * name, and every step but the last goes back to what it names.
+	 * Where back goes, when a record is open over its list: the name of that list
+	 * and the way there. Null at the top of a screen, where there is nowhere to go.
 	 */
-	trail: Crumb[];
+	back: { label: string; onSelect: () => void } | null;
+	onOpenPalette: () => void;
 	lockConfigured: boolean;
 	onLock: () => void;
 };
@@ -21,126 +20,68 @@ type TitleBarProps = {
  * minimise and maximise buttons on top of it (main/windows/chrome.ts), so the
  * gutters in `overlayGutter` are left empty for them.
  *
+ * It carries no name and no path. The sidebar says where you are, the page says
+ * what it is, and a bar that repeated both was a line of text nobody read. What
+ * it holds is what the whole window needs: a way back out of a record, the
+ * search that gets anywhere, and the lock. The search sits in the middle of
+ * what is left after the caption buttons, so it is not pushed off centre by
+ * whichever side has more.
+ *
  * Everything here is inside the drag region except the controls, which opt out
  * with `no-drag`. A button inside a drag region does not receive clicks.
  */
-export function TitleBar({ title, trail, lockConfigured, onLock }: TitleBarProps) {
+export function TitleBar({ back, onOpenPalette, lockConfigured, onLock }: TitleBarProps) {
 	return (
 		<header
-			className="drag-region flex flex-none items-center gap-2 bg-[var(--paper)]"
+			className="drag-region grid flex-none grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-[var(--line)] bg-[var(--paper)]"
 			style={{
 				height: "var(--titlebar-height)",
 				paddingLeft: overlayGutter.left,
 				paddingRight: overlayGutter.right,
 			}}
 		>
-			<Wordmark />
-
-			<Trail
-				title={title}
-				trail={trail}
-			/>
-
-			<div className="min-w-0 flex-1" />
-
-			{lockConfigured ? (
-				<Tooltip label="Lock Juno" side="bottom" className="no-drag flex">
-					<button
-						type="button"
-						onClick={onLock}
-						aria-label="Lock Juno"
-						className="flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"
-					>
-						<Icon name="lock" />
-					</button>
-				</Tooltip>
-			) : null}
-		</header>
-	);
-}
-
-type TrailProps = {
-	title: string;
-	trail: Crumb[];
-};
-
-/**
- * `Juno / Clients / Jansen BV`. A record opens over the whole working area, so
- * this line is the only thing saying which record it is, and the only way back
- * that is not the sidebar.
- *
- * The steps shrink before the last one does: on a narrow window the client's
- * name stays readable and `Clients` truncates instead.
- */
-function Trail({ title, trail }: TrailProps) {
-	const steps: Crumb[] = trail.length === 0 ? [{ label: title }] : trail;
-
-	return (
-		<nav
-			aria-label="Location"
-			className="flex min-w-0 items-center"
-		>
-			{steps.map((step, index) => {
-				const last = index === steps.length - 1;
-
-				return (
-					<span
-						key={`${index}:${step.label}`}
-						className={`flex items-center ${last ? "min-w-0 shrink-[1]" : "min-w-0 shrink-[4]"}`}
-					>
-						<span
-							className="flex-none px-2 text-[var(--ink-faint)]"
-							aria-hidden
+			<div className="flex min-w-0 items-center">
+				{back ? (
+					<Tooltip label="Back" keys={formatCombo(COMBOS.back)} side="bottom" className="no-drag flex min-w-0">
+						<button
+							type="button"
+							onClick={back.onSelect}
+							className="animate-fade inline-flex h-7 min-w-0 items-center gap-1 rounded-[var(--radius-md)] pr-2 pl-1 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] active:scale-[0.97]"
 						>
-							/
-						</span>
-						{step.onSelect && !last ? (
-							<button
-								type="button"
-								onClick={step.onSelect}
-								className="no-drag min-w-0 truncate rounded-[var(--radius-sm)] text-[length:var(--text-sm)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
-							>
-								{step.label}
-							</button>
-						) : (
-							<span
-								aria-current={last ? "page" : undefined}
-								className={`min-w-0 truncate text-[length:var(--text-sm)] ${
-									last ? "text-[var(--ink)]" : "text-[var(--ink-muted)]"
-								}`}
-							>
-								{step.label}
-							</span>
-						)}
-					</span>
-				);
-			})}
-		</nav>
-	);
-}
+							<Icon name="chevron-left" size={16} strokeWidth={2} className="flex-none" />
+							<span className="truncate">{back.label}</span>
+						</button>
+					</Tooltip>
+				) : null}
+			</div>
 
-/**
- * Juno: the crescent over the arc of the Capitoline roof. Two strokes, so it
- * stays legible at 16px and needs no separate dark variant.
- */
-function Wordmark() {
-	return (
-		<span className="flex flex-none items-center gap-1.5">
-			<svg
-				viewBox="0 0 16 16"
-				width="15"
-				height="15"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.5"
-				strokeLinecap="round"
-				aria-hidden
-				className="text-[var(--accent)]"
+			<button
+				type="button"
+				onClick={onOpenPalette}
+				aria-label="Search and commands"
+				className="no-drag group flex h-7 w-[min(380px,34vw)] items-center gap-2 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] px-2.5 text-left text-[length:var(--text-dense)] text-[var(--ink-muted)] transition-[border-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:border-[var(--line-strong)] active:scale-[0.99]"
 			>
-				<path d="M11.2 3.1a4.6 4.6 0 1 0 1.7 7.9A5.4 5.4 0 0 1 11.2 3.1Z" />
-				<path d="M2.75 13.6h10.5" />
-			</svg>
-			<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)] tracking-[-0.01em]">Juno</span>
-		</span>
+				<Icon name="search" size={14} strokeWidth={2} className="flex-none" />
+				<span className="min-w-0 flex-1 truncate">Search or jump to</span>
+				<span className="hidden flex-none min-[760px]:inline-flex">
+					<Kbd keys={formatCombo(COMBOS.palette)} />
+				</span>
+			</button>
+
+			<div className="flex min-w-0 items-center justify-end">
+				{lockConfigured ? (
+					<Tooltip label="Lock Juno" keys={formatCombo(COMBOS.lock)} side="bottom" className="no-drag flex">
+						<button
+							type="button"
+							onClick={onLock}
+							aria-label="Lock Juno"
+							className="flex h-7 w-7 flex-none items-center justify-center rounded-[var(--radius-md)] text-[var(--ink-faint)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--ink)] active:scale-90"
+						>
+							<Icon name="lock" size={16} strokeWidth={1.9} />
+						</button>
+					</Tooltip>
+				) : null}
+			</div>
+		</header>
 	);
 }

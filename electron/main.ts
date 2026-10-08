@@ -1807,7 +1807,10 @@ if (!app.requestSingleInstanceLock()) {
 											for (let tries = 0; tries < 20 && !picture.complete; tries++) await wait(100);
 											if (!picture.src.startsWith("app://asset/template/") || picture.naturalWidth !== 1) return "the kept picture did not load: " + picture.src;
 											let flow = null;
-											for (let tries = 0; tries < 20 && !flow; tries++) {
+											// The warning is drawn from a measurement taken on an animation frame, and a
+											// window that is covered is not given frames, so this waits for the window as
+											// well as for the editor.
+											for (let tries = 0; tries < 100 && !flow; tries++) {
 												await wait(150);
 												flow = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Flow onto the next pages");
 											}
@@ -4209,7 +4212,7 @@ if (!app.requestSingleInstanceLock()) {
 										const button = nav.querySelector("button[data-nav=clients]");
 										button.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
 										await new Promise((r) => setTimeout(r, 700));
-										const tip = [...document.body.children].find((el) => el.tagName === "SPAN" && el.textContent.trim() === "Clients");
+										const tip = [...document.body.children].find((el) => el.tagName === "SPAN" && el.textContent.trim().startsWith("Clients"));
 										return tip ? "ok" : "no tooltip on hover";
 									})()`,
 								)) as string;
@@ -4220,6 +4223,76 @@ if (!app.requestSingleInstanceLock()) {
 									`document.querySelector("nav[data-sidebar] button[data-nav=clients]").dispatchEvent(new PointerEvent("pointerout", { bubbles: true }))`,
 								);
 								console.log("SMOKE_DEMO sidebar rail=ok");
+
+								// The keyboard. The title bar carries no name and a search, the palette
+								// opens on the shortcut and finds a client by name, a digit goes to a
+								// screen, "new" opens that screen's form, and the slash shows the
+								// sheet. Every press is dispatched on the window, which is where they are
+								// heard, with the modifier this machine uses.
+								const helpers = `
+									const mac = navigator.userAgent.includes("Macintosh");
+									const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+									const press = (init, target) => (target ?? window).dispatchEvent(new KeyboardEvent("keydown", {
+										bubbles: true, cancelable: true, key: init.key, code: init.code ?? "",
+										ctrlKey: !mac && Boolean(init.mod), metaKey: mac && Boolean(init.mod), shiftKey: Boolean(init.shift),
+									}));
+								`;
+								const opened = (await window.webContents.executeJavaScript(
+									`(async () => {
+										${helpers}
+										const header = document.querySelector("header");
+										if (!header) return "no title bar";
+										if (header.textContent.includes("Juno")) return "the title bar still carries the name";
+										if (!header.querySelector("button[aria-label='Search and commands']")) return "no search in the title bar";
+										press({ mod: true, key: "k", code: "KeyK" });
+										await wait(500);
+										if (!document.querySelector("[data-palette]")) return "the shortcut did not open the palette";
+										const input = document.querySelector("[data-palette] input");
+										const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+										set.call(input, "bodhi");
+										input.dispatchEvent(new Event("input", { bubbles: true }));
+										await wait(900);
+										const text = document.querySelector("[data-palette]").textContent;
+										if (!text.includes("bodhi")) return "the palette did not find the client by name";
+										return "ok";
+									})()`,
+								)) as string;
+								if (opened !== "ok") throw new Error(`Smoke: palette ${opened}`);
+								const paletteImage = await capture(window.webContents);
+								writeFileSync(joinPath(shotDir, `palette.png`), paletteImage.toPNG());
+
+								const keyed = (await window.webContents.executeJavaScript(
+									`(async () => {
+										${helpers}
+										const input = document.querySelector("[data-palette] input");
+										input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+										await wait(400);
+										if (document.querySelector("[data-palette]")) return "escape did not close the palette";
+
+										press({ mod: true, key: "3", code: "Digit3" });
+										await wait(700);
+										const lit = document.querySelector("nav[data-sidebar] button[data-nav=clients]");
+										if (lit?.getAttribute("aria-current") !== "page") return "the digit did not go to Clients";
+
+										press({ mod: true, key: "n", code: "KeyN" });
+										await wait(900);
+										if (!document.querySelector("main").textContent.includes("New client")) return "new did not open the client form";
+										document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										await wait(500);
+
+										press({ mod: true, key: "/", code: "Slash" });
+										await wait(500);
+										const sheet = document.querySelector("[role=dialog]");
+										if (!sheet || !sheet.textContent.includes("Keyboard shortcuts")) return "the shortcut did not show the sheet";
+										sheet.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										await wait(400);
+										if (document.querySelector("[role=dialog]")) return "escape did not close the sheet";
+										return "ok";
+									})()`,
+								)) as string;
+								if (keyed !== "ok") throw new Error(`Smoke: shortcuts ${keyed}`);
+								console.log("SMOKE_DEMO shortcuts=ok");
 							}
 						}
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);

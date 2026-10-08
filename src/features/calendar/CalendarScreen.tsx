@@ -13,6 +13,7 @@ import { Dialog } from "../../components/Dialog";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { useScreenAction } from "../../lib/screen-actions";
 import { ProjectForm } from "../projects/ProjectForm";
 import { ReminderForm, type ReminderSeed } from "../reminders/ReminderForm";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
@@ -86,6 +87,8 @@ export function CalendarScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [version, setVersion] = useState(0);
 	const [form, setForm] = useState<FormState | null>(null);
+	// Asked for from outside: an hour from now, for an hour, today.
+	useScreenAction("calendar", () => createAt(todayIso(), Math.min(23, new Date().getHours() + 1) * 60));
 	const [detail, setDetail] = useState<CalendarItem | null>(null);
 	const [question, setQuestion] = useState<ScopeQuestion | null>(null);
 	const [undo, setUndo] = useState<Undo | null>(null);

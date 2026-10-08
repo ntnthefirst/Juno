@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project, ProjectSummary, ProjectsView, ReferenceItem } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { useScreenAction } from "../../lib/screen-actions";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
@@ -70,6 +71,7 @@ export function ProjectsScreen() {
 	useEffect(() => clearPending, []);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [editing, setEditing] = useState<Project | null | "new">(null);
+	useScreenAction("projects", () => setEditing("new"));
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
 	const [deleted, setDeleted] = useState<ProjectSummary | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);

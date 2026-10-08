@@ -216,7 +216,7 @@ export function MailTemplatesScreen() {
 	return (
 		<div className="relative flex h-full flex-col">
 			<div className="flex-none px-8 pt-8">
-				<div className="mx-auto w-full max-w-[var(--content-width)]">
+				<div className="w-full">
 					<div className="flex items-center gap-3">
 						<SectionSwitch sections={MAIL_SWITCH} current="mail-templates" label="Mail views" />
 						{load.status === "ready" ? (
@@ -318,7 +318,7 @@ export function MailTemplatesScreen() {
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-8 pb-8">
-				<div className="mx-auto mt-4 w-full max-w-[var(--content-width)]">
+				<div className="mt-4 w-full">
 					{load.status === "loading" ? (
 						<p className="text-[var(--ink-muted)]">Loading.</p>
 					) : load.status === "error" ? (

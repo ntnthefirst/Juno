@@ -258,7 +258,7 @@ export function DocumentTemplatesScreen() {
 
 	return (
 		<div className="flex h-full flex-col p-8">
-			<div className="mx-auto mb-6 w-full max-w-[var(--content-width)]">
+			<div className="mb-6 w-full">
 				<div className="flex items-center gap-3">
 					<SectionSwitch sections={DOCUMENT_SWITCH} current="document-templates" label="Document views" />
 					{load.status === "ready" ? (
@@ -347,7 +347,7 @@ export function DocumentTemplatesScreen() {
 				) : null}
 			</div>
 
-			<div className="mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">
+			<div className="w-full flex-1 overflow-y-auto">
 				{load.status === "loading" ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
 				) : load.status === "error" ? (
@@ -572,7 +572,7 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-				<div className="mx-auto w-full max-w-[var(--content-width)]">
+				<div className="w-full">
 					{template.description ? (
 						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">{template.description}</p>
 					) : null}

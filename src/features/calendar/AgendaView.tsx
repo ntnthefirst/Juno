@@ -107,7 +107,7 @@ export function AgendaView({
 					// class on its own would not: an animation restarts only when the
 					// element is new or the animation name itself changes.
 					key={range}
-					className={`mx-auto w-full max-w-[var(--content-width)] px-8 py-4 ${
+					className={`w-full px-8 py-4 ${
 						direction === 1 ? "animate-page-forward" : "animate-page-back"
 					}`}
 				>

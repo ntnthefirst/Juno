@@ -240,7 +240,7 @@ export function ProjectDetail({
 
 	return (
 		<div className="relative h-full overflow-y-auto">
-			<div className="mx-auto w-full max-w-[var(--content-width)] p-8">
+			<div className="w-full p-8">
 				<header className="flex items-start gap-4">
 					<div className="min-w-0 flex-1">
 						<div className="flex flex-wrap items-center gap-3">

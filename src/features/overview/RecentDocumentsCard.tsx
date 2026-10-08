@@ -5,7 +5,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { groupByDay } from "../../lib/day-groups";
 import { requestOpen } from "../../lib/open-entity";
 import type { Loaded } from "../../lib/use-loaded";
-import { Card, CardError, CardLink, CardNote, GroupLabel } from "./Card";
+import { Card, CardError, CardLink, CardNote, GroupLabel, CardSkeleton } from "./Card";
 
 type RecentDocumentsCardProps = {
 	documents: Loaded<DocumentRecord[]>;
@@ -33,7 +33,7 @@ export function RecentDocumentsCard({ documents, statuses }: RecentDocumentsCard
 		>
 			<CardError what="your documents" state={documents} />
 			{documents.status === "loading" ? (
-				<CardNote>Loading.</CardNote>
+				<CardSkeleton />
 			) : documents.status === "ready" && recent.length === 0 ? (
 				<CardNote>No documents yet.</CardNote>
 			) : (

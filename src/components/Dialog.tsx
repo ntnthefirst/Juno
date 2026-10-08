@@ -79,7 +79,7 @@ export function Dialog({ title, onClose, children, width = "base" }: DialogProps
 	return createPortal(
 		<div
 			data-popover-root
-			className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-[var(--ink)]/25 p-8"
+			className="animate-fade fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-[var(--ink)]/25 p-8"
 			onMouseDown={(event) => {
 				if (event.target === event.currentTarget) onClose();
 			}}
@@ -90,7 +90,7 @@ export function Dialog({ title, onClose, children, width = "base" }: DialogProps
 				aria-modal="true"
 				aria-labelledby={labelId}
 				tabIndex={-1}
-				className={`w-full rounded-[var(--radius-xl)] border border-[var(--line)] bg-[var(--surface)] focus:outline-none ${
+				className={`animate-scale w-full rounded-[var(--radius-xl)] border border-[var(--line)] bg-[var(--surface)] focus:outline-none ${
 					width === "narrow"
 						? "max-w-[400px]"
 						: width === "wide"

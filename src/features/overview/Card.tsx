@@ -44,6 +44,36 @@ export function GroupLabel({ children }: GroupLabelProps) {
 	);
 }
 
+/**
+ * Three grey rows where rows are about to be. A card that says "Loading." and
+ * then grows by three hundred pixels moves everything under it; this holds the
+ * space and says, by shape, that something is coming.
+ */
+export function CardSkeleton() {
+	return (
+		<div role="status" aria-label="Loading" className="flex flex-col px-2 py-1">
+			{[0, 1, 2].map((row) => (
+				<div key={row} className="flex items-center gap-3 py-2">
+					<span
+						className="h-8 w-8 flex-none animate-pulse rounded-[var(--radius-md)] bg-[var(--sunken)]"
+						style={{ animationDelay: row * 120 + "ms" }}
+					/>
+					<span className="flex min-w-0 flex-1 flex-col gap-1.5">
+						<span
+							className="h-3 w-2/5 animate-pulse rounded-[var(--radius-sm)] bg-[var(--sunken)]"
+							style={{ animationDelay: row * 120 + "ms" }}
+						/>
+						<span
+							className="h-2.5 w-3/5 animate-pulse rounded-[var(--radius-sm)] bg-[var(--sunken)]"
+							style={{ animationDelay: row * 120 + 60 + "ms" }}
+						/>
+					</span>
+				</div>
+			))}
+		</div>
+	);
+}
+
 type CardNoteProps = {
 	children: ReactNode;
 };

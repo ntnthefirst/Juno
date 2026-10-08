@@ -5,7 +5,7 @@ import { groupByDay } from "../../lib/day-groups";
 import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
 import type { Loaded } from "../../lib/use-loaded";
-import { Card, CardError, CardLink, CardNote, GroupLabel } from "./Card";
+import { Card, CardError, CardLink, CardNote, GroupLabel, CardSkeleton } from "./Card";
 
 type ClientsCardProps = {
 	clients: Loaded<ClientSummary[]>;
@@ -31,7 +31,7 @@ export function ClientsCard({ clients }: ClientsCardProps) {
 		>
 			<CardError what="your clients" state={clients} />
 			{clients.status === "loading" ? (
-				<CardNote>Loading.</CardNote>
+				<CardSkeleton />
 			) : clients.status === "ready" && recent.length === 0 ? (
 				<CardNote>No clients yet.</CardNote>
 			) : (

@@ -5,7 +5,7 @@ import { groupByDay } from "../../lib/day-groups";
 import { requestOpen } from "../../lib/open-entity";
 import type { Loaded } from "../../lib/use-loaded";
 import { formatWhen, leadParticipant } from "../mail/format";
-import { Card, CardError, CardLink, CardNote, GroupLabel } from "./Card";
+import { Card, CardError, CardLink, CardNote, GroupLabel, CardSkeleton } from "./Card";
 
 type RecentMailCardProps = {
 	/** The unread conversations in the inbox, newest first, read once by the screen. */
@@ -32,7 +32,7 @@ export function RecentMailCard({ state, hasAccounts }: RecentMailCardProps) {
 		>
 			<CardError what="your mail" state={state} />
 			{state.status === "loading" ? (
-				<CardNote>Loading.</CardNote>
+				<CardSkeleton />
 			) : state.status === "ready" && threads.length === 0 ? (
 				<CardNote>{hasAccounts === false ? "No mail account is connected yet." : "You are all caught up."}</CardNote>
 			) : (

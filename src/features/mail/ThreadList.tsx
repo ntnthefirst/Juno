@@ -5,6 +5,7 @@ import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { groupByDay } from "../../lib/day-groups";
+import { stagger } from "../../lib/motion";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { startThreadDrag } from "./drag";
 import { formatWhen, leadParticipant, participantsLine } from "./format";
@@ -301,7 +302,8 @@ export function ThreadList({
 									data-draft-kind={outbox ? "thread" : undefined}
 									draggable
 									onDragStart={(event) => startThreadDrag(event, dragIds, thread.subject || "1 thread")}
-									className="group relative"
+									className="animate-rise group relative"
+									style={stagger(entries.indexOf(entry))}
 									onContextMenu={(event) => {
 										setTarget(thread);
 										menu.open(event);

@@ -3,7 +3,7 @@ import type { CalendarItem } from "@shared/types";
 import { requestOpen } from "../../lib/open-entity";
 import { useLoaded } from "../../lib/use-loaded";
 import { addDays, describeDue } from "../reminders/format";
-import { Card, CardError, CardLink, CardNote, GroupLabel } from "./Card";
+import { Card, CardError, CardLink, CardNote, GroupLabel, CardSkeleton } from "./Card";
 
 type UpNextCardProps = {
 	/** Today as `YYYY-MM-DD`. Null until the screen has read the clock. */
@@ -78,7 +78,7 @@ export function UpNextCard({ today }: UpNextCardProps) {
 		<Card title="Up next" action={<CardLink label="Calendar" onClick={openCalendar} />}>
 			<CardError what="your calendar" state={state} />
 			{state.status === "loading" || !today ? (
-				<CardNote>Loading.</CardNote>
+				<CardSkeleton />
 			) : state.status === "ready" && items.length === 0 ? (
 				<CardNote>Nothing planned for the next seven days.</CardNote>
 			) : (

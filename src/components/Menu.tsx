@@ -174,7 +174,7 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 				ref={surface}
 				role="menu"
 				aria-label={ariaLabel}
-				className="fixed z-[61] flex flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] py-1"
+				className="animate-scale fixed z-[61] flex flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] py-1"
 				style={{
 					left: position?.left ?? 0,
 					top: position?.top ?? 0,

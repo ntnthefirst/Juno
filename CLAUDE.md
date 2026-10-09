@@ -188,7 +188,8 @@ Theme is a three-state setting: `system`, `light`, `dark`, defaulting to `system
 `nativeTheme.themeSource` in the main process. Doing only one leaves a light title
 bar over a dark window.
 
-The palette is cool porcelain with a deep iris accent and a brass second note.
+The palette is neutral, near-white greys in light and near-black in dark, with a
+deep iris accent and a brass second note.
 Colours, type, spacing, radius and motion come from the tokens in
 [brand/tokens.css](brand/tokens.css). **Never a raw hex in a component.** A
 colour the design needs and the theme lacks is a token to add, not a value to

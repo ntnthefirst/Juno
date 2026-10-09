@@ -1377,3 +1377,34 @@ same one every other confirmed tool has, in the Agent tab.
 
 **What would reverse this:** an agent that has to send without a person reading
 the message. Nothing in the product has asked for that.
+
+## 45. The window is a rail, one search and the whole width
+
+The first Juno had a sidebar that opened, a title bar that said its own name and
+the path to where you already were, and pages held to a 900px column. It read
+as a form, not a tool. What replaced it is deliberately less.
+
+- **The sidebar is eight icons and never opens.** Six places, then Agent and
+  Settings. Mail and Documents each hold a second screen behind a switch at the
+  top of their page, called Styled mail and Templates, so the rail stays at the
+  places the work happens. An entry is a colour and nothing else.
+- **The title bar has no name and no path.** It holds a way back out of a record,
+  the search, and the lock. The path was the only way back from a client, and is
+  replaced by a back button that appears only while a record is open, not by
+  nothing.
+- **One search gets anywhere and starts anything**, and the keyboard reaches
+  every place the sidebar does. The palette is the keyboard's route to what the
+  interface already does, not a second set of features.
+- **Pages are as wide as the window.** A reading column made sense for prose and
+  left a wide monitor with a strip of content in the middle of it. Text, forms
+  and dialogs keep a measure; pages do not.
+- **What arrives is animated, with tokens for every curve and duration**, and
+  the system's request for less movement cuts all of it.
+- **The palette is neutral grey with iris kept for what is interactive**, the
+  corners are 8px on a card and 12px on a modal, and avatar tints are muted (this
+  amends the palette in decision 25). The
+  first pass was pastel, and a list of pastel squares looked like a toy.
+
+**What would reverse this:** a screen whose purpose is reading long text, which
+would earn a measure of its own, or a second language of keyboard that a person
+has to learn before the first click. Nothing has asked for either.

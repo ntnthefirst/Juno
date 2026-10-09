@@ -31,7 +31,7 @@ export function Button({
 		<button
 			type={type}
 			{...rest}
-			className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:pointer-events-none disabled:opacity-50 ${metrics} ${VARIANTS[variant]}`}
+			className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] font-[var(--weight-medium)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 ${metrics} ${VARIANTS[variant]}`}
 		>
 			{children}
 		</button>

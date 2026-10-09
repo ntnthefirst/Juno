@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MailTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { MAIL_SWITCH } from "../../app/screens";
 import { InlineAdd } from "../../components/InlineAdd";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { IconAction } from "../../components/IconAction";
+import { SectionSwitch } from "../../components/SectionSwitch";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { emptyLayout } from "./mail/canvas/canvas-actions";
 import { messageOf } from "../../lib/errors";
@@ -214,11 +216,9 @@ export function MailTemplatesScreen() {
 	return (
 		<div className="relative flex h-full flex-col">
 			<div className="flex-none px-8 pt-8">
-				<div className="mx-auto w-full max-w-[var(--content-width)]">
+				<div className="w-full">
 					<div className="flex items-center gap-3">
-						<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-							Mail templates
-						</h1>
+						<SectionSwitch sections={MAIL_SWITCH} current="mail-templates" label="Mail views" />
 						{load.status === "ready" ? (
 							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 								{shown.length} {shown.length === 1 ? "template" : "templates"}
@@ -233,9 +233,7 @@ export function MailTemplatesScreen() {
 						/>
 					</div>
 					<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						The subject and body of the emails Juno composes for you. The texts that ship are
-						invented, so read one, correct it, and mark it as reviewed before Juno sends anything
-						drafted from it.
+						The emails you send again and again. Mark one as reviewed once you have read its text.
 					</p>
 
 					<div className="mt-5 flex items-center gap-2">
@@ -320,7 +318,7 @@ export function MailTemplatesScreen() {
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-8 pb-8">
-				<div className="mx-auto mt-4 w-full max-w-[var(--content-width)]">
+				<div className="mt-4 w-full">
 					{load.status === "loading" ? (
 						<p className="text-[var(--ink-muted)]">Loading.</p>
 					) : load.status === "error" ? (

@@ -23,7 +23,7 @@ export function AddButton({ label, disabled = false, onClick }: AddButtonProps) 
 			title={label}
 			disabled={disabled}
 			onClick={onClick}
-			className="inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--accent)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] disabled:pointer-events-none disabled:opacity-50"
+			className="inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--accent)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] active:scale-90 disabled:pointer-events-none disabled:opacity-50"
 		>
 			<Icon name="add" size={16} />
 		</button>

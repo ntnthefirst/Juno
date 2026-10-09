@@ -24,8 +24,8 @@ Real token names, so use these and not something that sounds right:
 | Status | `--ok`/`--ok-soft`, `--warn`/`--warn-soft`, `--risk`/`--risk-soft` | `text-ok`, `bg-risk-soft` |
 | Focus | `--focus` | `outline-focus` |
 
-The palette is cool porcelain with a deep **iris** accent and a **brass** second
-note. Iris carries every interactive state. Brass is signed and sealed only, and
+The palette is neutral: near-white greys in light, near-black in dark, with a
+deep **iris** accent and a **brass** second note. Iris carries every interactive state. Brass is signed and sealed only, and
 should appear about twice on a screen.
 
 - `--paper` is the window background, `--surface` sits on it (cards, rows, panels),
@@ -50,9 +50,8 @@ should appear about twice on a screen.
   `--radius-sm` for inputs and badges, `--radius-md` for buttons and rows,
   `--radius-lg` for cards, `--radius-xl` for modals. `--radius-full` is avatars
   and nothing else.
-- Motion is `--duration-fast` (120ms) or `--duration-base` (180ms) with `--ease`.
-  Transitions on `transform`, `opacity` and colours only, never on layout
-  properties. An app people use all day should not animate at you.
+- Motion has its own section, 5e. In short: transform, opacity and colour only,
+  never a layout property, and every curve and duration is a token.
 - Shadows: `--shadow-popover` and `--shadow-modal` exist for things that float.
   Everything else is separated by a border. Borders do the work here.
 - Opacity variants of a token are fine and preferred over a new token:
@@ -85,11 +84,12 @@ already dense; don't reach past it.
   it at all. A section heading is `--text-h3`.
 - `--leading-tight` for headings and table rows, `--leading-normal` for UI text,
   `--leading-relaxed` only for long-form: document body and email text.
-- Sidebar is `--sidebar-width` (248px), collapsed to `--sidebar-rail-width`
-  (56px), titlebar `--titlebar-height` (40px). All three are tokens because other
-  things are measured against them, and because the title bar height is also the
-  height of the native caption-button overlay
-  ([architecture.md](architecture.md) section 4b).
+- The sidebar is `--sidebar-rail-width` (56px) and never wider, and the titlebar
+  is `--titlebar-height`. Both are tokens because other things are measured
+  against them, and because the title bar height is also the height of the
+  native caption-button overlay ([architecture.md](architecture.md) section 4b).
+- A row that carries an avatar is `--row-height-roomy` (44px). A row with no
+  avatar is still `--row-height`.
 - Padding inside a dense row is `--space-2` / `--space-3`. Marketing-page
   breathing room (`--space-12` and up) belongs to empty states and onboarding,
   nowhere else.
@@ -123,29 +123,46 @@ not resolving the OS preference yourself.
 - Images, logo variants and any generated PDF preview need checking too. There is
   a paper wordmark and an ink wordmark in `brand/logo/` for exactly this.
 
-## 5b. The sidebar has three states, and the window picks two of them
+## 5b. The sidebar is a rail, and it never opens
 
-`src/app/use-sidebar-layout.ts` owns this, and a screen never second-guesses it.
+`src/app/Sidebar.tsx` is a column of icons at `--sidebar-rail-width`. There is
+no expanded state, no toggle, no drawer and no setting for any of them: the
+name of an entry is in its tooltip (`components/Tooltip.tsx`, drawn by the
+application, not the native `title`) and in its `aria-label`.
 
-| Window width | Behaviour |
-| --- | --- |
-| >= 760px | Beside the content, a rail by default. The toggle opens it fully |
-| < 760px | Out of the layout. The toggle floats it over the content as a drawer |
+- **Six places on top, two entries at the bottom.** Overview, Calendar, Clients,
+  Projects, Mail, Documents; then Agent and Settings. `app/screens.ts` lists
+  them. A seventh entry is a decision, not an edit.
+- **An entry has three colours and nothing else.** Soft (`--ink-faint`) at rest,
+  firm (`--ink`) under the pointer, iris (`--accent`) when it is the page. No
+  fill, no outline, no indicator bar. The one ring is the global
+  `:focus-visible` one, which only a keyboard triggers, and it stays.
+- **Icons are 20px with a 2.0 stroke.** Heroicons draw at 1.5, which is a hairline
+  at this size next to the soft colour.
+- **A badge is a dot,** and the count goes in the tooltip and the accessible name.
+- **Screens without an entry** light the entry they belong to
+  (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail,
+  Templates under Documents.
 
-The drawer closes on Escape, on a click outside, and when something in it is
-chosen. Widening the window past 760px puts the sidebar back and closes the
-drawer, so a panel is never left hanging over the content.
+### The switch
 
-A docked sidebar opened fully goes back to the rail the same way, when an
-entry is chosen or anything beside it is pressed. That is the "Collapse the
-sidebar on its own" setting in Settings > General, on by default. Turned off,
-the sidebar stays open or collapsed the way the toggle left it, and that
-choice is remembered per machine. The main window reads the setting again
-when the settings window closes, which is the only way a change reaches it.
+Mail and Documents each hold a second screen. It is not a second sidebar entry:
+it is `components/SectionSwitch.tsx`, a two-sided control at the top of the page
+(Mailbox | Styled mail, Documents | Templates), reached through the shell with
+`requestOpen({ kind: "screen", screen })` so the target opens on its list. Add
+a pair by adding a `ScreenSwitch` in `app/screens.ts`. Screens a form or an
+editor has taken over show no switch, because they replace the page it sits on.
 
-Collapsed means icons only: the label moves into `aria-label` and `title`, and a
-group heading becomes a hairline rather than an abbreviation. Every entry keeps
-its 36px row height in both states, so nothing jumps when it toggles.
+### Avatars and the time split
+
+`components/Avatar.tsx` is initials on one of eight tints (`--tone-1` to
+`--tone-8`, each with its `-ink`). The tint comes from the name, so a name is the
+same colour everywhere. People are round, businesses and projects are squares.
+Brass is never an avatar tint.
+
+A list that is ordered by time is split with `lib/day-groups.ts`: Today,
+Yesterday, Last 7 days, Last 30 days, then a month each. A list ordered by
+relevance (a search) is not split, because the days would come out of order.
 
 ## 5c. Three shapes, and picking the wrong one is the bug
 
@@ -175,6 +192,91 @@ of taste.
   popover the screen or the panel opened on top of everything.
 - The settings **window** is still modal, for the reason in decision 26. Reading
   a row changes nothing; changing a setting changes what every screen shows.
+
+## 5d. Pages use the width they are given
+
+A page is as wide as the window. There is no reading column and no centred
+900px strip: a list, a table, the overview and the template screens fill what is
+left of the window after the rail, and a wider window shows more of them.
+
+What keeps a measure is what is read or filled in as a line, never a page:
+
+- Paragraphs of explanation (`max-w-[62ch]`), so a sentence does not run the
+  width of a monitor.
+- A form page (`FormPage` at its default width, 620px) and a dialog. A field
+  stretched across 1600px is harder to use, not easier.
+- A popover, a menu, a side panel and a tooltip, which are sized to what is in
+  them.
+
+A new page container is `w-full`. `max-w-[var(--content-width)]` is gone from
+the tokens, and an arbitrary cap on a page is the thing to take out in review.
+
+## 5e. Motion
+
+Things that arrive are animated, things that are already there are not, and
+nothing moves while you are reading it. The tokens are in
+`brand/tokens.css`:
+
+| Token | For |
+| --- | --- |
+| `--duration-fast` 120ms, `--duration-base` 180ms | A hover, a colour, a press |
+| `--duration-slow` 360ms | Something arriving: a card, a screen, a panel |
+| `--ease` | Colour and the quickest changes |
+| `--ease-smooth` | Arrivals. A strong decelerate: fast off the mark, long settle |
+| `--ease-spring` | A small thing that should feel like it landed, with a hair of overshoot |
+
+The animations are utilities, not keyframes written at the call site:
+
+| Utility | For |
+| --- | --- |
+| `animate-screen` | A whole screen, on the `main` that is re-keyed per navigation |
+| `animate-rise` | A card, a tile, a row. Stagger a list with `stagger(index)` from `lib/motion.ts`: a 36ms step, and nothing past the tenth |
+| `animate-scale` | A dialog, a menu, the palette |
+| `animate-slide` | A side panel, from the edge it lives on |
+| `animate-lift` | A toast |
+| `animate-fade` | A scrim, or content replacing content in place |
+
+- **Transform and opacity only.** An animation that changes height, margin or
+  top relayouts the page on every frame. Collapsing a row is the one place a
+  size changes, and it is done by animating `grid-template-rows` between `1fr`
+  and `0fr`, which the browser does without measuring.
+- **A press gives.** Buttons scale to 97% while down, icon buttons to 90%.
+- **Numbers count up** (`useCountUp`) the first time they have a value. Once.
+- **Loading is the shape of what is coming** (`CardSkeleton`), not the word, so
+  the card does not grow under whatever is below it.
+- **Reduced motion is honoured in one place.** `global.css` cuts every
+  animation and transition to nothing under `prefers-reduced-motion`, and
+  `prefersReducedMotion()` is for the code that waits on a delay of its own. A
+  new animation needs nothing to opt in.
+- The raised side of `SectionSwitch` slides: each side is its own screen, so it
+  remembers where it was and the new copy moves from there.
+
+## 5f. The keyboard
+
+`lib/shortcuts.ts` holds every combination as a string (`mod+shift+l`), where
+`mod` is Command on a Mac and Control elsewhere. The sheet in
+`ShortcutsDialog`, the tooltips and the listener in `app/use-shortcuts.ts` all
+read the same strings, so they cannot disagree.
+
+- **Digits are read from the physical key.** On a Belgian AZERTY keyboard the
+  unshifted number row types `&`, `é` and `"`, so `event.key` never says "3".
+  Punctuation ignores Shift for the same reason: `?` is on a different key on
+  every layout. Letters and named keys match Shift exactly.
+- **Every shortcut carries the modifier, so it works while typing.** There is no
+  bare-key shortcut: the template editors own keys such as `?`, and two
+  listeners for one key is a bug that depends on which mounted first.
+- **Nothing fires under a dialog**, so a shortcut cannot move you from beneath a
+  question that is waiting. The palette is the exception, and its own shortcut
+  closes it.
+- **"New" asks, and the screen opens its form.** `requestScreenAction` brings the
+  screen up fresh and `useScreenAction` in that screen opens its form once it
+  has mounted. A screen that can start something adds the hook, and an entry in
+  `NEW_ON` in `app/screens.ts` says what the command is called there.
+- **The palette adds no capability.** What it opens is what a click opens, through
+  the same requests (`requestOpen`, `requestOpenClient`). A command that only
+  the palette can do is a feature with one way in.
+- A new shortcut goes in `SHORTCUT_GROUPS` in the same commit, or the sheet is
+  wrong.
 
 ## 6. Numbers line up
 

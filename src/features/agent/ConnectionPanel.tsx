@@ -104,7 +104,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 	const readOnly = tools.filter((tool) => tool.readOnly).length;
 
 	return (
-		<div className={part === undefined ? "mx-auto w-full max-w-[var(--content-width)]" : undefined}>
+		<div className={part === undefined ? "w-full" : undefined}>
 			{showServer ? (
 				<>
 					<Section title="MCP server" anchor="mcp-server">

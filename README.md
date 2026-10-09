@@ -95,7 +95,7 @@ electron/
   main/mcp/             Thin adapters over the same services, for agents
   shared/               The contract both processes typecheck against
 src/
-  app/                  Shell, sidebar, title bar
+  app/                  Shell, the icon rail, title bar
   features/             One folder per screen
   components/           Dialog, Button, Field, Select, Toast
 ```

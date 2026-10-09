@@ -67,13 +67,13 @@ export function AgentScreen() {
 
 	return (
 		<div className="h-full overflow-y-auto p-8">
-			<div className="mx-auto w-full max-w-[var(--content-width)]">
+			<div className="w-full">
 				<div className="flex items-center gap-4">
 					<span className="flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--accent-soft)] text-[var(--accent)]">
 						<Icon name="agent" size={24} />
 					</span>
 					<div>
-						<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.02em]">
+						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.02em]">
 							Agent
 						</h1>
 						<p className="mt-1 max-w-[68ch] text-[var(--ink-muted)]">
@@ -201,7 +201,7 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 	}
 
 	return (
-		<div className="mx-auto w-full max-w-[var(--content-width)] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
+		<div className="w-full rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
 			{rows.map((row) => {
 				const view = views.get(row.id) ?? null;
 				return (

@@ -25,7 +25,7 @@ export function IconAction({ icon, label, danger = false, disabled = false, size
 			className={[
 				"inline-flex shrink-0 items-center justify-center rounded-[var(--radius-md)]",
 				size === "base" ? "h-[40px] w-[40px]" : "h-[32px] w-[32px]",
-				"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+				"transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-90",
 				"focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] disabled:opacity-40",
 				danger
 					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"

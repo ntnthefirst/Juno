@@ -15,25 +15,22 @@ type WalkthroughStop = {
 	/**
 	 * A CSS selector on a stable attribute, never on displayed text: `data-nav`
 	 * and `aria-label` already exist on the elements below and are unaffected
-	 * by a collapsed sidebar or a locale change. When nothing on screen matches
-	 * it, the stop falls back to a centred card with no cutout rather than
-	 * throwing, which is what happens today for "Agent": there is no sidebar
-	 * entry for it yet (screens.ts has no "agent" ScreenId), and that file
-	 * belongs to other work.
+	 * by a locale change. When nothing on screen matches it, the stop falls back
+	 * to a centred card with no cutout rather than throwing.
 	 */
 	target: string;
 };
 
-// Ordered to match the sidebar: the unheaded group, then Work, Mail and
-// Documents, then the footer entries (Agent, Settings). Reminders sits in the
-// title bar rather than the sidebar, and comes just before the footer.
+// Ordered to match the sidebar, top to bottom. Styled mail and Templates have
+// no entry of their own: they sit behind the switch at the top of Mail and
+// Documents, so those stops point at the switch instead.
 const STOPS: WalkthroughStop[] = [
 	{
-		id: "today",
-		title: "Today",
-		body: "Gathers what needs you: reminders due, mail waiting, appointments coming up.",
-		screen: "today",
-		target: '[data-nav="today"]',
+		id: "overview",
+		title: "Overview",
+		body: "Gathers what needs you: reminders due, appointments coming up, mail waiting and the documents you touched last.",
+		screen: "overview",
+		target: '[data-nav="overview"]',
 	},
 	{
 		id: "calendar",
@@ -58,17 +55,17 @@ const STOPS: WalkthroughStop[] = [
 	},
 	{
 		id: "mail",
-		title: "Inbox",
+		title: "Mail",
 		body: "Reads your IMAP accounts from here. Nothing leaves this machine unless you send it.",
 		screen: "mail",
 		target: '[data-nav="mail"]',
 	},
 	{
-		id: "templates",
-		title: "Mail templates",
-		body: "The emails you send to clients again and again.",
-		screen: "templates",
-		target: '[data-nav="templates"]',
+		id: "mail-templates",
+		title: "Styled mail",
+		body: "The emails you send to clients again and again, laid out like a page. Switch to them from the top of Mail.",
+		screen: "mail-templates",
+		target: "[data-section-switch]",
 	},
 	{
 		id: "documents",
@@ -79,17 +76,10 @@ const STOPS: WalkthroughStop[] = [
 	},
 	{
 		id: "document-templates",
-		title: "Document templates",
-		body: "The contracts and letters your documents are generated from.",
+		title: "Templates",
+		body: "The contracts and letters your documents are generated from. Switch to them from the top of Documents.",
 		screen: "document-templates",
-		target: '[data-nav="document-templates"]',
-	},
-	{
-		id: "reminders",
-		title: "Reminders",
-		body: "This bell shows what is due, from any screen. Open it for the full list.",
-		screen: "reminders",
-		target: '[aria-label="Show reminders"]',
+		target: "[data-section-switch]",
 	},
 	{
 		id: "agent",

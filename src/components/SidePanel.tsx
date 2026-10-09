@@ -105,14 +105,14 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 		<>
 			<div
 				aria-hidden
-				className="pointer-events-none absolute inset-0 z-20 bg-[var(--ink)]/[0.04]"
+				className="animate-fade pointer-events-none absolute inset-0 z-20 bg-[var(--ink)]/[0.04]"
 				style={{ backdropFilter: "blur(var(--overlay-blur))" }}
 			/>
 			<aside
 				ref={panel}
 				tabIndex={-1}
 				aria-label={title}
-				className="absolute inset-y-0 right-0 z-30 flex w-[380px] max-w-full flex-col border-l border-[var(--line)] bg-[var(--paper)] focus:outline-none"
+				className="animate-slide absolute inset-y-0 right-0 z-30 flex w-[380px] max-w-full flex-col border-l border-[var(--line)] bg-[var(--paper)] focus:outline-none"
 				style={{ boxShadow: "var(--shadow-panel)" }}
 			>
 				<div className="flex flex-none items-start gap-2 border-b border-[var(--line)] px-4 py-3">

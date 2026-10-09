@@ -88,7 +88,7 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 	}
 
 	return (
-		<div className="mx-auto w-full max-w-[var(--content-width)]">
+		<div className="w-full">
 			<section>
 				<div className="flex items-baseline gap-3 pb-3">
 					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">Waiting for you</h2>

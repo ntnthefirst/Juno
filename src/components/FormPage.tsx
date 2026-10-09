@@ -58,7 +58,7 @@ export function FormPage({
 	actions,
 	children,
 }: FormPageProps) {
-	const measure = width === "wide" ? "max-w-[var(--content-width)]" : "max-w-[620px]";
+	const measure = width === "wide" ? "max-w-none" : "max-w-[620px]";
 	// Escape leaves, the same as the back control. A form page is not modal, so
 	// this is a convenience rather than the only way out.
 	useEffect(() => {
@@ -95,7 +95,7 @@ export function FormPage({
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-				<div className={`mx-auto w-full ${measure}`}>
+				<div className={`animate-rise mx-auto w-full ${measure}`}>
 					{sequence ? <StepRail steps={steps} step={step} onStep={onStep} /> : null}
 
 					{current?.hint ? (

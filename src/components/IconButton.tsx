@@ -38,7 +38,7 @@ export function IconButton({
 			onClick={onClick}
 			className={[
 				"flex h-[32px] w-[32px] flex-none items-center justify-center rounded-[var(--radius-md)]",
-				"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:pointer-events-none disabled:opacity-50",
+				"transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-90 disabled:pointer-events-none disabled:opacity-50",
 				"focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
 				danger
 					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"

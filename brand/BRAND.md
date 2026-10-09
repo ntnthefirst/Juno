@@ -147,7 +147,7 @@ What this rules out, all of which are easy to write by accident:
 ### Shape and depth
 
 - **Radius is small and rare.** 4px on controls, 6px on buttons and selectable
-  rows, 10px on the few real surfaces, 14px on modals. `--radius-full` is for
+  rows, 8px on the few real surfaces, 12px on modals. `--radius-full` is for
   avatars and nothing else. If there is no fill and no border, there is nothing
   to round.
 - **Depth is binary.** Either something is on the page, with no shadow, or it

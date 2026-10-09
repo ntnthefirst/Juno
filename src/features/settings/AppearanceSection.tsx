@@ -1,7 +1,6 @@
 import type { ThemeSetting } from "@shared/types";
 import type { ReactNode } from "react";
 import { Icon } from "../../components/Icon";
-import { Toggle } from "../../components/Toggle";
 import { Section } from "./Section";
 
 type Option = { id: ThemeSetting; label: string; hint: string };
@@ -20,20 +19,9 @@ const OPTIONS: Option[] = [
 type AppearanceSectionProps = {
 	theme: ThemeSetting;
 	onChange: (next: ThemeSetting) => void;
-	/**
-	 * The sidebar setting. Left out by setup, which asks about the theme and
-	 * nothing else, so the checkbox only appears when both of these are given.
-	 */
-	sidebarAutoCollapse?: boolean | null;
-	onSidebarAutoCollapseChange?: (next: boolean) => void;
 };
 
-export function AppearanceSection({
-	theme,
-	onChange,
-	sidebarAutoCollapse,
-	onSidebarAutoCollapseChange,
-}: AppearanceSectionProps) {
+export function AppearanceSection({ theme, onChange }: AppearanceSectionProps) {
 	return (
 		<Section
 			title="Appearance"
@@ -50,18 +38,6 @@ export function AppearanceSection({
 					/>
 				))}
 			</div>
-
-			{onSidebarAutoCollapseChange && sidebarAutoCollapse !== undefined ? (
-				<div className="mt-6">
-					<Toggle
-						checked={sidebarAutoCollapse ?? true}
-						disabled={sidebarAutoCollapse === null}
-						onChange={onSidebarAutoCollapseChange}
-						label="Collapse the sidebar on its own"
-						description="Back to icons after you choose something or click beside it."
-					/>
-				</div>
-			) : null}
 		</Section>
 	);
 }

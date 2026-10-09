@@ -17,11 +17,13 @@ const userData = mkdtempSync(join(tmpdir(), "juno-smoke-"));
 // The demo run walks seventeen screens in two themes, the setup window and the
 // walkthrough after it, both template editors, every page of the settings
 // window in two themes plus the search, and it sends real MCP requests to the
-// listener. Each capture also waits for a composited frame first, which is what
-// stops the screenshots being one step stale. Eight minutes is the headroom
-// that leaves on a machine that is also doing other things; a run that takes
-// longer than this is stuck rather than slow.
-const TIMEOUT_MS = 480_000;
+// listener, and presses the keyboard shortcuts. Each capture also waits for a
+// composited frame first, which is what stops the screenshots being one step
+// stale. Fifteen minutes is the headroom that leaves on a machine that is also
+// doing other things: the walk took about twelve when this was written, and
+// had outgrown a limit of eight. A run that takes longer than this is stuck
+// rather than slow.
+const TIMEOUT_MS = 900_000;
 
 // With JUNO_SMOKE_EXE set, the packaged executable is launched instead of the
 // source tree. That is the only run that sees the files electron-builder left

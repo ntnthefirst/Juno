@@ -26,7 +26,7 @@ const KIND_SCREENS: Partial<Record<AgentEntityKind, Extract<OpenTarget, { kind: 
 	contact: "clients",
 	mailAccount: "mail",
 	mailFolder: "mail",
-	mailTemplate: "templates",
+	mailTemplate: "mail-templates",
 	documentTemplate: "document-templates",
 	reminder: "reminders",
 	event: "calendar",

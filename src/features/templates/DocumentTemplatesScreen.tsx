@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import type { DocumentTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { DOCUMENT_SWITCH } from "../../app/screens";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { IconAction } from "../../components/IconAction";
 import { InlineAdd } from "../../components/InlineAdd";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { PdfViewer } from "../../components/PdfViewer";
+import { SectionSwitch } from "../../components/SectionSwitch";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { messageOf } from "../../lib/errors";
 import {
@@ -256,11 +258,9 @@ export function DocumentTemplatesScreen() {
 
 	return (
 		<div className="flex h-full flex-col p-8">
-			<div className="mx-auto mb-6 w-full max-w-[var(--content-width)]">
+			<div className="mb-6 w-full">
 				<div className="flex items-center gap-3">
-					<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-						Document templates
-					</h1>
+					<SectionSwitch sections={DOCUMENT_SWITCH} current="document-templates" label="Document views" />
 					{load.status === "ready" ? (
 						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 							{shown.length} {shown.length === 1 ? "template" : "templates"}
@@ -278,10 +278,8 @@ export function DocumentTemplatesScreen() {
 					/>
 				</div>
 				<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					The documents you make again and again, laid out on paper and printed to PDF. Each one asks
-					for what changes every time, and you connect it to a client once the PDF is made. Mark a
-					template as reviewed once you have read its text.
-				</p>
+						The contracts and letters you make again and again, laid out on paper and printed to PDF. Mark one as reviewed once you have read its text.
+					</p>
 				{createError ? (
 					<p
 						role="alert"
@@ -349,7 +347,7 @@ export function DocumentTemplatesScreen() {
 				) : null}
 			</div>
 
-			<div className="mx-auto w-full max-w-[var(--content-width)] flex-1 overflow-y-auto">
+			<div className="w-full flex-1 overflow-y-auto">
 				{load.status === "loading" ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
 				) : load.status === "error" ? (
@@ -574,7 +572,7 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-				<div className="mx-auto w-full max-w-[var(--content-width)]">
+				<div className="w-full">
 					{template.description ? (
 						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">{template.description}</p>
 					) : null}

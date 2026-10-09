@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toneClassOf } from "../../lib/avatar-tone";
 import { assetImageUrl } from "./format";
 
 type ProjectCoverProps = {
@@ -34,14 +35,14 @@ function initials(name: string): string {
  */
 export function ProjectCover({ assetId, name, className, compact = false }: ProjectCoverProps) {
 	const [failed, setFailed] = useState(false);
-	const box = `flex items-center justify-center overflow-hidden bg-[var(--sunken)] ${className ?? ""}`;
+	const box = `flex items-center justify-center overflow-hidden ${className ?? ""}`;
 
 	if (!assetId || failed) {
 		return (
-			<div className={box} aria-hidden>
+			<div className={`${box} ${toneClassOf(name)}`} aria-hidden>
 				<span
 					className={[
-						"font-[var(--weight-semibold)] tracking-[0.04em] text-[var(--ink-faint)]",
+						"font-[var(--weight-semibold)] tracking-[0.04em]",
 						compact ? "text-[length:var(--text-sm)]" : "text-[length:var(--text-h3)]",
 					].join(" ")}
 				>
@@ -52,7 +53,7 @@ export function ProjectCover({ assetId, name, className, compact = false }: Proj
 	}
 
 	return (
-		<div className={box}>
+		<div className={`${box} bg-[var(--sunken)]`}>
 			<img
 				src={assetImageUrl(assetId)}
 				alt={`Cover image for ${name}`}

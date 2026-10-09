@@ -894,7 +894,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 	if (!draft || !loaded) {
 		return (
 			<div className="flex h-full flex-col overflow-y-auto p-8">
-				<div className="mx-auto w-full max-w-[var(--content-width)]">
+				<div className="w-full">
 					<p className="text-[var(--ink-muted)]">{error ?? "Loading."}</p>
 				</div>
 			</div>
@@ -1180,7 +1180,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 
 					{mode === "inputs" ? (
 						<div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-24">
-							<div className="mx-auto w-full max-w-[var(--content-width)]">
+							<div className="w-full">
 								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
 									What this asks for
 								</h2>

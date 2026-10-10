@@ -22,6 +22,7 @@ import * as connections from "../services/agent-connections";
 import * as automations from "../services/automations";
 import * as briefing from "../services/briefing";
 import * as clientInstall from "../services/agent-install";
+import * as claudeDesktop from "../services/claude-desktop";
 import { serverStatus, setServerEnabled, setServerPort, summaries } from "../mcp";
 import { getMainWindow, getSettingsWindow } from "../windows";
 
@@ -52,6 +53,7 @@ export function registerAgentIpc(): void {
 	ipcMain.handle("agent.connections.list", () => connections.list());
 	ipcMain.handle("agent.connections.revoke", (_event, id: string) => connections.revoke(id));
 	ipcMain.handle("agent.connections.createToken", (_event, name: string) => connections.createToken(name));
+	ipcMain.handle("agent.claudeDesktop.connect", () => claudeDesktop.connect());
 	ipcMain.handle("agent.pairing.list", () => connections.listPairings());
 	ipcMain.handle("agent.pairing.answer", (_event, id: string, code: string) =>
 		connections.answerPairing(id, code),

@@ -144,9 +144,9 @@ export function titleBarOptions(): Electron.BrowserWindowConstructorOptions {
  * entry shows Electron's logo instead of Juno's. Pointing at the same source
  * file fixes the run nobody packages.
  *
- * `build/` is not in the builder's `files`, so the path exists only when it is
- * used. Returning undefined rather than a missing path keeps a packaged window
- * on the executable's icon rather than on nothing.
+ * A packaged build carries the file too, for the Claude Desktop extension, but
+ * a window there keeps the executable's icon, which is the same picture at
+ * every size Windows asks for.
  */
 export function windowIcon(): string | undefined {
 	if (app.isPackaged) return undefined;

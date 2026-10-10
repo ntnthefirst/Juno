@@ -287,6 +287,9 @@ const api: JunoApi = {
 			targets: () => call("agent.install.targets"),
 			write: (clientId) => call("agent.install.write", clientId),
 		},
+		claudeDesktop: {
+			connect: () => call("agent.claudeDesktop.connect"),
+		},
 		tools: () => call("agent.tools"),
 		connections: {
 			list: () => call("agent.connections.list"),

@@ -18,6 +18,7 @@ import type {
 	AgentConnection,
 	AgentTokenCreated,
 	AgentInstallResult,
+	ClaudeDesktopSetup,
 	AgentAction,
 	AgentActionListQuery,
 	AppInfo,
@@ -515,6 +516,14 @@ export interface JunoApi {
 			targets(): Promise<AgentClientTarget[]>;
 			/** Edits that one client's file. Backs it up and keeps every other server. */
 			write(clientId: string): Promise<AgentInstallResult>;
+		};
+		/**
+		 * Claude Desktop cannot be given an address, so it gets an extension that
+		 * carries a bridge. Makes a token for it, writes the extension and opens
+		 * it. A person's action, like every way in: there is no tool for it.
+		 */
+		claudeDesktop: {
+			connect(): Promise<ClaudeDesktopSetup>;
 		};
 		/** Every tool, for the screen that lists the surface. No handlers cross. */
 		tools(): Promise<ToolSummary[]>;

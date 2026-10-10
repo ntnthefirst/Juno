@@ -11,7 +11,8 @@ export type ServerInfo = Pick<McpServerStatus, "enabled" | "running" | "url">;
  * What gets written is the address of the agent server and nothing else: every
  * client here can be given a URL, and the handshake that lets it in happens
  * when it first connects. Claude Desktop is not in the list because it can only
- * be given a program to start, not an address.
+ * be given a program to start, not an address. It gets an extension instead,
+ * from claude-desktop.ts.
  *
  * The alternative is what this replaces: copy a block of JSON or TOML, find a
  * file whose path differs per client and per platform, work out whether it

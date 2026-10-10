@@ -2926,3 +2926,14 @@ export interface AgentTokenCreated {
 	connection: AgentConnection;
 	token: string;
 }
+
+/** What connecting Claude Desktop did. The token is readable this once. */
+export interface ClaudeDesktopSetup {
+	connection: AgentConnection;
+	token: string;
+	/** The extension Juno wrote, for a person to open by hand when Claude did not. */
+	path: string;
+	/** Whether the system handed the file to a program, which is Claude when it is installed. */
+	opened: boolean;
+	url: string;
+}

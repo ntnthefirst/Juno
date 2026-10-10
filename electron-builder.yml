@@ -13,6 +13,8 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - package.json
+  # The icon of the Claude Desktop extension Juno writes (services/claude-desktop.ts).
+  - build/icon.png
   # What is left out, and why. Every line is a file the running app never opens,
   # so it only makes the installer and every update bigger.
   # Source maps: nothing loads them in a packaged build.

@@ -35,9 +35,9 @@ and nothing else does is a model, which means three answers from you.
 - **What it may do unattended.** Nothing changes about the gate: an assistant
   is a caller like any other and its side-effectful calls park for approval.
 
-Until then an external agent does the same work. Open Agent, copy the
-configuration, paste it into Claude Desktop or Claude Code. That also answers
-phase 6's done-when in PLAN.md.
+Until then an external agent does the same work. Connect Claude Desktop
+(an extension) or Claude Code (an address) under Settings > MCP. That also
+answers phase 6's done-when in PLAN.md.
 
 ## 3. Things only you can try - **you**
 
@@ -51,10 +51,10 @@ your hands, a real account or a real client, rather than code.
   recurring event after the October change. Then import an Outlook export the
   other way; its Windows zone names are handled through the file's VTIMEZONE,
   which is tested against a hand-written one and not yet a real one.
-- **No third-party MCP client has connected yet.** The smoke run starts the
-  real bridge and speaks MCP to it, but Claude Desktop and Claude Code have
-  not. Try both, and check that a tool list cached while Juno was closed
-  recovers when it opens.
+- **Claude Desktop has not installed the extension yet.** Claude Code
+  connects by address and works. Press Connect next to Claude Desktop in
+  Settings > MCP, install, paste the token, and call a tool from a chat. Then
+  close Juno, check the chat says Juno is not running, and open it again.
 - **The example mail template has not been read in a real mail client yet.**
   Use it on a client whose address is yours (Mail templates, the example,
   Use), create the draft and send it to yourself. Put a real logo and a real

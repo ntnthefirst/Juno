@@ -5,6 +5,7 @@ import { Icon } from "../../components/Icon";
 import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { Section } from "../settings/Section";
+import { ClaudeDesktopConnect } from "./ClaudeDesktopConnect";
 import { ClientInstaller } from "./ClientInstaller";
 import { ConnectedClients } from "./ConnectedClients";
 import { ManualSetup } from "./ManualSetup";
@@ -174,8 +175,13 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 						<Icon name="info" className="mt-0.5 flex-none text-[var(--ink-muted)]" />
 						<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 							The first time a client connects it opens a page with a code. Type that code into the prompt
-							Juno shows. Claude Desktop only takes servers on the internet, so it cannot use this address.
+							Juno shows. Claude Desktop cannot reach an address on this machine, so it gets an extension
+							and a token instead.
 						</p>
+					</div>
+
+					<div className="mt-4">
+						<ClaudeDesktopConnect onNotice={onNotice} serverRunning={status.running} />
 					</div>
 
 					<div className="mt-4">

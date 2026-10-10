@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, nativeTheme } from "electron";
+import { app, nativeTheme, shell } from "electron";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
@@ -26,6 +26,7 @@ import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import * as agentAudit from "./main/services/agent-audit";
 import { configureAgentInstall } from "./main/services/agent-install";
+import { configureClaudeDesktop } from "./main/services/claude-desktop";
 import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
@@ -177,6 +178,17 @@ if (!app.requestSingleInstanceLock()) {
 			status: () => serverStatus(),
 			home: homedir(),
 			platform: process.platform,
+		});
+		// Claude Desktop takes an extension rather than an address. The bridge
+		// inside it is compiled beside the main process, and the icon ships in
+		// the package for this alone.
+		configureClaudeDesktop({
+			status: () => serverStatus(),
+			version: app.getVersion(),
+			bridgePath: join(__dirname, "bridge", "claude-desktop.js"),
+			iconPath: join(app.getAppPath(), "build", "icon.png"),
+			outDir: join(userDataDir(), "agent"),
+			open: (path) => shell.openPath(path),
 		});
 
 		// The agent surface comes up after IPC, because the gate it enforces is

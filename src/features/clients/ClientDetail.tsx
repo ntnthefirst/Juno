@@ -26,6 +26,7 @@ import { MarkdownNotes } from "../../components/MarkdownNotes";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { ClientDocumentsPanel } from "../documents/DocumentsPanel";
+import { requestOpen } from "../../lib/open-entity";
 import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
 
@@ -1112,9 +1113,15 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 							key={project.id}
 							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
 						>
-							<div className="min-w-0">
+							{/* The project's own page, the same way the palette opens it. */}
+							<button
+								type="button"
+								onClick={() => requestOpen({ kind: "project", id: project.id, name: project.name })}
+								title={`Open ${project.name}`}
+								className="-mx-2 min-w-0 flex-1 rounded-[var(--radius-md)] px-2 py-1 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-visible:bg-[var(--accent-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+							>
 								<div className="flex items-center gap-2">
-									<span data-selectable className="truncate font-[var(--weight-medium)]">
+									<span className="truncate font-[var(--weight-medium)]">
 										{project.name}
 									</span>
 									{project.status ? (
@@ -1131,8 +1138,8 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 										.filter(Boolean)
 										.join("  ·  ")}
 								</div>
-							</div>
-							<span className="flex shrink-0 gap-1">
+							</button>
+							<span className="flex shrink-0 gap-1 pt-1">
 								<IconButton icon="edit" label="Edit" onClick={() => onEdit(project.id)} />
 								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(project)} />
 							</span>

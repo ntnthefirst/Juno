@@ -1444,3 +1444,39 @@ named, forwarding to the address, not a second server.
 **What would reverse this:** Claude Desktop taking a local URL as a server,
 with the handshake. Then it joins the list in `agent-install.ts` and the
 bridge goes.
+
+## 47. A mail template fills in only what it asks for, after the recipient is chosen
+
+Decision 41 applied to mail. A mail template used to read the client, the
+project and the owner's settings, so what it said depended on which client was
+linked when it was used, and it could not be read in full without one. Now
+**every value it prints is one of its own declared inputs**, written
+`{{document.<key>}}` and typed by a person or an agent when it is used, with a
+kind each (text, long text, number, amount, date, choice, image, link), the
+same inputs a document template on paper declares. A placeholder naming a
+client, a project or the owner is refused when the template is saved
+(`mail-template-fields.ts`), and the editor offers only the template's own
+inputs to insert.
+
+Using one is **Link, Fill, Review**. Link comes first because it is the one
+question the records answer: who the message goes to, from which account, and
+which client and project it is filed under. Choosing a client fills in To and
+nothing in the message. Fill asks for the inputs, and Review shows what will be
+sent. A template that declares nothing skips Fill.
+
+Templates written before this are converted on launch, once and in place
+(`adoptRecordValues`): each record value a template read becomes an input of
+its own (`{{client.contactName}}` becomes `{{document.client_contact_name}}`,
+"Client contact name"), required when it is printed and optional when it only
+sits inside its own `{{#if}}`. An `owner.*` value starts with what the owner's
+settings say today, so a footer still fills itself in. Converting is not
+reviewing, so `customisedAt` is left as it was.
+
+A template is read on a page of its own, not in a side panel: a message is
+long, and a panel showed a third of one. The page has Edit and Use at the top
+and the whole message under them.
+
+Revisit if: filling the same client details by hand on every send turns out to
+be the common case. The answer then is a starting value an input takes from a
+named record field when a client is linked, shown and editable on Fill, not a
+template that reads records again.

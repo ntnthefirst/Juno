@@ -1480,3 +1480,31 @@ Revisit if: filling the same client details by hand on every send turns out to
 be the common case. The answer then is a starting value an input takes from a
 named record field when a client is linked, shown and editable on Fill, not a
 template that reads records again.
+
+## 48. A document belongs to a client, a project, both, or nothing
+
+A document had to have a client, which left nowhere to put a brief for a
+project of the owner's own, or a PDF that is not anyone's yet. `client_id` on
+`documents` is now nullable (migration 0020, a rebuild, tested with rows in it
+in `db/migrate-documents.test.ts`), and a document is kept under a client, a
+project, both, or neither.
+
+One rule decides it, in `document-owner.ts`, for generating, importing and
+relinking alike: **a project that has a client brings that client along**, so
+the client's page still lists every document of its projects, and naming a
+client the project does not belong to is refused rather than quietly fixed. A
+project of the owner's own has no client, and neither does its document.
+
+- A document is moved with `documents.link` (a tool, parked for approval like
+  `documents.set_status`), or from the Client and Project pickers in its own
+  column. Only where it is kept changes: the file, its versions and its
+  signatures stay as they are.
+- A project's page lists its documents and adds one from a template, an import
+  or a dropped file, the same panel a client's Documents tab is.
+- A title is unique within its place: the client, or for one with no client
+  the project, or among the documents kept under nothing.
+- An older template that reads a client still reads one when there is one, and
+  marks the gaps when there is none, the same as its preview.
+
+Revisit if: a document ever needs more than one project. That is a join table,
+and the single column would have to move into it with its data.

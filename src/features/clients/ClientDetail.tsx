@@ -25,7 +25,7 @@ import { Icon, type IconName } from "../../components/Icon";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
-import { ClientDocumentsPanel } from "./ClientDocumentsPanel";
+import { ClientDocumentsPanel } from "../documents/DocumentsPanel";
 import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
 

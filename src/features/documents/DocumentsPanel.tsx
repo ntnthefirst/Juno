@@ -13,9 +13,9 @@ import {
 	type ImportOutcome,
 } from "../../lib/pdf-drop";
 import { useFileDrop } from "../../lib/use-file-drop";
-import { ImportFlow } from "../documents/ImportFlow";
-import { VersionCount } from "../documents/VersionCount";
-import { VersionList } from "../documents/VersionList";
+import { ImportFlow } from "./ImportFlow";
+import { VersionCount } from "./VersionCount";
+import { VersionList } from "./VersionList";
 
 type ClientDocumentsPanelProps = {
 	clientId: string;

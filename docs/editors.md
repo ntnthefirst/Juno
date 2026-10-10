@@ -756,7 +756,9 @@ gate, and a document still has to be signed by a person
 ([.claude/rules/mcp.md](../.claude/rules/mcp.md) section 4).
 
 Clicking a template in a list shows a preview, not the editor. Reading is the
-common case; editing is the rare one.
+common case; editing is the rare one. A mail template's preview is a page of
+its own, the whole message with Edit and Use above it, and Back from either
+returns to it.
 
 ## 5. A document is a PDF
 

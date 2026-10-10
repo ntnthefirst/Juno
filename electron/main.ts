@@ -1501,6 +1501,19 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: ${screen} ${opened}`);
+									if (screen === "Mail templates") {
+										// A mail template is read on a page of its own, and the frame is
+										// as tall as the message rather than a fixed box.
+										await new Promise((r) => setTimeout(r, 600));
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											writeFileSync(joinPath(shotDir, `mail-template-page-${theme}.png`), (await capture(window.webContents)).toPNG());
+										}
+									}
 								}
 								if (screen === "Document templates") {
 									// The seeded templates carry no page layout, so the editor opens
@@ -3199,11 +3212,14 @@ if (!app.requestSingleInstanceLock()) {
 									writeFileSync(joinPath(shotDir, `use-mail-template.png`), useMailImage.toPNG());
 
 									// Nothing was created yet at this point, so Escape is enough: it
-									// exits the sequence rather than stepping back through it.
-									await window.webContents.executeJavaScript(
-										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
-									);
-									await new Promise((r) => setTimeout(r, 500));
+									// exits the sequence to the template's page, and a second one
+									// leaves that for the list.
+									for (let press = 0; press < 2; press++) {
+										await window.webContents.executeJavaScript(
+											`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+										);
+										await new Promise((r) => setTimeout(r, 500));
+									}
 
 									// A new template, the way a person makes one: the plus opens into
 									// a name, Enter creates it, and the editor opens on a canvas. This
@@ -3212,12 +3228,6 @@ if (!app.requestSingleInstanceLock()) {
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											// The template read earlier is still open beside the list.
-											const close = document.querySelector('button[aria-label="Close"]');
-											if (close) {
-												close.click();
-												await wait(400);
-											}
 											const plus = document.querySelector('button[aria-label="New mail template"]');
 											if (!plus) return "no plus on the list";
 											plus.click();
@@ -3362,10 +3372,13 @@ if (!app.requestSingleInstanceLock()) {
 									) as string;
 									if (exampleReview !== "ok") throw new Error(`Smoke: using the example ${exampleReview}`);
 									await shootBoth("mail-template-example-review");
-									await window.webContents.executeJavaScript(
-										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
-									);
-									await new Promise((r) => setTimeout(r, 500));
+									// Back to the template's page, then back to the list.
+									for (let press = 0; press < 2; press++) {
+										await window.webContents.executeJavaScript(
+											`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+										);
+										await new Promise((r) => setTimeout(r, 500));
+									}
 
 									// Opened in the editor: the layers name its parts, the picture at a
 									// web address is a box that says who loads it, and what it asks for

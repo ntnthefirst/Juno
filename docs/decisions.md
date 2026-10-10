@@ -783,7 +783,7 @@ client and per platform, and merging it by hand without breaking the servers
 already there. `services/agent-install.ts` does it instead, for Claude Code,
 Cursor, Windsurf, VS Code, Codex and Antigravity. (Claude Desktop was in the
 list while the entry was a command to start. It cannot be given an address, so
-it left with decision 42.)
+it left with decision 42, and came back by another door in decision 46.)
 
 It edits files other programs own, so the rules are strict and they are tested:
 
@@ -1301,6 +1301,8 @@ no session kept, and replies are plain JSON rather than a stream. The SDK now
 runs in the main process, which settles the size worry in decision 24: the
 cost was already in the installer.
 
+**Amended by decision 46**, which answers the cost below with that bridge.
+
 **What it costs.** Claude Desktop cannot be offered. Its configuration file
 takes only a program to start, and the connectors it does take are reached by
 Anthropic's servers, which cannot see this machine. An entry written by the
@@ -1408,3 +1410,37 @@ as a form, not a tool. What replaced it is deliberately less.
 **What would reverse this:** a screen whose purpose is reading long text, which
 would earn a measure of its own, or a second language of keyboard that a person
 has to learn before the first click. Nothing has asked for either.
+
+## 46. Claude Desktop gets an extension, and the extension is a bridge
+
+Decision 42 left Claude Desktop out, and that turned out to matter more than
+the clients that stayed: it is where the owner talks to an agent day to day.
+A chat there reaches a local server only as a program Claude starts itself. A
+connector added by URL is opened from Anthropic's servers, which cannot see
+127.0.0.1 on this machine; Figma works there only because its connector is
+Figma's cloud server, not the one on the laptop.
+
+So Juno writes a Claude Desktop extension, `Juno.mcpb`, and opens it, which
+brings up Claude's own install dialog. Inside is a manifest and
+`electron/bridge/claude-desktop.ts`, compiled: a program with no logic and no
+state that reads a message per line on stdin, posts it to the agent server
+with a token, and writes the reply to stdout. It is the bridge decision 42
+named, forwarding to the address, not a second server.
+
+- **Claude runs it with its own Node, from its own folder.** Nothing of Juno's
+  runs outside Juno, so the installer lock that decision 28 worked around does
+  not come back.
+- **The token is made for it, shown once, and pasted into Claude's dialog.**
+  The manifest declares it a sensitive field, so Claude keeps it in the system
+  keychain, and the bundle on disk holds no secret. Claude Desktop cannot do
+  the code handshake, so this is the hand-made token from decision 42 with a
+  name already on it.
+- **The bridge refuses any address that is not this machine**, so a changed
+  setting in Claude cannot send the token somewhere else.
+- **Connecting is IPC only.** It makes a token, and no tool may do that.
+- The zip is written by hand, stored and not deflated: two files and an icon,
+  and a dependency for that would be larger than the code.
+
+**What would reverse this:** Claude Desktop taking a local URL as a server,
+with the handshake. Then it joins the list in `agent-install.ts` and the
+bridge goes.

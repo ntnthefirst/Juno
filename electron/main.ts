@@ -479,6 +479,7 @@ if (!app.requestSingleInstanceLock()) {
 								const own = await b.projects.create({
 									name: "Juno", statusId: running.id,
 									description: "The back office this is.",
+									notes: "## Next\\n\\n- Release notes for **0.4**\\n- Check the installer on a clean machine",
 								});
 								await b.projects.links.create({ projectId: own.id, label: "Repository", target: "https://github.com/example/juno" });
 								await b.projects.links.create({ projectId: own.id, label: "Designs", target: "https://figma.com/file/example" });
@@ -1102,6 +1103,9 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.textContent.includes("Repository")) return "the links are not shown";
 											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
 											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the project";
+											const notes = main.querySelector("[aria-label='Project notes']");
+											if (!notes) return "no notes editor on the project";
+											if (!notes.textContent.includes("Release notes")) return "the notes editor does not show the stored notes";
 											const addDate = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add date");
 											if (!addDate) return "no add date button on the project";
 											addDate.click();

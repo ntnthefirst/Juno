@@ -20,6 +20,7 @@ import { AssetList } from "./AssetList";
 import { CommandPanel } from "./CommandPanel";
 import { formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
 import { LinkPanel } from "./LinkPanel";
+import { ProjectNotes } from "./ProjectNotes";
 import { RunConsole } from "./RunConsole";
 import { StorageDialog } from "./StorageDialog";
 import { ScheduleSection } from "../calendar/ScheduleSection";
@@ -328,6 +329,11 @@ export function ProjectDetail({
 						<MarkdownNotes text={project.description} />
 					</section>
 				) : null}
+
+				<section className="mt-8">
+					<SectionHeading>Notes</SectionHeading>
+					<ProjectNotes key={project.id} projectId={project.id} notes={project.notes} />
+				</section>
 
 				<div className="mt-8">
 					<ScheduleSection

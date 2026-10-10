@@ -52,6 +52,7 @@ const GLYPHS: Record<string, Glyph> = {
 /** Which mark belongs to which client id from services/agent-install.ts. */
 const BY_CLIENT: Record<string, string> = {
 	"claude-code": "claude",
+	"claude-desktop": "claude",
 	cursor: "cursor",
 	windsurf: "windsurf",
 	vscode: "vscode",

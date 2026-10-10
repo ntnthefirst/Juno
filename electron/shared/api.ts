@@ -627,7 +627,9 @@ export interface JunoApi {
 	};
 
 	documents: {
-		list(query?: { clientId?: string }): Promise<DocumentRecord[]>;
+		list(query?: { clientId?: string; projectId?: string }): Promise<DocumentRecord[]>;
+		/** Keeps it under a client, a project, both or neither. A project brings its client. */
+		link(id: string, input: { clientId: string | null; projectId: string | null }): Promise<DocumentRecord>;
 		get(id: string): Promise<DocumentRecord | null>;
 		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
 		/** Opens the file picker and hands back the chosen PDFs as bytes. Empty when cancelled. */

@@ -25,7 +25,7 @@ import { Icon, type IconName } from "../../components/Icon";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
-import { ClientDocumentsPanel } from "../documents/DocumentsPanel";
+import { DocumentsPanel } from "../documents/DocumentsPanel";
 import { requestOpen } from "../../lib/open-entity";
 import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
@@ -651,9 +651,9 @@ export function ClientDetail({
 						onRemove={(project) => setPending({ kind: "project", id: project.id, name: project.name })}
 					/>
 				) : tab === "documents" ? (
-					<ClientDocumentsPanel
-						clientId={clientId}
-						clientName={client.name}
+					<DocumentsPanel
+						scope={{ clientId }}
+						name={client.name}
 						onGenerate={onGenerateDocument}
 						onOpen={onOpenDocument}
 						onChanged={refresh}

@@ -24,9 +24,10 @@ import type {
 	ImportSource,
 } from "../../shared/types";
 import { getDb, type Db } from "../db";
-import { clients, documents, mailAttachments, mailMessages, mailThreads, projects } from "../db/schema";
+import { documents, mailAttachments, mailMessages, mailThreads } from "../db/schema";
 import { todayIsoDate } from "./document-context";
 import * as versions from "./document-versions";
+import { resolveOwner } from "./document-owner";
 import { documentStorageDir, fileNameFor, get, type DocumentRecord } from "./documents";
 import { attachmentPath } from "./mail-threads";
 import { compareText, extractText } from "./pdf-text";
@@ -132,24 +133,23 @@ function titleOf(fileName: string): string {
 	return fileName.replace(/\.pdf$/i, "").trim() || "Document";
 }
 
-function liveClient(clientId: string, db: Db) {
-	const client = db
-		.select()
-		.from(clients)
-		.where(and(eq(clients.id, clientId), isNull(clients.deletedAt)))
-		.get();
-	if (!client) throw new Error("That client no longer exists.");
-	return client;
-}
-
-/** The live document of this client with this title, compared the way a person would. */
-function documentTitled(clientId: string, title: string, db: Db) {
+/**
+ * The live document with this title in the same place: under the same client,
+ * or, for one with no client, under the same project, or among the documents
+ * kept under nothing. Compared the way a person would.
+ */
+function documentTitled(place: { clientId: string | null; projectId: string | null }, title: string, db: Db) {
 	const wanted = title.trim().toLowerCase();
+	const where = place.clientId
+		? eq(documents.clientId, place.clientId)
+		: place.projectId
+			? and(isNull(documents.clientId), eq(documents.projectId, place.projectId))
+			: and(isNull(documents.clientId), isNull(documents.projectId));
 	return (
 		db
 			.select({ id: documents.id, title: documents.title })
 			.from(documents)
-			.where(and(eq(documents.clientId, clientId), isNull(documents.deletedAt)))
+			.where(and(where, isNull(documents.deletedAt)))
 			.all()
 			.find((row) => row.title.trim().toLowerCase() === wanted) ?? null
 	);
@@ -184,7 +184,7 @@ async function analyse(file: Resolved, clientId: string | null, db: Db): Promise
 
 	const defaultTitle = titleOf(file.fileName);
 	const wantedClient = clientId ?? file.threadClientId;
-	const named = wantedClient ? documentTitled(wantedClient, defaultTitle, db) : null;
+	const named = wantedClient ? documentTitled({ clientId: wantedClient, projectId: null }, defaultTitle, db) : null;
 	const ids = [...best.keys(), ...(named && !best.has(named.id) ? [named.id] : [])];
 
 	const matches: ImportMatch[] = [];
@@ -234,27 +234,19 @@ export async function analysePath(
 
 async function createDocument(
 	file: Resolved,
-	input: { clientId: string; title?: string; projectId?: string | null; issuedOn?: string },
+	input: { clientId?: string | null; title?: string; projectId?: string | null; issuedOn?: string },
 	db: Db,
 ): Promise<DocumentRecord> {
-	const client = liveClient(input.clientId, db);
-	if (input.projectId) {
-		const project = db
-			.select()
-			.from(projects)
-			.where(and(eq(projects.id, input.projectId), isNull(projects.deletedAt)))
-			.get();
-		if (!project) throw new Error("That project no longer exists.");
-		if (project.clientId !== client.id) throw new Error("That project belongs to a different client.");
-	}
+	const owner = resolveOwner(input, db);
 
 	const title = input.title?.trim() || titleOf(file.fileName);
 	// Compared case-insensitively and trimmed, because "Contract.pdf" and
 	// "contract.pdf " are the same file to the person who dropped both. A
 	// deleted document does not count, so removing one frees its name again.
-	if (documentTitled(client.id, title, db)) {
+	if (documentTitled(owner, title, db)) {
+		const where = owner.clientName ?? owner.projectName;
 		throw new Error(
-			`${client.name} already has a document named "${title}". Add the file as a new version of it, or give it another name.`,
+			`${where ? `${where} already has` : "There is already"} a document named "${title}". Add the file as a new version of it, or give it another name.`,
 		);
 	}
 
@@ -266,8 +258,8 @@ async function createDocument(
 	const [row] = db
 		.insert(documents)
 		.values({
-			clientId: client.id,
-			projectId: input.projectId ?? null,
+			clientId: owner.clientId,
+			projectId: owner.projectId,
 			templateId: null,
 			templateVersion: null,
 			title,

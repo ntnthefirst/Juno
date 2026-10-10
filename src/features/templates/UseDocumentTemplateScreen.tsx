@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import type { ClientSummary, DocumentTemplate, ProjectSummary } from "@shared/types";
+import type { DocumentTemplate } from "@shared/types";
 import { Button } from "../../components/Button";
 import { FormPage, type FormStep } from "../../components/FormPage";
-import { Select } from "../../components/Select";
 import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
+import { DocumentOwnerFields, type DocumentOwnerChoice } from "../documents/DocumentOwnerFields";
 
 type UseDocumentTemplateScreenProps = {
 	templateId: string;
@@ -15,7 +15,7 @@ type UseDocumentTemplateScreenProps = {
 
 type Load =
 	| { status: "loading" }
-	| { status: "ready"; template: DocumentTemplate; clients: ClientSummary[] }
+	| { status: "ready"; template: DocumentTemplate }
 	| { status: "error"; message: string };
 
 type Preview =
@@ -37,12 +37,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 	const [stepIndex, setStepIndex] = useState(0);
 	const [values, setValues] = useState<Record<string, string>>({});
 	const [attemptedFill, setAttemptedFill] = useState(false);
-	const [clientId, setClientId] = useState("");
-	// Keyed to the client it was fetched for: a client switch does not need an
-	// effect to clear the stale list, the stale list just stops matching.
-	const [projectsState, setProjectsState] = useState<{ clientId: string; rows: ProjectSummary[] } | null>(null);
-	const [projectIdChoice, setProjectIdChoice] = useState("");
-	const [linkError, setLinkError] = useState<string | null>(null);
+	const [owner, setOwner] = useState<DocumentOwnerChoice>({ clientId: "", projectId: "" });
 	const [preview, setPreview] = useState<Preview>({ status: "idle" });
 	const [created, setCreated] = useState<{
 		title: string;
@@ -55,14 +50,15 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.juno.templates.get(templateId), window.juno.clients.list()])
-			.then(([template, clients]) => {
+		window.juno.templates
+			.get(templateId)
+			.then((template) => {
 				if (cancelled) return;
 				if (!template) {
 					setLoad({ status: "error", message: "This template is no longer in your juno." });
 					return;
 				}
-				setLoad({ status: "ready", template, clients });
+				setLoad({ status: "ready", template });
 				const defaults: Record<string, string> = {};
 				for (const input of template.inputs) {
 					if (input.defaultValue) defaults[input.key] = input.defaultValue;
@@ -77,26 +73,8 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 		};
 	}, [templateId]);
 
-	useEffect(() => {
-		if (clientId.length === 0) return;
-		let cancelled = false;
-		window.juno.projects
-			.list({ clientId })
-			.then((rows) => {
-				if (!cancelled) setProjectsState({ clientId, rows });
-			})
-			.catch(() => {
-				if (!cancelled) setProjectsState({ clientId, rows: [] });
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [clientId]);
-
-	const projects = clientId.length > 0 && projectsState?.clientId === clientId ? projectsState.rows : [];
-	// The person's choice holds while a client is picked; clearing the client
-	// clears it too, without an effect to do it.
-	const projectId = clientId.length === 0 ? "" : projectIdChoice;
+	const clientId = owner.clientId;
+	const projectId = owner.projectId;
 
 	if (load.status === "loading") return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
 
@@ -111,7 +89,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 		);
 	}
 
-	const { template, clients } = load;
+	const { template } = load;
 	const hasInputs = template.inputs.length > 0;
 	const steps: StepKey[] = hasInputs ? ["fill", "link", "review"] : ["link", "review"];
 	const step = steps[Math.min(stepIndex, steps.length - 1)]!;
@@ -119,7 +97,10 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 		key === "fill"
 			? { label: "Fill" }
 			: key === "link"
-				? { label: "Link", hint: "Who this document is for." }
+				? {
+						label: "Link",
+						hint: "Who this document is for and where it is kept. Without a client, what the template reads from one is marked as missing.",
+					}
 				: { label: "Review", hint: "A real preview before anything is created." },
 	);
 
@@ -130,14 +111,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 			setAttemptedFill(true);
 			if (missingRequired.length > 0) return;
 		}
-		if (step === "link") {
-			if (clientId.length === 0) {
-				setLinkError("Choose a client.");
-				return;
-			}
-			setLinkError(null);
-			void runPreview();
-		}
+		if (step === "link") void runPreview();
 		setStepIndex((index) => Math.min(index + 1, steps.length - 1));
 	}
 
@@ -154,7 +128,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 		try {
 			const result = await window.juno.templates.preview({
 				bodyHtml: template.bodyHtml,
-				clientId,
+				clientId: clientId || null,
 				projectId: projectId.length > 0 ? projectId : null,
 				isSpecimen: template.reviewedAt === null,
 			});
@@ -170,7 +144,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 		setError(null);
 		try {
 			const result = await window.juno.documents.generate({
-				clientId,
+				clientId: clientId || null,
 				templateId: template.id,
 				projectId: projectId.length > 0 ? projectId : null,
 				extras: values,
@@ -260,27 +234,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 				/>
 			) : null}
 
-			{step === "link" ? (
-				<div className="flex flex-col gap-4">
-					<Select
-						label="Client"
-						required
-						value={clientId}
-						onChange={setClientId}
-						placeholder="Choose a client"
-						options={clients.map((row) => ({ value: row.id, label: row.name }))}
-						error={linkError}
-					/>
-					<Select
-						label="Project"
-						value={projectId}
-						onChange={setProjectIdChoice}
-						placeholder={clientId.length === 0 ? "Choose a client first" : "No project"}
-						disabled={clientId.length === 0}
-						options={projects.map((row) => ({ value: row.id, label: row.name }))}
-					/>
-				</div>
-			) : null}
+			{step === "link" ? <DocumentOwnerFields value={owner} onChange={setOwner} /> : null}
 
 			{step === "review" ? (
 				<div>

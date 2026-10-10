@@ -375,6 +375,7 @@ const api: JunoApi = {
 
 	documents: {
 		list: (query) => call("documents.list", query),
+		link: (id, input) => call("documents.link", id, input),
 		get: (id) => call("documents.get", id),
 		generate: (input) => call("documents.generate", input),
 		pickPdfs: () => call("documents.pickPdfs"),

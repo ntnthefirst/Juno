@@ -1559,9 +1559,11 @@ export type DocumentTemplatePatch = Partial<
 >;
 
 export interface DocumentRecord extends Standard {
-	clientId: string;
-	clientName: string;
+	/** Null for a document kept under a project of the owner's own, or under nothing. */
+	clientId: string | null;
+	clientName: string | null;
 	projectId: string | null;
+	projectName: string | null;
 	templateId: string | null;
 	templateVersion: number | null;
 	title: string;
@@ -1589,7 +1591,7 @@ export type DocumentSourceKind = "generated" | "imported";
 export interface ImportDocumentInput {
 	/** An absolute path to a PDF that exists. Copied in, never referenced. */
 	sourcePath: string;
-	clientId: string;
+	clientId?: string | null;
 	title?: string;
 	projectId?: string | null;
 	issuedOn?: IsoDate;
@@ -1664,8 +1666,8 @@ export interface PickedPdf {
 export interface ImportMatch {
 	documentId: string;
 	title: string;
-	clientId: string;
-	clientName: string;
+	clientId: string | null;
+	clientName: string | null;
 	/** 0 to 1, how much of the text is the same. */
 	score: number;
 	/** The same bytes are already one of this document's versions. */
@@ -1688,7 +1690,7 @@ export interface ImportAnalysis {
 
 export interface ImportFileInput {
 	source: ImportSource;
-	clientId: string;
+	clientId?: string | null;
 	title?: string;
 	projectId?: string | null;
 	issuedOn?: IsoDate;
@@ -1700,7 +1702,8 @@ export interface AddVersionInput {
 }
 
 export interface GenerateDocumentInput {
-	clientId: string;
+	/** Optional: a project with a client brings its client along. */
+	clientId?: string | null;
 	templateId: string;
 	projectId?: string | null;
 	title?: string;

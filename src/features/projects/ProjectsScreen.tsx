@@ -10,6 +10,7 @@ import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
 import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
+import { GenerateDialog } from "../documents/GenerateDialog";
 import { ProjectDetail } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 import { ProjectGrid } from "./ProjectGrid";
@@ -73,6 +74,8 @@ export function ProjectsScreen() {
 	const [editing, setEditing] = useState<Project | null | "new">(null);
 	useScreenAction("projects", () => setEditing("new"));
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
+	// A document from a template is a page of its own, the same as on a client.
+	const [generating, setGenerating] = useState(false);
 	const [deleted, setDeleted] = useState<ProjectSummary | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
@@ -169,7 +172,7 @@ export function ProjectsScreen() {
 	// nothing floats above it: a dialog on top handles Escape itself, and
 	// without this guard both would fire.
 	useEffect(() => {
-		if (selectedId === null || editing !== null || scheduleForm !== null) return;
+		if (selectedId === null || editing !== null || scheduleForm !== null || generating) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			if (document.querySelector("[role='dialog']")) return;
@@ -177,7 +180,7 @@ export function ProjectsScreen() {
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, editing, scheduleForm, clearSelection]);
+	}, [selectedId, editing, scheduleForm, generating, clearSelection]);
 
 	const rows = load.status === "ready" ? load.rows : null;
 	const needle = term.trim().toLowerCase();
@@ -197,7 +200,13 @@ export function ProjectsScreen() {
 					{ label: "Projects", onSelect: () => setEditing(null) },
 					{ label: editing === "new" ? "New project" : "Edit project" },
 				]
-			: selectedId !== null && scheduleForm !== null
+			: selectedId !== null && generating
+				? [
+						{ label: "Projects", onSelect: clearSelection },
+						{ label: selectedName ?? "Project", onSelect: () => setGenerating(false) },
+						{ label: "New document" },
+					]
+				: selectedId !== null && scheduleForm !== null
 				? [
 						{ label: "Projects", onSelect: clearSelection },
 						{ label: selectedName ?? "Project", onSelect: () => setScheduleForm(null) },
@@ -214,6 +223,20 @@ export function ProjectsScreen() {
 				project={editing === "new" ? null : editing}
 				onClose={() => setEditing(null)}
 				onSaved={saved}
+			/>
+		);
+	}
+
+	if (selectedId !== null && generating) {
+		return (
+			<GenerateDialog
+				lockedProjectId={selectedId}
+				backLabel="Project"
+				onClose={() => setGenerating(false)}
+				onGenerated={() => {
+					setGenerating(false);
+					setDetailVersion((version) => version + 1);
+				}}
 			/>
 		);
 	}
@@ -241,6 +264,7 @@ export function ProjectsScreen() {
 				onChanged={refreshList}
 				onEdit={(project) => setEditing(project)}
 				onSchedule={setScheduleForm}
+				onGenerateDocument={() => setGenerating(true)}
 				onNameChange={setSelectedName}
 				onDeleted={(project) => {
 					clearSelection();

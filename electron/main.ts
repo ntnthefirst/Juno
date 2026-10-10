@@ -1115,6 +1115,7 @@ if (!app.requestSingleInstanceLock()) {
 											const notes = main.querySelector("[aria-label='Project notes']");
 											if (!notes) return "no notes editor on the project";
 											if (!notes.textContent.includes("Release notes")) return "the notes editor does not show the stored notes";
+											if (!main.querySelector("button[aria-label='Add a document']")) return "no documents section on the project";
 											const addDate = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add date");
 											if (!addDate) return "no add date button on the project";
 											addDate.click();
@@ -1804,11 +1805,12 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const dialog = document.querySelector("[role=dialog]");
-											const connect = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Connect a client");
-											if (!connect) return "the question has no way to connect a client";
-											connect.click();
+											const keep = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Keep in Juno");
+											if (!keep) return "the question has no way to keep the document";
+											keep.click();
 											await wait(400);
-											if (![...document.querySelectorAll("label")].some((el) => el.textContent.trim().startsWith("Client"))) return "no client step";
+											const labels = [...document.querySelectorAll("label")].map((el) => el.textContent.trim());
+											if (!labels.some((text) => text.startsWith("Client")) || !labels.some((text) => text.startsWith("Project"))) return "the keep step does not offer a client and a project";
 											const leave = () => {
 												const b = [...document.querySelectorAll("button")].find((el) => ["Previous", "Cancel"].includes(el.textContent.trim()));
 												if (b) b.click();

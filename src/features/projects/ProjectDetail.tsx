@@ -16,6 +16,8 @@ import { MenuButton, type MenuItem } from "../../components/Menu";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { requestOpen } from "../../lib/open-entity";
+import { DocumentsPanel } from "../documents/DocumentsPanel";
 import { AssetList } from "./AssetList";
 import { CommandPanel } from "./CommandPanel";
 import { formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
@@ -34,6 +36,8 @@ type ProjectDetailProps = {
 	onEdit: (project: Project) => void;
 	/** A date or a reminder is a form, so the screen draws it as a page. */
 	onSchedule: (form: ScheduleForm) => void;
+	/** So is a document from a template. */
+	onGenerateDocument: () => void;
 	onNameChange: (name: string) => void;
 	onDeleted: (project: ProjectSummary) => void;
 };
@@ -63,6 +67,7 @@ export function ProjectDetail({
 	onChanged,
 	onEdit,
 	onSchedule,
+	onGenerateDocument,
 	onNameChange,
 	onDeleted,
 }: ProjectDetailProps) {
@@ -340,6 +345,17 @@ export function ProjectDetail({
 						projectId={project.id}
 						{...(project.clientId ? { clientId: project.clientId } : {})}
 						onOpenForm={onSchedule}
+					/>
+				</div>
+
+				<div className="mt-8">
+					{/* Opening one goes to the Documents screen, the same as the palette. */}
+					<DocumentsPanel
+						scope={{ projectId: project.id }}
+						name={project.name}
+						onGenerate={onGenerateDocument}
+						onOpen={(id, title) => requestOpen({ kind: "document", id, name: title })}
+						onChanged={() => undefined}
 					/>
 				</div>
 

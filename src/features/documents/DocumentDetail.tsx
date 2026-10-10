@@ -9,6 +9,8 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { IconAction } from "../../components/IconAction";
 import { MenuButton } from "../../components/Menu";
+import { belongsTo } from "./belongs-to";
+import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { announceDocumentsChanged } from "../../lib/pdf-drop";
@@ -159,6 +161,21 @@ export function DocumentDetail({
 		setAction(null);
 		try {
 			await window.juno.documents.setStatus(documentId, statusId.length > 0 ? statusId : null);
+			refresh();
+			onChanged();
+		} catch (cause: unknown) {
+			setAction(messageOf(cause));
+		}
+	}
+
+	/** Moves it to another client or project, or to neither. The file stays as it is. */
+	async function relink(next: DocumentOwnerChoice) {
+		setAction(null);
+		try {
+			await window.juno.documents.link(documentId, {
+				clientId: next.clientId || null,
+				projectId: next.projectId || null,
+			});
 			refresh();
 			onChanged();
 		} catch (cause: unknown) {
@@ -340,7 +357,7 @@ export function DocumentDetail({
 						{record.isSpecimen ? <SpecimenMark /> : null}
 						{isImported ? <ImportedMark /> : null}
 					</div>
-					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{record.clientName}</p>
+					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{belongsTo(record)}</p>
 
 					<div className="mt-4 flex items-center gap-1">
 						<Button variant="primary" disabled={!hasFile} onClick={() => void guarded("sign", () => onSign(record))}>
@@ -446,6 +463,12 @@ export function DocumentDetail({
 							<Fact label="Issued on">
 								<span className="tabular">{formatDate(record.issuedOn) || "Not set"}</span>
 							</Fact>
+							<div className="col-span-2">
+								<DocumentOwnerFields
+									value={{ clientId: record.clientId ?? "", projectId: record.projectId ?? "" }}
+									onChange={(next) => void relink(next)}
+								/>
+							</div>
 							{isImported ? (
 								<Fact label="Source">Imported PDF</Fact>
 							) : (
@@ -513,7 +536,7 @@ export function DocumentDetail({
 			{confirmingDelete ? (
 				<Dialog title="Delete document" width="narrow" onClose={() => setConfirmingDelete(false)}>
 					<p className="mt-3 text-[length:var(--text-base)]">
-						{record.title} is removed from {record.clientName}. You can undo this straight after.
+						{record.title} is removed{record.clientName ? ` from ${record.clientName}` : ""}. You can undo this straight after.
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
 						<Button onClick={() => setConfirmingDelete(false)}>Cancel</Button>

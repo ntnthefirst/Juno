@@ -6,6 +6,7 @@ import { groupByDay } from "../../lib/day-groups";
 import { requestOpen } from "../../lib/open-entity";
 import type { Loaded } from "../../lib/use-loaded";
 import { Card, CardError, CardLink, CardNote, GroupLabel, CardSkeleton } from "./Card";
+import { belongsTo } from "../documents/belongs-to";
 
 type RecentDocumentsCardProps = {
 	documents: Loaded<DocumentRecord[]>;
@@ -49,11 +50,11 @@ export function RecentDocumentsCard({ documents, statuses }: RecentDocumentsCard
 									onClick={() => requestOpen({ kind: "document", id: record.id, name: record.title })}
 									className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] px-2 py-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
 								>
-									<Avatar name={record.clientName} size={32} shape="square" />
+									<Avatar name={record.clientName ?? record.projectName ?? record.title} size={32} shape="square" />
 									<span className="min-w-0 flex-1">
 										<span className="block truncate text-[length:var(--text-base)]">{record.title}</span>
 										<span className="block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-											{record.clientName}
+											{belongsTo(record)}
 										</span>
 									</span>
 									{status ? <StatusBadge label={status.label} tone={status.tone} /> : null}

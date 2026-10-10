@@ -17,9 +17,10 @@ import { ImportFlow } from "./ImportFlow";
 import { VersionCount } from "./VersionCount";
 import { VersionList } from "./VersionList";
 
-type ClientDocumentsPanelProps = {
-	clientId: string;
-	clientName: string;
+type DocumentsPanelProps = {
+	scope: DocumentsScope;
+	/** The client's or project's name, for "Drop to add to ...". */
+	name: string;
 	/** Starting a document from a template is a page, which the screen owns. */
 	onGenerate: () => void;
 	/** Opening one is the same viewer the Documents screen shows, which the screen owns too. */
@@ -27,6 +28,9 @@ type ClientDocumentsPanelProps = {
 	/** The client's own counts and timeline are stale once a document is added. */
 	onChanged: () => void;
 };
+
+/** Whose documents: a client's, or a project's. */
+export type DocumentsScope = { clientId: string } | { projectId: string };
 
 type Load =
 	| { status: "loading" }
@@ -41,29 +45,34 @@ function formatDate(date: string | null): string {
 }
 
 /**
- * A client's documents, with the two ways to add one. The plus offers a
- * template or an import, and files dropped on the panel are imported for this
- * client without being asked which one.
+ * A client's or a project's documents, with the two ways to add one. The plus
+ * offers a template or an import, and files dropped on the panel are imported
+ * for this client or project without being asked which one. A project that has
+ * a client brings its client along (document-owner.ts), so a file dropped on
+ * a client's project shows on the client's page too.
  */
-export function ClientDocumentsPanel({
-	clientId,
-	clientName,
+export function DocumentsPanel({
+	scope,
+	name,
 	onGenerate,
 	onOpen,
 	onChanged,
-}: ClientDocumentsPanelProps) {
+}: DocumentsPanelProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [items, setItems] = useState<ImportItem[] | null>(null);
 	const [expanded, setExpanded] = useState<string[]>([]);
 	const [problems, setProblems] = useState<string[]>([]);
 	const [notice, setNotice] = useState<string | null>(null);
 
+	const clientId = "clientId" in scope ? scope.clientId : undefined;
+	const projectId = "projectId" in scope ? scope.projectId : undefined;
+
 	const reload = useCallback(() => {
 		window.juno.documents
-			.list({ clientId })
+			.list(clientId ? { clientId } : { projectId })
 			.then((records) => setLoad({ status: "ready", records }))
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
-	}, [clientId]);
+	}, [clientId, projectId]);
 
 	useEffect(() => {
 		reload();
@@ -192,7 +201,7 @@ export function ClientDocumentsPanel({
 			{drop.dragging ? (
 				<div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[var(--radius-lg)] bg-[var(--accent-soft)]/80">
 					<p className="font-[var(--weight-medium)] text-[var(--accent)]">
-						Drop to add to {clientName}
+						Drop to add to {name}
 					</p>
 				</div>
 			) : null}
@@ -213,7 +222,14 @@ export function ClientDocumentsPanel({
 					</ul>
 				</div>
 			) : null}
-			{items ? <ImportFlow items={items} clientId={clientId} onDone={finished} /> : null}
+			{items ? (
+				<ImportFlow
+					items={items}
+					{...(clientId ? { clientId } : {})}
+					{...(projectId ? { projectId } : {})}
+					onDone={finished}
+				/>
+			) : null}
 		</section>
 	);
 }

@@ -24,6 +24,7 @@ import { ImportFlow } from "./ImportFlow";
 import { VersionCount } from "./VersionCount";
 import { VersionList } from "./VersionList";
 import { SignPage } from "./SignPage";
+import { belongsTo } from "./belongs-to";
 
 /** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
 function formatDate(date: string | null): string {
@@ -45,7 +46,7 @@ function missingNotice(missing: string[]): string {
 }
 
 function matches(record: DocumentRecord, needle: string): boolean {
-	return `${record.title} ${record.clientName}`.toLowerCase().includes(needle);
+	return `${record.title} ${belongsTo(record)}`.toLowerCase().includes(needle);
 }
 
 type Rows = { records: DocumentRecord[]; statuses: ReferenceItem[] };
@@ -225,7 +226,9 @@ export function DocumentsScreen() {
 	const statusOptions = [...usedStatusIds.entries()]
 		.map(([value, label]) => ({ value, label }))
 		.sort((a, b) => a.label.localeCompare(b.label));
-	const usedClients = new Map(records.map((record) => [record.clientId, record.clientName]));
+	const usedClients = new Map(
+		records.flatMap((record) => (record.clientId && record.clientName ? [[record.clientId, record.clientName] as const] : [])),
+	);
 	const clientOptions = [...usedClients.entries()]
 		.map(([value, label]) => ({ value, label }))
 		.sort((a, b) => a.label.localeCompare(b.label));
@@ -449,7 +452,7 @@ type DocumentTableProps = {
 	onRemove: (record: DocumentRecord) => void;
 };
 
-const HEADS = ["Title", "Client", "Status", "Issued"];
+const HEADS = ["Title", "Linked to", "Status", "Issued"];
 
 /**
  * Rows are the structure. No outer border, no filled header, no card, per
@@ -568,7 +571,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 								style={{ height: "var(--row-height-roomy)" }}
 							>
 								<div className="flex items-center gap-3">
-									<Avatar name={row.clientName} size={28} shape="square" />
+									<Avatar name={row.clientName ?? row.projectName ?? row.title} size={28} shape="square" />
 									<button
 										type="button"
 										aria-current={selected ? "true" : undefined}
@@ -593,7 +596,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 								</div>
 							</td>
 							<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-								<span className="block truncate">{row.clientName}</span>
+								<span className="block truncate">{belongsTo(row)}</span>
 							</td>
 							<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
 								<span className="block truncate">

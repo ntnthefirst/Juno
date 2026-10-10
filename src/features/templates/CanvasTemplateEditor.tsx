@@ -1193,9 +1193,10 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 									</p>
 								) : (
 									<p className="mt-1 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-										A value nothing in the records can answer. Each one becomes a placeholder in the body,
-										so it can be written in and filled every time this template is used. An input of kind
-										image can be dropped on the canvas as a picture.
+										Everything that changes each time this message is sent. Nothing is filled in from a
+										client, a project or your details: each input is typed by hand, or by an agent, after
+										the recipient is chosen. Write one as {"{{document.<key>}}"} in a text, or place it as
+										an input block. An image input is a picture chosen when the template is used.
 									</p>
 								)}
 								<div className="mt-4">
@@ -1319,7 +1320,6 @@ const MAIL_SOURCE: CanvasSource = {
 			// previewed with, so a picture it asks for is drawn in place of a
 			// marker where its address should be.
 			extras: startingValues(draft.inputs),
-			clientId: null,
 		});
 		return { kind: "html", subject: result.subject, html: result.bodyHtml, missing: result.missing };
 	},

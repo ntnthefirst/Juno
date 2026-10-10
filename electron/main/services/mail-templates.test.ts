@@ -13,7 +13,6 @@ import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { mailTemplates } from "../db/schema";
 import * as clientsService from "./clients";
-import * as contactsService from "./contacts";
 import { breakpointCss, compileLayout, fontLinks } from "./mail-layout";
 import * as templates from "./mail-templates";
 import { exampleTemplate, MAIL_TEMPLATE_SEED_VERSION } from "./mail-templates-seed";
@@ -72,6 +71,9 @@ function allRows() {
 describe("an install that already has the four templates", () => {
 	it("keeps them exactly as they are and gets no example", async () => {
 		installTheRetiredFour();
+		// Every launch gives them inputs for the record values they read before
+		// anything can edit them; a save that still named a record would be refused.
+		await templates.adoptRecordValues(db);
 		// One edited, one hidden, so every state an owner could have left them in
 		// is in the comparison.
 		const [first, second] = await templates.listAll(db);
@@ -213,25 +215,20 @@ describe("the example", () => {
 		expect(compileLayout(row.layout!, row.inputs)).toBe(row.bodyHtml);
 	});
 
-	it("previews against a client with every value filled in", async () => {
-		await settings.setOwner({
-			businessName: "Juno",
-			firstName: "Nathan",
-			lastName: "Peeters",
-			addressLine1: "Kerkstraat 1",
-			postalCode: "9000",
-			city: "Gent",
-			vatNumber: "BE0123456789",
-		});
-		const client = await clientsService.create({ name: "obet" }, db);
-		await contactsService.create({ clientId: client.id, name: "Laura", email: "laura@obet.be", isPrimary: true }, db);
-		const row = await example();
-		const extras = Object.fromEntries(row.inputs.map((input) => [input.key, input.defaultValue ?? ""]));
+	const typed = {
+		client_name: "obet",
+		contact_name: "Laura",
+		sender_name: "Nathan Peeters",
+		business_name: "Juno",
+		address: "Kerkstraat 1, 9000 Gent",
+		vat_number: "BE0123456789",
+		foto: "https://www.example.com/foto.jpg",
+	};
 
-		const preview = await templates.previewDraft(
-			{ subject: row.subject, layout: row.layout, inputs: row.inputs, clientId: client.id, extras },
-			db,
-		);
+	it("previews with every value it asks for typed in", async () => {
+		const row = await example();
+
+		const preview = await templates.previewDraft({ subject: row.subject, layout: row.layout, inputs: row.inputs, extras: typed });
 
 		expect(preview.missing).toEqual([]);
 		expect(preview.subject).toBe("Voorbeeld: bericht voor obet");
@@ -242,29 +239,35 @@ describe("the example", () => {
 		expect(preview.bodyText).toContain("Beste Laura,");
 	});
 
-	it("leaves out the optional business lines rather than marking them, for an owner who left them empty", async () => {
-		await settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters" });
-		const client = await clientsService.create({ name: "obet" }, db);
-		await contactsService.create({ clientId: client.id, name: "Laura", isPrimary: true }, db);
+	it("leaves out the optional business lines rather than marking them, when they are left empty", async () => {
 		const row = await example();
+		const rest = { ...typed, address: "", vat_number: "" };
 
-		const preview = await templates.previewDraft(
-			{ subject: row.subject, layout: row.layout, inputs: row.inputs, clientId: client.id, extras: { foto: "https://www.example.com/foto.jpg" } },
-			db,
-		);
+		const preview = await templates.previewDraft({ subject: row.subject, layout: row.layout, inputs: row.inputs, extras: rest });
 
 		expect(preview.missing).toEqual([]);
 		expect(preview.bodyHtml).not.toContain("Ondernemingsnummer");
 	});
 
-	it("asks for the picture, and marks it missing until it has one", async () => {
+	it("reads nothing from a client or from the owner's details", async () => {
 		await settings.setOwner({ businessName: "Juno", firstName: "Nathan" });
+		await clientsService.create({ name: "obet" }, db);
 		const row = await example();
-		expect(row.inputs).toHaveLength(1);
-		expect(row.inputs[0]).toMatchObject({ key: "foto", kind: "image", required: true });
+		expect(row.placeholders.every((path) => path.startsWith("document."))).toBe(true);
+
+		const preview = await templates.previewDraft({ subject: row.subject, layout: row.layout, inputs: row.inputs });
+		expect(preview.bodyHtml).not.toContain(">Juno<");
+		expect(preview.missing).toEqual(
+			expect.arrayContaining(["document.business_name", "document.client_name", "document.contact_name"]),
+		);
+	});
+
+	it("asks for the picture, and marks it missing until it has one", async () => {
+		const row = await example();
+		expect(row.inputs.find((input) => input.key === "foto")).toMatchObject({ kind: "image", required: true });
 		expect(row.placeholders).toContain("document.foto");
 
-		const preview = await templates.previewDraft({ subject: row.subject, layout: row.layout, inputs: row.inputs }, db);
+		const preview = await templates.previewDraft({ subject: row.subject, layout: row.layout, inputs: row.inputs });
 		expect(preview.missing).toContain("document.foto");
 	});
 
@@ -296,7 +299,7 @@ describe("the example", () => {
 		const rich = nodes.find((node) => node.kind === "text" && node.html.includes("<strong>") && node.html.includes("<em>"));
 		expect(rich).toBeDefined();
 		expect(rich).toMatchObject({ html: expect.stringContaining("<a href=\"https://") });
-		expect(rich).toMatchObject({ html: expect.stringContaining("{{ client.contactName }}") });
+		expect(rich).toMatchObject({ html: expect.stringContaining("{{ document.contact_name }}") });
 
 		// A field block for the picture the template asks for.
 		expect(nodes.some((node) => node.kind === "field" && node.inputKey === "foto")).toBe(true);
@@ -345,9 +348,9 @@ describe("the example", () => {
 		expect(containers.some((node) => node.box.margin.top > 0)).toBe(true);
 		expect(containers.some((node) => node.box.padding.top > 0)).toBe(true);
 
-		// The business details, as placeholders, in the footer.
+		// The business details, as inputs of its own, in the footer.
 		const footerText = JSON.stringify(footer);
-		for (const path of ["owner.businessName", "owner.contactName", "owner.addressLine1", "owner.vatNumber"]) {
+		for (const path of ["document.business_name", "document.sender_name", "document.address", "document.vat_number"]) {
 			expect(footerText).toContain(path);
 		}
 	});
@@ -357,5 +360,92 @@ describe("the example", () => {
 		const first = nodesOf(row.layout!).find((node) => node.kind === "text");
 		expect(first).toMatchObject({ html: expect.stringMatching(/voorbeeld.*editor.*Pas het aan/i) });
 		expect(row.subject.toLowerCase()).toContain("voorbeeld");
+	});
+});
+
+describe("own inputs only", () => {
+	it("refuses a template that names a record value, and says what to do instead", async () => {
+		await expect(
+			templates.create({ name: "Groet", subject: "Hallo", bodyHtml: "<p>Beste {{ client.contactName }}</p>" }, db),
+		).rejects.toThrow(/\{\{client\.contactName\}\}.*add an input/);
+	});
+
+	it("refuses a placeholder for an input it does not declare", async () => {
+		const made = await templates.create(
+			{
+				name: "Groet",
+				subject: "Hallo {{ document.naam }}",
+				bodyHtml: "<p>Beste {{ document.naam }}</p>",
+				inputs: [{ key: "naam", label: "Naam", kind: "text", required: true }],
+			},
+			db,
+		);
+		await expect(templates.update(made.id, { inputs: [] }, db)).rejects.toThrow(/document\.naam/);
+	});
+
+	it("fills in what was typed, and a date as it reads in Belgium", async () => {
+		const made = await templates.create(
+			{
+				name: "Termijn",
+				subject: "Tegen {{ document.due_on }}",
+				bodyHtml: "<p>Beste {{ document.naam }}</p>",
+				inputs: [
+					{ key: "naam", label: "Naam", kind: "text", required: true },
+					{ key: "due_on", label: "Tegen", kind: "date", required: true },
+				],
+			},
+			db,
+		);
+		const rendered = await templates.renderTemplate(
+			{ templateId: made.id, extras: { naam: "Laura", due_on: "2026-11-14" } },
+			db,
+		);
+		expect(rendered.missing).toEqual([]);
+		expect(rendered.subject).toBe("Tegen 14/11/2026");
+		expect(rendered.bodyText).toContain("Beste Laura");
+	});
+});
+
+describe("adoptRecordValues", () => {
+	it("gives an older template an input for every record value, with the owner's details to start from", async () => {
+		await settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters" });
+		db.insert(mailTemplates)
+			.values({
+				key: "oud",
+				name: "Oud",
+				subject: "Voor {{ client.name }}",
+				bodyHtml:
+					"<p>Beste {{client.contactName}}, {{ document.title }}</p>" +
+					"<p>{{ owner.businessName }}{{#if owner.vatNumber}} {{ owner.vatNumber }}{{/if}}</p>",
+				isSystem: false,
+				sortOrder: 0,
+			})
+			.run();
+
+		expect(await templates.adoptRecordValues(db)).toEqual({ converted: 1 });
+		const [row] = await templates.listAll(db);
+
+		expect(row!.subject).toBe("Voor {{ document.client_name }}");
+		expect(row!.bodyHtml).toContain("{{document.client_contact_name}}");
+		expect(row!.bodyHtml).toContain("{{#if document.owner_vat_number}}");
+		expect(row!.placeholders.every((path) => path.startsWith("document."))).toBe(true);
+		expect(row!.inputs).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ key: "client_name", label: "Client name", required: true }),
+				expect.objectContaining({ key: "title", label: "Title", required: true }),
+				expect.objectContaining({ key: "owner_business_name", defaultValue: "Juno" }),
+				expect.objectContaining({ key: "owner_vat_number", required: false }),
+			]),
+		);
+		// Converting is not the owner reviewing it.
+		expect(row!.customisedAt).toBeNull();
+	});
+
+	it("changes nothing the second time", async () => {
+		installTheRetiredFour();
+		expect(await templates.adoptRecordValues(db)).toEqual({ converted: 4 });
+		const before = allRows().map((row) => row.updatedAt);
+		expect(await templates.adoptRecordValues(db)).toEqual({ converted: 0 });
+		expect(allRows().map((row) => row.updatedAt)).toEqual(before);
 	});
 });

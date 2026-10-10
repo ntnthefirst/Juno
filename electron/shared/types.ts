@@ -2279,12 +2279,11 @@ export interface MailTemplateDraft {
 	bodyHtml?: string;
 	layout?: MailLayout | null;
 	inputs?: TemplateInput[];
-	clientId?: string | null;
-	projectId?: string | null;
+	/** What was typed for each declared input, by its key. */
 	extras?: Record<string, string>;
 }
 
-/** A template filled against a client and project, ready to put in a draft. */
+/** A template filled in with its inputs, ready to put in a draft. */
 export interface MailTemplateRender {
 	subject: string;
 	bodyHtml: string;
@@ -2362,9 +2361,10 @@ export interface MailTemplateSendInput {
 	cc?: MailAddress[];
 	bcc?: MailAddress[];
 	templateId: string;
+	/** Who it is for and what it is about. Files the message; fills in nothing. */
 	clientId?: string | null;
 	projectId?: string | null;
-	/** Values no record holds, by placeholder name under document. */
+	/** What was typed for each of the template's declared inputs, by its key. */
 	extras?: Record<string, string>;
 	documentIds?: string[];
 }

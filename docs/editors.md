@@ -746,10 +746,20 @@ an input keyed `scope` is written `{{document.scope}}` in the body.
 Using a template is its own screen, not a dialog, because it is a form with a
 sequence in it (rule 5c, decision 30):
 
-1. **Fill.** The declared inputs, with their labels and their help text.
-2. **Link.** A client, a project, or nobody. This is what fills `{{client.*}}`.
-3. **Create.** A mail template becomes a draft in the outbox. A document
-   template becomes a PDF on disk and a record pointing at it.
+For a mail template the order is Link, Fill, Review (decision 47):
+
+1. **Link.** Who it goes to, the account it is sent from, and the client and
+   project it is filed under. Choosing a client fills in To and nothing in the
+   message.
+2. **Fill.** The declared inputs, with their labels, their kinds and their help
+   text. Every value in the message comes from here. Skipped when the template
+   declares none.
+3. **Review.** The message as it will be sent, and Send, which queues it
+   through the outbox gate.
+
+A document template on paper is Fill, see the PDF, then a client to keep it
+under (decision 41). An older document template still links a client first,
+which is what fills its `{{client.*}}`.
 
 Nothing is sent or filed by that screen. A draft still goes through the outbox
 gate, and a document still has to be signed by a person

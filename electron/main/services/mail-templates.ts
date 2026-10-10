@@ -1,7 +1,7 @@
 /**
- * Mail templates: a Dutch subject and body with placeholders, filled from the
- * same context the document templates use, so a client's name is spelled the
- * same way in the mail as in the contract it carries.
+ * Mail templates: a Dutch subject and body with placeholders, filled in with
+ * the template's own inputs and nothing from a record, the same rule a
+ * document template on paper follows (mail-template-fields.ts).
  *
  * Rows that shipped in an earlier version are seeded reference data, decision
  * 16: a removed one is hidden rather than purged. Nothing ships any more except
@@ -24,8 +24,6 @@ import type {
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { mailTemplates } from "../db/schema";
-import { previewContext } from "./documents";
-import { formatDate } from "./document-context";
 import { canvasShell, htmlToText, mailShell } from "./mail-html";
 import {
 	breakpointCss,
@@ -38,6 +36,7 @@ import {
 	parseLayout,
 	serialiseLayout,
 } from "./mail-layout";
+import { adoptRecordPlaceholders, assertOwnMailPlaceholders, mailContext } from "./mail-template-fields";
 import { exampleTemplate, MAIL_TEMPLATE_SEED_VERSION } from "./mail-templates-seed";
 import * as settings from "./settings";
 import { placeholdersIn, render, unescapeHtml } from "./template-render";
@@ -155,6 +154,8 @@ export async function create(input: MailTemplateInput, db: Db = getDb()): Promis
 	validate(input);
 	const stamp = now();
 	const key = input.key?.trim() || input.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+	const body = bodyFrom(input.layout, input.bodyHtml, input.inputs ?? []);
+	assertOwnMailPlaceholders(input.subject, body.bodyHtml ?? input.bodyHtml, input.inputs ?? []);
 	const inserted = db
 		.insert(mailTemplates)
 		.values({
@@ -164,7 +165,7 @@ export async function create(input: MailTemplateInput, db: Db = getDb()): Promis
 			register: input.register ?? "u",
 			subject: input.subject.trim(),
 			bodyHtml: input.bodyHtml,
-			...bodyFrom(input.layout, input.bodyHtml, input.inputs ?? []),
+			...body,
 			inputsJson: serialiseInputs(input.inputs ?? []),
 			isSystem: false,
 			sortOrder: 100,
@@ -189,6 +190,7 @@ export async function update(id: string, patch: MailTemplatePatch, db: Db = getD
 	// drifting apart on an edit that never touched the layout.
 	const layout = patch.layout !== undefined ? patch.layout : current.layout ? current.layout : undefined;
 	const body = bodyFrom(layout, patch.bodyHtml, inputs);
+	assertOwnMailPlaceholders(patch.subject ?? current.subject, body.bodyHtml ?? current.bodyHtml, inputs);
 
 	const updated = db
 		.update(mailTemplates)
@@ -287,9 +289,7 @@ export async function duplicate(id: string, db: Db = getDb()): Promise<MailTempl
 
 export interface RenderInput {
 	templateId: string;
-	clientId?: string | null;
-	projectId?: string | null;
-	/** Values a template asks for that no record holds: document.title, document.dueOn, document.amount. */
+	/** What was typed for each declared input, by its key. */
 	extras?: Record<string, string>;
 }
 
@@ -319,34 +319,33 @@ async function shellFor(bodyHtml: string, layout: MailLayout | null, inputs: Tem
 }
 
 /**
- * Fills a template against a client and project. The subject is rendered as
- * text, the body as HTML in the house shell, and the text twin is derived from
- * the body so the two never disagree.
+ * Fills a template with what was typed for its inputs. The subject is
+ * rendered as text, the body as HTML in its shell, and the text twin is
+ * derived from the body so the two never disagree.
  */
 export async function renderTemplate(input: RenderInput, db: Db = getDb()): Promise<MailTemplateRender> {
 	const template = await get(input.templateId, db);
 	if (!template) throw new Error("That template does not exist.");
+	return renderWith(template.subject, template.bodyHtml, template.layout, template.inputs, input.extras ?? {});
+}
 
-	const context = await previewContext({ clientId: input.clientId, projectId: input.projectId }, db);
-	const document = (context.document as Record<string, unknown> | undefined) ?? {};
-	const extras = input.extras ?? {};
-	context.document = {
-		...document,
-		...extras,
-		// A date typed as YYYY-MM-DD reads as 14/11/2026 in the message.
-		...(extras.dueOn ? { dueOn: formatDate(extras.dueOn) } : {}),
-	};
-
-	const subject = render(template.subject, context);
-	const body = render(template.bodyHtml, context);
-	const bodyHtml = await shellFor(body.html, template.layout, template.inputs);
+async function renderWith(
+	subjectSource: string,
+	bodySource: string,
+	layout: MailLayout | null,
+	inputs: TemplateInput[],
+	values: Record<string, string>,
+): Promise<MailTemplateRender> {
+	const { context, missing } = mailContext(inputs, values);
+	const subject = render(subjectSource, context);
+	const body = render(bodySource, context);
 	return {
 		// The subject is text, so the escaping the renderer applied comes off again,
 		// and a missing-value marker keeps its words and loses its markup.
 		subject: unescapeHtml(subject.html.replace(/<[^>]+>/g, "")).trim(),
-		bodyHtml,
+		bodyHtml: await shellFor(body.html, layout, inputs),
 		bodyText: htmlToText(body.html),
-		missing: [...new Set([...subject.missing, ...body.missing])].sort(),
+		missing: [...new Set([...subject.missing, ...body.missing, ...missing])].sort(),
 	};
 }
 
@@ -395,29 +394,12 @@ export async function convertBlock(input: MailBlockConversion): Promise<MailLayo
 	return convertNodeToCode(layout, input.parentId, input.nodeId, input.inputs ?? []);
 }
 
-export async function previewDraft(draft: MailTemplateDraft, db: Db = getDb()): Promise<MailTemplateRender> {
+export async function previewDraft(draft: MailTemplateDraft): Promise<MailTemplateRender> {
 	const inputs = draft.inputs ?? [];
 	const layout = draft.layout ? normaliseLayout(draft.layout) : null;
 	if (draft.layout && !layout) throw new Error("That layout could not be read.");
 	const body = layout ? compileLayout(layout, inputs) : (draft.bodyHtml ?? "");
-
-	const context = await previewContext({ clientId: draft.clientId, projectId: draft.projectId }, db);
-	const document = (context.document as Record<string, unknown> | undefined) ?? {};
-	const extras = draft.extras ?? {};
-	context.document = {
-		...document,
-		...extras,
-		...(extras.dueOn ? { dueOn: formatDate(extras.dueOn) } : {}),
-	};
-
-	const subject = render(draft.subject, context);
-	const rendered = render(body, context);
-	return {
-		subject: unescapeHtml(subject.html.replace(/<[^>]+>/g, "")).trim(),
-		bodyHtml: await shellFor(rendered.html, layout, inputs),
-		bodyText: htmlToText(rendered.html),
-		missing: [...new Set([...subject.missing, ...rendered.missing])].sort(),
-	};
+	return renderWith(draft.subject, body, layout, inputs, draft.extras ?? {});
 }
 
 /**
@@ -455,4 +437,47 @@ export async function ensureMailTemplatesSeeded(
 
 	await settings.setMailTemplateSeedVersion(source.version);
 	return { created, updated: 0 };
+}
+
+/**
+ * Gives every template written before mail templates stopped reading records
+ * an input for each record value it used, once.
+ *
+ * Runs on every launch and changes nothing the second time, because a
+ * template it has converted refers to nothing but its own inputs. The owner's
+ * current details become the starting values of the inputs that replace
+ * `owner.*`, so a footer still fills itself in. `customisedAt` is left alone:
+ * converting a template is not the owner reviewing it.
+ */
+export async function adoptRecordValues(db: Db = getDb()): Promise<{ converted: number }> {
+	const owner = await settings.getOwner();
+	const defaults: Record<string, string> = {
+		"owner.email": primaryOwnerEmail(owner)?.email ?? "",
+		"owner.phone": primaryOwnerPhone(owner)?.phone ?? "",
+	};
+	for (const [field, value] of Object.entries(owner)) {
+		if (typeof value === "string" && value.trim()) defaults[`owner.${field}`] = value;
+	}
+
+	let converted = 0;
+	const rows = db.select().from(mailTemplates).where(isNull(mailTemplates.deletedAt)).all();
+	for (const row of rows) {
+		const adopted = adoptRecordPlaceholders(
+			{ subject: row.subject, bodyHtml: row.bodyHtml, layoutJson: row.layoutJson, inputs: parseInputs(row.inputsJson) },
+			defaults,
+		);
+		if (!adopted) continue;
+		db.update(mailTemplates)
+			.set({
+				subject: adopted.subject,
+				bodyHtml: adopted.bodyHtml,
+				layoutJson: adopted.layoutJson,
+				inputsJson: serialiseInputs(adopted.inputs),
+				updatedAt: now(),
+			})
+			.where(eq(mailTemplates.id, row.id))
+			.run();
+		converted++;
+	}
+	return { converted };
 }

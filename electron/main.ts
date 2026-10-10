@@ -48,7 +48,7 @@ import { configureMailboxWriter } from "./main/services/mail-writer";
 import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
 import * as mailSync from "./main/services/mail-sync";
-import { ensureMailTemplatesSeeded } from "./main/services/mail-templates";
+import { adoptRecordValues, ensureMailTemplatesSeeded } from "./main/services/mail-templates";
 import { configureMailTransport } from "./main/services/mail-transport";
 import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
@@ -143,6 +143,10 @@ if (!app.requestSingleInstanceLock()) {
 		if (mailTemplateSeed.created || mailTemplateSeed.updated) {
 			console.log(`Mail templates: ${mailTemplateSeed.created} created, ${mailTemplateSeed.updated} updated`);
 		}
+		// After the seed, so a first install's example is checked too, and
+		// before any window, so nothing renders a template still reading records.
+		const adopted = await adoptRecordValues(db);
+		if (adopted.converted) console.log(`Mail templates: ${adopted.converted} given inputs for record values`);
 
 		const reminderSeed = await ensureRemindersSeeded(db);
 		if (reminderSeed.created) {
@@ -406,7 +410,12 @@ if (!app.requestSingleInstanceLock()) {
 								await b.mail.templates.create({
 									name: "Herinnering betaling",
 									subject: "Herinnering: {{ document.title }}",
-									bodyHtml: "<p>Beste {{ client.contactName }},</p><p>Volgens mijn administratie staat {{ document.title }} nog open. Mogelijk is de betaling al onderweg.</p><p>Met vriendelijke groeten,<br>{{ owner.contactName }}</p>",
+									bodyHtml: "<p>Beste {{ document.contact_name }},</p><p>Volgens mijn administratie staat {{ document.title }} nog open. Mogelijk is de betaling al onderweg.</p><p>Met vriendelijke groeten,<br>{{ document.sender_name }}</p>",
+									inputs: [
+										{ key: "title", label: "Document", kind: "text", required: true },
+										{ key: "contact_name", label: "Aanspreking", kind: "text", required: true },
+										{ key: "sender_name", label: "Uw naam", kind: "text", required: true },
+									],
 								});
 								// Two addresses and a number, so the lists under Your business are
 								// photographed with something in them. The second one is the case
@@ -2761,7 +2770,6 @@ if (!app.requestSingleInstanceLock()) {
 												subject: "x",
 												bodyHtml: "",
 												inputs: [],
-												clientId: null,
 												layout: {
 													version: 2,
 													children: [
@@ -3183,8 +3191,9 @@ if (!app.requestSingleInstanceLock()) {
 										}
 									}
 
-									// No Fill step either: the hand-written template asks for nothing
-									// beyond a client and a project, so one Next reaches Review.
+									// Leaving the editor comes back to the template's page, which
+									// is where Use is. Link comes first and Fill second, so two
+									// Nexts reach Review.
 									const usedMail = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -3192,10 +3201,15 @@ if (!app.requestSingleInstanceLock()) {
 											if (!use) return "no use action";
 											use.click();
 											await wait(600);
-											const next = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
-											if (!next) return "no next action";
-											next.click();
-											await wait(900);
+											const rail = [...document.querySelectorAll("main ol li")].map((el) => el.textContent.trim());
+											if (rail.join(",") !== "1Link,2Fill,3Review") return "the steps are not Link, Fill, Review: " + rail.join(",");
+											for (let step = 0; step < 2; step++) {
+												const next = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
+												if (!next) return "no next action";
+												next.click();
+												await wait(600);
+											}
+											await wait(300);
 											const main = document.querySelector("main");
 											if (!main) return "no main";
 											const subjectLabel = [...main.querySelectorAll("p")].find((el) => el.textContent.trim() === "Subject");
@@ -3293,7 +3307,8 @@ if (!app.requestSingleInstanceLock()) {
 
 									// The example a first install is given. This database is
 									// fresh, so it is here and none of the four retired templates are,
-									// and against the demo client it fills in with nothing missing.
+									// and with a value for everything it asks it has nothing missing.
+									// Nothing in it comes from the demo client.
 									// Every picture in it is at a web address, which this window refuses
 									// to load, so the steps below also prove that neither the canvas
 									// nor a preview tries: a refused load fails the run.
@@ -3306,11 +3321,10 @@ if (!app.requestSingleInstanceLock()) {
 											if (all.some((t) => ["contract_cover", "project_kickoff", "invoice_due", "hosting_renewal"].includes(t.key))) return "a fresh install was given a retired template";
 											if (!example.layout) return "the example has no canvas";
 											if (example.isSystem) return "the example is a system row";
-											const clients = await b.clients.list({ limit: 50 });
-											const obet = clients.find((c) => c.name === "obet");
-											if (!obet) return "no demo client";
-											const extras = Object.fromEntries(example.inputs.map((input) => [input.key, input.defaultValue || ""]));
-											const filled = await b.mail.templates.preview({ subject: example.subject, layout: example.layout, inputs: example.inputs, clientId: obet.id, extras });
+											if (example.placeholders.some((path) => !path.startsWith("document."))) return "the example reads a record: " + example.placeholders.join(", ");
+											const typed = { client_name: "obet", contact_name: "Laura", sender_name: "Nathan Peeters", business_name: "Juno", address: "Kerkstraat 1, 9000 Gent" };
+											const extras = { ...Object.fromEntries(example.inputs.map((input) => [input.key, input.defaultValue || ""])), ...typed };
+											const filled = await b.mail.templates.preview({ subject: example.subject, layout: example.layout, inputs: example.inputs, extras });
 											if (filled.missing.length > 0) return "the example has no value for " + filled.missing.join(", ");
 											if (!filled.bodyHtml.includes("Beste Laura,")) return "the example does not greet the demo client";
 											if (!filled.bodyHtml.includes("Kerkstraat 1, 9000 Gent")) return "the example does not carry the business address";
@@ -3320,9 +3334,10 @@ if (!app.requestSingleInstanceLock()) {
 									if (!exampleFacts.startsWith("ok:")) throw new Error(`Smoke: the example ${exampleFacts}`);
 									const exampleUpdatedAt = exampleFacts.slice(3);
 
-									// Used the way a person would: the picture it asks for, a client,
-									// and the review. The review is the example filled in against the
-									// demo client, and it must say nothing is missing.
+									// Used the way a person would: a client, then what it asks for,
+									// then the review. Picking the client fills in To and nothing in
+									// the message, so the review must say nothing is missing only
+									// once every value has been typed.
 									const exampleReview = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -3337,21 +3352,33 @@ if (!app.requestSingleInstanceLock()) {
 											if (!use) return "no use action";
 											use.click();
 											await wait(700);
-											const ask = [...document.querySelectorAll("main label")].find((el) => el.textContent.trim().startsWith("Foto"));
-											const field = ask ? document.getElementById(ask.htmlFor) : null;
-											if (!field) return "the Fill step does not ask for the picture";
-											if (!field.value.startsWith("https://")) return "the picture starts without an address";
 											const next = () => [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
-											next().click();
-											await wait(500);
 											const clientLabel = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Client");
 											const select = clientLabel ? document.getElementById(clientLabel.htmlFor) : null;
-											if (!select) return "no client to pick";
+											if (!select) return "the use flow does not start on Link";
 											const obet = [...select.options].find((option) => option.textContent.trim() === "obet");
 											if (!obet) return "the demo client is not offered";
 											Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, obet.value);
 											select.dispatchEvent(new Event("change", { bubbles: true }));
 											await wait(500);
+											next().click();
+											await wait(500);
+											const fieldFor = (label) => {
+												const found = [...document.querySelectorAll("main label")].find((el) => el.textContent.trim().startsWith(label));
+												return found ? document.getElementById(found.htmlFor) : null;
+											};
+											const foto = fieldFor("Foto");
+											if (!foto) return "the Fill step does not ask for the picture";
+											if (!foto.value.startsWith("https://")) return "the picture starts without an address";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											for (const [label, value] of [["Klant", "obet"], ["Aanspreking", "Laura"], ["Uw naam", "Nathan Peeters"], ["Uw bedrijf", "Juno"]]) {
+												const field = fieldFor(label);
+												if (!field) return "the Fill step does not ask for " + label;
+												if (field.value) return label + " was filled in from a record";
+												setValue.call(field, value);
+												field.dispatchEvent(new Event("input", { bubbles: true }));
+												await wait(100);
+											}
 											next().click();
 											let frame = null;
 											for (let tries = 0; tries < 30 && !frame; tries++) {

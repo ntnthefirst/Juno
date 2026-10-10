@@ -883,13 +883,8 @@ export interface JunoApi {
 			/** Renders values in hand. Writes nothing, so a preview cannot mark a
 			 * template as edited. */
 			preview(draft: MailTemplateDraft): Promise<MailTemplateRender>;
-			/** Fills a template against a client and project. Stores nothing. */
-			render(input: {
-				templateId: string;
-				clientId?: string | null;
-				projectId?: string | null;
-				extras?: Record<string, string>;
-			}): Promise<MailTemplateRender>;
+			/** Fills a template with what was typed for its inputs. Stores nothing. */
+			render(input: { templateId: string; extras?: Record<string, string> }): Promise<MailTemplateRender>;
 		};
 		outbox: {
 			list(query?: MailOutboxListQuery): Promise<MailOutboxMessage[]>;

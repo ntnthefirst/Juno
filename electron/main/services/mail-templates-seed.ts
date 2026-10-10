@@ -14,9 +14,10 @@
  * row: the owner edits it or deletes it, and a reset or an upgrade never
  * brings it back (`ensureMailTemplatesSeeded` in ./mail-templates).
  *
- * Placeholder syntax is in ./template-render.ts and the available paths are
- * the ones in docs/templates.md. Conditionals do not nest, so each optional
- * line of the footer has its own.
+ * Placeholder syntax is in ./template-render.ts. Every value it prints is one
+ * of its own inputs (EXAMPLE_INPUTS), because a mail template reads nothing
+ * from a record. Conditionals do not nest, so each optional line of the footer
+ * has its own.
  */
 import type {
 	MailAction,
@@ -231,7 +232,7 @@ function content(): MailContainer {
 			),
 			paragraph(
 				"voorbeeld-tekst",
-				'Beste {{ client.contactName }},<br><br>Bedankt voor het fijne gesprek. Hieronder vindt u <strong>wat we afspraken</strong> en wat ik <em>nog van u nodig heb</em>. Meer uitleg vindt u op <a href="https://www.example.com/werkwijze">mijn website</a>.',
+				'Beste {{ document.contact_name }},<br><br>Bedankt voor het fijne gesprek. Hieronder vindt u <strong>wat we afspraken</strong> en wat ik <em>nog van u nodig heb</em>. Meer uitleg vindt u op <a href="https://www.example.com/werkwijze">mijn website</a>.',
 				{ text: { color: INK } },
 			),
 			{
@@ -280,7 +281,7 @@ function content(): MailContainer {
 				html: `<p style="margin:0;font-family:Courier New,Courier,monospace;font-size:14px;line-height:1.5;color:${INK}">Uw referentie: <strong>VOORBEELD-001</strong></p>`,
 				css: `background-color:${PAPER};border-radius:6px;padding:12px 16px`,
 			},
-			paragraph("voorbeeld-groet", "Met vriendelijke groeten,<br>{{ owner.contactName }}", { text: { color: INK } }),
+			paragraph("voorbeeld-groet", "Met vriendelijke groeten,<br>{{ document.sender_name }}", { text: { color: INK } }),
 		],
 	);
 }
@@ -296,9 +297,9 @@ function footer(): MailContainer {
 		[
 			paragraph(
 				"voorbeeld-gegevens",
-				"<strong>{{ owner.businessName }}</strong><br>{{ owner.contactName }}" +
-					"{{#if owner.addressLine1}}<br>{{ owner.addressLine1 }}, {{ owner.postalCode }} {{ owner.city }}{{/if}}" +
-					"{{#if owner.vatNumber}}<br>Ondernemingsnummer {{ owner.vatNumber }}{{/if}}",
+				"<strong>{{ document.business_name }}</strong><br>{{ document.sender_name }}" +
+					"{{#if document.address}}<br>{{ document.address }}{{/if}}" +
+					"{{#if document.vat_number}}<br>Ondernemingsnummer {{ document.vat_number }}{{/if}}",
 				{ text: { fontSize: 12, lineHeight: 1.5, color: INK_MUTED, align: "center" } },
 			),
 		],
@@ -361,6 +362,12 @@ export function exampleLayout(): MailLayout {
 }
 
 export const EXAMPLE_INPUTS: TemplateInput[] = [
+	{ key: "client_name", label: "Klant", kind: "text", required: true, help: "De naam van het bedrijf, voor het onderwerp." },
+	{ key: "contact_name", label: "Aanspreking", kind: "text", required: true, help: "Wie u aanspreekt: Beste ..." },
+	{ key: "sender_name", label: "Uw naam", kind: "text", required: true },
+	{ key: "business_name", label: "Uw bedrijf", kind: "text", required: true },
+	{ key: "address", label: "Adres", kind: "text", required: false, help: "Straat en nummer, postcode en gemeente. Leeg laat de regel weg." },
+	{ key: "vat_number", label: "Ondernemingsnummer", kind: "text", required: false, help: "Leeg laat de regel weg." },
 	{
 		key: "foto",
 		label: "Foto",
@@ -377,7 +384,7 @@ export function exampleTemplate(): MailTemplateInput {
 		name: "Voorbeeld met alle onderdelen",
 		description: "Laat zien wat de editor kan. Pas het aan of verwijder het.",
 		register: "u",
-		subject: "Voorbeeld: bericht voor {{ client.name }}",
+		subject: "Voorbeeld: bericht voor {{ document.client_name }}",
 		// The canvas is the source, so this is only what the service requires
 		// before it compiles the layout over it.
 		bodyHtml: "<p></p>",

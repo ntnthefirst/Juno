@@ -13,7 +13,6 @@ import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { documents, mailFolders, mailMessages, mailOutbox, mailThreads } from "../db/schema";
 import * as clientsService from "./clients";
-import * as contactsService from "./contacts";
 import * as accounts from "./mail-accounts";
 import { configureCredentialStore, MemoryCredentialStore } from "./mail-credentials";
 import { htmlToText, textToHtml } from "./mail-html";
@@ -47,9 +46,14 @@ async function coverTemplate() {
 			name: "Contract ter ondertekening",
 			subject: "{{ document.title }} ter ondertekening",
 			bodyHtml:
-				"<p>Beste {{ client.contactName }},</p>" +
+				"<p>Beste {{ document.contact_name }},</p>" +
 				"<p>In bijlage vindt u {{ document.title }}.</p>" +
-				"<p>Met vriendelijke groeten,<br>{{ owner.contactName }}</p>",
+				"<p>Met vriendelijke groeten,<br>{{ document.sender_name }}</p>",
+			inputs: [
+				{ key: "title", label: "Document", kind: "text", required: true },
+				{ key: "contact_name", label: "Aanspreking", kind: "text", required: true },
+				{ key: "sender_name", label: "Uw naam", kind: "text", required: true },
+			],
 		},
 		db,
 	);
@@ -270,16 +274,15 @@ describe("the gate", () => {
 	});
 
 	it("refuses to send a template gap to a client", async () => {
-		const client = await clientsService.create({ name: "obet" }, db);
 		const cover = await coverTemplate();
-		// No contact and no owner profile: the greeting and the sign-off are gaps.
-		const rendered = await templates.renderTemplate({ templateId: cover.id, clientId: client.id, extras: { title: "de NDA" } }, db);
-		expect(rendered.missing).toContain("client.contactName");
+		// Only the title typed: the greeting and the sign-off are gaps.
+		const rendered = await templates.renderTemplate({ templateId: cover.id, extras: { title: "de NDA" } }, db);
+		expect(rendered.missing).toContain("document.contact_name");
 		const made = await outbox.createDraft(
 			{ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: rendered.subject, bodyText: rendered.bodyText, bodyHtml: rendered.bodyHtml },
 			db,
 		);
-		await expect(outbox.requestSend(made.id, db)).rejects.toThrow(/placeholder without a value: client.contactName/);
+		await expect(outbox.requestSend(made.id, db)).rejects.toThrow(/placeholder without a value: document.contact_name/);
 		expect((await outbox.get(made.id, db))!.state).toBe("draft");
 	});
 
@@ -455,12 +458,10 @@ describe("createReply", () => {
 });
 
 describe("templates", () => {
-	it("renders a template in Dutch against a client", async () => {
-		const client = await clientsService.create({ name: "obet" }, db);
-		await contactsService.create({ clientId: client.id, name: "Laura", email: "laura@obet.be", isPrimary: true }, db);
+	it("renders a template in Dutch from the values typed for it", async () => {
 		const cover = await coverTemplate();
 		const rendered = await templates.renderTemplate(
-			{ templateId: cover.id, clientId: client.id, extras: { title: "de ontwikkelovereenkomst" } },
+			{ templateId: cover.id, extras: { title: "de ontwikkelovereenkomst", contact_name: "Laura" } },
 			db,
 		);
 		expect(rendered.subject).toBe("de ontwikkelovereenkomst ter ondertekening");
@@ -468,8 +469,8 @@ describe("templates", () => {
 		expect(rendered.bodyHtml).toContain("<!doctype html>");
 		expect(rendered.bodyText).toContain("Beste Laura,");
 		expect(rendered.bodyText).not.toContain("<p>");
-		// The owner profile is empty in a fresh install, so the sign-off is missing.
-		expect(rendered.missing).toContain("owner.contactName");
+		// Nothing comes from the owner profile, so an untyped sign-off is missing.
+		expect(rendered.missing).toContain("document.sender_name");
 	});
 
 	it("fills and sends a template in one step, and never leaves a draft behind", async () => {

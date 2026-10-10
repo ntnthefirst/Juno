@@ -59,6 +59,12 @@ service, do not guess from the screen. The context is built from real rows:
   service, in Belgian format. A template never formats a date and never does
   arithmetic.
 
+**A mail template and a document template on paper get none of these.** They
+fill in only their own declared inputs, written `{{document.<key>}}`, and a
+placeholder naming a client, a project or the owner is refused on save
+(decisions 41 and 47, docs/templates.md). For those, the step is declaring an
+input with a key, a label and a kind for every value the template prints.
+
 A field the template needs and the context lacks is a service change first, then
 the template. Never a hardcoded value, and never an invented field name that
 silently renders empty.

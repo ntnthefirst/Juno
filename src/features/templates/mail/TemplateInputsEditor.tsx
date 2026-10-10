@@ -62,8 +62,8 @@ export function TemplateInputsEditor({ inputs, onChange, disabled = false }: Tem
 		return (
 			<div>
 				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					Nothing declared yet. Add one for a value nothing in the records can answer: the scope
-					of the work, an amount agreed on the phone, a deadline.
+					Nothing declared yet. Add one for each value that changes from one use to the next: a
+					name, the scope of the work, an amount agreed on the phone, a deadline.
 				</p>
 				<Button disabled={disabled} onClick={add} size="dense">
 					<PlusIcon width={16} height={16} strokeWidth={1.8} aria-hidden />

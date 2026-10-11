@@ -21,7 +21,7 @@ const SIZE = 1024;
 app.disableHardwareAcceleration();
 
 app.whenReady().then(async () => {
-	const artFile = join(root, "brand", "art", "juno-icon-bureau.jpg");
+	const artFile = join(root, "brand", "art", "juno-icon.png");
 	if (existsSync(artFile)) {
 		const nativeImg = nativeImage.createFromPath(artFile);
 		const resized = nativeImg.resize({ width: SIZE, height: SIZE, quality: "best" });

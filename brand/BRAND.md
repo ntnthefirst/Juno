@@ -179,18 +179,16 @@ Space is the layout tool, so it has to be deliberate rather than whatever
 
 ## 8. The logo
 
-Files live in [logo/](logo/). The mark is a **B** built from a spine and two
-drawer blocks, so it reads as a letter and as a desk at the same time. It holds
-down to 16px, which is the only size test that matters for an app icon.
+Files live in [logo/](logo/). The mark is a continuous interlocking ribbon loop forming an abstract letter **J**, rendered in deep iris and electric blue with champagne gold rim accents. Designed with no background container so it floats cleanly on any surface or dock.
 
 | File | Use |
 | --- | --- |
-| `juno-mark.svg` | The mark alone, `currentColor`. Inline in the app |
-| `juno-wordmark.svg` | Mark plus name, `currentColor`. Inline in the app |
+| `juno-mark.svg` | The mark alone, transparent background. Inline in the app |
+| `juno-wordmark.svg` | Mark plus name. Inline in the app |
 | `juno-wordmark-ink.svg` | Fixed dark. For light backgrounds and any `<img>` |
 | `juno-wordmark-paper.svg` | Fixed light. For dark backgrounds and any `<img>` |
-| `juno-icon.svg` | The rounded accent tile. Application and installer icon |
-| `favicon.svg` | The tile at 32px, with tightened proportions |
+| `juno-icon.svg` | Standalone SVG icon with transparent background. Application and installer |
+| `favicon.svg` | Clean mark SVG favicon with transparent background |
 
 **The trap, which has already been hit once:** an SVG loaded through an `<img>`
 tag renders in its own document, so `currentColor` resolves to black no matter

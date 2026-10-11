@@ -45,7 +45,7 @@ function sidebar() {
   html,body{margin:0;width:164px;height:314px;overflow:hidden}
   body{background:${ACCENT};color:#f8f8fc;font-family:Inter,"Segoe UI",system-ui,sans-serif;
        display:flex;flex-direction:column;justify-content:flex-end;padding:20px;box-sizing:border-box}
-  .mark-img{width:46px;height:46px;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.28);display:block}
+  .mark-img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 4px 14px rgba(0,0,0,0.35));display:block}
   .mark{width:38px;height:38px;color:#f8f8fc;opacity:.95}
   .name{font-size:22px;font-weight:600;letter-spacing:-.02em;margin-top:14px}
   .sub{font-size:11px;line-height:1.45;opacity:.78;margin-top:6px}
@@ -61,7 +61,7 @@ ${iconHtml}
 /** The small badge top-right of every page after the first. */
 function header() {
 	const iconHtml = iconDataUrl
-		? `<img src="${iconDataUrl}" style="width:26px;height:26px;border-radius:6px;flex:none;" alt="Juno" />`
+		? `<img src="${iconDataUrl}" style="width:26px;height:26px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.18));flex:none;" alt="Juno" />`
 		: `<div class="mark">${MARK}</div>`;
 
 	return `<!doctype html><meta charset="utf-8"><style>

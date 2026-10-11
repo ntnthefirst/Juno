@@ -5,6 +5,7 @@ import { useScreenAction } from "../../lib/screen-actions";
 import { DOCUMENT_SWITCH } from "../../app/screens";
 import { AddButton } from "../../components/AddButton";
 import { Avatar } from "../../components/Avatar";
+import { EmptyState } from "../../components/EmptyState";
 import { IconAction } from "../../components/IconAction";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
@@ -390,11 +391,31 @@ export function DocumentsScreen() {
 								</p>
 							</div>
 						) : load.rows.records.length === 0 ? (
-							<p className="text-[var(--ink-muted)]">
-								No documents yet. Generate one from a template or import a PDF.
-							</p>
+							<EmptyState
+								icon="documents"
+								title="No documents yet"
+								description="Generate contracts, proposals and agreements from your templates, or drop in any PDF."
+								action={{
+									label: "New document",
+									icon: "add",
+									onClick: () => setGenerating(true),
+									shortcut: ["Ctrl", "N"],
+								}}
+								secondaryAction={{
+									label: "Import PDF",
+									onClick: () => void pickAndImport(),
+								}}
+								tip="Signed documents carry an audit trail with timestamps and version history."
+							/>
 						) : shown.length === 0 ? (
-							<p className="text-[var(--ink-muted)]">Nothing matches.</p>
+							<EmptyState
+								title="Nothing matches that"
+								description="Clear the search or change filters to see all documents."
+								secondaryAction={{
+									label: "Clear search",
+									onClick: () => setSearch(""),
+								}}
+							/>
 						) : (
 							<DocumentTable
 								rows={{ records: shown, statuses }}

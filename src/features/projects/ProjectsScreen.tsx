@@ -3,7 +3,7 @@ import type { Project, ProjectSummary, ProjectsView, ReferenceItem } from "@shar
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { useScreenAction } from "../../lib/screen-actions";
 import { AddButton } from "../../components/AddButton";
-import { Button } from "../../components/Button";
+import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { clearPending, peekPending } from "../../lib/open-entity";
@@ -344,23 +344,30 @@ export function ProjectsScreen() {
 						</p>
 					</div>
 				) : load.rows.projects.length === 0 ? (
-					<div className="max-w-[48ch]">
-						<h2 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">
-							No projects yet
-						</h2>
-						<p className="mt-2 text-[var(--ink-muted)]">
-							A project is a piece of work with its files, its links and the command that starts
-							it in one place. It can belong to a client, and it does not have to.
-						</p>
-						<div className="mt-6">
-							<Button variant="primary" onClick={() => setEditing("new")}>
-								<Icon name="add" />
-								New project
-							</Button>
-						</div>
-					</div>
+					<EmptyState
+						icon="projects"
+						title="No projects yet"
+						description="A piece of work with its files, its links, its notes and the command that starts it in one place."
+						action={{
+							label: "New project",
+							icon: "add",
+							onClick: () => setEditing("new"),
+							shortcut: ["Ctrl", "N"],
+						}}
+						tip="A project can belong to a client, or stand on its own."
+					/>
 				) : shown.length === 0 ? (
-					<p className="text-[var(--ink-muted)]">Nothing matches that. Clear the search to see all of them.</p>
+					<EmptyState
+						title="Nothing matches that"
+						description="Clear the search to see all of your projects."
+						secondaryAction={{
+							label: "Clear search",
+							onClick: () => {
+								setTerm("");
+								setStatusFilter("");
+							},
+						}}
+					/>
 				) : view.layout === "grid" ? (
 					<ProjectGrid
 						rows={shown}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Reminder, ReminderBucket } from "@shared/types";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
+import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { useScreenAction } from "../../lib/screen-actions";
@@ -133,7 +134,18 @@ export function RemindersScreen() {
 						</p>
 					</div>
 				) : rows.length === 0 ? (
-					<p className="text-[var(--ink-muted)]">No reminders yet.</p>
+					<EmptyState
+						icon="reminders"
+						title="All caught up"
+						description="Paperwork that is due, invoices that need writing, payments that need making. Nothing is waiting for you right now."
+						action={{
+							label: "New reminder",
+							icon: "add",
+							onClick: () => setForm({ reminder: null }),
+							shortcut: ["Ctrl", "N"],
+						}}
+						tip="Reminders can be recurring and tied directly to clients or projects."
+					/>
 				) : (
 					order.map((bucket) => {
 						const group = rows.filter((row) => row.bucket === bucket);

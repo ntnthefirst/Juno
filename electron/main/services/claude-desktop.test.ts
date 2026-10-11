@@ -1,6 +1,8 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { crc32 } from "node:zlib";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { checkUrl, forward } from "../../bridge/claude-desktop";
@@ -168,5 +170,54 @@ describe("the bridge against the agent server", () => {
 			{ protocolVersion: null },
 		)) as Reply[];
 		expect(reply.error?.message).toMatch(/not running/);
+	});
+
+	it("starts the bridge and answers initialize when loaded dynamically", async () => {
+		const bridgePath = join(__dirname, "../../../dist-electron/bridge/claude-desktop.js");
+		if (!existsSync(bridgePath)) return;
+
+		const { token } = connections.createToken("Claude Desktop");
+		const child = spawn(
+			process.execPath,
+			[
+				"-e",
+				`delete process.env.VITEST; process.env.JUNO_TOKEN = ${JSON.stringify(token)}; process.env.JUNO_URL = ${JSON.stringify(url)}; import(${JSON.stringify(pathToFileURL(bridgePath).toString())})`,
+			],
+			{ stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
+		);
+
+		const stdoutChunks: Buffer[] = [];
+		child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+
+		child.stdin.write(
+			`${JSON.stringify({
+				jsonrpc: "2.0",
+				id: 0,
+				method: "initialize",
+				params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "claude-ai", version: "1" } },
+			})}\n`,
+		);
+
+		const output = await new Promise<string>((resolve, reject) => {
+			const timeout = setTimeout(() => {
+				child.kill();
+				reject(new Error("Timed out waiting for bridge reply"));
+			}, 5000);
+			child.stdout.on("data", () => {
+				const text = Buffer.concat(stdoutChunks).toString("utf8");
+				if (text.includes("\n")) {
+					clearTimeout(timeout);
+					child.stdin.end();
+					resolve(text);
+				}
+			});
+			child.on("error", (err) => {
+				clearTimeout(timeout);
+				reject(err);
+			});
+		});
+
+		expect(output).toContain('"jsonrpc":"2.0"');
+		expect(output).toContain('"version":"9.9.9"');
 	});
 });

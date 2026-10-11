@@ -402,6 +402,17 @@
 	}
 }
 
+@keyframes juno-breathe {
+	0%, 100% {
+		transform: scale(1);
+		opacity: 0.92;
+	}
+	50% {
+		transform: scale(1.04);
+		opacity: 1;
+	}
+}
+
 /* Tailwind v4 reads this block to generate utilities: bg-paper, text-ink-muted,
  * border-line, rounded-lg, and so on. Add a token above and to this block
  * together, or the utility silently does not exist. */

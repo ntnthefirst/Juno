@@ -88,7 +88,7 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 				<img
 					src={appIcon}
 					alt="Juno"
-					className="mx-auto h-12 w-12 rounded-[var(--radius-md)] shadow-[0_4px_12px_rgba(0,0,0,0.14)]"
+					className="mx-auto h-14 w-14 object-contain filter drop-shadow-[0_4px_16px_rgba(91,79,225,0.25)]"
 				/>
 
 				<h1 className="mt-4 text-[length:var(--text-lg)] font-[var(--weight-medium)]">

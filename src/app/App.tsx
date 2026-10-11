@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
 import { LockScreen } from "../components/LockScreen";
+import { LoadingScreen } from "../components/LoadingScreen";
 import { AgentNotices } from "../features/agent/AgentNotices";
 import { AgentScreen } from "../features/agent/AgentScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
@@ -93,9 +94,8 @@ function Shell() {
 		};
 	}, []);
 
-	// Until the lock answer arrives, render nothing rather than a flash of a
-	// screen that is about to be replaced.
-	if (lock === null) return <div className="h-full bg-[var(--paper)]" />;
+	// Until the lock answer arrives, render the calm branded loading screen.
+	if (lock === null) return <LoadingScreen />;
 
 	if (lock.locked) {
 		return (

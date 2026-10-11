@@ -306,7 +306,7 @@ function AboutSection() {
 						<img
 							src={appIcon}
 							alt="Juno"
-							className="h-14 w-14 rounded-[var(--radius-md)] shadow-[0_2px_8px_rgba(0,0,0,0.12)] flex-none"
+							className="h-14 w-14 object-contain filter drop-shadow-[0_2px_8px_rgba(91,79,225,0.2)] flex-none"
 						/>
 						<div className="min-w-0 flex-1">
 							<div className="flex items-baseline gap-2">

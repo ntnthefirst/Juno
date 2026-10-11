@@ -10,8 +10,8 @@
  *
  * Run: node scripts/make-icon.mjs
  */
-import { app, BrowserWindow, screen } from "electron";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { app, BrowserWindow, screen, nativeImage } from "electron";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +21,18 @@ const SIZE = 1024;
 app.disableHardwareAcceleration();
 
 app.whenReady().then(async () => {
+	const artFile = join(root, "brand", "art", "juno-icon-bureau.jpg");
+	if (existsSync(artFile)) {
+		const nativeImg = nativeImage.createFromPath(artFile);
+		const resized = nativeImg.resize({ width: SIZE, height: SIZE, quality: "best" });
+		const out = join(root, "build");
+		mkdirSync(out, { recursive: true });
+		writeFileSync(join(out, "icon.png"), resized.toPNG());
+		console.log(`build/icon.png written from brand art at ${SIZE}x${SIZE}`);
+		app.quit();
+		return;
+	}
+
 	const svg = readFileSync(join(root, "brand", "logo", "juno-icon.svg"), "utf8");
 
 	// capturePage() returns device pixels, so a window sized in CSS pixels on a

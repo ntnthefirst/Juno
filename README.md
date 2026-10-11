@@ -1,7 +1,8 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="brand/logo/juno-wordmark-paper.svg">
-  <img src="brand/logo/juno-wordmark-ink.svg" alt="Juno" width="150">
-</picture>
+<p align="center">
+  <img src="build/icon.png" alt="Juno Icon" width="96" height="96" style="border-radius: 20px;">
+</p>
+
+# Juno
 
 Where the paperwork of running a small business happens, on your own machine,
 without a subscription.
@@ -10,6 +11,10 @@ Juno keeps clients, contracts, mail, dates and reminders in one place,
 generates the documents you would otherwise retype, and exposes everything it can
 do to an AI agent so the boring parts can be asked for instead of clicked
 through.
+
+<p align="center">
+  <img src="brand/art/juno-welcome.jpg" alt="Juno Bureau Workspace" width="100%" style="border-radius: 8px;">
+</p>
 
 **Status: phases 0 to 6 built.** The app builds, packages, installs and runs.
 Clients, documents, reminders, a mail client with an outbox, a calendar with

@@ -72,6 +72,10 @@ const templateProperties: Record<string, unknown> = {
 	inputs: INPUTS_SCHEMA,
 };
 
+const OWNER_RULE =
+	"A document belongs to a client, a project, both, or neither. A project that has a client brings " +
+	"that client along; naming a different client is refused.";
+
 export const templateTools: ToolDescriptor[] = [
 	{
 		name: "templates.list",
@@ -275,16 +279,47 @@ export const documentTools: ToolDescriptor[] = [
 	{
 		name: "documents.list",
 		title: "List documents",
-		description: "Generated documents, newest first, optionally for one client.",
+		description: "Documents, newest first, optionally for one client or one project.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {
 			type: "object",
-			properties: { client_id: { type: "string", description: "Limit to one client." } },
+			properties: {
+				client_id: { type: "string", description: "Limit to one client." },
+				project_id: { type: "string", description: "Limit to one project." },
+			},
 			additionalProperties: false,
 		},
 		handler: async (args) =>
-			documents.list(args.client_id ? { clientId: String(args.client_id) } : {}),
+			documents.list({
+				...(args.client_id ? { clientId: String(args.client_id) } : {}),
+				...(args.project_id ? { projectId: String(args.project_id) } : {}),
+			}),
+	},
+	{
+		name: "documents.link",
+		title: "Keep a document under a client or a project",
+		description:
+			"Changes what a document belongs to: a client, a project, both, or neither (pass null for both). " +
+			"A project that has a client brings that client along, and naming a different client is refused. " +
+			"Only where it is kept changes; the file, its versions and its signatures stay as they are.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: { type: "string" },
+				client_id: { type: ["string", "null"], description: "Null for no client." },
+				project_id: { type: ["string", "null"], description: "Null for no project." },
+			},
+			required: ["id", "client_id", "project_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			documents.link(String(args.id), {
+				clientId: (args.client_id as string | null) ?? null,
+				projectId: (args.project_id as string | null) ?? null,
+			}),
 	},
 	{
 		name: "documents.get",
@@ -304,7 +339,8 @@ export const documentTools: ToolDescriptor[] = [
 		name: "documents.generate",
 		title: "Generate a document",
 		description:
-			"Renders a template for a client and stores the result as a draft with its PDF. Nothing is sent. " +
+			"Renders a template and stores the result as a draft with its PDF, under a client, a project, " +
+			"both or neither. A project that has a client brings that client along. Nothing is sent. " +
 			"Placeholders that cannot be filled are rendered as visible markers and reported. A template laid " +
 			"out on paper (one with a canvas) takes every value from extras, keyed by its input keys, and " +
 			"nothing from the client: the client is who the document belongs to.",
@@ -313,10 +349,10 @@ export const documentTools: ToolDescriptor[] = [
 		inputSchema: {
 			type: "object",
 			properties: {
-				client_id: { type: "string" },
+				client_id: { type: ["string", "null"], description: "Optional. " + OWNER_RULE },
 				template_id: { type: "string" },
-				project_id: { type: ["string", "null"], description: "Must belong to the same client." },
-				title: { type: "string", description: "Defaults to the template name and client name." },
+				project_id: { type: ["string", "null"], description: "Optional. Must belong to the client when both are given." },
+				title: { type: "string", description: "Defaults to the template name and the client or project name." },
 				issued_on: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
 				extras: {
 					type: "object",
@@ -324,12 +360,12 @@ export const documentTools: ToolDescriptor[] = [
 					additionalProperties: { type: "string" },
 				},
 			},
-			required: ["client_id", "template_id"],
+			required: ["template_id"],
 			additionalProperties: false,
 		},
 		handler: async (args) => {
 			const input: GenerateDocumentInput = {
-				clientId: String(args.client_id),
+				clientId: (args.client_id as string | null) ?? null,
 				templateId: String(args.template_id),
 				projectId: (args.project_id as string | null) ?? null,
 				...(args.title !== undefined ? { title: String(args.title) } : {}),
@@ -348,27 +384,29 @@ export const documentTools: ToolDescriptor[] = [
 		name: "documents.import",
 		title: "Import a PDF as a document",
 		description:
-			"Copies an existing PDF on this machine into Juno and records it for a client. It has no body " +
+			"Copies an existing PDF on this machine into Juno and records it under a client, a project, both " +
+			"or neither. It has no body " +
 			"and cannot be rendered again, because it did not come from a template, but it can still be signed. " +
-			"Refused when the client already has a document with the same title: check documents.find_matches first.",
+			"Refused when the same client, or project when there is no client, already has a document with the " +
+			"same title: check documents.find_matches first.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
 			type: "object",
 			properties: {
 				source_path: { type: "string", description: "Absolute path to the PDF on this machine." },
-				client_id: { type: "string" },
+				client_id: { type: ["string", "null"], description: "Optional. " + OWNER_RULE },
 				title: { type: "string", description: "Defaults to the file's own name." },
-				project_id: { type: ["string", "null"], description: "Must belong to the same client." },
+				project_id: { type: ["string", "null"], description: "Optional. Must belong to the client when both are given." },
 				issued_on: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
 			},
-			required: ["source_path", "client_id"],
+			required: ["source_path"],
 			additionalProperties: false,
 		},
 		handler: async (args) => {
 			const input: ImportDocumentInput = {
 				sourcePath: String(args.source_path),
-				clientId: String(args.client_id),
+				clientId: (args.client_id as string | null) ?? null,
 				...(args.title !== undefined ? { title: String(args.title) } : {}),
 				...(args.project_id !== undefined ? { projectId: args.project_id as string | null } : {}),
 				...(args.issued_on !== undefined ? { issuedOn: String(args.issued_on) } : {}),

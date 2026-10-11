@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import type { ClientSummary, ImportAnalysis } from "@shared/types";
+import type { ImportAnalysis } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
-import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { announceDocumentsChanged, type ImportItem, type ImportOutcome } from "../../lib/pdf-drop";
+import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
 
 type ImportFlowProps = {
 	items: ImportItem[];
 	/** Set when the files are already known to belong to one client: its own tab. */
 	clientId?: string;
+	/** Set when they are known to belong to one project: its own page. */
+	projectId?: string;
 	onDone: (outcome: ImportOutcome) => void;
 };
 
@@ -33,16 +35,15 @@ function reasonOf(match: ImportAnalysis["matches"][number]): string {
  *
  * Each file is read by the main process first. When it looks like a document
  * Juno already has, by its text or by its name, the question is whether it is
- * a new version of that document or a document of its own. When the client is
- * not known either, that is asked too. A file with nothing to ask about is
- * imported straight away.
+ * a new version of that document or a document of its own. When neither the
+ * client nor the project is known, where to keep it is asked too, and "none"
+ * is an answer. A file with nothing to ask about is imported straight away.
  */
-export function ImportFlow({ items, clientId, onDone }: ImportFlowProps) {
+export function ImportFlow({ items, clientId, projectId, onDone }: ImportFlowProps) {
 	const [index, setIndex] = useState(0);
 	const [step, setStep] = useState<Step>({ status: "reading" });
-	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [choice, setChoice] = useState<Choice>({ kind: "new" });
-	const [targetClient, setTargetClient] = useState("");
+	const [owner, setOwner] = useState<DocumentOwnerChoice>({ clientId: "", projectId: "" });
 	const [title, setTitle] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const outcome = useRef<ImportOutcome>({ documents: 0, versions: 0, skipped: 0, failures: [] });
@@ -55,19 +56,6 @@ export function ImportFlow({ items, clientId, onDone }: ImportFlowProps) {
 	}, [onDone]);
 
 	const item = items[index];
-
-	useEffect(() => {
-		let cancelled = false;
-		window.juno.clients
-			.list()
-			.then((rows) => {
-				if (!cancelled) setClients(rows);
-			})
-			.catch(() => undefined);
-		return () => {
-			cancelled = true;
-		};
-	}, []);
 
 	useEffect(() => {
 		if (!item) {
@@ -83,16 +71,21 @@ export function ImportFlow({ items, clientId, onDone }: ImportFlowProps) {
 			const analysis = await window.juno.documents.analyseImport({ source: item.source, clientId: clientId ?? null });
 			if (cancelled) return;
 			const usable = analysis.matches.filter((match) => !match.identical);
-			// Nothing to ask: the client is known and nothing looks like this file.
-			if (clientId && analysis.matches.length === 0) {
-				await window.juno.documents.importFile({ source: item.source, clientId, title: analysis.defaultTitle });
+			// Nothing to ask: where it goes is known and nothing looks like this file.
+			if ((clientId || projectId) && analysis.matches.length === 0) {
+				await window.juno.documents.importFile({
+					source: item.source,
+					clientId: clientId ?? null,
+					projectId: projectId ?? null,
+					title: analysis.defaultTitle,
+				});
 				if (cancelled) return;
 				outcome.current.documents += 1;
 				setIndex((current) => current + 1);
 				return;
 			}
 			setChoice(usable[0] ? { kind: "version", documentId: usable[0].documentId } : { kind: "new" });
-			setTargetClient(clientId ?? analysis.suggestedClientId ?? "");
+			setOwner({ clientId: clientId ?? analysis.suggestedClientId ?? "", projectId: projectId ?? "" });
 			setTitle(analysis.defaultTitle);
 			setStep({ status: "asking", analysis });
 		})().catch((cause: unknown) => {
@@ -103,7 +96,7 @@ export function ImportFlow({ items, clientId, onDone }: ImportFlowProps) {
 		return () => {
 			cancelled = true;
 		};
-	}, [item, clientId]);
+	}, [item, clientId, projectId]);
 
 	if (!item || step.status === "reading") return null;
 
@@ -120,17 +113,18 @@ export function ImportFlow({ items, clientId, onDone }: ImportFlowProps) {
 	async function confirm() {
 		if (busy || !item) return;
 		setError(null);
-		if (choice.kind === "new" && !targetClient) {
-			setError("Choose the client this document is for.");
-			return;
-		}
 		setStep({ status: "saving", analysis });
 		try {
 			if (choice.kind === "version") {
 				await window.juno.documents.addVersion({ documentId: choice.documentId, source: item.source });
 				next("versions");
 			} else {
-				await window.juno.documents.importFile({ source: item.source, clientId: targetClient, title: title.trim() || undefined });
+				await window.juno.documents.importFile({
+					source: item.source,
+					clientId: owner.clientId || null,
+					projectId: owner.projectId || null,
+					title: title.trim() || undefined,
+				});
 				next("documents");
 			}
 		} catch (cause: unknown) {
@@ -183,7 +177,7 @@ export function ImportFlow({ items, clientId, onDone }: ImportFlowProps) {
 						<span className="min-w-0">
 							<span className="block truncate">New version of {match.title}</span>
 							<span className="block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								{match.clientName}. {reasonOf(match)}
+								{match.clientName ?? "Not linked to a client"}. {reasonOf(match)}
 							</span>
 						</span>
 					</label>
@@ -202,16 +196,7 @@ export function ImportFlow({ items, clientId, onDone }: ImportFlowProps) {
 
 			{choice.kind === "new" ? (
 				<div className="mt-3 flex flex-col gap-4 pl-9">
-					{clientId ? null : (
-						<Select
-							label="Client"
-							required
-							value={targetClient}
-							onChange={setTargetClient}
-							placeholder="Choose a client"
-							options={clients.map((row) => ({ value: row.id, label: row.name }))}
-						/>
-					)}
+					{clientId || projectId ? null : <DocumentOwnerFields value={owner} onChange={setOwner} disabled={busy} />}
 					<Field label="Title" value={title} onChange={setTitle} />
 				</div>
 			) : null}

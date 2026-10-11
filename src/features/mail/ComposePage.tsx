@@ -142,12 +142,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 		setBusy("render");
 		setError(null);
 		try {
-			const rendered = await window.juno.mail.templates.render({
-				templateId: template.id,
-				clientId: clientId || null,
-				projectId: seed.projectId ?? null,
-				extras,
-			});
+			const rendered = await window.juno.mail.templates.render({ templateId: template.id, extras });
 			setSubject(rendered.subject);
 			setBodyText(rendered.bodyText);
 			setBodyHtml(rendered.bodyHtml);
@@ -158,7 +153,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 		} finally {
 			setBusy(null);
 		}
-	}, [template, clientId, seed.projectId, extras]);
+	}, [template, extras]);
 
 	// Read through a ref rather than depended on directly: applyTemplate's own
 	// success flips templateApplied to true, and listing it here would retrigger

@@ -627,7 +627,9 @@ export interface JunoApi {
 	};
 
 	documents: {
-		list(query?: { clientId?: string }): Promise<DocumentRecord[]>;
+		list(query?: { clientId?: string; projectId?: string }): Promise<DocumentRecord[]>;
+		/** Keeps it under a client, a project, both or neither. A project brings its client. */
+		link(id: string, input: { clientId: string | null; projectId: string | null }): Promise<DocumentRecord>;
 		get(id: string): Promise<DocumentRecord | null>;
 		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
 		/** Opens the file picker and hands back the chosen PDFs as bytes. Empty when cancelled. */
@@ -883,13 +885,8 @@ export interface JunoApi {
 			/** Renders values in hand. Writes nothing, so a preview cannot mark a
 			 * template as edited. */
 			preview(draft: MailTemplateDraft): Promise<MailTemplateRender>;
-			/** Fills a template against a client and project. Stores nothing. */
-			render(input: {
-				templateId: string;
-				clientId?: string | null;
-				projectId?: string | null;
-				extras?: Record<string, string>;
-			}): Promise<MailTemplateRender>;
+			/** Fills a template with what was typed for its inputs. Stores nothing. */
+			render(input: { templateId: string; extras?: Record<string, string> }): Promise<MailTemplateRender>;
 		};
 		outbox: {
 			list(query?: MailOutboxListQuery): Promise<MailOutboxMessage[]>;

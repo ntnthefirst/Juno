@@ -1,19 +1,17 @@
 import { type FormEvent, useEffect, useId, useState } from "react";
-import type {
-	ClientSummary,
-	DocumentTemplate,
-	GenerateDocumentResult,
-	ProjectSummary,
-} from "@shared/types";
+import type { DocumentTemplate, GenerateDocumentResult } from "@shared/types";
 import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
 
 type GenerateDialogProps = {
 	/** Fixes the client, for a document started from that client's own page. */
 	lockedClientId?: string;
+	/** Fixes the project, for a document started from that project's own page. */
+	lockedProjectId?: string;
 	/** Wording for the way back, when it is not the Documents list. */
 	backLabel?: string;
 	onClose: () => void;
@@ -38,32 +36,38 @@ function labelFor(path: string): string {
 	return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
 
-export function GenerateDialog({ lockedClientId, backLabel = "Documents", onClose, onGenerated }: GenerateDialogProps) {
+export function GenerateDialog({
+	lockedClientId,
+	lockedProjectId,
+	backLabel = "Documents",
+	onClose,
+	onGenerated,
+}: GenerateDialogProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
-	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
-	const [projects, setProjects] = useState<ProjectSummary[]>([]);
 
-	const [clientId, setClientId] = useState(lockedClientId ?? "");
+	// A project's own page fixes the project; its client, if it has one, comes
+	// with it in the service, so the client is left for the service to fill.
+	const [owner, setOwner] = useState<DocumentOwnerChoice>({
+		clientId: lockedClientId ?? "",
+		projectId: lockedProjectId ?? "",
+	});
 	const [templateId, setTemplateId] = useState("");
-	const [projectId, setProjectId] = useState("");
 	const [title, setTitle] = useState("");
 	const [issuedOn, setIssuedOn] = useState("");
 	const [extras, setExtras] = useState<Record<string, string>>({});
 
-	const [clientError, setClientError] = useState<string | null>(null);
 	const [templateError, setTemplateError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.juno.clients.list(), window.juno.templates.list()])
-			.then(([clientRows, templateRows]) => {
-				if (cancelled) return;
-				setClients(clientRows);
-				setTemplates(templateRows);
+		window.juno.templates
+			.list()
+			.then((templateRows) => {
+				if (!cancelled) setTemplates(templateRows);
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setError(messageOf(cause));
@@ -73,32 +77,6 @@ export function GenerateDialog({ lockedClientId, backLabel = "Documents", onClos
 		};
 	}, []);
 
-	// Projects are re-read per client, so another client's project can never be
-	// offered here, not even for the moment between the two selections.
-	useEffect(() => {
-		if (clientId.length === 0) return;
-		let cancelled = false;
-		window.juno.projects
-			.list({ clientId })
-			.then((rows) => {
-				if (!cancelled) setProjects(rows);
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setError(messageOf(cause));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [clientId]);
-
-	function chooseClient(value: string) {
-		setClientId(value);
-		// Cleared here rather than in the effect, so the previous client's projects
-		// are never on offer while the new ones are still being read.
-		setProjects([]);
-		setProjectId("");
-	}
-
 	const template = templates.find((row) => row.id === templateId) ?? null;
 	const paths = extraPaths(template);
 
@@ -106,9 +84,8 @@ export function GenerateDialog({ lockedClientId, backLabel = "Documents", onClos
 		event.preventDefault();
 		if (busy) return;
 
-		setClientError(clientId.length === 0 ? "Choose a client." : null);
 		setTemplateError(templateId.length === 0 ? "Choose a template." : null);
-		if (clientId.length === 0 || templateId.length === 0) return;
+		if (templateId.length === 0) return;
 
 		const values: Record<string, string> = {};
 		for (const path of paths) {
@@ -122,9 +99,9 @@ export function GenerateDialog({ lockedClientId, backLabel = "Documents", onClos
 			// issuedOn stays a YYYY-MM-DD string. A Date round trip shifts it by the
 			// timezone offset, which dates a contract to the day before.
 			const result = await window.juno.documents.generate({
-				clientId,
+				clientId: owner.clientId || null,
 				templateId,
-				projectId: projectId.length > 0 ? projectId : null,
+				projectId: owner.projectId || null,
 				title: title.trim() || undefined,
 				issuedOn: issuedOn.length > 0 ? issuedOn : undefined,
 				extras: Object.keys(values).length > 0 ? values : undefined,
@@ -154,17 +131,6 @@ export function GenerateDialog({ lockedClientId, backLabel = "Documents", onClos
 			<form id={formId} onSubmit={submit} noValidate>
 				<div className="flex flex-col gap-4">
 					<Select
-						label="Client"
-						required
-						value={clientId}
-						onChange={chooseClient}
-						placeholder="Choose a client"
-						error={clientError}
-						disabled={lockedClientId !== undefined}
-						options={clients.map((row) => ({ value: row.id, label: row.name }))}
-					/>
-
-					<Select
 						label="Template"
 						required
 						value={templateId}
@@ -189,13 +155,11 @@ export function GenerateDialog({ lockedClientId, backLabel = "Documents", onClos
 						</div>
 					) : null}
 
-					<Select
-						label="Project"
-						value={projectId}
-						onChange={setProjectId}
-						placeholder={clientId.length === 0 ? "Choose a client first" : "No project"}
-						disabled={clientId.length === 0}
-						options={projects.map((row) => ({ value: row.id, label: row.name }))}
+					<DocumentOwnerFields
+						value={owner}
+						onChange={setOwner}
+						lockClient={lockedClientId !== undefined}
+						disabled={lockedProjectId !== undefined}
 					/>
 
 					<div className="grid grid-cols-2 gap-4">

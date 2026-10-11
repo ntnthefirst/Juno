@@ -4,20 +4,11 @@ import type { TemplateInput, TemplateInputKind } from "@shared/types";
 import { Button } from "../../../components/Button";
 import { Field } from "../../../components/Field";
 import { Select } from "../../../components/Select";
+import { KIND_OPTIONS } from "./input-kinds";
 
 /** Mirrors KEY_PATTERN in electron/main/services/template-inputs.ts exactly. */
 const KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 
-const KIND_OPTIONS: { value: TemplateInputKind; label: string }[] = [
-	{ value: "text", label: "Text" },
-	{ value: "textarea", label: "Long text" },
-	{ value: "number", label: "Number" },
-	{ value: "money", label: "Amount" },
-	{ value: "date", label: "Date" },
-	{ value: "choice", label: "Choice" },
-	{ value: "image", label: "Image" },
-	{ value: "url", label: "Link" },
-];
 
 const ICON_BUTTON =
 	"flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:pointer-events-none disabled:opacity-40";
@@ -71,8 +62,8 @@ export function TemplateInputsEditor({ inputs, onChange, disabled = false }: Tem
 		return (
 			<div>
 				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-					Nothing declared yet. Add one for a value nothing in the records can answer: the scope
-					of the work, an amount agreed on the phone, a deadline.
+					Nothing declared yet. Add one for each value that changes from one use to the next: a
+					name, the scope of the work, an amount agreed on the phone, a deadline.
 				</p>
 				<Button disabled={disabled} onClick={add} size="dense">
 					<PlusIcon width={16} height={16} strokeWidth={1.8} aria-hidden />

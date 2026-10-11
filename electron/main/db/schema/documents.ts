@@ -95,9 +95,12 @@ export const documents = sqliteTable(
 	"documents",
 	{
 		...standardColumns,
-		clientId: text("client_id")
-			.notNull()
-			.references(() => clients.id),
+		/**
+		 * Who it is for. Null for a document that belongs to a project of the
+		 * owner's own, or to nothing yet. When it has a project with a client,
+		 * this is that client, so the client's page still lists it.
+		 */
+		clientId: text("client_id").references(() => clients.id),
 		projectId: text("project_id").references(() => projects.id),
 		templateId: text("template_id").references(() => documentTemplates.id),
 		/** The template version this was rendered from, for the audit trail. */

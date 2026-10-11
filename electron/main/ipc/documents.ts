@@ -18,8 +18,12 @@ import * as versions from "../services/document-versions";
 import * as documents from "../services/documents";
 
 export function registerDocumentsIpc(): void {
-	ipcMain.handle("documents.list", (_event, query?: { clientId?: string }) =>
+	ipcMain.handle("documents.list", (_event, query?: { clientId?: string; projectId?: string }) =>
 		documents.list(query ?? {}),
+	);
+	ipcMain.handle(
+		"documents.link",
+		(_event, id: string, input: { clientId: string | null; projectId: string | null }) => documents.link(id, input),
 	);
 	ipcMain.handle("documents.get", (_event, id: string) => documents.get(id));
 

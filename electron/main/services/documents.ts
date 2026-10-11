@@ -21,6 +21,7 @@ import {
 	referenceItems,
 } from "../db/schema";
 import { buildContext, todayIsoDate } from "./document-context";
+import { resolveOwner } from "./document-owner";
 import * as templates from "./document-templates";
 import * as versions from "./document-versions";
 import * as settings from "./settings";
@@ -70,9 +71,11 @@ export interface DocumentRecord {
 	id: string;
 	ownerId: string;
 	deletedAt: string | null;
-	clientId: string;
-	clientName: string;
+	/** Null for a document that belongs to a project of the owner's own, or to nothing. */
+	clientId: string | null;
+	clientName: string | null;
 	projectId: string | null;
+	projectName: string | null;
 	templateId: string | null;
 	templateVersion: number | null;
 	title: string;
@@ -94,7 +97,8 @@ export interface DocumentRecord {
 }
 
 export interface GenerateInput {
-	clientId: string;
+	/** Optional: a project with a client brings its client along (document-owner.ts). */
+	clientId?: string | null;
 	templateId: string;
 	projectId?: string | null;
 	title?: string;
@@ -111,14 +115,19 @@ export interface GenerateResult {
 
 type Row = typeof documents.$inferSelect;
 
-function toRecord(row: Row, clientName: string, summary?: versions.VersionSummary): DocumentRecord {
+function toRecord(
+	row: Row,
+	names: { clientName: string | null; projectName: string | null },
+	summary?: versions.VersionSummary,
+): DocumentRecord {
 	return {
 		id: row.id,
 		ownerId: row.ownerId,
 		deletedAt: row.deletedAt,
 		clientId: row.clientId,
-		clientName,
+		clientName: names.clientName,
 		projectId: row.projectId,
+		projectName: names.projectName,
 		templateId: row.templateId,
 		templateVersion: row.templateVersion,
 		title: row.title,
@@ -177,37 +186,65 @@ export function documentStorageDir(): string {
 	return importDirectory;
 }
 
+/**
+ * Left joins, because a document need not have a client or a project. An inner
+ * join here would make one without either vanish from every list.
+ */
+function selectWithNames(db: Db) {
+	return db
+		.select({ document: documents, clientName: clients.name, projectName: projects.name })
+		.from(documents)
+		.leftJoin(clients, eq(documents.clientId, clients.id))
+		.leftJoin(projects, eq(documents.projectId, projects.id));
+}
+
 export async function list(
-	query: { clientId?: string } = {},
+	query: { clientId?: string; projectId?: string } = {},
 	db: Db = getDb(),
 ): Promise<DocumentRecord[]> {
-	const rows = db
-		.select({ document: documents, clientName: clients.name })
-		.from(documents)
-		.innerJoin(clients, eq(documents.clientId, clients.id))
+	const rows = selectWithNames(db)
 		.where(
-			query.clientId
-				? and(isNull(documents.deletedAt), eq(documents.clientId, query.clientId))
-				: isNull(documents.deletedAt),
+			and(
+				isNull(documents.deletedAt),
+				query.clientId ? eq(documents.clientId, query.clientId) : undefined,
+				query.projectId ? eq(documents.projectId, query.projectId) : undefined,
+			),
 		)
-		.orderBy(desc(documents.createdAt))
+		.orderBy(desc(documents.createdAt), desc(documents.id))
 		.all();
 	const summaries = versions.summaries(
 		rows.map((row) => row.document.id),
 		db,
 	);
-	return rows.map((row) => toRecord(row.document, row.clientName, summaries.get(row.document.id)));
+	return rows.map((row) => toRecord(row.document, row, summaries.get(row.document.id)));
 }
 
 export async function get(id: string, db: Db = getDb()): Promise<DocumentRecord | null> {
-	const row = db
-		.select({ document: documents, clientName: clients.name })
-		.from(documents)
-		.innerJoin(clients, eq(documents.clientId, clients.id))
+	const row = selectWithNames(db)
 		.where(and(eq(documents.id, id), isNull(documents.deletedAt)))
 		.get();
 	if (!row) return null;
-	return toRecord(row.document, row.clientName, versions.summaries([id], db).get(id));
+	return toRecord(row.document, row, versions.summaries([id], db).get(id));
+}
+
+/**
+ * Moves a document to a client, a project, both, or nothing. Only where it is
+ * kept changes: the file, its versions and its signatures stay as they are.
+ */
+export async function link(
+	id: string,
+	input: { clientId?: string | null; projectId?: string | null },
+	db: Db = getDb(),
+): Promise<DocumentRecord> {
+	const owner = resolveOwner(input, db);
+	const row = db
+		.update(documents)
+		.set({ clientId: owner.clientId, projectId: owner.projectId, updatedAt: now() })
+		.where(and(eq(documents.id, id), isNull(documents.deletedAt)))
+		.returning()
+		.get();
+	if (!row) throw new Error("That document no longer exists.");
+	return (await get(row.id, db))!;
 }
 
 /**
@@ -227,46 +264,40 @@ export async function generate(
 	const template = await templates.get(input.templateId, db);
 	if (!template) throw new Error("That template no longer exists.");
 
-	const client = db
-		.select()
-		.from(clients)
-		.where(and(eq(clients.id, input.clientId), isNull(clients.deletedAt)))
-		.get();
-	if (!client) throw new Error("That client no longer exists.");
+	const belongsTo = resolveOwner({ clientId: input.clientId, projectId: input.projectId }, db);
+	const client = belongsTo.clientId
+		? db.select().from(clients).where(eq(clients.id, belongsTo.clientId)).get()
+		: undefined;
 
-	const primaryContact = db
-		.select()
-		.from(contacts)
-		.where(
-			and(
-				eq(contacts.clientId, client.id),
-				eq(contacts.isPrimary, true),
-				isNull(contacts.deletedAt),
-			),
-		)
-		.get();
-
-	const project = input.projectId
+	const primaryContact = client
 		? db
 				.select()
-				.from(projects)
-				.where(and(eq(projects.id, input.projectId), isNull(projects.deletedAt)))
+				.from(contacts)
+				.where(
+					and(
+						eq(contacts.clientId, client.id),
+						eq(contacts.isPrimary, true),
+						isNull(contacts.deletedAt),
+					),
+				)
 				.get()
-		: null;
+		: undefined;
 
-	if (input.projectId && !project) throw new Error("That project no longer exists.");
-	if (project && project.clientId !== client.id) {
-		throw new Error("That project belongs to a different client.");
-	}
+	const project = belongsTo.projectId
+		? db.select().from(projects).where(eq(projects.id, belongsTo.projectId)).get()
+		: undefined;
 
 	const owner = await settings.getOwner();
 	const issuedOn = input.issuedOn ?? todayIsoDate();
-	const title = input.title?.trim() || `${template.name} ${client.name}`;
+	const title =
+		input.title?.trim() || [template.name, client?.name ?? project?.name].filter(Boolean).join(" ");
 
+	// An older template that reads a client gets an empty one when there is
+	// none, the same as a preview, so the gaps are marked rather than invented.
 	const context = buildContext({
 		owner,
-		client: client as unknown as Client,
-		...primaryDetails(client.id, db),
+		client: (client ?? { name: "" }) as unknown as Client,
+		...(client ? primaryDetails(client.id, db) : {}),
 		primaryContact: (primaryContact ?? null) as unknown as Contact | null,
 		project: (project ?? null) as unknown as Project | null,
 		extras: input.extras,
@@ -299,8 +330,8 @@ export async function generate(
 	const [row] = db
 		.insert(documents)
 		.values({
-			clientId: client.id,
-			projectId: project?.id ?? null,
+			clientId: belongsTo.clientId,
+			projectId: belongsTo.projectId,
 			templateId: template.id,
 			templateVersion: template.version,
 			title,
@@ -320,7 +351,7 @@ export async function generate(
 		.returning()
 		.all();
 
-	return { document: toRecord(row!, client.name), missing: rendered.missing };
+	return { document: toRecord(row!, belongsTo), missing: rendered.missing };
 }
 
 /**

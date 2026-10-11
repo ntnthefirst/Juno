@@ -276,6 +276,11 @@ export function VisualEditor({ value, onChange, active, disabled = false, placeh
 							className="absolute left-0 top-[calc(100%+4px)] z-10 max-h-[320px] w-[280px] overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-2"
 							style={{ boxShadow: "var(--shadow-popover)" }}
 						>
+							{placeholderGroups.length === 0 ? (
+								<p className="px-2 py-1.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									Nothing to insert yet. Add an input under What this template asks for, and it is offered here.
+								</p>
+							) : null}
 							{placeholderGroups.map((group) => (
 								<div key={group.label} className="mb-2 last:mb-0">
 									<p className="px-2 py-1 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-wide text-[var(--ink-faint)]">

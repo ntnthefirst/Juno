@@ -612,15 +612,14 @@ export async function createReply(input: MailReplyInput, db: Db = getDb()): Prom
 }
 
 /**
- * What a template makes of a client and a project, as the draft input it would
- * be sent from. A template starts a new message; it is never a reply.
+ * What a template makes of the values typed for it, as the draft input it
+ * would be sent from. The client and project file the message and fill in
+ * nothing. A template starts a new message; it is never a reply.
  */
 async function draftOf(input: MailTemplateSendInput, db: Db): Promise<MailDraftInput> {
 	const rendered = await renderTemplate(
 		{
 			templateId: input.templateId,
-			clientId: input.clientId ?? null,
-			projectId: input.projectId ?? null,
 			...(input.extras ? { extras: input.extras } : {}),
 		},
 		db,
@@ -826,8 +825,8 @@ function templateSeal(subject: string, bodyHtml: string): string {
 }
 
 /**
- * The same for a template: the message the template makes right now, for this
- * client and project, which is what is sent if it is approved. Nothing is
+ * The same for a template: the message the template makes right now, from
+ * these values, which is what is sent if it is approved. Nothing is
  * written; a template is never kept as a draft.
  */
 export async function reviewTemplateSend(input: MailTemplateSendInput, db: Db = getDb()): Promise<SendReview> {
@@ -842,15 +841,13 @@ export async function reviewTemplateSend(input: MailTemplateSendInput, db: Db = 
 	const rendered = await renderTemplate(
 		{
 			templateId: input.templateId,
-			clientId: input.clientId ?? null,
-			projectId: input.projectId ?? null,
 			...(input.extras ? { extras: input.extras } : {}),
 		},
 		db,
 	);
 	if (rendered.missing.length > 0) {
 		throw new Error(
-			`The template still has a placeholder without a value: ${rendered.missing.join(", ")}. Fill in the record or pass it in extras.`,
+			`The template still has a placeholder without a value: ${rendered.missing.join(", ")}. Pass a value for each in extras, by input key.`,
 		);
 	}
 	const attachments: string[] = [];
@@ -878,7 +875,7 @@ export async function reviewTemplateSend(input: MailTemplateSendInput, db: Db = 
 	};
 }
 
-/** Refuses an approval when the template, the client or the project changed what it would say. */
+/** Refuses an approval when the template changed what it would say. */
 export async function verifyTemplateUnchanged(
 	input: MailTemplateSendInput,
 	seal: string | null,
@@ -887,8 +884,6 @@ export async function verifyTemplateUnchanged(
 	const rendered = await renderTemplate(
 		{
 			templateId: input.templateId,
-			clientId: input.clientId ?? null,
-			projectId: input.projectId ?? null,
 			...(input.extras ? { extras: input.extras } : {}),
 		},
 		db,

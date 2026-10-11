@@ -18,7 +18,7 @@ import {
 } from "./mail-template-filters";
 import { MailTemplateEditor } from "./CanvasTemplateEditor";
 import { MailTemplateList, type TemplateAction } from "./mail/MailTemplateList";
-import { MailTemplatePanel } from "./mail/MailTemplatePanel";
+import { MailTemplatePage } from "./mail/MailTemplatePage";
 import { UseMailTemplateScreen } from "./UseMailTemplateScreen";
 
 type Load =
@@ -26,7 +26,13 @@ type Load =
 	| { status: "ready"; rows: MailTemplate[] }
 	| { status: "error"; message: string };
 
-type View = { mode: "list" } | { mode: "edit"; id: string } | { mode: "use"; id: string };
+type View =
+	| { mode: "list" }
+	| { mode: "view"; id: string }
+	// `from` is where back goes: the template's own page when it was opened
+	// from there, the list when the editor or the use flow was reached directly.
+	| { mode: "edit"; id: string; from: "list" | "view" }
+	| { mode: "use"; id: string; from: "list" | "view" };
 
 /** What a delete is about to do, held while the question is on screen. */
 type Confirm = { ids: string[]; deleting: MailTemplate[]; hiding: MailTemplate[] };
@@ -39,9 +45,8 @@ function matches(template: MailTemplate, needle: string): boolean {
 }
 
 /**
- * The mail templates screen: a list with a search over it, a panel on the
- * right for the one being read, and the editor and the use flow as pages that
- * replace it.
+ * The mail templates screen: a list with a search over it, and the template
+ * being read, the editor and the use flow as pages that replace it.
  *
  * `listAll` rather than `list`, because a hidden template has to be reachable
  * to be put back. The pickers elsewhere call `list` and never see one
@@ -52,7 +57,6 @@ export function MailTemplatesScreen() {
 	const [view, setView] = useState<View>({ mode: "list" });
 	const [search, setSearch] = useState("");
 	const [filters, setFilters] = useState<MailTemplateFilters>(NO_MAIL_TEMPLATE_FILTERS);
-	const [openId, setOpenId] = useState<string | null>(null);
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
 	const [confirm, setConfirm] = useState<Confirm | null>(null);
 	const [creating, setCreating] = useState(false);
@@ -99,18 +103,22 @@ export function MailTemplatesScreen() {
 	const someSelected = selectedIds.length > 0 && !allSelected;
 
 	const byId = useCallback((id: string) => rows.find((row) => row.id === id) ?? null, [rows]);
-	const opened = openId ? byId(openId) : null;
+	const viewing = view.mode === "view" ? byId(view.id) : null;
 	const editing = view.mode === "edit" ? byId(view.id) : null;
 	const using = view.mode === "use" ? byId(view.id) : null;
-	const selectedRow = editing ?? using;
+	const selectedRow = viewing ?? editing ?? using;
 
 	usePublishBreadcrumb(
 		!selectedRow
 			? []
 			: [
 					{ label: "Mail templates", onSelect: () => setView({ mode: "list" }) },
-					{ label: selectedRow.name },
-					{ label: view.mode === "edit" ? "Edit" : "Use" },
+					...(view.mode === "view"
+						? [{ label: selectedRow.name }]
+						: [
+								{ label: selectedRow.name, onSelect: () => setView({ mode: "view", id: selectedRow.id }) },
+								{ label: view.mode === "edit" ? "Edit" : "Use" },
+							]),
 				],
 	);
 
@@ -120,13 +128,13 @@ export function MailTemplatesScreen() {
 			const templates = window.juno.mail.templates;
 			switch (action) {
 				case "open":
-					setOpenId(ids[0] ?? null);
+					if (ids[0]) setView({ mode: "view", id: ids[0] });
 					return;
 				case "use":
-					if (ids[0]) setView({ mode: "use", id: ids[0] });
+					if (ids[0]) setView({ mode: "use", id: ids[0], from: "list" });
 					return;
 				case "edit":
-					if (ids[0]) setView({ mode: "edit", id: ids[0] });
+					if (ids[0]) setView({ mode: "edit", id: ids[0], from: "list" });
 					return;
 				case "duplicate":
 					for (const id of ids) await templates.duplicate(id);
@@ -139,7 +147,6 @@ export function MailTemplatesScreen() {
 					break;
 				case "remove":
 					for (const id of ids) await templates.remove(id);
-					if (openId && ids.includes(openId)) setOpenId(null);
 					break;
 			}
 			setSelectedIds([]);
@@ -183,7 +190,7 @@ export function MailTemplatesScreen() {
 				layout: emptyLayout(),
 			});
 			refresh();
-			setView({ mode: "edit", id: created.id });
+			setView({ mode: "edit", id: created.id, from: "list" });
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		} finally {
@@ -191,12 +198,24 @@ export function MailTemplatesScreen() {
 		}
 	}
 
+	if (view.mode === "view" && viewing) {
+		return (
+			<MailTemplatePage
+				key={viewing.id}
+				template={viewing}
+				onBack={() => setView({ mode: "list" })}
+				onEdit={() => setView({ mode: "edit", id: viewing.id, from: "view" })}
+				onUse={() => setView({ mode: "use", id: viewing.id, from: "view" })}
+			/>
+		);
+	}
+
 	if (view.mode === "edit" && editing) {
 		return (
 			<MailTemplateEditor
 				key={editing.id}
 				templateId={editing.id}
-				onBack={() => setView({ mode: "list" })}
+				onBack={() => setView(view.from === "view" ? { mode: "view", id: editing.id } : { mode: "list" })}
 				onSaved={refresh}
 			/>
 		);
@@ -207,7 +226,7 @@ export function MailTemplatesScreen() {
 			<UseMailTemplateScreen
 				key={using.id}
 				template={using}
-				onBack={() => setView({ mode: "list" })}
+				onBack={() => setView(view.from === "view" ? { mode: "view", id: using.id } : { mode: "list" })}
 				onCreated={() => setView({ mode: "list" })}
 			/>
 		);
@@ -334,9 +353,8 @@ export function MailTemplatesScreen() {
 						<MailTemplateList
 							rows={shown}
 							searching={needle.length > 0 || filterCount > 0}
-							openId={openId}
 							selectedIds={selectedIds}
-							onOpen={setOpenId}
+							onOpen={(id) => setView({ mode: "view", id })}
 							onToggle={(id) =>
 								setSelectedIds((current) =>
 									current.includes(id) ? current.filter((other) => other !== id) : [...current, id],
@@ -347,16 +365,6 @@ export function MailTemplatesScreen() {
 					)}
 				</div>
 			</div>
-
-			{opened ? (
-				<MailTemplatePanel
-					key={opened.id}
-					template={opened}
-					onClose={() => setOpenId(null)}
-					onEdit={() => setView({ mode: "edit", id: opened.id })}
-					onUse={() => setView({ mode: "use", id: opened.id })}
-				/>
-			) : null}
 
 			{confirm ? (
 				<Dialog title="Delete templates" onClose={() => setConfirm(null)} width="narrow">

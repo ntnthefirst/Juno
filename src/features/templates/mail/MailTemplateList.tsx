@@ -10,7 +10,6 @@ export type TemplateAction = "open" | "use" | "edit" | "duplicate" | "hide" | "u
 type MailTemplateListProps = {
 	rows: MailTemplate[];
 	searching: boolean;
-	openId: string | null;
 	selectedIds: string[];
 	onOpen: (id: string) => void;
 	onToggle: (id: string) => void;
@@ -30,7 +29,6 @@ type MailTemplateListProps = {
 export function MailTemplateList({
 	rows,
 	searching,
-	openId,
 	selectedIds,
 	onOpen,
 	onToggle,
@@ -102,13 +100,12 @@ export function MailTemplateList({
 		<>
 			<ul>
 				{rows.map((template) => {
-					const active = template.id === openId;
 					const checked = selectedIds.includes(template.id);
 					return (
 						<li key={template.id} className="border-b border-[var(--line)]">
 							<div
 								className={`group flex items-center gap-2 rounded-[var(--radius-md)] px-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-									active ? "bg-[var(--accent-soft)]" : checked ? "bg-[var(--sunken)]" : "hover:bg-[var(--hover)]"
+									checked ? "bg-[var(--sunken)]" : "hover:bg-[var(--hover)]"
 								}`}
 								style={{ minHeight: "var(--row-height)" }}
 								onContextMenu={(event) => {
@@ -127,12 +124,6 @@ export function MailTemplateList({
 								/>
 								<button
 									type="button"
-									aria-current={active ? "true" : undefined}
-									// Only marked while a plain click still opens the panel: once a
-									// selection is running the same click ticks a box instead, and an
-									// outside click closing whatever panel is open is the right
-									// default for that.
-									data-opens-panel={hasSelection ? undefined : ""}
 									onClick={() => (hasSelection ? onToggle(template.id) : onOpen(template.id))}
 									onDoubleClick={() => onAction("use", [template.id])}
 									className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"

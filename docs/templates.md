@@ -178,22 +178,34 @@ a provider that offers one. See decision 8.
 
 ## Mail templates
 
-A mail template uses the same syntax and the same values, plus whatever it
-declares as an input, which arrives as `document.<key>`. The canvas it is laid
-out on is in [editors.md](editors.md) section 2.
+A mail template uses the same syntax and works like a template on paper:
+**it fills in only what it asks for** (decision 47). None of the values under
+"Available values" reach it. Every value it prints is one of its own inputs,
+each with a key, a label, a kind and whether it is required, written
+`{{document.<key>}}`. A placeholder naming anything else is refused when the
+template is saved. The canvas it is laid out on is in
+[editors.md](editors.md) section 2.
+
+So a greeting is an input (`{{document.contact_name}}`, "Aanspreking"), and so
+is a footer line. An input can carry a starting value, which is how a footer
+with your own details fills itself in every time. Choosing a client when the
+template is used decides who it goes to and where it is filed, and fills in
+nothing.
+
+A template written before this read records. It is converted the first time
+Juno starts after the change: `{{client.contactName}}` becomes
+`{{document.client_contact_name}}` and an input labelled "Client contact name",
+and an `owner.*` value starts with what your settings said at that moment.
 
 **What ships.** One example on a first install, and nothing else. An install
 that already has the four old mail templates keeps them; a new one never gets
 them, and no code looks a mail template up by key.
 
-Three things to know when writing one:
+Two things to know when writing one:
 
-- There is no `client.firstName`. A greeting uses `client.contactName`, the
-  name of the primary contact, and `client.name` is the business.
-- A footer uses `owner.businessName`, `owner.contactName`, `owner.addressLine1`,
-  `owner.postalCode`, `owner.city`, `owner.vatNumber`, `owner.email` and
-  `owner.phone`. Only the first two are always filled in, so wrap the rest in
-  `{{#if …}}`.
+- An input that is printed and left empty is a gap, and a message with a gap
+  is refused. Wrap an optional line in `{{#if document.<key>}}` and mark its
+  input not required.
 - Conditionals do not nest. The first closing tag ends the conditional it
   meets, so an `if` inside an `if` leaves the outer one open. Give each
   optional line its own.

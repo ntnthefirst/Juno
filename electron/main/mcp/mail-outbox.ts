@@ -139,21 +139,21 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		name: "mail.templates.render",
 		title: "Fill a mail template",
 		description:
-			"Fills a template against a client and project and returns the subject, the HTML body " +
-			"in the house style and its text twin, plus the placeholders that had no value. Stores " +
-			"nothing: a check before mail.send_from_template.",
+			"Fills a template with values for its declared inputs and returns the subject, the HTML " +
+			"body and its text twin, plus the placeholders that had no value. Stores nothing: a check " +
+			"before mail.send_from_template.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {
 			type: "object",
 			properties: {
 				template_id: { type: "string" },
-				client_id: { type: ["string", "null"] },
-				project_id: { type: ["string", "null"] },
 				extras: {
 					type: "object",
 					description:
-						"Values no record holds, by placeholder name under document: title, dueOn (YYYY-MM-DD), amount.",
+						"A value for each of the template's declared inputs, by input key (see inputs on " +
+						"mail.templates.get). Nothing is filled in from a client, a project or the owner's " +
+						"details. A date is YYYY-MM-DD; a picture is a data:image address or an https address.",
 					additionalProperties: { type: "string" },
 				},
 			},
@@ -163,8 +163,6 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		handler: async (args) =>
 			templates.renderTemplate({
 				templateId: String(args.template_id),
-				clientId: (args.client_id as string | null) ?? null,
-				projectId: (args.project_id as string | null) ?? null,
 				...(args.extras && typeof args.extras === "object"
 					? { extras: args.extras as Record<string, string> }
 					: {}),
@@ -204,8 +202,11 @@ export const mailOutboxTools: ToolDescriptor[] = [
 				body_html: { type: "string", description: "Ignored when a layout is given." },
 				layout: LAYOUT_SCHEMA,
 				inputs: { type: "array", description: "The declared inputs, so a field block knows its kind." },
-				client_id: { type: ["string", "null"] },
-				project_id: { type: ["string", "null"] },
+				extras: {
+					type: "object",
+					description: "A value for each declared input, by input key, to preview it filled in.",
+					additionalProperties: { type: "string" },
+				},
 			},
 			required: ["subject"],
 			additionalProperties: false,
@@ -216,8 +217,9 @@ export const mailOutboxTools: ToolDescriptor[] = [
 				...(typeof args.body_html === "string" ? { bodyHtml: args.body_html } : {}),
 				...(args.layout !== undefined ? { layout: args.layout as never } : {}),
 				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
-				clientId: (args.client_id as string | null) ?? null,
-				projectId: (args.project_id as string | null) ?? null,
+				...(args.extras && typeof args.extras === "object"
+					? { extras: args.extras as Record<string, string> }
+					: {}),
 			}),
 	},
 	{
@@ -226,7 +228,9 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		description:
 			"A new template of the owner's own, never a system one. The body is Dutch, because a " +
 			"client reads it. Pass a layout to lay it out on the canvas, or body_html to write the " +
-			"HTML by hand.",
+			"HTML by hand. It fills in only its own inputs: declare each value it prints in inputs " +
+			"and write it as {{document.<key>}}. A placeholder naming a client, a project or the " +
+			"owner is refused.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -440,8 +444,8 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		name: "mail.send_from_template",
 		title: "Ask to send a mail from a template",
 		description:
-			"Fills a mail template for a client and project and asks to send it as a new message, in " +
-			"one step. It does not send: the request waits under Agent in Juno, where a person reads " +
+			"Fills a mail template with values for its inputs and asks to send it as a new message, in " +
+			"one step. The client and project file the message and fill in nothing. It does not send: the request waits under Agent in Juno, where a person reads " +
 			"the whole filled message and approves or rejects it, and nothing appears in the mail " +
 			"screen. A template is never saved as a draft and cannot be used for a reply or a " +
 			"forward; for those write a draft with mail.reply and ask with mail.send. A request that " +
@@ -463,7 +467,9 @@ export const mailOutboxTools: ToolDescriptor[] = [
 				extras: {
 					type: "object",
 					description:
-						"Values no record holds, by placeholder name under document: title, dueOn (YYYY-MM-DD), amount.",
+						"A value for each of the template's declared inputs, by input key (see inputs on " +
+						"mail.templates.get). Nothing is filled in from a client, a project or the owner's " +
+						"details. A date is YYYY-MM-DD; a picture is a data:image address or an https address.",
 					additionalProperties: { type: "string" },
 				},
 				document_ids: { type: "array", items: { type: "string" } },

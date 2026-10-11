@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientSummary, DocumentTemplate, ProjectSummary } from "@shared/types";
+import type { DocumentTemplate } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
 import { FormPage, type FormStep } from "../../components/FormPage";
 import { PdfViewer } from "../../components/PdfViewer";
-import { Select } from "../../components/Select";
 import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
+import { belongsTo } from "../documents/belongs-to";
+import { DocumentOwnerFields, type DocumentOwnerChoice } from "../documents/DocumentOwnerFields";
 
 type UseCanvasTemplateScreenProps = {
 	template: DocumentTemplate;
@@ -16,22 +17,22 @@ type UseCanvasTemplateScreenProps = {
 	onDone: () => void;
 };
 
-type StepKey = "fill" | "pdf" | "client";
+type StepKey = "fill" | "pdf" | "keep";
 
 type Printed = { stamp: number; pdf: Uint8Array; missing: string[] };
 
-type Created = { title: string; isSpecimen: boolean; pdfError: string | null };
+type Created = { title: string; isSpecimen: boolean; pdfError: string | null; where: string };
 
 /**
- * Using a template laid out on paper: fill it in, see the PDF, then decide who
- * it is for.
+ * Using a template laid out on paper: fill it in, see the PDF, then decide
+ * where it is kept.
  *
  * A canvas template takes nothing from a client (docs/templates.md), so the PDF
- * exists before anyone is chosen, and choosing one only decides where the
- * document is kept. The question is asked the moment the PDF is made, as a
- * question with two answers, and the answer that needs fields opens a step of
- * its own rather than a form in a dialog (decision 30). A PDF nobody connects
- * can be saved anywhere as a file and is not kept by Juno.
+ * exists before anyone is chosen, and choosing a client, a project, both or
+ * neither only decides where the document is kept. The question is asked the
+ * moment the PDF is made, as a question with two answers, and the answer that
+ * needs fields opens a step of its own rather than a form in a dialog
+ * (decision 30). A PDF that is not kept can be saved anywhere as a file.
  */
 export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasTemplateScreenProps) {
 	const [stepIndex, setStepIndex] = useState(0);
@@ -42,63 +43,25 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 	const [printed, setPrinted] = useState<Printed | null>(null);
 	const [printing, setPrinting] = useState(false);
 	const [asking, setAsking] = useState(false);
-	const [clients, setClients] = useState<ClientSummary[]>([]);
-	const [clientId, setClientId] = useState("");
-	const [projectsState, setProjectsState] = useState<{ clientId: string; rows: ProjectSummary[] } | null>(null);
-	const [projectIdChoice, setProjectIdChoice] = useState("");
+	const [owner, setOwner] = useState<DocumentOwnerChoice>({ clientId: "", projectId: "" });
 	const [title, setTitle] = useState(template.name);
-	const [clientError, setClientError] = useState<string | null>(null);
 	const [created, setCreated] = useState<Created | null>(null);
 	const [savedTo, setSavedTo] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
-	useEffect(() => {
-		let cancelled = false;
-		window.juno.clients
-			.list()
-			.then((rows) => {
-				if (!cancelled) setClients(rows);
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setError(messageOf(cause));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	useEffect(() => {
-		if (clientId.length === 0) return;
-		let cancelled = false;
-		window.juno.projects
-			.list({ clientId })
-			.then((rows) => {
-				if (!cancelled) setProjectsState({ clientId, rows });
-			})
-			.catch(() => {
-				if (!cancelled) setProjectsState({ clientId, rows: [] });
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [clientId]);
-
-	const projects = clientId.length > 0 && projectsState?.clientId === clientId ? projectsState.rows : [];
-	const projectId = clientId.length === 0 ? "" : projectIdChoice;
-
 	// The viewer reads its file by key; the bytes are already in hand.
 	const read = useCallback(async () => printed?.pdf ?? new Uint8Array(), [printed]);
 
 	const hasInputs = template.inputs.length > 0;
-	const steps: StepKey[] = hasInputs ? ["fill", "pdf", "client"] : ["pdf", "client"];
+	const steps: StepKey[] = hasInputs ? ["fill", "pdf", "keep"] : ["pdf", "keep"];
 	const step = steps[Math.min(stepIndex, steps.length - 1)]!;
 	const formSteps: FormStep[] = steps.map((key) =>
 		key === "fill"
 			? { label: "Fill", hint: "Everything this document says that changes each time." }
 			: key === "pdf"
 				? { label: "PDF", hint: "The document as it prints." }
-				: { label: "Client", hint: "Who it is for, and where it is kept." },
+				: { label: "Keep", hint: "Where it is kept: a client, a project, both or neither." },
 	);
 	const missingRequired = template.inputs.filter(
 		(input) => input.required && (values[input.key] ?? "").trim().length === 0,
@@ -163,18 +126,13 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 
 	async function create(): Promise<void> {
 		if (busy) return;
-		if (clientId.length === 0) {
-			setClientError("Choose a client.");
-			return;
-		}
-		setClientError(null);
 		setBusy(true);
 		setError(null);
 		try {
 			const result = await window.juno.documents.generate({
-				clientId,
+				clientId: owner.clientId || null,
 				templateId: template.id,
-				projectId: projectId.length > 0 ? projectId : null,
+				projectId: owner.projectId || null,
 				title: title.trim() || template.name,
 				extras: values,
 			});
@@ -182,6 +140,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 				title: result.document.title,
 				isSpecimen: result.document.isSpecimen,
 				pdfError: result.pdfError,
+				where: belongsTo(result.document),
 			});
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -191,13 +150,14 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 	}
 
 	if (created) {
-		const client = clients.find((row) => row.id === clientId);
 		return (
 			<FormPage title={`Use: ${template.name}`} onBack={onDone} backLabel="Done" width="form">
 				<p className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">Document created</p>
 				<p className="mt-3 text-[length:var(--text-base)]">
 					{created.pdfError === null
-						? `${created.title} is kept with ${client?.name ?? "the client"} as a PDF.`
+						? created.where === "Not linked"
+							? `${created.title} is kept in Juno as a PDF, under no client or project.`
+							: `${created.title} is kept with ${created.where} as a PDF.`
 						: `${created.title} was saved, but its PDF was not written.`}
 					{created.isSpecimen ? " It is marked as a specimen, because the template has not been reviewed." : ""}
 				</p>
@@ -236,8 +196,8 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 							<Button disabled={busy || !printed} onClick={() => void savePdf()}>
 								Save PDF
 							</Button>
-							<Button variant="primary" disabled={!printed} onClick={() => goTo("client")}>
-								Connect a client
+							<Button variant="primary" disabled={!printed} onClick={() => goTo("keep")}>
+								Keep in Juno
 							</Button>
 						</>
 					) : (
@@ -289,37 +249,21 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 				</div>
 			) : null}
 
-			{step === "client" ? (
+			{step === "keep" ? (
 				<div className="flex flex-col gap-4">
-					<Select
-						label="Client"
-						required
-						value={clientId}
-						onChange={setClientId}
-						placeholder="Choose a client"
-						options={clients.map((row) => ({ value: row.id, label: row.name }))}
-						error={clientError}
-					/>
-					<Select
-						label="Project"
-						value={projectId}
-						onChange={setProjectIdChoice}
-						placeholder={clientId.length === 0 ? "Choose a client first" : "No project"}
-						disabled={clientId.length === 0}
-						options={projects.map((row) => ({ value: row.id, label: row.name }))}
-					/>
-					<Field label="Title" value={title} onChange={setTitle} help="How the document is listed with the client." />
+					<DocumentOwnerFields value={owner} onChange={setOwner} disabled={busy} />
+					<Field label="Title" value={title} onChange={setTitle} help="How the document is listed." />
 					<p className="max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						The PDF is the one you saw. Nothing from the client is written into it. A document from a template
+						The PDF is the one you saw. Nothing from a client or project is written into it. A document from a template
 						nobody has reviewed is marked as a specimen and cannot be signed.
 					</p>
 				</div>
 			) : null}
 
 			{asking && printed ? (
-				<Dialog title="Connect a client" onClose={() => setAsking(false)} width="narrow">
+				<Dialog title="Keep this document" onClose={() => setAsking(false)} width="narrow">
 					<p className="text-[length:var(--text-dense)]">
-						The PDF is made. Connect it to a client to keep it as one of their documents?
+						The PDF is made. Keep it in Juno, under a client, a project or neither?
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
 						<Button onClick={() => setAsking(false)}>Not now</Button>
@@ -327,10 +271,10 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 							variant="primary"
 							onClick={() => {
 								setAsking(false);
-								goTo("client");
+								goTo("keep");
 							}}
 						>
-							Connect a client
+							Keep in Juno
 						</Button>
 					</div>
 				</Dialog>

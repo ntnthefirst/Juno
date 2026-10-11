@@ -28,8 +28,6 @@ type UseMailTemplateScreenProps = {
 // not need an effect to clear the stale render: it just stops matching.
 type ReviewRequestKey = {
 	templateId: string;
-	clientId: string;
-	projectId: string;
 	values: Record<string, string>;
 };
 
@@ -40,9 +38,7 @@ type ReviewRenderState =
 function sameReviewKey(a: ReviewRequestKey, b: ReviewRequestKey): boolean {
 	// values compares by reference: setValues always writes a fresh object, so
 	// this is exact and avoids serialising the record on every render.
-	return (
-		a.templateId === b.templateId && a.clientId === b.clientId && a.projectId === b.projectId && a.values === b.values
-	);
+	return a.templateId === b.templateId && a.values === b.values;
 }
 
 /**
@@ -67,27 +63,31 @@ function parseAddressLine(line: string): MailAddress[] {
 }
 
 /**
- * Fill, Link, Review and send: docs/editors.md section 4. A template with
- * no declared inputs skips straight to Link, because a step with nothing on
+ * Link, Fill, Review and send: docs/editors.md section 4.
+ *
+ * Who it goes to comes first, because that is the question with an answer in
+ * the records, and what the message says comes second, because nothing in the
+ * records answers it: every value is one of the template's own inputs. A
+ * template with no declared inputs skips Fill, because a step with nothing on
  * it is not a step, it is a confirmation nobody asked for.
  */
 export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTemplateScreenProps) {
 	const hasInputs = template.inputs.length > 0;
 	const stepDefs: (FormStep & { key: "fill" | "link" | "review" })[] = [
+		{
+			key: "link" as const,
+			label: "Link",
+			hint: "Who this goes to, and which client and project it is filed under. Nothing in the message is filled in from them.",
+		},
 		...(hasInputs
 			? [
 					{
 						key: "fill" as const,
 						label: "Fill",
-						hint: "What this template asks for, beyond your client and project records.",
+						hint: "What this template asks for. Every value in the message comes from here.",
 					},
 				]
 			: []),
-		{
-			key: "link" as const,
-			label: "Link",
-			hint: "Linking a client fills the client placeholders. Leave it out and they stay marked as missing, which is fine if that is deliberate.",
-		},
 		{
 			key: "review" as const,
 			label: "Review",
@@ -170,9 +170,9 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 	useEffect(() => {
 		if (currentKey !== "review") return;
 		let cancelled = false;
-		const key: ReviewRequestKey = { templateId: template.id, clientId, projectId, values };
+		const key: ReviewRequestKey = { templateId: template.id, values };
 		window.juno.mail.templates
-			.render({ templateId: template.id, clientId: clientId || null, projectId: projectId || null, extras: values })
+			.render({ templateId: template.id, extras: values })
 			.then((result) => {
 				if (cancelled) return;
 				setReviewRender({ ...key, status: "ready", result });
@@ -183,9 +183,9 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 		return () => {
 			cancelled = true;
 		};
-	}, [currentKey, template.id, clientId, projectId, values]);
+	}, [currentKey, template.id, values]);
 
-	const reviewKey: ReviewRequestKey = { templateId: template.id, clientId, projectId, values };
+	const reviewKey: ReviewRequestKey = { templateId: template.id, values };
 
 	const currentReview = reviewRender && sameReviewKey(reviewRender, reviewKey) ? reviewRender : null;
 	const rendered = currentReview?.status === "ready" ? currentReview.result : null;
@@ -276,7 +276,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 						onChange={(value) => setClientId(value)}
 						placeholder="Nobody"
 						options={clients.map((c) => ({ value: c.id, label: c.name }))}
-						help="Fills the client placeholders in the body."
+						help="Files the message under this client and fills in To."
 					/>
 					<Select
 						label="Project"
@@ -314,7 +314,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 							<p className="font-[var(--weight-medium)]">{rendered.subject}</p>
 							{rendered.missing.length > 0 ? (
 								<p className="mt-2 text-[length:var(--text-sm)] text-[var(--risk)]">
-									No value for: {rendered.missing.join(", ")}. Fill these in before sending: a message with a gap in it is refused.
+									No value for: {rendered.missing.join(", ")}. Fill these in on the Fill step before sending: a message with a gap in it is refused.
 								</p>
 							) : null}
 							<div className="mt-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">

@@ -11,6 +11,7 @@ import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
 import { useLoaded } from "../lib/use-loaded";
 import { leadParticipant } from "../features/mail/format";
 import type { ScreenId } from "./screens";
+import { belongsTo } from "../features/documents/belongs-to";
 
 type PaletteItem = {
 	id: string;
@@ -187,9 +188,9 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 						documents.value.map((record): PaletteItem => ({
 							id: `document-${record.id}`,
 							label: record.title,
-							detail: record.clientName,
-							avatar: { name: record.clientName, shape: "square" },
-							keywords: record.clientName,
+							detail: belongsTo(record),
+							avatar: { name: record.clientName ?? record.projectName ?? record.title, shape: "square" },
+							keywords: belongsTo(record),
 							run: () => requestOpen({ kind: "document", id: record.id, name: record.title }),
 						})),
 						term,

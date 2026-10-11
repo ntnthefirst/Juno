@@ -13,6 +13,7 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import * as clients from "./clients";
+import * as projectsService from "./projects";
 import * as documents from "./documents";
 import { addVersion, analyseImport, importFile, importPdf } from "./document-import";
 import * as versions from "./document-versions";
@@ -336,5 +337,66 @@ describe("a mail attachment as a version", () => {
 
 		const version = await addVersion({ documentId: record.id, source: { kind: "attachment", attachmentId: "att" } }, db);
 		expect(version).toMatchObject({ source: "mail", mailAttachmentId: "att", fileDate: "2026-03-04T09:00:00.000Z", isLatest: true });
+	});
+});
+
+describe("what a document belongs to", () => {
+	async function setUp() {
+		const db = freshDb();
+		configureDocumentStorage(mkdtempSync(join(tmpdir(), "juno-import-storage-")));
+		const sourceDir = mkdtempSync(join(tmpdir(), "juno-import-source-"));
+		const client = await clients.create({ name: "Noir" }, db);
+		const other = await clients.create({ name: "Acme" }, db);
+		const website = await projectsService.create({ clientId: client.id, name: "Website" }, db);
+		const own = await projectsService.create({ name: "Juno" }, db);
+		return { db, sourceDir, client, other, website, own };
+	}
+
+	it("takes the project's client when only the project is given", async () => {
+		const { db, sourceDir, client, website } = await setUp();
+		const record = await importPdf({ sourcePath: writePdfFixture(sourceDir), projectId: website.id }, db);
+		expect(record).toMatchObject({ clientId: client.id, clientName: "Noir", projectId: website.id, projectName: "Website" });
+		expect((await documents.list({ clientId: client.id }, db)).map((row) => row.id)).toEqual([record.id]);
+		expect((await documents.list({ projectId: website.id }, db)).map((row) => row.id)).toEqual([record.id]);
+	});
+
+	it("keeps one under a project of your own, or under nothing", async () => {
+		const { db, sourceDir, own } = await setUp();
+		const underProject = await importPdf({ sourcePath: writePdfFixture(sourceDir, "a.pdf"), projectId: own.id }, db);
+		expect(underProject).toMatchObject({ clientId: null, clientName: null, projectName: "Juno" });
+		const loose = await importPdf({ sourcePath: writePdfFixture(sourceDir, "b.pdf") }, db);
+		expect(loose).toMatchObject({ clientId: null, projectId: null });
+		expect((await documents.list({}, db)).map((row) => row.id).sort()).toEqual([underProject.id, loose.id].sort());
+	});
+
+	it("refuses a client the project does not belong to", async () => {
+		const { db, sourceDir, other, website } = await setUp();
+		await expect(
+			importPdf({ sourcePath: writePdfFixture(sourceDir), clientId: other.id, projectId: website.id }, db),
+		).rejects.toThrow(/belongs to a different client/);
+	});
+
+	it("moves a document to a project, and off everything", async () => {
+		const { db, sourceDir, client, website } = await setUp();
+		const record = await importPdf({ sourcePath: writePdfFixture(sourceDir), clientId: client.id }, db);
+
+		const moved = await documents.link(record.id, { clientId: null, projectId: website.id }, db);
+		expect(moved).toMatchObject({ clientId: client.id, projectId: website.id });
+
+		const loose = await documents.link(record.id, { clientId: null, projectId: null }, db);
+		expect(loose).toMatchObject({ clientId: null, projectId: null, clientName: null, projectName: null });
+		expect(await documents.list({ clientId: client.id }, db)).toEqual([]);
+		// The file did not move.
+		expect(loose.pdfPath).toBe(record.pdfPath);
+	});
+
+	it("names the same title only once in one place", async () => {
+		const { db, sourceDir, own } = await setUp();
+		await importPdf({ sourcePath: writePdfFixture(sourceDir, "c.pdf"), projectId: own.id, title: "Brief" }, db);
+		await expect(
+			importPdf({ sourcePath: writePdfFixture(sourceDir, "d.pdf"), projectId: own.id, title: "Brief" }, db),
+		).rejects.toThrow(/Juno already has a document named "Brief"/);
+		// Somewhere else, the same title is free.
+		await expect(importPdf({ sourcePath: writePdfFixture(sourceDir, "e.pdf"), title: "Brief" }, db)).resolves.toBeTruthy();
 	});
 });

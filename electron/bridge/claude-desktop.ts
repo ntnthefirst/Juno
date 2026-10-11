@@ -179,5 +179,5 @@ function main(): void {
 	run({ url, token });
 }
 
-// Started by Claude Desktop, not when a test imports this file.
-if (typeof module !== "undefined" && typeof require !== "undefined" && require.main === module) main();
+// Started by Claude Desktop or from the command line, not when imported in Vitest.
+if (!process.env.VITEST || (typeof require !== "undefined" && require.main === module)) main();

@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { AppInfo, SettingsSection } from "@shared/types";
 import { Toast } from "../components/Toast";
+import appIcon from "../assets/icon.png";
 import { AccountingSection } from "../features/settings/AccountingSection";
 import { AppearanceSection } from "../features/settings/AppearanceSection";
 import { BackupSection } from "../features/settings/BackupSection";
@@ -300,17 +301,40 @@ function AboutSection() {
 			) : info === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : (
-				<dl className="flex flex-col gap-2 text-[length:var(--text-dense)]">
-					<Row label="Platform">
-						{info.platform}
-						{info.isDev ? ", development build" : ""}
-					</Row>
-					<Row label="Database">
-						<span data-selectable className="break-all">
-							{info.databasePath}
-						</span>
-					</Row>
-				</dl>
+				<div className="flex flex-col gap-5">
+					<div className="flex items-center gap-4 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+						<img
+							src={appIcon}
+							alt="Juno"
+							className="h-14 w-14 rounded-[var(--radius-md)] shadow-[0_2px_8px_rgba(0,0,0,0.12)] flex-none"
+						/>
+						<div className="min-w-0 flex-1">
+							<div className="flex items-baseline gap-2">
+								<h3 className="text-[length:var(--text-lg)] font-[var(--weight-semibold)] text-[var(--ink)]">
+									Juno
+								</h3>
+								<span className="font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+									v{info.version}
+								</span>
+							</div>
+							<p className="mt-0.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								A local-first back office for small business owners and freelancers.
+							</p>
+						</div>
+					</div>
+
+					<dl className="flex flex-col gap-2.5 text-[length:var(--text-dense)]">
+						<Row label="Platform">
+							{info.platform}
+							{info.isDev ? " (development build)" : ""}
+						</Row>
+						<Row label="Database">
+							<span data-selectable className="break-all font-mono text-[length:var(--text-sm)]">
+								{info.databasePath}
+							</span>
+						</Row>
+					</dl>
+				</div>
 			)}
 		</Section>
 	);

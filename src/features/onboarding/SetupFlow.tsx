@@ -13,8 +13,8 @@ import {
 	LockIllustration,
 	MailIllustration,
 	PersonIllustration,
-	WelcomeIllustration,
 } from "./OnboardingIllustrations";
+import welcomeHero from "../../assets/welcome-bureau.jpg";
 
 /**
  * Mirrors ONBOARDING_VERSION in electron/main/services/settings.ts. The
@@ -199,19 +199,25 @@ type WelcomeStepProps = {
 function WelcomeStep({ onStart }: WelcomeStepProps) {
 	return (
 		<div className="flex flex-col items-center text-center">
-			<WelcomeIllustration />
-			<h1 className="mt-5 text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+			<div className="relative mb-5 w-full max-w-[360px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
+				<img
+					src={welcomeHero}
+					alt="Juno Bureau Workspace"
+					className="h-[150px] w-full object-cover"
+				/>
+			</div>
+			<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">
 				Welcome to Juno
 			</h1>
-			<p className="mt-3 max-w-[46ch] text-[var(--ink-muted)]">
-				Juno keeps your clients, documents, mail, calendar and reminders on this machine. Nothing
-				leaves it unless you send it yourself, and there is no account to sign in to.
+			<p className="mt-2.5 max-w-[46ch] text-[var(--ink-muted)]">
+				Your local-first writing desk and back office. Clients, documents,
+				mail, calendar and reminders on your machine, with no cloud subscription.
 			</p>
 			<p className="mt-2 max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-				Five short questions. Your name and your business are the two that have to be answered,
-				because every contract carries both. Appearance, the lock and mail can all wait.
+				Five short questions to configure your business name and details for contracts.
+				Appearance, the lock and mail can all wait.
 			</p>
-			<div className="mt-7 flex flex-col items-center gap-2">
+			<div className="mt-6 flex flex-col items-center gap-2">
 				<Button variant="primary" onClick={onStart}>
 					Set up Juno
 				</Button>

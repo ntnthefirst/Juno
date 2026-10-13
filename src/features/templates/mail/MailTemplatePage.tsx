@@ -39,6 +39,8 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 	const [state, setState] = useState<RenderState | null>(null);
 	const [height, setHeight] = useState(FALLBACK_HEIGHT);
 	const frameRef = useRef<HTMLIFrameElement>(null);
+	const holderRef = useRef<HTMLDivElement>(null);
+	const fitRef = useRef<(() => void) | null>(null);
 	// A template with linked fonts is shown in them, the same as in the editor.
 	const fonts = useCanvasFonts(template.layout?.fonts ?? []);
 
@@ -103,7 +105,28 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 		};
 		fit();
 		void doc.fonts.ready.then(fit);
+		fitRef.current = fit;
 	}
+
+	// A narrower window re-wraps the message, so its height changes. Only the
+	// width is watched: the height follows the frame and would feed itself.
+	useEffect(() => {
+		const holder = holderRef.current;
+		if (!holder) return;
+		let width = holder.clientWidth;
+		let frame = 0;
+		const observer = new ResizeObserver(() => {
+			if (holder.clientWidth === width) return;
+			width = holder.clientWidth;
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(() => fitRef.current?.());
+		});
+		observer.observe(holder);
+		return () => {
+			observer.disconnect();
+			cancelAnimationFrame(frame);
+		};
+	}, [rendered]);
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -190,11 +213,11 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 					) : null}
 
 					{rendered ? (
-						<div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
+						<div ref={holderRef} className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
 							<iframe
 								ref={frameRef}
 								title="Template preview"
-								srcDoc={framed(rendered.html, fonts.css)}
+								srcDoc={framed(rendered.html, `html{overflow:hidden}${fonts.css}`)}
 								sandbox="allow-same-origin"
 								referrerPolicy="no-referrer"
 								onLoad={measure}

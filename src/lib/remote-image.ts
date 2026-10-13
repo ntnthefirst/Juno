@@ -40,9 +40,22 @@ function attributeOf(tag: string, name: string): string | null {
  * attribute.
  */
 export function remotePlaceholder(alt: string, style: string): string {
-	const frame =
-		"box-sizing:border-box;padding:8px 10px;border:1px dashed GrayText;background-color:Canvas;color:CanvasText;font-size:12px;line-height:1.4;overflow:hidden";
 	const own = style.trim().replace(/;+$/, "");
+	// max-width keeps a box inside the column it stands in, so a narrow frame
+	// does not grow a horizontal scrollbar around it.
+	const frame =
+		"box-sizing:border-box;max-width:100%;padding:8px 10px;border:1px dashed GrayText;background-color:Canvas;color:CanvasText;font-size:12px;line-height:1.4;overflow:hidden";
+	const width = /(?:^|;)\s*width\s*:\s*(\d+(?:\.\d+)?)px/i.exec(own);
+	if (width && Number(width[1]) < 160) {
+		// Too narrow for words: the text would wrap into a tall sliver. A plain
+		// box at the picture's size, with the explanation on hover.
+		const side = Math.round(Number(width[1]));
+		const sized = /(?:^|;)\s*height\s*:/i.test(own) ? "" : `height:${side}px;`;
+		return (
+			`<span data-juno-remote-image="1" title="${escapeAttribute(`${alt || "Picture"}. ${REMOTE_IMAGE_NOTE}`)}" ` +
+			`style="display:block;${sized}${own ? `${own};` : ""}${frame};padding:0"></span>`
+		);
+	}
 	return (
 		`<span data-juno-remote-image="1" style="display:block;${own ? `${own};` : ""}${frame}">` +
 		`${escapeAttribute(alt || "Picture")}<br><span style="opacity:0.7">${escapeAttribute(REMOTE_IMAGE_NOTE)}</span></span>`
@@ -55,9 +68,32 @@ export function remotePlaceholder(alt: string, style: string): string {
  * alignment are still the ones the message gives it.
  */
 export function withoutRemoteImages(html: string): string {
-	return html.replace(/<img\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi, (tag) => {
+	const pictures = html.replace(/<img\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi, (tag) => {
 		const src = attributeOf(tag, "src");
 		if (src === null || isDrawable(unescapeText(src))) return tag;
-		return remotePlaceholder(unescapeText(attributeOf(tag, "alt") ?? ""), attributeOf(tag, "style") ?? "");
+		return remotePlaceholder(unescapeText(attributeOf(tag, "alt") ?? ""), sizedStyle(tag));
 	});
+	// Video, audio and embedded players are loaded by the reader's client too,
+	// and this window would refuse them. Each becomes the same box.
+	return pictures.replace(
+		/<(video|audio|iframe|embed|object)\b(?:"[^"]*"|'[^']*'|[^'">])*>(?:[\s\S]*?<\/\1>)?/gi,
+		(tag, name: string) => {
+			const label = unescapeText(attributeOf(tag, "title") ?? "") || name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+			return remotePlaceholder(label, sizedStyle(tag));
+		},
+	);
+}
+
+/** The element's own style, plus the width and height it gave as attributes when the style does not. */
+function sizedStyle(tag: string): string {
+	const own = attributeOf(tag, "style") ?? "";
+	let extra = "";
+	for (const side of ["width", "height"] as const) {
+		const value = attributeOf(tag, side);
+		const declared = own.split(";").some((part) => part.trim().toLowerCase().startsWith(`${side}:`));
+		if (value && /^\d+(?:\.\d+)?%?$/.test(value) && !declared) {
+			extra += side + ":" + (value.endsWith("%") ? value : value + "px") + ";";
+		}
+	}
+	return extra + own;
 }

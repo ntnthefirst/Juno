@@ -9,7 +9,8 @@
  * Pure: no Electron import, no database import. Both template services and
  * their tests can use it without a connection.
  */
-import type { TemplateInput, TemplateInputKind } from "../../shared/types";
+import { INPUT_SOURCES } from "../../shared/input-sources";
+import type { InputSource, TemplateInput, TemplateInputKind } from "../../shared/types";
 
 const KINDS: TemplateInputKind[] = [
 	"text",
@@ -66,6 +67,8 @@ export function parseInputs(json: string | null): TemplateInput[] {
 		const input: TemplateInput = { key, label, kind, required };
 		if (typeof entry.help === "string") input.help = entry.help;
 		if (typeof entry.defaultValue === "string") input.defaultValue = entry.defaultValue;
+		const source = INPUT_SOURCES.find((option) => option.value === entry.source)?.value;
+		if (source) input.source = source as InputSource;
 		if (kind === "choice" && Array.isArray(entry.options)) {
 			const options = entry.options.filter((option): option is string => typeof option === "string");
 			if (options.length > 0) input.options = options;
@@ -106,6 +109,9 @@ export function validateInputs(inputs: TemplateInput[]): void {
 
 		if (!raw.label.trim()) {
 			throw new Error(`The input "${key}" needs a label, so the person filling it in knows what it asks.`);
+		}
+		if (raw.source && !INPUT_SOURCES.some((option) => option.value === raw.source)) {
+			throw new Error(`The input "${key}" is filled from "${raw.source}", which is not something a record holds. Pick one from the list.`);
 		}
 		if (raw.kind === "choice" && (!raw.options || raw.options.length < 1)) {
 			throw new Error(`The input "${key}" is a choice and needs at least one option. Add one.`);

@@ -51,7 +51,7 @@ const INPUTS_SCHEMA = {
 	type: "array",
 	description:
 		"What the template asks for when it is used: [{ key, label, kind: text, textarea, number, money, " +
-		"date, choice, image or url, required, help, defaultValue, options for a choice }]. The key is " +
+		"date, choice, image or url, required, help, defaultValue, options for a choice, source: client_name, contact_first_name, contact_name, contact_email, contact_phone, client_email, client_vat, client_website or project_name }]. A source is only a starting value in the app when a client is linked; an agent still passes its own value for the key. The key is " +
 		"lowercase letters, digits and underscores and is written {{document.<key>}} in the canvas. An " +
 		"image input is filled with a picture as a data:image/png;base64 or jpeg, gif or webp address, " +
 		"never a web address.",

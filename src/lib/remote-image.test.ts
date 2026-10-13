@@ -61,3 +61,13 @@ describe("framed", () => {
 		expect(out).toContain("<style>@font-face{}</style>");
 	});
 });
+
+describe("withoutRemoteImages, other media", () => {
+	it("swaps a video or an embedded player for a box at its size", () => {
+		const out = withoutRemoteImages('<p>a</p><iframe src="https://v.test/e" width="560" height="315" title="Demo"></iframe><video src="https://v.test/a.mp4"></video>');
+		expect(out).not.toContain("<iframe");
+		expect(out).not.toContain("<video");
+		expect(out).toContain("width:560px");
+		expect(out.match(/data-juno-remote-image/g)).toHaveLength(2);
+	});
+});

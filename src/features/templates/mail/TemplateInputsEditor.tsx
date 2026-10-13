@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon, PlusIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import type { TemplateInput, TemplateInputKind } from "@shared/types";
+import type { InputSource, TemplateInput, TemplateInputKind } from "@shared/types";
 import { Button } from "../../../components/Button";
 import { Field } from "../../../components/Field";
 import { Select } from "../../../components/Select";
+import { INPUT_SOURCES } from "@shared/input-sources";
 import { KIND_OPTIONS } from "./input-kinds";
 
 /** Mirrors KEY_PATTERN in electron/main/services/template-inputs.ts exactly. */
@@ -129,6 +130,17 @@ export function TemplateInputsEditor({ inputs, onChange, disabled = false }: Tem
 										/>
 										Required
 									</label>
+								</div>
+								<Select
+									label="Fill from"
+									value={input.source ?? ""}
+									onChange={(value) => update(index, { source: value ? (value as InputSource) : null })}
+									options={INPUT_SOURCES}
+									placeholder="Typed each time"
+									disabled={disabled}
+								/>
+								<div className="flex items-end pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									Filled in when a client or project is linked. You can still change it.
 								</div>
 								<div className="sm:col-span-2">
 									<Field

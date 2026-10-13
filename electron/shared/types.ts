@@ -763,6 +763,18 @@ export type TemplateInputKind =
 	/** An https URL, rendered as a link. */
 	| "url";
 
+/** A record value an input can be filled from when the template is used. */
+export type InputSource =
+	| "client_name"
+	| "contact_first_name"
+	| "contact_name"
+	| "contact_email"
+	| "contact_phone"
+	| "client_email"
+	| "client_vat"
+	| "client_website"
+	| "project_name";
+
 /**
  * A value a template asks for when it is used, because nothing in the records
  * can answer it: the scope of the work, an amount agreed on the phone, a
@@ -780,6 +792,11 @@ export interface TemplateInput {
 	defaultValue?: string | null;
 	/** The choices, for `choice`. Ignored for every other kind. */
 	options?: string[];
+	/**
+	 * Filled in from the linked client or project when the template is used.
+	 * The person can still change it, and an agent still passes its own value.
+	 */
+	source?: InputSource | null;
 }
 
 /* ----------------------------------------------- mail templates: the canvas */

@@ -8,6 +8,7 @@ import type {
 	MailTemplateRender,
 	ProjectSummary,
 } from "@shared/types";
+import { resolveInputSources } from "@shared/input-sources";
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { FormPage, type FormStep } from "../../components/FormPage";
@@ -77,7 +78,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 		{
 			key: "link" as const,
 			label: "Link",
-			hint: "Who this goes to, and which client and project it is filed under. Nothing in the message is filled in from them.",
+			hint: "Who this goes to, and which client and project it is filed under. Inputs set to fill from a record take their value from them.",
 		},
 		...(hasInputs
 			? [
@@ -156,6 +157,35 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 			cancelled = true;
 		};
 	}, [clientId]);
+
+	// Inputs that are filled from a record take the linked client's and
+	// project's values. Linking someone else replaces them, the same as the
+	// address does; anything typed afterwards holds.
+	useEffect(() => {
+		if (!clientId && !projectIdChoice) return;
+		if (!template.inputs.some((input) => input.source)) return;
+		let cancelled = false;
+		Promise.all([
+			clientId ? window.juno.clients.get(clientId) : Promise.resolve(null),
+			clientId ? window.juno.contacts.listForClient(clientId) : Promise.resolve([]),
+			clientId && projectIdChoice ? window.juno.projects.get(projectIdChoice) : Promise.resolve(null),
+		])
+			.then(([client, contacts, project]) => {
+				if (cancelled) return;
+				const contact = contacts.find((c) => c.isPrimary) ?? contacts[0] ?? null;
+				const filled = resolveInputSources(template.inputs, {
+					client,
+					contact,
+					email: clients.find((c) => c.id === clientId)?.email ?? null,
+					project,
+				});
+				if (Object.keys(filled).length > 0) setValues((current) => ({ ...current, ...filled }));
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [clientId, projectIdChoice, template.inputs, clients]);
 
 	const projects = clientId && projectsState?.clientId === clientId ? projectsState.rows : [];
 	// The person's choice holds while a client is picked; clearing the client

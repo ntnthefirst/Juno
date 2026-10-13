@@ -27,6 +27,7 @@ import * as accounts from "../services/mail-accounts";
 import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
 import * as fonts from "../services/mail-fonts";
+import * as pictures from "../services/mail-pictures";
 import type { MailFolderInput } from "../services/mail-folders";
 import * as outbox from "../services/mail-outbox";
 import * as purgeMail from "../services/mail-purge";
@@ -179,6 +180,7 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.templates.unhide", (_event, id: string) => templates.unhide(id));
 	ipcMain.handle("mail.templates.duplicate", (_event, id: string) => templates.duplicate(id));
 	ipcMain.handle("mail.templates.parseBody", (_event, html: string) => templates.parseBody(html));
+	ipcMain.handle("mail.templates.loadPicture", (_event, address: string) => pictures.loadPicture(address));
 	ipcMain.handle("mail.templates.loadGoogleFont", (_event, request: GoogleFontRequest) => fonts.loadGoogleFont(request));
 	ipcMain.handle("mail.templates.convertBlock", (_event, input: MailBlockConversion) => templates.convertBlock(input));
 	ipcMain.handle("mail.templates.preview", (_event, draft: MailTemplateDraft) =>

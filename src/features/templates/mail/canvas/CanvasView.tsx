@@ -198,7 +198,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 						}}
 					/>
 				) : (
-					<RemoteImage alt={block.alt} width={block.width} />
+					<RemoteImage src={src} alt={block.alt} width={block.width} />
 				)
 			) : null;
 			return picture ? (

@@ -15,7 +15,9 @@ import { FormPage, type FormStep } from "../../components/FormPage";
 import { Select } from "../../components/Select";
 import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
+import { LoadPicturesNotice } from "../../components/LoadPicturesNotice";
 import { framed } from "../../lib/framed-preview";
+import { useRemotePictures } from "../../lib/remote-pictures";
 import { useCanvasFonts } from "./mail/canvas/use-canvas-fonts";
 
 type UseMailTemplateScreenProps = {
@@ -219,6 +221,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 
 	const currentReview = reviewRender && sameReviewKey(reviewRender, reviewKey) ? reviewRender : null;
 	const rendered = currentReview?.status === "ready" ? currentReview.result : null;
+	const remote = useRemotePictures(rendered?.bodyHtml ?? "");
 	const renderError = currentReview?.status === "error" ? currentReview.message : null;
 
 	async function create() {
@@ -347,10 +350,13 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 									No value for: {rendered.missing.join(", ")}. Fill these in on the Fill step before sending: a message with a gap in it is refused.
 								</p>
 							) : null}
-							<div className="mt-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
+							<div className="mt-3">
+									<LoadPicturesNotice pending={remote.pending} onConfirm={remote.confirm} />
+								</div>
+								<div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
 								<iframe
 									title="Message preview"
-									srcDoc={framed(rendered.bodyHtml, fonts.css)}
+									srcDoc={framed(rendered.bodyHtml, fonts.css, remote.pictures)}
 									sandbox=""
 									referrerPolicy="no-referrer"
 									className="block h-[420px] w-full bg-[var(--surface)]"

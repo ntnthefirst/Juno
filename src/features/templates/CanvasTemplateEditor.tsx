@@ -53,6 +53,8 @@ import {
 import { GROUP_ACTIONS, isControl, isTyping, shortcutFor, type ShortcutAction } from "./mail/canvas/shortcuts";
 import { alignAcross, flowOf, type Across } from "./mail/canvas/sizing";
 import { useCanvasFonts } from "./mail/canvas/use-canvas-fonts";
+import { LoadPicturesNotice } from "../../components/LoadPicturesNotice";
+import { useRemotePictures } from "../../lib/remote-pictures";
 import { EditorSidebar, type EditorMode } from "./mail/EditorSidebar";
 import { HtmlCodeEditor } from "./mail/HtmlCodeEditor";
 import { mailPlaceholderGroups } from "./mail/placeholders";
@@ -418,6 +420,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 	// folded back by `restyleLayout`, and what is in it is changed on `layout`.
 	const shown = layout ? layoutAt(layout, active) : null;
 	const canvasFonts = useCanvasFonts(layout?.fonts ?? []);
+	const remote = useRemotePictures(preview?.kind === "html" ? preview.html : "");
 	// An undo can take away what was selected. What is gone is not selected.
 	const liveId = layout && selection && selectionIn(layout, selection.id) ? selection.id : null;
 	const live: Selection = liveId ? { id: liveId } : null;
@@ -1111,9 +1114,10 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 												No value for: {preview.missing.join(", ")}
 											</p>
 										) : null}
+										<LoadPicturesNotice pending={remote.pending} onConfirm={remote.confirm} />
 										<iframe
 											title="Template preview"
-											srcDoc={framed(preview.html, canvasFonts.css)}
+											srcDoc={framed(preview.html, canvasFonts.css, remote.pictures)}
 											sandbox=""
 											referrerPolicy="no-referrer"
 											className="block h-[70vh] w-full rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--canvas-paper)]"

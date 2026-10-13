@@ -36,6 +36,7 @@ import {
 	type Axis as PageAxis,
 	type LayoutFlow,
 } from "./alignment";
+import { PictureAddressNotice } from "./PictureAddressNotice";
 import { ActionsSection } from "./ActionsSection";
 import { flowAutoSides, pictureAutoSides, type AutoSides } from "./box-style";
 import { BreakpointsSection } from "./BreakpointsSection";
@@ -790,13 +791,14 @@ function ContentSection({ block, inputs, set, picture = null }: ContentProps) {
 						placeholder="https://"
 						onChange={(next) => set({ src: next } as Partial<MailBlock>)}
 					/>
+					<PictureAddressNotice address={block.src} />
 					<TextInput
 						label="Alt text"
 						value={block.alt}
 						placeholder="What it shows"
 						onChange={(next) => set({ alt: next } as Partial<MailBlock>)}
 					/>
-					<PanelNote>A hosted https address. A picture carried inside the message gets it filed as spam.</PanelNote>
+					<PanelNote>A hosted https address. A picture carried inside the message gets it filed as spam. Loading it here only shows it in Juno; the message keeps the link.</PanelNote>
 				</PanelSection>
 			);
 		case "field":

@@ -4,7 +4,9 @@ import type { MailTemplate } from "@shared/types";
 import { Button } from "../../../components/Button";
 import { Icon } from "../../../components/Icon";
 import { messageOf } from "../../../lib/errors";
+import { LoadPicturesNotice } from "../../../components/LoadPicturesNotice";
 import { framed } from "../../../lib/framed-preview";
+import { useRemotePictures } from "../../../lib/remote-pictures";
 import { useCanvasFonts } from "./canvas/use-canvas-fonts";
 import { kindLabel } from "./input-kinds";
 
@@ -43,6 +45,7 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 	const fitRef = useRef<(() => void) | null>(null);
 	// A template with linked fonts is shown in them, the same as in the editor.
 	const fonts = useCanvasFonts(template.layout?.fonts ?? []);
+	const remote = useRemotePictures(state?.status === "ready" && state.templateId === template.id ? state.rendered.html : "");
 
 	useEffect(() => {
 		let cancelled = false;
@@ -212,12 +215,14 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 						</p>
 					) : null}
 
+					{rendered ? <LoadPicturesNotice pending={remote.pending} onConfirm={remote.confirm} /> : null}
+
 					{rendered ? (
 						<div ref={holderRef} className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
 							<iframe
 								ref={frameRef}
 								title="Template preview"
-								srcDoc={framed(rendered.html, `html{overflow:hidden}${fonts.css}`)}
+								srcDoc={framed(rendered.html, `html{overflow:hidden}${fonts.css}`, remote.pictures)}
 								sandbox="allow-same-origin"
 								referrerPolicy="no-referrer"
 								onLoad={measure}

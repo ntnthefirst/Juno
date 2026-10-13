@@ -67,10 +67,13 @@ export function remotePlaceholder(alt: string, style: string): string {
  * The picture's own style stays on the box, so its width, margins and
  * alignment are still the ones the message gives it.
  */
-export function withoutRemoteImages(html: string): string {
+export function withoutRemoteImages(html: string, loaded: Record<string, string> = {}): string {
 	const pictures = html.replace(/<img\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi, (tag) => {
 		const src = attributeOf(tag, "src");
 		if (src === null || isDrawable(unescapeText(src))) return tag;
+		// A picture the person confirmed was downloaded by Juno: draw those bytes.
+		const bytes = loaded[unescapeText(src)];
+		if (bytes) return tag.replace(/(\ssrc\s*=\s*)(?:"[^"]*"|'[^']*')/i, `$1"${bytes}"`);
 		return remotePlaceholder(unescapeText(attributeOf(tag, "alt") ?? ""), sizedStyle(tag));
 	});
 	// Video, audio and embedded players are loaded by the reader's client too,
@@ -82,6 +85,17 @@ export function withoutRemoteImages(html: string): string {
 			return remotePlaceholder(label, sizedStyle(tag));
 		},
 	);
+}
+
+/** Every distinct https address a message asks a picture from, in order. */
+export function remoteImageAddresses(html: string): string[] {
+	const found = new Set<string>();
+	for (const tag of html.match(/<img\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi) ?? []) {
+		const src = attributeOf(tag, "src");
+		const address = src === null ? "" : unescapeText(src).trim();
+		if (/^https:\/\//i.test(address)) found.add(address);
+	}
+	return [...found];
 }
 
 /** The element's own style, plus the width and height it gave as attributes when the style does not. */

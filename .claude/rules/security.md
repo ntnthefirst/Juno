@@ -43,6 +43,9 @@ May not expose, ever:
   node object.
 - A function that takes a SQL string, a file path chosen by the renderer, or a URL
   the main process will fetch. Pass an id and let the service resolve it.
+  The one exception is `mail.templates.loadPicture`, reached only after the person
+  confirms a source in a dialog (`services/mail-pictures.ts`): https only, a public
+  host on every redirect, a size cap, and raster formats only. It is not an MCP tool.
 
 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`,
 `webSecurity: true`. None of these gets turned off to make an import work. If a

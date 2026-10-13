@@ -1311,6 +1311,16 @@ export interface GoogleFontLoad {
 	css: string;
 }
 
+/**
+ * A picture at a web address, downloaded by the main process after the person
+ * confirmed the source, for the editor and the previews to draw. Never sent.
+ */
+export interface PictureLoad {
+	address: string;
+	/** The bytes, inline. PNG, JPEG, GIF or WebP only. */
+	dataUrl: string;
+}
+
 /** What a client that will not load a linked font shows in its place. */
 export type MailFontFallback = "sans" | "serif" | "mono";
 

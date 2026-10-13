@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
+import appIcon from "../assets/icon.png";
 
 type LockScreenProps = {
 	state: LockState;
@@ -84,14 +85,11 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 				className="w-[340px] rounded-[var(--radius-xl)] border border-[var(--line)] bg-[var(--surface)] p-8 text-center"
 				style={{ boxShadow: "var(--shadow-modal)" }}
 			>
-				<svg viewBox="0 0 64 64" width="44" height="44" fill="none" className="mx-auto" aria-hidden>
-					<rect width="64" height="64" rx="14" fill="var(--accent)" />
-					<g transform="translate(4.1,3.2) scale(1.8)" fill="var(--accent-ink)">
-						<rect x="6" y="6" width="4" height="20" rx="1.5" />
-						<rect x="11.5" y="6" width="12" height="9" rx="2.5" />
-						<rect x="11.5" y="17" width="13.5" height="9" rx="2.5" />
-					</g>
-				</svg>
+				<img
+					src={appIcon}
+					alt="Juno"
+					className="mx-auto h-14 w-14 object-contain filter drop-shadow-[0_4px_16px_rgba(91,79,225,0.25)]"
+				/>
 
 				<h1 className="mt-4 text-[length:var(--text-lg)] font-[var(--weight-medium)]">
 					Juno is locked

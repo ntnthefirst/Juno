@@ -9,7 +9,7 @@
  * Run: npm run icons
  */
 import { app, BrowserWindow } from "electron";
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,23 +26,33 @@ const MARK = `<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-
   <path d="M5.5 27.2h21" stroke-linecap="round"/>
 </svg>`;
 
+const iconPngPath = join(out, "icon.png");
+const iconDataUrl = existsSync(iconPngPath)
+	? `data:image/png;base64,${readFileSync(iconPngPath).toString("base64")}`
+	: null;
+
 /**
  * The tall panel down the left of the welcome and finish pages. Deliberately
  * quiet: a mark, the name, and one line saying what the thing is. An installer
  * is not a place to sell something already being installed.
  */
 function sidebar() {
+	const iconHtml = iconDataUrl
+		? `<img src="${iconDataUrl}" class="mark-img" alt="Juno" />`
+		: `<div class="mark">${MARK}</div>`;
+
 	return `<!doctype html><meta charset="utf-8"><style>
   html,body{margin:0;width:164px;height:314px;overflow:hidden}
   body{background:${ACCENT};color:#f8f8fc;font-family:Inter,"Segoe UI",system-ui,sans-serif;
        display:flex;flex-direction:column;justify-content:flex-end;padding:20px;box-sizing:border-box}
+  .mark-img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 4px 14px rgba(0,0,0,0.35));display:block}
   .mark{width:38px;height:38px;color:#f8f8fc;opacity:.95}
   .name{font-size:22px;font-weight:600;letter-spacing:-.02em;margin-top:14px}
-  .sub{font-size:11px;line-height:1.45;opacity:.72;margin-top:6px}
+  .sub{font-size:11px;line-height:1.45;opacity:.78;margin-top:6px}
   /* A hairline that reads as the roofline in the mark, continued. */
   .rule{height:1px;background:#f8f8fc;opacity:.28;margin:14px 0 0}
 </style>
-<div class="mark">${MARK}</div>
+${iconHtml}
 <div class="name">Juno</div>
 <div class="rule"></div>
 <div class="sub">Your clients, contracts, mail and calendar. On this machine.</div>`;
@@ -50,6 +60,10 @@ function sidebar() {
 
 /** The small badge top-right of every page after the first. */
 function header() {
+	const iconHtml = iconDataUrl
+		? `<img src="${iconDataUrl}" style="width:26px;height:26px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.18));flex:none;" alt="Juno" />`
+		: `<div class="mark">${MARK}</div>`;
+
 	return `<!doctype html><meta charset="utf-8"><style>
   html,body{margin:0;width:150px;height:57px;overflow:hidden}
   body{background:${PAPER};color:${INK};font-family:Inter,"Segoe UI",system-ui,sans-serif;
@@ -58,7 +72,7 @@ function header() {
   .name{font-size:15px;font-weight:600;letter-spacing:-.01em}
   .sub{font-size:9px;color:${MUTED}}
 </style>
-<div class="mark">${MARK}</div>
+${iconHtml}
 <div><div class="name">Juno</div><div class="sub">Back office</div></div>`;
 }
 

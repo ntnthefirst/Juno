@@ -10,6 +10,7 @@ import type {
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { EmptyState } from "../../components/EmptyState";
 import { SectionSwitch } from "../../components/SectionSwitch";
 import { Toast } from "../../components/Toast";
 import { MAIL_SWITCH } from "../../app/screens";
@@ -649,26 +650,17 @@ export function MailScreen() {
 		return (
 			<div className="p-8">
 				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">Mail</h1>
-				<div className="mt-12 max-w-[52ch]">
-					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">No accounts yet</h2>
-					<p className="mt-2 text-[var(--ink-muted)]">
-						Juno reads mail over IMAP, from an account you type in yourself. It pulls mail onto this machine
-						and sends only what you press Send on.
-					</p>
-					{/*
-						Settings is a separate window, so this opens it on the page that
-						does the job rather than leaving someone to find the tab
-						(main/windows/chrome.ts carries the section in the URL).
-					*/}
-					<div className="mt-6">
-						<Button
-							variant="primary"
-							onClick={() => void window.juno.window.openSettings("mail")}
-						>
-							Connect an account
-						</Button>
-					</div>
-				</div>
+				<EmptyState
+					icon="mail"
+					title="No mail accounts yet"
+					description="Juno reads mail over IMAP, stored locally on this machine. Read and search offline, and link threads directly to client records."
+					action={{
+						label: "Connect an account",
+						icon: "add",
+						onClick: () => void window.juno.window.openSettings("mail"),
+					}}
+					tip="Credentials are stored securely in your operating system keychain."
+				/>
 			</div>
 		);
 	}

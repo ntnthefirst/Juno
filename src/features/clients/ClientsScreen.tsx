@@ -17,6 +17,7 @@ import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { useScreenAction } from "../../lib/screen-actions";
 import { AddButton } from "../../components/AddButton";
 import { Avatar } from "../../components/Avatar";
+import { EmptyState } from "../../components/EmptyState";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
@@ -505,7 +506,11 @@ export function ClientsScreen() {
 				) : load.status === "error" ? (
 					<ErrorNote message={load.message} />
 				) : load.rows.length === 0 ? (
-					<Empty searching={search.trim().length > 0} />
+					<Empty
+						searching={search.trim().length > 0}
+						onAdd={() => setForm({ client: null })}
+						onClearSearch={() => setSearch("")}
+					/>
 				) : (
 					<ClientTable
 						allRows={load.rows}
@@ -710,11 +715,38 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 	);
 }
 
-function Empty({ searching }: { searching: boolean }) {
+function Empty({
+	searching,
+	onAdd,
+	onClearSearch,
+}: {
+	searching: boolean;
+	onAdd: () => void;
+	onClearSearch: () => void;
+}) {
+	if (searching) {
+		return (
+			<EmptyState
+				title="No client matches that"
+				description="Check the spelling or clear the search to see all of them."
+				secondaryAction={{ label: "Clear search", onClick: onClearSearch }}
+			/>
+		);
+	}
+
 	return (
-		<p className="text-[var(--ink-muted)]">
-			{searching ? "No client matches that." : "No clients yet."}
-		</p>
+		<EmptyState
+			icon="clients"
+			title="No clients yet"
+			description="Every business you work with, their contacts, projects and paperwork in one place."
+			action={{
+				label: "New client",
+				icon: "add",
+				onClick: onAdd,
+				shortcut: ["Ctrl", "N"],
+			}}
+			tip="Client records link contracts, mail threads and dates automatically."
+		/>
 	);
 }
 

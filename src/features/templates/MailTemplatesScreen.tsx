@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MailTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { MAIL_SWITCH } from "../../app/screens";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { InlineAdd } from "../../components/InlineAdd";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { IconAction } from "../../components/IconAction";
-import { SectionSwitch } from "../../components/SectionSwitch";
+import { Icon } from "../../components/Icon";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { emptyLayout } from "./mail/canvas/canvas-actions";
 import { messageOf } from "../../lib/errors";
+import { clearPending, peekPending, requestOpen } from "../../lib/open-entity";
 import {
 	activeMailTemplateFilterCount,
 	NO_MAIL_TEMPLATE_FILTERS,
@@ -54,7 +55,13 @@ function matches(template: MailTemplate, needle: string): boolean {
  */
 export function MailTemplatesScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
-	const [view, setView] = useState<View>({ mode: "list" });
+	// A template asked for from the styled mail pane in Mail opens straight away.
+	const [view, setView] = useState<View>(() => {
+		const request = peekPending("mail-template");
+		if (!request) return { mode: "list" };
+		return request.mode === "edit" ? { mode: "edit", id: request.id, from: "view" } : { mode: "view", id: request.id };
+	});
+	useEffect(() => clearPending, []);
 	const [search, setSearch] = useState("");
 	const [filters, setFilters] = useState<MailTemplateFilters>(NO_MAIL_TEMPLATE_FILTERS);
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -236,8 +243,18 @@ export function MailTemplatesScreen() {
 		<div className="relative flex h-full flex-col">
 			<div className="flex-none px-8 pt-8">
 				<div className="w-full">
+					<TitleBarSlot>
+						<button
+							type="button"
+							onClick={() => requestOpen({ kind: "screen", screen: "mail" })}
+							className="inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						>
+							<Icon name="mail" size={14} />
+							Mailbox
+						</button>
+					</TitleBarSlot>
 					<div className="flex items-center gap-3">
-						<SectionSwitch sections={MAIL_SWITCH} current="mail-templates" label="Mail views" />
+						<h1 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">Styled mail</h1>
 						{load.status === "ready" ? (
 							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 								{shown.length} {shown.length === 1 ? "template" : "templates"}

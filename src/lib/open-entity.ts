@@ -7,6 +7,7 @@ export type OpenTarget =
 	| { kind: "project"; id: string; name: string }
 	| { kind: "document"; id: string; name: string }
 	| { kind: "thread"; id: string; messageId: string | null }
+	| { kind: "mail-template"; id: string; mode: "view" | "edit" }
 	| { kind: "screen"; screen: ScreenId };
 
 // Held beside the event for the same reason as the client request: the screen

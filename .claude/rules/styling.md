@@ -156,12 +156,20 @@ application, not the native `title`) and in its `aria-label`.
 
 ### The switch
 
-Mail and Documents each hold a second screen. It is not a second sidebar entry:
-it is `components/SectionSwitch.tsx`, a two-sided control at the top of the page
-(Mailbox | Styled mail, Documents | Templates), reached through the shell with
+Documents holds a second screen. It is not a second sidebar entry: it is
+`components/SectionSwitch.tsx`, a two-sided control at the top of the page
+(Documents | Templates), reached through the shell with
 `requestOpen({ kind: "screen", screen })` so the target opens on its list. Add
 a pair by adding a `ScreenSwitch` in `app/screens.ts`. Screens a form or an
 editor has taken over show no switch, because they replace the page it sits on.
+
+Mail does it differently, by the owner's choice. New message and a Styled mail
+button sit in the title bar while Mail is open, and the button opens a column
+on the right (`features/mail/StyledMailPane.tsx`): the templates, the one
+picked shown as it reads, a way to widen it to full size, and a double click
+to send it. Sending happens in that column, with the mailbox still in view.
+The full Styled mail screen, for writing and changing templates, is its
+Manage button.
 
 ### Avatars and the time split
 
@@ -192,6 +200,9 @@ of taste.
 - **A screen renders a form page instead of its list**, not on top of it, so the
   state belongs to the screen. If the pane you are in is too narrow to hold a
   page, the state is in the wrong component.
+- **One exception, by the owner's choice: sending a styled mail from Mail.**
+  Its steps run in the styled mail column (`components/PanelFrame.tsx`), so
+  the mailbox stays in view. It does not spread: every other form is a page.
 - The submit button lives in the page footer, outside the `<form>`, and reaches
   it with `form={id}` from `useId()`.
 - A side panel does not trap focus and does not block a click behind it. That is

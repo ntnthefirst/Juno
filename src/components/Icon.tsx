@@ -9,6 +9,7 @@ import {
 	ArrowUturnRightIcon,
 	ArrowDownIcon,
 	ArrowRightIcon,
+	ArrowsPointingInIcon,
 	ArrowsPointingOutIcon,
 	ArrowsUpDownIcon,
 	Bars3BottomLeftIcon,
@@ -187,6 +188,9 @@ export type IconName =
 	| "align-right"
 	| "align-justify"
 	| "corners"
+	| "expand"
+	| "collapse"
+	| "undo"
 	// The mail template canvas: its tools, its views and its design panel.
 	| "tool-section"
 	| "tool-text"
@@ -540,6 +544,9 @@ const ICONS: Record<IconName, Glyph> = {
 	"align-right": Bars3BottomRightIcon,
 	"align-justify": Bars4Icon,
 	corners: ArrowsPointingOutIcon,
+	expand: ArrowsPointingOutIcon,
+	collapse: ArrowsPointingInIcon,
+	undo: ArrowUturnLeftIcon,
 	"tool-section": HashtagIcon,
 	"tool-text": DRAWN.text,
 	"tool-heading": H2Icon,

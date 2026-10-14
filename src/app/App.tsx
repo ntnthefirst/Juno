@@ -209,7 +209,15 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 				const target = currentRequest();
 				if (!target) return;
 				const next: ScreenId =
-					target.kind === "project" ? "projects" : target.kind === "document" ? "documents" : target.kind === "thread" ? "mail" : target.screen;
+					target.kind === "project"
+						? "projects"
+						: target.kind === "document"
+							? "documents"
+							: target.kind === "thread"
+								? "mail"
+								: target.kind === "mail-template"
+									? "mail-templates"
+									: target.screen;
 				setVisit((count) => count + 1);
 				setScreen(next);
 			}),

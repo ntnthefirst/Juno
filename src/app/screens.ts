@@ -66,11 +66,6 @@ export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
  */
 export type ScreenSwitch = { left: { id: ScreenId; label: string }; right: { id: ScreenId; label: string } };
 
-export const MAIL_SWITCH: ScreenSwitch = {
-	left: { id: "mail", label: "Mailbox" },
-	right: { id: "mail-templates", label: "Styled mail" },
-};
-
 export const DOCUMENT_SWITCH: ScreenSwitch = {
 	left: { id: "documents", label: "Documents" },
 	right: { id: "document-templates", label: "Templates" },

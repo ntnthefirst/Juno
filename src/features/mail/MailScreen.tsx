@@ -7,13 +7,13 @@ import type {
 	MailSyncStatus,
 	MailThreadSummary,
 } from "@shared/types";
-import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
-import { SectionSwitch } from "../../components/SectionSwitch";
+import { Icon } from "../../components/Icon";
+import { Tooltip } from "../../components/Tooltip";
 import { Toast } from "../../components/Toast";
-import { MAIL_SWITCH } from "../../app/screens";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { messageOf } from "../../lib/errors";
 import { useScreenAction } from "../../lib/screen-actions";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
@@ -28,6 +28,7 @@ import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { OutboxDetail } from "./OutboxDetail";
 import { ThreadList, type ThreadAction } from "./ThreadList";
 import { ThreadToolbar } from "./ThreadToolbar";
+import { StyledMailPane } from "./StyledMailPane";
 import { ThreadView } from "./ThreadView";
 
 type LinkTarget = { threadId: string; currentClientId: string | null; senderAddress: string | null };
@@ -108,6 +109,22 @@ export function MailScreen() {
 	const [folderDelete, setFolderDelete] = useState<MailFolder | null>(null);
 	const [folderEmpty, setFolderEmpty] = useState<MailFolder | null>(null);
 	const [folderBusy, setFolderBusy] = useState(false);
+	// The styled mail column on the right. Remembered for the session, so coming
+	// back to Mail finds it the way it was left.
+	const [stylesOpen, setStylesOpen] = useState(() => {
+		try {
+			return sessionStorage.getItem("juno.mail.styles") === "1";
+		} catch {
+			return false;
+		}
+	});
+	useEffect(() => {
+		try {
+			sessionStorage.setItem("juno.mail.styles", stylesOpen ? "1" : "0");
+		} catch {
+			// Without storage it only lasts until the screen changes.
+		}
+	}, [stylesOpen]);
 	const openCount = useRef(1);
 	const composeOpen = useRef(false);
 	useEffect(() => {
@@ -715,26 +732,42 @@ export function MailScreen() {
 
 	return (
 		<div className="flex h-full min-h-0">
+			{/*
+				Writing a message and the styled mail column are about the whole
+				screen rather than one pane, so they sit in the title bar while Mail
+				is open and leave with it.
+			*/}
+			<TitleBarSlot>
+				<Tooltip label="New message" side="bottom" className="flex">
+					<button
+						type="button"
+						onClick={() => setCompose({ accountId: selection?.accountId ?? accounts[0]?.id })}
+						aria-label="New message"
+						className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-md)] text-[var(--accent)] transition-[background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] active:scale-90"
+					>
+						<Icon name="add" size={16} strokeWidth={2} />
+					</button>
+				</Tooltip>
+				<button
+					type="button"
+					onClick={() => setStylesOpen((open) => !open)}
+					aria-pressed={stylesOpen}
+					className={[
+						"inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-[0.97]",
+						stylesOpen ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
+					].join(" ")}
+				>
+					<Icon name="templates" size={14} />
+					Styled mail
+				</button>
+			</TitleBarSlot>
 			<div
 				className={[
 					"w-[264px] shrink-0 flex-col border-r border-[var(--line)]",
 					readerOpen ? "hidden min-[1100px]:flex" : "flex",
 				].join(" ")}
 			>
-				{/*
-					Writing is the one thing this pane is for that is not a folder, so it
-					sits on the title line as a plus rather than spending a row of its own
-					on a button. Syncing says so on the account it belongs to, which is
-					the only place the answer is useful when there are two of them.
-				*/}
-				<div className="flex items-center justify-between gap-2 px-4 pt-5 pb-3">
-					<SectionSwitch sections={MAIL_SWITCH} current="mail" label="Mail views" />
-					<AddButton
-						label="New message"
-						onClick={() => setCompose({ accountId: selection?.accountId ?? accounts[0]?.id })}
-					/>
-				</div>
-				<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+				<div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-4">
 					<FolderNav
 						accounts={accounts}
 						folders={folders}
@@ -870,6 +903,16 @@ export function MailScreen() {
 					</div>
 				)}
 			</div>
+
+			{stylesOpen ? (
+				<StyledMailPane
+					onClose={() => setStylesOpen(false)}
+					onSent={() => {
+						setNotice("Message queued.");
+						setOutboxVersion((v) => v + 1);
+					}}
+				/>
+			) : null}
 
 			{deleteConfirm ? (
 				<Dialog

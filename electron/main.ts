@@ -1032,12 +1032,30 @@ if (!app.requestSingleInstanceLock()) {
 								await new Promise((r) => setTimeout(r, 800));
 								const inPage: Record<string, string> = {
 									"Reminders": "All reminders",
-									"Mail templates": "Styled mail",
 									"Document templates": "Templates",
 								};
 								const route = inPage[screen];
 								if (route && !(await pressText(route)))
 									throw new Error(`Smoke: no "${route}" to press on the way to ${screen}`);
+								if (screen === "Mail templates") {
+									// Styled mail is a column beside the mailbox, opened from the
+									// title bar, and its Manage button leads to the full screen.
+									const pane = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const toggle = [...document.querySelectorAll("header button")].find((el) => el.textContent.trim() === "Styled mail");
+											if (!toggle) return "no styled mail button in the title bar";
+											if (toggle.getAttribute("aria-pressed") !== "true") toggle.click();
+											await new Promise((r) => setTimeout(r, 900));
+											const aside = document.querySelector("aside[aria-label='Styled mail']");
+											if (!aside) return "the styled mail column did not open";
+											if (!aside.querySelector("iframe")) return "the column shows no preview";
+											return "ok";
+										})()`,
+									)) as string;
+									if (pane !== "ok") throw new Error(`Smoke: styled mail column ${pane}`);
+									writeFileSync(joinPath(shotDir, `mail-styled-pane.png`), (await capture(window.webContents)).toPNG());
+									if (!(await pressText("Manage"))) throw new Error("Smoke: no Manage in the styled mail column");
+								}
 								if (screen === "Agent") {
 									// The requests tab is the default, and the pending request from
 									// the agent call above has to be on it with its arguments.

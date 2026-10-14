@@ -1,4 +1,6 @@
 import type { MailOutboxMessage } from "@shared/types";
+import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { useContextMenu } from "../../lib/use-context-menu";
 import { formatWhen } from "./format";
 import { STATE_LABELS, STATE_TONES } from "./outbox-format";
 
@@ -8,6 +10,10 @@ type OutboxRowProps = {
 	onSelect: (id: string) => void;
 	/** So the list around it can walk focus between rows with the arrow keys. */
 	buttonRef: (element: HTMLButtonElement | null) => void;
+	/** Sends a failed message again. */
+	onRetry?: (id: string) => void;
+	/** Stops a message that is queued or waiting for approval. */
+	onCancel?: (id: string) => void;
 };
 
 /**
@@ -15,9 +21,35 @@ type OutboxRowProps = {
  * state as a badge, because a draft, a request waiting for you and a failed
  * send all live in the same place.
  */
-export function OutboxRow({ message, active, onSelect, buttonRef }: OutboxRowProps) {
+export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onCancel }: OutboxRowProps) {
+	const menu = useContextMenu();
+	const items: MenuItem[] = [
+		{
+			id: "open",
+			label: message.state === "draft" || message.state === "pending" ? "Edit" : "Open",
+			icon: message.state === "draft" || message.state === "pending" ? "edit" : "mail",
+			onSelect: () => onSelect(message.id),
+		},
+		{
+			id: "retry",
+			label: "Try again",
+			icon: "sync",
+			separatorBefore: true,
+			disabled: message.state !== "failed" || !onRetry,
+			onSelect: () => onRetry?.(message.id),
+		},
+		{
+			id: "cancel",
+			label: "Cancel sending",
+			icon: "close",
+			danger: true,
+			disabled: !(message.state === "queued" || message.state === "pending") || !onCancel,
+			onSelect: () => onCancel?.(message.id),
+		},
+	];
+
 	return (
-		<li data-draft-kind="outbox" className="border-b border-[var(--line)]/60">
+		<li data-draft-kind="outbox" className="border-b border-[var(--line)]/60" onContextMenu={menu.open}>
 			<button
 				type="button"
 				ref={buttonRef}
@@ -49,6 +81,9 @@ export function OutboxRow({ message, active, onSelect, buttonRef }: OutboxRowPro
 					) : null}
 				</div>
 			</button>
+			{menu.at ? (
+				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={`Actions for ${message.subject || "this message"}`} />
+			) : null}
 		</li>
 	);
 }

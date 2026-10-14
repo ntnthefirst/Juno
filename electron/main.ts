@@ -3818,6 +3818,32 @@ if (!app.requestSingleInstanceLock()) {
 									};
 									await shoot("mail-list");
 
+									// A row under the pointer shows its actions and nothing else:
+									// the date, the count and the marks step aside. Hover needs a
+									// real pointer, so the move is sent as an input event.
+									const rowBox = (await window.webContents.executeJavaScript(
+										`(() => {
+											const row = document.querySelector("main ul li.group");
+											if (!row) return null;
+											const r = row.getBoundingClientRect();
+											return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+										})()`,
+									)) as { x: number; y: number } | null;
+									if (!rowBox) throw new Error("Smoke: no mail row to hover");
+									window.webContents.sendInputEvent({ type: "mouseMove", x: rowBox.x, y: rowBox.y });
+									await new Promise((r) => setTimeout(r, 400));
+									const hoverState = (await window.webContents.executeJavaScript(
+										`(() => {
+											const row = document.querySelector("main ul li.group");
+											const actions = row && [...row.querySelectorAll("button[aria-label]")].filter((b) => getComputedStyle(b.parentElement).opacity === "1");
+											return actions && actions.length >= 3 ? "ok" : "the hover actions did not show";
+										})()`,
+									)) as string;
+									if (hoverState !== "ok") throw new Error(`Smoke: mail hover ${hoverState}`);
+									await shoot("mail-hover");
+									window.webContents.sendInputEvent({ type: "mouseMove", x: 4, y: 400 });
+									await new Promise((r) => setTimeout(r, 300));
+
 									// Ticking a row turns the list into something you file in
 									// bulk: the toolbar grows a box, a count and the actions, and
 									// the per-row icons step aside. It is a second layout of the

@@ -1508,3 +1508,30 @@ project of the owner's own has no client, and neither does its document.
 
 Revisit if: a document ever needs more than one project. That is a join table,
 and the single column would have to move into it with its data.
+
+## 48. Juno runs in the background, so an agent can always reach it
+
+The agent server lives in the Juno process (decision 42), and the Claude Desktop
+extension is only a bridge to it (decision 46). With Juno closed the bridge has
+nothing to forward to and Claude says "Juno is not running". Rather than a second
+program, Juno itself stays up with no window.
+
+**It is on by default**, and Settings > MCP has a switch. While it is on, and the
+agent server is on, and setup has been finished, in an installed copy:
+
+- Juno starts with the computer (the operating system's login item, started with
+  `--background`) and opens no window and no splash. The window comes up when the
+  person opens Juno, or from the tray icon.
+- Closing the window does not quit. The tray icon says Juno is there and offers
+  Open and Quit.
+- **Closing the window locks Juno**, so opening it again asks for the PIN the same
+  as a walk-up (decision 15). The agent server keeps checking the lock on every
+  call, so with a lock set up an agent gets "locked" until a person unlocks.
+
+Nothing new listens and nothing new is reachable: the same server, on the same
+loopback address, behind the same code and tokens. What changes is only that the
+process is there. Mail sync, the daily summary and automations keep running while
+it is, which is what they do with the window open.
+
+**What would reverse this:** a client that can start Juno itself on demand, which
+would make an always-running process unnecessary.

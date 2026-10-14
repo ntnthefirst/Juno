@@ -599,6 +599,12 @@ export interface McpServerSettings {
 	enabled: boolean;
 	/** Null means the default for this build. */
 	port: number | null;
+	/**
+	 * Start with the computer and stay running with no window, so an agent can
+	 * reach Juno without anyone opening it. On by default; it only means
+	 * something while the server is on.
+	 */
+	background: boolean;
 }
 
 export interface OnboardingState {
@@ -1309,6 +1315,16 @@ export interface GoogleFontLoad {
 	family: string;
 	href: string;
 	css: string;
+}
+
+/**
+ * A picture at a web address, downloaded by the main process after the person
+ * confirmed the source, for the editor and the previews to draw. Never sent.
+ */
+export interface PictureLoad {
+	address: string;
+	/** The bytes, inline. PNG, JPEG, GIF or WebP only. */
+	dataUrl: string;
 }
 
 /** What a client that will not load a linked font shows in its place. */
@@ -2214,6 +2230,13 @@ export interface MailFileResult {
 	/** The destination, by the name the folder list shows. */
 	folderName: string;
 	remembered: number;
+	/**
+	 * How to put it back: each folder the messages came from, with the ids they
+	 * have now. Moving those ids to that folder is the undo. A message the
+	 * server would not place, and the next sync has not found yet, is left out,
+	 * because it has no row to move.
+	 */
+	undo: { folderId: string; messageIds: string[] }[];
 }
 
 export type MailSyncPhase = "idle" | "connecting" | "folders" | "headers" | "bodies" | "done" | "failed";
@@ -2902,6 +2925,8 @@ export interface McpServerStatus {
 	port: number;
 	/** The port Juno uses when nobody picked one. */
 	defaultPort: number;
+	/** Whether Juno starts with the computer and keeps running with no window open. */
+	background: boolean;
 	/** What a client is pointed at. */
 	url: string;
 	/** Why it is not running, when it is enabled and is not. */

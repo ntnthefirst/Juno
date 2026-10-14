@@ -71,3 +71,14 @@ describe("withoutRemoteImages, other media", () => {
 		expect(out.match(/data-juno-remote-image/g)).toHaveLength(2);
 	});
 });
+
+describe("pictures the person allowed", () => {
+	it("draws the downloaded bytes where a confirmed address is linked", async () => {
+		const { remoteImageAddresses } = await import("./remote-image");
+		const html = '<img src="https://a.test/1.png" alt="x" style="width:200px"><img src="https://a.test/2.png">';
+		expect(remoteImageAddresses(html)).toEqual(["https://a.test/1.png", "https://a.test/2.png"]);
+		const out = withoutRemoteImages(html, { "https://a.test/1.png": "data:image/png;base64,AAAA" });
+		expect(out).toContain('src="data:image/png;base64,AAAA"');
+		expect(out.match(/data-juno-remote-image/g)).toHaveLength(1);
+	});
+});

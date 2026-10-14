@@ -121,7 +121,7 @@ const DEFAULT_UPDATES: UpdateSettings = { autoInstall: true, lastCheckedAt: null
  * The agent server starts on its own: it is what lets an agent be pointed at
  * Juno with one address, and an off switch is one click away in Settings.
  */
-const DEFAULT_MCP_SERVER: McpServerSettings = { enabled: true, port: null };
+const DEFAULT_MCP_SERVER: McpServerSettings = { enabled: true, port: null, background: true };
 
 /** Below the operating systems' ephemeral ranges, so nothing else is handed it. */
 export const MIN_MCP_PORT = 1024;
@@ -337,6 +337,7 @@ function normaliseMcpServer(raw: unknown): McpServerSettings {
 	return {
 		enabled: bool(server.enabled, DEFAULT_MCP_SERVER.enabled),
 		port: port !== null && port >= MIN_MCP_PORT && port <= MAX_MCP_PORT ? port : null,
+		background: bool(server.background, DEFAULT_MCP_SERVER.background),
 	};
 }
 

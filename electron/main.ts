@@ -53,6 +53,7 @@ import { configureMailTransport } from "./main/services/mail-transport";
 import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
+import { configureBackground, launchedHidden, runsInBackground, syncBackground } from "./main/background";
 import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
 import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
@@ -72,7 +73,8 @@ if (!app.requestSingleInstanceLock()) {
 } else {
 	// One main window, and a second launch focuses it rather than opening one.
 	// windows/index.ts is what actually holds that rule.
-	app.on("second-instance", () => focusMainWindow());
+	// With no window up (a background start), a second launch opens one.
+	app.on("second-instance", () => openMainWindow(isDev));
 
 	app.whenReady().then(async () => {
 		// Before the first window, so the splash is the first thing carrying the
@@ -81,13 +83,13 @@ if (!app.requestSingleInstanceLock()) {
 
 		// Up before any of the slow work, and down when the window can paint.
 		// A smoke run has nobody watching and an always-on-top window would sit
-		// over the screenshots it takes.
-		if (!process.env.JUNO_SMOKE) showSplash();
-
+		// over the screenshots it takes. A start at login shows nothing at all.
 		// Paths are injected here rather than read inside each service, so no
 		// service has to import `electron` and every one stays testable in plain
 		// Node.
 		settings.configureSettings(userDataDir());
+		const hidden = await launchedHidden();
+		if (!process.env.JUNO_SMOKE && !hidden) showSplash();
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
 		configureDocuments(documentsDir());
 		configureDocumentStorage(documentsDir());
@@ -204,7 +206,10 @@ if (!app.requestSingleInstanceLock()) {
 			defaultPort: app.isPackaged ? 5866 : 5867,
 			version: app.getVersion(),
 			ephemeralPort: Boolean(process.env.JUNO_SMOKE),
+			onBackgroundChange: () => syncBackground(),
 		});
+		configureBackground(() => openMainWindow(isDev));
+		await syncBackground();
 
 		// In development only the mail host is served; the window comes from Vite.
 		registerAppScheme(isDev ? null : join(app.getAppPath(), "dist"));
@@ -213,10 +218,10 @@ if (!app.requestSingleInstanceLock()) {
 		// to happen before the first window loads anything.
 		installSessionPolicy(isDev);
 
-		const window = openMainWindow(isDev);
+		const window = hidden ? null : openMainWindow(isDev);
 		// Not on create: a window that exists but has not painted is a grey
 		// rectangle, which is the exact gap the splash is covering.
-		window.once("ready-to-show", () => closeSplash());
+		window?.once("ready-to-show", () => closeSplash());
 
 		// One summary a day, never one per reminder. See services/notifications.ts.
 		if (!process.env.JUNO_SMOKE) {
@@ -236,7 +241,7 @@ if (!app.requestSingleInstanceLock()) {
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
 		// its database, rather than proving only that it compiles.
-		if (process.env.JUNO_SMOKE) {
+		if (process.env.JUNO_SMOKE && window) {
 			// Electron 41 passes a single event object here. The old positional
 			// signature still fires but logs a deprecation warning on every message.
 			window.webContents.on("console-message", (event) => {
@@ -1027,12 +1032,30 @@ if (!app.requestSingleInstanceLock()) {
 								await new Promise((r) => setTimeout(r, 800));
 								const inPage: Record<string, string> = {
 									"Reminders": "All reminders",
-									"Mail templates": "Styled mail",
 									"Document templates": "Templates",
 								};
 								const route = inPage[screen];
 								if (route && !(await pressText(route)))
 									throw new Error(`Smoke: no "${route}" to press on the way to ${screen}`);
+								if (screen === "Mail templates") {
+									// Styled mail is a column beside the mailbox, opened from the
+									// title bar, and its Manage button leads to the full screen.
+									const pane = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const toggle = [...document.querySelectorAll("header button")].find((el) => el.textContent.trim() === "Styled mail");
+											if (!toggle) return "no styled mail button in the title bar";
+											if (toggle.getAttribute("aria-pressed") !== "true") toggle.click();
+											await new Promise((r) => setTimeout(r, 900));
+											const aside = document.querySelector("aside[aria-label='Styled mail']");
+											if (!aside) return "the styled mail column did not open";
+											if (!aside.querySelector("iframe")) return "the column shows no preview";
+											return "ok";
+										})()`,
+									)) as string;
+									if (pane !== "ok") throw new Error(`Smoke: styled mail column ${pane}`);
+									writeFileSync(joinPath(shotDir, `mail-styled-pane.png`), (await capture(window.webContents)).toPNG());
+									if (!(await pressText("Manage"))) throw new Error("Smoke: no Manage in the styled mail column");
+								}
 								if (screen === "Agent") {
 									// The requests tab is the default, and the pending request from
 									// the agent call above has to be on it with its arguments.
@@ -3795,6 +3818,32 @@ if (!app.requestSingleInstanceLock()) {
 									};
 									await shoot("mail-list");
 
+									// A row under the pointer shows its actions and nothing else:
+									// the date, the count and the marks step aside. Hover needs a
+									// real pointer, so the move is sent as an input event.
+									const rowBox = (await window.webContents.executeJavaScript(
+										`(() => {
+											const row = document.querySelector("main ul li.group");
+											if (!row) return null;
+											const r = row.getBoundingClientRect();
+											return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+										})()`,
+									)) as { x: number; y: number } | null;
+									if (!rowBox) throw new Error("Smoke: no mail row to hover");
+									window.webContents.sendInputEvent({ type: "mouseMove", x: rowBox.x, y: rowBox.y });
+									await new Promise((r) => setTimeout(r, 400));
+									const hoverState = (await window.webContents.executeJavaScript(
+										`(() => {
+											const row = document.querySelector("main ul li.group");
+											const actions = row && [...row.querySelectorAll("button[aria-label]")].filter((b) => getComputedStyle(b.parentElement).opacity === "1");
+											return actions && actions.length >= 3 ? "ok" : "the hover actions did not show";
+										})()`,
+									)) as string;
+									if (hoverState !== "ok") throw new Error(`Smoke: mail hover ${hoverState}`);
+									await shoot("mail-hover");
+									window.webContents.sendInputEvent({ type: "mouseMove", x: 4, y: 400 });
+									await new Promise((r) => setTimeout(r, 300));
+
 									// Ticking a row turns the list into something you file in
 									// bulk: the toolbar grows a box, a count and the actions, and
 									// the per-row icons step aside. It is a second layout of the
@@ -4250,16 +4299,17 @@ if (!app.requestSingleInstanceLock()) {
 								console.log(`SMOKE_DEMO settings pages=${pages.length}`);
 								closeSettingsWindow();
 
-								// The sidebar is a rail of icons and never opens. Eight entries (six
-								// places, the agent and settings), no text of its own, and a label in a
-								// tooltip that appears when the pointer rests on one.
+								// The sidebar is a rail of icons and never opens. Seven entries (six
+								// places and settings; the agent is in the title bar), no text of its
+								// own, and a label in a tooltip that appears when the pointer rests on one.
 								await new Promise((r) => setTimeout(r, 400));
 								const rail = (await window.webContents.executeJavaScript(
 									`(async () => {
 										const nav = document.querySelector("nav[data-sidebar]");
 										if (!nav) return "no sidebar";
 										const entries = nav.querySelectorAll("button[data-nav]").length;
-										if (entries !== 8) return "the sidebar has " + entries + " entries, not 8";
+										if (entries !== 7) return "the sidebar has " + entries + " entries, not 7";
+										if (!document.querySelector("header button[data-nav=agent]")) return "the agent is not in the title bar";
 										if (nav.textContent.trim() !== "") return "the sidebar draws text: " + nav.textContent.trim();
 										const width = Math.round(nav.getBoundingClientRect().width);
 										if (width > 64) return "the sidebar is " + width + "px wide";
@@ -4367,6 +4417,13 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	app.on("window-all-closed", () => {
+		// Running in the background keeps the agent server up. The window is gone,
+		// so the lock goes on: opening Juno again asks for the PIN, the same as a
+		// walk-up to a laptop that was left (decision 15).
+		if (runsInBackground()) {
+			lock.lock();
+			return;
+		}
 		if (process.platform !== "darwin") app.quit();
 	});
 

@@ -154,8 +154,8 @@
 
 	/* ---- Layout ---- */
 	--sidebar-width: 248px;
-	/* Collapsed to icons only. Wide enough to keep a 32px hit target centred. */
-	--sidebar-rail-width: 56px;
+	/* The activity bar of a code editor: 48px wide, 48px items, 24px icons. */
+	--sidebar-rail-width: 48px;
 	/* Matches the native window-control overlay height set in main-window.ts.
 	 * Changing one without the other puts the buttons off the bar. */
 	--titlebar-height: 40px;

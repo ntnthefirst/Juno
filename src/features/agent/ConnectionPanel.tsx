@@ -116,6 +116,13 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 							disabled={switching}
 							onChange={(next) => void run(() => window.juno.agent.server.setEnabled(next))}
 						/>
+						<Toggle
+							label="Run in the background"
+							description="Juno starts with your computer and stays running with no window, so agents can reach it without you opening it. Quit it from the tray icon."
+							checked={status.background}
+							disabled={switching || !status.enabled}
+							onChange={(next) => void run(() => window.juno.agent.server.setBackground(next))}
+						/>
 
 						<div className="mt-4 flex flex-wrap items-center gap-3">
 							<span

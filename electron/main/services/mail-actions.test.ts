@@ -27,7 +27,7 @@ import {
 } from "./mail-source";
 import * as sync from "./mail-sync";
 import * as threads from "./mail-threads";
-import { configureMailboxWriter, type MailboxWriter } from "./mail-writer";
+import { configureMailboxWriter, configureWriterRetry, type MailboxWriter } from "./mail-writer";
 import { configureSettings } from "./settings";
 
 const MIGRATIONS = resolve(process.cwd(), "electron/main/db/migrations");
@@ -371,6 +371,47 @@ describe("archiving", () => {
 		// The server said where it landed, so the row went with it.
 		expect(result.remembered).toBe(1);
 		expect(liveMessage(messageId)?.folderId).toBe(folderIdOf("archive"));
+	});
+
+	it("says how to put it back, and putting it back works", async () => {
+		const { threadId, messageId } = await syncedThread();
+
+		const result = await actions.archiveThreads([threadId], db);
+		expect(result.undo).toEqual([{ folderId: folderIdOf("inbox"), messageIds: [messageId] }]);
+
+		const [group] = result.undo;
+		await actions.move(group!.messageIds, { folderId: group!.folderId }, db);
+		expect(box.messages.get("INBOX")).toHaveLength(1);
+		expect(box.messages.get("Archive")).toHaveLength(0);
+		expect(liveMessage(messageId)?.folderId).toBe(folderIdOf("inbox"));
+	});
+
+	it("tries the connection again when the network blinks", async () => {
+		configureWriterRetry([0, 0]);
+		let failures = 1;
+		configureMailboxWriter(async () => {
+			if (failures-- > 0) throw Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
+			return box.writer();
+		});
+		const { threadId } = await syncedThread();
+
+		const result = await actions.archiveThreads([threadId], db);
+
+		expect(result.moved).toBe(1);
+		expect(box.messages.get("Archive")).toHaveLength(1);
+	});
+
+	it("does not try again when the server refuses outright", async () => {
+		configureWriterRetry([0, 0]);
+		let attempts = 0;
+		configureMailboxWriter(async () => {
+			attempts += 1;
+			throw Object.assign(new Error("no such host"), { code: "ENOTFOUND" });
+		});
+		const { threadId } = await syncedThread();
+
+		await expect(actions.archiveThreads([threadId], db)).rejects.toThrow(/Could not find/);
+		expect(attempts).toBe(1);
 	});
 
 	it("pulls the destination at once when the server does not say where it landed", async () => {

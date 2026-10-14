@@ -12,9 +12,10 @@ import { withoutRemoteImages } from "./remote-image";
  *
  * Pictures at a web address are treated the same way: the window loads no
  * image but its own, so each becomes a box saying the reader's mail client
- * loads it (remote-image.ts). What is sent is untouched.
+ * loads it (remote-image.ts), unless the person confirmed the source and Juno
+ * downloaded it (`loaded`, from remote-pictures.ts). What is sent is untouched.
  */
-export function framed(html: string, fontCss: string): string {
-	const unlinked = withoutRemoteImages(html).replace(/<link rel="stylesheet" href="[^"]*">/g, "");
+export function framed(html: string, fontCss: string, loaded: Record<string, string> = {}): string {
+	const unlinked = withoutRemoteImages(html, loaded).replace(/<link rel="stylesheet" href="[^"]*">/g, "");
 	return fontCss ? unlinked.replace("</head>", `<style>${fontCss}</style></head>`) : unlinked;
 }

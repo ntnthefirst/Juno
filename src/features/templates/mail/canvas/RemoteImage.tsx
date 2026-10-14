@@ -1,7 +1,9 @@
 import { Icon } from "../../../../components/Icon";
 import { REMOTE_IMAGE_NOTE } from "../../../../lib/remote-image";
+import { useRemotePicture } from "../../../../lib/remote-pictures";
 
 type RemoteImageProps = {
+	src: string;
 	alt: string;
 	/** Pixels, or null for the whole width it is given. */
 	width: number | null;
@@ -12,7 +14,12 @@ type RemoteImageProps = {
  * image from anywhere but Juno, so this is a box at the picture's width with
  * its alt text, and a line saying the reader's mail client does the loading.
  */
-export function RemoteImage({ alt, width }: RemoteImageProps) {
+export function RemoteImage({ src, alt, width }: RemoteImageProps) {
+	const { dataUrl } = useRemotePicture(src.trim());
+	// Drawn once the person confirmed the source and Juno downloaded it.
+	if (dataUrl) {
+		return <img src={dataUrl} alt={alt} style={{ display: "block", maxWidth: "100%", width: width ?? undefined, height: "auto" }} />;
+	}
 	return (
 		<span
 			className="flex flex-col gap-0.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--canvas-line)] bg-[var(--canvas-paper)] p-2 text-[length:var(--text-micro)] leading-[var(--leading-tight)] text-[var(--canvas-ink-muted)]"

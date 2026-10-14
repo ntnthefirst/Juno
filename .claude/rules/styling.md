@@ -84,8 +84,8 @@ already dense; don't reach past it.
   it at all. A section heading is `--text-h3`.
 - `--leading-tight` for headings and table rows, `--leading-normal` for UI text,
   `--leading-relaxed` only for long-form: document body and email text.
-- The sidebar is `--sidebar-rail-width` (56px) and never wider, and the titlebar
-  is `--titlebar-height`. Both are tokens because other things are measured
+- The sidebar is `--sidebar-rail-width` (48px, a code editor's activity bar)
+  and never wider, and the titlebar is `--titlebar-height`. Both are tokens because other things are measured
   against them, and because the title bar height is also the height of the
   native caption-button overlay ([architecture.md](architecture.md) section 4b).
 - A row that carries an avatar is `--row-height-roomy` (44px). A row with no
@@ -123,6 +123,14 @@ not resolving the OS preference yourself.
 - Images, logo variants and any generated PDF preview need checking too. There is
   a paper wordmark and an ink wordmark in `brand/logo/` for exactly this.
 
+## 5a. The title bar is there and not seen
+
+The main window draws its own title bar in the page colour with no rule under
+it, so the window reads as one surface. It still exists: it is the drag region
+and the caption buttons sit on it. A screen may put its own controls in it
+with `app/TitleBarSlot.tsx`, beside the way back (Mail puts New message and
+the styled mail pane there, and only while Mail is open).
+
 ## 5b. The sidebar is a rail, and it never opens
 
 `src/app/Sidebar.tsx` is a column of icons at `--sidebar-rail-width`. There is
@@ -130,15 +138,17 @@ no expanded state, no toggle, no drawer and no setting for any of them: the
 name of an entry is in its tooltip (`components/Tooltip.tsx`, drawn by the
 application, not the native `title`) and in its `aria-label`.
 
-- **Six places on top, two entries at the bottom.** Overview, Calendar, Clients,
-  Projects, Mail, Documents; then Agent and Settings. `app/screens.ts` lists
-  them. A seventh entry is a decision, not an edit.
+- **Six places on top, Settings at the bottom.** Overview, Calendar, Clients,
+  Projects, Mail, Documents; then Settings. `app/screens.ts` lists them. A
+  seventh place is a decision, not an edit. The agent is in the title bar, at
+  the right beside the window's own buttons, with the same three colours.
 - **An entry has three colours and nothing else.** Soft (`--ink-faint`) at rest,
   firm (`--ink`) under the pointer, iris (`--accent`) when it is the page. No
   fill, no outline, no indicator bar. The one ring is the global
   `:focus-visible` one, which only a keyboard triggers, and it stays.
-- **Icons are 20px with a 2.0 stroke.** Heroicons draw at 1.5, which is a hairline
-  at this size next to the soft colour.
+- **Entries are 48px square and icons 24px with a 1.7 stroke,** the dimensions
+  of a code editor's activity bar. Heroicons draw at 1.5, which is a hairline
+  next to the soft colour.
 - **A badge is a dot,** and the count goes in the tooltip and the accessible name.
 - **Screens without an entry** light the entry they belong to
   (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail,
@@ -146,12 +156,20 @@ application, not the native `title`) and in its `aria-label`.
 
 ### The switch
 
-Mail and Documents each hold a second screen. It is not a second sidebar entry:
-it is `components/SectionSwitch.tsx`, a two-sided control at the top of the page
-(Mailbox | Styled mail, Documents | Templates), reached through the shell with
+Documents holds a second screen. It is not a second sidebar entry: it is
+`components/SectionSwitch.tsx`, a two-sided control at the top of the page
+(Documents | Templates), reached through the shell with
 `requestOpen({ kind: "screen", screen })` so the target opens on its list. Add
 a pair by adding a `ScreenSwitch` in `app/screens.ts`. Screens a form or an
 editor has taken over show no switch, because they replace the page it sits on.
+
+Mail does it differently, by the owner's choice. New message and a Styled mail
+button sit in the title bar while Mail is open, and the button opens a column
+on the right (`features/mail/StyledMailPane.tsx`): the templates, the one
+picked shown as it reads, a way to widen it to full size, and a double click
+to send it. Sending happens in that column, with the mailbox still in view.
+The full Styled mail screen, for writing and changing templates, is its
+Manage button.
 
 ### Avatars and the time split
 
@@ -182,6 +200,9 @@ of taste.
 - **A screen renders a form page instead of its list**, not on top of it, so the
   state belongs to the screen. If the pane you are in is too narrow to hold a
   page, the state is in the wrong component.
+- **One exception, by the owner's choice: sending a styled mail from Mail.**
+  Its steps run in the styled mail column (`components/PanelFrame.tsx`), so
+  the mailbox stays in view. It does not spread: every other form is a page.
 - The submit button lives in the page footer, outside the `<form>`, and reaches
   it with `form={id}` from `useId()`.
 - A side panel does not trap focus and does not block a click behind it. That is

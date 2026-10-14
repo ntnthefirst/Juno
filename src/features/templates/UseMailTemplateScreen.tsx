@@ -12,10 +12,13 @@ import { resolveInputSources } from "@shared/input-sources";
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { FormPage, type FormStep } from "../../components/FormPage";
+import { PanelFrame } from "../../components/PanelFrame";
 import { Select } from "../../components/Select";
 import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
+import { LoadPicturesNotice } from "../../components/LoadPicturesNotice";
 import { framed } from "../../lib/framed-preview";
+import { useRemotePictures } from "../../lib/remote-pictures";
 import { useCanvasFonts } from "./mail/canvas/use-canvas-fonts";
 
 type UseMailTemplateScreenProps = {
@@ -23,6 +26,11 @@ type UseMailTemplateScreenProps = {
 	onBack: () => void;
 	/** The message was queued. A template is never kept as a draft. */
 	onCreated: () => void;
+	/**
+	 * A page that takes the screen over, or the column of the styled mail pane
+	 * beside the mailbox, where the steps stack and the fields go one per row.
+	 */
+	variant?: "page" | "panel";
 };
 
 // Keyed to the inputs the review render was requested with, so a change does
@@ -72,7 +80,7 @@ function parseAddressLine(line: string): MailAddress[] {
  * template with no declared inputs skips Fill, because a step with nothing on
  * it is not a step, it is a confirmation nobody asked for.
  */
-export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTemplateScreenProps) {
+export function UseMailTemplateScreen({ template, onBack, onCreated, variant = "page" }: UseMailTemplateScreenProps) {
 	const hasInputs = template.inputs.length > 0;
 	const stepDefs: (FormStep & { key: "fill" | "link" | "review" })[] = [
 		{
@@ -219,6 +227,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 
 	const currentReview = reviewRender && sameReviewKey(reviewRender, reviewKey) ? reviewRender : null;
 	const rendered = currentReview?.status === "ready" ? currentReview.result : null;
+	const remote = useRemotePictures(rendered?.bodyHtml ?? "");
 	const renderError = currentReview?.status === "error" ? currentReview.message : null;
 
 	async function create() {
@@ -242,48 +251,50 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 		}
 	}
 
+	const missingInputKeys = rendered
+		? rendered.missing.filter((path) => path.startsWith("document.")).map((path) => path.slice("document.".length))
+		: [];
+	const panel = variant === "panel";
+
 	if (sentMessage) {
-		return (
+		const done = (
+			<p className="text-[var(--ink)]">
+				Message queued. It goes out in a moment, and you can follow it in the outbox.
+			</p>
+		);
+		return panel ? (
+			<PanelFrame title={template.name} onBack={onCreated} backLabel="Done" actions={<Button variant="primary" onClick={onCreated}>Done</Button>}>
+				{done}
+			</PanelFrame>
+		) : (
 			<FormPage title={template.name} onBack={onCreated} backLabel="Done" width="wide">
-				<p className="text-[var(--ink)]">
-					Message queued. It goes out in a moment, and you can follow it in the outbox.
-				</p>
+				{done}
 			</FormPage>
 		);
 	}
 
-	const missingInputKeys = rendered
-		? rendered.missing.filter((path) => path.startsWith("document.")).map((path) => path.slice("document.".length))
-		: [];
+	const actions = (
+		<>
+			{step > 0 ? <Button onClick={() => setStep(step - 1)}>Previous</Button> : null}
+			{isLastStep ? (
+				<Button
+					variant="primary"
+					disabled={creating || !rendered || !to.trim() || !accountId}
+					title={!to.trim() ? "Add a recipient on the Link step first." : undefined}
+					onClick={() => void create()}
+				>
+					{creating ? "Sending" : "Send"}
+				</Button>
+			) : (
+				<Button variant="primary" onClick={() => setStep(step + 1)}>
+					Next
+				</Button>
+			)}
+		</>
+	);
 
-	return (
-		<FormPage
-			title={`Use ${template.name}`}
-			onBack={onBack}
-			width="wide"
-			steps={stepDefs}
-			step={step}
-			onStep={setStep}
-			actions={
-				<>
-					{step > 0 ? <Button onClick={() => setStep(step - 1)}>Previous</Button> : null}
-					{isLastStep ? (
-						<Button
-							variant="primary"
-							disabled={creating || !rendered || !to.trim() || !accountId}
-							title={!to.trim() ? "Add a recipient on the Link step first." : undefined}
-							onClick={() => void create()}
-						>
-							{creating ? "Sending" : "Send"}
-						</Button>
-					) : (
-						<Button variant="primary" onClick={() => setStep(step + 1)}>
-							Next
-						</Button>
-					)}
-				</>
-			}
-		>
+	const body = (
+		<>
 			{error ? (
 				<p role="alert" data-selectable className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
 					{error}
@@ -299,7 +310,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 					disabled={creating}
 				/>
 			) : currentKey === "link" ? (
-				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+				<div className={panel ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 gap-4 sm:grid-cols-2"}>
 					<Select
 						label="Client"
 						value={clientId}
@@ -347,10 +358,13 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 									No value for: {rendered.missing.join(", ")}. Fill these in on the Fill step before sending: a message with a gap in it is refused.
 								</p>
 							) : null}
-							<div className="mt-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
+							<div className="mt-3">
+								<LoadPicturesNotice pending={remote.pending} onConfirm={remote.confirm} />
+							</div>
+							<div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
 								<iframe
 									title="Message preview"
-									srcDoc={framed(rendered.bodyHtml, fonts.css)}
+									srcDoc={framed(rendered.bodyHtml, fonts.css, remote.pictures)}
 									sandbox=""
 									referrerPolicy="no-referrer"
 									className="block h-[420px] w-full bg-[var(--surface)]"
@@ -362,6 +376,36 @@ export function UseMailTemplateScreen({ template, onBack, onCreated }: UseMailTe
 					)}
 				</div>
 			)}
+		</>
+	);
+
+	if (panel) {
+		return (
+			<PanelFrame
+				title={`Use ${template.name}`}
+				onBack={onBack}
+				backLabel="Styled mail"
+				steps={stepDefs}
+				step={step}
+				onStep={setStep}
+				actions={actions}
+			>
+				{body}
+			</PanelFrame>
+		);
+	}
+
+	return (
+		<FormPage
+			title={`Use ${template.name}`}
+			onBack={onBack}
+			width="wide"
+			steps={stepDefs}
+			step={step}
+			onStep={setStep}
+			actions={actions}
+		>
+			{body}
 		</FormPage>
 	);
 }

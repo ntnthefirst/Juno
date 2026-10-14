@@ -127,6 +127,7 @@ import type {
 	MailTemplate,
 	MailLayout,
 	GoogleFontLoad,
+	PictureLoad,
 	GoogleFontRequest,
 	MailBlockConversion,
 	MailTemplateDraft,
@@ -505,6 +506,8 @@ export interface JunoApi {
 			status(): Promise<McpServerStatus>;
 			/** The switch. Off stops the listener; the clients already let in are kept. */
 			setEnabled(enabled: boolean): Promise<McpServerStatus>;
+			/** Start with the computer and keep running with no window. */
+			setBackground(background: boolean): Promise<McpServerStatus>;
 			/** A port of the person's choosing, or null for the default. */
 			setPort(port: number | null): Promise<McpServerStatus>;
 		};
@@ -880,6 +883,12 @@ export interface JunoApi {
 			 * it. Juno builds the address itself and never fetches one it is given.
 			 */
 			loadGoogleFont(request: GoogleFontRequest): Promise<GoogleFontLoad>;
+			/**
+			 * Downloads a picture at a web address, for the editor and previews to
+			 * draw. Only after the person confirmed the source; it refuses anything
+			 * that is not a public https picture (services/mail-pictures.ts).
+			 */
+			loadPicture(address: string): Promise<PictureLoad>;
 			/** One block as its HTML and CSS. Answers with the changed canvas; stores nothing. */
 			convertBlock(input: MailBlockConversion): Promise<MailLayout>;
 			/** Renders values in hand. Writes nothing, so a preview cannot mark a

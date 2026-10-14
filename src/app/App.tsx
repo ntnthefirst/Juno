@@ -27,6 +27,7 @@ import { NEW_ON, SCREEN_LABELS, SIDEBAR_ENTRY, type ScreenId } from "./screens";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
+import { TitleBarSlotContext } from "./titlebar-slot-context";
 import { useShortcuts } from "./use-shortcuts";
 
 export function App() {
@@ -130,6 +131,21 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	const trail = useBreadcrumbTrail();
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const [helpOpen, setHelpOpen] = useState(false);
+	// The element in the title bar a screen may draw into, held in state so a
+	// screen that mounts before the bar has painted still finds it.
+	const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+	const [agentPending, setAgentPending] = useState(0);
+
+	useEffect(() => {
+		const refresh = () => {
+			void window.juno.agent.actions
+				.pendingCount()
+				.then(setAgentPending)
+				.catch(() => setAgentPending(0));
+		};
+		refresh();
+		return window.juno.agent.actions.onChange(refresh);
+	}, []);
 
 	const navigate = (id: ScreenId) => {
 		if (id === screen) setVisit((count) => count + 1);
@@ -193,7 +209,15 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 				const target = currentRequest();
 				if (!target) return;
 				const next: ScreenId =
-					target.kind === "project" ? "projects" : target.kind === "document" ? "documents" : target.kind === "thread" ? "mail" : target.screen;
+					target.kind === "project"
+						? "projects"
+						: target.kind === "document"
+							? "documents"
+							: target.kind === "thread"
+								? "mail"
+								: target.kind === "mail-template"
+									? "mail-templates"
+									: target.screen;
 				setVisit((count) => count + 1);
 				setScreen(next);
 			}),
@@ -212,64 +236,70 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	);
 
 	return (
-		<div className="flex h-full flex-col bg-[var(--paper)]">
-			<TitleBar
-				back={back}
-				onOpenPalette={() => setPaletteOpen(true)}
-				lockConfigured={lock.configured}
-				onLock={() => void window.juno.lock.lock()}
-			/>
-			<div className="relative flex min-h-0 flex-1">
-				<Sidebar
-					current={SIDEBAR_ENTRY[screen]}
-					onNavigate={navigate}
-					onOpenSettings={() => void window.juno.window.openSettings()}
+		<TitleBarSlotContext.Provider value={slot}>
+			<div className="flex h-full flex-col bg-[var(--paper)]">
+				<TitleBar
+					back={back}
+					onOpenPalette={() => setPaletteOpen(true)}
+					lockConfigured={lock.configured}
+					onLock={() => void window.juno.lock.lock()}
+					agentActive={screen === "agent"}
+					agentPending={agentPending}
+					onOpenAgent={() => navigate("agent")}
+					slotRef={setSlot}
 				/>
+				<div className="relative flex min-h-0 flex-1">
+					<Sidebar
+						current={SIDEBAR_ENTRY[screen]}
+						onNavigate={navigate}
+						onOpenSettings={() => void window.juno.window.openSettings()}
+					/>
 
-				<main key={`${screen}:${visit}`} className="animate-screen min-w-0 flex-1 overflow-hidden">
-					{screen === "overview" ? (
-						<OverviewScreen />
-					) : screen === "clients" ? (
-						<ClientsScreen />
-					) : screen === "projects" ? (
-						<ProjectsScreen />
-					) : screen === "reminders" ? (
-						<RemindersScreen />
-					) : screen === "documents" ? (
-						<DocumentsScreen />
-					) : screen === "mail" ? (
-						<MailScreen />
-					) : screen === "calendar" ? (
-						<CalendarScreen />
-					) : screen === "mail-templates" ? (
-						<MailTemplatesScreen />
-					) : screen === "document-templates" ? (
-						<DocumentTemplatesScreen />
-					) : screen === "agent" ? (
-						<AgentScreen />
-					) : (
-						<Placeholder title={SCREEN_LABELS[screen]} />
-					)}
-				</main>
+					<main key={`${screen}:${visit}`} className="animate-screen min-w-0 flex-1 overflow-hidden">
+						{screen === "overview" ? (
+							<OverviewScreen />
+						) : screen === "clients" ? (
+							<ClientsScreen />
+						) : screen === "projects" ? (
+							<ProjectsScreen />
+						) : screen === "reminders" ? (
+							<RemindersScreen />
+						) : screen === "documents" ? (
+							<DocumentsScreen />
+						) : screen === "mail" ? (
+							<MailScreen />
+						) : screen === "calendar" ? (
+							<CalendarScreen />
+						) : screen === "mail-templates" ? (
+							<MailTemplatesScreen />
+						) : screen === "document-templates" ? (
+							<DocumentTemplatesScreen />
+						) : screen === "agent" ? (
+							<AgentScreen />
+						) : (
+							<Placeholder title={SCREEN_LABELS[screen]} />
+						)}
+					</main>
+				</div>
+
+				<DocumentDropLayer />
+				<AgentNotices />
+
+				{paletteOpen ? (
+					<CommandPalette
+						onClose={() => setPaletteOpen(false)}
+						onNavigate={navigate}
+						onNew={startNew}
+						onSettings={() => void window.juno.window.openSettings()}
+						onLock={lock.configured ? () => void window.juno.lock.lock() : null}
+						onHelp={() => setHelpOpen(true)}
+					/>
+				) : null}
+				{helpOpen ? <ShortcutsDialog onClose={() => setHelpOpen(false)} /> : null}
+
+				{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 			</div>
-
-			<DocumentDropLayer />
-			<AgentNotices />
-
-			{paletteOpen ? (
-				<CommandPalette
-					onClose={() => setPaletteOpen(false)}
-					onNavigate={navigate}
-					onNew={startNew}
-					onSettings={() => void window.juno.window.openSettings()}
-					onLock={lock.configured ? () => void window.juno.lock.lock() : null}
-					onHelp={() => setHelpOpen(true)}
-				/>
-			) : null}
-			{helpOpen ? <ShortcutsDialog onClose={() => setHelpOpen(false)} /> : null}
-
-			{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
-		</div>
+		</TitleBarSlotContext.Provider>
 	);
 }
 

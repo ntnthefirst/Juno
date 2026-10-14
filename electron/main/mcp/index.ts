@@ -34,6 +34,8 @@ export interface AgentSurfaceConfig {
 	version: string;
 	/** Let the system pick the port. For a run that must not meet an installed Juno. */
 	ephemeralPort?: boolean;
+	/** Called after the background setting changed, so the app lifecycle can follow it. */
+	onBackgroundChange?: () => void | Promise<void>;
 }
 
 let config: AgentSurfaceConfig | null = null;
@@ -125,6 +127,7 @@ export async function serverStatus(): Promise<McpServerStatus> {
 		running: http.running,
 		port,
 		defaultPort: config.defaultPort,
+		background: stored.background,
 		url: `http://127.0.0.1:${port}/mcp`,
 		error: stored.enabled ? http.error : null,
 		toolCount: toolCount(),
@@ -134,7 +137,16 @@ export async function serverStatus(): Promise<McpServerStatus> {
 /** The switch. Off stops the listener and drops every open request; who was let in is kept. */
 export async function setServerEnabled(enabled: boolean): Promise<McpServerStatus> {
 	await settings.setMcpServer({ enabled });
+	// With the server off there is nothing to keep running for.
+	await config?.onBackgroundChange?.();
 	return applyServer();
+}
+
+/** Start with the computer and keep running with no window. The app lifecycle follows through the hook. */
+export async function setServerBackground(background: boolean): Promise<McpServerStatus> {
+	await settings.setMcpServer({ background });
+	await config?.onBackgroundChange?.();
+	return serverStatus();
 }
 
 /** A port of the person's choosing, or null for the default. Restarts the listener on it. */

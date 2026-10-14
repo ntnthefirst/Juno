@@ -166,7 +166,7 @@ describe("the update preference", () => {
 describe("the agent server", () => {
 	it("is on, on the default port, until somebody changes it", async () => {
 		freshStore();
-		expect(await settings.getMcpServer()).toEqual({ enabled: true, port: null });
+		expect(await settings.getMcpServer()).toEqual({ enabled: true, port: null, background: true });
 	});
 
 	it("keeps the switch and the port across a fresh read", async () => {
@@ -174,14 +174,14 @@ describe("the agent server", () => {
 		await settings.setMcpServer({ enabled: false });
 		await settings.setMcpServer({ port: 7001 });
 		configureSettings(dir);
-		expect(await settings.getMcpServer()).toEqual({ enabled: false, port: 7001 });
+		expect(await settings.getMcpServer()).toEqual({ enabled: false, port: 7001, background: true });
 	});
 
 	it("patches one field without clearing the other", async () => {
 		freshStore();
 		await settings.setMcpServer({ port: 7001 });
-		expect(await settings.setMcpServer({ enabled: false })).toEqual({ enabled: false, port: 7001 });
-		expect(await settings.setMcpServer({ port: null })).toEqual({ enabled: false, port: null });
+		expect(await settings.setMcpServer({ enabled: false })).toEqual({ enabled: false, port: 7001, background: true });
+		expect(await settings.setMcpServer({ port: null })).toEqual({ enabled: false, port: null, background: true });
 	});
 
 	it("refuses a port the operating system hands out at random, or one that is not a port", async () => {
@@ -194,7 +194,7 @@ describe("the agent server", () => {
 
 	it("falls back to the defaults when the stored values are the wrong type or out of range", async () => {
 		freshStore({ mcpServer: { enabled: "off", port: 99999 } });
-		expect(await settings.getMcpServer()).toEqual({ enabled: true, port: null });
+		expect(await settings.getMcpServer()).toEqual({ enabled: true, port: null, background: true });
 	});
 
 	it("comes back with the rest of the settings, and as a copy", async () => {

@@ -33,6 +33,8 @@ export type ThreadListOutbox = {
 	messages: MailOutboxMessage[] | null;
 	selectedId: string | null;
 	onSelect: (id: string) => void;
+	onRetry?: (id: string) => void;
+	onCancel?: (id: string) => void;
 };
 
 type ThreadListProps = {
@@ -280,6 +282,8 @@ export function ThreadList({
 										message={entry.message}
 										active={entry.id === outbox?.selectedId}
 										onSelect={(id) => outbox?.onSelect(id)}
+										onRetry={outbox?.onRetry}
+										onCancel={outbox?.onCancel}
 										buttonRef={(element) => {
 											if (element) rows.current.set(entry.id, element);
 											else rows.current.delete(entry.id);
@@ -364,7 +368,7 @@ export function ThreadList({
 											}}
 											aria-current={active && !hasSelection ? "true" : undefined}
 											aria-pressed={hasSelection ? checked : undefined}
-											className="min-w-0 flex-1 text-left"
+											className={`min-w-0 flex-1 text-left ${hasSelection ? "" : "group-focus-within:pr-[140px] group-hover:pr-[140px]"}`}
 										>
 											<div className="flex items-baseline gap-2">
 												<span
@@ -374,28 +378,34 @@ export function ThreadList({
 												>
 													{participantsLine(thread.participants, "Me")}
 												</span>
-												{thread.messageCount > 1 ? (
-													<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-														{thread.messageCount}
-													</span>
-												) : null}
-												{thread.isFlagged ? (
-													<span className="shrink-0 text-[var(--seal)]" title="Flagged">
-														<Icon name="flag" size={12} />
-													</span>
-												) : null}
-												{thread.hasAttachments ? (
-													<span className="shrink-0 text-[var(--ink-muted)]" title="Has attachments">
-														<Icon name="attachment" size={12} />
-													</span>
-												) : null}
-												{/* The date gives way to the row's actions on hover. */}
+												{/*
+													The count, the marks and the date give way to the row's
+													actions on hover, all of them, so the icons stand alone
+													rather than over half a date.
+												*/}
 												<span
-													className={`tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)] ${
-														hasSelection ? "" : "group-hover:invisible"
+													className={`flex shrink-0 items-baseline gap-2 ${
+														hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"
 													}`}
 												>
-													{formatWhen(thread.lastMessageAt)}
+													{thread.messageCount > 1 ? (
+														<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+															{thread.messageCount}
+														</span>
+													) : null}
+													{thread.isFlagged ? (
+														<span className="text-[var(--seal)]" title="Flagged">
+															<Icon name="flag" size={12} />
+														</span>
+													) : null}
+													{thread.hasAttachments ? (
+														<span className="text-[var(--ink-muted)]" title="Has attachments">
+															<Icon name="attachment" size={12} />
+														</span>
+													) : null}
+													<span className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+														{formatWhen(thread.lastMessageAt)}
+													</span>
 												</span>
 											</div>
 											<div className="mt-0.5 flex items-baseline gap-2">
@@ -407,12 +417,12 @@ export function ThreadList({
 												</span>
 												{/* Beside Juno's own unsent messages, the server's are told apart. */}
 												{outbox ? (
-													<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+													<span className={`shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
 														On the server
 													</span>
 												) : null}
 												{thread.clientName ? (
-													<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+													<span className={`shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
 														{thread.clientName}
 													</span>
 												) : null}
@@ -421,7 +431,7 @@ export function ThreadList({
 									</div>
 
 									{/*
-										Hover actions, in the row's top-right corner where the date is.
+										Hover actions, at the row's right edge where the date was.
 										Hidden until the row is hovered or something in it has focus, so
 										the list is a list rather than a grid of buttons, and reachable
 										from the keyboard because focus counts as hover here. They stay
@@ -430,7 +440,7 @@ export function ThreadList({
 										not what anybody was aiming at.
 									*/}
 									{hasSelection ? null : (
-										<div className="pointer-events-none absolute top-1 right-3 flex gap-0.5 opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+										<div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 gap-0.5 opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
 											<IconAction
 												icon={unread ? "read" : "unread"}
 												label={unread ? "Mark read" : "Mark unread"}

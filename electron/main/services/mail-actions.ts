@@ -223,11 +223,18 @@ export async function move(
 	db: Db = getDb(),
 ): Promise<MailFileResult> {
 	const rows = messagesWithFolders(db, messageIds);
-	if (rows.length === 0) return { moved: 0, folderName: "", remembered: 0 };
+	if (rows.length === 0) return { moved: 0, folderName: "", remembered: 0, undo: [] };
 
 	let moved = 0;
 	let remembered = 0;
 	let folderName = "";
+	// By the folder each message left, the ids it has where it landed.
+	const back = new Map<string, string[]>();
+	const remember = (fromFolderId: string, id: string) => {
+		const list = back.get(fromFolderId) ?? [];
+		list.push(id);
+		back.set(fromFolderId, list);
+	};
 
 	for (const group of groupByFolder(rows).values()) {
 		const destination = await resolveTarget(db, group.accountId, target);
@@ -258,6 +265,7 @@ export async function move(
 					.where(eq(mailMessages.id, message.id))
 					.run();
 				remembered += 1;
+				remember(group.folder.id, message.id);
 			}
 			moved += 1;
 		}
@@ -274,7 +282,7 @@ export async function move(
 			// caller is only told a message is there when it really is.
 			const wanted = unplaced.map((message) => message.messageId).filter((id): id is string => id !== null);
 			if (wanted.length > 0) {
-				remembered += db
+				const found = db
 					.select({ id: mailMessages.id })
 					.from(mailMessages)
 					.where(
@@ -284,13 +292,16 @@ export async function move(
 							isNull(mailMessages.deletedAt),
 						),
 					)
-					.all().length;
+					.all();
+				remembered += found.length;
+				for (const row of found) remember(group.folder.id, row.id);
 			}
 		}
 	}
 
 	tidyEmptyThreads(db, [...new Set(rows.map((row) => row.message.threadId))]);
-	return { moved, folderName, remembered };
+	const undo = [...back.entries()].map(([folderId, messageIds]) => ({ folderId, messageIds }));
+	return { moved, folderName, remembered, undo };
 }
 
 /** Moves whole threads, which is what the list actually offers. */

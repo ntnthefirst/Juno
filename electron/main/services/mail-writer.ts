@@ -82,6 +82,44 @@ export function openMailboxWriter(connection: MailConnection): Promise<MailboxWr
 }
 
 /**
+ * Failures that say the network blinked rather than that the server refused.
+ * A laptop waking from sleep, a wifi hand-over or a provider dropping an idle
+ * socket all look like this, and the second attempt a moment later is what a
+ * mail client does before it bothers a person with it.
+ */
+const TRANSIENT = new Set(["ECONNRESET", "EPIPE", "ETIMEDOUT", "ETIMEOUT", "CONNECT_TIMEOUT", "EAI_AGAIN", "NoConnection"]);
+
+/** How long to wait before each further attempt to connect. Two retries, then the error stands. */
+let retryDelays = [600, 1800];
+
+/** For tests, which do not want to wait. */
+export function configureWriterRetry(delays: number[]): void {
+	retryDelays = delays;
+}
+
+export function isTransientMailError(error: unknown): boolean {
+	const code = (error as { code?: unknown } | null)?.code;
+	return typeof code === "string" && TRANSIENT.has(code);
+}
+
+/**
+ * Connects, trying again on a transient failure. Only the connection is
+ * retried, never the work: a move that was half done when the line dropped is
+ * not repeated blind, because the server may already have done the first half.
+ */
+async function connectWithRetry(connection: MailConnection): Promise<MailboxWriter> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			return await openMailboxWriter(connection);
+		} catch (error) {
+			const delay = retryDelays[attempt];
+			if (delay === undefined || !isTransientMailError(error)) throw error;
+			await new Promise((resolve) => setTimeout(resolve, delay));
+		}
+	}
+}
+
+/**
  * Opens a writer for an account, runs the work, and logs out in a `finally`
  * whatever happened. A leaked connection is an account locked out for minutes,
  * because providers cap concurrent connections in the low single digits.
@@ -98,7 +136,7 @@ export async function withWriter<T>(
 	const connection = connectionFor(accountId, db);
 	let writer: MailboxWriter | null = null;
 	try {
-		writer = await openMailboxWriter(connection);
+		writer = await connectWithRetry(connection);
 		return await work(writer);
 	} catch (error) {
 		throw new Error(describeMailError(error, connection));

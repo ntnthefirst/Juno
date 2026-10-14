@@ -2230,6 +2230,13 @@ export interface MailFileResult {
 	/** The destination, by the name the folder list shows. */
 	folderName: string;
 	remembered: number;
+	/**
+	 * How to put it back: each folder the messages came from, with the ids they
+	 * have now. Moving those ids to that folder is the undo. A message the
+	 * server would not place, and the next sync has not found yet, is left out,
+	 * because it has no row to move.
+	 */
+	undo: { folderId: string; messageIds: string[] }[];
 }
 
 export type MailSyncPhase = "idle" | "connecting" | "folders" | "headers" | "bodies" | "done" | "failed";

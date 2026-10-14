@@ -281,6 +281,7 @@ const api: JunoApi = {
 		server: {
 			status: () => call("agent.server.status"),
 			setEnabled: (enabled) => call("agent.server.setEnabled", enabled),
+			setBackground: (background) => call("agent.server.setBackground", background),
 			setPort: (port) => call("agent.server.setPort", port),
 		},
 		install: {

@@ -506,6 +506,8 @@ export interface JunoApi {
 			status(): Promise<McpServerStatus>;
 			/** The switch. Off stops the listener; the clients already let in are kept. */
 			setEnabled(enabled: boolean): Promise<McpServerStatus>;
+			/** Start with the computer and keep running with no window. */
+			setBackground(background: boolean): Promise<McpServerStatus>;
 			/** A port of the person's choosing, or null for the default. */
 			setPort(port: number | null): Promise<McpServerStatus>;
 		};

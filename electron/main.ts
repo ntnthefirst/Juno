@@ -53,6 +53,7 @@ import { configureMailTransport } from "./main/services/mail-transport";
 import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
+import { configureBackground, launchedHidden, runsInBackground, syncBackground } from "./main/background";
 import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
 import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
@@ -72,7 +73,8 @@ if (!app.requestSingleInstanceLock()) {
 } else {
 	// One main window, and a second launch focuses it rather than opening one.
 	// windows/index.ts is what actually holds that rule.
-	app.on("second-instance", () => focusMainWindow());
+	// With no window up (a background start), a second launch opens one.
+	app.on("second-instance", () => openMainWindow(isDev));
 
 	app.whenReady().then(async () => {
 		// Before the first window, so the splash is the first thing carrying the
@@ -81,13 +83,13 @@ if (!app.requestSingleInstanceLock()) {
 
 		// Up before any of the slow work, and down when the window can paint.
 		// A smoke run has nobody watching and an always-on-top window would sit
-		// over the screenshots it takes.
-		if (!process.env.JUNO_SMOKE) showSplash();
-
+		// over the screenshots it takes. A start at login shows nothing at all.
 		// Paths are injected here rather than read inside each service, so no
 		// service has to import `electron` and every one stays testable in plain
 		// Node.
 		settings.configureSettings(userDataDir());
+		const hidden = await launchedHidden();
+		if (!process.env.JUNO_SMOKE && !hidden) showSplash();
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
 		configureDocuments(documentsDir());
 		configureDocumentStorage(documentsDir());
@@ -204,7 +206,10 @@ if (!app.requestSingleInstanceLock()) {
 			defaultPort: app.isPackaged ? 5866 : 5867,
 			version: app.getVersion(),
 			ephemeralPort: Boolean(process.env.JUNO_SMOKE),
+			onBackgroundChange: () => syncBackground(),
 		});
+		configureBackground(() => openMainWindow(isDev));
+		await syncBackground();
 
 		// In development only the mail host is served; the window comes from Vite.
 		registerAppScheme(isDev ? null : join(app.getAppPath(), "dist"));
@@ -213,10 +218,10 @@ if (!app.requestSingleInstanceLock()) {
 		// to happen before the first window loads anything.
 		installSessionPolicy(isDev);
 
-		const window = openMainWindow(isDev);
+		const window = hidden ? null : openMainWindow(isDev);
 		// Not on create: a window that exists but has not painted is a grey
 		// rectangle, which is the exact gap the splash is covering.
-		window.once("ready-to-show", () => closeSplash());
+		window?.once("ready-to-show", () => closeSplash());
 
 		// One summary a day, never one per reminder. See services/notifications.ts.
 		if (!process.env.JUNO_SMOKE) {
@@ -236,7 +241,7 @@ if (!app.requestSingleInstanceLock()) {
 
 		// Lets `npm run smoke` prove the real application boots, paints and reaches
 		// its database, rather than proving only that it compiles.
-		if (process.env.JUNO_SMOKE) {
+		if (process.env.JUNO_SMOKE && window) {
 			// Electron 41 passes a single event object here. The old positional
 			// signature still fires but logs a deprecation warning on every message.
 			window.webContents.on("console-message", (event) => {
@@ -4367,6 +4372,13 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	app.on("window-all-closed", () => {
+		// Running in the background keeps the agent server up. The window is gone,
+		// so the lock goes on: opening Juno again asks for the PIN, the same as a
+		// walk-up to a laptop that was left (decision 15).
+		if (runsInBackground()) {
+			lock.lock();
+			return;
+		}
 		if (process.platform !== "darwin") app.quit();
 	});
 

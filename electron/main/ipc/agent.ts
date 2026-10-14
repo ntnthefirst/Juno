@@ -23,7 +23,7 @@ import * as automations from "../services/automations";
 import * as briefing from "../services/briefing";
 import * as clientInstall from "../services/agent-install";
 import * as claudeDesktop from "../services/claude-desktop";
-import { serverStatus, setServerEnabled, setServerPort, summaries } from "../mcp";
+import { serverStatus, setServerBackground, setServerEnabled, setServerPort, summaries } from "../mcp";
 import { getMainWindow, getSettingsWindow } from "../windows";
 
 /**
@@ -43,6 +43,7 @@ function bringForward(): void {
 export function registerAgentIpc(): void {
 	ipcMain.handle("agent.server.status", () => serverStatus());
 	ipcMain.handle("agent.server.setEnabled", (_event, enabled: boolean) => setServerEnabled(enabled === true));
+	ipcMain.handle("agent.server.setBackground", (_event, background: boolean) => setServerBackground(background === true));
 	ipcMain.handle("agent.server.setPort", (_event, port: number | null) => setServerPort(port));
 	ipcMain.handle("agent.install.targets", () => clientInstall.targets());
 	ipcMain.handle("agent.install.write", (_event, clientId: string) => clientInstall.install(clientId));

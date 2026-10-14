@@ -599,6 +599,12 @@ export interface McpServerSettings {
 	enabled: boolean;
 	/** Null means the default for this build. */
 	port: number | null;
+	/**
+	 * Start with the computer and stay running with no window, so an agent can
+	 * reach Juno without anyone opening it. On by default; it only means
+	 * something while the server is on.
+	 */
+	background: boolean;
 }
 
 export interface OnboardingState {
@@ -2912,6 +2918,8 @@ export interface McpServerStatus {
 	port: number;
 	/** The port Juno uses when nobody picked one. */
 	defaultPort: number;
+	/** Whether Juno starts with the computer and keeps running with no window open. */
+	background: boolean;
 	/** What a client is pointed at. */
 	url: string;
 	/** Why it is not running, when it is enabled and is not. */

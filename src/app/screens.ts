@@ -15,8 +15,9 @@ export type ScreenId =
 export type ScreenItem = { id: ScreenId; label: string; icon: IconName };
 
 /**
- * The sidebar is a rail of icons and nothing else, so it is two short lists:
- * the places the work happens, then the two that are about Juno itself.
+ * The sidebar is a rail of icons and nothing else: the places the work
+ * happens, and Settings at the foot. The agent is about Juno itself and sits
+ * in the title bar, beside the window's own buttons.
  *
  * Mail and Documents each hold a second screen behind a switch at the top of
  * the page (`SCREEN_SWITCH`), and Reminders is reached from the overview, so
@@ -31,8 +32,6 @@ export const SIDEBAR_TOP: ScreenItem[] = [
 	{ id: "mail", label: "Mail", icon: "mail" },
 	{ id: "documents", label: "Documents", icon: "documents" },
 ];
-
-export const SIDEBAR_BOTTOM: ScreenItem[] = [{ id: "agent", label: "Agent", icon: "agent" }];
 
 export const SCREEN_LABELS: Record<ScreenId, string> = {
 	overview: "Overview",

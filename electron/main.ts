@@ -4255,16 +4255,17 @@ if (!app.requestSingleInstanceLock()) {
 								console.log(`SMOKE_DEMO settings pages=${pages.length}`);
 								closeSettingsWindow();
 
-								// The sidebar is a rail of icons and never opens. Eight entries (six
-								// places, the agent and settings), no text of its own, and a label in a
-								// tooltip that appears when the pointer rests on one.
+								// The sidebar is a rail of icons and never opens. Seven entries (six
+								// places and settings; the agent is in the title bar), no text of its
+								// own, and a label in a tooltip that appears when the pointer rests on one.
 								await new Promise((r) => setTimeout(r, 400));
 								const rail = (await window.webContents.executeJavaScript(
 									`(async () => {
 										const nav = document.querySelector("nav[data-sidebar]");
 										if (!nav) return "no sidebar";
 										const entries = nav.querySelectorAll("button[data-nav]").length;
-										if (entries !== 8) return "the sidebar has " + entries + " entries, not 8";
+										if (entries !== 7) return "the sidebar has " + entries + " entries, not 7";
+										if (!document.querySelector("header button[data-nav=agent]")) return "the agent is not in the title bar";
 										if (nav.textContent.trim() !== "") return "the sidebar draws text: " + nav.textContent.trim();
 										const width = Math.round(nav.getBoundingClientRect().width);
 										if (width > 64) return "the sidebar is " + width + "px wide";

@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import { Icon, type IconName } from "../components/Icon";
 import { Tooltip } from "../components/Tooltip";
 import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
-import { SIDEBAR_BOTTOM, SIDEBAR_TOP, type ScreenId } from "./screens";
+import { SIDEBAR_TOP, type ScreenId } from "./screens";
 
 type SidebarProps = {
 	/** The entry to light. A screen without an entry of its own lights the one it belongs to. */
@@ -12,34 +11,25 @@ type SidebarProps = {
 };
 
 /**
- * A rail of icons, always. It never opens: the names are in the tooltips, and
- * the only states an entry has are its colour, soft at rest, firmer under the
- * pointer and iris once it is the page you are on. No fill and no outline
+ * A rail of icons, always, sized like a code editor's activity bar: 48px wide,
+ * 48px per entry, 24px icons. It never opens: the names are in the tooltips,
+ * and the only states an entry has are its colour, soft at rest, firmer under
+ * the pointer and iris once it is the page you are on. No fill and no outline
  * mark any of the three. The ring a keyboard user needs is the one global
  * `:focus-visible` rule, which a mouse click never triggers.
+ *
+ * The agent is not here. It is about Juno rather than a place the work
+ * happens, so it sits in the title bar beside the window's own buttons.
  */
 export function Sidebar({ current, onNavigate, onOpenSettings }: SidebarProps) {
-	const [pending, setPending] = useState(0);
-
-	useEffect(() => {
-		const refresh = () => {
-			void window.juno.agent.actions
-				.pendingCount()
-				.then(setPending)
-				.catch(() => setPending(0));
-		};
-		refresh();
-		return window.juno.agent.actions.onChange(refresh);
-	}, []);
-
 	return (
 		<nav
 			aria-label="Sections"
 			data-sidebar
 			style={{ width: "var(--sidebar-rail-width)" }}
-			className="flex flex-none flex-col items-center border-r border-[var(--line)] bg-[var(--paper)] px-2 py-3"
+			className="flex flex-none flex-col items-stretch border-r border-[var(--line)] bg-[var(--paper)]"
 		>
-			<div className="flex min-h-0 w-full flex-1 flex-col gap-1">
+			<div className="flex min-h-0 w-full flex-1 flex-col">
 				{SIDEBAR_TOP.map((item) => (
 					<NavButton
 						key={item.id}
@@ -53,19 +43,7 @@ export function Sidebar({ current, onNavigate, onOpenSettings }: SidebarProps) {
 				))}
 			</div>
 
-			<div className="flex w-full flex-none flex-col gap-1">
-				{SIDEBAR_BOTTOM.map((item) => (
-					<NavButton
-						key={item.id}
-						navId={item.id}
-						icon={item.icon}
-						label={item.label}
-						active={item.id === current}
-						badge={item.id === "agent" ? pending : 0}
-						combo={SCREEN_COMBOS[item.id]}
-						onClick={() => onNavigate(item.id)}
-					/>
-				))}
+			<div className="flex w-full flex-none flex-col">
 				<NavButton
 					navId="settings"
 					icon="settings"
@@ -88,36 +66,26 @@ type NavButtonProps = {
 	icon: IconName;
 	label: string;
 	active: boolean;
-	/** A dot when more than zero, and the count in the name. Nothing else here counts. */
-	badge?: number;
 	/** The shortcut, drawn in the tooltip. */
 	combo?: string | undefined;
 	onClick: () => void;
 };
 
-function NavButton({ navId, icon, label, active, badge = 0, combo, onClick }: NavButtonProps) {
-	const name = badge > 0 ? `${label}, ${badge} waiting for you` : label;
-
+function NavButton({ navId, icon, label, active, combo, onClick }: NavButtonProps) {
 	return (
-		<Tooltip label={name} keys={combo ? formatCombo(combo) : undefined} className="flex w-full">
+		<Tooltip label={label} keys={combo ? formatCombo(combo) : undefined} className="flex w-full">
 			<button
 				type="button"
 				data-nav={navId}
 				aria-current={active ? "page" : undefined}
-				aria-label={name}
+				aria-label={label}
 				onClick={onClick}
 				className={[
-					"relative flex h-10 w-full items-center justify-center rounded-[var(--radius-md)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+					"relative flex h-12 w-full items-center justify-center transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 					active ? "text-[var(--accent)]" : "text-[var(--ink-faint)] hover:text-[var(--ink)]",
 				].join(" ")}
 			>
-				<Icon name={icon} size={20} strokeWidth={2} />
-				{badge > 0 ? (
-					<span
-						aria-hidden
-						className="absolute right-[9px] top-[9px] h-2 w-2 rounded-[var(--radius-full)] bg-[var(--warn)] ring-2 ring-[var(--paper)]"
-					/>
-				) : null}
+				<Icon name={icon} size={24} strokeWidth={1.7} />
 			</button>
 		</Tooltip>
 	);

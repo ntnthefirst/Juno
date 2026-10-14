@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	MailAccount,
 	MailFolder,
+	MailFileResult,
+	MailOutboxCounts,
 	MailOutboxMessage,
 	MailReplyMode,
 	MailSyncStatus,
@@ -16,6 +18,8 @@ import { Toast } from "../../components/Toast";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { messageOf } from "../../lib/errors";
 import { useScreenAction } from "../../lib/screen-actions";
+import { useContextMenu } from "../../lib/use-context-menu";
+import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
 import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
@@ -28,10 +32,14 @@ import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { OutboxDetail } from "./OutboxDetail";
 import { ThreadList, type ThreadAction } from "./ThreadList";
 import { ThreadToolbar } from "./ThreadToolbar";
+import { MailStatusBar } from "./MailStatusBar";
 import { StyledMailPane } from "./StyledMailPane";
 import { ThreadView } from "./ThreadView";
 
 type LinkTarget = { threadId: string; currentClientId: string | null; senderAddress: string | null };
+
+type ToastAction = { label: string; run: () => void };
+type Toast = { id: number; text: string; action: ToastAction | undefined };
 
 /**
  * The one thing open in the reading pane. Drafts lists two kinds of row, a
@@ -95,7 +103,24 @@ export function MailScreen() {
 	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [lastPicked, setLastPicked] = useState<string | null>(null);
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});
-	const [notice, setNotice] = useState<string | null>(null);
+	// One message at a time at the foot of the screen, sometimes with the one
+	// thing worth doing about it (undo, try again). Each new one is a new toast,
+	// so its countdown starts over.
+	const [toast, setToast] = useState<Toast | null>(null);
+	const toastCount = useRef(0);
+	const say = useCallback((text: string, action?: ToastAction) => {
+		toastCount.current += 1;
+		setToast({ id: toastCount.current, text, action });
+	}, []);
+	const setNotice = useCallback(
+		(text: string | null) => {
+			if (text === null) setToast(null);
+			else say(text);
+		},
+		[say],
+	);
+	const [online, setOnline] = useState(() => navigator.onLine);
+	const [outboxCounts, setOutboxCounts] = useState<MailOutboxCounts | null>(null);
 	const [compose, setCompose] = useState<ComposeSeed | null>(null);
 	useScreenAction("mail", () => setCompose({}));
 	const [accountsVersion, setAccountsVersion] = useState(0);
@@ -109,6 +134,8 @@ export function MailScreen() {
 	const [folderDelete, setFolderDelete] = useState<MailFolder | null>(null);
 	const [folderEmpty, setFolderEmpty] = useState<MailFolder | null>(null);
 	const [folderBusy, setFolderBusy] = useState(false);
+	// A right click on the list where there is no row: what the list as a whole can do.
+	const listMenu = useContextMenu();
 	// The styled mail column on the right. Remembered for the session, so coming
 	// back to Mail finds it the way it was left.
 	const [stylesOpen, setStylesOpen] = useState(() => {
@@ -148,7 +175,7 @@ export function MailScreen() {
 		}
 		open();
 		return onDraftOffered(open);
-	}, []);
+	}, [setNotice]);
 
 	const loadAccounts = useCallback(async () => {
 		const list = await window.juno.mail.accounts.list();
@@ -185,7 +212,7 @@ export function MailScreen() {
 		return () => {
 			cancelled = true;
 		};
-	}, [loadAccounts, accountsVersion, outboxVersion]);
+	}, [loadAccounts, accountsVersion, outboxVersion, setNotice]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -209,6 +236,49 @@ export function MailScreen() {
 			cancelled = true;
 			offSync();
 			offOutbox();
+		};
+	}, []);
+
+	// What is still waiting to go out, for the status line. Refreshed whenever
+	// the sender reports or the lists reload.
+	useEffect(() => {
+		let cancelled = false;
+		window.juno.mail.outbox
+			.counts()
+			.then((counts) => {
+				if (!cancelled) setOutboxCounts(counts);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [outboxVersion, accountsVersion]);
+
+	// Recovering on its own is most of what makes a mail client feel solid. When
+	// the connection comes back, every account syncs and the outbox is looked at
+	// again. When the window comes back to the front after a while away, the
+	// accounts sync too, at most once every two minutes.
+	const lastAutoSync = useRef(0);
+	useEffect(() => {
+		const goOnline = () => {
+			setOnline(true);
+			lastAutoSync.current = Date.now();
+			void window.juno.mail.sync.run().catch(() => undefined);
+			setOutboxVersion((v) => v + 1);
+		};
+		const goOffline = () => setOnline(false);
+		const onFocus = () => {
+			if (!navigator.onLine || Date.now() - lastAutoSync.current < 120_000) return;
+			lastAutoSync.current = Date.now();
+			void window.juno.mail.sync.run().catch(() => undefined);
+		};
+		window.addEventListener("online", goOnline);
+		window.addEventListener("offline", goOffline);
+		window.addEventListener("focus", onFocus);
+		return () => {
+			window.removeEventListener("online", goOnline);
+			window.removeEventListener("offline", goOffline);
+			window.removeEventListener("focus", onFocus);
 		};
 	}, []);
 
@@ -443,32 +513,72 @@ export function MailScreen() {
 		setAccountsVersion((v) => v + 1);
 	}
 
+	/**
+	 * Puts filed mail back where it came from, from what the move reported.
+	 * Each folder it left is one move, so a selection gathered from two folders
+	 * goes back to both.
+	 */
+	async function undoFile(result: MailFileResult) {
+		try {
+			let restored = 0;
+			for (const group of result.undo) {
+				const back = await window.juno.mail.file.moveMessagesToFolder(group.messageIds, group.folderId);
+				restored += back.moved;
+			}
+			setAccountsVersion((v) => v + 1);
+			say(restored === 1 ? "Put back." : `${restored} messages put back.`);
+		} catch (cause: unknown) {
+			say(messageOf(cause));
+		}
+	}
+
+	/** A filing result in words, with Undo when there is something to put back. */
+	function reportFiled(text: string, result: MailFileResult) {
+		say(text, result.undo.length > 0 ? { label: "Undo", run: () => void undoFile(result) } : undefined);
+	}
+
 	async function fileThreads(action: "archive" | "junk" | "trash", ids: string[]) {
 		if (ids.length === 0) return;
 		const verbs = { archive: "archived", junk: "moved to junk", trash: "moved to trash" };
 		try {
 			const result = await window.juno.mail.file[action](ids);
 			afterFile(ids);
-			setNotice(describeMailFileResult(verbs[action], ids.length, result));
+			reportFiled(describeMailFileResult(verbs[action], ids.length, result), result);
 		} catch (cause: unknown) {
-			setNotice(messageOf(cause));
+			say(messageOf(cause), { label: "Try again", run: () => void fileThreads(action, ids) });
 		}
 	}
 
+	/**
+	 * Read and unread show at once, the way a mail client does, and are put
+	 * back if the server says no. Waiting on a round trip to un-bold a row is
+	 * what makes a list feel stuck.
+	 */
 	async function setThreadsReadState(ids: string[], seen: boolean) {
 		if (ids.length === 0) return;
+		const before = threads;
+		setThreads(
+			(current) =>
+				current?.map((thread) =>
+					ids.includes(thread.id) ? { ...thread, unreadCount: seen ? 0 : Math.max(1, thread.unreadCount) } : thread,
+				) ?? current,
+		);
 		try {
 			await window.juno.mail.file.setThreadsSeen(ids, seen);
 			setAccountsVersion((v) => v + 1);
-			const noun = ids.length === 1 ? "thread" : "threads";
-			setNotice(seen ? `Marked ${ids.length} ${noun} as read.` : `Marked ${ids.length} ${noun} as unread.`);
 		} catch (cause: unknown) {
-			setNotice(messageOf(cause));
+			setThreads(before);
+			say(messageOf(cause), { label: "Try again", run: () => void setThreadsReadState(ids, seen) });
 		}
 	}
 
+	/** The same for flags: shown at once, put back on a refusal. */
 	async function setThreadsFlagged(ids: string[], flagged: boolean) {
 		if (ids.length === 0) return;
+		const before = threads;
+		setThreads(
+			(current) => current?.map((thread) => (ids.includes(thread.id) ? { ...thread, isFlagged: flagged } : thread)) ?? current,
+		);
 		try {
 			// Flags live on messages, and a thread's flag is every message in it.
 			const messageIds: string[] = [];
@@ -478,10 +588,9 @@ export function MailScreen() {
 			}
 			await window.juno.mail.file.setFlagged(messageIds, flagged);
 			setAccountsVersion((v) => v + 1);
-			const noun = ids.length === 1 ? "thread" : "threads";
-			setNotice(flagged ? `Flagged ${ids.length} ${noun}.` : `Cleared the flag on ${ids.length} ${noun}.`);
 		} catch (cause: unknown) {
-			setNotice(messageOf(cause));
+			setThreads(before);
+			say(messageOf(cause), { label: "Try again", run: () => void setThreadsFlagged(ids, flagged) });
 		}
 	}
 
@@ -500,7 +609,7 @@ export function MailScreen() {
 	async function moveThreadsTo(ids: string[], folderId: string) {
 		const result = await window.juno.mail.file.moveToFolder(ids, folderId);
 		afterFile(ids);
-		setNotice(describeMailFileResult(`moved to ${result.folderName}`, ids.length, result));
+		reportFiled(describeMailFileResult(`moved to ${result.folderName}`, ids.length, result), result);
 	}
 
 	async function confirmMove(folderId: string) {
@@ -620,6 +729,17 @@ export function MailScreen() {
 		}
 	}
 
+	/** Sends a failed message again, or stops one that has not gone yet. */
+	async function outboxStep(step: "retry" | "cancel", id: string) {
+		try {
+			await window.juno.mail.outbox[step](id);
+			setOutboxVersion((v) => v + 1);
+			say(step === "retry" ? "Sending again." : "Sending cancelled.");
+		} catch (cause: unknown) {
+			say(messageOf(cause));
+		}
+	}
+
 	async function confirmFolderEmpty() {
 		if (!folderEmpty) return;
 		setFolderBusy(true);
@@ -728,6 +848,48 @@ export function MailScreen() {
 		? (activeFolders.find((f) => f.id === selection.folderId) ?? null)
 		: null;
 	const moveAccountId = moveTarget ? (threadById(moveTarget[0] ?? "")?.accountId ?? null) : null;
+
+	function listItems(): MenuItem[] {
+		const visible = (threads ?? []).map((thread) => thread.id);
+		return [
+			{
+				id: "new",
+				label: "New message",
+				icon: "add",
+				onSelect: () => setCompose({ accountId: selection?.accountId ?? accounts?.[0]?.id }),
+			},
+			{
+				id: "sync",
+				label: "Sync now",
+				icon: "sync",
+				onSelect: () => void syncNow(selection?.accountId ?? undefined),
+			},
+			{
+				id: "select-all",
+				label: "Select all",
+				icon: "check",
+				separatorBefore: true,
+				disabled: visible.length === 0,
+				onSelect: selectEveryThread,
+			},
+			{
+				id: "read-all",
+				label: "Mark all read",
+				icon: "read",
+				disabled: !selectedFolder || selectedFolder.unreadCount === 0,
+				onSelect: () => {
+					if (selectedFolder) handleFolderAction("markAllRead", selectedFolder);
+				},
+			},
+			{
+				id: "styled",
+				label: stylesOpen ? "Hide styled mail" : "Show styled mail",
+				icon: "templates",
+				separatorBefore: true,
+				onSelect: () => setStylesOpen((open) => !open),
+			},
+		];
+	}
 	const pending = Object.values(sync).reduce((total, status) => total + status.pending, 0);
 
 	return (
@@ -790,6 +952,21 @@ export function MailScreen() {
 						}}
 					/>
 				</div>
+				<MailStatusBar
+					accounts={accounts}
+					sync={sync}
+					online={online}
+					outbox={outboxCounts}
+					onRetry={(id) => void syncNow(id)}
+					onShowOutbox={() => {
+						const account = selection?.accountId ?? null;
+						const drafts = account ? (folders[account]?.find((f) => f.specialUse === "drafts")?.id ?? null) : null;
+						setThreads(null);
+						setSelection({ accountId: account, folderId: drafts, view: "drafts" });
+						openThread(null);
+						clearThreadSelection();
+					}}
+				/>
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
@@ -850,7 +1027,7 @@ export function MailScreen() {
 							</div>
 						) : null}
 
-						<div className="min-h-0 flex-1 overflow-y-auto">
+						<div className="min-h-0 flex-1 overflow-y-auto" onContextMenu={listMenu.open}>
 							<ThreadList
 								threads={threads}
 								{...(showingDrafts
@@ -865,6 +1042,8 @@ export function MailScreen() {
 													if (row?.state === "draft" || row?.state === "pending") setCompose({ draft: row });
 													else setOpened({ kind: "outbox", id });
 												},
+												onRetry: (id: string) => void outboxStep("retry", id),
+												onCancel: (id: string) => void outboxStep("cancel", id),
 											},
 										}
 									: {})}
@@ -903,6 +1082,15 @@ export function MailScreen() {
 					</div>
 				)}
 			</div>
+
+			{listMenu.at ? (
+				<ContextMenu
+					at={listMenu.at}
+					items={listItems()}
+					onClose={listMenu.close}
+					ariaLabel="Actions for this list"
+				/>
+			) : null}
 
 			{stylesOpen ? (
 				<StyledMailPane
@@ -1023,10 +1211,21 @@ export function MailScreen() {
 				/>
 			) : null}
 
-			{notice ? (
+			{toast ? (
 				<Toast
-					message={notice}
-					onDismiss={() => setNotice(null)}
+					key={toast.id}
+					message={toast.text}
+					actionLabel={toast.action?.label}
+					onAction={
+						toast.action
+							? () => {
+									const run = toast.action?.run;
+									setToast(null);
+									run?.();
+								}
+							: undefined
+					}
+					onDismiss={() => setToast(null)}
 				/>
 			) : null}
 		</div>

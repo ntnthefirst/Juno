@@ -13,6 +13,7 @@ import {
 	type ImportOutcome,
 } from "../../lib/pdf-drop";
 import { useFileDrop } from "../../lib/use-file-drop";
+import { AddExistingDialog } from "./AddExistingDialog";
 import { ImportFlow } from "./ImportFlow";
 import { VersionCount } from "./VersionCount";
 import { VersionList } from "./VersionList";
@@ -45,9 +46,10 @@ function formatDate(date: string | null): string {
 }
 
 /**
- * A client's or a project's documents, with the two ways to add one. The plus
- * offers a template or an import, and files dropped on the panel are imported
- * for this client or project without being asked which one. A project that has
+ * A client's or a project's documents, with the three ways to add one. The plus
+ * offers a template, a PDF from this computer, or a document Juno already
+ * has, and files dropped on the panel are imported for this client or project
+ * without being asked which one. A project that has
  * a client brings its client along (document-owner.ts), so a file dropped on
  * a client's project shows on the client's page too.
  */
@@ -63,6 +65,7 @@ export function DocumentsPanel({
 	const [expanded, setExpanded] = useState<string[]>([]);
 	const [problems, setProblems] = useState<string[]>([]);
 	const [notice, setNotice] = useState<string | null>(null);
+	const [addingExisting, setAddingExisting] = useState(false);
 
 	const clientId = "clientId" in scope ? scope.clientId : undefined;
 	const projectId = "projectId" in scope ? scope.projectId : undefined;
@@ -126,6 +129,15 @@ export function DocumentsPanel({
 					items={[
 						{ id: "template", label: "From a template", icon: "documents", onSelect: onGenerate },
 						{ id: "import", label: "Import a PDF", icon: "import", onSelect: () => void choose() },
+						{
+							id: "existing",
+							label: "Add an existing document",
+							icon: "link",
+							onSelect: () => {
+								setNotice(null);
+								setAddingExisting(true);
+							},
+						},
 					]}
 					icon="add"
 				/>
@@ -144,7 +156,7 @@ export function DocumentsPanel({
 				<div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--line-strong)] px-6 py-10 text-center">
 					<p className="font-[var(--weight-medium)]">No documents yet</p>
 					<p className="mx-auto mt-1 max-w-[46ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-						Drop PDF files here, or use the plus to start one from a template or import one. A file that is an existing document again is offered as a new version.
+						Drop PDF files here, or use the plus to start one from a template, import one, or add a document Juno already has. A file that is an existing document again is offered as a new version.
 					</p>
 				</div>
 			) : (
@@ -221,6 +233,19 @@ export function DocumentsPanel({
 						))}
 					</ul>
 				</div>
+			) : null}
+			{addingExisting ? (
+				<AddExistingDialog
+					scope={scope}
+					name={name}
+					onClose={() => setAddingExisting(false)}
+					onAdded={(record, from) => {
+						setAddingExisting(false);
+						setNotice(from === "Not linked" ? `${record.title} added.` : `${record.title} moved here from ${from}.`);
+						reload();
+						onChanged();
+					}}
+				/>
 			) : null}
 			{items ? (
 				<ImportFlow

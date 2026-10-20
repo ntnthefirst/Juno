@@ -348,3 +348,58 @@ export async function addVersionFromPath(
 ): Promise<DocumentVersion> {
 	return appendVersion(input.documentId, resolvePath(input.sourcePath), db);
 }
+
+/**
+ * A PDF attached to a mail from this machine with "Add to documents" ticked,
+ * kept once the mail has gone and not before. Kept under the mail's client and
+ * project; when the two do not fit together, under the client alone.
+ *
+ * The same bytes already kept anywhere are not kept twice, and a file named
+ * like a document in the same place becomes a new version of it, because
+ * sending "Offerte.pdf" again is sending the next version of the offer.
+ */
+export async function keepSentFile(
+	input: {
+		data: Uint8Array;
+		fileName: string;
+		fileDate: string;
+		clientId: string | null;
+		projectId: string | null;
+	},
+	db: Db = getDb(),
+): Promise<DocumentRecord> {
+	const bytes = Buffer.from(input.data);
+	const fileName = basename(input.fileName).trim() || "Document.pdf";
+	checkPdf(bytes, fileName);
+	const file: Resolved = {
+		bytes,
+		fileName,
+		fileDate: validDate(input.fileDate, new Date().toISOString()),
+		source: "mail",
+		mailAttachmentId: null,
+		threadClientId: null,
+	};
+
+	let owner;
+	try {
+		owner = resolveOwner({ clientId: input.clientId, projectId: input.projectId }, db);
+	} catch {
+		owner = resolveOwner({ clientId: input.clientId }, db);
+	}
+
+	const hash = versions.hashBytes(bytes);
+	const same = versions.fingerprints(db).find((row) => row.fileHash === hash);
+	if (same) {
+		const record = await get(same.documentId, db);
+		if (record) return record;
+	}
+
+	const named = documentTitled(owner, titleOf(fileName), db);
+	if (named) {
+		await appendVersion(named.id, file, db);
+		const record = await get(named.id, db);
+		if (!record) throw new Error("The version was written but the document could not be read back.");
+		return record;
+	}
+	return createDocument(file, { clientId: owner.clientId, projectId: owner.projectId }, db);
+}

@@ -543,6 +543,12 @@ const api: JunoApi = {
 			cancel: (id) => call("mail.outbox.cancel", id),
 			retry: (id) => call("mail.outbox.retry", id),
 			remove: (id) => call("mail.outbox.remove", id),
+			files: {
+				choose: (outboxId) => call("mail.outbox.files.choose", outboxId),
+				add: (outboxId, input) => call("mail.outbox.files.add", outboxId, input),
+				remove: (fileId) => call("mail.outbox.files.remove", fileId),
+				setKeep: (fileId, keep) => call("mail.outbox.files.setKeep", fileId, keep),
+			},
 			onChange: (listener) => {
 				const handler = (_event: Electron.IpcRendererEvent, message: MailOutboxMessage) =>
 					listener(message);

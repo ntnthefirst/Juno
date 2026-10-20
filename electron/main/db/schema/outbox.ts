@@ -164,3 +164,42 @@ export const mailOutboxAttachments = sqliteTable(
 		index("mail_outbox_attachments_document_idx").on(t.documentId),
 	],
 );
+
+/**
+ * A file attached to an outgoing message from this machine rather than from
+ * Documents: picked in the composer or dropped on it.
+ *
+ * It is not a document and is not kept as one unless `keep_as_document` is
+ * set, and even then only once the message has gone. Until it is sent, the
+ * bytes are a copy under the userData root at `relative_path`, so the draft
+ * still has its file when the original is moved or deleted. Once the message
+ * is sent or the draft is gone the copy is removed and the row stays, so the
+ * outbox can still say what went with it.
+ */
+export const mailOutboxFiles = sqliteTable(
+	"mail_outbox_files",
+	{
+		...standardColumns,
+		outboxId: text("outbox_id")
+			.notNull()
+			.references(() => mailOutbox.id),
+		/** The name the recipient sees, with any path stripped. */
+		fileName: text("file_name").notNull(),
+		mimeType: text("mime_type").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		/** The original's last-modified time, so a kept document dates from the file. */
+		fileDate: text("file_date").notNull(),
+		/** Relative to the outbox files folder, built by the service from ids. Null once removed. */
+		relativePath: text("relative_path"),
+		keepAsDocument: integer("keep_as_document", { mode: "boolean" }).notNull().default(false),
+		/** The document it was kept as, once sent. */
+		documentId: text("document_id").references(() => documents.id),
+		/** Why keeping it failed. The message went regardless. */
+		keepError: text("keep_error"),
+	},
+	(t) => [
+		index("mail_outbox_files_outbox_idx").on(t.outboxId),
+		index("mail_outbox_files_document_idx").on(t.documentId),
+		index("mail_outbox_files_deleted_idx").on(t.deletedAt),
+	],
+);

@@ -914,6 +914,19 @@ export interface JunoApi {
 			cancel(id: string): Promise<MailOutboxMessage>;
 			retry(id: string): Promise<MailOutboxMessage>;
 			remove(id: string): Promise<MailOutboxMessage>;
+			/**
+			 * Files attached from this machine, of any kind. Sent and not kept,
+			 * unless keep is set for a PDF, which then becomes a document once the
+			 * message has gone.
+			 */
+			files: {
+				/** The operating system's picker. Null when it is cancelled. */
+				choose(outboxId: string): Promise<MailOutboxMessage | null>;
+				/** A dropped file, as bytes. Never a path. */
+				add(outboxId: string, input: { fileName: string; data: Uint8Array; fileDate?: string }): Promise<MailOutboxMessage>;
+				remove(fileId: string): Promise<MailOutboxMessage>;
+				setKeep(fileId: string, keep: boolean): Promise<MailOutboxMessage>;
+			};
 			/** State changes, pushed by the sender as it works. */
 			onChange(listener: (message: MailOutboxMessage) => void): () => void;
 			/**

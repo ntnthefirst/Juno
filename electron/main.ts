@@ -18,6 +18,7 @@ import {
 	databasePath,
 	documentsDir,
 	mailDir,
+	outboxFilesDir,
 	projectsDir,
 	templateAssetsDir,
 	userDataDir,
@@ -33,6 +34,7 @@ import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
+import { configureOutboxFiles, prune as pruneOutboxFiles } from "./main/services/mail-outbox-files";
 import { configureTemplateAssets } from "./main/services/document-template-assets";
 import { configureProjectStorage } from "./main/services/project-storage";
 import * as projectRunner from "./main/services/project-runner";
@@ -96,6 +98,7 @@ if (!app.requestSingleInstanceLock()) {
 		configureTemplateAssets(templateAssetsDir());
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
+		configureOutboxFiles(outboxFilesDir());
 		// Sync never starts while locked and stops at the next step when the lock
 		// comes on, per decision 15.
 		mailSync.configureMailSync({ mailDir: mailDir(), isPaused: () => lock.isLocked() });
@@ -165,6 +168,14 @@ if (!app.requestSingleInstanceLock()) {
 			}
 		} catch (cause) {
 			console.error("Audit log purge failed:", cause instanceof Error ? cause.message : cause);
+		}
+
+		// Copies of files that went with a sent message, or with a draft that is
+		// gone. The same kind of housekeeping, and it never stops boot either.
+		try {
+			pruneOutboxFiles(db);
+		} catch (cause) {
+			console.error("Outbox file cleanup failed:", cause instanceof Error ? cause.message : cause);
 		}
 
 		// Restoring a backup replaces the live file, which cannot happen while the
@@ -3917,6 +3928,48 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (composed !== "ok") throw new Error(`Smoke: compose ${composed}`);
 									await shoot("mail-compose");
+
+									// Attaching: every document, searchable, and this computer. The
+									// list opens over the message and closes on a second press.
+									const attachList = await window.webContents.executeJavaScript(
+										`(async () => {
+											const button = document.querySelector("button[aria-label='Attach']");
+											if (!button) return "no attach button";
+											button.click();
+											await new Promise((r) => setTimeout(r, 700));
+											if (!document.querySelector("input[aria-label='Search documents']")) return "no document search";
+											const fromHere = [...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "From this computer");
+											return fromHere ? "ok" : "no way to attach from this computer";
+										})()`,
+									);
+									if (attachList !== "ok") throw new Error(`Smoke: compose attach ${attachList}`);
+									await shoot("mail-compose-attach");
+									// Files dropped on the message: copied onto the draft and listed
+									// with their size. A PDF can be kept as a document once sent, and
+									// is not by default; anything else is sent only.
+									const dropped = await window.webContents.executeJavaScript(
+										`(async () => {
+											document.querySelector("button[aria-label='Attach']").click();
+											await new Promise((r) => setTimeout(r, 300));
+											const target = document.querySelector("button[aria-label='Attach']").closest(".relative.flex.h-full");
+											if (!target) return "no drop target";
+											const data = new DataTransfer();
+											data.items.add(new File(["smoke"], "Planning.xlsx"));
+											data.items.add(new File(["%PDF-1.4 smoke"], "Offerte.pdf"));
+											target.dispatchEvent(new DragEvent("dragenter", { bubbles: true, cancelable: true, dataTransfer: data }));
+											target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: data }));
+											await new Promise((r) => setTimeout(r, 1500));
+											const list = document.querySelector("ul[aria-label='Attachments']");
+											if (!list || !list.textContent.includes("Planning.xlsx") || !list.textContent.includes("Offerte.pdf")) return "the dropped files are not listed";
+											if (!list.textContent.includes("Sent only")) return "the spreadsheet is offered to Documents";
+											const boxes = list.querySelectorAll("input[type=checkbox]");
+											if (boxes.length !== 1) return "expected one choice to keep, for the PDF, found " + boxes.length;
+											if (boxes[0].checked) return "the PDF is kept by default";
+											return "ok";
+										})()`,
+									);
+									if (dropped !== "ok") throw new Error(`Smoke: compose drop ${dropped}`);
+									await shoot("mail-compose-files");
 									// A subject, then Escape, which is the composer's only way
 									// out since it became a full-screen form. Typing first is what
 									// gives autosave something to write, and the draft it leaves

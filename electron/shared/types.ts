@@ -2342,6 +2342,25 @@ export interface MailOutboxAttachment {
 	filename: string;
 }
 
+/**
+ * A file attached from this machine rather than from Documents. Any kind. Sent
+ * and not kept, unless `keepAsDocument` is set, and then kept only once the
+ * message has gone.
+ */
+export interface MailOutboxFile {
+	id: string;
+	fileName: string;
+	mimeType: string;
+	byteSize: number;
+	keepAsDocument: boolean;
+	/** True for a PDF, the one kind Documents keeps. Anything else is sent only. */
+	canKeep: boolean;
+	/** The document it became, once sent. */
+	documentId: string | null;
+	/** Why keeping it failed. The message went regardless. */
+	keepError: string | null;
+}
+
 export interface MailOutboxMessage extends Standard {
 	accountId: string;
 	state: MailOutboxState;
@@ -2374,6 +2393,8 @@ export interface MailOutboxMessage extends Standard {
 	appendedToSentAt: Iso | null;
 	appendError: string | null;
 	attachments: MailOutboxAttachment[];
+	/** Files attached from this machine. */
+	files: MailOutboxFile[];
 }
 
 export interface MailDraftInput {
@@ -2391,7 +2412,7 @@ export interface MailDraftInput {
 	clientId?: string | null;
 	projectId?: string | null;
 	templateId?: string | null;
-	/** Documents to attach. Their PDF is rendered at send time if needed. */
+	/** Documents to attach. Each goes as its newest version, rendered at send time if it has none yet. */
 	documentIds?: string[];
 	/** Who wrote it. An agent's draft is opened in the editor for a person; it is never sent. */
 	actor?: "user" | "agent";

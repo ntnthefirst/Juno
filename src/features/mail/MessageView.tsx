@@ -14,7 +14,7 @@ import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
 import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
 import { ImportFlow } from "../documents/ImportFlow";
-import { AttachmentIcon } from "./AttachmentIcon";
+import { AttachmentIcon } from "../../components/AttachmentIcon";
 import { PersonChip } from "./PersonChip";
 import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 

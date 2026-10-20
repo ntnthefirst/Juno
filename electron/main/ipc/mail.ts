@@ -30,6 +30,8 @@ import * as fonts from "../services/mail-fonts";
 import * as pictures from "../services/mail-pictures";
 import type { MailFolderInput } from "../services/mail-folders";
 import * as outbox from "../services/mail-outbox";
+import * as outboxFiles from "../services/mail-outbox-files";
+import * as outboxPicker from "../services/mail-outbox-picker";
 import * as purgeMail from "../services/mail-purge";
 import * as recipients from "../services/mail-recipients";
 import * as sender from "../services/mail-send";
@@ -213,6 +215,18 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.outbox.cancel", (_event, id: string) => outbox.cancel(id));
 	ipcMain.handle("mail.outbox.retry", (_event, id: string) => outbox.retry(id));
 	ipcMain.handle("mail.outbox.remove", (_event, id: string) => outbox.remove(id));
+	// Files from this machine. No MCP twin on purpose: adding one takes a file
+	// the person chose here, and no tool may take a path (mcp.md section 7).
+	ipcMain.handle("mail.outbox.files.choose", (_event, outboxId: string) => outboxPicker.choose(outboxId));
+	ipcMain.handle(
+		"mail.outbox.files.add",
+		(_event, outboxId: string, input: { fileName: string; data: Uint8Array; fileDate?: string }) =>
+			outboxFiles.add(outboxId, input),
+	);
+	ipcMain.handle("mail.outbox.files.remove", (_event, fileId: string) => outboxFiles.remove(fileId));
+	ipcMain.handle("mail.outbox.files.setKeep", (_event, fileId: string, keep: boolean) =>
+		outboxFiles.setKeep(fileId, keep),
+	);
 
 	// Progress is pushed rather than polled, the same way the lock is.
 	sync.onChange((status) => {

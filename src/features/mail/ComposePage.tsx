@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DocumentRecord, MailAccount, MailAddress, MailOutboxMessage, MailTemplate } from "@shared/types";
+import { mimeTypeOf } from "@shared/mime";
+import { AttachmentIcon } from "../../components/AttachmentIcon";
 import { Button } from "../../components/Button";
+import { DocumentSearchList } from "../../components/DocumentSearchList";
 import { Field } from "../../components/Field";
 import { Icon } from "../../components/Icon";
+import { IconAction } from "../../components/IconAction";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { useFileDrop } from "../../lib/use-file-drop";
+import { formatBytes } from "./format";
 import MessageEditor from "./MessageEditor";
 import { RecipientField } from "./RecipientField";
 
@@ -41,7 +47,9 @@ type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
 export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePageProps) {
 	const [accounts, setAccounts] = useState<MailAccount[]>([]);
 	const [templates, setTemplates] = useState<MailTemplate[]>([]);
-	const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+	const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);
+	const [documentSearch, setDocumentSearch] = useState("");
+	const [attaching, setAttaching] = useState(false);
 	const [accountId, setAccountId] = useState(seed.draft?.accountId ?? seed.accountId ?? "");
 	const [to, setTo] = useState<MailAddress[]>(seed.draft?.to ?? seed.to ?? []);
 	const [cc, setCc] = useState<MailAddress[]>(seed.draft?.cc ?? seed.cc ?? []);
@@ -100,15 +108,23 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 		};
 	}, [addressKey]);
 
+	// Every document, not only the client's: a contract is often kept under a
+	// project, or under nothing yet. The client's own are listed first.
+	// Read again when the list opens, so a document made meanwhile is in it.
 	useEffect(() => {
 		let cancelled = false;
-		window.juno.documents.list(clientId ? { clientId } : undefined).then((rows) => {
-			if (!cancelled) setDocuments(rows);
-		});
+		window.juno.documents
+			.list()
+			.then((rows) => {
+				if (!cancelled) setDocuments(rows);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setError(messageOf(cause));
+			});
 		return () => {
 			cancelled = true;
 		};
-	}, [clientId]);
+	}, [attachmentsOpen]);
 
 	useEffect(() => {
 		if (!attachmentsOpen) return;
@@ -188,8 +204,17 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 		setTemplateApplied(false);
 	}
 
+	// Files from this computer live on the saved draft, so they are read from it.
+	const files = savedMessage?.files ?? [];
+
 	const isEmpty =
-		to.length === 0 && cc.length === 0 && bcc.length === 0 && !subject.trim() && !bodyText.trim() && documentIds.length === 0;
+		to.length === 0 &&
+		cc.length === 0 &&
+		bcc.length === 0 &&
+		!subject.trim() &&
+		!bodyText.trim() &&
+		documentIds.length === 0 &&
+		files.length === 0;
 
 	// Read through a ref rather than depended on directly: persist's own
 	// success calls setSavedMessage, and depending on that state would give
@@ -275,6 +300,69 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 		};
 	}, [to, cc, bcc, subject, bodyText, bodyHtml, documentIds, isEmpty, busy, persist]);
 
+	/**
+	 * A file from this computer is copied onto the draft, so the draft has to
+	 * exist first. Saved now even when nothing else has been typed.
+	 */
+	async function ensureDraft(): Promise<MailOutboxMessage | null> {
+		if (savedMessageRef.current) return savedMessageRef.current;
+		if (!accountId) {
+			setError("Add a mail account under Settings before attaching files.");
+			return null;
+		}
+		return persist(true);
+	}
+
+	async function attachFromComputer() {
+		if (attaching) return;
+		setAttachmentsOpen(false);
+		setAttaching(true);
+		setError(null);
+		try {
+			const draft = await ensureDraft();
+			if (!draft) return;
+			const message = await window.juno.mail.outbox.files.choose(draft.id);
+			if (message) setSavedMessage(message);
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		} finally {
+			setAttaching(false);
+		}
+	}
+
+	async function attachDropped(dropped: File[]) {
+		if (attaching) return;
+		setAttaching(true);
+		setError(null);
+		try {
+			const draft = await ensureDraft();
+			if (!draft) return;
+			for (const file of dropped) {
+				const message = await window.juno.mail.outbox.files.add(draft.id, {
+					fileName: file.name,
+					data: new Uint8Array(await file.arrayBuffer()),
+					fileDate: new Date(file.lastModified || Date.now()).toISOString(),
+				});
+				setSavedMessage(message);
+			}
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		} finally {
+			setAttaching(false);
+		}
+	}
+
+	async function fileAction(work: () => Promise<MailOutboxMessage>) {
+		setError(null);
+		try {
+			setSavedMessage(await work());
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		}
+	}
+
+	const drop = useFileDrop((dropped) => void attachDropped(dropped));
+
 	async function handleSend() {
 		if (busy) return;
 		setBusy("send");
@@ -347,8 +435,29 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 								? "Draft"
 								: "";
 
+	const nearbyLabel = clientId
+		? (documents?.find((record) => record.clientId === clientId)?.clientName ?? "This client")
+		: seed.projectId
+			? (documents?.find((record) => record.projectId === seed.projectId)?.projectName ?? "This project")
+			: undefined;
+	const attachedDocuments = documentIds.map((id) => {
+		const record = documents?.find((item) => item.id === id);
+		const kept = savedMessage?.attachments.find((item) => item.documentId === id);
+		return {
+			id,
+			name: record ? `${record.title}.pdf` : (kept?.filename ?? "Document"),
+			isSpecimen: record?.isSpecimen ?? false,
+		};
+	});
+	const attachmentCount = documentIds.length + files.length;
+
 	return (
-		<div className="flex h-full min-h-0 flex-col">
+		<div {...drop.bind} className="relative flex h-full min-h-0 flex-col">
+			{drop.dragging ? (
+				<div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--accent)] bg-[var(--accent-soft)]">
+					<p className="font-[var(--weight-medium)] text-[var(--accent)]">Drop to attach. Nothing is kept unless you ask.</p>
+				</div>
+			) : null}
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				<div className="flex min-h-full flex-col gap-3 px-6 pt-4 pb-6">
 					{accounts.length > 1 ? (
@@ -439,66 +548,139 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 							<button
 								type="button"
 								onClick={() => setAttachmentsOpen((current) => !current)}
-								aria-label="Attach a document"
-								title="Attach a document"
+								aria-label="Attach"
+								aria-expanded={attachmentsOpen}
+								title="Attach a document or a file"
 								className={`flex h-10 w-10 flex-none items-center justify-center rounded-[var(--radius-sm)] bg-[var(--sunken)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
-									documentIds.length > 0 ? "text-[var(--accent)]" : "text-[var(--ink-muted)]"
+									attachmentCount > 0 ? "text-[var(--accent)]" : "text-[var(--ink-muted)]"
 								}`}
 							>
 								<Icon name="attachment" size={18} />
-								{documentIds.length > 0 ? (
+								{attachmentCount > 0 ? (
 									<span className="tabular absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[length:var(--text-micro)] text-[var(--accent-ink)]">
-										{documentIds.length}
+										{attachmentCount}
 									</span>
 								) : null}
 							</button>
 							{attachmentsOpen ? (
 								<div
-									className="absolute top-[calc(100%+4px)] right-0 z-20 w-[320px] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-2"
+									className="animate-scale absolute top-[calc(100%+4px)] right-0 z-20 flex w-[380px] flex-col rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-2"
 									style={{ boxShadow: "var(--shadow-popover)" }}
 								>
-									<p className="px-2 pb-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Attach documents</p>
-									{documents.length === 0 ? (
-										<p className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-											{clientId ? "This client has no documents." : "Pick a client to see its documents."}
+									<input
+										type="search"
+										value={documentSearch}
+										onChange={(event) => setDocumentSearch(event.target.value)}
+										placeholder="Search documents"
+										aria-label="Search documents"
+										autoFocus
+										className="w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+									/>
+									<div className="mt-1 max-h-[280px] overflow-y-auto">
+										<DocumentSearchList
+											documents={documents}
+											search={documentSearch}
+											{...(nearbyLabel
+												? {
+														nearby: (record: DocumentRecord) =>
+															clientId ? record.clientId === clientId : record.projectId === seed.projectId,
+														nearbyLabel,
+													}
+												: {})}
+											checked={documentIds}
+											onPick={(record) =>
+												setDocumentIds((current) =>
+													current.includes(record.id)
+														? current.filter((id) => id !== record.id)
+														: [...current, record.id],
+												)
+											}
+											emptyText="There are no documents yet."
+										/>
+									</div>
+									<div className="mt-2 border-t border-[var(--line)] pt-2">
+										<button
+											type="button"
+											onClick={() => void attachFromComputer()}
+											disabled={attaching}
+											className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 text-left text-[length:var(--text-dense)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-60"
+											style={{ height: "var(--row-height)" }}
+										>
+											<Icon name="folder-open" size={16} />
+											<span className="flex-1">From this computer</span>
+										</button>
+										<p className="px-2 pt-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+											Sent and not kept. You can also drop files on the message.
 										</p>
-									) : (
-										<ul className="max-h-[240px] overflow-y-auto">
-											{documents.map((document) => (
-												<li key={document.id}>
-													<label
-														className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-md)] px-2 hover:bg-[var(--hover)]"
-														style={{ height: "var(--row-height)" }}
-													>
-														<input
-															type="checkbox"
-															className="accent-[var(--accent)]"
-															checked={documentIds.includes(document.id)}
-															onChange={(event) =>
-																setDocumentIds((current) =>
-																	event.target.checked
-																		? [...current, document.id]
-																		: current.filter((id) => id !== document.id),
-																)
-															}
-														/>
-														<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
-															{document.title}
-														</span>
-														{document.isSpecimen ? (
-															<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--risk)]">
-																specimen
-															</span>
-														) : null}
-													</label>
-												</li>
-											))}
-										</ul>
-									)}
+									</div>
 								</div>
 							) : null}
 						</div>
 					</div>
+
+					{attachedDocuments.length > 0 || files.length > 0 ? (
+						<ul aria-label="Attachments" className="flex flex-col">
+							{attachedDocuments.map((attached) => (
+								<li
+									key={attached.id}
+									className="flex items-center gap-3 border-b border-[var(--line)] px-2"
+									style={{ height: "var(--row-height)" }}
+								>
+									<AttachmentIcon filename={attached.name} mimeType={mimeTypeOf(attached.name)} />
+									<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{attached.name}</span>
+									{attached.isSpecimen ? (
+										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--risk)]">specimen</span>
+									) : null}
+									<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">From documents</span>
+									<IconAction
+										icon="close"
+										label={`Remove ${attached.name}`}
+										onClick={() => setDocumentIds((current) => current.filter((id) => id !== attached.id))}
+									/>
+								</li>
+							))}
+							{files.map((file) => (
+								<li
+									key={file.id}
+									className="flex items-center gap-3 border-b border-[var(--line)] px-2"
+									style={{ height: "var(--row-height)" }}
+								>
+									<AttachmentIcon filename={file.fileName} mimeType={file.mimeType} />
+									<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{file.fileName}</span>
+									<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										{formatBytes(file.byteSize)}
+									</span>
+									{file.canKeep ? (
+										<label className="flex shrink-0 cursor-pointer items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<input
+												type="checkbox"
+												className="accent-[var(--accent)]"
+												checked={file.keepAsDocument}
+												onChange={(event) =>
+													void fileAction(() =>
+														window.juno.mail.outbox.files.setKeep(file.id, event.target.checked),
+													)
+												}
+											/>
+											Add to documents when sent
+										</label>
+									) : (
+										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">Sent only</span>
+									)}
+									<IconAction
+										icon="close"
+										label={`Remove ${file.fileName}`}
+										onClick={() => void fileAction(() => window.juno.mail.outbox.files.remove(file.id))}
+									/>
+								</li>
+							))}
+						</ul>
+					) : null}
+					{attaching ? (
+						<p role="status" className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							Attaching.
+						</p>
+					) : null}
 
 					{template && extraFields.length > 0 ? (
 						<div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

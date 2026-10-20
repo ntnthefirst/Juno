@@ -1535,3 +1535,44 @@ it is, which is what they do with the window open.
 
 **What would reverse this:** a client that can start Juno itself on demand, which
 would make an always-running process unnecessary.
+
+## 49. A mail carries any file, and Documents keeps the PDF paperwork
+
+Documents is the paperwork with a life of its own: made from a template or
+brought in as a PDF, with versions, a signature and a send. Mostly legal. A
+Word draft, a price sheet, a photo of a joint or a CAD drawing is not that; it
+is a file of a project (decision 35), and it does not appear on the Documents
+page. Keeping the two apart is what lets Sign always mean something there.
+
+A message is different, because a mail client is expected to carry anything.
+The composer attaches:
+
+- **Any document**, from a search over all of them with the mail's client
+  first, not only the client's own. A contract is often kept under a project or
+  under nothing yet. Each goes as its **newest version**, which is what sending
+  a document means (decision 39): a copy the client countersigned and sent back
+  goes out as that copy, not as the older one Juno signed.
+- **Any file from this computer**, by the operating system's picker or by
+  dropping it on the message. It is **sent and not kept**. The draft holds a
+  copy under `mail/outbox/<message>/<file>`, named by ids, so the original can
+  move. The copies go once the message is sent, and at startup for anything a
+  crash left behind.
+
+A PDF from this computer can be ticked "Add to documents when sent". It becomes
+a document under the mail's client and project only once the message has gone,
+so a draft thrown away leaves nothing in Documents. The same bytes are never
+kept twice, and a PDF named like a document in the same place becomes its next
+version. Another kind is sent only, and the composer says so.
+
+There is no MCP tool to attach a file from this computer, because adding one
+means naming a path on this machine (`mcp.md` section 7). An agent attaches
+documents by id, which it could already.
+
+A client's or project's documents also take **a document that already exists**,
+from the same search, so a contract imported elsewhere or kept from a mail is
+filed without opening it. It is a move (`documents.link`), and the question
+says where it is kept now.
+
+**What would reverse this:** a kind of paperwork that is not a PDF and still
+needs versions and a signature. Then Documents takes that kind, and Sign is
+offered only where the newest version can carry one.

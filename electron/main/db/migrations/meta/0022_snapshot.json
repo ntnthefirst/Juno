@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "11ea2cc7-af31-4a31-a87d-5eeed3885099",
+  "id": "8df71d44-612b-434d-a842-bdcb26e23ced",
   "prevId": "8e9ca535-a79a-4762-af5c-945dde68d3a5",
   "tables": {
     "agent_actions": {
@@ -5200,6 +5200,13 @@
           "name": "mail_outbox_client_idx",
           "columns": [
             "client_id"
+          ],
+          "isUnique": false
+        },
+        "mail_outbox_message_id_idx": {
+          "name": "mail_outbox_message_id_idx",
+          "columns": [
+            "message_id"
           ],
           "isUnique": false
         },

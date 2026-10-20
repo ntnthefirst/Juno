@@ -109,6 +109,9 @@ export const mailOutbox = sqliteTable(
 		index("mail_outbox_state_idx").on(t.state),
 		index("mail_outbox_thread_idx").on(t.threadId),
 		index("mail_outbox_client_idx").on(t.clientId),
+		// Sync looks a Message-ID up here for every conversation it starts, to
+		// file one Juno sent from a project (mail-store.ts resolveThread).
+		index("mail_outbox_message_id_idx").on(t.messageId),
 		index("mail_outbox_deleted_idx").on(t.deletedAt),
 	],
 );

@@ -29,6 +29,7 @@ import type {
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { projectAssets, projects } from "../db/schema";
+import { attachmentPath } from "./mail-threads";
 import { ensureFolder, folderFor, resolveInside, uniqueNameIn } from "./project-storage";
 import { requireProject } from "./projects";
 
@@ -163,7 +164,10 @@ export async function add(input: AddAssetInput, db: Db = getDb()): Promise<Proje
 
 	if (storage === "managed") {
 		ensureFolder(folder);
-		const name = uniqueNameIn(folder, basename(source));
+		// Named for what it is called on screen when that was given: a copy from
+		// the outbox or the mail folder is stored under an id, with no extension
+		// to open it by. uniqueNameIn makes the name safe for the folder.
+		const name = uniqueNameIn(folder, input.fileName?.trim() || basename(source));
 		copyFileSync(source, join(folder, name));
 		path = name;
 	}
@@ -311,4 +315,19 @@ export function pathOf(id: string, db: Db = getDb()): { path: string; mimeType: 
 		);
 	}
 	return { path: asset.absolutePath, mimeType: asset.mimeType };
+}
+
+/**
+ * Files an attachment of a received mail under a project: the photo of the
+ * wall, the measurements, the logo the client sent. Copied in like any added
+ * file, named as it arrived, and resolved from the attachment's id, never from
+ * a path a caller gives.
+ */
+export async function addFromMailAttachment(
+	projectId: string,
+	attachmentId: string,
+	db: Db = getDb(),
+): Promise<ProjectAsset> {
+	const { path, filename } = attachmentPath(attachmentId, db);
+	return add({ projectId, sourcePath: path, fileName: filename, storage: "managed" }, db);
 }

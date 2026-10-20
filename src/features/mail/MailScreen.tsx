@@ -428,6 +428,7 @@ export function MailScreen() {
 				bodyHtml: `<p><br></p>${seed.quotedHtml}`,
 				replyToMessageId: seed.replyToMessageId,
 				clientId: seed.clientId,
+				projectId: seed.projectId,
 			});
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
@@ -455,6 +456,7 @@ export function MailScreen() {
 				bodyHtml: `<p><br></p>${seed.quotedHtml}`,
 				replyToMessageId: seed.replyToMessageId,
 				clientId: seed.clientId,
+				projectId: seed.projectId,
 			});
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));

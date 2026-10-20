@@ -1132,6 +1132,14 @@ if (!app.requestSingleInstanceLock()) {
 									if (switched !== "ok") throw new Error(`Smoke: project layouts ${switched}`);
 								}
 								if (screen === "Project record") {
+									// A conversation filed under the project, the way a person files one
+									// from the reader's menu, so the project's Mail section has a row.
+									const smokeThreads = await import("./main/services/mail-threads");
+									const smokeProjects = await import("./main/services/projects");
+									const ownProject = (await smokeProjects.list({})).find((project) => project.name.includes("Juno"));
+									const [filedThread] = await smokeThreads.listThreads({ limit: 1 });
+									if (!ownProject || !filedThread) throw new Error("Smoke: no project or thread to file together");
+									await smokeThreads.linkProject(filedThread.id, ownProject.id);
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1150,6 +1158,9 @@ if (!app.requestSingleInstanceLock()) {
 											if (!notes) return "no notes editor on the project";
 											if (!notes.textContent.includes("Release notes")) return "the notes editor does not show the stored notes";
 											if (!main.querySelector("button[aria-label='Add a document']")) return "no documents section on the project";
+											const mailRow = [...main.querySelectorAll("section h2")].find((el) => el.textContent.trim() === "Mail");
+											if (!mailRow) return "no mail section on the project";
+											if (!mailRow.closest("section").textContent.includes(${JSON.stringify(filedThread.subject)})) return "the filed conversation is not listed on the project";
 											const addDate = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add date");
 											if (!addDate) return "no add date button on the project";
 											addDate.click();

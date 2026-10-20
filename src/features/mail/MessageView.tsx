@@ -26,6 +26,8 @@ type MessageViewProps = {
 	onNotice: (message: string) => void;
 	onReply: (messageId: string, mode: MailReplyMode) => void;
 	clientLinked: boolean;
+	/** The project the conversation is filed under: an attachment can go into its files. */
+	project: { id: string; name: string } | null;
 	/** A file action on this message changed it (read, flagged): reload the thread. */
 	onChanged: () => void;
 };
@@ -71,7 +73,16 @@ function removeTrust(key: string, value: string): void {
 	}
 }
 
-export function MessageView({ message, open, onToggle, onNotice, onReply, onChanged, clientLinked }: MessageViewProps) {
+export function MessageView({
+	message,
+	open,
+	onToggle,
+	onNotice,
+	onReply,
+	onChanged,
+	clientLinked,
+	project,
+}: MessageViewProps) {
 	const senderAddress = message.from?.address.toLowerCase() ?? null;
 	const emailTrusted = readTrust(TRUSTED_EMAILS_KEY).includes(message.id);
 	const senderTrusted = senderAddress !== null && readTrust(TRUSTED_SENDERS_KEY).includes(senderAddress);
@@ -210,6 +221,17 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		try {
 			const path = await window.juno.mail.attachments.save(id);
 			if (path) onNotice(`Saved to ${path}`);
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		}
+	}
+
+	/** Into the conversation's project, named as it arrived. Any kind: photos, drawings, a price sheet. */
+	async function addToProject(id: string, filename: string) {
+		if (!project) return;
+		try {
+			await window.juno.projects.assets.addFromMail(project.id, id);
+			onNotice(`${filename} added to the files of ${project.name}.`);
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
 		}
@@ -425,6 +447,16 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 													},
 												]
 											: []),
+										...(project
+											? [
+													{
+														id: "project",
+														label: `Add to ${project.name} files`,
+														icon: "projects" as const,
+														onSelect: () => void addToProject(attachment.id, attachment.filename),
+													},
+												]
+											: []),
 									];
 									return (
 										<li
@@ -596,6 +628,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 			{importItems ? (
 				<ImportFlow
 					items={importItems}
+					{...(project ? { projectId: project.id } : {})}
 					onDone={(outcome) => {
 						setImportItems(null);
 						const text = [describeOutcome(outcome), ...outcome.failures.map((entry) => entry.message)]

@@ -157,6 +157,7 @@ const api: JunoApi = {
 		assets: {
 			list: (projectId) => call("projects.assets.list", projectId),
 			choose: (projectId, storage) => call("projects.assets.choose", projectId, storage),
+			addFromMail: (projectId, attachmentId) => call("projects.assets.addFromMail", projectId, attachmentId),
 			update: (id, patch) => call("projects.assets.update", id, patch),
 			remove: (id) => call("projects.assets.remove", id),
 			restore: (id) => call("projects.assets.restore", id),
@@ -484,6 +485,7 @@ const api: JunoApi = {
 			get: (id) => call("mail.threads.get", id),
 			linkClient: (id, clientId) => call("mail.threads.linkClient", id, clientId),
 			unlinkClient: (id) => call("mail.threads.unlinkClient", id),
+			linkProject: (id, projectId) => call("mail.threads.linkProject", id, projectId),
 			countForClient: (clientId) => call("mail.threads.countForClient", clientId),
 		},
 		file: {
@@ -546,6 +548,7 @@ const api: JunoApi = {
 			files: {
 				choose: (outboxId) => call("mail.outbox.files.choose", outboxId),
 				add: (outboxId, input) => call("mail.outbox.files.add", outboxId, input),
+				addFromProject: (outboxId, assetId) => call("mail.outbox.files.addFromProject", outboxId, assetId),
 				remove: (fileId) => call("mail.outbox.files.remove", fileId),
 				setKeep: (fileId, keep) => call("mail.outbox.files.setKeep", fileId, keep),
 			},

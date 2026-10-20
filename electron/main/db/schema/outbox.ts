@@ -1,6 +1,7 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { seededColumns, standardColumns } from "../columns";
 import { clients, projects } from "./clients";
+import { projectAssets } from "./projects";
 import { documents } from "./documents";
 import { mailAccounts, mailMessages, mailThreads } from "./mail";
 
@@ -169,8 +170,8 @@ export const mailOutboxAttachments = sqliteTable(
  * A file attached to an outgoing message from this machine rather than from
  * Documents: picked in the composer or dropped on it.
  *
- * It is not a document and is not kept as one unless `keep_as_document` is
- * set, and even then only once the message has gone. Until it is sent, the
+ * It is not kept unless `keep_as_document` is set, and even then only once the
+ * message has gone: a PDF as a document, anything else as a project file. Until it is sent, the
  * bytes are a copy under the userData root at `relative_path`, so the draft
  * still has its file when the original is moved or deleted. Once the message
  * is sent or the draft is gone the copy is removed and the row stays, so the
@@ -191,9 +192,18 @@ export const mailOutboxFiles = sqliteTable(
 		fileDate: text("file_date").notNull(),
 		/** Relative to the outbox files folder, built by the service from ids. Null once removed. */
 		relativePath: text("relative_path"),
-		keepAsDocument: integer("keep_as_document", { mode: "boolean" }).notNull().default(false),
+		/**
+		 * Keep it once the message has gone: a PDF as a document, anything else as
+		 * a file of the message's project. The column kept the name it was given
+		 * when only PDFs could be kept.
+		 */
+		keep: integer("keep_as_document", { mode: "boolean" }).notNull().default(false),
 		/** The document it was kept as, once sent. */
 		documentId: text("document_id").references(() => documents.id),
+		/** The project file it was copied from, when it came from a project's files rather than this computer. */
+		sourceAssetId: text("source_asset_id").references(() => projectAssets.id),
+		/** The project file it was kept as, once sent, when it is not a PDF and the message has a project. */
+		keptAssetId: text("kept_asset_id").references(() => projectAssets.id),
 		/** Why keeping it failed. The message went regardless. */
 		keepError: text("keep_error"),
 	},

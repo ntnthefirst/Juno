@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DocumentRecord, MailAccount, MailAddress, MailOutboxMessage, MailTemplate } from "@shared/types";
+import type {
+	DocumentRecord,
+	MailAccount,
+	MailAddress,
+	MailOutboxMessage,
+	MailTemplate,
+	ProjectAsset,
+} from "@shared/types";
 import { mimeTypeOf } from "@shared/mime";
 import { AttachmentIcon } from "../../components/AttachmentIcon";
 import { Button } from "../../components/Button";
@@ -50,6 +57,10 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 	const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);
 	const [documentSearch, setDocumentSearch] = useState("");
 	const [attaching, setAttaching] = useState(false);
+	const [projectFiles, setProjectFiles] = useState<{ name: string; assets: ProjectAsset[] } | null>(null);
+	// The job the message is about: the one it was started from, or the one a
+	// reopened draft was saved with. It decides where a kept file goes.
+	const projectId = seed.draft?.projectId ?? seed.projectId ?? null;
 	const [accountId, setAccountId] = useState(seed.draft?.accountId ?? seed.accountId ?? "");
 	const [to, setTo] = useState<MailAddress[]>(seed.draft?.to ?? seed.to ?? []);
 	const [cc, setCc] = useState<MailAddress[]>(seed.draft?.cc ?? seed.cc ?? []);
@@ -240,7 +251,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 					bodyText,
 					bodyHtml,
 					clientId: clientId || null,
-					projectId: seed.projectId ?? null,
+					projectId,
 					templateId: templateApplied && template ? template.id : null,
 					documentIds,
 					replyToMessageId: seed.draft?.replyToMessageId ?? seed.replyToMessageId ?? null,
@@ -271,7 +282,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 			documentIds,
 			templateApplied,
 			template,
-			seed.projectId,
+			projectId,
 			seed.draft,
 			seed.replyToMessageId,
 		],
@@ -338,13 +349,46 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 			const draft = await ensureDraft();
 			if (!draft) return;
 			for (const file of dropped) {
+				// No date is the moment of attaching, which the service fills in.
 				const message = await window.juno.mail.outbox.files.add(draft.id, {
 					fileName: file.name,
 					data: new Uint8Array(await file.arrayBuffer()),
-					fileDate: new Date(file.lastModified || Date.now()).toISOString(),
+					...(file.lastModified ? { fileDate: new Date(file.lastModified).toISOString() } : {}),
 				});
 				setSavedMessage(message);
 			}
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		} finally {
+			setAttaching(false);
+		}
+	}
+
+	// The project's own files, offered beside the documents when the message has
+	// a project: the drawing, the photos, the price sheet.
+	useEffect(() => {
+		if (!projectId || !attachmentsOpen) return;
+		let cancelled = false;
+		Promise.all([window.juno.projects.get(projectId), window.juno.projects.assets.list(projectId)])
+			.then(([project, assets]) => {
+				if (!cancelled && project) setProjectFiles({ name: project.name, assets: assets.filter((asset) => asset.exists) });
+			})
+			.catch(() => {
+				// The documents and this computer still work; the project's files are an extra.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [projectId, attachmentsOpen]);
+
+	async function attachProjectFile(assetId: string) {
+		if (attaching) return;
+		setAttaching(true);
+		setError(null);
+		try {
+			const draft = await ensureDraft();
+			if (!draft) return;
+			setSavedMessage(await window.juno.mail.outbox.files.addFromProject(draft.id, assetId));
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		} finally {
@@ -437,8 +481,8 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 
 	const nearbyLabel = clientId
 		? (documents?.find((record) => record.clientId === clientId)?.clientName ?? "This client")
-		: seed.projectId
-			? (documents?.find((record) => record.projectId === seed.projectId)?.projectName ?? "This project")
+		: projectId
+			? (documents?.find((record) => record.projectId === projectId)?.projectName ?? "This project")
 			: undefined;
 	const attachedDocuments = documentIds.map((id) => {
 		const record = documents?.find((item) => item.id === id);
@@ -583,7 +627,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 											{...(nearbyLabel
 												? {
 														nearby: (record: DocumentRecord) =>
-															clientId ? record.clientId === clientId : record.projectId === seed.projectId,
+															clientId ? record.clientId === clientId : record.projectId === projectId,
 														nearbyLabel,
 													}
 												: {})}
@@ -597,6 +641,35 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 											}
 											emptyText="There are no documents yet."
 										/>
+										{projectFiles && projectFiles.assets.length > 0 ? (
+											<div>
+												<p className="px-2 pt-2 pb-1 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+													Files of {projectFiles.name}
+												</p>
+												<ul>
+													{projectFiles.assets.map((asset) => {
+														const attached = files.some((file) => file.sourceAssetId === asset.id);
+														return (
+															<li key={asset.id}>
+																<button
+																	type="button"
+																	disabled={attached || attaching}
+																	onClick={() => void attachProjectFile(asset.id)}
+																	className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 text-left hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-default disabled:hover:bg-transparent"
+																	style={{ height: "var(--row-height)" }}
+																>
+																	<AttachmentIcon filename={asset.fileName} mimeType={asset.mimeType ?? mimeTypeOf(asset.fileName)} />
+																	<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{asset.fileName}</span>
+																	{attached ? (
+																		<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">Attached</span>
+																	) : null}
+																</button>
+															</li>
+														);
+													})}
+												</ul>
+											</div>
+										) : null}
 									</div>
 									<div className="mt-2 border-t border-[var(--line)] pt-2">
 										<button
@@ -650,19 +723,21 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 									<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
 										{formatBytes(file.byteSize)}
 									</span>
-									{file.canKeep ? (
+									{file.sourceAssetId ? (
+										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">From project files</span>
+									) : file.keepsAs ? (
 										<label className="flex shrink-0 cursor-pointer items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 											<input
 												type="checkbox"
 												className="accent-[var(--accent)]"
-												checked={file.keepAsDocument}
+												checked={file.keep}
 												onChange={(event) =>
 													void fileAction(() =>
 														window.juno.mail.outbox.files.setKeep(file.id, event.target.checked),
 													)
 												}
 											/>
-											Add to documents when sent
+											{file.keepsAs === "document" ? "Add to documents when sent" : "Add to project files when sent"}
 										</label>
 									) : (
 										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">Sent only</span>

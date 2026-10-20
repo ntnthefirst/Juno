@@ -2067,6 +2067,9 @@ export interface MailThreadSummary {
 	clientId: string | null;
 	clientName: string | null;
 	linkSource: "auto" | "manual" | null;
+	/** The job the conversation is filed under, set by a person or a reply from the project. */
+	projectId: string | null;
+	projectName: string | null;
 	firstMessageAt: Iso;
 	lastMessageAt: Iso;
 	messageCount: number;
@@ -2196,6 +2199,8 @@ export interface MailThreadListQuery {
 	folderId?: string;
 	folderSpecialUse?: MailSpecialUse;
 	clientId?: string;
+	/** Only conversations filed under this project. */
+	projectId?: string;
 	/** Full-text over subject, body and sender. */
 	search?: string;
 	unreadOnly?: boolean;
@@ -2343,23 +2348,33 @@ export interface MailOutboxAttachment {
 }
 
 /**
- * A file attached from this machine rather than from Documents. Any kind. Sent
- * and not kept, unless `keepAsDocument` is set, and then kept only once the
- * message has gone.
+ * A file attached from this machine or from a project's files, rather than
+ * from Documents. Any kind. Sent and not kept, unless `keep` is set, and then
+ * kept only once the message has gone, where `keepsAs` says.
  */
 export interface MailOutboxFile {
 	id: string;
 	fileName: string;
 	mimeType: string;
 	byteSize: number;
-	keepAsDocument: boolean;
-	/** True for a PDF, the one kind Documents keeps. Anything else is sent only. */
-	canKeep: boolean;
+	keep: boolean;
+	/**
+	 * Where a kept file goes: a PDF becomes a document, anything else a file of
+	 * the message's project. Null when it cannot be kept: another kind on a
+	 * message with no project, or a file that is a project file already.
+	 */
+	keepsAs: MailFileKeep | null;
+	/** The project file it was attached from, when it did not come from this computer. */
+	sourceAssetId: string | null;
 	/** The document it became, once sent. */
 	documentId: string | null;
+	/** The project file it became, once sent. */
+	keptAssetId: string | null;
 	/** Why keeping it failed. The message went regardless. */
 	keepError: string | null;
 }
+
+export type MailFileKeep = "document" | "project-file";
 
 export interface MailOutboxMessage extends Standard {
 	accountId: string;
@@ -2471,6 +2486,8 @@ export interface MailReplySeed {
 	/** Null for a forward: it starts a conversation rather than continuing one. */
 	replyToMessageId: string | null;
 	clientId: string | null;
+	/** The project the conversation is filed under, which the answer is filed under too. */
+	projectId: string | null;
 }
 
 export interface MailOutboxListQuery {

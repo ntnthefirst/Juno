@@ -25,13 +25,14 @@
 import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { isPdfName, mimeTypeOf } from "../../shared/mime";
+import { mimeTypeOf } from "../../shared/mime";
 import type { MailOutboxMessage } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now, uuidv7 } from "../db/columns";
 import { mailOutbox, mailOutboxFiles } from "../db/schema";
 import { keepSentFile } from "./document-import";
 import * as outbox from "./mail-outbox";
+import * as projectAssets from "./project-assets";
 import type { OutgoingAttachment } from "./mail-transport";
 
 /**
@@ -97,6 +98,14 @@ export async function add(
 	input: { fileName: string; data: Uint8Array; fileDate?: string },
 	db: Db = getDb(),
 ): Promise<MailOutboxMessage> {
+	return stage(outboxId, { ...input, sourceAssetId: null }, db);
+}
+
+async function stage(
+	outboxId: string,
+	input: { fileName: string; data: Uint8Array; fileDate?: string; sourceAssetId: string | null },
+	db: Db,
+): Promise<MailOutboxMessage> {
 	const name = cleanName(input.fileName);
 	const bytes = Buffer.from(input.data);
 	if (bytes.length === 0) throw new Error(`"${name}" is empty. Choose the file again.`);
@@ -123,6 +132,7 @@ export async function add(
 			byteSize: bytes.length,
 			fileDate: new Date(date).toISOString(),
 			relativePath,
+			sourceAssetId: input.sourceAssetId,
 		})
 		.run();
 	outbox.touchDraft(outboxId, db);
@@ -142,6 +152,31 @@ export async function addFromPath(outboxId: string, path: string, db: Db = getDb
 	return add(
 		outboxId,
 		{ fileName: name, data: new Uint8Array(readFileSync(path)), fileDate: statSync(path).mtime.toISOString() },
+		db,
+	);
+}
+
+/**
+ * Attaches a file of a project: the photo of the wall, the drawing, the price
+ * sheet. Named by its id, so an agent can do it as well as the window, and
+ * copied like any other file, so moving the original after attaching does not
+ * change what is sent. It is a project file already, so it is never kept again.
+ */
+export async function addFromProject(outboxId: string, assetId: string, db: Db = getDb()): Promise<MailOutboxMessage> {
+	const asset = await projectAssets.get(assetId, db);
+	if (!asset) throw new Error("That file is no longer in its project.");
+	const { path } = projectAssets.pathOf(assetId, db);
+	if (statSync(path).size > MAX_OUTBOX_FILE_BYTES) {
+		throw new Error(`"${asset.fileName}" is larger than 25 MB, which most mail servers refuse. Share it another way.`);
+	}
+	return stage(
+		outboxId,
+		{
+			fileName: asset.fileName,
+			data: new Uint8Array(readFileSync(path)),
+			fileDate: statSync(path).mtime.toISOString(),
+			sourceAssetId: asset.id,
+		},
 		db,
 	);
 }
@@ -166,18 +201,23 @@ export async function remove(id: string, db: Db = getDb()): Promise<MailOutboxMe
 }
 
 /**
- * Whether the file becomes a document once the message is sent. Changes
- * nothing about what is sent, so an agent's request to send the draft stays
- * the message that was asked about.
+ * Whether the file is kept once the message is sent: a PDF as a document,
+ * anything else as a file of the message's project. Changes nothing about what
+ * is sent, so an agent's request to send the draft stays the message that was
+ * asked about.
  */
 export async function setKeep(id: string, keep: boolean, db: Db = getDb()): Promise<MailOutboxMessage> {
 	const row = requireFile(id, db);
-	outbox.requireEditable(row.outboxId, db);
-	if (keep && !isPdfName(row.fileName)) {
-		throw new Error(`"${row.fileName}" is not a PDF, and Documents keeps PDFs. It is sent and not kept.`);
+	const message = outbox.requireEditable(row.outboxId, db);
+	if (keep && !outbox.keepsAs({ ...row, projectId: message.projectId })) {
+		throw new Error(
+			row.sourceAssetId
+				? `"${row.fileName}" is a project file already.`
+				: `"${row.fileName}" is not a PDF, so it would be kept as a project file, and this message has no project. It is sent and not kept.`,
+		);
 	}
 	db.update(mailOutboxFiles)
-		.set({ keepAsDocument: keep, updatedAt: now() })
+		.set({ keep, updatedAt: now() })
 		.where(eq(mailOutboxFiles.id, id))
 		.run();
 	return messageOf(row.outboxId, db);
@@ -205,35 +245,48 @@ export function toSend(outboxId: string, db: Db = getDb()): OutgoingAttachment[]
 }
 
 /**
- * After a message has gone: the files marked to keep become documents under
- * the message's client and project, and every copy is removed. A file that
- * cannot be kept says why on its row and does not undo the send.
+ * After a message has gone: the files marked to keep are kept, a PDF as a
+ * document under the message's client and project, anything else as a file of
+ * its project, and every copy is removed. A file that cannot be kept says why
+ * on its row and does not undo the send.
  */
 export async function afterSent(
 	message: { id: string; clientId: string | null; projectId: string | null },
 	db: Db = getDb(),
 ): Promise<void> {
 	for (const row of liveRows(message.id, db)) {
-		if (row.keepAsDocument && row.relativePath && !row.documentId) {
+		const target = outbox.keepsAs({ ...row, projectId: message.projectId });
+		if (row.keep && target && row.relativePath && !row.documentId && !row.keptAssetId) {
 			try {
-				const document = await keepSentFile(
-					{
-						data: new Uint8Array(readFileSync(absolute(row.relativePath))),
-						fileName: row.fileName,
-						fileDate: row.fileDate,
-						clientId: message.clientId,
-						projectId: message.projectId,
-					},
-					db,
-				);
-				db.update(mailOutboxFiles)
-					.set({ documentId: document.id, keepError: null, updatedAt: now() })
-					.where(eq(mailOutboxFiles.id, row.id))
-					.run();
+				if (target === "document") {
+					const document = await keepSentFile(
+						{
+							data: new Uint8Array(readFileSync(absolute(row.relativePath))),
+							fileName: row.fileName,
+							fileDate: row.fileDate,
+							clientId: message.clientId,
+							projectId: message.projectId,
+						},
+						db,
+					);
+					db.update(mailOutboxFiles)
+						.set({ documentId: document.id, keepError: null, updatedAt: now() })
+						.where(eq(mailOutboxFiles.id, row.id))
+						.run();
+				} else if (message.projectId) {
+					const asset = await projectAssets.add(
+						{ projectId: message.projectId, sourcePath: absolute(row.relativePath), fileName: row.fileName },
+						db,
+					);
+					db.update(mailOutboxFiles)
+						.set({ keptAssetId: asset.id, keepError: null, updatedAt: now() })
+						.where(eq(mailOutboxFiles.id, row.id))
+						.run();
+				}
 			} catch (cause) {
 				db.update(mailOutboxFiles)
 					.set({
-						keepError: (cause instanceof Error ? cause.message : "It could not be added to documents.").slice(0, 500),
+						keepError: (cause instanceof Error ? cause.message : "It could not be kept.").slice(0, 500),
 						updatedAt: now(),
 					})
 					.where(eq(mailOutboxFiles.id, row.id))

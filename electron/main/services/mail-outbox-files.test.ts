@@ -90,8 +90,8 @@ describe("files from this machine", () => {
 			fileName: "Offerte.docx",
 			mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 			byteSize: 4,
-			keepAsDocument: false,
-			canKeep: false,
+			keep: false,
+			keepsAs: null,
 		});
 		const stored = readdirSync(join(outboxDir, message.id));
 		expect(stored).toEqual([after.files[0]!.id]);
@@ -100,8 +100,8 @@ describe("files from this machine", () => {
 	it("keeps PDFs only: a zip is sent and never kept", async () => {
 		const message = await draft();
 		const after = await files.add(message.id, { fileName: "photos.zip", data: bytes("zip") }, db);
-		expect(after.files[0]!.canKeep).toBe(false);
-		await expect(files.setKeep(after.files[0]!.id, true, db)).rejects.toThrow(/not a PDF/);
+		expect(after.files[0]!.keepsAs).toBeNull();
+		await expect(files.setKeep(after.files[0]!.id, true, db)).rejects.toThrow(/has no project/);
 	});
 
 	it("refuses an empty file, and a file on a message that has gone", async () => {
@@ -155,7 +155,7 @@ describe("files from this machine", () => {
 		const project = await projectsService.create({ name: "Website", clientId: client.id }, db);
 		const message = await draft({ clientId: client.id, projectId: project.id });
 		const added = await files.add(message.id, { fileName: "Offerte.pdf", data: pdf("v1") }, db);
-		expect(added.files[0]!.canKeep).toBe(true);
+		expect(added.files[0]!.keepsAs).toBe("document");
 		await files.setKeep(added.files[0]!.id, true, db);
 
 		// Not before it has gone.

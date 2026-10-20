@@ -90,6 +90,9 @@ export function registerMailIpc(): void {
 		threads.linkClient(id, clientId),
 	);
 	ipcMain.handle("mail.threads.unlinkClient", (_event, id: string) => threads.unlinkClient(id));
+	ipcMain.handle("mail.threads.linkProject", (_event, id: string, projectId: string | null) =>
+		threads.linkProject(id, projectId),
+	);
 	ipcMain.handle("mail.threads.countForClient", (_event, clientId: string) =>
 		threads.countForClient(clientId),
 	);
@@ -222,6 +225,9 @@ export function registerMailIpc(): void {
 		"mail.outbox.files.add",
 		(_event, outboxId: string, input: { fileName: string; data: Uint8Array; fileDate?: string }) =>
 			outboxFiles.add(outboxId, input),
+	);
+	ipcMain.handle("mail.outbox.files.addFromProject", (_event, outboxId: string, assetId: string) =>
+		outboxFiles.addFromProject(outboxId, assetId),
 	);
 	ipcMain.handle("mail.outbox.files.remove", (_event, fileId: string) => outboxFiles.remove(fileId));
 	ipcMain.handle("mail.outbox.files.setKeep", (_event, fileId: string, keep: boolean) =>

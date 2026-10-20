@@ -6,7 +6,9 @@ import { Icon, type IconName } from "../../components/Icon";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { describeMailFileResult } from "./format";
+import { requestOpen } from "../../lib/open-entity";
 import { LinkClientDialog } from "./LinkClientDialog";
+import { LinkProjectDialog } from "./LinkProjectDialog";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { MessageView } from "./MessageView";
 import { ConversationPanel, type ThreadEntry } from "./ConversationPanel";
@@ -80,6 +82,7 @@ export function ThreadView({
 }: ThreadViewProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [linking, setLinking] = useState(false);
+	const [filing, setFiling] = useState(false);
 	// The overview of the whole conversation is a choice that holds between threads.
 	const [overviewOpen, setOverviewOpen] = useState(readOverviewOpen);
 	const [version, setVersion] = useState(0);
@@ -170,6 +173,15 @@ export function ThreadView({
 	function refresh() {
 		setVersion((v) => v + 1);
 		onChanged();
+	}
+
+	async function unfile() {
+		try {
+			await window.juno.mail.threads.linkProject(threadId, null);
+			refresh();
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		}
 	}
 
 	async function unlink() {
@@ -352,6 +364,15 @@ export function ThreadView({
 			? [{ id: "unlink-client", label: "Unlink client", icon: "link" as const, onSelect: () => void unlink() }]
 			: []),
 		{
+			id: "file-project",
+			label: summary.projectId ? "Change project" : "File under a project",
+			icon: "projects",
+			onSelect: () => setFiling(true),
+		},
+		...(summary.projectId
+			? [{ id: "unfile-project", label: "Take off the project", icon: "projects" as const, onSelect: () => void unfile() }]
+			: []),
+		{
 			id: "copy-address",
 			label: "Copy sender address",
 			icon: "copy",
@@ -445,6 +466,19 @@ export function ThreadView({
 							) : null}
 						</span>
 					) : null}
+					{summary.projectId && summary.projectName ? (
+						<button
+							type="button"
+							onClick={() =>
+								requestOpen({ kind: "project", id: summary.projectId!, name: summary.projectName! })
+							}
+							title="Open the project"
+							className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-1 text-[length:var(--text-sm)] text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+						>
+							<Icon name="projects" size={12} />
+							{summary.projectName}
+						</button>
+					) : null}
 					<p className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
 						{entries.length} {entries.length === 1 ? "message" : "messages"}
 					</p>
@@ -459,6 +493,11 @@ export function ThreadView({
 								key={selected.message.id}
 								message={selected.message}
 								clientLinked={summary.clientId !== null}
+								project={
+									summary.projectId && summary.projectName
+										? { id: summary.projectId, name: summary.projectName }
+										: null
+								}
 								open
 								onToggle={noop}
 								onNotice={onNotice}
@@ -509,6 +548,16 @@ export function ThreadView({
 				</Dialog>
 			) : null}
 
+			{filing ? (
+				<LinkProjectDialog
+					thread={summary}
+					onClose={() => setFiling(false)}
+					onLinked={() => {
+						setFiling(false);
+						refresh();
+					}}
+				/>
+			) : null}
 			{linking ? (
 				<LinkClientDialog
 					threadId={threadId}

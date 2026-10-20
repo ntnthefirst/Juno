@@ -67,6 +67,9 @@ export function registerProjectsIpc(): void {
 		(_event, projectId: string, storage: "managed" | "linked") =>
 			actions.chooseAssets(projectId, storage),
 	);
+	ipcMain.handle("projects.assets.addFromMail", (_event, projectId: string, attachmentId: string) =>
+		assets.addFromMailAttachment(projectId, attachmentId),
+	);
 	ipcMain.handle("projects.assets.update", (_event, id: string, patch: ProjectAssetPatch) =>
 		assets.update(id, patch),
 	);

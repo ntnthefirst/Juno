@@ -1190,6 +1190,27 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: project record ${opened}`);
+									// The conversations filed under the project, in both themes, with
+									// the storage dialog closed and the section scrolled into view.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 500));
+											const heading = [...document.querySelectorAll("main section h2")].find((el) => el.textContent.trim() === "Mail");
+											heading?.scrollIntoView({ block: "start" });
+											await new Promise((r) => setTimeout(r, 400));
+										})()`,
+									);
+									if (shotDir) {
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											writeFileSync(joinPath(shotDir, `project-mail-${theme}.png`), (await capture(window.webContents)).toPNG());
+										}
+									}
 								}
 								if (screen === "Client record") {
 									const opened = await window.webContents.executeJavaScript(

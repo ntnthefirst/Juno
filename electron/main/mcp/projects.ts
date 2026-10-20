@@ -313,10 +313,30 @@ export const projectTools: ToolDescriptor[] = [
 		handler: (args) => assets.listForProject(args.project_id as string),
 	},
 	{
+		name: "projects.add_file_from_mail",
+		title: "File a mail attachment under a project",
+		description:
+			"Copies an attachment of a received message into a project's files: the photos of a room, the " +
+			"measurements, the logo a client sent. Named as it arrived. A PDF that is paperwork, such as a " +
+			"signed contract, belongs in documents instead (documents.import works from a file).",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				project_id: { type: "string", description: "The project's id, from projects.list." },
+				attachment_id: { type: "string", description: "The attachment's id, from mail.messages.get." },
+			},
+			required: ["project_id", "attachment_id"],
+			additionalProperties: false,
+		},
+		handler: (args) => assets.addFromMailAttachment(String(args.project_id), String(args.attachment_id)),
+	},
+	{
 		name: "projects.update_asset",
 		title: "Rename or caption a project file",
 		description:
-			"Change the name a file is shown under, or its caption. The file on disk keeps the name it was saved with. Adding a file is not a tool: it picks one from this machine, which is a person's job.",
+			"Change the name a file is shown under, or its caption. The file on disk keeps the name it was saved with. Adding a file from this machine is not a tool: picking one is a person's job. An attachment of a received mail is added with projects.add_file_from_mail.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {

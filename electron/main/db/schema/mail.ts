@@ -1,6 +1,6 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { standardColumns } from "../columns";
-import { clients } from "./clients";
+import { clients, projects } from "./clients";
 
 /**
  * An IMAP account. Settings only.
@@ -119,12 +119,20 @@ export const mailThreads = sqliteTable(
 		clientId: text("client_id").references(() => clients.id),
 		/** auto, manual, or null while unlinked and never touched by hand. */
 		linkSource: text("link_source"),
+		/**
+		 * The job the conversation is about. Optional, and never inferred from the
+		 * addresses: a supplier writing about a client's kitchen belongs to that
+		 * kitchen and not to the client, so this is set by a person, by a reply
+		 * sent from the project, or by an agent, and nothing else.
+		 */
+		projectId: text("project_id").references(() => projects.id),
 		firstMessageAt: text("first_message_at").notNull(),
 		lastMessageAt: text("last_message_at").notNull(),
 	},
 	(t) => [
 		index("mail_threads_account_last_idx").on(t.accountId, t.lastMessageAt),
 		index("mail_threads_client_idx").on(t.clientId),
+		index("mail_threads_project_idx").on(t.projectId),
 		index("mail_threads_deleted_idx").on(t.deletedAt),
 	],
 );

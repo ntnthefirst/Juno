@@ -360,6 +360,8 @@ export interface JunoApi {
 			 * path from here: the renderer never names a file on disk.
 			 */
 			choose(projectId: string, storage: ProjectAssetStorage): Promise<ProjectAsset[]>;
+			/** Copies an attachment of a received mail into the project, by the attachment's id. */
+			addFromMail(projectId: string, attachmentId: string): Promise<ProjectAsset>;
 			update(id: string, patch: ProjectAssetPatch): Promise<ProjectAsset>;
 			remove(id: string): Promise<ProjectAsset>;
 			restore(id: string): Promise<ProjectAsset>;
@@ -820,6 +822,8 @@ export interface JunoApi {
 			get(id: string): Promise<MailThread | null>;
 			linkClient(id: string, clientId: string): Promise<MailThreadSummary>;
 			unlinkClient(id: string): Promise<MailThreadSummary>;
+			/** Files the conversation under a project, or takes it off one with null. Leaves its client alone. */
+			linkProject(id: string, projectId: string | null): Promise<MailThreadSummary>;
 			countForClient(clientId: string): Promise<number>;
 		};
 		/**
@@ -924,6 +928,8 @@ export interface JunoApi {
 				choose(outboxId: string): Promise<MailOutboxMessage | null>;
 				/** A dropped file, as bytes. Never a path. */
 				add(outboxId: string, input: { fileName: string; data: Uint8Array; fileDate?: string }): Promise<MailOutboxMessage>;
+				/** A file of a project, by its id. Copied onto the draft; never kept again. */
+				addFromProject(outboxId: string, assetId: string): Promise<MailOutboxMessage>;
 				remove(fileId: string): Promise<MailOutboxMessage>;
 				setKeep(fileId: string, keep: boolean): Promise<MailOutboxMessage>;
 			};

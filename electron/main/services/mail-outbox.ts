@@ -21,6 +21,7 @@ import type {
 	MailDraftPatch,
 	MailOutboxAttachment,
 	MailOutboxCounts,
+	MailFileKeep,
 	MailOutboxFile,
 	MailMessageClient,
 	MailOutboxListQuery,
@@ -156,6 +157,22 @@ function attachmentsFor(db: Db, outboxIds: string[]): Map<string, MailOutboxAtta
 }
 
 /**
+ * Where a file on a message would be kept once sent. Documents is the PDF
+ * paperwork (decision 49), so a PDF becomes a document; anything else becomes
+ * a file of the message's project, and with no project there is nowhere for it
+ * to go. A file that came from a project's files is one already.
+ */
+export function keepsAs(file: {
+	fileName: string;
+	sourceAssetId: string | null;
+	projectId: string | null;
+}): MailFileKeep | null {
+	if (file.sourceAssetId) return null;
+	if (isPdfName(file.fileName)) return "document";
+	return file.projectId ? "project-file" : null;
+}
+
+/**
  * Files attached from this machine, by message id. Read here rather than in
  * mail-outbox-files.ts, which writes them and needs this module in turn.
  */
@@ -163,21 +180,24 @@ function filesFor(db: Db, outboxIds: string[]): Map<string, MailOutboxFile[]> {
 	const out = new Map<string, MailOutboxFile[]>();
 	if (outboxIds.length === 0) return out;
 	const rows = db
-		.select()
+		.select({ file: mailOutboxFiles, projectId: mailOutbox.projectId })
 		.from(mailOutboxFiles)
+		.innerJoin(mailOutbox, eq(mailOutboxFiles.outboxId, mailOutbox.id))
 		.where(and(inArray(mailOutboxFiles.outboxId, outboxIds), isNull(mailOutboxFiles.deletedAt)))
 		.orderBy(asc(mailOutboxFiles.createdAt), asc(mailOutboxFiles.id))
 		.all();
-	for (const row of rows) {
+	for (const { file: row, projectId } of rows) {
 		const list = out.get(row.outboxId) ?? [];
 		list.push({
 			id: row.id,
 			fileName: row.fileName,
 			mimeType: row.mimeType,
 			byteSize: row.byteSize,
-			keepAsDocument: row.keepAsDocument,
-			canKeep: isPdfName(row.fileName),
+			keep: row.keep,
+			keepsAs: keepsAs({ fileName: row.fileName, sourceAssetId: row.sourceAssetId, projectId }),
+			sourceAssetId: row.sourceAssetId,
 			documentId: row.documentId,
+			keptAssetId: row.keptAssetId,
 			keepError: row.keepError,
 		});
 		out.set(row.outboxId, list);
@@ -551,14 +571,16 @@ function replyHeaders(db: Db, replyToMessageId: string | null | undefined): {
 	references: string[];
 	threadId: string | null;
 	clientId: string | null;
+	projectId: string | null;
 } {
-	if (!replyToMessageId) return { inReplyTo: null, references: [], threadId: null, clientId: null };
+	if (!replyToMessageId) return { inReplyTo: null, references: [], threadId: null, clientId: null, projectId: null };
 	const original = db
 		.select({
 			messageId: mailMessages.messageId,
 			referencesJson: mailMessages.referencesJson,
 			threadId: mailMessages.threadId,
 			clientId: mailThreads.clientId,
+			projectId: mailThreads.projectId,
 		})
 		.from(mailMessages)
 		.leftJoin(mailThreads, eq(mailMessages.threadId, mailThreads.id))
@@ -572,6 +594,7 @@ function replyHeaders(db: Db, replyToMessageId: string | null | undefined): {
 		references,
 		threadId: original.threadId,
 		clientId: original.clientId ?? null,
+		projectId: original.projectId ?? null,
 	};
 }
 
@@ -621,7 +644,8 @@ async function insertDraft(input: MailDraftInput, db: Db): Promise<MailOutboxMes
 				replyToMessageId: input.replyToMessageId ?? null,
 				threadId: reply.threadId,
 				clientId: input.clientId ?? reply.clientId,
-				projectId: input.projectId ?? null,
+				// A reply carries on the job its conversation is filed under.
+				projectId: input.projectId ?? reply.projectId,
 				templateId: input.templateId ?? null,
 				requestedBy: input.actor ?? "user",
 				createdAt: stamp,
@@ -1055,7 +1079,7 @@ export async function replySeed(
 	db: Db = getDb(),
 ): Promise<MailReplySeed> {
 	const row = db
-		.select({ message: mailMessages, clientId: mailThreads.clientId })
+		.select({ message: mailMessages, clientId: mailThreads.clientId, projectId: mailThreads.projectId })
 		.from(mailMessages)
 		.leftJoin(mailThreads, eq(mailMessages.threadId, mailThreads.id))
 		.where(and(eq(mailMessages.id, messageId), isNull(mailMessages.deletedAt)))
@@ -1114,6 +1138,9 @@ export async function replySeed(
 		}),
 		replyToMessageId: forwarding ? null : message.id,
 		clientId: row.clientId ?? null,
+		// A forward is a new conversation and still about the same job: passing
+		// the client's photos on to a supplier is part of the kitchen.
+		projectId: row.projectId ?? null,
 	};
 }
 
@@ -1178,6 +1205,7 @@ export async function replySeedForOutgoing(
 		}),
 		replyToMessageId: forwarding ? null : row.replyToMessageId,
 		clientId: row.clientId ?? null,
+		projectId: row.projectId ?? null,
 	};
 }
 

@@ -1576,3 +1576,37 @@ says where it is kept now.
 **What would reverse this:** a kind of paperwork that is not a PDF and still
 needs versions and a signature. Then Documents takes that kind, and Sign is
 offered only where the newest version can carry one.
+
+## 50. A project is the job, and a conversation can be filed under it
+
+A small business works in jobs: the website for Acme, the kitchen for the
+Peeters family. The job is where its mail, its paperwork and its files belong,
+so the project is the place everything about it can be found from. A client is
+who pays; a project is what the work is.
+
+**A conversation is filed under a project by a person, not by a guess.**
+`mail_threads.project_id` is set from the reader's menu, by an agent through
+`mail.threads.link_project`, or by Juno itself in exactly two cases that are
+not guesses: a reply carries the project of the conversation it answers, and a
+message sent from a project files the conversation its Sent copy starts. The
+addresses never decide it, because a supplier writing about the Peeters kitchen
+belongs to that kitchen and is not the client. So filing leaves the thread's
+client alone: a thread with no client can go under any project, and a thread
+with a client only under that client's projects or the owner's own.
+
+What follows from a conversation having a project, and nothing more:
+
+- The project's page lists its conversations (Mail), newest first.
+- An attachment can be added to the project's files from the reader, any
+  kind, copied in under its own name. A PDF can still go to Documents instead,
+  and then lands under the project.
+- The composer offers the project's files beside the documents, copied onto
+  the draft like any file. A file from this computer that is not a PDF can be
+  kept as a project file once sent (`mail_outbox_files.keep_as_document` now
+  means keep, wherever the kind goes; the column kept its name).
+
+Nothing new is required. A conversation with no project, a document with no
+project and a project with no client all stay ordinary.
+
+**What would reverse this:** a conversation that is about two jobs often
+enough to matter. That is a join table, and the column would move into it.

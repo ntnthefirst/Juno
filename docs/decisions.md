@@ -1287,6 +1287,15 @@ same screen, shown once.
 settings is (decision 14) and one more: restoring a backup of the records must
 not bring back a token that was taken out since.
 
+**Only a missing file starts a new one.** Starting over makes a new signing
+secret and an empty list, so every client id and every token stops working at
+once, and every client has to be let in again. A file another program holds
+for a moment (a virus scanner, the installer during an update) is waited for,
+and one that still cannot be read leaves the server answering 500, never 401,
+because a 401 is what makes a client throw its token away. A file that was read
+and is not a store is kept beside the new one as
+`agent-connections.broken-<time>.json`.
+
 **No tool lets a client in, makes a token or switches the server.** They are
 IPC only, for the reason `approve` has no tool: the thing being gated is what
 would call it. Every call still checks the lock first, and a client cannot start

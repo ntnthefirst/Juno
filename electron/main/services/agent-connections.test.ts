@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -312,5 +312,54 @@ describe("tokens", () => {
 		connections.revoke(made.connection.id);
 		stop();
 		expect(count).toBe(2);
+	});
+});
+
+describe("the file on disk", () => {
+	const path = () => join(dir, "agent-connections.json");
+
+	it("keeps a client's id and token across a restart, so it never has to connect again", () => {
+		const client = register();
+		const { accessToken } = connect();
+		connections.configureAgentConnections(dir, () => clock);
+		expect(connections.readClientId(client.clientId)?.name).toBe("Claude Code");
+		expect(connections.verifyToken(accessToken)?.name).toBe("Claude Code");
+	});
+
+	it("never replaces a file it could not read, and lets the next try read it", () => {
+		const client = register();
+		const { accessToken } = connect();
+		const before = readFileSync(path(), "utf8");
+
+		// A file it cannot open stands in for one another program holds locked.
+		renameSync(path(), `${path()}.aside`);
+		mkdirSync(path());
+		connections.configureAgentConnections(dir, () => clock);
+		expect(() => connections.verifyToken(accessToken)).toThrow(/could not read agent-connections\.json/);
+		expect(() => connections.readClientId(client.clientId)).toThrow(/could not read/);
+
+		rmSync(path(), { recursive: true });
+		renameSync(`${path()}.aside`, path());
+		expect(readFileSync(path(), "utf8")).toBe(before);
+		expect(connections.verifyToken(accessToken)?.name).toBe("Claude Code");
+		expect(connections.readClientId(client.clientId)?.name).toBe("Claude Code");
+	});
+
+	it("keeps a broken file beside the new one rather than losing it", () => {
+		writeFileSync(path(), "{ not json");
+		connections.configureAgentConnections(dir, () => clock);
+		expect(connections.list()).toEqual([]);
+
+		const kept = readdirSync(dir).filter((name) => name.startsWith("agent-connections.broken-"));
+		expect(kept).toHaveLength(1);
+		expect(readFileSync(join(dir, kept[0]), "utf8")).toBe("{ not json");
+		expect(JSON.parse(readFileSync(path(), "utf8")).secret).toMatch(/^[0-9a-f]{64}$/);
+	});
+
+	it("starts a new store when there is no file yet, and writes it at once", () => {
+		expect(existsSync(path())).toBe(false);
+		expect(connections.list()).toEqual([]);
+		expect(existsSync(path())).toBe(true);
+		expect(readdirSync(dir).some((name) => name.includes("broken"))).toBe(false);
 	});
 });

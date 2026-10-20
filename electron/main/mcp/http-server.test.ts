@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -361,6 +361,23 @@ describe("using the tools after the handshake", () => {
 		connections.revoke(made.connection.id);
 		const { response } = await rpc(made.token, { jsonrpc: "2.0", id: 2, method: "tools/list" });
 		expect(response.status).toBe(401);
+	});
+
+	it("does not tell a client its token is bad when the store cannot be read", async () => {
+		const made = connections.createToken("Script");
+		const file = join(dir, "agent-connections.json");
+		renameSync(file, `${file}.aside`);
+		mkdirSync(file);
+		connections.configureAgentConnections(dir);
+
+		// A 401 here is what makes a client throw its token away and ask for a new one.
+		const { response } = await rpc(made.token, { jsonrpc: "2.0", id: 2, method: "tools/list" });
+		expect(response.status).toBe(500);
+
+		rmSync(file, { recursive: true });
+		renameSync(`${file}.aside`, file);
+		const listed = await rpc(made.token, { jsonrpc: "2.0", id: 2, method: "tools/list" }, { "mcp-protocol-version": "2025-06-18" });
+		expect(listed.json?.result?.tools).toHaveLength(1);
 	});
 
 	it("offers no stream and no session", async () => {

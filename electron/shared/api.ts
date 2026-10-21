@@ -14,10 +14,8 @@
  * service behind it is synchronous.
  */
 import type {
-	AgentClientTarget,
 	AgentConnection,
 	AgentTokenCreated,
-	AgentInstallResult,
 	ClaudeDesktopSetup,
 	AgentAction,
 	AgentActionListQuery,
@@ -512,15 +510,6 @@ export interface JunoApi {
 			setBackground(background: boolean): Promise<McpServerStatus>;
 			/** A port of the person's choosing, or null for the default. */
 			setPort(port: number | null): Promise<McpServerStatus>;
-		};
-		/**
-		 * Writing Juno into the agent clients on this machine, rather than
-		 * leaving a person to find five config files and merge JSON by hand.
-		 */
-		install: {
-			targets(): Promise<AgentClientTarget[]>;
-			/** Edits that one client's file. Backs it up and keeps every other server. */
-			write(clientId: string): Promise<AgentInstallResult>;
 		};
 		/**
 		 * Claude Desktop cannot be given an address, so it gets an extension that

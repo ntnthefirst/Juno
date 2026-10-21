@@ -26,7 +26,7 @@
  * test points it at a temp folder.
  */
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { AgentConnection, AgentTokenCreated, PairingAnswer, PairingRequest } from "../../shared/types";
 
@@ -143,6 +143,35 @@ function file(): string {
 	return join(directory, FILE_NAME);
 }
 
+/** Tries at a file another program has open for a moment, before giving up on it. */
+const FILE_ATTEMPTS = 5;
+const FILE_RETRY_MS = 40;
+
+function pause(ms: number): void {
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function errorCode(cause: unknown): string | undefined {
+	return cause instanceof Error && "code" in cause ? String((cause as NodeJS.ErrnoException).code) : undefined;
+}
+
+/**
+ * On Windows a virus scanner, a backup tool or the installer can hold the file
+ * open for a moment, and reading or replacing it then fails with EBUSY or
+ * EPERM. That is a reason to wait, never a reason to think the file is gone.
+ */
+function withRetry<T>(action: () => T): T {
+	for (let attempt = 1; ; attempt++) {
+		try {
+			return action();
+		} catch (cause: unknown) {
+			const busy = ["EBUSY", "EPERM", "EACCES"].includes(errorCode(cause) ?? "");
+			if (!busy || attempt >= FILE_ATTEMPTS) throw cause;
+			pause(FILE_RETRY_MS * attempt);
+		}
+	}
+}
+
 function persist(next: Store): void {
 	const path = file();
 	mkdirSync(dirname(path), { recursive: true });
@@ -150,23 +179,49 @@ function persist(next: Store): void {
 	// 0o600 where the platform honours it. The hashes are not secrets, but the
 	// signing secret is, and the file is not for anyone else on the machine.
 	writeFileSync(tmp, `${JSON.stringify(next, null, "\t")}\n`, { encoding: "utf8", mode: 0o600 });
-	renameSync(tmp, path);
+	withRetry(() => renameSync(tmp, path));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
-function read(): Store {
-	if (store) return store;
-	let raw: unknown = null;
+/**
+ * What is on disk: the parsed file, or null when there is no file yet.
+ *
+ * Only a file that does not exist is a first run. Anything else that stops it
+ * being read throws, and nothing is written, because starting over here makes
+ * a new signing secret and an empty list, and every client that was let in has
+ * to be let in again. A file that was read and is not a store is kept beside
+ * it before a new one is started, so what was in it can still be looked at.
+ */
+function load(path: string): Record<string, unknown> | null {
+	let text: string;
 	try {
-		raw = JSON.parse(readFileSync(file(), "utf8"));
-	} catch {
-		raw = null;
+		text = withRetry(() => readFileSync(path, "utf8"));
+	} catch (cause: unknown) {
+		if (errorCode(cause) === "ENOENT") return null;
+		throw new Error(
+			`Juno could not read ${FILE_NAME}, so it cannot check who may use the agent server. Restart Juno. If it keeps happening, check that no other program locks ${path}.`,
+		);
 	}
 
-	const record = isRecord(raw) ? raw : {};
+	let parsed: unknown = null;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		parsed = null;
+	}
+	if (isRecord(parsed) && typeof parsed.secret === "string" && parsed.secret.length >= 32) return parsed;
+
+	const stamp = new Date(now()).toISOString().replace(/[:.]/g, "-");
+	withRetry(() => copyFileSync(path, join(dirname(path), `agent-connections.broken-${stamp}.json`)));
+	return null;
+}
+
+function read(): Store {
+	if (store) return store;
+	const record = load(file()) ?? {};
 	const secret = typeof record.secret === "string" && record.secret.length >= 32 ? record.secret : null;
 	const connections: StoredConnection[] = [];
 	if (secret && Array.isArray(record.connections)) {

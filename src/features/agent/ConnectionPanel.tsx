@@ -6,9 +6,7 @@ import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { Section } from "../settings/Section";
 import { ClaudeDesktopConnect } from "./ClaudeDesktopConnect";
-import { ClientInstaller } from "./ClientInstaller";
 import { ConnectedClients } from "./ConnectedClients";
-import { ManualSetup } from "./ManualSetup";
 
 type ConnectionPanelProps = {
 	onNotice: (message: string) => void;
@@ -20,26 +18,19 @@ type ConnectionPanelProps = {
 	part?: "server" | "connect" | "tools";
 };
 
-/** Let Juno write the file, or write it yourself. There is no third way in. */
-type Route = "install" | "manual";
-
-const ROUTES: { id: Route; label: string; hint: string }[] = [
-	{ id: "install", label: "Let Juno do it", hint: "Pick a client and Juno writes its configuration file" },
-	{ id: "manual", label: "Do it myself", hint: "Copy the entry and paste it wherever it goes" },
-];
-
 /**
  * How an agent reaches Juno, who has been let in, and what it can do.
  *
  * The server is an address, the way Figma's is: a client is given the URL and
  * nothing else. The first time it connects it opens a page with a code and
- * Juno asks for that code, so there is no key to copy and none to leak.
+ * Juno asks for that code, so there is no key to copy and none to leak. Juno
+ * writes nothing into another program's configuration: the person adds the
+ * URL in the client, the way they would add any other server.
  */
 export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 	const [status, setStatus] = useState<McpServerStatus | null>(null);
 	const [tools, setTools] = useState<ToolSummary[]>([]);
 	const [error, setError] = useState<string | null>(null);
-	const [route, setRoute] = useState<Route>("install");
 	const [filter, setFilter] = useState("");
 	const [switching, setSwitching] = useState(false);
 
@@ -173,30 +164,34 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 			) : null}
 
 			{showConnect ? (
-				<Section
-					title="Connect a client"
-					anchor="mcp-connect"
-					action={<RouteSwitch route={route} onChange={setRoute} />}
-				>
+				<Section title="Connect a client" anchor="mcp-connect">
 					<div className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2.5">
 						<Icon name="info" className="mt-0.5 flex-none text-[var(--ink-muted)]" />
 						<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-							The first time a client connects it opens a page with a code. Type that code into the prompt
-							Juno shows. Claude Desktop cannot reach an address on this machine, so it gets an extension
-							and a token instead.
+							Add the server URL as a new MCP server in your client. The first time it connects it opens a
+							page with a code. Type that code into the prompt Juno shows. Claude Desktop cannot reach an
+							address on this machine, so it gets an extension and a token instead.
 						</p>
 					</div>
 
-					<div className="mt-4">
-						<ClaudeDesktopConnect onNotice={onNotice} serverRunning={status.running} />
-					</div>
+					{/* The agent screen shows the server above this, URL and all. */}
+					{part === "connect" ? (
+						<div className="mt-4 flex items-center gap-2">
+							<p
+								data-selectable
+								className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-[length:var(--text-dense)] text-[var(--ink)]"
+							>
+								{status.url}
+							</p>
+							<Button size="dense" onClick={() => void copy(status.url, "URL copied.")}>
+								<Icon name="copy" />
+								Copy URL
+							</Button>
+						</div>
+					) : null}
 
 					<div className="mt-4">
-						{route === "install" ? (
-							<ClientInstaller onNotice={onNotice} serverRunning={status.running} />
-						) : (
-							<ManualSetup onNotice={onNotice} />
-						)}
+						<ClaudeDesktopConnect onNotice={onNotice} serverRunning={status.running} />
 					</div>
 				</Section>
 			) : null}
@@ -315,44 +310,6 @@ function PortRow({ status, busy, onChange }: PortRowProps) {
 					? "Pick a port from 1024 to 32767. Higher ones are handed out to other programs at random."
 					: "Changing the port changes the URL, so clients have to be pointed at it again."}
 			</p>
-		</div>
-	);
-}
-
-type RouteSwitchProps = {
-	route: Route;
-	onChange: (next: Route) => void;
-};
-
-/** Two buttons in one well: the same choice a radio pair makes, in one row. */
-function RouteSwitch({ route, onChange }: RouteSwitchProps) {
-	return (
-		<div
-			role="radiogroup"
-			aria-label="How to connect a client"
-			className="flex gap-0.5 rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5"
-		>
-			{ROUTES.map((option) => {
-				const selected = option.id === route;
-				return (
-					<button
-						key={option.id}
-						type="button"
-						role="radio"
-						aria-checked={selected}
-						title={option.hint}
-						onClick={() => onChange(option.id)}
-						className={[
-							"flex h-8 items-center rounded-[var(--radius-sm)] px-3 text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]",
-							selected
-								? "bg-[var(--surface)] font-[var(--weight-medium)] text-[var(--ink)] shadow-[0_0_0_1px_var(--line)]"
-								: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
-						].join(" ")}
-					>
-						{option.label}
-					</button>
-				);
-			})}
 		</div>
 	);
 }

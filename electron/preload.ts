@@ -285,10 +285,6 @@ const api: JunoApi = {
 			setBackground: (background) => call("agent.server.setBackground", background),
 			setPort: (port) => call("agent.server.setPort", port),
 		},
-		install: {
-			targets: () => call("agent.install.targets"),
-			write: (clientId) => call("agent.install.write", clientId),
-		},
 		claudeDesktop: {
 			connect: () => call("agent.claudeDesktop.connect"),
 		},

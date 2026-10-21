@@ -9,7 +9,6 @@
  * 6. Window last, so it never paints against a half-built backend.
  */
 import { app, nativeTheme, shell } from "electron";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -26,7 +25,6 @@ import {
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import * as agentAudit from "./main/services/agent-audit";
-import { configureAgentInstall } from "./main/services/agent-install";
 import { configureClaudeDesktop } from "./main/services/claude-desktop";
 import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
@@ -191,11 +189,6 @@ if (!app.requestSingleInstanceLock()) {
 		// Writing Juno into the agent clients on this machine needs the address
 		// the settings screen shows, so it is given the same answer rather than
 		// working it out a second time.
-		configureAgentInstall({
-			status: () => serverStatus(),
-			home: homedir(),
-			platform: process.platform,
-		});
 		// Claude Desktop takes an extension rather than an address. The bridge
 		// inside it is compiled beside the main process, and the icon ships in
 		// the package for this alone.

@@ -778,6 +778,8 @@ stay visible and editable, and the connection test settles it.
 
 ## 32. Juno writes itself into agent clients, carefully
 
+**Reversed by decision 51.** Juno no longer writes into any client's files.
+
 Connecting an agent meant copying JSON into a file whose path differs per
 client and per platform, and merging it by hand without breaking the servers
 already there. `services/agent-install.ts` does it instead, for Claude Code,
@@ -1451,7 +1453,7 @@ named, forwarding to the address, not a second server.
   and a dependency for that would be larger than the code.
 
 **What would reverse this:** Claude Desktop taking a local URL as a server,
-with the handshake. Then it joins the list in `agent-install.ts` and the
+with the handshake. Then it is given the URL like every other client and the
 bridge goes.
 
 ## 47. A mail template fills in only what it asks for, after the recipient is chosen
@@ -1619,3 +1621,27 @@ project and a project with no client all stay ordinary.
 
 **What would reverse this:** a conversation that is about two jobs often
 enough to matter. That is a join table, and the column would move into it.
+
+## 51. A client is given the URL, and Juno writes into no one's files
+
+Decision 32 had Juno find the configuration file of six agent clients and write
+itself into it, with a backup, a careful merge and a page of steps for doing it
+by hand. Every one of those clients already has its own way to add a server by
+URL, and the handshake from decision 42 does the rest, so the writer was a
+second way in that edited files belonging to other programs, could fall out of
+step with each client's own format, and was one more thing to explain on a
+settings page that should say one thing.
+
+So `services/agent-install.ts`, the `agent.install.*` channels, the
+`agent.list_clients` and `agent.connect_client` tools and the two screens
+behind them are gone. Settings > MCP shows the URL with a Copy button, says to
+add it as a server in the client, and the first connection asks for the code.
+A file Juno wrote before stays where it is and keeps working, because what it
+holds is that same URL.
+
+Claude Desktop is the one exception and stays as decision 46 has it: it cannot
+reach an address on this machine, so it gets the extension and a token.
+
+**What would reverse this:** a client people use that cannot add a server by
+URL and has no extension format. Then it gets what Claude Desktop got, a bridge
+of its own, not a file written into its settings.

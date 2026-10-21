@@ -2894,62 +2894,6 @@ export interface Briefing {
 
 /* ----------------------------------------------------------- the MCP server */
 
-/** What an agent client keeps its servers in. Codex is the one that is not JSON. */
-export type AgentConfigFormat = "json" | "toml";
-
-/**
- * An agent client on this machine, and where Juno stands with its MCP config.
- *
- * Two separate questions, because one answer used to stand for both and read
- * as the wrong one: `installed` is whether the client is on this machine, from
- * its own data folder or install directory, and `hasConfigFile` is whether the
- * file Juno would write already exists. A client that is installed but has
- * never had an MCP server added has no file yet, and writing it is exactly what
- * makes the client pick Juno up the next time it starts.
- */
-export interface AgentClientTarget {
-	id: string;
-	name: string;
-	/** Null when this client does not exist on this platform. */
-	path: string | null;
-	installed: boolean;
-	hasConfigFile: boolean;
-	/** Juno is in the file, under some settings. */
-	configured: boolean;
-	/** Juno is in the file with exactly the settings this install would write. */
-	upToDate: boolean;
-	format: AgentConfigFormat;
-	/**
-	 * The object or table the servers live under inside that client's file.
-	 * VS Code calls it "servers", Codex calls it "mcp_servers", everyone else
-	 * copied Claude Desktop and calls it "mcpServers".
-	 *
-	 * It is on the target rather than looked up by id in the renderer, because a
-	 * second copy of this mapping is one that drifts the day a client renames
-	 * its key, and the screen that would be wrong is the one telling a person
-	 * where to paste something by hand.
-	 */
-	configKey: string;
-	/**
-	 * The entry this client would be given, in the shape its file uses, ready to
-	 * paste. Built by the same code that writes it, so a person copying it by
-	 * hand and a click on Connect cannot end up with two different entries.
-	 */
-	snippet: string;
-	/** What the person has to do after the file changes, in one sentence. */
-	after: string;
-}
-
-/** What a write to one agent client's configuration did. */
-export interface AgentInstallResult {
-	name: string;
-	path: string;
-	/** Where the previous file was copied, when there was one. */
-	backupPath: string | null;
-	created: boolean;
-	after: string;
-}
-
 /**
  * The agent server: a listener on this machine's loopback address that an MCP
  * client reaches with a URL.

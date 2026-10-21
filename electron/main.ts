@@ -4490,7 +4490,13 @@ if (!app.requestSingleInstanceLock()) {
 						}
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);
 						app.quit();
-					})();
+					})().catch((error: unknown) => {
+						// A step that throws ends the run here. Left unhandled, the
+						// rejection is only logged, and Juno keeps running in the
+						// background until the script gives up fifteen minutes later.
+						console.error(`SMOKE_FAILED ${error instanceof Error ? error.message : String(error)}`);
+						app.exit(1);
+					});
 				}, 1200);
 			});
 		}

@@ -64,6 +64,13 @@ child.on("exit", (code) => {
 	clearTimeout(timer);
 
 	const ready = stdout.includes("SMOKE_READY");
+	// A step that threw names itself. Say which one, rather than reporting a
+	// window that never loaded.
+	const failed = /SMOKE_FAILED (.*)/.exec(stderr);
+	if (failed) {
+		console.error(`\nSmoke failed: ${failed[1].trim()}`);
+		return finish(1);
+	}
 	// Electron writes a lot of benign noise to stderr on Windows. Only these
 	// matter, and each one means the application is actually broken.
 	const fatal = [

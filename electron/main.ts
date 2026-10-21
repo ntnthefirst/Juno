@@ -1270,18 +1270,11 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.textContent.includes("http://127.0.0.1:")) return "no server address";
 											const power = main.querySelector("button[role=switch]");
 											if (!power || power.getAttribute("aria-checked") !== "true") return "the server switch is not on";
-											// The installers are one of two routes and the block of
-											// configuration is the other, so both sides of the switch
-											// are checked here rather than assuming which one is up.
-											if (!main.textContent.includes("Claude Code")) return "no client list";
-											const manual = [...main.querySelectorAll("button[role=radio]")].find((el) => el.textContent.trim() === "Do it myself");
-											if (!manual) return "no manual route";
-											manual.click();
-											await new Promise((r) => setTimeout(r, 400));
-											if (!(main.querySelector("pre")?.textContent ?? "").includes("http://127.0.0.1:")) return "no configuration block";
-											const installers = [...main.querySelectorAll("button[role=radio]")].find((el) => el.textContent.trim() === "Let Juno do it");
-											if (installers) installers.click();
-											await new Promise((r) => setTimeout(r, 400));
+											// A client is given the URL and nothing else, so the page says to
+											// add it, and Claude Desktop, which cannot take one, has its own row.
+											if (!main.textContent.includes("Add the server URL")) return "no instruction to add the URL";
+											if (!main.textContent.includes("Claude Desktop")) return "no Claude Desktop row";
+											if (main.querySelector("button[role=radio]")) return "a route switch is still there";
 											return "ok";
 										})()`,
 									);
@@ -4250,27 +4243,20 @@ if (!app.requestSingleInstanceLock()) {
 									await photograph("statuses-project");
 								}
 
-								// The MCP connect page hides half of itself behind a two-way switch, so the
-								// loop above only ever photographs the installers. The other side is the
-								// block someone pastes by hand, and it has broken before.
+								// The connect page is where a person gets the URL to give a client, so it
+								// has to carry the address and a way to copy it, not only the server page.
 								{
 									await openPage("mcp-connect", "mcp");
-									const switched = (await inSettings(
+									const shown = (await inSettings(
 										`(() => {
-											const b = [...document.querySelectorAll("button[role=radio]")]
-												.find((el) => el.textContent.trim() === "Do it myself");
-											if (!b) return false;
-											b.click();
-											return true;
+											const text = document.body.textContent;
+											if (!text.includes("http://127.0.0.1:")) return "no server address";
+											if (![...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "Copy URL")) return "no Copy URL button";
+											return "ok";
 										})()`,
-									)) as boolean;
-									if (!switched) throw new Error("Smoke: the MCP page had no way to the manual route");
-									await pause(350);
-									const pasted = (await inSettings(
-										`(document.querySelector("pre")?.textContent ?? "").includes("http://127.0.0.1:")`,
-									)) as boolean;
-									if (!pasted) throw new Error("Smoke: the manual route printed no configuration");
-									await photograph("mcp-manual", 300);
+									)) as string;
+									if (shown !== "ok") throw new Error(`Smoke: the MCP connect page has ${shown}`);
+									await photograph("mcp-connect-url", 300);
 								}
 
 								// The search lives above the groups and answers on a page of its own. It is

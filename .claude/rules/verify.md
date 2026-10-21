@@ -28,9 +28,11 @@ Run from the repo root. The project uses npm.
 Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
 screen and the settings window, and write a screenshot of each in both themes
 to `.smoke/`. That is the fastest honest look at a visual change. Add
-`JUNO_SMOKE_FRONT=1` to keep the window above every other window for the run;
-without it, a window somebody covers produces stale captures (see the
-`capturePage` trap below).
+`JUNO_SMOKE_FRONT=1` to keep the window above every other window for the run,
+and to restore it if somebody minimises it; without it, a window somebody
+covers produces stale captures (see the `capturePage` trap below), and a
+minimised one fails the mail hover step, because it takes no pointer input.
+A step that throws ends the run straight away and the script names it.
 
 These names are the canonical set. A skill or a script that invents a different
 one (`npm run package`, `npm run dist`) is wrong and should be corrected to match.

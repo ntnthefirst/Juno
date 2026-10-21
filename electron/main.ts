@@ -782,12 +782,20 @@ if (!app.requestSingleInstanceLock()) {
 							 * machine nobody is sitting at still produces screenshots worth
 							 * looking at. It is off by default, because a run that steals the
 							 * screen is a run nobody starts twice.
+							 *
+							 * Staying on top does not stop the window being minimised, by a
+							 * person at the machine who wants their screen back, and a
+							 * minimised window is neither composited nor sent pointer input. So
+							 * it is restored as soon as it goes.
 							 */
 							const front = (target: Electron.BrowserWindow | null) => {
 								if (!process.env.JUNO_SMOKE_FRONT || !target || target.isDestroyed()) return;
 								target.setAlwaysOnTop(true, "screen-saver");
 								target.show();
 								target.focus();
+								target.on("minimize", () => {
+									if (!target.isDestroyed()) target.restore();
+								});
 							};
 							front(window);
 
@@ -3863,7 +3871,9 @@ if (!app.requestSingleInstanceLock()) {
 
 									// A row under the pointer shows its actions and nothing else:
 									// the date, the count and the marks step aside. Hover needs a
-									// real pointer, so the move is sent as an input event.
+									// real pointer, so the move is sent as an input event. A
+									// minimised window takes no pointer input at all, which is a
+									// state of the desktop rather than of the row, so it is named.
 									const rowBox = (await window.webContents.executeJavaScript(
 										`(() => {
 											const row = document.querySelector("main ul li.group");
@@ -3873,15 +3883,26 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as { x: number; y: number } | null;
 									if (!rowBox) throw new Error("Smoke: no mail row to hover");
-									window.webContents.sendInputEvent({ type: "mouseMove", x: rowBox.x, y: rowBox.y });
-									await new Promise((r) => setTimeout(r, 400));
-									const hoverState = (await window.webContents.executeJavaScript(
-										`(() => {
-											const row = document.querySelector("main ul li.group");
-											const actions = row && [...row.querySelectorAll("button[aria-label]")].filter((b) => getComputedStyle(b.parentElement).opacity === "1");
-											return actions && actions.length >= 3 ? "ok" : "the hover actions did not show";
-										})()`,
-									)) as string;
+									if (window.isMinimized()) {
+										throw new Error(
+											"Smoke: mail hover needs the window on screen, and it was minimised. Run with JUNO_SMOKE_FRONT=1",
+										);
+									}
+									// The move is sent again until the actions are in: the real
+									// pointer, if it is over the window and moves, puts hover back
+									// where it is, and the fade takes a moment of its own.
+									let hoverState = "the hover actions did not show";
+									for (let attempt = 0; attempt < 10 && hoverState !== "ok"; attempt++) {
+										window.webContents.sendInputEvent({ type: "mouseMove", x: rowBox.x, y: rowBox.y });
+										await new Promise((r) => setTimeout(r, 200));
+										hoverState = (await window.webContents.executeJavaScript(
+											`(() => {
+												const row = document.querySelector("main ul li.group");
+												const actions = row && [...row.querySelectorAll("button[aria-label]")].filter((b) => getComputedStyle(b.parentElement).opacity === "1");
+												return actions && actions.length >= 3 ? "ok" : "the hover actions did not show";
+											})()`,
+										)) as string;
+									}
 									if (hoverState !== "ok") throw new Error(`Smoke: mail hover ${hoverState}`);
 									await shoot("mail-hover");
 									window.webContents.sendInputEvent({ type: "mouseMove", x: 4, y: 400 });

@@ -24,7 +24,7 @@ export function Button({
 }: ButtonProps) {
 	const metrics =
 		size === "dense"
-			? "h-[32px] px-2 text-dense"
+			? "h-[32px] px-3 text-dense"
 			: "h-[40px] px-4 text-base";
 
 	return (

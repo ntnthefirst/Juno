@@ -37,10 +37,10 @@ export function Toast({ message, actionLabel, onAction, onDismiss }: ToastProps)
 			role="status"
 			aria-live="polite"
 			data-popover-root
-			className="animate-lift fixed bottom-8 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] py-2 pl-4 pr-2"
+			className="animate-lift fixed bottom-8 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] py-3 pl-4 pr-3"
 			style={{ boxShadow: "var(--shadow-popover)" }}
 		>
-			<span className="text-dense">{message}</span>
+			<span className="text-base">{message}</span>
 			{actionLabel && onAction ? (
 				<Button size="dense" onClick={act}>
 					<span className="text-[var(--accent)]">{actionLabel}</span>

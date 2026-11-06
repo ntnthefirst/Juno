@@ -25,7 +25,7 @@ type EmptyStateProps = {
 /**
  * An empty state for a list, screen or section.
  *
- * Sits on paper with marketing-page breathing room, a clear explanation of what
+ * Sits in the sheet with room around it, a clear explanation of what
  * the entity is and why it exists, and an immediate primary action with its
  * keyboard shortcut.
  */
@@ -40,21 +40,21 @@ export function EmptyState({
 	return (
 		<div className="flex flex-col items-center justify-center py-16 px-6 text-center animate-fade">
 			{icon ? (
-				<div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)] shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-					<Icon name={icon} size={28} strokeWidth={1.8} />
+				<div className="mb-3 flex h-12 w-12 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--sunken)] text-[var(--ink-muted)]">
+					<Icon name={icon} size={24} />
 				</div>
 			) : null}
 
-			<h3 className="text-h3 text-[var(--ink)]">
+			<h3 className="text-lg font-[var(--weight-medium)] text-[var(--ink)]">
 				{title}
 			</h3>
 
-			<p className="mt-2 max-w-[44ch] text-base text-[var(--ink-muted)]">
+			<p className="mt-3 max-w-[44ch] text-base text-[var(--ink-muted)]">
 				{description}
 			</p>
 
 			{action || secondaryAction ? (
-				<div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+				<div className="mt-3 flex flex-wrap items-center justify-center gap-3">
 					{action ? (
 						<div className="flex items-center gap-2">
 							<Button variant="primary" onClick={action.onClick}>

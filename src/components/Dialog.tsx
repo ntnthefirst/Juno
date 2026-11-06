@@ -90,9 +90,9 @@ export function Dialog({ title, onClose, children, width = "base" }: DialogProps
 				aria-modal="true"
 				aria-labelledby={labelId}
 				tabIndex={-1}
-				className={`animate-scale w-full rounded-[var(--radius-xl)] border border-[var(--line)] bg-[var(--surface)] focus:outline-none ${
+				className={`animate-scale w-full rounded-[var(--radius-xl)] bg-[var(--surface)] focus:outline-none ${
 					width === "narrow"
-						? "max-w-[400px]"
+						? "max-w-[440px]"
 						: width === "wide"
 							? "max-w-[860px]"
 							: "max-w-[560px]"
@@ -101,11 +101,11 @@ export function Dialog({ title, onClose, children, width = "base" }: DialogProps
 			>
 				<h2
 					id={labelId}
-					className="px-6 pt-6 text-h3"
+					className="px-6 pt-6 text-lg font-[var(--weight-medium)]"
 				>
 					{title}
 				</h2>
-				<div className="px-6 pb-6">{children}</div>
+				<div className="px-6 pt-3 pb-6">{children}</div>
 			</div>
 		</div>,
 		document.body,

@@ -1509,7 +1509,7 @@ project of the owner's own has no client, and neither does its document.
 Revisit if: a document ever needs more than one project. That is a join table,
 and the single column would have to move into it with its data.
 
-## 48. Juno runs in the background, so an agent can always reach it
+## 49. Juno runs in the background, so an agent can always reach it
 
 The agent server lives in the Juno process (decision 42), and the Claude Desktop
 extension is only a bridge to it (decision 46). With Juno closed the bridge has
@@ -1535,3 +1535,31 @@ it is, which is what they do with the window open.
 
 **What would reverse this:** a client that can start Juno itself on demand, which
 would make an always-running process unnecessary.
+
+## 50. The Figma file is the reference for visual values and text styles
+
+The design file now draws every screen and component, and the text in it is set
+in named text styles. Rather than keep two sets of numbers and a rule for which
+one wins per value, the file is the reference: where `brand/tokens.css` and the
+file disagree, the file is right and the tokens move.
+
+This supersedes the earlier token values. `--line` in light is `#ececf1`, and
+`--radius-sm`, `-md`, `-lg` and `-xl` are 6, 8, 12 and 16. The icon rail is the
+56px strip the frames draw (48px entries inside it), and the title bar is 40px.
+
+**The text styles are the type scale.** Each is one Tailwind utility that carries
+its own pixel line height, so no component pairs a size with a `leading-*` to get
+the design's value: `text-h1` 32/40, `text-h2` 24/30 and `text-h3` 20/25 (all
+semibold), `text-lg` 16/24, `text-base` 14/21, `text-dense` 13/20, `text-sm`
+12/18, `text-micro` 11/16 (medium), `text-document` 16/26, and `text-overline`
+11/16 (semibold, 6% tracking, used with `uppercase`). Letter spacing is 0
+everywhere else, so headings carry no negative tracking. A weight a style does
+not fix (base, dense, small and large body are drawn in several) is set on the
+element.
+
+The tokens file is still the one place values live in code, and the rule against
+a raw value in a component stands. What changed is only which side is the source
+when they differ.
+
+**What would reverse this:** the design file ceasing to be maintained alongside
+the app, at which point the tokens go back to being the reference.

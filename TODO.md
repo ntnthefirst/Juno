@@ -223,9 +223,9 @@ windows 720 wide) and are named `NN Screen / State`. Treat a screenshot as the
 truth for layout and the text in it as the truth for copy, except where a
 package says the copy is a placeholder.
 
-**The design is not the spec for values.** Take sizes, colours and radii from
-`brand/tokens.css`, never from a pixel read off a frame (section 8.4 lists the
-two places they differ today). Take behaviour from the package text below.
+**The design is the reference for values** (decision 50). The tokens already match
+it, so use the token utilities and the text styles (`text-h1` to `text-overline`),
+never a pixel read off a frame. Take behaviour from the package text below.
 
 **Every package follows the same rules.**
 
@@ -261,8 +261,7 @@ A sensible order is 8.2 package 1, 2, 3, then 5, 6, 7, 8, then 4 and 9.
 
 ### 8.1 Decisions to take first - **you**
 
-Each one is written into `docs/decisions.md` (next free number is 49, and note
-that 48 is used twice there already, which wants fixing) in the same commit as
+Each one is written into `docs/decisions.md` (next free number is 51) in the same commit as
 the code that depends on it.
 
 1. **Greetings: the design's model or section 5a.** The design has intro and
@@ -298,8 +297,7 @@ the code that depends on it.
 6. **Where automations live.** The design's Agent screen no longer lists them and
    no frame shows another home. They exist in the app (`features/agent/
    AutomationList.tsx`). Decide a home, then draw it in Figma first (8.5).
-7. **Which wins, the tokens or the design.** Section 8.4. Blocks nothing but
-   every package that adds a visual.
+7. **Which wins, the tokens or the design.** Taken: the design (decision 50).
 8. **When two intro blocks match.** The design gives each block one rule and
    says nothing about two blocks with the same rule. Recommended: the one higher
    in the list wins, and the list is reordered by dragging. Blocks package 1.
@@ -681,7 +679,7 @@ use for every file.
 **Behaviour.** Windows toast notifications with action buttons (a due reminder
 has Complete and Snooze, an agent request has Review), a tray icon with a menu
 (Open Juno, New note once package 4 exists, Quit) and a setting for whether
-closing the window keeps Juno running (decision 48 already runs it in the
+closing the window keeps Juno running (decision 49 already runs it in the
 background), a taskbar overlay badge with the number of requests waiting, a global
 shortcut for a new note (off by default, set in Settings), and native file dialogs
 everywhere a file is picked. Nothing here sends anything off the machine.
@@ -725,21 +723,6 @@ build into the app, so check for them in every screen.
 - **Icons scale with their size.** An icon drawn on a 24 grid must scale when
   used at 14, 16 or 18, so use an SVG with a `viewBox` and a size, never a fixed
   pixel drawing.
-
-### 8.4 Design values that differ from `brand/tokens.css` - **you**
-
-Only two things differ, found by reading both.
-
-| Token | `brand/tokens.css` | Figma variable |
-| --- | --- | --- |
-| `--line` (light) | `#e3e3e8` | `line/default` `#ececf1` |
-| `--radius-sm` / `-md` / `-lg` / `-xl` | 4 / 6 / 8 / 12 | `radius/sm` / `md` / `lg` / `xl` 6 / 8 / 12 / 16 |
-
-Everything else (surfaces, ink, accent, seal, status, dark values) is identical.
-Decide which side moves. If the tokens move, change `brand/tokens.css`, copy it to
-`src/styles/tokens.css`, and keep the `@theme inline` block in step, in one commit,
-then look at every screen in both themes. If the design moves, fix the Figma
-variables and the frames bound to them.
 
 ### 8.5 Open design work in Figma
 

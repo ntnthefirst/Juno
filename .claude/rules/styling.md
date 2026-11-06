@@ -47,8 +47,8 @@ should appear about twice on a screen.
   add to `brand/tokens.css` and to the `@theme inline` block, not an arbitrary
   value at the call site. Say so in one line before adding it.
 - Spacing uses the 4px scale (`--space-1` through `--space-16`). Radius uses
-  `--radius-sm` for inputs and badges, `--radius-md` for buttons and rows,
-  `--radius-lg` for cards, `--radius-xl` for modals. `--radius-full` is avatars
+  `--radius-sm` (6px) for inputs and badges, `--radius-md` (8px) for buttons and
+  rows, `--radius-lg` (12px) for cards, `--radius-xl` (16px) for modals. `--radius-full` is avatars
   and nothing else.
 - Motion has its own section, 5e. In short: transform, opacity and colour only,
   never a layout property, and every curve and duration is a token.
@@ -75,17 +75,27 @@ same edit. All four or none.
 Juno is a back office, not a marketing page. The type scale in the tokens is
 already dense; don't reach past it.
 
-- **Default UI text is `--text-base` (14px).** Table cells and list rows are
-  `--text-dense` (13px). Secondary labels `--text-sm` (12px), badges and table
-  meta `--text-micro` (11px).
+- **Default UI text is `text-base` (14/21).** Table cells and list rows are
+  `text-dense` (13/20). Secondary labels `text-sm` (12/18), badges and table
+  meta `text-micro` (11/16, medium).
 - **Rows are `--row-height` (36px).** Not 48, not 56. A screen shows twenty clients
   without scrolling or it is the wrong screen.
-- `--text-h1` (32px) appears at most once per screen, and most screens don't need
-  it at all. A section heading is `--text-h3`.
-- `--leading-tight` for headings and table rows, `--leading-normal` for UI text,
-  `--leading-relaxed` only for long-form: document body and email text.
-- The sidebar is `--sidebar-rail-width` (48px, a code editor's activity bar)
-  and never wider, and the titlebar is `--titlebar-height`. Both are tokens because other things are measured
+- `text-h1` (32/40) appears at most once per screen, and most screens don't need
+  it at all. A section heading is `text-h3` (20/25). `text-h2` is 24/30.
+- **The text styles are the Figma styles (decision 50), one utility each.** Each
+  carries its pixel line height, so never pair one with a `leading-*` to get the
+  design's value. `text-h1`, `-h2` and `-h3` are semibold and `text-micro` is
+  medium, built in. `text-lg` is 16/24 for large body, `text-document` is 16/26
+  for the body of a document or an email, and `text-overline` is 11/16
+  semibold with 6% tracking, used with `uppercase`. Weights the design draws in
+  several (base, dense, small, large body) are set on the element.
+- **Never `text-[length:var(--text-x)]`.** It sets a size and leaves the line
+  height at the inherited 1.5, which is not the design's. Letter spacing is 0, so
+  no negative `tracking-*` on a heading. The only tracking is the overline's.
+  `leading-none` and `leading-tight` stay for badges and dense blocks of fixed
+  height, where the line box is the point.
+- The sidebar is `--sidebar-rail-width` (56px, holding 48px entries, as the
+  design draws it) and never wider, and the titlebar is `--titlebar-height`. Both are tokens because other things are measured
   against them, and because the title bar height is also the height of the
   native caption-button overlay ([architecture.md](architecture.md) section 4b).
 - A row that carries an avatar is `--row-height-roomy` (44px). A row with no
@@ -146,8 +156,7 @@ application, not the native `title`) and in its `aria-label`.
   firm (`--ink`) under the pointer, iris (`--accent`) when it is the page. No
   fill, no outline, no indicator bar. The one ring is the global
   `:focus-visible` one, which only a keyboard triggers, and it stays.
-- **Entries are 48px square and icons 24px with a 1.7 stroke,** the dimensions
-  of a code editor's activity bar. Heroicons draw at 1.5, which is a hairline
+- **Entries are 48px square inside the 56px strip, icons 24px with a 1.7 stroke.** Heroicons draw at 1.5, which is a hairline
   next to the soft colour.
 - **A badge is a dot,** and the count goes in the tooltip and the accessible name.
 - **Screens without an entry** light the entry they belong to

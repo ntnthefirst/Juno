@@ -213,7 +213,7 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 							{ACTOR_LABELS[row.actor]}
 						</span>
 						<span
-							className={`w-[64px] shrink-0 text-right text-sm font-[var(--weight-medium)] ${RESULT_TONES[row.result]}`}
+							className={`min-w-[64px] shrink-0 text-right text-sm font-[var(--weight-medium)] ${RESULT_TONES[row.result]}`}
 						>
 							{RESULT_LABELS[row.result]}
 						</span>
@@ -233,4 +233,5 @@ const RESULT_LABELS: Record<AuditEvent["result"], string> = {
 	pending: "Waiting",
 	rejected: "Rejected",
 	expired: "Expired",
+	closed: "Sent by you, request closed",
 };

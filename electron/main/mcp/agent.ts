@@ -26,6 +26,7 @@ const ACTION_STATES: AgentActionState[] = [
 	"expired",
 	"executed",
 	"failed",
+	"closed",
 ];
 
 const ACTORS: AuditActor[] = ["user", "agent", "automation"];

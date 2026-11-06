@@ -74,6 +74,7 @@ export function registerAgentIpc(): void {
 		actions.list(query ?? {}),
 	);
 	ipcMain.handle("agent.actions.get", (_event, id: string) => actions.get(id));
+	ipcMain.handle("agent.actions.forDraft", (_event, draftId: string) => actions.requestForDraft(draftId));
 	ipcMain.handle("agent.actions.pendingCount", () => actions.pendingCount());
 	// A person's press. There is no tool for this, and there will not be one.
 	ipcMain.handle("agent.actions.approve", (_event, id: string) => actions.approve(id));

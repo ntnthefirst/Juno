@@ -12,6 +12,8 @@ import type {
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { Icon } from "../../components/Icon";
+import { Notice } from "../../components/Notice";
+import { requestOpen } from "../../lib/open-entity";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { BlockMenu, type ManageTarget } from "./blocks/BlockMenu";
@@ -38,7 +40,8 @@ type ComposePageProps = {
 	seed: ComposeSeed;
 	onClose: () => void;
 	onDeleted: () => void;
-	onDone: (message: MailOutboxMessage, queued: boolean) => void;
+	/** `closedRequest` is the title of the agent request that sending this draft closed, if there was one. */
+	onDone: (message: MailOutboxMessage, queued: boolean, closedRequest?: string | null) => void;
 	/**
 	 * Opens the manage screen for intros and outros. The draft is saved first and
 	 * handed over, so coming back reopens the message as it was left. Left out
@@ -83,6 +86,25 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 	const [templateApplied, setTemplateApplied] = useState(Boolean(seed.draft?.templateId));
 	const [savedMessage, setSavedMessage] = useState<MailOutboxMessage | null>(seed.draft ?? null);
 	const [saveState, setSaveState] = useState<SaveState>("idle");
+	// Set when an agent asked to send this draft and nobody has answered yet.
+	const [agentRequestId, setAgentRequestId] = useState<string | null>(null);
+
+	const draftId = seed.draft?.id ?? null;
+	useEffect(() => {
+		if (!draftId) return;
+		let cancelled = false;
+		window.juno.agent.actions
+			.forDraft(draftId)
+			.then((action) => {
+				if (!cancelled) setAgentRequestId(action?.state === "pending" ? action.id : null);
+			})
+			.catch(() => {
+				// No banner is the safe direction: sending still goes through the same gate.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [draftId]);
 
 	const attachmentsRef = useRef<HTMLDivElement>(null);
 	const editorRef = useRef<MessageEditorHandle>(null);
@@ -405,7 +427,23 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 				return;
 			}
 			const sent = await window.juno.mail.outbox.send(message.id);
-			onDone(sent, true);
+			let closedTitle: string | null = null;
+			if (agentRequestId) {
+				// The service closed the request in the same step as the send. Ask what
+				// it says rather than assuming, so the notice only appears when true.
+				try {
+					const [action, tools] = await Promise.all([
+						window.juno.agent.actions.forDraft(sent.id),
+						window.juno.agent.tools(),
+					]);
+					if (action?.state === "closed") {
+						closedTitle = tools.find((tool) => tool.name === action.toolName)?.title ?? "Send a draft";
+					}
+				} catch {
+					// The message has gone out; a missing notice is not worth an error.
+				}
+			}
+			onDone(sent, true, closedTitle);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 			setBusy(null);
@@ -476,6 +514,27 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				<div className="flex min-h-full flex-col gap-3 px-6 pt-4 pb-6">
+					{agentRequestId ? (
+						<Notice
+							tone="info"
+							layout="inline"
+							icon="agent"
+							role="status"
+							actions={
+								<button
+									type="button"
+									onClick={() => {
+										void handleClose().then(() => requestOpen({ kind: "screen", screen: "agent" }));
+									}}
+									className="text-dense font-[var(--weight-medium)] text-[var(--accent)] hover:underline"
+								>
+									View request
+								</button>
+							}
+						>
+							This draft answers an agent request. Send it here yourself and the request closes by itself.
+						</Notice>
+					) : null}
 					{accounts.length > 1 ? (
 						<div className="max-w-[420px]">
 							<Select

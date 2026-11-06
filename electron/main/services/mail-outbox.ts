@@ -45,6 +45,7 @@ import {
 } from "../db/schema";
 import { formatDateTime } from "./document-context";
 import { htmlToText, quoteForReply, quoteHtmlForReply, textToHtml } from "./mail-html";
+import { announceAll, closeForSentDraft } from "./agent-actions";
 import { clientsFor } from "./mail-recipients";
 import { renderTemplate } from "./mail-templates";
 
@@ -908,10 +909,16 @@ export async function requestSend(id: string, db: Db = getDb()): Promise<MailOut
 	validateSendable(row, account, attachmentCount(db, row.id));
 
 	const stamp = now();
-	db.update(mailOutbox)
-		.set({ state: "queued", requestedBy: "user", approvedAt: stamp, queuedAt: stamp, lastError: null, updatedAt: stamp })
-		.where(eq(mailOutbox.id, id))
-		.run();
+	// The request an agent made for this draft closes in the same transaction,
+	// so a message is never queued with its request still open to approve.
+	const closed = db.transaction((tx) => {
+		tx.update(mailOutbox)
+			.set({ state: "queued", requestedBy: "user", approvedAt: stamp, queuedAt: stamp, lastError: null, updatedAt: stamp })
+			.where(and(eq(mailOutbox.id, id), inArray(mailOutbox.state, ["draft", "failed", "pending"])))
+			.run();
+		return closeForSentDraft(id, tx);
+	});
+	announceAll(closed);
 	notifyQueued();
 	const record = await requireRecord(id, db);
 	notifyChanged(record);

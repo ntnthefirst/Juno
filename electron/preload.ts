@@ -318,6 +318,7 @@ const api: JunoApi = {
 		actions: {
 			list: (query) => call("agent.actions.list", query),
 			get: (id) => call("agent.actions.get", id),
+			forDraft: (draftId) => call("agent.actions.forDraft", draftId),
 			pendingCount: () => call("agent.actions.pendingCount"),
 			approve: (id) => call("agent.actions.approve", id),
 			reject: (id) => call("agent.actions.reject", id),

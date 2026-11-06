@@ -568,6 +568,8 @@ export interface JunoApi {
 		actions: {
 			list(query?: AgentActionListQuery): Promise<AgentAction[]>;
 			get(id: string): Promise<AgentAction | null>;
+			/** The request an agent made to send this draft: pending, or closed once you sent it yourself. */
+			forDraft(draftId: string): Promise<AgentAction | null>;
 			pendingCount(): Promise<number>;
 			/**
 			 * Runs what an agent asked for. There is no MCP equivalent and there

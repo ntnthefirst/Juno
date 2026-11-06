@@ -89,6 +89,9 @@ export async function startAgentSurface(next: AgentSurfaceConfig): Promise<void>
 		if (!action.automationRunId) return;
 		if (action.state === "executed" || action.state === "failed" || action.state === "rejected" || action.state === "expired") {
 			void automations.resumeForAction(action.id, action.state).catch(() => undefined);
+		} else if (action.state === "closed") {
+			// The message went out, sent by hand, so the step is done.
+			void automations.resumeForAction(action.id, "executed").catch(() => undefined);
 		}
 	});
 

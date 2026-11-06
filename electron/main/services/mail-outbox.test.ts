@@ -12,6 +12,8 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { documents, mailFolders, mailMessages, mailOutbox, mailThreads } from "../db/schema";
+import * as agentActions from "./agent-actions";
+import * as audit from "./agent-audit";
 import * as clientsService from "./clients";
 import * as accounts from "./mail-accounts";
 import { configureCredentialStore, MemoryCredentialStore } from "./mail-credentials";
@@ -200,6 +202,79 @@ describe("the gate", () => {
 		expect(sentMessages[0]!.connection.password).toBe("secret");
 		expect(appended).toHaveLength(1);
 		expect(appended[0]!.folder).toBe("Sent");
+	});
+
+	describe("a request closed by sending the draft yourself", () => {
+		async function askToSend(draftId: string) {
+			return agentActions.request(
+				{ toolName: "mail.send", args: { id: draftId }, summary: 'Send "Offerte" to laura@obet.be', source: "mcp" },
+				db,
+			);
+		}
+
+		afterEach(() => agentActions.resetForTests());
+
+		it("closes the request in the same step as the send, and the message goes out once", async () => {
+			const executed: string[] = [];
+			agentActions.configureAgentActions(async (_tool, args) => {
+				executed.push(String(args.id));
+				return outbox.requestSend(String(args.id), db);
+			});
+			const id = await draft();
+			const request = await askToSend(id);
+			expect((await agentActions.requestForDraft(id, db))?.state).toBe("pending");
+
+			const seen: string[] = [];
+			const off = agentActions.onChange((action) => seen.push(action.state));
+			await outbox.requestSend(id, db);
+			off();
+
+			const closed = (await agentActions.get(request.id, db))!;
+			expect(closed.state).toBe("closed");
+			expect(closed.result).toEqual({ sentBy: "user" });
+			expect(seen).toEqual(["closed"]);
+			expect((await agentActions.requestForDraft(id, db))?.state).toBe("closed");
+			const log = await audit.list({ toolName: "mail.send" }, db);
+			expect(log.map((row) => row.result)).toContain("closed");
+
+			// Approving the closed request is refused and sends nothing more.
+			await expect(agentActions.approve(request.id, db)).rejects.toThrow(/already closed/);
+			expect(executed).toEqual([]);
+
+			expect(await sender.processQueue(db)).toBe(1);
+			expect(await sender.processQueue(db)).toBe(0);
+			expect(sentMessages).toHaveLength(1);
+
+			// Pressing Send again on the same draft is refused as well.
+			await expect(outbox.requestSend(id, db)).rejects.toThrow(/cannot be sent again/);
+			expect(await sender.processQueue(db)).toBe(0);
+			expect(sentMessages).toHaveLength(1);
+		});
+
+		it("leaves a request that is being approved alone, and closes only the request for this draft", async () => {
+			agentActions.configureAgentActions(async (_tool, args) => outbox.requestSend(String(args.id), db));
+			const first = await draft();
+			const second = await draft();
+			const approved = await askToSend(first);
+			const other = await askToSend(second);
+
+			const done = await agentActions.approve(approved.id, db);
+			expect(done.state).toBe("executed");
+			expect((await agentActions.get(other.id, db))!.state).toBe("pending");
+
+			expect(await sender.processQueue(db)).toBe(1);
+			expect(sentMessages).toHaveLength(1);
+		});
+
+		it("does not close a request when the send itself is refused", async () => {
+			const made = await outbox.createDraft(
+				{ accountId, to: [], subject: "Leeg", bodyText: "Hallo." },
+				db,
+			);
+			const request = await askToSend(made.id);
+			await expect(outbox.requestSend(made.id, db)).rejects.toThrow(/nobody in To/);
+			expect((await agentActions.get(request.id, db))!.state).toBe("pending");
+		});
 	});
 
 	it("keeps an agent's message a draft that nothing sends until a person presses Send", async () => {

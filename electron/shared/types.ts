@@ -2721,7 +2721,12 @@ export interface AddressCandidate {
  * action carrying the arguments it would use, and a person approves or rejects
  * it in the app. See .claude/rules/mcp.md section 4.
  */
-export type AgentActionState = "pending" | "approved" | "rejected" | "expired" | "executed" | "failed";
+/**
+ * `closed` is a request a person answered by doing the thing themselves:
+ * they opened the draft the agent asked to send and pressed Send. Nothing ran
+ * on the agent's behalf, and it can no longer be approved.
+ */
+export type AgentActionState = "pending" | "approved" | "rejected" | "expired" | "executed" | "failed" | "closed";
 
 /** Where the request came from. Never "user": a person's own click is not a request. */
 export type AgentActionSource = "mcp" | "assistant" | "automation";
@@ -2806,7 +2811,7 @@ export interface AgentActionListQuery {
 }
 
 export type AuditActor = "user" | "agent" | "automation";
-export type AuditResult = "ok" | "failed" | "pending" | "rejected" | "expired";
+export type AuditResult = "ok" | "failed" | "pending" | "rejected" | "expired" | "closed";
 
 export interface AuditEvent extends Standard {
 	actor: AuditActor;

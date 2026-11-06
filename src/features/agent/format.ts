@@ -12,6 +12,7 @@ export const ACTION_LABELS: Record<AgentActionState, string> = {
 	expired: "Expired",
 	executed: "Done",
 	failed: "Failed",
+	closed: "Sent by you",
 };
 
 /** Tone is a token name, never a hex. See brand/BRAND.md section 5. */
@@ -22,6 +23,7 @@ export const ACTION_TONES: Record<AgentActionState, string> = {
 	expired: "bg-[var(--sunken)] text-[var(--ink-muted)]",
 	executed: "bg-[var(--ok-soft)] text-[var(--ok)]",
 	failed: "bg-[var(--risk-soft)] text-[var(--risk)]",
+	closed: "bg-[var(--ok-soft)] text-[var(--ok)]",
 };
 
 export const RUN_LABELS: Record<AutomationRunStatus, string> = {
@@ -46,6 +48,7 @@ export const RESULT_TONES: Record<AuditResult, string> = {
 	pending: "text-[var(--warn)]",
 	rejected: "text-[var(--ink-muted)]",
 	expired: "text-[var(--ink-muted)]",
+	closed: "text-[var(--ok)]",
 };
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];

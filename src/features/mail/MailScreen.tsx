@@ -836,9 +836,15 @@ export function MailScreen() {
 					setOutboxVersion((v) => v + 1);
 					setOpened(null);
 				}}
-				onDone={(message, queued) => {
+				onDone={(message, queued, closedRequest) => {
 					setCompose(null);
-					setNotice(queued ? "Message queued." : "Draft saved.");
+					setNotice(
+						closedRequest
+							? `Sent. The request "${closedRequest}" is closed.`
+							: queued
+								? "Message queued."
+								: "Draft saved.",
+					);
 					setOutboxVersion((v) => v + 1);
 					const draftsFolderId =
 						folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;

@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 import type { AgentClientTarget } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
+import { Notice } from "../../components/Notice";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 
@@ -117,10 +118,9 @@ export function ManualSetup({ onNotice }: ManualSetupProps) {
 					</Step>
 
 					<Step number={3} title="Restart it">
-						<div className="flex items-start gap-2.5 rounded-[var(--radius-md)] bg-[var(--warn-soft)] px-3 py-2.5">
-							<Icon name="sync" className="mt-0.5 flex-none text-[var(--warn)]" />
-							<p className="font-[var(--weight-medium)] text-[var(--warn)]">{target.after}</p>
-						</div>
+						<Notice layout="inline" icon="sync">
+							{target.after}
+						</Notice>
 					</Step>
 				</ol>
 			)}

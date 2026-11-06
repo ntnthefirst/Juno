@@ -9,6 +9,7 @@ import {
 	type MailReplyMode,
 } from "@shared/types";
 import { Button } from "../../components/Button";
+import { Notice } from "../../components/Notice";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
@@ -482,40 +483,31 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 					) : (
 						<div className="-mx-8 flex flex-1 flex-col">
 							{!clientLinked && !trusted ? (
-								<div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-3 text-[var(--warn)]">
-									<span className="mr-auto text-sm text-[var(--ink-muted)]">
-										{trustDecision === "blocked"
-											? "This sender is not trusted. Content stays blocked."
-											: "This email is not trusted. Content and links stay blocked."}
-									</span>
-									<Button
-										size="dense"
-										onClick={trustEmail}
-									>
-										Trust this email
-									</Button>
-									{trustDecision === "unknown" ? (
-										<Button
-											size="dense"
-											onClick={blockSender}
-										>
-											Don't trust sender
-										</Button>
-									) : null}
-									<Button
-										size="dense"
-										onClick={trustSender}
-										disabled={!senderAddress}
-									>
-										Trust sender
-									</Button>
-								</div>
+								<Notice
+									actions={
+										<>
+											<Button size="dense" onClick={trustEmail}>
+												Trust this email
+											</Button>
+											{trustDecision === "unknown" ? (
+												<Button size="dense" onClick={blockSender}>
+													Don't trust sender
+												</Button>
+											) : null}
+											<Button size="dense" onClick={trustSender} disabled={!senderAddress}>
+												Trust sender
+											</Button>
+										</>
+									}
+								>
+									{trustDecision === "blocked"
+										? "This sender is not trusted. Content stays blocked."
+										: "This email is not trusted. Content and links stay blocked."}
+								</Notice>
 							) : (
 								<>
 									{body?.suspicious ? (
-										<div className="flex shrink-0 items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-2 text-sm text-[var(--warn)]">
-											<span>Weird content was removed before this email was shown.</span>
-										</div>
+										<Notice role="status">Weird content was removed before this email was shown.</Notice>
 									) : null}
 									{body && body.remoteImages > 0 && !remoteImages ? (
 										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-sm">

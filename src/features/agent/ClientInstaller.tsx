@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AgentClientTarget, AgentInstallResult } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
+import { Notice } from "../../components/Notice";
 import { messageOf } from "../../lib/errors";
 import { ClientLogo } from "./client-logos";
 
@@ -181,9 +182,10 @@ export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProp
 							? `Created ${done.result.name}'s configuration.`
 							: `Updated ${done.result.name}'s configuration.`}
 					</p>
-					<div className="mt-3 flex items-start gap-2.5 rounded-[var(--radius-md)] bg-[var(--warn-soft)] px-3 py-2.5">
-						<Icon name="sync" className="mt-0.5 flex-none text-[var(--warn)]" />
-						<p className="font-[var(--weight-medium)] text-[var(--warn)]">{done.result.after}</p>
+					<div className="mt-3">
+						<Notice layout="inline" icon="sync">
+							{done.result.after}
+						</Notice>
 					</div>
 					{done.result.backupPath ? (
 						<p

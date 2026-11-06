@@ -5,6 +5,7 @@ import appIcon from "../assets/icon.png";
 import { AccountingSection } from "../features/settings/AccountingSection";
 import { AppearanceSection } from "../features/settings/AppearanceSection";
 import { BackupSection } from "../features/settings/BackupSection";
+import { RecentSection } from "../features/settings/RecentSection";
 import { CertificateSection } from "../features/settings/CertificateSection";
 import { LockSection } from "../features/settings/LockSection";
 import { MailSection } from "../features/settings/MailSection";
@@ -262,6 +263,8 @@ function PageBody({ page, theme, onTheme, onNotice }: PageBodyProps): ReactNode 
 			return <CertificateSection />;
 		case "lock":
 			return <LockSection />;
+		case "recent":
+			return <RecentSection onDone={onNotice} />;
 		case "backup":
 			return <BackupSection onDone={onNotice} />;
 		case "mcp-server":

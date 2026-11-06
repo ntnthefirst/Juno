@@ -8,6 +8,7 @@ import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
+import { useRecentTouch } from "../../lib/use-recent-touch";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
 import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
 import { GenerateDialog } from "../documents/GenerateDialog";
@@ -70,6 +71,7 @@ export function ProjectsScreen() {
 	// current by ProjectDetail once the real record has loaded.
 	const [selectedName, setSelectedName] = useState<string | null>(() => peekPending("project")?.name ?? null);
 	useEffect(() => clearPending, []);
+	useRecentTouch("project", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [editing, setEditing] = useState<Project | null | "new">(null);
 	useScreenAction("projects", () => setEditing("new"));

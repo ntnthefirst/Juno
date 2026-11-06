@@ -52,6 +52,7 @@ import { ClientLinkPanel } from "./ClientLinkPanel";
 import { ClientPhonePanel } from "./ClientPhonePanel";
 import { ContactForm } from "./ContactForm";
 import { ProjectForm } from "../projects/ProjectForm";
+import { useRecentTouch } from "../../lib/use-recent-touch";
 
 type Load =
 	| { status: "loading" }
@@ -70,6 +71,7 @@ export function ClientsScreen() {
 	// place the full row comes back from the main process.
 	const [selectedName, setSelectedName] = useState<string | null>(() => peekPendingClient()?.name ?? null);
 	useEffect(() => clearPendingClient, []);
+	useRecentTouch("client", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const bumpDetail = () => setDetailVersion((current) => current + 1);
 	const [form, setForm] = useState<{ client: Client | null } | null>(null);

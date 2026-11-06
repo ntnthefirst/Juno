@@ -142,8 +142,20 @@ and bottom (frames `25:16` and `29:1229`); the sheet is `main` in `App.tsx`.
 A screen never paints its own `--paper` background or its own left border at its
 edge: sticky headers and side columns inside the sheet use `--surface`. It still exists: it is the drag region
 and the caption buttons sit on it. A screen may put its own controls in it
-with `app/TitleBarSlot.tsx`, beside the way back (Mail puts New message and
-the styled mail pane there, and only while Mail is open).
+with `app/TitleBarSlot.tsx`: `side="left"` is beside the way back (Mail puts
+the styled mail pane button there, and only while Mail is open) and
+`side="right"` is before the agent button.
+
+What the bar holds, from the Title Bar component (`14:221`) and its variants:
+Search, Recent, Reminders and New (a plus) at the left, then a divider and the
+way back when a record is open. The page title is centred on the window, and is
+the record's name while one is open. At the right are the screen's own actions,
+a divider and the agent. On Calendar, Clients, Projects, Documents, Templates
+and Reminders New is a text button at the right instead of the plus
+(`NEW_AT_RIGHT` in `app/screens.ts`). Recent lists the last 20 records opened
+(`services/recent.ts`), the bell opens the Reminders screen, and New offers
+what `NEW_MENU` lists. **The lock has no button**: no frame draws one, so it is
+the palette command and Ctrl or Cmd Shift L.
 
 ## 5b. The sidebar is a rail, and it never opens
 

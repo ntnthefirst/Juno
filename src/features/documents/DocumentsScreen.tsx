@@ -18,6 +18,7 @@ import { groupByDay } from "../../lib/day-groups";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
+import { useRecentTouch } from "../../lib/use-recent-touch";
 import { activeDocumentFilterCount, NO_DOCUMENT_FILTERS, type DocumentFilters } from "./document-filters";
 import { DocumentDetail, SpecimenMark } from "./DocumentDetail";
 import { GenerateDialog } from "./GenerateDialog";
@@ -65,6 +66,7 @@ export function DocumentsScreen() {
 	// current by DocumentDetail once the real record has loaded.
 	const [selectedTitle, setSelectedTitle] = useState<string | null>(() => peekPending("document")?.name ?? null);
 	useEffect(() => clearPending, []);
+	useRecentTouch("document", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [generating, setGenerating] = useState(false);
 	useScreenAction("documents", () => setGenerating(true));

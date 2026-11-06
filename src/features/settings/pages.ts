@@ -28,6 +28,7 @@ export type SettingsPageId =
 	| "certificate"
 	| "lock"
 	| "backup"
+	| "recent"
 	| "mcp-server"
 	| "mcp-connect"
 	| "mcp-tools";
@@ -78,6 +79,7 @@ export const PAGES: SettingsPage[] = [
 
 	{ id: "lock", group: "security", label: "Lock", anchors: ["lock"], solo: true },
 	{ id: "backup", group: "security", label: "Backup", anchors: ["backup"], solo: true },
+	{ id: "recent", group: "security", label: "Recent", anchors: ["recent"], solo: true },
 
 	{ id: "mcp-server", group: "mcp", label: "Server", anchors: ["mcp-server", "mcp-clients"], solo: false },
 	{ id: "mcp-connect", group: "mcp", label: "Connect a client", anchors: ["mcp-connect"], solo: true },

@@ -376,6 +376,14 @@ export const SETTING_ENTRIES: SettingEntry[] = [
 		],
 	},
 
+	{
+		tab: "security",
+		anchor: "recent",
+		title: "Recent",
+		description: "Clear the list of records you opened last.",
+		keywords: ["recent", "history", "opened", "last", "clear", "forget", "title bar", "clock"],
+	},
+
 	// MCP
 	{
 		tab: "mcp",

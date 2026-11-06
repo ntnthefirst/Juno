@@ -1,12 +1,15 @@
 import { createContext, useContext } from "react";
 
 /**
- * The element in the title bar a screen may draw its own controls into, or
- * null before the bar has mounted. Kept apart from the component that uses it
- * so neither file loses fast refresh.
+ * The two elements in the title bar a screen may draw its own controls into:
+ * `left` is after the divider beside the way back, `right` is before the agent
+ * button. Both are null until the bar has mounted. Kept apart from the
+ * component that uses them so neither file loses fast refresh.
  */
-export const TitleBarSlotContext = createContext<HTMLElement | null>(null);
+export type TitleBarSlots = { left: HTMLElement | null; right: HTMLElement | null };
 
-export function useTitleBarSlot(): HTMLElement | null {
-	return useContext(TitleBarSlotContext);
+export const TitleBarSlotContext = createContext<TitleBarSlots>({ left: null, right: null });
+
+export function useTitleBarSlot(side: "left" | "right"): HTMLElement | null {
+	return useContext(TitleBarSlotContext)[side];
 }

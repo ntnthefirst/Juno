@@ -3907,10 +3907,14 @@ if (!app.requestSingleInstanceLock()) {
 
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {
-											// Matched on the label: writing is a plus on the title line
-											// now, so there is no text to find it by.
-											const open = document.querySelector("button[aria-label='New message']");
-											if (!open) return "no new message button";
+											// Writing is an item in the New menu, which is the plus at
+											// the left of the title bar.
+											const plus = document.querySelector("button[aria-label='New']");
+											if (!plus) return "no new button";
+											plus.click();
+											await new Promise((r) => setTimeout(r, 300));
+											const open = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim().startsWith("New message"));
+											if (!open) return "no new message item";
 											open.click();
 											await new Promise((r) => setTimeout(r, 700));
 											return document.querySelector("input[role=combobox]") ? "ok" : "no composer";
@@ -4352,7 +4356,11 @@ if (!app.requestSingleInstanceLock()) {
 										const header = document.querySelector("header");
 										if (!header) return "no title bar";
 										if (header.textContent.includes("Juno")) return "the title bar still carries the name";
-										if (!header.querySelector("button[aria-label='Search and commands']")) return "no search in the title bar";
+										if (!header.querySelector("button[aria-label='Search']")) return "no search in the title bar";
+										for (const name of ["Recent", "Reminders"]) {
+											if (!header.querySelector("button[aria-label='" + name + "']")) return "no " + name + " in the title bar";
+										}
+										if (header.querySelector("button[aria-label='Lock Juno']")) return "the lock is back in the title bar";
 										press({ mod: true, key: "k", code: "KeyK" });
 										await wait(500);
 										if (!document.querySelector("[data-palette]")) return "the shortcut did not open the palette";
@@ -4377,6 +4385,13 @@ if (!app.requestSingleInstanceLock()) {
 										input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
 										await wait(400);
 										if (document.querySelector("[data-palette]")) return "escape did not close the palette";
+
+										press({ mod: true, key: "e", code: "KeyE" });
+										await wait(500);
+										if (!document.querySelector("[role=menu][aria-label=Recent]")) return "the shortcut did not open Recent";
+										document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										await wait(400);
+										if (document.querySelector("[role=menu][aria-label=Recent]")) return "escape did not close Recent";
 
 										press({ mod: true, key: "3", code: "Digit3" });
 										await wait(700);

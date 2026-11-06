@@ -13,10 +13,10 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
-import { Tooltip } from "../../components/Tooltip";
 import { Toast } from "../../components/Toast";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { messageOf } from "../../lib/errors";
+import { useRecentTouch } from "../../lib/use-recent-touch";
 import { useScreenAction } from "../../lib/screen-actions";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
@@ -292,6 +292,7 @@ export function MailScreen() {
 	// reaches it: a search would leave the folder for the whole account.
 	const term = showingDrafts ? "" : search.trim();
 	const selectedThreadId = opened?.kind === "thread" ? opened.id : null;
+	useRecentTouch("thread", selectedThreadId);
 	const selectedOutboxId = opened?.kind === "outbox" ? opened.id : null;
 
 	function openThread(id: string | null) {
@@ -895,21 +896,11 @@ export function MailScreen() {
 	return (
 		<div className="flex h-full min-h-0">
 			{/*
-				Writing a message and the styled mail column are about the whole
-				screen rather than one pane, so they sit in the title bar while Mail
-				is open and leave with it.
+				The styled mail column is about the whole screen rather than one pane,
+				so its button sits in the title bar while Mail is open and leaves with it.
+				Writing a message is in the New menu there.
 			*/}
 			<TitleBarSlot>
-				<Tooltip label="New message" side="bottom" className="flex">
-					<button
-						type="button"
-						onClick={() => setCompose({ accountId: selection?.accountId ?? accounts[0]?.id })}
-						aria-label="New message"
-						className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-md)] text-[var(--accent)] transition-[background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] active:scale-90"
-					>
-						<Icon name="add" size={16} strokeWidth={2} />
-					</button>
-				</Tooltip>
 				<button
 					type="button"
 					onClick={() => setStylesOpen((open) => !open)}

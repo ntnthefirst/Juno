@@ -87,3 +87,24 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
 	documents: { screen: "documents", label: "New document" },
 	"document-templates": { screen: "documents", label: "New document" },
 };
+
+/**
+ * Everything the New menu in the title bar offers, in the order it is drawn.
+ * Each item does what the same entry in `NEW_ON` does: it asks the screen that
+ * owns the record to open its form.
+ */
+export const NEW_MENU: { screen: ScreenId; label: string; icon: IconName }[] = [
+	{ screen: "overview", label: "New reminder", icon: "reminders" },
+	{ screen: "calendar", label: "New event", icon: "calendar" },
+	{ screen: "clients", label: "New client", icon: "clients" },
+	{ screen: "projects", label: "New project", icon: "projects" },
+	{ screen: "mail", label: "New message", icon: "mail" },
+	{ screen: "documents", label: "New document", icon: "documents" },
+];
+
+/**
+ * Screens where New is drawn at the right of the title bar, as a text button
+ * beside the screen's own actions. On every other screen it is the plus at the
+ * left, beside Search, Recent and Reminders.
+ */
+export const NEW_AT_RIGHT: ScreenId[] = ["calendar", "clients", "projects", "documents", "document-templates", "reminders"];

@@ -108,6 +108,7 @@ import type { ComponentType, ReactNode } from "react";
 export type IconName =
 	| "overview"
 	| "today"
+	| "recent"
 	| "clients"
 	| "client"
 	| "projects"
@@ -452,6 +453,7 @@ const DRAWN = {
 const ICONS: Record<IconName, Glyph> = {
 	overview: HomeIcon,
 	today: ClockIcon,
+	recent: ClockIcon,
 	clients: UsersIcon,
 	client: BuildingOffice2Icon,
 	projects: FolderIcon,

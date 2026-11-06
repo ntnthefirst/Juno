@@ -1391,7 +1391,7 @@ as a form, not a tool. What replaced it is deliberately less.
   top of their page, called Styled mail and Templates, so the rail stays at the
   places the work happens. An entry is a colour and nothing else.
 - **The title bar has no name and no path.** It holds a way back out of a record,
-  the search, and the lock. The path was the only way back from a client, and is
+  the search, and (until decision 51) the lock. The path was the only way back from a client, and is
   replaced by a back button that appears only while a record is open, not by
   nothing.
 - **One search gets anywhere and starts anything**, and the keyboard reaches
@@ -1563,3 +1563,24 @@ when they differ.
 
 **What would reverse this:** the design file ceasing to be maintained alongside
 the app, at which point the tokens go back to being the reference.
+
+## 51. The title bar holds Search, Recent, Reminders and New, and the lock moves to the palette
+
+The Title Bar component and its frames draw four icon buttons at the left, the
+page title in the middle and the agent at the right, and no lock. The design is
+the reference (decision 50), so the lock button is gone from the bar.
+
+- **Search, Recent, Reminders, New.** Search opens the palette. Recent lists the
+  last 20 records opened, newest first (`recent_items`, kept by
+  `services/recent.ts`, written when a record opens, cleared from Settings >
+  Security and data). The bell opens the Reminders screen and nothing more. New
+  opens a menu of what can be made, led by what the screen in view makes.
+- **The lock stays reachable** through the palette command and Ctrl or Cmd Shift
+  L. It is still configured and still locked from the main process, so nothing
+  about the lock itself changes (decision 15).
+- **Recent is opened by name, not by a path**, and a record that was deleted
+  since is left out when the list is read, not when it is written.
+
+**What would reverse this:** a frame that draws the lock in the bar, or a
+reminders count that has to be seen at all times, which would make the bell
+more than a link.

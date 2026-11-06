@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MailThreadSummary } from "@shared/types";
-import { Avatar } from "../components/Avatar";
 import { Icon, type IconName } from "../components/Icon";
 import { Kbd } from "../components/Kbd";
 import { requestOpenClient } from "../lib/open-client";
@@ -16,16 +15,28 @@ import { belongsTo } from "../features/documents/belongs-to";
 type PaletteItem = {
 	id: string;
 	label: string;
-	/** Under the label, muted: the client of a document, the subject of a thread. */
+	/** Under the label, muted: the client of a document, the sender of a thread. */
 	detail?: string;
 	icon?: IconName;
-	avatar?: { name: string; shape: "round" | "square" };
+	/** Drawn on a tile with the kind of record, and named at the right. */
+	record?: string;
 	keys?: string[];
 	keywords?: string;
 	run: () => void;
 };
 
 type Section = { title: string; items: PaletteItem[] };
+
+/** Where a search looks. Tab moves along these, the way the tabs under the box do. */
+type Scope = "all" | "client" | "project" | "mail" | "document";
+
+const SCOPES: { id: Scope; label: string }[] = [
+	{ id: "all", label: "All" },
+	{ id: "client", label: "Clients" },
+	{ id: "project", label: "Projects" },
+	{ id: "mail", label: "Mail" },
+	{ id: "document", label: "Documents" },
+];
 
 type CommandPaletteProps = {
 	onClose: () => void;
@@ -38,12 +49,21 @@ type CommandPaletteProps = {
 	onHelp: () => void;
 };
 
+const RECORD_LABEL: Record<string, string> = {
+	clients: "Clients",
+	projects: "Projects",
+	mail: "Mail",
+	documents: "Documents",
+};
+
 const loadClients = () => window.juno.clients.list();
 const loadProjects = () => window.juno.projects.list();
 const loadDocuments = () => window.juno.documents.list();
 
-/** How many of each kind of record are offered. More is scrolling, not finding. */
-const PER_KIND = 5;
+/** How many of each kind of record are offered under All. More is scrolling, not finding. */
+const PER_KIND = 4;
+/** And how many when one kind is picked, since the whole box is then for it. */
+const PER_KIND_SCOPED = 20;
 /** Below this the mail search would match nearly everything, and cost a query for it. */
 const MIN_MAIL_QUERY = 2;
 
@@ -60,6 +80,7 @@ const MIN_MAIL_QUERY = 2;
 export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock, onHelp }: CommandPaletteProps) {
 	const [query, setQuery] = useState("");
 	const [active, setActive] = useState(0);
+	const [scope, setScope] = useState<Scope>("all");
 	const [mail, setMail] = useState<{ query: string; rows: MailThreadSummary[] } | null>(null);
 	const listId = useId();
 	const input = useRef<HTMLInputElement>(null);
@@ -85,7 +106,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 		let cancelled = false;
 		const timer = window.setTimeout(() => {
 			window.juno.mail.threads
-				.list({ search: term, limit: PER_KIND })
+				.list({ search: term, limit: PER_KIND_SCOPED })
 				.then((rows) => {
 					if (!cancelled) setMail({ query: term, rows });
 				})
@@ -117,7 +138,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 			{ id: "go-styled-mail", label: "Styled mail", icon: "templates", keywords: "mail templates email layouts", run: go("mail-templates") },
 			{ id: "go-documents", label: "Documents", icon: "documents", keys: comboKeys("documents"), keywords: "contracts pdf files", run: go("documents") },
 			{ id: "go-templates", label: "Templates", icon: "templates", keywords: "document templates contracts letters", run: go("document-templates") },
-			{ id: "go-reminders", label: "Reminders", icon: "reminders", keywords: "tasks due todo", run: go("reminders") },
+			{ id: "go-reminders", label: "Reminders", icon: "reminders", keys: formatCombo(COMBOS.reminders), keywords: "tasks due todo", run: go("reminders") },
 			{ id: "go-agent", label: "Agent", icon: "agent", keys: comboKeys("agent"), keywords: "assistant mcp connection requests", run: go("agent") },
 			{ id: "go-settings", label: "Settings", icon: "settings", keys: formatCombo(COMBOS.settings), keywords: "preferences account mail accounts theme", run: onSettings },
 		];
@@ -141,73 +162,74 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 		if (term === "") {
 			return [
 				{ title: "Go to", items: goTo },
-				{ title: "Create", items: create },
+				{ title: "New", items: create },
 				{ title: "Other", items: other },
 			];
 		}
 
 		const result: Section[] = [];
-		const commands = rank([...goTo, ...create, ...other], term);
-		if (commands.length > 0) result.push({ title: "Commands", items: commands });
+		const cap = scope === "all" ? PER_KIND : PER_KIND_SCOPED;
+		const commands = scope === "all" ? rank([...goTo, ...create, ...other], term) : [];
+		if (commands.length > 0) result.push({ title: "Go to", items: commands.slice(0, PER_KIND) });
 
 		const clientRows =
-			clients.status === "ready"
+			(scope === "all" || scope === "client") && clients.status === "ready"
 				? rank(
 						clients.value.map((client): PaletteItem => ({
 							id: `client-${client.id}`,
 							label: client.name,
 							detail: [client.city, client.status?.label].filter(Boolean).join(" · "),
-							avatar: { name: client.name, shape: "square" },
+							record: "clients",
 							keywords: client.email ?? "",
 							run: () => requestOpenClient(client.id, client.name),
 						})),
 						term,
-					).slice(0, PER_KIND)
+					).slice(0, cap)
 				: [];
 		if (clientRows.length > 0) result.push({ title: "Clients", items: clientRows });
 
 		const projectRows =
-			projects.status === "ready"
+			(scope === "all" || scope === "project") && projects.status === "ready"
 				? rank(
 						projects.value.map((project): PaletteItem => ({
 							id: `project-${project.id}`,
 							label: project.name,
 							detail: project.clientName ?? "",
-							avatar: { name: project.name, shape: "square" },
+							record: "projects",
 							keywords: `${project.clientName ?? ""} ${project.description ?? ""}`,
 							run: () => requestOpen({ kind: "project", id: project.id, name: project.name }),
 						})),
 						term,
-					).slice(0, PER_KIND)
+					).slice(0, cap)
 				: [];
 		if (projectRows.length > 0) result.push({ title: "Projects", items: projectRows });
 
 		const documentRows =
-			documents.status === "ready"
+			(scope === "all" || scope === "document") && documents.status === "ready"
 				? rank(
 						documents.value.map((record): PaletteItem => ({
 							id: `document-${record.id}`,
 							label: record.title,
 							detail: belongsTo(record),
-							avatar: { name: record.clientName ?? record.projectName ?? record.title, shape: "square" },
+							record: "documents",
 							keywords: belongsTo(record),
 							run: () => requestOpen({ kind: "document", id: record.id, name: record.title }),
 						})),
 						term,
-					).slice(0, PER_KIND)
+					).slice(0, cap)
 				: [];
 		if (documentRows.length > 0) result.push({ title: "Documents", items: documentRows });
 
 		// Only the answer to what is typed now: the one for the word before it is stale.
 		const mailRows =
-			mail && mail.query === term
-				? mail.rows.map((thread): PaletteItem => {
+			(scope === "all" || scope === "mail") && mail && mail.query === term
+				? mail.rows.slice(0, cap).map((thread): PaletteItem => {
 						const from = leadParticipant(thread.participants);
 						return {
 							id: `thread-${thread.id}`,
 							label: thread.subject || "(no subject)",
 							detail: from,
-							avatar: { name: from, shape: "round" },
+							record: "mail",
 							run: () => requestOpen({ kind: "thread", id: thread.id, messageId: thread.messageId }),
 						};
 					})
@@ -215,7 +237,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 		if (mailRows.length > 0) result.push({ title: "Mail", items: mailRows });
 
 		return result;
-	}, [term, clients, projects, documents, mail, onNavigate, onNew, onSettings, onLock, onHelp]);
+	}, [term, scope, clients, projects, documents, mail, onNavigate, onNew, onSettings, onLock, onHelp]);
 
 	const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
 	const index = Math.min(active, Math.max(0, flat.length - 1));
@@ -248,8 +270,15 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 			onClose();
 		} else if (event.key === "Tab") {
 			// The box is the one thing to focus. Tabbing out of it into the page behind
-			// a layer that is meant to be modal is how a keyboard gets lost.
+			// a layer that is meant to be modal is how a keyboard gets lost, so Tab
+			// changes where the search looks instead.
 			event.preventDefault();
+			if (term !== "") {
+				const here = SCOPES.findIndex((entry) => entry.id === scope);
+				const step = event.shiftKey ? -1 : 1;
+				setScope(SCOPES[(here + step + SCOPES.length) % SCOPES.length]?.id ?? "all");
+				setActive(0);
+			}
 		}
 	}
 
@@ -302,6 +331,33 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 					<Kbd keys={["Esc"]} />
 				</div>
 
+				{term !== "" ? (
+					<div role="tablist" aria-label="Where to look" className="flex flex-none items-center gap-1 px-3 pt-2 pb-1">
+						{SCOPES.map((entry) => (
+							<button
+								key={entry.id}
+								type="button"
+								role="tab"
+								tabIndex={-1}
+								aria-selected={scope === entry.id}
+								onMouseDown={(event) => event.preventDefault()}
+								onClick={() => {
+									setScope(entry.id);
+									setActive(0);
+								}}
+								className={[
+									"rounded-[var(--radius-md)] px-2 py-1 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)]",
+									scope === entry.id
+										? "bg-[var(--hover)] text-[var(--ink)]"
+										: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
+								].join(" ")}
+							>
+								{entry.label}
+							</button>
+						))}
+					</div>
+				) : null}
+
 				<div ref={list} id={listId} role="listbox" className="min-h-0 flex-1 overflow-y-auto p-2">
 					{flat.length === 0 ? (
 						<p className="px-3 py-8 text-center text-dense text-[var(--ink-muted)]">
@@ -310,7 +366,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 					) : (
 						sections.map((section, sectionIndex) => (
 							<div key={section.title} role="group" aria-label={section.title}>
-								<p className="px-3 pt-3 pb-1 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-1">
+								<p className="px-3 pt-3 pb-1 text-overline uppercase text-[var(--ink-muted)] first:pt-1">
 									{section.title}
 								</p>
 								{section.items.map((item, itemIndex) => {
@@ -328,25 +384,29 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 											}}
 											onClick={() => choose(item)}
 											className={[
-												"flex h-11 cursor-default items-center gap-3 rounded-[var(--radius-md)] px-3 transition-colors duration-[var(--duration-fast)]",
+												"flex cursor-default items-center gap-3 rounded-[var(--radius-md)] px-3 transition-colors duration-[var(--duration-fast)]",
+												item.record ? "h-[52px]" : "h-11",
 												isActive ? "bg-[var(--hover)]" : "",
 											].join(" ")}
 										>
-											{item.avatar ? (
-												<Avatar name={item.avatar.name} size={24} shape={item.avatar.shape} />
+											{item.record ? (
+												<span className="flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] bg-[var(--sunken)] text-[var(--ink-muted)]">
+													<Icon name={item.record as IconName} size={16} strokeWidth={1.9} />
+												</span>
 											) : (
 												<span className="flex h-6 w-6 flex-none items-center justify-center text-[var(--ink-muted)]">
 													{item.icon ? <Icon name={item.icon} size={16} strokeWidth={1.9} /> : null}
 												</span>
 											)}
-											<span className="min-w-0 flex-1 truncate text-base">
-												{item.label}
+											<span className="min-w-0 flex-1">
+												<span className="block truncate text-dense font-[var(--weight-medium)]">{item.label}</span>
 												{item.detail ? (
-													<span className="ml-2 text-dense text-[var(--ink-muted)]">
-														{item.detail}
-													</span>
+													<span className="block truncate text-sm text-[var(--ink-muted)]">{item.detail}</span>
 												) : null}
 											</span>
+											{item.record ? (
+												<span className="flex-none text-sm text-[var(--ink-muted)]">{RECORD_LABEL[item.record]}</span>
+											) : null}
 											{item.keys ? <Kbd keys={item.keys} /> : null}
 											{isActive && !item.keys ? <Kbd keys={["Enter"]} /> : null}
 										</div>
@@ -367,6 +427,11 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 					<span className="flex items-center gap-1.5">
 						<Kbd keys={["Esc"]} /> close
 					</span>
+					{term !== "" ? (
+						<span className="flex items-center gap-1.5">
+							<Kbd keys={["Tab"]} /> change where it looks
+						</span>
+					) : null}
 				</div>
 			</div>
 		</div>,

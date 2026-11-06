@@ -86,6 +86,8 @@ export const SCREEN_COMBOS: Partial<Record<ScreenId, string>> = {
 
 export const COMBOS = {
 	palette: "mod+k",
+	recent: "mod+e",
+	reminders: "mod+shift+r",
 	newItem: "mod+n",
 	settings: "mod+,",
 	back: "alt+arrowleft",
@@ -106,6 +108,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 		title: "General",
 		rows: [
 			{ combos: [COMBOS.palette], label: "Search and commands" },
+			{ combos: [COMBOS.recent], label: "Recent records" },
+			{ combos: [COMBOS.reminders], label: "Reminders" },
 			{ combos: [COMBOS.newItem], label: "New, on this screen" },
 			{ combos: [COMBOS.back], label: "Back, out of a record" },
 			{ combos: [COMBOS.settings], label: "Settings" },

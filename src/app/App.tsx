@@ -134,6 +134,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	// The element in the title bar a screen may draw into, held in state so a
 	// screen that mounts before the bar has painted still finds it.
 	const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+	const [rightSlot, setRightSlot] = useState<HTMLDivElement | null>(null);
+	const [recentOpen, setRecentOpen] = useState(false);
 	const [agentPending, setAgentPending] = useState(0);
 
 	useEffect(() => {
@@ -168,6 +170,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 	useShortcuts({
 		palette: () => setPaletteOpen((open) => !open),
+		recent: () => setRecentOpen((open) => !open),
+		reminders: () => navigate("reminders"),
 		goTo: navigate,
 		newItem: newHere,
 		settings: () => void window.juno.window.openSettings(),
@@ -236,17 +240,23 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	);
 
 	return (
-		<TitleBarSlotContext.Provider value={slot}>
+		<TitleBarSlotContext.Provider value={{ left: slot, right: rightSlot }}>
 			<div className="flex h-full flex-col bg-[var(--paper)]">
 				<TitleBar
 					back={back}
+					title={trail[trail.length - 1]?.label ?? SCREEN_LABELS[screen]}
+					screen={screen}
 					onOpenPalette={() => setPaletteOpen(true)}
-					lockConfigured={lock.configured}
-					onLock={() => void window.juno.lock.lock()}
+					recentOpen={recentOpen}
+					onRecentOpenChange={setRecentOpen}
+					remindersActive={screen === "reminders"}
+					onOpenReminders={() => navigate("reminders")}
+					onNew={startNew}
 					agentActive={screen === "agent"}
 					agentPending={agentPending}
 					onOpenAgent={() => navigate("agent")}
 					slotRef={setSlot}
+					rightSlotRef={setRightSlot}
 				/>
 				<div className="relative flex min-h-0 flex-1">
 					<Sidebar

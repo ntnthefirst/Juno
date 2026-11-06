@@ -1,3 +1,4 @@
+import { Segmented } from "../../components/Segmented";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
 	CalendarEvent,
@@ -65,10 +66,10 @@ type ScopeQuestion = {
 
 const AGENDA_DAYS = 30;
 
-const VIEW_OPTIONS: { kind: ViewKind; label: string; short: string }[] = [
-	{ kind: "month", label: "Month", short: "M" },
-	{ kind: "week", label: "Week", short: "W" },
-	{ kind: "agenda", label: "Agenda", short: "A" },
+const VIEW_OPTIONS: { kind: ViewKind; label: string }[] = [
+	{ kind: "month", label: "Month" },
+	{ kind: "week", label: "Week" },
+	{ kind: "agenda", label: "Agenda" },
 ];
 
 /** The current minute, for the week view's line. Impure, so read in an effect. */
@@ -517,35 +518,13 @@ export function CalendarScreen() {
 					</Button>
 				</div>
 
-				<div
-					className="flex shrink-0 items-center gap-px rounded-[var(--radius-md)] bg-[var(--sunken)] p-px"
-					role="group"
-					aria-label="View"
-				>
-					{VIEW_OPTIONS.map((option) => (
-						<button
-							key={option.kind}
-							type="button"
-							aria-pressed={view === option.kind}
-							// Both labels are in the DOM and CSS picks one, so the button
-							// needs a name of its own: without it a screen reader reads the
-							// long one and the short one together, as "Week W".
-							aria-label={option.label}
-							title={option.label}
-							onClick={() => setView(option.kind)}
-							className={`h-[30px] rounded-[var(--radius-md)] px-3 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								view === option.kind ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-							}`}
-						>
-							<span aria-hidden className="hidden sm:inline">
-								{option.label}
-							</span>
-							<span aria-hidden className="sm:hidden">
-								{option.short}
-							</span>
-						</button>
-					))}
-				</div>
+				<Segmented
+					size="compact"
+					label="View"
+					value={view}
+					onChange={setView}
+					options={VIEW_OPTIONS.map((option) => ({ id: option.kind, label: option.label, name: option.label }))}
+				/>
 
 				<div className="ml-auto flex shrink-0 items-center gap-1">
 					<MenuButton

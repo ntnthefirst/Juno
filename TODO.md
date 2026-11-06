@@ -233,7 +233,7 @@ means a decision or a thing only Nathan can do, as at the top of this file.
 
 **Order.** The decisions in 8.1 come first, because three packages are blocked
 on them. After that the packages are independent unless one says "needs".
-A sensible order is 8.2 package 2, 3, then 5, 6, 7, 8, then 4 and 9.
+A sensible order is 8.2 package 3, then 5, 6, 7, 8, then 4 and 9.
 
 ### 8.1 Decisions to take first - **you**
 
@@ -271,56 +271,6 @@ the code that depends on it.
 
 ### 8.2 Packages
 
-#### Package 2. Mail reading: links, suggestions, find, closing a request (M)
-
-**Figma.** `14 Mail / Reading` (`30:2336`), `Reading, link hover` (`106:10280`),
-`Reading, find` (`89:7543`), `Sent, request closed` (`89:8186`), the request
-banner in `Compose` (`89:8178`). Components: Suggestion Bar (`84:2156`), Find Bar
-(`88:2241`), Notice (`20:701`), Request Banner (`88:2320`).
-
-**Behaviour.**
-
-- **Links are clickable.** In the reader a link is underlined and in the accent
-  colour. Hovering it shows a small popover under the pointer with the real
-  address (never the anchor text), "Open in browser" and "Copy link". Opening goes
-  through the https check in `.claude/rules/security.md` section 3, and a link
-  that is not https shows the popover with "Open in browser" removed. The message
-  is in a sandboxed frame (`mail-frame-script.ts`), so the frame posts the link
-  and its position to the window, and the window draws the popover. The frame
-  gets no new permission.
-- **Suggestions under the header.** Two bars from the design: "Janssens mentions
-  Friday at 10:00. Add 'Delivery, oak table' to the calendar?" with Not now and
-  Add to calendar, and "This looks like part of Kitchen cabinets. Link this
-  message to the project?" with Not now and Link to project. Detection is local
-  (dates in the text, a client or project name in the thread), runs on the
-  main process, and nothing is filed or created until the button is pressed. Not
-  now hides that suggestion for that message for good. A switch per source lives
-  in Settings > MCP > Permissions (package 6) under "Suggestions". Check first:
-  `features/reminders/SuggestionList.tsx` and `services/reminders-derive.ts`
-  already derive suggestions for the overview, so share the shape.
-- **Find in a message.** Ctrl F opens the find bar at the top of the reader, with
-  a count ("1 of 2"), next and previous, Escape to close. Matches are highlighted
-  inside the frame. The same bar component is used in pages (package 4).
-- **A request closes when you send it yourself.** An agent asks to send a draft.
-  If the owner opens that draft and presses Send, the request it answered is
-  closed by itself. The composer shows the request banner ("This draft answers an
-  agent request. Send it here yourself and the request closes by itself.", with
-  "View request"), and after sending a notice ("Sent. The request 'Ask to send a
-  draft' is closed."). The Log shows the outcome "Sent by you, request closed"
-  (`32:3369`). The send goes through the normal path and the gate in decision 44.
-  Closing the request must never send a second time.
-
-**Build.** Links: the frame script and the reader. Suggestions: a service
-`services/suggestions.ts` with `forMessage(id)` and `dismiss(id, kind)`, IPC
-`suggestions.*`, MCP `suggestions.list` read only. Find: renderer only. Request
-closing: in `services/agent-actions.ts`, when a draft linked to a parked
-`mail.send` is sent by hand, mark that action closed with that outcome, in the
-same transaction as the send.
-
-**Done when.** Tests cover the closing rule (closed once, not sent twice), the
-dismissal and the https check. The reader and the composer match the frames in
-both themes. No new permission was added to the message frame.
-
 #### Package 3. The project record (L, needs a migration)
 
 **Figma.** `13 Project Record / Notes` (`29:2223`), `Menu` (`98:10622`), `Add
@@ -343,7 +293,7 @@ and `Kind=Add` (set `76:2231`), Tab (`13:166`), Section Card (`18:399`).
   Next event, Time logged.
 - **Mail.** "Linked mail. Threads you linked to this project." with Link a mail,
   the thread rows, and the line "Mail stays in your mailbox. Linking only shows
-  the thread here." Mail to project links exist (`mail_threads_link_project`).
+  the thread here." Mail to project links do not exist on this branch: migration 0022 on main adds them, and this branch's 0022 is the mail blocks, so renumber when they meet. Once a thread can be filed under a project, add the project suggestion under a message ("This looks like part of Kitchen cabinets. Link this message to the project?", Not now and Link to project) in `services/suggestions.ts`, which already has the kind and the `projects` switch.
 - **Timeline.** A vertical graph grouped by month, newest first, with a filter:
   status changes, mail linked, quote sent for signature, time entries, contract
   signed, project created, folder connected. Reuse `services/client-timeline.ts`
@@ -389,7 +339,7 @@ Toolbar (`72:1238`), Slash Menu (`72:1272`), File Row (`72:1237`), Find Bar
   to be taken) and reads like a document: title, "Page", the client, "Edited
   today at 10:05", then blocks: text, heading, checklist, table. "Type to add a
   block" at the end, and a slash menu with Text, Heading, Checklist and the rest
-  drawn in the frame. Find works as in package 2.
+  drawn in the frame. Find works as in a message: `components/FindBar.tsx` is the bar, and the page asks it for the count.
 - **Mixed files in a project.** A project lists Word files, PDFs and images next
   to its notes and pages, with File Row.
 - **Empty state.** Not drawn yet. Draw it first (8.5) with the mascot.

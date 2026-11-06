@@ -3227,7 +3227,8 @@ if (!app.requestSingleInstanceLock()) {
 											use.click();
 											await wait(600);
 											const rail = [...document.querySelectorAll("main ol li")].map((el) => el.textContent.trim());
-											if (rail.join(",") !== "1Link,2Fill,3Review") return "the steps are not Link, Fill, Review: " + rail.join(",");
+											// The rail draws the current step and the ones already passed, so it grows by one on each Next.
+											if (rail.join(",") !== "1Link") return "the first step is not Link: " + rail.join(",");
 											for (let step = 0; step < 2; step++) {
 												const next = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
 												if (!next) return "no next action";

@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, ChevronLeftIcon } from "@heroicons/react/24/outline";
 
 export type FormStep = {
 	/** Shown in the rail. Two words at most: it is a label, not a sentence. */
@@ -77,32 +77,25 @@ export function FormPage({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex flex-none items-center gap-2 border-b border-[var(--line)] px-6 py-3">
-				<button
-					type="button"
-					onClick={onBack}
-					className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
-				>
-					<ArrowLeftIcon width={16} height={16} strokeWidth={1.8} aria-hidden />
-					{backLabel}
-				</button>
-				<span className="flex-none text-[var(--ink-faint)]" aria-hidden>
-					/
-				</span>
-				<h1 className="min-w-0 truncate text-h3">
-					{title}
-				</h1>
-			</div>
-
-			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+			<div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-6">
 				<div className={`animate-rise mx-auto w-full ${measure}`}>
+					<header className="mb-4 flex flex-col items-start gap-2">
+						<button
+							type="button"
+							onClick={onBack}
+							className="-ml-1 inline-flex min-h-[32px] items-center gap-1 rounded-[var(--radius-md)] px-1 text-base text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--ink)]"
+						>
+							<ChevronLeftIcon width={14} height={14} strokeWidth={2} aria-hidden />
+							{backLabel}
+						</button>
+						<h1 className="min-w-0 text-h2">{title}</h1>
+						{description ? <div className="max-w-[62ch] text-base text-[var(--ink-muted)]">{description}</div> : null}
+					</header>
+
 					{sequence ? <StepRail steps={steps} step={step} onStep={onStep} /> : null}
 
 					{current?.hint ? (
 						<p className="mb-5 max-w-[62ch] text-[var(--ink-muted)]">{current.hint}</p>
-					) : null}
-					{description ? (
-						<div className="mb-5 max-w-[62ch] text-[var(--ink-muted)]">{description}</div>
 					) : null}
 
 					{children}
@@ -110,8 +103,8 @@ export function FormPage({
 			</div>
 
 			{actions ? (
-				<div className="flex-none border-t border-[var(--line)] px-6 py-3">
-					<div className={`mx-auto flex w-full ${measure} items-center justify-end gap-2`}>
+				<div className="flex-none px-6">
+					<div className={`mx-auto flex w-full ${measure} items-center justify-end gap-2 border-t border-[var(--line)] py-4`}>
 						{actions}
 					</div>
 				</div>
@@ -129,42 +122,35 @@ type StepRailProps = {
 /**
  * Where you are in the sequence, and how much is left. Steps already passed are
  * clickable, because going back to change an answer is normal. Steps ahead are
- * not: they are not filled in yet, and offering them would suggest they are.
+ * not drawn at all, as the design has it: they are not filled in yet.
  */
 function StepRail({ steps, step, onStep }: StepRailProps) {
 	return (
-		<ol className="mb-6 flex flex-wrap items-center gap-x-2 gap-y-1">
-			{steps.map((entry, index) => {
-				const state = index === step ? "current" : index < step ? "done" : "ahead";
-				const reachable = state === "done" && onStep !== undefined;
+		<ol className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+			{steps.slice(0, step + 1).map((entry, index) => {
+				const current = index === step;
+				const reachable = !current && onStep !== undefined;
 				return (
-					<li key={entry.label} className="flex items-center gap-2">
-						{index > 0 ? (
-							<span aria-hidden className="h-px w-6 bg-[var(--line-strong)]" />
-						) : null}
+					<li key={entry.label}>
 						<button
 							type="button"
 							disabled={!reachable}
-							aria-current={state === "current" ? "step" : undefined}
+							aria-current={current ? "step" : undefined}
 							onClick={reachable ? () => onStep(index) : undefined}
 							className={[
-								"flex h-[28px] items-center gap-2 rounded-[var(--radius-md)] px-2 text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-								state === "current"
-									? "font-[var(--weight-medium)] text-[var(--ink)]"
-									: "text-[var(--ink-muted)]",
-								reachable ? "hover:bg-[var(--hover)] hover:text-[var(--ink)]" : "",
+								"flex items-center gap-3 py-2 text-base font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+								current ? "text-[var(--ink)]" : "text-[var(--ink-muted)]",
+								reachable ? "hover:text-[var(--ink)]" : "",
 							].join(" ")}
 						>
 							<span
 								aria-hidden
 								className={[
-									"tabular flex h-[20px] w-[20px] flex-none items-center justify-center rounded-full text-micro font-[var(--weight-medium)]",
-									state === "ahead"
-										? "border border-[var(--line-strong)] text-[var(--ink-faint)]"
-										: "bg-[var(--accent)] text-[var(--accent-ink)]",
+									"tabular flex h-6 w-6 flex-none items-center justify-center rounded-full text-sm font-[var(--weight-medium)]",
+									current ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "bg-[var(--ok-soft)] text-[var(--ok)]",
 								].join(" ")}
 							>
-								{index + 1}
+								{current ? index + 1 : <CheckIcon width={14} height={14} strokeWidth={2.2} />}
 							</span>
 							{entry.label}
 						</button>

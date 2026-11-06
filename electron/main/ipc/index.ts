@@ -28,6 +28,7 @@ import { registerSigningCertificateIpc } from "./signing-certificate";
 import { registerRecentIpc } from "./recent";
 import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
+import { registerSuggestionsIpc } from "./suggestions";
 import { registerTemplatesIpc } from "./templates";
 import { registerUpdatesIpc } from "./updates";
 import { registerWindowIpc } from "./window";
@@ -57,6 +58,7 @@ export function registerAllIpc(): void {
 	registerSigningCertificateIpc();
 	registerRemindersIpc();
 	registerMailIpc();
+	registerSuggestionsIpc();
 	registerCalendarIpc();
 	registerGeocodingIpc();
 	registerAgentIpc();

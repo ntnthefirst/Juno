@@ -27,6 +27,7 @@ import { reminderTools } from "./reminders";
 import { recentTools } from "./recent";
 import { searchTools } from "./search";
 import { settingsTools } from "./settings";
+import { suggestionTools } from "./suggestions";
 import { updateTools } from "./updates";
 import type { ToolDescriptor } from "./types";
 
@@ -51,6 +52,7 @@ const lists: ToolDescriptor[][] = [
 	mailBlockTools,
 	mailActionTools,
 	mailOutboxTools,
+	suggestionTools,
 	calendarTools,
 	geocodingTools,
 	agentTools,

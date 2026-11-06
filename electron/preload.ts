@@ -277,6 +277,15 @@ const api: JunoApi = {
 		query: (input) => call("search.query", input),
 	},
 
+	suggestions: {
+		forMessage: (messageId) => call("suggestions.forMessage", messageId),
+		dismiss: (messageId, kind) => call("suggestions.dismiss", messageId, kind),
+		accept: (messageId, kind) => call("suggestions.accept", messageId, kind),
+		sources: {
+			get: () => call("suggestions.sources.get"),
+			set: (patch) => call("suggestions.sources.set", patch),
+		},
+	},
 	recent: {
 		list: () => call("recent.list"),
 		touch: (kind, recordId) => call("recent.touch", kind, recordId),

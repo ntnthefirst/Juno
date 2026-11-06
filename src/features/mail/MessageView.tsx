@@ -5,6 +5,7 @@ import { isHttpsLink } from "@shared/mail-link";
 import {
 	MAIL_FRAME_ORIGIN,
 	type ClientSummary,
+	type MessageSuggestion,
 	type MailAttachment,
 	type MailMessage,
 	type MailMessageBody,
@@ -22,6 +23,7 @@ import { ImportFlow } from "../documents/ImportFlow";
 import { AttachmentIcon } from "./AttachmentIcon";
 import { LinkPopover } from "./LinkPopover";
 import { PersonChip } from "./PersonChip";
+import { SuggestionBar } from "./SuggestionBar";
 import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 
 type MessageViewProps = {
@@ -100,6 +102,8 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 	const [measuredFrame, setMeasuredFrame] = useState<{ messageId: string; height: number } | null>(null);
 	const [hoveredLink, setHoveredLink] = useState<{ messageId: string; href: string; x: number; y: number } | null>(null);
 	const hideTimer = useRef<number | null>(null);	const noticeRef = useRef(onNotice);
+	const [offers, setOffers] = useState<{ messageId: string; list: MessageSuggestion[] } | null>(null);
+	const [offerBusy, setOfferBusy] = useState(false);
 	const [findOpen, setFindOpen] = useState(false);
 	const [findQuery, setFindQuery] = useState("");
 	const [findResult, setFindResult] = useState({ count: 0, current: -1 });
@@ -224,6 +228,23 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		};
 	}, [message.id]);
 
+	// Offers under the header, worked out locally when the message is opened.
+	useEffect(() => {
+		if (!open || !message.bodyFetched) return;
+		let cancelled = false;
+		window.juno.suggestions
+			.forMessage(message.id)
+			.then((list) => {
+				if (!cancelled) setOffers({ messageId: message.id, list });
+			})
+			.catch(() => {
+				// No offer is the safe direction: the message reads the same without one.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open, message.id, message.bodyFetched]);
+
 	// The owner's addresses and the accounts', which are not someone to look up.
 	useEffect(() => {
 		let cancelled = false;
@@ -336,6 +357,41 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 			onNotice("Could not copy the link.");
 		}
 		setHoveredLink(null);
+	}
+
+	function without(suggestion: MessageSuggestion) {
+		setOffers((current) =>
+			current && current.messageId === suggestion.messageId
+				? { ...current, list: current.list.filter((item) => item.kind !== suggestion.kind) }
+				: current,
+		);
+	}
+
+	async function acceptOffer(suggestion: MessageSuggestion) {
+		if (offerBusy) return;
+		setOfferBusy(true);
+		try {
+			const event = await window.juno.suggestions.accept(suggestion.messageId, suggestion.kind);
+			without(suggestion);
+			onNotice(`Added "${event.title}" to the calendar.`);
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		} finally {
+			setOfferBusy(false);
+		}
+	}
+
+	async function dismissOffer(suggestion: MessageSuggestion) {
+		if (offerBusy) return;
+		setOfferBusy(true);
+		try {
+			await window.juno.suggestions.dismiss(suggestion.messageId, suggestion.kind);
+			without(suggestion);
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		} finally {
+			setOfferBusy(false);
+		}
 	}
 
 	async function copyAddress() {
@@ -491,6 +547,21 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 						</div>
 
 					</div>
+
+					{offers && offers.messageId === message.id && offers.list.length > 0 ? (
+						<div className="flex shrink-0 flex-col gap-2 pt-3">
+							{offers.list.map((suggestion) => (
+								<SuggestionBar
+									key={suggestion.kind}
+									suggestion={suggestion}
+									actionLabel={suggestion.kind === "event" ? "Add to calendar" : "Link to project"}
+									busy={offerBusy}
+									onAccept={() => void acceptOffer(suggestion)}
+									onDismiss={() => void dismissOffer(suggestion)}
+								/>
+							))}
+						</div>
+					) : null}
 
 					{visibleAttachments.length > 0 ? (
 						<div className="shrink-0 border-t border-[var(--line)] py-3">

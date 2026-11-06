@@ -38,6 +38,7 @@ import type {
 	OwnerProfile,
 	OwnerProfilePatch,
 	ProjectsView,
+	SuggestionSources,
 	ThemeSetting,
 	UpdateSettings,
 } from "../../shared/types";
@@ -123,6 +124,8 @@ const DEFAULT_UPDATES: UpdateSettings = { autoInstall: true, lastCheckedAt: null
  */
 const DEFAULT_MCP_SERVER: McpServerSettings = { enabled: true, port: null, background: true };
 
+const DEFAULT_SUGGESTIONS: SuggestionSources = { calendar: true, projects: true };
+
 /** Below the operating systems' ephemeral ranges, so nothing else is handed it. */
 export const MIN_MCP_PORT = 1024;
 export const MAX_MCP_PORT = 32767;
@@ -142,6 +145,7 @@ const DEFAULTS: AppSettings = {
 	projectsView: DEFAULT_PROJECTS_VIEW,
 	updates: DEFAULT_UPDATES,
 	mcpServer: DEFAULT_MCP_SERVER,
+	suggestions: DEFAULT_SUGGESTIONS,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -258,6 +262,7 @@ function normalise(raw: unknown): AppSettings {
 			projectsView: { ...DEFAULT_PROJECTS_VIEW },
 			updates: { ...DEFAULT_UPDATES },
 			mcpServer: { ...DEFAULT_MCP_SERVER },
+			suggestions: { ...DEFAULT_SUGGESTIONS },
 		};
 	}
 
@@ -329,6 +334,15 @@ function normalise(raw: unknown): AppSettings {
 		projectsView: normaliseProjectsView(raw.projectsView),
 		updates: normaliseUpdates(raw.updates),
 		mcpServer: normaliseMcpServer(raw.mcpServer),
+		suggestions: normaliseSuggestions(raw.suggestions),
+	};
+}
+
+function normaliseSuggestions(raw: unknown): SuggestionSources {
+	const sources = isRecord(raw) ? raw : {};
+	return {
+		calendar: bool(sources.calendar, DEFAULT_SUGGESTIONS.calendar),
+		projects: bool(sources.projects, DEFAULT_SUGGESTIONS.projects),
 	};
 }
 
@@ -403,6 +417,7 @@ export async function get(): Promise<AppSettings> {
 		projectsView: { ...current.projectsView },
 		updates: { ...current.updates },
 		mcpServer: { ...current.mcpServer },
+		suggestions: { ...current.suggestions },
 	};
 }
 
@@ -454,6 +469,17 @@ export async function setMcpServer(patch: Partial<McpServerSettings>): Promise<M
 	const current = read();
 	const next = normaliseMcpServer({ ...current.mcpServer, ...patch });
 	return { ...write({ ...current, mcpServer: next }).mcpServer };
+}
+
+export async function getSuggestionSources(): Promise<SuggestionSources> {
+	return { ...read().suggestions };
+}
+
+/** A patch, because each source is its own switch. */
+export async function setSuggestionSources(patch: Partial<SuggestionSources>): Promise<SuggestionSources> {
+	const current = read();
+	const next = normaliseSuggestions({ ...current.suggestions, ...patch });
+	return { ...write({ ...current, suggestions: next }).suggestions };
 }
 
 export async function getTheme(): Promise<ThemeSetting> {

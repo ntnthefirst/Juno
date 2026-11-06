@@ -184,6 +184,9 @@ import type {
 	OnboardingPatch,
 	OnboardingState,
 	SettingsSection,
+	MessageSuggestion,
+	SuggestionKind,
+	SuggestionSources,
 	UpdateStatus,
 } from "./types";
 
@@ -507,6 +510,20 @@ export interface JunoApi {
 		global(term: string, limit?: number): Promise<SearchHit[]>;
 		/** The same search, narrowed to some kinds of record. */
 		query(input: SearchQuery): Promise<SearchHit[]>;
+	};
+
+	suggestions: {
+		/** What can be offered under this message now. Writes nothing. */
+		forMessage(messageId: string): Promise<MessageSuggestion[]>;
+		/** Not now: not offered under this message again. */
+		dismiss(messageId: string, kind: SuggestionKind): Promise<void>;
+		/** Add to calendar. Makes the event and records the answer. */
+		accept(messageId: string, kind: SuggestionKind): Promise<CalendarEvent>;
+		/** The switches behind each kind of suggestion, for the settings screen. */
+		sources: {
+			get(): Promise<SuggestionSources>;
+			set(patch: Partial<SuggestionSources>): Promise<SuggestionSources>;
+		};
 	};
 
 	recent: {

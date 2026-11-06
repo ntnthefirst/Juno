@@ -8,3 +8,4 @@ export * from "./calendar";
 export * from "./agent";
 export * from "./recent";
 export * from "./mail-blocks";
+export * from "./mail-suggestions";

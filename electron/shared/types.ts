@@ -594,6 +594,32 @@ export interface AppSettings {
 	updates: UpdateSettings;
 	/** Whether the agent server is on, and the port it was given if it was given one. */
 	mcpServer: McpServerSettings;
+	/** Which kinds of suggestion the reader may make under a message. */
+	suggestions: SuggestionSources;
+}
+
+export type SuggestionKind = "event" | "project";
+
+/** One thing offered under a message. The words are the whole of what a person is asked. */
+export interface MessageSuggestion {
+	kind: SuggestionKind;
+	messageId: string;
+	/** "Janssens mentions Friday at 10:00." */
+	headline: string;
+	/** "Add "Delivery, oak table" to the calendar?" */
+	question: string;
+}
+
+/**
+ * One switch per place a suggestion can come from. Both are on by default,
+ * because a suggestion costs nothing until a button is pressed, and either can
+ * be turned off without touching the other.
+ */
+export interface SuggestionSources {
+	/** A day and a time in a message, offered as a calendar event. */
+	calendar: boolean;
+	/** A project's name in a message, offered as a link to that project. */
+	projects: boolean;
 }
 
 export interface McpServerSettings {

@@ -162,6 +162,13 @@
       "when": 1794004100570,
       "tag": "0022_mail_blocks",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1794006823235,
+      "tag": "0023_mail_suggestion_states",
+      "breakpoints": true
     }
   ]
 }

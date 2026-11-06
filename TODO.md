@@ -79,46 +79,22 @@ Written down so nobody builds them by accident.
 
 ## 5. Mail rules: greetings for every message, automation per mailbox
 
-Two kinds of rule, and they live in different places on purpose. Greetings and
-sign-offs apply to every message from every account, so they are one list.
-Automation belongs to one mailbox, so each mailbox has its own list.
+Greetings and sign-offs became intros and outros in the composer, and are built
+(5a). Automation belongs to one mailbox, so each mailbox has its own list.
 
-Both are built like Cloudflare's rules: a rule has a **name**, an on and off
-switch, **conditions** and **what it does**. Rules sit in an **ordered list**
-that is reordered by dragging, and are checked top to bottom. Stored in the
-database with the five columns, behind a service, IPC channels and MCP tools,
+Automation rules are built like Cloudflare's rules: a rule has a **name**, an on
+and off switch, **conditions** and **what it does**. Rules sit in an **ordered
+list** that is reordered by dragging, and are checked top to bottom. Stored in
+the database with the five columns, behind a service, IPC channels and MCP tools,
 like everything else (decision 2).
 
 ### 5a. Greetings and sign-offs
 
-**Being built separately, not on this branch.** An unfinished start is on the
-branch `wip/mail-phrases`: the schema and migration 0015, the service with its
-tests, the IPC and MCP adapters, and the composer inserting the greeting and
-sign-off. The Settings screen, the smoke steps and a full `npm run check` and
-smoke run are still missing. Whichever of 5a and 5b lands second regenerates
-its migration so the numbers do not collide (data.md section 3).
-
-The way Outlook does signatures. Nothing to do with templates.
-
-- **Greetings and sign-offs are named, static texts.** The owner keeps a list
-  of each, as many as they like, each with a title and a text. For example a
-  greeting "Basic" with "Beste,", and a greeting "Reply to clients" with
-  "Beste," and "Bedankt voor uw bericht." on the next line. Sign-offs the
-  same way. Static means
-  plain text, no placeholders, so there is nothing to fill in and nothing that
-  can come out empty.
-- **Rules decide which one goes where.** A rule has a name, conditions, and
-  which greeting and which sign-off it adds (either may be none). Conditions:
-  - what the message is: new, reply or forward;
-  - who it goes to: a client, a known contact, or anyone else;
-  - which account it is sent from.
-  So "every new mail" adds "Basic", and "every reply to a client" adds
-  "Reply to clients".
-- The first rule that matches decides. The composer puts its greeting and
-  sign-off in when a message is started, and they stay editable there. No rule
-  matches, nothing is added.
-- Edited in Settings > Mail accounts, above the accounts, because it is common
-  to all of them: the greetings, the sign-offs, and the rules.
+Built as intros and outros in the mail composer (decision 52), following the
+design instead of the static-text plan that was written here before. The
+service is `services/mail-blocks.ts`, the screens are in
+`src/features/mail/blocks/`. The unfinished branch `wip/mail-phrases` is kept as
+a reference only: its model differs and it is not to be merged.
 
 ### 5b. Automation rules per mailbox
 
@@ -257,19 +233,13 @@ means a decision or a thing only Nathan can do, as at the top of this file.
 
 **Order.** The decisions in 8.1 come first, because three packages are blocked
 on them. After that the packages are independent unless one says "needs".
-A sensible order is 8.2 package 1, 2, 3, then 5, 6, 7, 8, then 4 and 9.
+A sensible order is 8.2 package 2, 3, then 5, 6, 7, 8, then 4 and 9.
 
 ### 8.1 Decisions to take first - **you**
 
-Each one is written into `docs/decisions.md` (next free number is 51) in the same commit as
+Each one is written into `docs/decisions.md` (next free number is 53) in the same commit as
 the code that depends on it.
 
-1. **Greetings: the design's model or section 5a.** The design has intro and
-   outro blocks with variable chips and one rule each. Section 5a has static
-   text with no placeholders and rules with several conditions, and it is only
-   an unfinished branch (`wip/mail-phrases`). Recommended: build the design's
-   model and drop 5a, because the design is what was chosen after 5a was
-   written. Blocks package 1.
 2. **Notes as a place of its own.** The design's icon rail has a seventh entry,
    Notes, between Mail and Documents. `.claude/rules/styling.md` section 5b says
    a seventh place is a decision and not an edit. Options: add the entry (and
@@ -298,77 +268,8 @@ the code that depends on it.
    no frame shows another home. They exist in the app (`features/agent/
    AutomationList.tsx`). Decide a home, then draw it in Figma first (8.5).
 7. **Which wins, the tokens or the design.** Taken: the design (decision 50).
-8. **When two intro blocks match.** The design gives each block one rule and
-   says nothing about two blocks with the same rule. Recommended: the one higher
-   in the list wins, and the list is reordered by dragging. Blocks package 1.
 
 ### 8.2 Packages
-
-#### Package 1. Intros and outros in the composer (M, needs decisions 1 and 8)
-
-**Figma.** Screens: `14 Mail / Compose` (`30:2564`), `Compose, intro menu`
-(`84:8459`), `Compose, outro menu` (`119:11074`), `Compose, manage intro`
-(`119:11359`), `Intros and outros` (`105:10178`). Components: Editor Tool
-(`119:10979`), Block Menu (`118:1620`), Block Menu Row (`118:1543`), Variable Chip
-(`102:1521`), Context Menu set (`76:2231`, variant `Kind=Block`), icons
-`Icon/Intro` and `Icon/Outro`.
-
-**Behaviour.**
-
-- The composer toolbar starts with two 36px icon buttons, intro then outro, then
-  a divider, then bold, italic, underline, list, rows, link, image. There is no
-  Insert button. Both have tooltips ("Intro", "Outro").
-- A click opens a list under the button, 276px wide, closing on Escape or a click
-  elsewhere. It has a small heading ("Intro" or "Outro"), one row per block with a
-  check on the block in use, its name and, at the right in muted text, the name
-  of its rule ("Clients", "New contacts", "Replies", "Manual"). Then a divider
-  and a "No intro" or "No outro" row. Then a preview well showing the text of the
-  row under the pointer, or of the one in use when nothing is hovered, with
-  variables drawn as chips. Then one muted line: "Right click the icon to manage".
-- Choosing a row puts that block at the very start (intro) or very end (outro)
-  of the body, replacing the one there. Choosing "No intro" removes it. Both stay
-  editable text in the message, and a block never sends anything by itself.
-- A right click on either button opens the manage menu: "Edit this intro" (or
-  outro), "New intro", a divider, "Manage intros and outros". The first two open
-  the manage screen on that block, or on a new empty block of that kind. The
-  last opens the manage screen. Use a native menu (package 7), not a drawn one.
-- The manage screen (`105:10178`) is a page, reached from Mail with a back link
-  labelled "Mail". Left: the blocks, grouped Intro and Outro, each with its name
-  and a one-line rule description ("Added when you write to a client"), and a
-  "New block" button. Right: the editor for the selected block. Fields: Name,
-  Text, with an "Add a variable" menu (Client name, First name, Project, Date,
-  My name) that inserts a chip. A radio list headed "When to add it": "I add it
-  myself, never automatically", "I write to a client", "I write to someone who is
-  not a client yet", "I reply to a mail", "The mail is linked to a project". A
-  note: "You can still change or remove it in the mail. An intro or outro never
-  sends anything by itself." A live preview. Delete and Save.
-- A variable is stored as a token in the text and drawn as a chip, never as
-  curly braces, in the editor, the menu, the preview and the composer. A variable
-  with no value (First name for a recipient with no name) makes the rule not
-  match, so the block is not added automatically. The owner can still insert it
-  by hand and sees the chip stay empty in the preview.
-- Automatic insertion happens once, when the composer opens or the recipient
-  becomes known, and never again after the owner has chosen "No intro" or edited
-  the line.
-- The text of a block is what a client reads, so it is written in Dutch
-  (Belgium). The interface around it is English.
-
-**Build.** A table `mail_blocks` (kind `intro` or `outro`, name, body with tokens,
-rule, sort order) with the five columns. A service `services/mail-blocks.ts`:
-`list`, `get`, `create`, `update`, `remove` (soft delete), `reorder`, and
-`resolve(context)` which returns the block a new message gets, given whether the
-message is new or a reply, whether the recipient is a client and the project link.
-IPC channels under `mail.blocks.*`. MCP tools `mail.list_blocks` (read only) and
-`mail.create_block`, `mail.update_block`, `mail.delete_block` (local writes, flagged
-side-effectful, never scheduled). Seed: a first install gets the design's five
-examples (Formal, Friendly, Short, Kind regards, Best wishes) as ordinary rows,
-not system rows, like the example mail template. Remove the composer's old
-pickers, and if section 5a was started on `wip/mail-phrases`, close that branch.
-
-**Done when.** The composer behaves as above in both themes. Tests cover `resolve`
-for each of the five rules, the empty-variable case and the tie-break. The manage
-screen saves, deletes and reorders. The MCP host test passes. Section 5a is
-replaced by a note that points here.
 
 #### Package 2. Mail reading: links, suggestions, find, closing a request (M)
 
@@ -568,6 +469,10 @@ cannot invent one. Interface only: no MCP tool. Respect the lock.
 
 **Done when.** Each kind opens with the right items, the keyboard menu key opens
 it too, and no menu appears while the app is locked.
+
+One already exists as a drawn menu and moves here: the right click on the intro and
+outro buttons in the composer (`features/mail/blocks/BlockMenu.tsx`), kind Block,
+with Edit this intro, New intro and Manage intros and outros.
 
 #### Package 8. Calendar layouts and the new-record windows (M, needs decision 4)
 

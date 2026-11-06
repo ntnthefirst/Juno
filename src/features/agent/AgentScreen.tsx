@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentAction, AgentAuditView, AuditEvent } from "@shared/types";
 import { Icon, type IconName } from "../../components/Icon";
+import { Tabs } from "../../components/Tabs";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { AutomationList } from "./AutomationList";
@@ -83,33 +84,16 @@ export function AgentScreen() {
 					</div>
 				</div>
 
-				<div
-					className="mt-6 flex items-center gap-px border-b border-[var(--line)]"
-					role="tablist"
-					aria-label="Agent"
-				>
-					{TABS.map((entry) => (
-						<button
-							key={entry.id}
-							type="button"
-							role="tab"
-							aria-selected={tab === entry.id}
-							onClick={() => setTab(entry.id)}
-							className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								tab === entry.id
-									? "border-[var(--accent)] text-[var(--accent)]"
-									: "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
-							}`}
-						>
-							<Icon name={entry.icon} size={14} />
-							{entry.label}
-							{entry.id === "requests" && pending > 0 ? (
-								<span className="tabular rounded-[var(--radius-full)] bg-[var(--warn-soft)] px-1.5 text-micro text-[var(--warn)]">
-									{pending}
-								</span>
-							) : null}
-						</button>
-					))}
+				<div className="mt-6">
+					<Tabs
+						label="Agent"
+						tabs={TABS.map((entry) => ({
+							...entry,
+							count: entry.id === "requests" && pending > 0 ? pending : null,
+						}))}
+						value={tab}
+						onChange={setTab}
+					/>
 				</div>
 
 				<div className="mt-6">

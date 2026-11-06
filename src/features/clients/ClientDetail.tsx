@@ -1,4 +1,5 @@
 import { IconButton } from "../../components/IconButton";
+import { Tabs, type TabItem } from "../../components/Tabs";
 import { ScheduleSection } from "../calendar/ScheduleSection";
 import type { ScheduleForm } from "../calendar/schedule-form";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -447,7 +448,7 @@ export function ClientDetail({
 	const totalEntries = Object.values(entryCounts).reduce((sum, count) => sum + count, 0);
 	const mailEntries = entries.filter((entry) => entry.kind === "mail");
 
-	const tabs: { id: TabId; label: string; count: number | null }[] = [
+	const tabs: TabItem<TabId>[] = [
 		{ id: "overview", label: "Overview", count: null },
 		{ id: "timeline", label: "Timeline", count: totalEntries },
 		{ id: "projects", label: "Projects", count: entryCounts.project },
@@ -555,31 +556,16 @@ export function ClientDetail({
 				</div>
 			</div>
 
-			<div role="tablist" aria-label="Client" className="mt-8 flex items-center gap-px border-b border-[var(--line)]">
-				{tabs.map((entry) => (
-					<button
-						key={entry.id}
-						type="button"
-						role="tab"
-						aria-selected={tab === entry.id}
-						onClick={() => {
-							setTab(entry.id);
-							onTabChange?.(entry.id);
-						}}
-						className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-							tab === entry.id
-								? "border-[var(--accent)] text-[var(--accent)]"
-								: "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
-						}`}
-					>
-						{entry.label}
-						{entry.count !== null ? (
-							<span className="tabular rounded-[var(--radius-full)] bg-[var(--sunken)] px-1.5 text-micro text-[var(--ink-muted)]">
-								{entry.count}
-							</span>
-						) : null}
-					</button>
-				))}
+			<div className="mt-8">
+				<Tabs
+					label="Client"
+					tabs={tabs.map((entry) => ({ ...entry, countTone: "quiet" as const }))}
+					value={tab}
+					onChange={(id) => {
+						setTab(id);
+						onTabChange?.(id);
+					}}
+				/>
 			</div>
 
 			<div className="mt-6">

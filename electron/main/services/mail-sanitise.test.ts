@@ -24,6 +24,16 @@ describe("link reporting from the frame", () => {
 	});
 });
 
+describe("find inside the frame", () => {
+	it("listens to its parent only and highlights with mark elements", () => {
+		const { document } = sanitiseHtml("<p>Nieuw dit najaar</p>");
+		expect(document).toContain("juno.mail.find");
+		expect(document).toContain("event.source !== parent");
+		expect(document).toContain("mark.juno-find");
+		expect(textDocument("najaar")).toContain("juno.mail.findResult");
+	});
+});
+
 describe("sanitiseHtml", () => {
 	it("drops scripts, frames, forms and event handlers", () => {
 		const { document } = sanitiseHtml(

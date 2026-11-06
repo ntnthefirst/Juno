@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type WheelEvent } from "react";
+import { createPortal } from "react-dom";
 import { isOpenableAttachment } from "@shared/attachment-kind";
 import { isHttpsLink } from "@shared/mail-link";
 import {
@@ -10,7 +11,9 @@ import {
 	type MailReplyMode,
 } from "@shared/types";
 import { Button } from "../../components/Button";
+import { FindBar } from "../../components/FindBar";
 import { Notice } from "../../components/Notice";
+import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
@@ -97,6 +100,9 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 	const [measuredFrame, setMeasuredFrame] = useState<{ messageId: string; height: number } | null>(null);
 	const [hoveredLink, setHoveredLink] = useState<{ messageId: string; href: string; x: number; y: number } | null>(null);
 	const hideTimer = useRef<number | null>(null);	const noticeRef = useRef(onNotice);
+	const [findOpen, setFindOpen] = useState(false);
+	const [findQuery, setFindQuery] = useState("");
+	const [findResult, setFindResult] = useState({ count: 0, current: -1 });
 	const frame = useRef<HTMLIFrameElement>(null);
 	const menu = useContextMenu();
 
@@ -120,10 +126,60 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		noticeRef.current = onNotice;
 	});
 
+	function tellFrame(action: "search" | "next" | "previous" | "clear", query = "") {
+		frame.current?.contentWindow?.postMessage({ type: "juno.mail.find", action, query }, "*");
+	}
+
+	function closeFind() {
+		setFindOpen(false);
+		setFindResult({ count: 0, current: -1 });
+		tellFrame("clear");
+	}
+
+	// Ctrl F finds in the message that is open, and nowhere else.
+	useEffect(() => {
+		if (!open) return;
+		function onKey(event: KeyboardEvent) {
+			if (!matchesCombo(event, COMBOS.find)) return;
+			if (document.querySelector("[role='dialog']")) return;
+			event.preventDefault();
+			setFindOpen(true);
+		}
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [open]);
+
+	// The match list is the frame's, so a new query, or a frame that has just
+	// loaded again, asks it to search once more.
+	useEffect(() => {
+		if (!findOpen) return;
+		if (findQuery === "") {
+			frame.current?.contentWindow?.postMessage({ type: "juno.mail.find", action: "clear", query: "" }, "*");
+			return;
+		}
+		frame.current?.contentWindow?.postMessage({ type: "juno.mail.find", action: "search", query: findQuery }, "*");
+	}, [findOpen, findQuery, remoteImages, message.id]);
+
 	useEffect(() => {
 		function cancelHide() {
 			if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
 			hideTimer.current = null;
+		}
+
+		function revealInFrame(top: number) {
+			const box = frame.current?.getBoundingClientRect();
+			if (!box) return;
+			// The frame is as tall as its message, so the reader around it is what scrolls.
+			let holder: HTMLElement | null = frame.current?.parentElement ?? null;
+			while (holder && !(holder.scrollHeight > holder.clientHeight && /(auto|scroll)/.test(getComputedStyle(holder).overflowY))) {
+				holder = holder.parentElement;
+			}
+			if (!holder) return;
+			const bounds = holder.getBoundingClientRect();
+			const at = box.top + top;
+			if (at < bounds.top + 80 || at > bounds.bottom - 40) {
+				holder.scrollTo({ top: holder.scrollTop + (at - bounds.top) - bounds.height / 3 });
+			}
 		}
 
 		function receiveHeight(event: MessageEvent<unknown>) {
@@ -142,6 +198,14 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 					cancelHide();
 					hideTimer.current = window.setTimeout(() => setHoveredLink(null), 220);
 				}
+				return;
+			}
+			if (data.type === "juno.mail.findResult") {
+				const found = data as { count?: unknown; current?: unknown; top?: unknown };
+				if (typeof found.count === "number" && typeof found.current === "number") {
+					setFindResult({ count: found.count, current: found.current });
+				}
+				if (typeof found.top === "number") revealInFrame(found.top);
 				return;
 			}
 			if (data.type === "juno.mail.linkClick") {
@@ -579,6 +643,9 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 										src={frameSrc}
 										sandbox="allow-scripts"
 										referrerPolicy="no-referrer"
+										onLoad={() => {
+											if (findOpen && findQuery !== "") tellFrame("search", findQuery);
+										}}
 										className="block min-h-full w-full shrink-0 overflow-x-auto overflow-y-hidden border-t border-[var(--line)] bg-[var(--surface)]"
 										style={frameHeight === null ? undefined : { height: frameHeight }}
 									/>
@@ -626,6 +693,22 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 				</div>
 			) : null}
 
+			{open && findOpen
+				? createPortal(
+						<div className="fixed top-[calc(var(--titlebar-height)+8px)] right-6 z-40">
+							<FindBar
+								query={findQuery}
+								onQueryChange={setFindQuery}
+								count={findResult.count}
+								current={findResult.current}
+								onNext={() => tellFrame("next")}
+								onPrevious={() => tellFrame("previous")}
+								onClose={closeFind}
+							/>
+						</div>,
+						document.body,
+					)
+				: null}
 			{open && hoveredLink?.messageId === message.id ? (
 				<LinkPopover
 					href={hoveredLink.href}

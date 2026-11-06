@@ -21,7 +21,7 @@
  */
 import { randomBytes } from "node:crypto";
 import sanitizeHtml from "sanitize-html";
-import { LINK_SCRIPT, QUOTE_SCRIPT } from "./mail-frame-script";
+import { FIND_SCRIPT, LINK_SCRIPT, QUOTE_SCRIPT } from "./mail-frame-script";
 import { plainTextToQuotedMarkup } from "./mail-html";
 
 export interface SanitiseOptions {
@@ -174,6 +174,8 @@ a[data-href] { color: #4a3fa0; text-decoration: underline; cursor: pointer; }
 /* !important because clients style their own quotes inline, each differently, and a thread should read the same whoever wrote each turn. */
 blockquote { margin: 8px 0 8px 8px !important; padding: 0 0 0 12px !important; border: 0 !important; border-left: 2px solid #d9d6cf !important; color: #5c5a55 !important; }
 pre { white-space: pre-wrap; }
+mark.juno-find { background: #fde9a8; color: inherit; border-radius: 2px; }
+mark.juno-find-current { background: #f2b34a; }
 table { max-width: 100%; }
 `;
 
@@ -313,7 +315,7 @@ export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): Saniti
 		'<!doctype html><html><head><meta charset="utf-8">' +
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(Boolean(options.allowRemoteImages), scriptNonce))}">` +
 		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body>` +
-		`<script nonce="${scriptNonce}">${QUOTE_SCRIPT}${HEIGHT_SCRIPT}${LINK_SCRIPT}</script></html>`;
+		`<script nonce="${scriptNonce}">${QUOTE_SCRIPT}${HEIGHT_SCRIPT}${LINK_SCRIPT}${FIND_SCRIPT}</script></html>`;
 
 	return { document, scriptNonce, remoteImages, suspicious, links };
 }
@@ -340,6 +342,6 @@ export function textDocumentBody(text: string): SanitisedBody {
 		'<!doctype html><html><head><meta charset="utf-8">' +
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false, scriptNonce))}">` +
 		`<style>${BASE_CSS} body { white-space: pre-wrap; } ${TEXT_DARK_CSS}</style></head>` +
-		`<body>${body}</body><script nonce="${scriptNonce}">${HEIGHT_SCRIPT}${LINK_SCRIPT}</script></html>`;
+		`<body>${body}</body><script nonce="${scriptNonce}">${HEIGHT_SCRIPT}${LINK_SCRIPT}${FIND_SCRIPT}</script></html>`;
 	return { document, scriptNonce, remoteImages: 0, suspicious: false, links: [] };
 }

@@ -93,6 +93,7 @@ export const COMBOS = {
 	back: "alt+arrowleft",
 	lock: "mod+shift+l",
 	help: "mod+/",
+	find: "mod+f",
 } as const;
 
 export type ShortcutRow = { combos: string[]; label: string };
@@ -128,6 +129,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: ["mod+6"], label: "Documents" },
 			{ combos: ["mod+7"], label: "Agent" },
 		],
+	},
+	{
+		title: "Reading a message",
+		rows: [{ combos: [COMBOS.find], label: "Find in the open message" }],
 	},
 	{
 		title: "In the mail list",

@@ -20,6 +20,8 @@ import { useRecentTouch } from "../../lib/use-recent-touch";
 import { useScreenAction } from "../../lib/screen-actions";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { BlocksPage } from "./blocks/BlocksPage";
+import type { ManageTarget } from "./blocks/BlockMenu";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
 import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
@@ -122,6 +124,8 @@ export function MailScreen() {
 	const [online, setOnline] = useState(() => navigator.onLine);
 	const [outboxCounts, setOutboxCounts] = useState<MailOutboxCounts | null>(null);
 	const [compose, setCompose] = useState<ComposeSeed | null>(null);
+	// The page for intros and outros, and what to reopen when it is left.
+	const [blocksPage, setBlocksPage] = useState<{ target: ManageTarget; returnTo: ComposeSeed | null } | null>(null);
 	useScreenAction("mail", () => setCompose({}));
 	const [accountsVersion, setAccountsVersion] = useState(0);
 	const [outboxVersion, setOutboxVersion] = useState(0);
@@ -805,10 +809,26 @@ export function MailScreen() {
 
 	// A form takes the screen. Both of these have fields in them, and neither
 	// belongs over the top of the list it came from.
+	if (blocksPage) {
+		return (
+			<BlocksPage
+				target={blocksPage.target}
+				onBack={() => {
+					setCompose(blocksPage.returnTo);
+					setBlocksPage(null);
+				}}
+			/>
+		);
+	}
+
 	if (compose) {
 		return (
 			<ComposePage
 				seed={compose}
+				onManage={(draft, target) => {
+					setBlocksPage({ target, returnTo: draft ? { draft } : compose });
+					setCompose(null);
+				}}
 				onClose={() => setCompose(null)}
 				onDeleted={() => {
 					setCompose(null);

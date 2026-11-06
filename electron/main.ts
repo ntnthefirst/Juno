@@ -3926,6 +3926,56 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (composed !== "ok") throw new Error(`Smoke: compose ${composed}`);
 									await shoot("mail-compose");
+									// The two buttons that start the toolbar: the intro menu lists what
+									// a first install is given, and a right click reaches the manage
+									// page, which comes back to the composer.
+									const blockMenu = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const intro = document.querySelector("button[aria-label='Intro']");
+											if (!intro || !document.querySelector("button[aria-label='Outro']")) return "no intro and outro buttons";
+											intro.click();
+											await wait(300);
+											const menu = document.querySelector("[role=menu][aria-label='Intro']");
+											if (!menu) return "no intro menu";
+											const rows = [...menu.querySelectorAll("[role=menuitem]")].map((el) => el.textContent.trim());
+											if (rows.length < 4 || !rows.some((row) => row.startsWith("Formal")) || !rows.some((row) => row.startsWith("No intro"))) return "unexpected rows " + rows.join(" | ");
+											[...menu.querySelectorAll("[role=menuitem]")][1].dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+											await wait(200);
+											return "ok";
+										})()`,
+									);
+									if (blockMenu !== "ok") throw new Error(`Smoke: intro menu ${blockMenu}`);
+									await shoot("mail-compose-intro");
+									const blocksPage = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(200);
+											const intro = document.querySelector("button[aria-label='Intro']");
+											intro.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
+											await wait(300);
+											const manage = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Manage intros and outros");
+											if (!manage) return "no manage item";
+											manage.click();
+											await wait(700);
+											if (![...document.querySelectorAll("h1")].some((el) => el.textContent.includes("Intros and outros"))) return "no manage page";
+											if (!document.querySelector("[role=textbox][aria-label='Text']")) return "no text field";
+											return "ok";
+										})()`,
+									);
+									if (blocksPage !== "ok") throw new Error(`Smoke: manage page ${blocksPage}`);
+									await shoot("mail-blocks");
+									const backToCompose = await window.webContents.executeJavaScript(
+										`(async () => {
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Mail");
+											if (!back) return "no back link";
+											back.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return document.querySelector("input[role=combobox]") ? "ok" : "the composer did not come back";
+										})()`,
+									);
+									if (backToCompose !== "ok") throw new Error(`Smoke: back to the composer ${backToCompose}`);
 									// A subject, then Escape, which is the composer's only way
 									// out since it became a full-screen form. Typing first is what
 									// gives autosave something to write, and the draft it leaves

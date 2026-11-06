@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DocumentRecord, MailAccount, MailAddress, MailOutboxMessage, MailTemplate } from "@shared/types";
+import type {
+	ComposeBlock,
+	ComposeBlockContext,
+	ComposeBlockKind,
+	DocumentRecord,
+	MailAccount,
+	MailAddress,
+	MailOutboxMessage,
+	MailTemplate,
+} from "@shared/types";
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
-import MessageEditor from "./MessageEditor";
+import { BlockMenu, type ManageTarget } from "./blocks/BlockMenu";
+import { squash } from "./blocks/block-text";
+import MessageEditor, { type MessageEditorHandle } from "./MessageEditor";
 import { RecipientField } from "./RecipientField";
 
 export type ComposeSeed = {
@@ -28,7 +39,15 @@ type ComposePageProps = {
 	onClose: () => void;
 	onDeleted: () => void;
 	onDone: (message: MailOutboxMessage, queued: boolean) => void;
+	/**
+	 * Opens the manage screen for intros and outros. The draft is saved first and
+	 * handed over, so coming back reopens the message as it was left. Left out
+	 * where the composer has no screen to go back to, and the menus then only pick.
+	 */
+	onManage?: (draft: MailOutboxMessage | null, target: ManageTarget) => void;
 };
+
+type BlockState = Record<ComposeBlockKind, string | null>;
 
 type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
 
@@ -38,7 +57,7 @@ type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
  * form; this reads as a blank message the way a mail client's own compose
  * window does, on any size of screen.
  */
-export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePageProps) {
+export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: ComposePageProps) {
 	const [accounts, setAccounts] = useState<MailAccount[]>([]);
 	const [templates, setTemplates] = useState<MailTemplate[]>([]);
 	const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -66,6 +85,25 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 	const [saveState, setSaveState] = useState<SaveState>("idle");
 
 	const attachmentsRef = useRef<HTMLDivElement>(null);
+	const editorRef = useRef<MessageEditorHandle>(null);
+
+	// Intros and outros. A kind is "auto" until the person takes it over, which is
+	// choosing a block, choosing none, or editing the line: after any of those the
+	// rules never touch it again. A reopened draft already has what it was given.
+	const [blocks, setBlocks] = useState<ComposeBlock[] | null>(null);
+	const [activeBlocks, setActiveBlocks] = useState<BlockState>({ intro: null, outro: null });
+	const [insertedBlocks, setInsertedBlocks] = useState<BlockState>({ intro: null, outro: null });
+	const insertedRef = useRef<BlockState>({ intro: null, outro: null });
+	const blockMode = useRef<Record<ComposeBlockKind, "auto" | "manual" | "off">>({
+		intro: seed.draft ? "manual" : "auto",
+		outro: seed.draft ? "manual" : "auto",
+	});
+
+	const recordBlock = useCallback((kind: ComposeBlockKind, blockId: string | null, text: string | null) => {
+		insertedRef.current = { ...insertedRef.current, [kind]: text };
+		setInsertedBlocks(insertedRef.current);
+		setActiveBlocks((current) => ({ ...current, [kind]: blockId }));
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -86,6 +124,81 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 			cancelled = true;
 		};
 	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		window.juno.mail.blocks
+			.list()
+			.then((rows) => {
+				if (!cancelled) setBlocks(rows);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setError(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const replying = Boolean(seed.draft?.replyToMessageId ?? seed.replyToMessageId);
+	const projectId = seed.projectId ?? null;
+	const blockContext = useMemo<ComposeBlockContext>(
+		() => ({ reply: replying, to, clientId: clientId || null, projectId }),
+		[replying, to, clientId, projectId],
+	);
+
+	// Once when the composer opens and again when the recipient becomes known,
+	// for as long as the line is still the one that was put there.
+	useEffect(() => {
+		if (blocks === null) return;
+		if (blockMode.current.intro !== "auto" && blockMode.current.outro !== "auto") return;
+		let cancelled = false;
+		window.juno.mail.blocks
+			.resolve(blockContext)
+			.then((found) => {
+				const editor = editorRef.current;
+				if (cancelled || !editor) return;
+				for (const kind of ["intro", "outro"] as const) {
+					if (blockMode.current[kind] !== "auto") continue;
+					const put = insertedRef.current[kind];
+					const inMessage = editor.readBlock(kind);
+					if (inMessage !== null && (put === null || squash(inMessage) !== squash(put))) {
+						blockMode.current[kind] = "manual";
+						continue;
+					}
+					const next = found[kind];
+					if ((next?.text ?? null) === put) continue;
+					editor.setBlock(kind, next?.text ?? null);
+					recordBlock(kind, next?.block.id ?? null, next?.text ?? null);
+				}
+			})
+			.catch(() => {
+				// A line added for you is a convenience. If it cannot be worked out the
+				// message starts as it would have, and there is nothing to report.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [blocks, blockContext, recordBlock]);
+
+	async function pickBlock(kind: ComposeBlockKind, blockId: string | null) {
+		const editor = editorRef.current;
+		if (!editor) return;
+		if (blockId === null) {
+			editor.setBlock(kind, null);
+			blockMode.current[kind] = "off";
+			recordBlock(kind, null, null);
+			return;
+		}
+		try {
+			const rendered = await window.juno.mail.blocks.render(blockId, blockContext);
+			editor.setBlock(kind, rendered.text);
+			blockMode.current[kind] = "manual";
+			recordBlock(kind, blockId, rendered.text);
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		}
+	}
 
 	const addressKey = [...to, ...cc, ...bcc].map((address) => address.address).join(",");
 	useEffect(() => {
@@ -188,8 +301,14 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 		setTemplateApplied(false);
 	}
 
+	// A message holding only the lines the rules added is still an empty message,
+	// so opening the composer does not leave a draft behind.
+	const typedText = [insertedBlocks.intro, insertedBlocks.outro].reduce<string>(
+		(rest, line) => (line ? rest.replace(line, "") : rest),
+		bodyText,
+	);
 	const isEmpty =
-		to.length === 0 && cc.length === 0 && bcc.length === 0 && !subject.trim() && !bodyText.trim() && documentIds.length === 0;
+		to.length === 0 && cc.length === 0 && bcc.length === 0 && !subject.trim() && !typedText.trim() && documentIds.length === 0;
 
 	// Read through a ref rather than depended on directly: persist's own
 	// success calls setSavedMessage, and depending on that state would give
@@ -309,6 +428,12 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 			setError(messageOf(cause));
 			setBusy(null);
 		}
+	}
+
+	async function manageBlocks(target: ManageTarget) {
+		if (busy) return;
+		const saved = await persist(false);
+		onManage?.(saved, target);
 	}
 
 	const handleClose = useCallback(async () => {
@@ -545,9 +670,24 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 
 					<div className="min-h-[240px] flex-1">
 						<MessageEditor
+							ref={editorRef}
 							text={bodyText}
 							html={bodyHtml}
 							onChange={editBody}
+							toolbarStart={
+								<>
+									{(["intro", "outro"] as const).map((kind) => (
+										<BlockMenu
+											key={kind}
+											kind={kind}
+											blocks={(blocks ?? []).filter((block) => block.kind === kind)}
+											activeId={activeBlocks[kind]}
+											onPick={(blockId) => void pickBlock(kind, blockId)}
+											onManage={onManage ? (target) => void manageBlocks(target) : undefined}
+										/>
+									))}
+								</>
+							}
 						/>
 					</div>
 				</div>

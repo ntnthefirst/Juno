@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
+import type { ComposeBlockKind } from "@shared/types";
 import { BoldIcon, ItalicIcon, LinkIcon, ListBulletIcon, NumberedListIcon, UnderlineIcon } from "@heroicons/react/24/outline";
 import { Button } from "../../components/Button";
 import { EmojiPicker } from "../../components/EmojiPicker";
@@ -8,11 +9,41 @@ import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { TOOLBAR_BUTTON, TOOLBAR_BUTTON_ACTIVE } from "../../components/toolbar-styles";
 import { escapeAttribute, isDrawable, REMOTE_IMAGE_NOTE } from "../../lib/remote-image";
+import { linesToHtml } from "./blocks/block-text";
+
+/**
+ * What the composer can ask of the body: the intro and the outro sit in marked
+ * elements, so one can be found, replaced or taken out without disturbing the
+ * rest of what was typed.
+ */
+export type MessageEditorHandle = {
+	/** The text of the block in the message as it reads now, or null when there is none. */
+	readBlock: (kind: ComposeBlockKind) => string | null;
+	/** Puts the block at the start (intro) or end (outro), replacing the one there. Null takes it out. */
+	setBlock: (kind: ComposeBlockKind, text: string | null) => void;
+};
+
+const BLOCK_ATTRIBUTE = "data-juno-block";
+
+/**
+ * Where an outro goes. At the very end, except in a reply: the quoted original
+ * and the line that introduces it ("On ... wrote") stay last, so the sign-off
+ * sits under what was written and not under somebody else's mail.
+ */
+function outroAnchor(host: HTMLElement): Element | null {
+	const quote = [...host.children].find((child) => child.tagName === "BLOCKQUOTE");
+	if (!quote) return null;
+	const before = quote.previousElementSibling;
+	return before && before.tagName === "P" ? before : quote;
+}
 
 type MessageEditorProps = {
 	text: string;
 	html: string | null;
 	onChange: (text: string, html: string | null) => void;
+	/** Drawn at the start of the toolbar, before the formatting buttons. */
+	toolbarStart?: ReactNode;
+	ref?: Ref<MessageEditorHandle>;
 };
 
 /**
@@ -66,7 +97,7 @@ function forMessage(value: string): string {
  * around the body itself, so it reads as the page continuing rather than a
  * box sitting on it.
  */
-export default function MessageEditor({ text, html, onChange }: MessageEditorProps) {
+export default function MessageEditor({ text, html, onChange, toolbarStart, ref }: MessageEditorProps) {
 	const hostRef = useRef<HTMLDivElement>(null);
 	const toolbarRef = useRef<HTMLDivElement>(null);
 	const savedRangeRef = useRef<Range | null>(null);
@@ -133,6 +164,28 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 		onChange(host.innerText, nextHtml || null);
 		refreshActiveFormats();
 	}
+
+	useImperativeHandle(ref, () => ({
+		readBlock(kind) {
+			const element = hostRef.current?.querySelector<HTMLElement>(`[${BLOCK_ATTRIBUTE}="${kind}"]`);
+			return element ? element.innerText : null;
+		},
+		setBlock(kind, blockText) {
+			const host = hostRef.current;
+			if (!host) return;
+			host.querySelector(`[${BLOCK_ATTRIBUTE}="${kind}"]`)?.remove();
+			if (blockText !== null) {
+				const element = document.createElement("div");
+				element.setAttribute(BLOCK_ATTRIBUTE, kind);
+				// Inline, because the message leaves this window and a stylesheet does not.
+				element.setAttribute("style", kind === "intro" ? "margin:0 0 16px 0;" : "margin:16px 0 0 0;");
+				element.innerHTML = linesToHtml(blockText);
+				host.insertBefore(element, kind === "intro" ? host.firstChild : outroAnchor(host));
+			}
+			const nextHtml = forMessage(host.innerHTML);
+			onChange(host.innerText, nextHtml || null);
+		},
+	}));
 
 	function captureSelection() {
 		const host = hostRef.current;
@@ -244,6 +297,12 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 				ref={toolbarRef}
 				className="flex flex-none flex-wrap items-center gap-1 border-b border-[var(--line)] bg-[var(--sunken)] p-1.5"
 			>
+				{toolbarStart ? (
+					<>
+						{toolbarStart}
+						<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line-strong)]" />
+					</>
+				) : null}
 				<button
 					type="button"
 					aria-label="Bold"

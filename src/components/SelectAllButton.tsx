@@ -1,3 +1,5 @@
+import { Checkbox } from "./Checkbox";
+
 type SelectAllButtonProps = {
 	/** Every row the list is showing right now is selected. */
 	checked: boolean;
@@ -11,8 +13,8 @@ type SelectAllButtonProps = {
 /**
  * The square checkbox at the left of a list's search bar: takes the whole
  * page when nothing is selected, drops the selection once anything is. A
- * native checkbox is what carries the indeterminate state for free, which is
- * why this stays an `<input>` rather than a button drawing its own mark.
+ * shared checkbox keeps the native input underneath, which is what carries the
+ * indeterminate state.
  */
 export function SelectAllButton({
 	checked,
@@ -24,19 +26,13 @@ export function SelectAllButton({
 	const hasSelection = checked || indeterminate;
 	return (
 		<label className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)] hover:bg-[var(--hover)] has-[:disabled]:hover:bg-transparent">
-			<input
-				type="checkbox"
+			<Checkbox
 				checked={checked}
 				disabled={disabled}
-				ref={(element) => {
-					// Some of the page, but not all of it, is the third state a
-					// checkbox only has through the DOM.
-					if (element) element.indeterminate = indeterminate;
-				}}
+				indeterminate={indeterminate}
 				onChange={() => (hasSelection ? onClearSelection() : onSelectAll())}
 				aria-label={hasSelection ? "Clear selection" : "Select all"}
 				title={hasSelection ? "Clear selection" : "Select all"}
-				className="h-3.5 w-3.5 rounded-[3px] border-[var(--line-strong)] accent-[var(--accent)] disabled:opacity-40"
 			/>
 		</label>
 	);

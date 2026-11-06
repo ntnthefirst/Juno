@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Reminder } from "@shared/types";
-import { Icon } from "../../components/Icon";
+import { Checkbox } from "../../components/Checkbox";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { prefersReducedMotion } from "../../lib/motion";
@@ -151,25 +151,15 @@ export function ReminderRow({
 					onContextMenu={menu.open}
 					className="group flex items-center gap-1 rounded-[var(--radius-lg)] px-1 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
 				>
-					<button
-						type="button"
-						onClick={toggle}
-						disabled={busy}
-						aria-label={done ? `Reopen ${reminder.title}` : `Mark ${reminder.title} done`}
-						className="flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-full)] disabled:pointer-events-none"
-					>
-						<span
-							aria-hidden
-							className={[
-								"flex h-[18px] w-[18px] items-center justify-center rounded-[var(--radius-full)] border-[1.5px] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-								done || leaving
-									? "border-[var(--ok)] bg-[var(--ok)] text-[var(--paper)]"
-									: "border-[var(--line-strong)] text-transparent group-hover:border-[var(--accent)] hover:text-[var(--accent)]",
-							].join(" ")}
-						>
-							<Icon name="check" size={11} strokeWidth={3} />
-						</span>
-					</button>
+					<span className="flex h-8 w-8 flex-none items-center justify-center">
+						<Checkbox
+							shape="round"
+							checked={done || leaving}
+							onChange={toggle}
+							disabled={busy}
+							aria-label={done ? `Reopen ${reminder.title}` : `Mark ${reminder.title} done`}
+						/>
+					</span>
 
 					<div className="min-w-0 flex-1 py-2 pl-1">
 						<p

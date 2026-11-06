@@ -5,6 +5,7 @@ import { useScreenAction } from "../../lib/screen-actions";
 import { DOCUMENT_SWITCH } from "../../app/screens";
 import { AddButton } from "../../components/AddButton";
 import { Avatar } from "../../components/Avatar";
+import { Checkbox } from "../../components/Checkbox";
 import { EmptyState } from "../../components/EmptyState";
 import { IconAction } from "../../components/IconAction";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
@@ -577,14 +578,11 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 								style={{ height: "var(--row-height-roomy)" }}
 								onClick={(event) => event.stopPropagation()}
 							>
-								<input
-									type="checkbox"
+								<Checkbox
 									checked={checked}
 									onChange={() => onToggle(row.id)}
 									aria-label={`Select ${row.title}`}
-									className={`h-4 w-4 accent-[var(--accent)] ${
-										hasSelection ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-									}`}
+									className={hasSelection ? "" : "opacity-0 group-hover:opacity-100 has-[:focus-visible]:opacity-100"}
 								/>
 							</td>
 							<td

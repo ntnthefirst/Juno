@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useRef, useState } from "react";
 import type { MailOutboxMessage, MailThreadSummary } from "@shared/types";
 import { Avatar } from "../../components/Avatar";
+import { Checkbox } from "../../components/Checkbox";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { ContextMenu, type MenuItem } from "../../components/Menu";
@@ -340,8 +341,7 @@ export function ThreadList({
 											>
 												<Avatar name={lead} size={32} />
 											</span>
-											<input
-												type="checkbox"
+											<Checkbox
 												checked={checked}
 												onChange={(event) =>
 													onToggleSelect(thread.id, (event.nativeEvent as MouseEvent).shiftKey)
@@ -349,10 +349,10 @@ export function ThreadList({
 												onClick={(event) => event.stopPropagation()}
 												aria-label={`Select ${participantsLine(thread.participants, "Me")}`}
 												className={[
-													"absolute h-4 w-4 rounded-[3px] border-[var(--line-strong)] accent-[var(--accent)]",
+													"absolute",
 													hasSelection
 														? "opacity-100"
-														: "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100",
+														: "opacity-0 has-[:focus-visible]:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100",
 												].join(" ")}
 											/>
 										</span>

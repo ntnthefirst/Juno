@@ -43,15 +43,15 @@ export function VersionList({ documentId, nested = false }: VersionListProps) {
 
 	if (versions === null) {
 		return error ? (
-			<p className="py-2 text-[length:var(--text-sm)] text-[var(--risk)]">{error}</p>
+			<p className="py-2 text-sm text-[var(--risk)]">{error}</p>
 		) : (
-			<p className="py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Loading.</p>
+			<p className="py-2 text-sm text-[var(--ink-muted)]">Loading.</p>
 		);
 	}
 
 	if (versions.length === 0) {
 		return (
-			<p className="py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="py-2 text-sm text-[var(--ink-muted)]">
 				No versions yet. The first one is made when the PDF is created.
 			</p>
 		);
@@ -63,18 +63,18 @@ export function VersionList({ documentId, nested = false }: VersionListProps) {
 				{versions.map((version) => (
 					<li
 						key={version.id}
-						className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-1.5 text-[length:var(--text-dense)] last:border-b-0"
+						className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-1.5 text-dense last:border-b-0"
 						style={{ minHeight: "var(--row-height)" }}
 					>
 						<div className="flex min-w-0 items-center gap-3">
 							<span className="tabular w-7 shrink-0 text-[var(--ink-muted)]">v{version.number}</span>
 							<span
-								className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${kindClass(version.kind)}`}
+								className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-micro font-[var(--weight-medium)] ${kindClass(version.kind)}`}
 							>
 								{KIND_LABELS[version.kind]}
 							</span>
 							{version.isLatest ? (
-								<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--accent)]">
+								<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--accent)]">
 									Latest
 								</span>
 							) : null}
@@ -83,7 +83,7 @@ export function VersionList({ documentId, nested = false }: VersionListProps) {
 							</span>
 						</div>
 						<div className="flex shrink-0 items-center gap-1">
-							<span className="tabular mr-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="tabular mr-2 text-sm text-[var(--ink-muted)]">
 								{formatInstant(version.fileDate)}
 							</span>
 							<Button size="dense" onClick={() => void run(() => window.juno.documents.openVersion(version.id))}>
@@ -101,7 +101,7 @@ export function VersionList({ documentId, nested = false }: VersionListProps) {
 					</li>
 				))}
 			</ol>
-			{error ? <p className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">{error}</p> : null}
+			{error ? <p className="mt-1 text-sm text-[var(--risk)]">{error}</p> : null}
 		</div>
 	);
 }

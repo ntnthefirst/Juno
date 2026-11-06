@@ -219,7 +219,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 				<span
 					{...own}
 					style={host.place}
-					className={`flex items-center gap-1.5 text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)] ${host.className}`}
+					className={`flex items-center gap-1.5 text-micro text-[var(--canvas-ink-muted)] ${host.className}`}
 				>
 					<Icon name="image" size={14} /> {key ? "This picture is no longer stored" : "No image address yet"}
 				</span>
@@ -261,7 +261,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 					<span
 						{...own}
 						style={host.place}
-						className={`text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)] ${host.className}`}
+						className={`text-micro text-[var(--canvas-ink-muted)] ${host.className}`}
 					>
 						No input chosen
 					</span>
@@ -299,7 +299,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 				<span
 					{...own}
 					style={host.place}
-					className={`text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)] ${host.className}`}
+					className={`text-micro text-[var(--canvas-ink-muted)] ${host.className}`}
 				>
 					Empty HTML block
 				</span>
@@ -588,7 +588,7 @@ export function CanvasView({
 					<p
 						data-canvas-chrome
 						style={{ gridColumn: "1 / -1" }}
-						className="flex-1 px-3 py-6 text-center text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
+						className="flex-1 px-3 py-6 text-center text-micro text-[var(--canvas-ink-muted)]"
 					>
 						{container.name} is empty
 					</p>
@@ -653,7 +653,7 @@ export function CanvasView({
 				{shown.length === 0 ? (
 					<span
 						data-canvas-chrome
-						className="block px-2 py-4 text-center text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
+						className="block px-2 py-4 text-center text-micro text-[var(--canvas-ink-muted)]"
 					>
 						Empty
 					</span>

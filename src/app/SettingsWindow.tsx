@@ -163,7 +163,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 					paddingRight: overlayGutter.right,
 				}}
 			>
-				<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)]">Settings</span>
+				<span className="text-sm font-[var(--weight-semibold)]">Settings</span>
 			</header>
 
 			<div className="flex min-h-0 flex-1">
@@ -310,26 +310,26 @@ function AboutSection() {
 						/>
 						<div className="min-w-0 flex-1">
 							<div className="flex items-baseline gap-2">
-								<h3 className="text-[length:var(--text-lg)] font-[var(--weight-semibold)] text-[var(--ink)]">
+								<h3 className="text-lg font-[var(--weight-semibold)] text-[var(--ink)]">
 									Juno
 								</h3>
-								<span className="font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+								<span className="font-mono text-micro text-[var(--ink-muted)]">
 									v{info.version}
 								</span>
 							</div>
-							<p className="mt-0.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-0.5 text-sm text-[var(--ink-muted)]">
 								A local-first back office for small business owners and freelancers.
 							</p>
 						</div>
 					</div>
 
-					<dl className="flex flex-col gap-2.5 text-[length:var(--text-dense)]">
+					<dl className="flex flex-col gap-2.5 text-dense">
 						<Row label="Platform">
 							{info.platform}
 							{info.isDev ? " (development build)" : ""}
 						</Row>
 						<Row label="Database">
-							<span data-selectable className="break-all font-mono text-[length:var(--text-sm)]">
+							<span data-selectable className="break-all font-mono text-sm">
 								{info.databasePath}
 							</span>
 						</Row>

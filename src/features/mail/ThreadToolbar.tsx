@@ -84,13 +84,13 @@ export function ThreadToolbar({
 				onClearSelection={onClearSelection}
 			/>
 			{hasSelection ? (
-				<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
+				<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
 					{selectedIds.length} selected
 				</span>
 			) : null}
 
 			{heading ? (
-				<h2 className="min-w-0 text-[length:var(--text-h3)] font-[var(--weight-medium)]">{heading}</h2>
+				<h2 className="min-w-0 text-h3 font-[var(--weight-medium)]">{heading}</h2>
 			) : (
 				<MailSearchBar search={search} onSearch={onSearch} filters={filters} onFilters={onFilters} />
 			)}

@@ -51,14 +51,14 @@ export function RecentMailCard({ state, hasAccounts }: RecentMailCardProps) {
 									<Avatar name={sender} size={32} />
 									<span className="min-w-0 flex-1">
 										<span className="flex items-baseline gap-2">
-											<span className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-[var(--weight-semibold)]">
+											<span className="min-w-0 flex-1 truncate text-base font-[var(--weight-semibold)]">
 												{sender}
 											</span>
-											<span className="tabular flex-none text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="tabular flex-none text-sm text-[var(--ink-muted)]">
 												{formatWhen(thread.lastMessageAt)}
 											</span>
 										</span>
-										<span className="block truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+										<span className="block truncate text-dense text-[var(--ink-muted)]">
 											<span className="text-[var(--ink)]">{thread.subject}</span>
 											{thread.snippet ? ` ${thread.snippet}` : ""}
 										</span>

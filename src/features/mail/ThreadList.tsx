@@ -127,7 +127,7 @@ export function ThreadList({
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load mail.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{error}
 				</p>
 			</div>
@@ -269,7 +269,7 @@ export function ThreadList({
 						{section.label ? (
 							<li
 								aria-hidden
-								className="px-3 pt-4 pb-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-2"
+								className="px-3 pt-4 pb-1 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-2"
 							>
 								{section.label}
 							</li>
@@ -372,7 +372,7 @@ export function ThreadList({
 										>
 											<div className="flex items-baseline gap-2">
 												<span
-													className={`min-w-0 flex-1 truncate text-[length:var(--text-base)] ${
+													className={`min-w-0 flex-1 truncate text-base ${
 														unread ? "font-[var(--weight-semibold)] text-[var(--ink)]" : "text-[var(--ink)]"
 													}`}
 												>
@@ -389,7 +389,7 @@ export function ThreadList({
 													}`}
 												>
 													{thread.messageCount > 1 ? (
-														<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+														<span className="tabular text-micro text-[var(--ink-muted)]">
 															{thread.messageCount}
 														</span>
 													) : null}
@@ -403,13 +403,13 @@ export function ThreadList({
 															<Icon name="attachment" size={12} />
 														</span>
 													) : null}
-													<span className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+													<span className="tabular text-sm text-[var(--ink-muted)]">
 														{formatWhen(thread.lastMessageAt)}
 													</span>
 												</span>
 											</div>
 											<div className="mt-0.5 flex items-baseline gap-2">
-												<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+												<span className="min-w-0 flex-1 truncate text-dense text-[var(--ink-muted)]">
 													<span className={unread ? "font-[var(--weight-medium)] text-[var(--ink)]" : "text-[var(--ink)]"}>
 														{thread.subject}
 													</span>
@@ -417,12 +417,12 @@ export function ThreadList({
 												</span>
 												{/* Beside Juno's own unsent messages, the server's are told apart. */}
 												{outbox ? (
-													<span className={`shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
+													<span className={`shrink-0 text-micro text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
 														On the server
 													</span>
 												) : null}
 												{thread.clientName ? (
-													<span className={`shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
+													<span className={`shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-micro text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
 														{thread.clientName}
 													</span>
 												) : null}

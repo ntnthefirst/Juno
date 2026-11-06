@@ -118,13 +118,13 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 				<div
 					role="dialog"
 					aria-label={`About ${displayName(person)}`}
-					className="absolute left-0 top-full z-20 mt-1 w-[380px] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-3 text-[length:var(--text-dense)] text-[var(--ink)] shadow-[var(--shadow-popover)]"
+					className="absolute left-0 top-full z-20 mt-1 w-[380px] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-3 text-dense text-[var(--ink)] shadow-[var(--shadow-popover)]"
 				>
 					<div className="flex items-start gap-2">
 						<div className="min-w-0 flex-1">
 							<p className="truncate font-[var(--weight-medium)]">{displayName(person)}</p>
 							{person.name?.trim() ? (
-								<p data-selectable className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p data-selectable className="truncate text-sm text-[var(--ink-muted)]">
 									{person.address}
 								</p>
 							) : null}
@@ -150,17 +150,17 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 						) : lookup.match ? (
 							<div className="flex items-start gap-2">
 								<div className="min-w-0 flex-1">
-									<p className="text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+									<p className="text-micro uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 										Client
 									</p>
 									<p className="truncate font-[var(--weight-medium)]">{lookup.match.clientName}</p>
 									{lookup.client?.vatNumber ? (
-										<p className="tabular truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p className="tabular truncate text-sm text-[var(--ink-muted)]">
 											{lookup.client.vatNumber}
 										</p>
 									) : null}
 									{lookup.client?.website ? (
-										<p className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p className="truncate text-sm text-[var(--ink-muted)]">
 											{lookup.client.website}
 										</p>
 									) : null}
@@ -197,7 +197,7 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 						<div className="mt-2 border-t border-[var(--line)] pt-2">
 							<div className="flex items-center gap-2">
 								<span className="min-w-0 flex-1">
-									<span className="block text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+									<span className="block text-micro uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 										Sender
 									</span>
 									<span className="block font-[var(--weight-medium)]">{trust.trusted ? "Trusted" : "Not trusted"}</span>
@@ -220,7 +220,7 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 												if (trust.trusted !== option.value) trust.onChange(option.value);
 											}}
 											className={[
-												"h-[28px] rounded-[var(--radius-sm)] px-3 text-[length:var(--text-sm)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:opacity-50",
+												"h-[28px] rounded-[var(--radius-sm)] px-3 text-sm transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:opacity-50",
 												trust.trusted === option.value
 													? "bg-[var(--surface)] font-[var(--weight-medium)] text-[var(--ink)]"
 													: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
@@ -232,7 +232,7 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 								</div>
 							</div>
 							{trust.viaClient ? (
-								<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="mt-1 text-sm text-[var(--ink-muted)]">
 									Trusted because a client is linked.
 								</p>
 							) : null}

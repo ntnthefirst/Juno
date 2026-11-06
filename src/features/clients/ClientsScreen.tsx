@@ -477,11 +477,11 @@ export function ClientsScreen() {
 		<div className="relative flex h-full flex-col p-8">
 			<div className="mb-6 flex w-full items-center justify-between gap-4">
 				<div className="flex items-baseline gap-3">
-					<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">
+					<h1 className="text-h2">
 						Clients
 					</h1>
 					{load.status === "ready" ? (
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="text-sm text-[var(--ink-muted)]">
 							{load.rows.length} {load.rows.length === 1 ? "client" : "clients"}
 						</span>
 					) : null}
@@ -680,7 +680,7 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 								}`}
 							>
 								<td
-									className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]"
+									className="border-b border-[var(--line)]/60 px-3 text-dense"
 									style={{ height: "var(--row-height-roomy)" }}
 								>
 									<button
@@ -693,13 +693,13 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 										<span className="truncate">{row.name}</span>
 									</button>
 								</td>
-								<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]">
+								<td className="border-b border-[var(--line)]/60 px-3 text-dense">
 									{row.status ? <StatusBadge label={row.status.label} tone={row.status.tone} /> : null}
 								</td>
-								<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<td className="border-b border-[var(--line)]/60 px-3 text-dense text-[var(--ink-muted)]">
 									{row.city ?? ""}
 								</td>
-								<td className="tabular border-b border-[var(--line)]/60 px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<td className="tabular border-b border-[var(--line)]/60 px-3 text-right text-dense text-[var(--ink-muted)]">
 									{row.openProjectCount} / {row.projectCount}
 								</td>
 							</tr>
@@ -754,7 +754,7 @@ function ErrorNote({ message }: { message: string }) {
 	return (
 		<div className="border-l-2 border-[var(--risk)] pl-4">
 			<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load clients.</p>
-			<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 				{message}
 			</p>
 		</div>

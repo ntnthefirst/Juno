@@ -160,7 +160,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						<div>
 							<label
 								htmlFor={notesId}
-								className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+								className="mb-1 block text-sm text-[var(--ink-muted)]"
 							>
 								Notes
 							</label>
@@ -170,7 +170,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						<Button onClick={() => setNotesOpen(true)}>Add notes</Button>
 					)}
 					{notesOpen ? (
-						<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mt-1 text-sm text-[var(--ink-muted)]">
 							Markdown is supported: **bold**, _italic_, a [link](https://example.com), a list.
 						</p>
 					) : null}
@@ -183,7 +183,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						</p>
 						<p
 							data-selectable
-							className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mt-1 text-sm text-[var(--ink-muted)]"
 						>
 							{error}
 						</p>

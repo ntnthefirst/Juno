@@ -172,7 +172,7 @@ export function ProjectDetail({
 					<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 						Could not open this project.
 					</p>
-					<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 						{load.message}
 					</p>
 				</div>
@@ -250,7 +250,7 @@ export function ProjectDetail({
 				<header className="flex items-start gap-4">
 					<div className="min-w-0 flex-1">
 						<div className="flex flex-wrap items-center gap-3">
-							<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">
+							<h1 className="text-h1">
 								{project.name}
 							</h1>
 							{status ? <StatusBadge label={status.label} tone={status.tone} /> : null}
@@ -307,7 +307,7 @@ export function ProjectDetail({
 				</header>
 
 				{project.localPath ? (
-					<p className="mt-4 flex items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-4 flex items-center gap-2 text-sm text-[var(--ink-muted)]">
 						<Icon name="projects" size={14} />
 						<span data-selectable className="truncate font-mono" title={project.localPath}>
 							{project.localPath}
@@ -372,7 +372,7 @@ export function ProjectDetail({
 					</SectionHeading>
 
 					{links.length === 0 ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="text-sm text-[var(--ink-muted)]">
 							Nothing linked yet. A repository, a Figma file, a staging address, a folder.
 						</p>
 					) : (
@@ -393,12 +393,12 @@ export function ProjectDetail({
 												setNotice(messageOf(cause));
 											})
 										}
-										className="min-w-0 flex-1 truncate text-left text-[length:var(--text-dense)]"
+										className="min-w-0 flex-1 truncate text-left text-dense"
 										title={link.target}
 									>
 										{link.label}
 									</button>
-									<span className="hidden min-w-0 max-w-[40%] flex-none truncate text-[length:var(--text-micro)] text-[var(--ink-muted)] sm:block">
+									<span className="hidden min-w-0 max-w-[40%] flex-none truncate text-micro text-[var(--ink-muted)] sm:block">
 										{link.target.startsWith("https://")
 											? link.target.replace(/^https:\/\//, "")
 											: pathTail(link.target)}
@@ -495,7 +495,7 @@ export function ProjectDetail({
 					</SectionHeading>
 
 					{assets.length === 0 ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="text-sm text-[var(--ink-muted)]">
 							No files yet. Added files are copied into the project's folder. Linked files stay
 							where they are, which is what a large export wants.
 						</p>
@@ -537,7 +537,7 @@ export function ProjectDetail({
 					</SectionHeading>
 
 					{commands.length === 0 ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="text-sm text-[var(--ink-muted)]">
 							No commands yet. One runs in a real shell with your account, and nothing but this
 							screen can write or start one.
 						</p>
@@ -555,9 +555,9 @@ export function ProjectDetail({
 										<span className="flex-none text-[var(--ink-faint)]">
 											<Icon name={command.kind === "docker" ? "container" : "terminal"} />
 										</span>
-										<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
+										<span className="min-w-0 flex-1 truncate text-dense">
 											<span className="font-[var(--weight-medium)]">{command.label}</span>
-											<span className="ml-2 font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+											<span className="ml-2 font-mono text-micro text-[var(--ink-muted)]">
 												{command.command}
 											</span>
 										</span>
@@ -678,7 +678,7 @@ type SectionHeadingProps = {
 function SectionHeading({ children, action }: SectionHeadingProps) {
 	return (
 		<div className="mb-2 flex items-center justify-between gap-4">
-			<h2 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">{children}</h2>
+			<h2 className="text-h3">{children}</h2>
 			{action}
 		</div>
 	);

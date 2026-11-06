@@ -268,7 +268,7 @@ export function ProjectForm({
 					<div className="col-span-2">
 						<label
 							htmlFor={descriptionId}
-							className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mb-1 block text-sm text-[var(--ink-muted)]"
 						>
 							Description
 						</label>
@@ -286,7 +286,7 @@ export function ProjectForm({
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not save this project.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

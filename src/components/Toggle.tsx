@@ -34,13 +34,13 @@ export function Toggle({ checked, onChange, disabled = false, label, description
 			className="group flex w-full min-h-[40px] items-center justify-between gap-6 rounded-[var(--radius-md)] text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--focus)] disabled:opacity-50"
 		>
 			<span className="flex min-w-0 flex-col gap-1">
-				<span id={labelId} className="text-[length:var(--text-base)] text-[var(--ink)]">
+				<span id={labelId} className="text-base text-[var(--ink)]">
 					{label}
 				</span>
 				{description ? (
 					<span
 						id={descriptionId}
-						className="max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						className="max-w-[62ch] text-sm text-[var(--ink-muted)]"
 					>
 						{description}
 					</span>

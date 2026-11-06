@@ -59,7 +59,7 @@ export function SettingsNav({
 						value={query}
 						onChange={(event) => onQuery(event.target.value)}
 						onKeyDown={onSearchKeyDown}
-						className="min-w-0 flex-1 bg-transparent text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+						className="min-w-0 flex-1 bg-transparent text-dense text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:outline-none [&::-webkit-search-cancel-button]:hidden"
 					/>
 					{query ? (
 						<button
@@ -77,7 +77,7 @@ export function SettingsNav({
 					) : (
 						<kbd
 							aria-hidden
-							className="mr-1 flex-none rounded-[var(--radius-sm)] border border-[var(--line-strong)] px-1.5 font-sans text-[length:var(--text-micro)] text-[var(--ink-muted)]"
+							className="mr-1 flex-none rounded-[var(--radius-sm)] border border-[var(--line-strong)] px-1.5 font-sans text-micro text-[var(--ink-muted)]"
 						>
 							{isMac ? "Cmd F" : "Ctrl F"}
 						</kbd>
@@ -101,7 +101,7 @@ export function SettingsNav({
 								onClick={() => onPage(open && pages.length > 1 ? page : firstPageOf(group.id))}
 								style={{ height: "var(--row-height)" }}
 								className={[
-									"flex w-full items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 text-left text-[length:var(--text-base)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus)]",
+									"flex w-full items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 text-left text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus)]",
 									open && !unfolded
 										? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
 										: open
@@ -133,7 +133,7 @@ export function SettingsNav({
 													onClick={() => onPage(item.id)}
 													style={{ height: "32px" }}
 													className={[
-														"flex w-full items-center rounded-[var(--radius-md)] px-2.5 text-left text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus)]",
+														"flex w-full items-center rounded-[var(--radius-md)] px-2.5 text-left text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus)]",
 														here
 															? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
 															: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",

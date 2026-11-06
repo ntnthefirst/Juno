@@ -232,7 +232,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 					)}
 
 					<div className="col-span-2">
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="text-sm text-[var(--ink-muted)]">
 							{describeRecurrence(values.pattern, intervalNumber)}
 						</p>
 					</div>
@@ -271,7 +271,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 					<div className="col-span-2">
 						<label
 							htmlFor={notesId}
-							className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mb-1 block text-sm text-[var(--ink-muted)]"
 						>
 							Notes
 						</label>
@@ -286,7 +286,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 						</p>
 						<p
 							data-selectable
-							className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mt-1 text-sm text-[var(--ink-muted)]"
 						>
 							{error}
 						</p>

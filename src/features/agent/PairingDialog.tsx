@@ -113,12 +113,12 @@ function PairingPrompt({ request, onConnected, onChanged }: PairingPromptProps) 
 				<span className="font-[var(--weight-semibold)]">{request.clientName}</span> wants to use Juno on this
 				computer.
 			</p>
-			<p className="mt-2 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+			<p className="mt-2 text-dense text-[var(--ink-muted)]">
 				Type the code on the page it just opened in your browser.
 			</p>
 
 			<label className="mt-5 block">
-				<span className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">Code</span>
+				<span className="mb-1 block text-sm text-[var(--ink-muted)]">Code</span>
 				<input
 					value={display}
 					onChange={(event) => change(event.target.value)}
@@ -129,19 +129,19 @@ function PairingPrompt({ request, onConnected, onChanged }: PairingPromptProps) 
 					readOnly={busy}
 					placeholder="000 000"
 					aria-describedby="pairing-message"
-					className="tabular w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-center font-mono text-[length:var(--text-h3)] tracking-[0.2em] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+					className="tabular w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-center font-mono text-h3 tracking-[0.2em] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 				/>
 			</label>
 
 			<p
 				id="pairing-message"
 				role={message ? "alert" : undefined}
-				className="mt-2 min-h-[1.5em] text-[length:var(--text-sm)] text-[var(--risk)]"
+				className="mt-2 min-h-[1.5em] text-sm text-[var(--risk)]"
 			>
 				{message}
 			</p>
 
-			<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-2 text-sm text-[var(--ink-muted)]">
 				It would go back to <span className="font-mono">{request.redirectHost}</span>. If you did not just connect
 				an app yourself, press Deny.
 			</p>

@@ -118,7 +118,7 @@ export function CommandPanel({
 					}
 				/>
 
-				<div className="flex gap-2 rounded-[var(--radius-md)] bg-[var(--warn-soft)] p-3 text-[length:var(--text-sm)] text-[var(--ink)]">
+				<div className="flex gap-2 rounded-[var(--radius-md)] bg-[var(--warn-soft)] p-3 text-sm text-[var(--ink)]">
 					<span className="flex-none pt-0.5 text-[var(--warn)]">
 						<Icon name="warning" />
 					</span>
@@ -133,7 +133,7 @@ export function CommandPanel({
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not save this command.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

@@ -99,12 +99,12 @@ export function UpNextCard({ today }: UpNextCardProps) {
 										className={`h-8 w-1 flex-none rounded-[var(--radius-full)] ${item.kind === "deadline" ? "bg-[var(--warn)]" : "bg-[var(--accent)]"}`}
 									/>
 									<span className="min-w-0 flex-1">
-										<span className="block truncate text-[length:var(--text-base)]">{titleOf(item)}</span>
-										<span className="block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<span className="block truncate text-base">{titleOf(item)}</span>
+										<span className="block truncate text-sm text-[var(--ink-muted)]">
 											{detailOf(item) || " "}
 										</span>
 									</span>
-									<span className="tabular flex-none text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+									<span className="tabular flex-none text-dense text-[var(--ink-muted)]">
 										{time}
 									</span>
 								</button>

@@ -170,11 +170,11 @@ export function WeekView({
 				<div />
 				{dates.map((date) => (
 					<div key={date} className="flex items-baseline gap-1.5 px-2 py-1.5">
-						<span className="text-[length:var(--text-micro)] uppercase tracking-[0.08em] text-[var(--ink-muted)]">
+						<span className="text-micro uppercase tracking-[0.08em] text-[var(--ink-muted)]">
 							{weekdayShort(date)}
 						</span>
 						<span
-							className={`tabular text-[length:var(--text-dense)] ${
+							className={`tabular text-dense ${
 								date === today
 									? "rounded-[var(--radius-full)] bg-[var(--accent)] px-1.5 font-[var(--weight-medium)] text-[var(--accent-ink)]"
 									: ""
@@ -187,7 +187,7 @@ export function WeekView({
 			</div>
 
 			<div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] overflow-y-auto border-b border-[var(--line)] [scrollbar-gutter:stable]">
-				<div className="px-2 py-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">all day</div>
+				<div className="px-2 py-1 text-micro text-[var(--ink-muted)]">all day</div>
 				{dates.map((date, index) => {
 					const dated = (placed.get(date) ?? []).filter((p) => p.dated);
 					return (
@@ -207,7 +207,7 @@ export function WeekView({
 									onContextMenu={(event) => openItemMenu(event, p.item)}
 									title={itemTitle(p.item)}
 									className={[
-										"h-5 truncate rounded-[var(--radius-sm)] px-1.5 text-left text-[length:var(--text-micro)] font-[var(--weight-medium)] leading-none",
+										"h-5 truncate rounded-[var(--radius-sm)] px-1.5 text-left text-micro font-[var(--weight-medium)] leading-none",
 										chipTone(p.item),
 										p.continued ? "rounded-l-none" : "",
 										p.continues ? "rounded-r-none" : "",
@@ -230,7 +230,7 @@ export function WeekView({
 						{HOURS.map((hour) => (
 							<div
 								key={hour}
-								className="tabular absolute right-2 -translate-y-1/2 text-[length:var(--text-micro)] text-[var(--ink-muted)]"
+								className="tabular absolute right-2 -translate-y-1/2 text-micro text-[var(--ink-muted)]"
 								style={{ top: hour * HOUR_PX }}
 							>
 								{hour === 0 ? "" : formatMinutes(hour * 60)}
@@ -290,7 +290,7 @@ export function WeekView({
 												}}
 												onContextMenu={(event) => openItemMenu(event, item)}
 												className={[
-													"absolute z-[1] flex cursor-grab select-none flex-col overflow-hidden rounded-[var(--radius-sm)] border border-[var(--surface)] px-1.5 py-0.5 text-[length:var(--text-micro)] leading-tight",
+													"absolute z-[1] flex cursor-grab select-none flex-col overflow-hidden rounded-[var(--radius-sm)] border border-[var(--surface)] px-1.5 py-0.5 text-micro leading-tight",
 													chipTone(item),
 													active ? "opacity-80 shadow-[var(--shadow-popover)]" : "",
 												].join(" ")}

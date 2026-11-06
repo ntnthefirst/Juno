@@ -112,20 +112,20 @@ function GroupMenu({ group, last, anchor, onPick, onClose }: GroupMenuProps) {
 					role="menuitem"
 					data-element={element.id}
 					onClick={() => onPick(element.id)}
-					className="flex h-[32px] w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 text-left text-[length:var(--text-sm)] text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
+					className="flex h-[32px] w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 text-left text-sm text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
 				>
 					<Icon name={element.icon} size={14} className="flex-none text-[var(--ink-muted)]" />
 					<span className="flex-1 truncate">{element.label}</span>
 					{element.tag !== element.label.toLowerCase() ? (
-						<span className="flex-none font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">{element.tag}</span>
+						<span className="flex-none font-mono text-micro text-[var(--ink-muted)]">{element.tag}</span>
 					) : null}
-					<kbd className="w-[20px] flex-none rounded-[var(--radius-sm)] bg-[var(--sunken)] py-0.5 text-center font-[family-name:var(--font-ui)] text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+					<kbd className="w-[20px] flex-none rounded-[var(--radius-sm)] bg-[var(--sunken)] py-0.5 text-center font-[family-name:var(--font-ui)] text-micro text-[var(--ink-muted)]">
 						{element.key}
 					</kbd>
 				</button>
 			))}
 			{group.id === "media" ? (
-				<p className="mt-1 border-t border-[var(--line)] px-2 pt-2 pb-1 text-[length:var(--text-micro)] leading-[var(--leading-normal)] text-[var(--ink-muted)]">
+				<p className="mt-1 border-t border-[var(--line)] px-2 pt-2 pb-1 text-micro text-[var(--ink-muted)]">
 					{MEDIA_NOTE}
 				</p>
 			) : null}
@@ -241,7 +241,7 @@ function ModeButton({ label, icon, active, onClick, count = 0 }: ModeButtonProps
 		>
 			<Icon name={icon} size={16} />
 			{count > 0 ? (
-				<span className="tabular absolute -top-1 -right-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent)] px-1 text-[length:var(--text-micro)] leading-none font-[var(--weight-semibold)] text-[var(--accent-ink)]">
+				<span className="tabular absolute -top-1 -right-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent)] px-1 text-micro leading-none font-[var(--weight-semibold)] text-[var(--accent-ink)]">
 					{count}
 				</span>
 			) : null}

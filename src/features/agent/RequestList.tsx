@@ -65,7 +65,7 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the requests.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{error}
 				</p>
 			</div>
@@ -91,8 +91,8 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 		<div className="w-full">
 			<section>
 				<div className="flex items-baseline gap-3 pb-3">
-					<h2 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">Waiting for you</h2>
-					<span className="tabular rounded-[var(--radius-full)] bg-[var(--warn-soft)] px-2 text-[length:var(--text-sm)] text-[var(--warn)]">
+					<h2 className="text-h3">Waiting for you</h2>
+					<span className="tabular rounded-[var(--radius-full)] bg-[var(--warn-soft)] px-2 text-sm text-[var(--warn)]">
 						{pending.length}
 					</span>
 				</div>
@@ -103,7 +103,7 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 						</span>
 						<div>
 							<p className="font-[var(--weight-medium)]">Nothing is waiting</p>
-							<p className="mt-0.5 max-w-[60ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<p className="mt-0.5 max-w-[60ch] text-dense text-[var(--ink-muted)]">
 								When an agent asks for something that changes a record or sends a mail, it appears here as
 								a card you can read, and nothing happens until you approve it.
 							</p>
@@ -127,10 +127,10 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 
 			{days.length > 0 ? (
 				<section className="mt-10">
-					<h2 className="pb-1 text-[length:var(--text-h3)] font-[var(--weight-semibold)]">Answered</h2>
+					<h2 className="pb-1 text-h3">Answered</h2>
 					{days.map((day) => (
 						<div key={day.heading} className="mt-4">
-							<p className="px-2 pb-1 text-[length:var(--text-micro)] uppercase tracking-[0.08em] text-[var(--ink-muted)]">
+							<p className="px-2 pb-1 text-micro uppercase tracking-[0.08em] text-[var(--ink-muted)]">
 								{day.heading}
 							</p>
 							<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
@@ -197,10 +197,10 @@ function RequestCard({ action, view, now, onChanged, onNotice }: CardProps & { n
 			<header className="flex items-start gap-4 p-4">
 				<ToolTile toolName={action.toolName} />
 				<div className="min-w-0 flex-1">
-					<h3 className="text-[length:var(--text-base)] font-[var(--weight-semibold)] leading-[var(--leading-tight)]">
+					<h3 className="text-base font-[var(--weight-semibold)] leading-[var(--leading-tight)]">
 						{view?.title ?? action.summary}
 					</h3>
-					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-1 text-sm text-[var(--ink-muted)]">
 						{verb.label}
 						{now !== null ? (
 							<>
@@ -233,7 +233,7 @@ function RequestCard({ action, view, now, onChanged, onNotice }: CardProps & { n
 				) : null}
 
 				{short.length > 0 ? (
-					<dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-[length:var(--text-dense)]">
+					<dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-dense">
 						{short.map((field) => (
 							<div key={field.label} className="contents">
 								<dt className="text-[var(--ink-muted)]">{field.label}</dt>
@@ -247,10 +247,10 @@ function RequestCard({ action, view, now, onChanged, onNotice }: CardProps & { n
 
 				{long.map((field) => (
 					<div key={field.label}>
-						<p className="mb-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{field.label}</p>
+						<p className="mb-1 text-sm text-[var(--ink-muted)]">{field.label}</p>
 						<p
 							data-selectable
-							className="max-h-[200px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 text-[length:var(--text-dense)] leading-[var(--leading-relaxed)]"
+							className="max-h-[200px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 text-dense leading-[var(--leading-relaxed)]"
 						>
 							{field.value}
 						</p>
@@ -263,7 +263,7 @@ function RequestCard({ action, view, now, onChanged, onNotice }: CardProps & { n
 					) : (
 						<pre
 							data-selectable
-							className="max-h-[320px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-sans text-[length:var(--text-dense)] leading-[var(--leading-relaxed)]"
+							className="max-h-[320px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-sans text-dense leading-[var(--leading-relaxed)]"
 						>
 							{action.preview}
 						</pre>
@@ -271,15 +271,15 @@ function RequestCard({ action, view, now, onChanged, onNotice }: CardProps & { n
 				) : null}
 
 				<details>
-					<summary className="cursor-default text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<summary className="cursor-default text-sm text-[var(--ink-muted)]">
 						Technical details
 					</summary>
-					<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-2 text-sm text-[var(--ink-muted)]">
 						Tool <span className="font-mono">{action.toolName}</span>, asked {formatWhen(action.createdAt)}
 					</p>
 					<pre
 						data-selectable
-						className="mt-2 overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-[length:var(--text-sm)]"
+						className="mt-2 overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-sm"
 					>
 						{formatArgs(action.args)}
 					</pre>
@@ -309,7 +309,7 @@ function MailCard({ preview }: MailCardProps) {
 					{subject || "(no subject)"}
 				</p>
 			</div>
-			<dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 border-b border-[var(--line)] px-4 py-2 text-[length:var(--text-sm)]">
+			<dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 border-b border-[var(--line)] px-4 py-2 text-sm">
 				{others.map((header) => (
 					<div key={header.label} className="contents">
 						<dt className="text-[var(--ink-muted)]">{header.label === "Attached" ? "Attached" : header.label}</dt>
@@ -321,7 +321,7 @@ function MailCard({ preview }: MailCardProps) {
 			</dl>
 			<p
 				data-selectable
-				className="max-h-[300px] overflow-auto whitespace-pre-wrap px-4 py-3 text-[length:var(--text-dense)] leading-[var(--leading-relaxed)]"
+				className="max-h-[300px] overflow-auto whitespace-pre-wrap px-4 py-3 text-dense leading-[var(--leading-relaxed)]"
 			>
 				{preview.body || "(no text)"}
 			</p>
@@ -358,7 +358,7 @@ function AnsweredRow({ action, view, onChanged, onNotice }: CardProps) {
 		>
 			<ToolTile toolName={action.toolName} size="small" />
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+				<p className="truncate text-dense font-[var(--weight-medium)]">
 					{view?.title ?? action.summary}
 				</p>
 				{shown.length > 0 ? (
@@ -369,17 +369,17 @@ function AnsweredRow({ action, view, onChanged, onNotice }: CardProps) {
 					</div>
 				) : null}
 				{action.error ? (
-					<p data-selectable className="mt-1 truncate text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p data-selectable className="mt-1 truncate text-sm text-[var(--risk)]">
 						{action.error}
 					</p>
 				) : null}
 			</div>
 			<span
-				className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${ACTION_TONES[action.state]}`}
+				className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-micro font-[var(--weight-medium)] ${ACTION_TONES[action.state]}`}
 			>
 				{ACTION_LABELS[action.state]}
 			</span>
-			<span className="tabular w-[44px] shrink-0 text-right text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<span className="tabular w-[44px] shrink-0 text-right text-sm text-[var(--ink-muted)]">
 				{formatWhen(action.decidedAt ?? action.createdAt).slice(-5)}
 			</span>
 			<Button size="dense" disabled={busy} onClick={() => void clear()}>

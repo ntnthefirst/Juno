@@ -297,20 +297,20 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 						placeholder="Search or jump to"
 						spellCheck={false}
 						autoComplete="off"
-						className="min-w-0 flex-1 bg-transparent text-[length:var(--text-lg)] text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
+						className="min-w-0 flex-1 bg-transparent text-lg text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
 					/>
 					<Kbd keys={["Esc"]} />
 				</div>
 
 				<div ref={list} id={listId} role="listbox" className="min-h-0 flex-1 overflow-y-auto p-2">
 					{flat.length === 0 ? (
-						<p className="px-3 py-8 text-center text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						<p className="px-3 py-8 text-center text-dense text-[var(--ink-muted)]">
 							Nothing matches.
 						</p>
 					) : (
 						sections.map((section, sectionIndex) => (
 							<div key={section.title} role="group" aria-label={section.title}>
-								<p className="px-3 pt-3 pb-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-1">
+								<p className="px-3 pt-3 pb-1 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-1">
 									{section.title}
 								</p>
 								{section.items.map((item, itemIndex) => {
@@ -339,10 +339,10 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 													{item.icon ? <Icon name={item.icon} size={16} strokeWidth={1.9} /> : null}
 												</span>
 											)}
-											<span className="min-w-0 flex-1 truncate text-[length:var(--text-base)]">
+											<span className="min-w-0 flex-1 truncate text-base">
 												{item.label}
 												{item.detail ? (
-													<span className="ml-2 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+													<span className="ml-2 text-dense text-[var(--ink-muted)]">
 														{item.detail}
 													</span>
 												) : null}
@@ -357,7 +357,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 					)}
 				</div>
 
-				<div className="flex h-9 flex-none items-center gap-4 border-t border-[var(--line)] px-4 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+				<div className="flex h-9 flex-none items-center gap-4 border-t border-[var(--line)] px-4 text-micro text-[var(--ink-muted)]">
 					<span className="flex items-center gap-1.5">
 						<Kbd keys={["↑", "↓"]} /> move
 					</span>

@@ -99,7 +99,7 @@ export function ProjectGrid({
 									{row.status ? <StatusBadge label={row.status.label} tone={row.status.tone} /> : null}
 								</div>
 
-								<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="truncate text-sm text-[var(--ink-muted)]">
 									{row.clientName ?? "Your own work"}
 								</span>
 
@@ -112,14 +112,14 @@ export function ProjectGrid({
 										</span>
 									))}
 									{row.assetCount > 0 ? (
-										<span className="tabular flex items-center gap-1 text-[length:var(--text-micro)]">
+										<span className="tabular flex items-center gap-1 text-micro">
 											<Icon name="image" size={14} />
 											{row.assetCount}
 										</span>
 									) : null}
 									{row.commandCount > 0 ? <Icon name="terminal" size={14} /> : null}
 
-									<span className="tabular ml-auto whitespace-nowrap text-[length:var(--text-micro)]">
+									<span className="tabular ml-auto whitespace-nowrap text-micro">
 										{row.dueOn ? formatDate(row.dueOn) : formatCents(row.agreedValueCents)}
 									</span>
 								</div>

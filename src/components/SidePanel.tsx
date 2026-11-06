@@ -117,11 +117,11 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 			>
 				<div className="flex flex-none items-start gap-2 border-b border-[var(--line)] px-4 py-3">
 					<div className="min-w-0 flex-1">
-						<h2 className="truncate text-[length:var(--text-base)] font-[var(--weight-semibold)]">
+						<h2 className="truncate text-base font-[var(--weight-semibold)]">
 							{title}
 						</h2>
 						{subtitle ? (
-							<p className="mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-0.5 truncate text-sm text-[var(--ink-muted)]">
 								{subtitle}
 							</p>
 						) : null}

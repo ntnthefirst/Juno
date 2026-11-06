@@ -19,7 +19,7 @@ type FieldProps = {
 };
 
 const CONTROL =
-	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-base)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60";
+	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60";
 
 export function Field({
 	label,
@@ -46,7 +46,7 @@ export function Field({
 		<div>
 			<label
 				htmlFor={id}
-				className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+				className="mb-1 block text-sm text-[var(--ink-muted)]"
 			>
 				{label}
 				{required ? <span aria-hidden> *</span> : null}
@@ -82,13 +82,13 @@ export function Field({
 			)}
 
 			{help ? (
-				<p id={helpId} className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p id={helpId} className="mt-1 text-sm text-[var(--ink-muted)]">
 					{help}
 				</p>
 			) : null}
 
 			{error ? (
-				<p id={errorId} className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p id={errorId} className="mt-1 text-sm text-[var(--risk)]">
 					{error}
 				</p>
 			) : null}

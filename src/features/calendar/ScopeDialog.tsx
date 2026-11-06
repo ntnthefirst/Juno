@@ -18,7 +18,7 @@ export function ScopeDialog({ verb, title, onChoose, onClose }: ScopeDialogProps
 	const capitalised = verb.charAt(0).toUpperCase() + verb.slice(1);
 	return (
 		<Dialog title={`${capitalised} repeating event`} width="narrow" onClose={onClose}>
-			<p className="mt-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">{title}</p>
+			<p className="mt-3 text-dense text-[var(--ink-muted)]">{title}</p>
 			<div className="mt-5 flex flex-col gap-1">
 				<Button onClick={() => onChoose("this")}>
 					<span className="w-full text-left">This occurrence</span>

@@ -50,7 +50,7 @@ function FormatButton({ label, onPress, children, active = false }: FormatButton
 				event.preventDefault();
 				onPress();
 			}}
-			className={`flex h-[32px] min-w-[32px] items-center justify-center rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
+			className={`flex h-[32px] min-w-[32px] items-center justify-center rounded-[var(--radius-sm)] px-1.5 text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
 				active ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--ink)] hover:bg-[var(--hover)]"
 			}`}
 		>
@@ -212,7 +212,7 @@ export function InlineText({ rich, value, tag, style, caret, host: frame, onComm
 										host.current?.focus();
 									}
 								}}
-								className="h-[32px] w-[220px] rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 text-[length:var(--text-dense)] text-[var(--ink)] focus:outline-none"
+								className="h-[32px] w-[220px] rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 text-dense text-[var(--ink)] focus:outline-none"
 							/>
 							<FormatButton label="Add the link" onPress={applyLink}>
 								<Icon name="check" size={14} />
@@ -243,7 +243,7 @@ export function InlineText({ rich, value, tag, style, caret, host: frame, onComm
 									run("unlink");
 								}}
 							>
-								<span className="text-[length:var(--text-micro)]">Clear</span>
+								<span className="text-micro">Clear</span>
 							</FormatButton>
 						</>
 					)}

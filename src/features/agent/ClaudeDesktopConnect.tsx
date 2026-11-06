@@ -51,7 +51,7 @@ export function ClaudeDesktopConnect({ onNotice, serverRunning }: ClaudeDesktopC
 				</span>
 				<span className="min-w-0 flex-1">
 					<span className="block font-[var(--weight-medium)]">Claude Desktop</span>
-					<span className="mt-0.5 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<span className="mt-0.5 block text-sm text-[var(--ink-muted)]">
 						Installed as an extension, so Juno's tools are in every chat in the desktop app.
 					</span>
 				</span>
@@ -64,7 +64,7 @@ export function ClaudeDesktopConnect({ onNotice, serverRunning }: ClaudeDesktopC
 				<p
 					role="alert"
 					data-selectable
-					className="mt-2 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					className="mt-2 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 				>
 					{error}
 				</p>
@@ -75,7 +75,7 @@ export function ClaudeDesktopConnect({ onNotice, serverRunning }: ClaudeDesktopC
 					<p className="font-[var(--weight-medium)]">
 						{setup.opened ? "Claude is asking to install Juno." : "The extension is ready."}
 					</p>
-					<ol className="mt-2 flex max-w-[68ch] list-decimal flex-col gap-1 pl-5 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+					<ol className="mt-2 flex max-w-[68ch] list-decimal flex-col gap-1 pl-5 text-dense text-[var(--ink-muted)]">
 						{setup.opened ? null : (
 							<li>
 								Open the file below in Claude Desktop, or drag it onto Settings &gt; Extensions there.
@@ -89,7 +89,7 @@ export function ClaudeDesktopConnect({ onNotice, serverRunning }: ClaudeDesktopC
 					<div className="mt-3 flex items-center gap-2">
 						<p
 							data-selectable
-							className="min-w-0 flex-1 break-all rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-[length:var(--text-sm)] text-[var(--ink)]"
+							className="min-w-0 flex-1 break-all rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-sm text-[var(--ink)]"
 						>
 							{setup.token}
 						</p>
@@ -98,12 +98,12 @@ export function ClaudeDesktopConnect({ onNotice, serverRunning }: ClaudeDesktopC
 							Copy
 						</Button>
 					</div>
-					<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-2 text-sm text-[var(--ink-muted)]">
 						It is not shown again. Claude keeps it in the system keychain.
 					</p>
 					<p
 						data-selectable
-						className="mt-3 font-mono text-[length:var(--text-micro)] text-[var(--ink-faint)]"
+						className="mt-3 font-mono text-micro text-[var(--ink-faint)]"
 					>
 						{setup.path}
 					</p>

@@ -45,21 +45,21 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 	return (
 		<div className="px-8 py-6">
 			<div className="flex items-start justify-between gap-6">
-				<h2 className="min-w-0 text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.01em]">
+				<h2 className="min-w-0 text-h2">
 					{message.subject || "(no subject)"}
 				</h2>
-				<span className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-1 text-[length:var(--text-sm)] ${STATE_TONES[message.state]}`}>
+				<span className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-1 text-sm ${STATE_TONES[message.state]}`}>
 					{STATE_LABELS[message.state]}
 				</span>
 			</div>
 
 			{message.lastError ? (
-				<p data-selectable className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p data-selectable className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 					{message.lastError}
 				</p>
 			) : null}
 
-			<dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-[length:var(--text-sm)]">
+			<dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-sm">
 				<dt className="text-[var(--ink-muted)]">To</dt>
 				<dd data-selectable>{message.to.map((a) => (a.name ? `${a.name} <${a.address}>` : a.address)).join(", ") || "(nobody)"}</dd>
 				{message.cc.length > 0 ? (
@@ -92,7 +92,7 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 				<dt className="text-[var(--ink-muted)]">Attempts</dt>
 				<dd className="tabular">{message.attempts}</dd>
 				<dt className="text-[var(--ink-muted)]">Message-ID</dt>
-				<dd data-selectable className="truncate font-mono text-[length:var(--text-micro)]">{message.messageId}</dd>
+				<dd data-selectable className="truncate font-mono text-micro">{message.messageId}</dd>
 			</dl>
 
 			<div className="mt-6 flex flex-wrap gap-2">
@@ -134,7 +134,7 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 					/>
 				</div>
 			) : (
-				<pre className="mt-6 whitespace-pre-wrap rounded-[var(--radius-lg)] border border-[var(--line)] p-4 text-[length:var(--text-base)] leading-[var(--leading-relaxed)]">
+				<pre className="mt-6 whitespace-pre-wrap rounded-[var(--radius-lg)] border border-[var(--line)] p-4 text-base leading-[var(--leading-relaxed)]">
 					{message.bodyText}
 				</pre>
 			)}

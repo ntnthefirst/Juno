@@ -95,7 +95,7 @@ export function SignatureSection() {
 			{load.status === "loading" ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : path === null ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No image set. A transparent PNG works best.
 				</p>
 			) : (
@@ -109,7 +109,7 @@ export function SignatureSection() {
 					) : null}
 					<p
 						data-selectable
-						className="mt-2 break-all text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						className="mt-2 break-all text-sm text-[var(--ink-muted)]"
 					>
 						{path}
 					</p>

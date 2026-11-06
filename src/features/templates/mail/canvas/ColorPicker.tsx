@@ -78,7 +78,7 @@ export function PickerPopover({ anchor, title, onClose, children }: PickerPopove
 			className="fixed z-50 flex max-h-[calc(100vh-16px)] flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-modal)]"
 		>
 			<div className="flex h-[36px] flex-none items-center border-b border-[var(--line)] pr-1 pl-3">
-				<span className="flex-1 truncate text-[length:var(--text-sm)] font-[var(--weight-semibold)]">{title}</span>
+				<span className="flex-1 truncate text-sm font-[var(--weight-semibold)]">{title}</span>
 				<button
 					type="button"
 					aria-label="Close"
@@ -243,7 +243,7 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 			</div>
 
 			<div className="flex h-[28px] items-center rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
-				<span className="pl-2 text-[length:var(--text-micro)] text-[var(--ink-muted)]">Hex</span>
+				<span className="pl-2 text-micro text-[var(--ink-muted)]">Hex</span>
 				<input
 					value={hex}
 					spellCheck={false}
@@ -253,7 +253,7 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 					onKeyDown={(event) => {
 						if (event.key === "Enter") commitHex();
 					}}
-					className="tabular min-w-0 flex-1 bg-transparent px-2 font-mono text-[length:var(--text-micro)] text-[var(--ink)] uppercase focus:outline-none"
+					className="tabular min-w-0 flex-1 bg-transparent px-2 font-mono text-micro text-[var(--ink)] uppercase focus:outline-none"
 				/>
 				<span aria-hidden className="h-[16px] w-px bg-[var(--line)]" />
 				<input
@@ -265,9 +265,9 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 					onKeyDown={(event) => {
 						if (event.key === "Enter") commitPercent();
 					}}
-					className="tabular w-[36px] bg-transparent pl-2 text-right text-[length:var(--text-sm)] text-[var(--ink)] focus:outline-none"
+					className="tabular w-[36px] bg-transparent pl-2 text-right text-sm text-[var(--ink)] focus:outline-none"
 				/>
-				<span className="pr-2 pl-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">%</span>
+				<span className="pr-2 pl-0.5 text-micro text-[var(--ink-muted)]">%</span>
 			</div>
 		</div>
 	);

@@ -173,18 +173,18 @@ export function ReminderRow({
 
 					<div className="min-w-0 flex-1 py-2 pl-1">
 						<p
-							className={`truncate text-[length:var(--text-base)] ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
+							className={`truncate text-base ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
 						>
 							{reminder.title}
 						</p>
 						{meta ? (
-							<p className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">{meta}</p>
+							<p className="truncate text-sm text-[var(--ink-muted)]">{meta}</p>
 						) : null}
 					</div>
 
 					<span
 						className={[
-							"tabular shrink-0 whitespace-nowrap pl-2 text-[length:var(--text-dense)]",
+							"tabular shrink-0 whitespace-nowrap pl-2 text-dense",
 							overdue ? "font-[var(--weight-medium)] text-[var(--risk)]" : "text-[var(--ink-muted)]",
 						].join(" ")}
 					>

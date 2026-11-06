@@ -231,7 +231,7 @@ export function CanvasStage({
 							zoomed.current = true;
 							setZoom((current) => clamp(current - 0.1, ZOOM_MIN, ZOOM_MAX));
 						}}
-						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-[length:var(--text-base)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						<span aria-hidden>-</span>
 					</button>
@@ -242,7 +242,7 @@ export function CanvasStage({
 							fit();
 						}}
 						title={`Fit the sheet (${keysFor("Zoom to fit")})`}
-						className="tabular h-[28px] rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="tabular h-[28px] rounded-[var(--radius-sm)] px-1.5 text-micro text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						{Math.round(zoom * 100)}%
 					</button>
@@ -254,7 +254,7 @@ export function CanvasStage({
 							zoomed.current = true;
 							setZoom((current) => clamp(current + 0.1, ZOOM_MIN, ZOOM_MAX));
 						}}
-						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-[length:var(--text-base)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						<span aria-hidden>+</span>
 					</button>
@@ -295,12 +295,12 @@ export function CanvasStage({
 						style={{ width, transform: `scale(${zoom})`, transformOrigin: "top left" }}
 					>
 						{paper ? (
-							<p className="tabular pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+							<p className="tabular pb-1 text-micro text-[var(--ink-muted)]">
 								<span className="font-[var(--weight-medium)] text-[var(--ink)]">{paperLabel(paper)}</span>{" "}
 								{pagesOf(layout).length === 1 ? "1 page" : `${pagesOf(layout).length} pages`}
 							</p>
 						) : (
-							<p className="tabular pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+							<p className="tabular pb-1 text-micro text-[var(--ink-muted)]">
 								<span className="font-[var(--weight-medium)] text-[var(--ink)]">{label}</span> {width} x {height}
 							</p>
 						)}

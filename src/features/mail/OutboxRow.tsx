@@ -61,23 +61,23 @@ export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onCan
 				<span aria-hidden className="h-4 w-4 shrink-0" />
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
-						<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
+						<span className="min-w-0 flex-1 truncate text-dense">
 							{message.to.map((a) => a.name || a.address).join(", ") || "(nobody yet)"}
 						</span>
-						<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+						<span className="tabular shrink-0 text-micro text-[var(--ink-muted)]">
 							{formatWhen(message.sentAt ?? message.updatedAt)}
 						</span>
 					</div>
 					<div className="mt-0.5 flex items-baseline gap-2">
-						<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+						<span className="min-w-0 flex-1 truncate text-dense font-[var(--weight-medium)]">
 							{message.subject || "(no subject)"}
 						</span>
-						<span className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] ${STATE_TONES[message.state]}`}>
+						<span className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-micro ${STATE_TONES[message.state]}`}>
 							{STATE_LABELS[message.state]}
 						</span>
 					</div>
 					{message.lastError ? (
-						<div className="mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--risk)]">{message.lastError}</div>
+						<div className="mt-0.5 truncate text-sm text-[var(--risk)]">{message.lastError}</div>
 					) : null}
 				</div>
 			</button>

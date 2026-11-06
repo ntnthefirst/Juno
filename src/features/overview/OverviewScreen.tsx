@@ -141,10 +141,10 @@ export function OverviewScreen() {
 				<header className="animate-rise flex items-center gap-4">
 					<Avatar name={who} size={48} />
 					<div className="min-w-0">
-						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-tight tracking-[-0.02em]">
+						<h1 className="text-h2">
 							{greeting}
 						</h1>
-						<p className="mt-0.5 text-[length:var(--text-base)] text-[var(--ink-muted)]">
+						<p className="mt-0.5 text-base text-[var(--ink-muted)]">
 							{clock?.dateLabel ?? "Checking the date."}
 							{headline ? ` · ${headline}` : ""}
 						</p>

@@ -39,7 +39,7 @@ const FREQUENCIES: { value: string; label: string }[] = [
 ];
 
 const CONTROL =
-	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-base)] text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60";
+	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-base text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60";
 
 export function RecurrenceEditor({ value, onChange, startLocal, disabled = false, error }: RecurrenceEditorProps) {
 	const id = useId();
@@ -72,7 +72,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 
 			{state ? (
 				<div>
-					<label htmlFor={`${id}-interval`} className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<label htmlFor={`${id}-interval`} className="mb-1 block text-sm text-[var(--ink-muted)]">
 						Every
 					</label>
 					<div className="flex items-center gap-2">
@@ -86,7 +86,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 							onChange={(event) => setState({ interval: Math.max(1, Number(event.target.value) || 1) })}
 							className={`${CONTROL} tabular w-20`}
 						/>
-						<span className="text-[length:var(--text-base)] text-[var(--ink-muted)]">{unit}</span>
+						<span className="text-base text-[var(--ink-muted)]">{unit}</span>
 					</div>
 				</div>
 			) : (
@@ -95,7 +95,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 
 			{state?.freq === "WEEKLY" ? (
 				<div className="col-span-2">
-					<span className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">On</span>
+					<span className="mb-1 block text-sm text-[var(--ink-muted)]">On</span>
 					<div className="flex gap-1" role="group" aria-label="Weekdays">
 						{WEEKDAYS.map((day) => {
 							const active = state.weekdays.includes(day.value);
@@ -107,7 +107,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 									aria-label={day.long}
 									disabled={disabled}
 									onClick={() => toggleWeekday(day.value)}
-									className={`h-[32px] w-[32px] rounded-[var(--radius-sm)] text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:opacity-50 ${
+									className={`h-[32px] w-[32px] rounded-[var(--radius-sm)] text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:opacity-50 ${
 										active
 											? "bg-[var(--accent)] text-[var(--accent-ink)]"
 											: "bg-[var(--sunken)] text-[var(--ink-muted)] hover:bg-[var(--hover)]"
@@ -119,7 +119,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 						})}
 					</div>
 					{state.weekdays.length === 0 ? (
-						<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mt-1 text-sm text-[var(--ink-muted)]">
 							Nothing chosen means the start's own weekday.
 						</p>
 					) : null}
@@ -156,7 +156,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 					/>
 					{state.ends === "count" ? (
 						<div>
-							<label htmlFor={`${id}-count`} className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<label htmlFor={`${id}-count`} className="mb-1 block text-sm text-[var(--ink-muted)]">
 								Times
 							</label>
 							<input
@@ -182,7 +182,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 					) : (
 						<div />
 					)}
-					<p className="col-span-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="col-span-2 text-sm text-[var(--ink-muted)]">
 						{describeState(state, startLocal)}
 					</p>
 				</>
@@ -197,7 +197,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 						placeholder="FREQ=MONTHLY;BYDAY=-1FR"
 						disabled={disabled}
 					/>
-					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-1 text-sm text-[var(--ink-muted)]">
 						An RFC 5545 rule without the RRULE: prefix. Daily, weekly, monthly or yearly.
 					</p>
 				</div>

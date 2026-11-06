@@ -70,7 +70,7 @@ export function ConnectClientDialog({ address, onClose, onConnected }: ConnectCl
 				className="mt-3 w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 			/>
 			{error ? (
-				<p role="alert" className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p role="alert" className="mt-3 text-sm text-[var(--risk)]">
 					{error}
 				</p>
 			) : null}
@@ -91,7 +91,7 @@ export function ConnectClientDialog({ address, onClose, onConnected }: ConnectCl
 							>
 								<span className="truncate">{client.name}</span>
 								{client.city ? (
-									<span className="shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{client.city}</span>
+									<span className="shrink-0 text-sm text-[var(--ink-muted)]">{client.city}</span>
 								) : null}
 							</button>
 						</li>

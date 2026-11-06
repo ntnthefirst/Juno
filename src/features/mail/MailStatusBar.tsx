@@ -117,13 +117,13 @@ export function MailStatusBar({ accounts, sync, online, outbox, onRetry, onShowO
 					)}
 					<div className="min-w-0 flex-1">
 						<p
-							className={`truncate text-[length:var(--text-sm)] ${line.tone === "risk" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
+							className={`truncate text-sm ${line.tone === "risk" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
 							title={line.detail ?? line.text}
 						>
 							<span className="tabular">{line.text}</span>
 						</p>
 						{line.detail ? (
-							<p data-selectable className="line-clamp-2 text-[length:var(--text-micro)] text-[var(--ink-muted)]" title={line.detail}>
+							<p data-selectable className="line-clamp-2 text-micro text-[var(--ink-muted)]" title={line.detail}>
 								{line.detail}
 							</p>
 						) : null}
@@ -132,7 +132,7 @@ export function MailStatusBar({ accounts, sync, online, outbox, onRetry, onShowO
 						<button
 							type="button"
 							onClick={line.action.onClick}
-							className="flex-none rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--accent)] hover:bg-[var(--hover)]"
+							className="flex-none rounded-[var(--radius-sm)] px-1.5 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--accent)] hover:bg-[var(--hover)]"
 						>
 							{line.action.label}
 						</button>

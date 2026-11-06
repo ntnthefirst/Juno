@@ -280,10 +280,10 @@ function Header({ label, name, deleteLabel, onDelete, hidden }: HeaderProps) {
 					aria-label={`${label} name`}
 					placeholder={label}
 					onChange={(event) => name.onChange(event.target.value)}
-					className="-ml-1.5 h-[28px] min-w-0 flex-1 truncate rounded-[var(--radius-sm)] border border-transparent bg-transparent px-1.5 text-[length:var(--text-sm)] font-[var(--weight-semibold)] text-[var(--ink)] hover:bg-[var(--sunken)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none"
+					className="-ml-1.5 h-[28px] min-w-0 flex-1 truncate rounded-[var(--radius-sm)] border border-transparent bg-transparent px-1.5 text-sm font-[var(--weight-semibold)] text-[var(--ink)] hover:bg-[var(--sunken)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none"
 				/>
 			) : (
-				<span className="flex-1 truncate text-[length:var(--text-sm)] font-[var(--weight-semibold)]">{label}</span>
+				<span className="flex-1 truncate text-sm font-[var(--weight-semibold)]">{label}</span>
 			)}
 			{hidden ? (
 				<PanelButton
@@ -553,13 +553,13 @@ function SpacingSection({ padding, margin }: SpacingSectionProps) {
 		<PanelSection title="Spacing">
 			{padding ? (
 				<>
-					<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">Padding</span>
+					<span className="text-micro text-[var(--ink-muted)]">Padding</span>
 					<SpacingFields kind="Padding" value={padding.value} onChange={padding.onChange} />
 				</>
 			) : null}
 			{margin ? (
 				<>
-					<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">Margin</span>
+					<span className="text-micro text-[var(--ink-muted)]">Margin</span>
 					<SpacingFields kind="Margin" value={margin.value} onChange={margin.onChange} auto={margin.auto} />
 					{anyAuto ? <PanelNote>A side in Auto is set by where it sits, under Position.</PanelNote> : null}
 					<PanelNote tone="warn">Outlook on Windows ignores margins on a div in some versions.</PanelNote>
@@ -849,7 +849,7 @@ type CodeSectionProps = {
 function CodeSection({ block, set }: CodeSectionProps) {
 	return (
 		<PanelSection title="Code">
-			<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">HTML</span>
+			<span className="text-micro text-[var(--ink-muted)]">HTML</span>
 			<TextInput
 				label="HTML"
 				multiline
@@ -859,7 +859,7 @@ function CodeSection({ block, set }: CodeSectionProps) {
 				placeholder="<p>Tekst</p>"
 				onChange={(next) => set({ html: next } as Partial<MailBlock>)}
 			/>
-			<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">CSS</span>
+			<span className="text-micro text-[var(--ink-muted)]">CSS</span>
 			<TextInput
 				label="CSS"
 				multiline
@@ -1245,8 +1245,8 @@ export function DesignPanel({
 				>
 					{columns.rows.map((row, index) => (
 						<div key={row.id} className="flex h-[28px] items-center gap-1">
-							<span className="flex-1 truncate text-[length:var(--text-sm)] text-[var(--ink)]">Row {index + 1}</span>
-							<span className="tabular flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+							<span className="flex-1 truncate text-sm text-[var(--ink)]">Row {index + 1}</span>
+							<span className="tabular flex-none text-micro text-[var(--ink-muted)]">
 								{row.cells.length} {row.cells.length === 1 ? "cell" : "cells"}
 							</span>
 							<PanelButton
@@ -1542,7 +1542,7 @@ export function DesignPanel({
 									active={isStretched(arrangement, axis)}
 									onClick={() => patchLayout(setStretch(arrangement, axis, !isStretched(arrangement, axis)))}
 								/>
-								<span className="min-w-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">{STRETCH[axis].label}</span>
+								<span className="min-w-0 text-micro text-[var(--ink-muted)]">{STRETCH[axis].label}</span>
 							</div>
 						))}
 					</div>

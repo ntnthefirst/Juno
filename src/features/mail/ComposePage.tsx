@@ -379,7 +379,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 										<button
 											type="button"
 											onClick={() => setShowCopies(true)}
-											className="shrink-0 text-[length:var(--text-sm)] text-[var(--accent)] hover:underline"
+											className="shrink-0 text-sm text-[var(--accent)] hover:underline"
 										>
 											Add Cc or Bcc
 										</button>
@@ -391,7 +391,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 							<div className="mb-1 flex items-baseline justify-end">
 								<span
 									aria-live="polite"
-									className={`text-[length:var(--text-sm)] ${saveState === "error" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
+									className={`text-sm ${saveState === "error" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
 								>
 									{statusLabel}
 								</span>
@@ -447,7 +447,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 							>
 								<Icon name="attachment" size={18} />
 								{documentIds.length > 0 ? (
-									<span className="tabular absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[length:var(--text-micro)] text-[var(--accent-ink)]">
+									<span className="tabular absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--accent)] px-1 text-micro text-[var(--accent-ink)]">
 										{documentIds.length}
 									</span>
 								) : null}
@@ -457,9 +457,9 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 									className="absolute top-[calc(100%+4px)] right-0 z-20 w-[320px] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-2"
 									style={{ boxShadow: "var(--shadow-popover)" }}
 								>
-									<p className="px-2 pb-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Attach documents</p>
+									<p className="px-2 pb-1 text-sm text-[var(--ink-muted)]">Attach documents</p>
 									{documents.length === 0 ? (
-										<p className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p className="px-2 py-2 text-sm text-[var(--ink-muted)]">
 											{clientId ? "This client has no documents." : "Pick a client to see its documents."}
 										</p>
 									) : (
@@ -482,11 +482,11 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 																)
 															}
 														/>
-														<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
+														<span className="min-w-0 flex-1 truncate text-dense">
 															{document.title}
 														</span>
 														{document.isSpecimen ? (
-															<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--risk)]">
+															<span className="shrink-0 text-micro text-[var(--risk)]">
 																specimen
 															</span>
 														) : null}
@@ -523,7 +523,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 						</div>
 					) : null}
 					{missing.length > 0 ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--risk)]">
+						<p className="text-sm text-[var(--risk)]">
 							No value for: {missing.join(", ")}. Fill the field above and it fills in again.
 						</p>
 					) : null}
@@ -532,13 +532,13 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 						<p
 							role="alert"
 							data-selectable
-							className="border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+							className="border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 						>
 							{error}
 						</p>
 					) : null}
 					{!canSend && account ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="text-sm text-[var(--ink-muted)]">
 							{account.email} has no outgoing server, so this can be saved but not sent. Add one under Settings.
 						</p>
 					) : null}

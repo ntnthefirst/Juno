@@ -202,7 +202,7 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 							}}
 							style={{ height: "var(--row-height)" }}
 							className={[
-								"flex w-full shrink-0 items-center gap-2.5 px-3 text-left text-[length:var(--text-dense)]",
+								"flex w-full shrink-0 items-center gap-2.5 px-3 text-left text-dense",
 								"focus:outline-none disabled:pointer-events-none disabled:opacity-40",
 								item.danger
 									? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
@@ -221,7 +221,7 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 							)}
 							<span className="min-w-0 flex-1 truncate">{item.label}</span>
 							{item.hint ? (
-								<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+								<span className="tabular shrink-0 text-micro text-[var(--ink-faint)]">
 									{item.hint}
 								</span>
 							) : null}
@@ -280,10 +280,10 @@ export function MenuButton({
 	const metrics =
 		size === "dense"
 			? label
-				? "h-[32px] px-2 text-[length:var(--text-dense)]"
+				? "h-[32px] px-2 text-dense"
 				: "h-[32px] w-[32px]"
 			: label
-				? "h-[40px] px-4 text-[length:var(--text-base)]"
+				? "h-[40px] px-4 text-base"
 				: "h-[40px] w-[40px]";
 
 	return (

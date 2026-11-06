@@ -78,7 +78,7 @@ type RowProps = {
 function Row({ description, button, disabled, onClick }: RowProps) {
 	return (
 		<div className="flex items-center justify-between gap-4">
-			<p className="max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">{description}</p>
+			<p className="max-w-[46ch] text-sm text-[var(--ink-muted)]">{description}</p>
 			<Button disabled={disabled} onClick={onClick}>
 				{button}
 			</Button>

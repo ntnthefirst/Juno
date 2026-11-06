@@ -13,7 +13,7 @@ type CheckListProps = {
 /** Pick any number of values. Nothing picked means no filter. */
 export function CheckList({ options, selected, onChange, emptyText }: CheckListProps) {
 	if (options.length === 0) {
-		return <p className="px-3 py-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{emptyText}</p>;
+		return <p className="px-3 py-1 text-sm text-[var(--ink-muted)]">{emptyText}</p>;
 	}
 	return (
 		<ul className="flex flex-col">
@@ -58,10 +58,10 @@ function toNumber(text: string): number | null {
 export function RangeField({ label, value, onChange }: RangeFieldProps) {
 	const id = useId();
 	const input =
-		"tabular w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-2 py-1.5 text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]";
+		"tabular w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-2 py-1.5 text-dense text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]";
 	return (
 		<div className="px-3 py-1">
-			<div className="mb-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{label}</div>
+			<div className="mb-1 text-sm text-[var(--ink-muted)]">{label}</div>
 			<div className="flex items-center gap-2">
 				<input
 					id={`${id}-min`}
@@ -74,7 +74,7 @@ export function RangeField({ label, value, onChange }: RangeFieldProps) {
 					onChange={(event) => onChange({ ...value, min: toNumber(event.target.value) })}
 					className={input}
 				/>
-				<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">to</span>
+				<span className="text-sm text-[var(--ink-muted)]">to</span>
 				<input
 					id={`${id}-max`}
 					type="number"

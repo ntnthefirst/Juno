@@ -71,7 +71,7 @@ export function ListSearchBar({
 					onChange={(event) => onSearch(event.target.value)}
 					placeholder={placeholder}
 					aria-label={label}
-					className="min-w-0 flex-1 bg-transparent py-1.5 text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+					className="min-w-0 flex-1 bg-transparent py-1.5 text-dense text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
 				/>
 				{search ? (
 					<button
@@ -100,7 +100,7 @@ export function ListSearchBar({
 					>
 						<Icon name="filter" size={14} />
 						{filterCount > 0 ? (
-							<span className="tabular text-[length:var(--text-micro)]">{filterCount}</span>
+							<span className="tabular text-micro">{filterCount}</span>
 						) : null}
 					</button>
 				) : null}
@@ -142,7 +142,7 @@ export function FilterToggle({ label, icon, on, onClick }: FilterToggleProps) {
 			aria-pressed={on}
 			onClick={onClick}
 			className={[
-				"inline-flex h-[32px] items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)]",
+				"inline-flex h-[32px] items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense",
 				on
 					? "bg-[var(--accent-soft)] text-[var(--accent)]"
 					: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",

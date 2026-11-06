@@ -98,11 +98,11 @@ export function RemindersScreen() {
 			<div className="w-full">
 				<div className="mb-6 flex items-center justify-between gap-4">
 					<div className="flex items-baseline gap-3">
-						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">
+						<h1 className="text-h2">
 							Reminders
 						</h1>
 						{load.status === "ready" ? (
-							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="text-sm text-[var(--ink-muted)]">
 								{plural(rows.length, "reminder", "reminders")}
 							</span>
 						) : null}
@@ -128,7 +128,7 @@ export function RemindersScreen() {
 						</p>
 						<p
 							data-selectable
-							className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mt-1 text-sm text-[var(--ink-muted)]"
 						>
 							{load.message}
 						</p>
@@ -153,10 +153,10 @@ export function RemindersScreen() {
 						return (
 							<section key={bucket} className="mt-8 first:mt-0">
 								<div className="flex items-baseline gap-2 px-2">
-									<h2 className="text-[length:var(--text-base)] font-[var(--weight-semibold)]">
+									<h2 className="text-base font-[var(--weight-semibold)]">
 										{BUCKET_LABELS[bucket]}
 									</h2>
-									<span className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<span className="tabular text-sm text-[var(--ink-muted)]">
 										{group.length}
 									</span>
 								</div>

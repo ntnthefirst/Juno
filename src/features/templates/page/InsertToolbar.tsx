@@ -32,7 +32,7 @@ export function InsertToolbar({
 	return (
 		<div className="flex h-full flex-col gap-6 overflow-y-auto border-r border-[var(--line)] p-4">
 			<div>
-				<p className="mb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="mb-2 text-sm text-[var(--ink-muted)]">
 					Adding to page {activePageNumber} of {pageCount}
 				</p>
 				<div className="flex rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5" role="group" aria-label="Where a new block goes">
@@ -40,7 +40,7 @@ export function InsertToolbar({
 						type="button"
 						aria-pressed={placement === "flow"}
 						onClick={() => onPlacementChange("flow")}
-						className={`h-[28px] flex-1 rounded-[var(--radius-sm)] text-[length:var(--text-sm)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+						className={`h-[28px] flex-1 rounded-[var(--radius-sm)] text-sm font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 							placement === "flow" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
 						}`}
 					>
@@ -50,7 +50,7 @@ export function InsertToolbar({
 						type="button"
 						aria-pressed={placement === "box"}
 						onClick={() => onPlacementChange("box")}
-						className={`h-[28px] flex-1 rounded-[var(--radius-sm)] text-[length:var(--text-sm)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+						className={`h-[28px] flex-1 rounded-[var(--radius-sm)] text-sm font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 							placement === "box" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
 						}`}
 					>
@@ -60,7 +60,7 @@ export function InsertToolbar({
 			</div>
 
 			<div>
-				<p className="mb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Add a block</p>
+				<p className="mb-2 text-sm text-[var(--ink-muted)]">Add a block</p>
 				<div className="flex flex-col gap-1.5">
 					{BLOCK_KINDS.map((kind) => (
 						// A plain button rather than the shared Button component: this is a
@@ -71,7 +71,7 @@ export function InsertToolbar({
 							key={kind}
 							type="button"
 							onClick={() => onInsertBlock(kind)}
-							className="flex h-[32px] w-full shrink-0 items-center justify-start gap-2 rounded-[var(--radius-md)] px-2 text-left text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+							className="flex h-[32px] w-full shrink-0 items-center justify-start gap-2 rounded-[var(--radius-md)] px-2 text-left text-dense font-[var(--weight-medium)] text-[var(--ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
 						>
 							Add {BLOCK_KIND_LABELS[kind].toLowerCase()}
 						</button>
@@ -80,7 +80,7 @@ export function InsertToolbar({
 			</div>
 
 			<div className="mt-auto">
-				<p className="mb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Pages</p>
+				<p className="mb-2 text-sm text-[var(--ink-muted)]">Pages</p>
 				<div className="flex flex-col gap-1.5">
 					<Button size="dense" onClick={onAddPage}>
 						Add page

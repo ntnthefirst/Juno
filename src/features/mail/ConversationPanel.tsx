@@ -80,7 +80,7 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 
 	return (
 		<aside aria-label="Conversation" className="flex w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--paper)]">
-			<h3 className="flex shrink-0 items-baseline justify-between px-4 pb-1 pt-4 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+			<h3 className="flex shrink-0 items-baseline justify-between px-4 pb-1 pt-4 text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 				Conversation
 				<span className="tabular normal-case tracking-normal">{entries.length}</span>
 			</h3>
@@ -171,7 +171,7 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 											selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
 										].join(" ")}
 									>
-										<span className="flex items-center gap-2 text-[length:var(--text-dense)]">
+										<span className="flex items-center gap-2 text-dense">
 											<span
 												className={`truncate ${unread ? "font-[var(--weight-semibold)]" : "font-[var(--weight-medium)]"}`}
 											>
@@ -187,20 +187,20 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 											{hasAttachment ? (
 												<Icon name="attachment" size={12} className="shrink-0 text-[var(--ink-muted)]" />
 											) : null}
-											<span className="tabular ml-auto shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="tabular ml-auto shrink-0 text-sm text-[var(--ink-muted)]">
 												{formatWhen(when)}
 											</span>
 										</span>
 										{mine ? (
-											<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="truncate text-sm text-[var(--ink-muted)]">
 												To {participantsLine(entry.message.to)}
 											</span>
 										) : null}
-										<span className="flex items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<span className="flex items-center gap-2 text-sm text-[var(--ink-muted)]">
 											{entry.kind === "message" && entry.message.folderName ? (
 												<span
 													title={`In ${entry.message.folderName}`}
-													className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] ${
+													className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-micro ${
 														entry.message.folderUse === "trash"
 															? "bg-[var(--risk-soft)] text-[var(--risk)]"
 															: "bg-[var(--sunken)] text-[var(--ink-muted)]"
@@ -213,7 +213,7 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 											) : null}
 											{state !== null && state !== "sent" ? (
 												<span
-													className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] ${STATE_TONES[state]}`}
+													className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-micro ${STATE_TONES[state]}`}
 												>
 													{STATE_LABELS[state]}
 												</span>

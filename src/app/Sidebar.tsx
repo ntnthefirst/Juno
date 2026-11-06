@@ -11,7 +11,7 @@ type SidebarProps = {
 };
 
 /**
- * A rail of icons, always, sized like a code editor's activity bar: 48px wide,
+ * A rail of icons, always, sized as the design draws it: a 56px strip,
  * 48px per entry, 24px icons. It never opens: the names are in the tooltips,
  * and the only states an entry has are its colour, soft at rest, firmer under
  * the pointer and iris once it is the page you are on. No fill and no outline

@@ -52,8 +52,8 @@ export function RecentDocumentsCard({ documents, statuses }: RecentDocumentsCard
 								>
 									<Avatar name={record.clientName ?? record.projectName ?? record.title} size={32} shape="square" />
 									<span className="min-w-0 flex-1">
-										<span className="block truncate text-[length:var(--text-base)]">{record.title}</span>
-										<span className="block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<span className="block truncate text-base">{record.title}</span>
+										<span className="block truncate text-sm text-[var(--ink-muted)]">
 											{belongsTo(record)}
 										</span>
 									</span>

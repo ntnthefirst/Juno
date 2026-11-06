@@ -130,7 +130,7 @@ export function MailTemplateList({
 								>
 									<span className="min-w-0 flex-1">
 										<span className="flex items-center gap-2">
-											<span className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+											<span className="truncate text-dense font-[var(--weight-medium)]">
 												{template.name}
 											</span>
 											{template.layout ? (
@@ -142,17 +142,17 @@ export function MailTemplateList({
 												</span>
 											) : null}
 											{template.hiddenAt ? (
-												<span className="flex-none rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 py-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+												<span className="flex-none rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 py-0.5 text-micro text-[var(--ink-muted)]">
 													hidden
 												</span>
 											) : null}
 											{template.isSystem && template.customisedAt === null ? (
-												<span className="flex-none rounded-[var(--radius-sm)] bg-[var(--warn-soft)] px-1.5 py-0.5 text-[length:var(--text-micro)] text-[var(--warn)]">
+												<span className="flex-none rounded-[var(--radius-sm)] bg-[var(--warn-soft)] px-1.5 py-0.5 text-micro text-[var(--warn)]">
 													unreviewed
 												</span>
 											) : null}
 										</span>
-										<span className="mt-0.5 block truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+										<span className="mt-0.5 block truncate text-dense text-[var(--ink-muted)]">
 											{template.subject}
 										</span>
 									</span>

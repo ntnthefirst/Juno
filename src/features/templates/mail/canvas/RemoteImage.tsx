@@ -22,7 +22,7 @@ export function RemoteImage({ src, alt, width }: RemoteImageProps) {
 	}
 	return (
 		<span
-			className="flex flex-col gap-0.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--canvas-line)] bg-[var(--canvas-paper)] p-2 text-[length:var(--text-micro)] leading-[var(--leading-tight)] text-[var(--canvas-ink-muted)]"
+			className="flex flex-col gap-0.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--canvas-line)] bg-[var(--canvas-paper)] p-2 text-micro leading-[var(--leading-tight)] text-[var(--canvas-ink-muted)]"
 			style={{ boxSizing: "border-box", maxWidth: "100%", width: width ?? undefined }}
 		>
 			<span className="flex items-center gap-1.5 text-[var(--canvas-ink)]">

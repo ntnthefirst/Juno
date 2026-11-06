@@ -18,9 +18,9 @@ export function PageHeader({ page }: PageHeaderProps) {
 	return (
 		<header className="mb-4">
 			{showGroup ? (
-				<p className="mb-0.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{group.label}</p>
+				<p className="mb-0.5 text-sm text-[var(--ink-muted)]">{group.label}</p>
 			) : null}
-			<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">{page.label}</h1>
+			<h1 className="text-h2">{page.label}</h1>
 		</header>
 	);
 }

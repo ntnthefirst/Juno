@@ -17,7 +17,7 @@ type VersionSwitcherProps = {
 export function VersionSwitcher({ versions, viewingId, onView, onOpenCertificate }: VersionSwitcherProps) {
 	if (versions.length === 0) {
 		return (
-			<p className="py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="py-2 text-sm text-[var(--ink-muted)]">
 				No versions yet. The first one is made when the PDF is created.
 			</p>
 		);
@@ -39,23 +39,23 @@ export function VersionSwitcher({ versions, viewingId, onView, onOpenCertificate
 								viewing ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
 							].join(" ")}
 						>
-							<span className="flex items-center gap-2 text-[length:var(--text-dense)]">
+							<span className="flex items-center gap-2 text-dense">
 								<span className="tabular w-6 shrink-0 text-[var(--ink-muted)]">v{version.number}</span>
 								<span
-									className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${kindClass(version.kind)}`}
+									className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-micro font-[var(--weight-medium)] ${kindClass(version.kind)}`}
 								>
 									{KIND_LABELS[version.kind]}
 								</span>
 								{version.isLatest ? (
-									<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--accent)]">
+									<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--accent)]">
 										Latest
 									</span>
 								) : null}
-								<span className="tabular ml-auto shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="tabular ml-auto shrink-0 text-sm text-[var(--ink-muted)]">
 									{formatInstant(version.fileDate)}
 								</span>
 							</span>
-							<span className="mt-0.5 block truncate pl-8 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="mt-0.5 block truncate pl-8 text-sm text-[var(--ink-muted)]">
 								{detailOf(version)}
 							</span>
 						</button>

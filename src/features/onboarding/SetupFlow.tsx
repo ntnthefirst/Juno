@@ -178,7 +178,7 @@ function StepRail({ step, onSelect }: StepRailProps) {
 				})}
 			</ol>
 
-			<p className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="tabular text-sm text-[var(--ink-muted)]">
 				Step {step + 1} of {STEPS.length}
 			</p>
 		</div>
@@ -206,14 +206,14 @@ function WelcomeStep({ onStart }: WelcomeStepProps) {
 					className="h-[150px] w-full object-cover"
 				/>
 			</div>
-			<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+			<h1 className="text-h2">
 				Welcome to Juno
 			</h1>
 			<p className="mt-2.5 max-w-[46ch] text-[var(--ink-muted)]">
 				Your local-first writing desk and back office. Clients, documents,
 				mail, calendar and reminders on your machine, with no cloud subscription.
 			</p>
-			<p className="mt-2 max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-2 max-w-[46ch] text-sm text-[var(--ink-muted)]">
 				Five short questions to configure your business name and details for contracts.
 				Appearance, the lock and mail can all wait.
 			</p>
@@ -221,7 +221,7 @@ function WelcomeStep({ onStart }: WelcomeStepProps) {
 				<Button variant="primary" onClick={onStart}>
 					Set up Juno
 				</Button>
-				<p className="text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+				<p className="text-micro text-[var(--ink-faint)]">
 					Closing this window closes Juno, and setup opens again next time.
 				</p>
 			</div>
@@ -421,7 +421,7 @@ function AppearanceStep({ onContinue }: StepProps) {
 			<div className="mt-5">
 				<AppearanceSection theme={theme} onChange={setTheme} />
 			</div>
-			<p className="mt-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-4 text-sm text-[var(--ink-muted)]">
 				Applied straight away, so you see the choice while you make it, and changeable at any time
 				from settings.
 			</p>
@@ -448,7 +448,7 @@ function LockStep({ onContinue }: StepProps) {
 			<div className="mt-5">
 				<LockSection />
 			</div>
-			<p className="mt-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-4 text-sm text-[var(--ink-muted)]">
 				Setting one up is optional, and "not now" is a fine answer.
 			</p>
 			<StepFooter error={null}>
@@ -474,7 +474,7 @@ function MailStep({ onContinue, onAddAccount }: MailStepProps) {
 				operating system's own keychain, never in the database, and nothing is ever written back to
 				the server. This can wait.
 			</p>
-			<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-2 text-sm text-[var(--ink-muted)]">
 				Adding one now finishes setup and opens settings on mail accounts.
 			</p>
 			<StepFooter error={null}>
@@ -566,7 +566,7 @@ function StepFooter({ error, children }: StepFooterProps) {
 				<p
 					role="alert"
 					data-selectable
-					className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 				>
 					{error}
 				</p>
@@ -587,7 +587,7 @@ function Heading({ illustration, title }: HeadingProps) {
 		<div className="flex flex-col items-center text-center">
 			{illustration}
 			{title ? (
-				<h1 className="mt-4 text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+				<h1 className="mt-4 text-h2">
 					{title}
 				</h1>
 			) : null}

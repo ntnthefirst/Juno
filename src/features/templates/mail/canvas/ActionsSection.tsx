@@ -34,7 +34,7 @@ const TARGETS: Record<MailClickAction["kind"], { label: string; placeholder: str
 };
 
 const OPTION =
-	"flex h-[28px] w-full items-center rounded-[var(--radius-sm)] px-2 text-left text-[length:var(--text-sm)] text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus";
+	"flex h-[28px] w-full items-center rounded-[var(--radius-sm)] px-2 text-left text-sm text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus";
 
 type RowFrameProps = {
 	trigger: string;
@@ -49,7 +49,7 @@ type RowFrameProps = {
 function RowFrame({ trigger, what, hidden, name, onHidden, onRemove }: RowFrameProps) {
 	return (
 		<div className="flex items-center gap-0.5">
-			<span className="w-[52px] flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">{trigger}</span>
+			<span className="w-[52px] flex-none text-micro text-[var(--ink-muted)]">{trigger}</span>
 			<div className="min-w-0 flex-1">{what}</div>
 			<PanelButton
 				label={hidden ? `Show ${name}` : `Hide ${name}`}

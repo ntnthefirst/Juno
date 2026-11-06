@@ -57,9 +57,9 @@ function StatTile({ stat, index }: StatTileProps) {
 		>
 			<span className="flex items-center gap-2 text-[var(--ink-muted)]">
 				<Icon name={stat.icon} size={15} strokeWidth={1.9} />
-				<span className="text-[length:var(--text-dense)]">{stat.label}</span>
+				<span className="text-dense">{stat.label}</span>
 			</span>
-			<span className="tabular text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-none tracking-[-0.02em]">
+			<span className="tabular text-h2 leading-none">
 				{counted === null ? "-" : counted}
 			</span>
 		</button>

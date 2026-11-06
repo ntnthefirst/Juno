@@ -418,7 +418,7 @@ export function ClientDetail({
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load this client.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{load.message}
 				</p>
 			</div>
@@ -473,7 +473,7 @@ export function ClientDetail({
 				<div className="flex items-start gap-3">
 					<span
 						aria-hidden
-						className="flex h-10 w-10 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent-soft)] text-[length:var(--text-base)] font-[var(--weight-semibold)] text-[var(--accent)]"
+						className="flex h-10 w-10 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent-soft)] text-base font-[var(--weight-semibold)] text-[var(--accent)]"
 					>
 						{initialsOf(client.name)}
 					</span>
@@ -483,7 +483,7 @@ export function ClientDetail({
 							<div className="flex min-w-0 items-center gap-2">
 								<h2
 									data-selectable
-									className="truncate text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]"
+									className="truncate text-h2"
 								>
 									{client.name}
 								</h2>
@@ -497,7 +497,7 @@ export function ClientDetail({
 							<MenuButton ariaLabel={`${client.name} actions`} items={cardMenuItems} />
 						</div>
 
-						<div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-[length:var(--text-dense)] sm:grid-cols-2">
+						<div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-dense sm:grid-cols-2">
 							{primaryEmail ? (
 								<div className="flex min-w-0 items-center gap-2">
 									<Icon name="mail" className="shrink-0 text-[var(--ink-muted)]" />
@@ -566,7 +566,7 @@ export function ClientDetail({
 							setTab(entry.id);
 							onTabChange?.(entry.id);
 						}}
-						className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+						className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 							tab === entry.id
 								? "border-[var(--accent)] text-[var(--accent)]"
 								: "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
@@ -574,7 +574,7 @@ export function ClientDetail({
 					>
 						{entry.label}
 						{entry.count !== null ? (
-							<span className="tabular rounded-[var(--radius-full)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+							<span className="tabular rounded-[var(--radius-full)] bg-[var(--sunken)] px-1.5 text-micro text-[var(--ink-muted)]">
 								{entry.count}
 							</span>
 						) : null}
@@ -586,7 +586,7 @@ export function ClientDetail({
 				{tab === "overview" ? (
 					<div className="flex flex-col gap-10">
 						{client.notes && client.notes.trim().length > 0 ? (
-							<div className="text-[length:var(--text-dense)]">
+							<div className="text-dense">
 								<MarkdownNotes text={client.notes} />
 							</div>
 						) : null}
@@ -741,7 +741,7 @@ function StatusMenuButton({ clientName, status, options, onChange }: StatusMenuB
 				{status ? (
 					<StatusBadge label={status.label} tone={status.tone} />
 				) : (
-					<span className="inline-block text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+					<span className="inline-block text-micro text-[var(--ink-muted)]">
 						No status
 					</span>
 				)}
@@ -770,14 +770,14 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Emails</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Emails</h3>
 				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add email
 				</Button>
 			</div>
 
 			{emails.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No email addresses for this client yet.
 				</p>
 			) : (
@@ -785,7 +785,7 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 					{emails.map((email) => (
 						<li
 							key={email.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<div className="min-w-0">
 								<div className="flex items-center gap-2">
@@ -827,14 +827,14 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Phone numbers</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Phone numbers</h3>
 				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add phone number
 				</Button>
 			</div>
 
 			{phones.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No phone numbers for this client yet.
 				</p>
 			) : (
@@ -842,7 +842,7 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 					{phones.map((phone) => (
 						<li
 							key={phone.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<div className="min-w-0">
 								<div className="flex items-center gap-2">
@@ -903,14 +903,14 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Links</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Links</h3>
 				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add link
 				</Button>
 			</div>
 
 			{links.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No website or profiles for this client yet.
 				</p>
 			) : (
@@ -918,7 +918,7 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 					{links.map((link) => (
 						<li
 							key={link.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<div className="flex min-w-0 items-start gap-3">
 								<Icon
@@ -929,7 +929,7 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 									<div className="flex items-center gap-2">
 										<span className="truncate font-[var(--weight-medium)]">{linkTitle(link)}</span>
 										{link.label && isClientLinkKind(link.kind) ? (
-											<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="text-sm text-[var(--ink-muted)]">
 												{CLIENT_LINK_KIND_LABELS[link.kind]}
 											</span>
 										) : null}
@@ -951,7 +951,7 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 				</ul>
 			)}
 			{problem ? (
-				<p role="alert" data-selectable className="mt-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p role="alert" data-selectable className="mt-2 text-sm text-[var(--risk)]">
 					{problem}
 				</p>
 			) : null}
@@ -971,14 +971,14 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Addresses</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Addresses</h3>
 				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add address
 				</Button>
 			</div>
 
 			{addresses.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No addresses for this client yet.
 				</p>
 			) : (
@@ -990,7 +990,7 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 						return (
 							<li
 								key={address.id}
-								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 							>
 								<div className="min-w-0">
 									<div className="flex items-center gap-2">
@@ -1035,14 +1035,14 @@ function ContactsSection({ contacts, onAdd, onEdit, onMakePrimary, onRemove }: C
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Contacts</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Contacts</h3>
 				<Button size="dense" onClick={onAdd}>
 					Add contact
 				</Button>
 			</div>
 
 			{contacts.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No contacts for this client yet.
 				</p>
 			) : (
@@ -1050,7 +1050,7 @@ function ContactsSection({ contacts, onAdd, onEdit, onMakePrimary, onRemove }: C
 					{contacts.map((contact) => (
 						<li
 							key={contact.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							{/* Two lines rather than columns. Fixed-width columns reserved space
 							    for fields most contacts do not have, which squeezed the name to
@@ -1096,14 +1096,14 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Projects</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Projects</h3>
 				<Button size="dense" onClick={onAdd}>
 					Add project
 				</Button>
 			</div>
 
 			{projects.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No projects for this client yet.
 				</p>
 			) : (
@@ -1111,7 +1111,7 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 					{projects.map((project) => (
 						<li
 							key={project.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							{/* The project's own page, the same way the palette opens it. */}
 							<button
@@ -1198,7 +1198,7 @@ function TimelineTab({
 	return (
 		<div>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Timeline</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Timeline</h3>
 				<span data-opens-panel className="flex gap-2">
 					<Button size="dense" onClick={onLogCall}>
 						Log a call
@@ -1208,7 +1208,7 @@ function TimelineTab({
 			</div>
 
 			{entries.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					Nothing recorded for this client yet.
 				</p>
 			) : (
@@ -1220,7 +1220,7 @@ function TimelineTab({
 						return (
 							<li key={entry.id}>
 								{showHeading ? (
-									<div className="sticky top-0 z-10 -mx-1 bg-[var(--paper)] px-1 py-1.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+									<div className="sticky top-0 z-10 -mx-1 bg-[var(--paper)] px-1 py-1.5 text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
 										{monthLabelOf(month)}
 									</div>
 								) : null}
@@ -1246,7 +1246,7 @@ function TimelineTab({
 											<div className="min-w-0">
 												<span
 													data-selectable
-													className="block truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]"
+													className="block truncate text-dense font-[var(--weight-medium)]"
 												>
 													{entry.kind === "status" ? (
 														<>
@@ -1260,14 +1260,14 @@ function TimelineTab({
 												{entry.detail ? (
 													<span
 														data-selectable
-														className="mt-0.5 block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+														className="mt-0.5 block truncate text-sm text-[var(--ink-muted)]"
 													>
 														{entry.detail}
 													</span>
 												) : null}
 											</div>
 											<div className="flex flex-none items-center gap-1">
-												<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+												<span className="tabular text-micro text-[var(--ink-faint)]">
 													{dateLabelOf(entry)}
 												</span>
 												{entry.kind === "note" ? (
@@ -1309,15 +1309,15 @@ type EntryListProps = {
 function EntryList({ title, entries, emptyText }: EntryListProps) {
 	return (
 		<section>
-			<h3 className="mb-4 text-[length:var(--text-h3)] font-[var(--weight-medium)]">{title}</h3>
+			<h3 className="mb-4 text-h3 font-[var(--weight-medium)]">{title}</h3>
 			{entries.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">{emptyText}</p>
+				<p className="text-dense text-[var(--ink-muted)]">{emptyText}</p>
 			) : (
 				<ul>
 					{entries.map((entry) => (
 						<li
 							key={entry.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<div className="flex min-w-0 items-start gap-3">
 								<span
@@ -1337,7 +1337,7 @@ function EntryList({ title, entries, emptyText }: EntryListProps) {
 									) : null}
 								</div>
 							</div>
-							<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+							<span className="tabular shrink-0 text-micro text-[var(--ink-faint)]">
 								{dateLabelOf(entry)}
 							</span>
 						</li>

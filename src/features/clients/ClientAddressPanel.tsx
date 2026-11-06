@@ -135,7 +135,7 @@ export function ClientAddressPanel({ clientId, address, onClose, onSaved }: Clie
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not save this address.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

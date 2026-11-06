@@ -86,7 +86,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not read the server state.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{error}
 				</p>
 			</div>
@@ -129,7 +129,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 								className={`inline-block h-2 w-2 rounded-[var(--radius-full)] ${status.running ? "bg-[var(--ok)]" : status.enabled ? "bg-[var(--risk)]" : "bg-[var(--ink-faint)]"}`}
 								aria-hidden
 							/>
-							<p className="text-[length:var(--text-dense)]">
+							<p className="text-dense">
 								{status.running
 									? `Listening, ${status.toolCount} tools.`
 									: status.enabled
@@ -138,7 +138,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 							</p>
 						</div>
 						{status.error ? (
-							<p data-selectable role="alert" className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">
+							<p data-selectable role="alert" className="mt-1 text-sm text-[var(--risk)]">
 								{status.error}
 							</p>
 						) : null}
@@ -146,7 +146,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 						<div className="mt-4 flex items-center gap-2">
 							<p
 								data-selectable
-								className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-[length:var(--text-dense)] text-[var(--ink)]"
+								className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-dense text-[var(--ink)]"
 							>
 								{status.url}
 							</p>
@@ -155,7 +155,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 								Copy URL
 							</Button>
 						</div>
-						<p className="mt-2 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mt-2 max-w-[68ch] text-sm text-[var(--ink-muted)]">
 							Paste this into any client that takes an MCP server URL. Juno has to be running and unlocked.
 						</p>
 
@@ -180,7 +180,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 				>
 					<div className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2.5">
 						<Icon name="info" className="mt-0.5 flex-none text-[var(--ink-muted)]" />
-						<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						<p className="text-dense text-[var(--ink-muted)]">
 							The first time a client connects it opens a page with a code. Type that code into the prompt
 							Juno shows. Claude Desktop cannot reach an address on this machine, so it gets an extension
 							and a token instead.
@@ -206,7 +206,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 					title="What an agent can do"
 					anchor="mcp-tools"
 					action={
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="text-sm text-[var(--ink-muted)]">
 							{readOnly} read, {tools.length - readOnly} that change something
 						</span>
 					}
@@ -226,14 +226,14 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 								key={tool.name}
 								className="flex items-center gap-3 border-b border-[var(--line)] px-2 py-1.5 hover:bg-[var(--hover)]"
 							>
-								<span className="w-[220px] shrink-0 truncate font-mono text-[length:var(--text-sm)]">
+								<span className="w-[220px] shrink-0 truncate font-mono text-sm">
 									{tool.name}
 								</span>
-								<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<span className="min-w-0 flex-1 truncate text-dense text-[var(--ink-muted)]">
 									{tool.title}
 								</span>
 								<span
-									className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${
+									className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-micro font-[var(--weight-medium)] ${
 										tool.readOnly
 											? "bg-[var(--sunken)] text-[var(--ink-muted)]"
 											: tool.requiresConfirmation
@@ -283,7 +283,7 @@ function PortRow({ status, busy, onChange }: PortRowProps) {
 		<div className="mt-5">
 			<div className="flex flex-wrap items-end gap-2">
 				<label className="block">
-					<span className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">Port</span>
+					<span className="mb-1 block text-sm text-[var(--ink-muted)]">Port</span>
 					<input
 						type="number"
 						inputMode="numeric"
@@ -310,7 +310,7 @@ function PortRow({ status, busy, onChange }: PortRowProps) {
 					</Button>
 				) : null}
 			</div>
-			<p className="mt-2 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-2 max-w-[68ch] text-sm text-[var(--ink-muted)]">
 				{draft !== "" && !valid
 					? "Pick a port from 1024 to 32767. Higher ones are handed out to other programs at random."
 					: "Changing the port changes the URL, so clients have to be pointed at it again."}
@@ -343,7 +343,7 @@ function RouteSwitch({ route, onChange }: RouteSwitchProps) {
 						title={option.hint}
 						onClick={() => onChange(option.id)}
 						className={[
-							"flex h-8 items-center rounded-[var(--radius-sm)] px-3 text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]",
+							"flex h-8 items-center rounded-[var(--radius-sm)] px-3 text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]",
 							selected
 								? "bg-[var(--surface)] font-[var(--weight-medium)] text-[var(--ink)] shadow-[0_0_0_1px_var(--line)]"
 								: "text-[var(--ink-muted)] hover:text-[var(--ink)]",

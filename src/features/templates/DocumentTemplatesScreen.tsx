@@ -262,7 +262,7 @@ export function DocumentTemplatesScreen() {
 				<div className="flex items-center gap-3">
 					<SectionSwitch sections={DOCUMENT_SWITCH} current="document-templates" label="Document views" />
 					{load.status === "ready" ? (
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="text-sm text-[var(--ink-muted)]">
 							{shown.length} {shown.length === 1 ? "template" : "templates"}
 						</span>
 					) : null}
@@ -277,14 +277,14 @@ export function DocumentTemplatesScreen() {
 						onSubmit={(name) => void create(name)}
 					/>
 				</div>
-				<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="mt-3 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 						The contracts and letters you make again and again, laid out on paper and printed to PDF. Mark one as reviewed once you have read its text.
 					</p>
 				{createError ? (
 					<p
 						role="alert"
 						data-selectable
-						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 					>
 						{createError}
 					</p>
@@ -293,7 +293,7 @@ export function DocumentTemplatesScreen() {
 					<p
 						role="alert"
 						data-selectable
-						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 					>
 						{removeError}
 					</p>
@@ -309,7 +309,7 @@ export function DocumentTemplatesScreen() {
 							onClearSelection={() => setSelectedIds([])}
 						/>
 						{selectedIds.length > 0 ? (
-							<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
+							<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
 								{selectedIds.length} selected
 							</span>
 						) : null}
@@ -355,7 +355,7 @@ export function DocumentTemplatesScreen() {
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not load your document templates.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{load.message}
 						</p>
 					</div>
@@ -385,7 +385,7 @@ export function DocumentTemplatesScreen() {
 
 			{confirmRemove ? (
 				<Dialog title="Delete document templates" onClose={() => setConfirmRemove(null)} width="narrow">
-					<p className="text-[length:var(--text-dense)]">
+					<p className="text-dense">
 						{confirmRemove.length === 1
 							? "1 document template will be deleted. This cannot be undone."
 							: `${confirmRemove.length} document templates will be deleted. This cannot be undone.`}
@@ -445,21 +445,21 @@ function DocumentTemplateRow({ template, checked, hasSelection, onToggle, onSele
 					className="min-w-0 flex-1 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 				>
 					<span className="flex items-center gap-2">
-						<span className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+						<span className="truncate text-dense font-[var(--weight-medium)]">
 							{template.name}
 						</span>
 						{reviewed ? null : (
-							<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--risk)]">
+							<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--risk)]">
 								Not reviewed
 							</span>
 						)}
 					</span>
 					{template.description ? (
-						<span className="mt-0.5 block truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						<span className="mt-0.5 block truncate text-dense text-[var(--ink-muted)]">
 							{template.description}
 						</span>
 					) : null}
-					<span className="tabular mt-0.5 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<span className="tabular mt-0.5 block text-sm text-[var(--ink-muted)]">
 						Version {template.version}
 						{"  ·  "}
 						{template.canvas
@@ -546,7 +546,7 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 					<button
 						type="button"
 						onClick={onBack}
-						className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						<ArrowLeftIcon width={16} height={16} strokeWidth={1.8} aria-hidden />
 						Back
@@ -554,11 +554,11 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 					<span aria-hidden className="text-[var(--ink-faint)]">
 						/
 					</span>
-					<h1 className="min-w-0 truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+					<h1 className="min-w-0 truncate text-h3">
 						{template.name}
 					</h1>
 					{template.reviewedAt === null ? (
-						<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--risk)]">
+						<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--risk)]">
 							Not reviewed
 						</span>
 					) : null}
@@ -574,21 +574,21 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
 				<div className="w-full">
 					{template.description ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">{template.description}</p>
+						<p className="text-sm text-[var(--ink-muted)]">{template.description}</p>
 					) : null}
 
 					<section className="mt-6">
-						<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+						<h2 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 							Asks for
 						</h2>
 						{template.inputs.length === 0 ? (
-							<p className="mt-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<p className="mt-3 text-dense text-[var(--ink-muted)]">
 								{template.canvas ? "Nothing. It prints as it is." : "Nothing beyond a client and a project."}
 							</p>
 						) : (
 							<ul className="mt-3 flex flex-col gap-1">
 								{template.inputs.map((input) => (
-									<li key={input.key} className="text-[length:var(--text-dense)] text-[var(--ink)]">
+									<li key={input.key} className="text-dense text-[var(--ink)]">
 										{input.label || input.key}
 										{input.required ? <span className="text-[var(--ink-muted)]"> (required)</span> : null}
 									</li>
@@ -598,12 +598,12 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 					</section>
 
 					<section className="mt-8">
-						<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+						<h2 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 							Preview
 						</h2>
 
 						{template.reviewedAt === null ? (
-							<p className="mt-3 max-w-[62ch] border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+							<p className="mt-3 max-w-[62ch] border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 								Nobody has checked this text. A document generated from it is marked as a specimen and
 								cannot be signed.
 							</p>
@@ -615,7 +615,7 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 									fileKey={printed ? String(printed.stamp) : null}
 									read={readPrinted}
 									caption={
-										<span className="truncate text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<span className="truncate text-micro text-[var(--ink-muted)]">
 											{paperLabel(template.canvas.paper)}
 											{printed && printed.missing.length > 0 ? `. No value for: ${printed.missing.join(", ")}` : ""}
 										</span>
@@ -628,18 +628,18 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 								/>
 							</div>
 						) : preview.status === "loading" ? (
-							<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">Rendering.</p>
+							<p className="mt-4 text-dense text-[var(--ink-muted)]">Rendering.</p>
 						) : preview.status === "error" ? (
 							<p
 								data-selectable
-								className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+								className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 							>
 								{preview.message}
 							</p>
 						) : (
 							<>
 								{preview.missing.length > 0 ? (
-									<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<p className="mt-3 text-sm text-[var(--ink-muted)]">
 										Missing here: {preview.missing.join(", ")}
 									</p>
 								) : null}

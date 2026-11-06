@@ -31,17 +31,17 @@ export function EntityChip({ entity, compact = false, onNotice }: EntityChipProp
 			</span>
 			<span className="flex min-w-0 flex-col text-left leading-tight">
 				{compact ? null : (
-					<span className="text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+					<span className="text-micro uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 						{entity.role}
 					</span>
 				)}
 				<span
-					className={`truncate text-[length:var(--text-dense)] ${entity.gone ? "text-[var(--ink-muted)] line-through" : "font-[var(--weight-medium)]"}`}
+					className={`truncate text-dense ${entity.gone ? "text-[var(--ink-muted)] line-through" : "font-[var(--weight-medium)]"}`}
 				>
 					{label}
 				</span>
 				{!compact && entity.detail ? (
-					<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">{entity.detail}</span>
+					<span className="truncate text-sm text-[var(--ink-muted)]">{entity.detail}</span>
 				) : null}
 			</span>
 			{openable ? <Icon name="external" size={12} className="shrink-0 text-[var(--ink-faint)]" /> : null}

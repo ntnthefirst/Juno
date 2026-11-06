@@ -280,11 +280,11 @@ export function ProjectsScreen() {
 			<div className="mb-6 flex w-full flex-col gap-4">
 				<div className="flex items-center justify-between gap-4">
 					<div className="flex items-baseline gap-3">
-						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">
+						<h1 className="text-h2">
 							Projects
 						</h1>
 						{rows ? (
-							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="text-sm text-[var(--ink-muted)]">
 								{shown.length} {shown.length === 1 ? "project" : "projects"}
 							</span>
 						) : null}
@@ -308,7 +308,7 @@ export function ProjectsScreen() {
 								onChange={(event) => setTerm(event.target.value)}
 								aria-label="Search projects"
 								placeholder="Search by name, client, description or folder"
-								className="h-[36px] w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-9 pr-3 text-[length:var(--text-base)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+								className="h-[36px] w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-9 pr-3 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 							/>
 						</div>
 
@@ -316,7 +316,7 @@ export function ProjectsScreen() {
 							value={statusFilter}
 							onChange={(event) => setStatusFilter(event.target.value)}
 							aria-label="Filter by status"
-							className="h-[36px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 text-[length:var(--text-dense)] text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+							className="h-[36px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 text-dense text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 						>
 							<option value="">Every status</option>
 							{rows.statuses
@@ -339,7 +339,7 @@ export function ProjectsScreen() {
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not load your projects.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{load.message}
 						</p>
 					</div>

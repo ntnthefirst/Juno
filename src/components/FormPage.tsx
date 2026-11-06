@@ -81,7 +81,7 @@ export function FormPage({
 				<button
 					type="button"
 					onClick={onBack}
-					className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+					className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 				>
 					<ArrowLeftIcon width={16} height={16} strokeWidth={1.8} aria-hidden />
 					{backLabel}
@@ -89,7 +89,7 @@ export function FormPage({
 				<span className="flex-none text-[var(--ink-faint)]" aria-hidden>
 					/
 				</span>
-				<h1 className="min-w-0 truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+				<h1 className="min-w-0 truncate text-h3">
 					{title}
 				</h1>
 			</div>
@@ -148,7 +148,7 @@ function StepRail({ steps, step, onStep }: StepRailProps) {
 							aria-current={state === "current" ? "step" : undefined}
 							onClick={reachable ? () => onStep(index) : undefined}
 							className={[
-								"flex h-[28px] items-center gap-2 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+								"flex h-[28px] items-center gap-2 rounded-[var(--radius-md)] px-2 text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 								state === "current"
 									? "font-[var(--weight-medium)] text-[var(--ink)]"
 									: "text-[var(--ink-muted)]",
@@ -158,7 +158,7 @@ function StepRail({ steps, step, onStep }: StepRailProps) {
 							<span
 								aria-hidden
 								className={[
-									"tabular flex h-[20px] w-[20px] flex-none items-center justify-center rounded-full text-[length:var(--text-micro)] font-[var(--weight-medium)]",
+									"tabular flex h-[20px] w-[20px] flex-none items-center justify-center rounded-full text-micro font-[var(--weight-medium)]",
 									state === "ahead"
 										? "border border-[var(--line-strong)] text-[var(--ink-faint)]"
 										: "bg-[var(--accent)] text-[var(--accent-ink)]",

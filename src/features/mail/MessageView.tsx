@@ -267,7 +267,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 				// button cannot hold another one.
 				<div className="flex w-full shrink-0 items-start gap-3 bg-[var(--hover)] px-8 py-3">
 					<div className="flex min-w-0 flex-1 items-baseline gap-2">
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">From</span>
+						<span className="text-sm text-[var(--ink-muted)]">From</span>
 						{message.from ? (
 							<span
 								className={`min-w-0 ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
@@ -289,13 +289,13 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 							<span className="font-[var(--weight-medium)]">{from}</span>
 						)}
 						{detailsOpen && message.from ? (
-							<span data-selectable className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span data-selectable className="min-w-0 truncate text-sm text-[var(--ink-muted)]">
 								{"<"}{message.from.address}{">"}
 							</span>
 						) : null}
 					</div>
 					<span
-						className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						className="tabular shrink-0 text-sm text-[var(--ink-muted)]"
 						title={formatFull(message.internalDate)}
 					>
 						{detailsOpen
@@ -318,17 +318,17 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 								{from}
 							</span>
 							{message.from ? (
-								<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="min-w-0 truncate text-sm text-[var(--ink-muted)]">
 									{message.from.address}
 								</span>
 							) : null}
 						</div>
-						<span className="mt-0.5 block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="mt-0.5 block truncate text-sm text-[var(--ink-muted)]">
 							{message.snippet}
 						</span>
 					</div>
 					<span
-						className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						className="tabular shrink-0 text-sm text-[var(--ink-muted)]"
 						title={formatFull(message.internalDate)}
 					>
 						{formatWhen(message.sentAt ?? message.internalDate)}
@@ -339,7 +339,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 			{open ? (
 				<div className="flex flex-1 flex-col px-8">
 					<div className="-mx-8 bg-[var(--hover)] px-8">
-						<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<div className="flex shrink-0 items-center gap-2 pb-2 text-sm text-[var(--ink-muted)]">
 								<span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
 									<span>To</span>
 									{message.to.length === 0 ? <span>(nobody)</span> : null}
@@ -380,7 +380,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 
 					{visibleAttachments.length > 0 ? (
 						<div className="shrink-0 border-t border-[var(--line)] py-3">
-							<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+							<h3 className="text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 								Attachments
 							</h3>
 							<ul
@@ -441,10 +441,10 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 											>
 												<AttachmentIcon filename={attachment.filename} mimeType={attachment.mimeType} />
 												<span className="flex min-w-0 max-w-[220px] flex-col">
-													<span className="truncate text-[length:var(--text-dense)] leading-tight">
+													<span className="truncate text-dense leading-tight">
 														{attachment.filename}
 													</span>
-													<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+													<span className="tabular text-micro text-[var(--ink-muted)]">
 														{formatBytes(attachment.size)}
 													</span>
 												</span>
@@ -458,7 +458,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 									);
 								})}
 							</ul>
-							<p className="mt-1 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+							<p className="mt-1 text-micro text-[var(--ink-faint)]">
 								{canOpenHere
 									? "Documents, images and media open in your default app. Anything else is shown in its folder."
 									: "Trust the sender to open attachments from here."}
@@ -483,7 +483,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 						<div className="-mx-8 flex flex-1 flex-col">
 							{!clientLinked && !trusted ? (
 								<div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-3 text-[var(--warn)]">
-									<span className="mr-auto text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<span className="mr-auto text-sm text-[var(--ink-muted)]">
 										{trustDecision === "blocked"
 											? "This sender is not trusted. Content stays blocked."
 											: "This email is not trusted. Content and links stay blocked."}
@@ -513,12 +513,12 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 							) : (
 								<>
 									{body?.suspicious ? (
-										<div className="flex shrink-0 items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-2 text-[length:var(--text-sm)] text-[var(--warn)]">
+										<div className="flex shrink-0 items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-2 text-sm text-[var(--warn)]">
 											<span>Weird content was removed before this email was shown.</span>
 										</div>
 									) : null}
 									{body && body.remoteImages > 0 && !remoteImages ? (
-										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-[length:var(--text-sm)]">
+										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-sm">
 											<span className="text-[var(--ink-muted)]">
 												{body.remoteImages} remote{" "}
 												{body.remoteImages === 1 ? "image" : "images"} not loaded. Loading them
@@ -548,7 +548,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 												type="button"
 												aria-expanded={linksOpen}
 												onClick={() => setLinksOpen((current) => !current)}
-												className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+												className="text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)] hover:text-[var(--ink)]"
 											>
 												Links ({body.links.length})
 											</button>
@@ -557,7 +557,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 													{body.links.slice(0, 40).map((link) => (
 														<li
 															key={link.href}
-															className="flex min-w-0 items-baseline gap-2 text-[length:var(--text-sm)]"
+															className="flex min-w-0 items-baseline gap-2 text-sm"
 														>
 															<button
 																type="button"
@@ -568,7 +568,7 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 															</button>
 															<span
 																data-selectable
-																className="min-w-0 truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]"
+																className="min-w-0 truncate font-mono text-micro text-[var(--ink-muted)]"
 															>
 																{link.href}
 															</span>

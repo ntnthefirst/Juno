@@ -163,7 +163,7 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 	return (
 		<section>
 			<div className="mb-2 flex items-center justify-between gap-4">
-				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">Dates and reminders</h2>
+				<h2 className="text-h3">Dates and reminders</h2>
 				<div className="flex items-center gap-1">
 					<Button size="dense" onClick={addEvent}>
 						<Icon name="calendar" />
@@ -177,13 +177,13 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 			</div>
 
 			{load.status === "error" ? (
-				<p className="border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p className="border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 					{load.message}
 				</p>
 			) : load.status === "loading" ? (
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Loading.</p>
+				<p className="text-sm text-[var(--ink-muted)]">Loading.</p>
 			) : rows.length === 0 ? (
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="text-sm text-[var(--ink-muted)]">
 					Nothing planned. Add a date for a meeting or a delivery, or a reminder for something to do.
 				</p>
 			) : (
@@ -256,12 +256,12 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 					row.kind === "event" ? "bg-[var(--accent)]" : overdue ? "bg-[var(--risk)]" : "bg-[var(--warn)]"
 				}`}
 			/>
-			<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
+			<span className="min-w-0 flex-1 truncate text-dense">
 				{item.title}
-				{detail ? <span className="ml-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{detail}</span> : null}
+				{detail ? <span className="ml-2 text-sm text-[var(--ink-muted)]">{detail}</span> : null}
 			</span>
 			<span
-				className={`tabular flex-none text-[length:var(--text-sm)] ${overdue ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
+				className={`tabular flex-none text-sm ${overdue ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
 			>
 				{overdue ? `Overdue, ${when}` : when}
 			</span>

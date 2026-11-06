@@ -91,7 +91,7 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 					className="mx-auto h-14 w-14 object-contain filter drop-shadow-[0_4px_16px_rgba(91,79,225,0.25)]"
 				/>
 
-				<h1 className="mt-4 text-[length:var(--text-lg)] font-[var(--weight-medium)]">
+				<h1 className="mt-4 text-lg font-[var(--weight-medium)]">
 					Juno is locked
 				</h1>
 
@@ -106,7 +106,7 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 						onChange={(e) => setSecret(e.target.value)}
 						placeholder={isPin ? "PIN" : "Passphrase"}
 						aria-label={isPin ? "PIN" : "Passphrase"}
-						className="w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-center text-[length:var(--text-base)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none disabled:opacity-60"
+						className="w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-center text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none disabled:opacity-60"
 					/>
 
 					<button
@@ -121,7 +121,7 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 				<p
 					role="status"
 					aria-live="polite"
-					className="mt-3 min-h-[1.25rem] text-[length:var(--text-sm)] text-[var(--risk)]"
+					className="mt-3 min-h-[1.25rem] text-sm text-[var(--risk)]"
 				>
 					{waiting
 						? secondsLeft > 0
@@ -130,7 +130,7 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 						: (error ?? "")}
 				</p>
 
-				<p className="mt-4 text-[length:var(--text-micro)] leading-[var(--leading-normal)] text-[var(--ink-muted)]">
+				<p className="mt-4 text-micro text-[var(--ink-muted)]">
 					The lock screen protects against someone using this machine. It does not encrypt the
 					database on disk.
 				</p>

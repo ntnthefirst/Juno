@@ -30,7 +30,7 @@ function formatDate(date: string | null): string {
 
 export function SpecimenMark() {
 	return (
-		<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--risk)]">
+		<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--risk)]">
 			Specimen
 		</span>
 	);
@@ -38,7 +38,7 @@ export function SpecimenMark() {
 
 function ImportedMark() {
 	return (
-		<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--ink-muted)]">
+		<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--ink-muted)]">
 			Imported
 		</span>
 	);
@@ -279,7 +279,7 @@ export function DocumentDetail({
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 					Could not load this document.
 				</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{load.message}
 				</p>
 			</div>
@@ -301,7 +301,7 @@ export function DocumentDetail({
 			<span>{KIND_LABELS[viewing.kind]}</span>
 			{viewing.isLatest ? null : (
 				<>
-					<span className="rounded-[var(--radius-sm)] bg-[var(--warn-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--warn)]">
+					<span className="rounded-[var(--radius-sm)] bg-[var(--warn-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--warn)]">
 						Not the latest
 					</span>
 					<button
@@ -350,14 +350,14 @@ export function DocumentDetail({
 					<div className="flex flex-wrap items-center gap-2">
 						<h2
 							data-selectable
-							className="min-w-0 break-words text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]"
+							className="min-w-0 break-words text-h3"
 						>
 							{record.title}
 						</h2>
 						{record.isSpecimen ? <SpecimenMark /> : null}
 						{isImported ? <ImportedMark /> : null}
 					</div>
-					<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{belongsTo(record)}</p>
+					<p className="mt-1 text-sm text-[var(--ink-muted)]">{belongsTo(record)}</p>
 
 					<div className="mt-4 flex items-center gap-1">
 						<Button variant="primary" disabled={!hasFile} onClick={() => void guarded("sign", () => onSign(record))}>
@@ -429,7 +429,7 @@ export function DocumentDetail({
 				</div>
 
 				{record.isSpecimen ? (
-					<p className="mx-5 mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p className="mx-5 mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 						This came from a template nobody had reviewed. The wording is invented, the PDF carries a
 						red banner, and it cannot be signed.
 					</p>
@@ -439,13 +439,13 @@ export function DocumentDetail({
 					<p
 						role="alert"
 						data-selectable
-						className="mx-5 mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+						className="mx-5 mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 					>
 						{action}
 					</p>
 				) : null}
 				{notice ? (
-					<p role="status" className="mx-5 mt-4 border-l-2 border-[var(--ok)] pl-3 text-[length:var(--text-sm)] text-[var(--ok)]">
+					<p role="status" className="mx-5 mt-4 border-l-2 border-[var(--ok)] pl-3 text-sm text-[var(--ok)]">
 						{notice}
 					</p>
 				) : null}
@@ -492,7 +492,7 @@ export function DocumentDetail({
 							</Button>
 						}
 					>
-						<p className="mb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mb-2 text-sm text-[var(--ink-muted)]">
 							Pick one to read it here. Sending and signing use the latest.
 						</p>
 						<VersionSwitcher
@@ -535,7 +535,7 @@ export function DocumentDetail({
 
 			{confirmingDelete ? (
 				<Dialog title="Delete document" width="narrow" onClose={() => setConfirmingDelete(false)}>
-					<p className="mt-3 text-[length:var(--text-base)]">
+					<p className="mt-3 text-base">
 						{record.title} is removed{record.clientName ? ` from ${record.clientName}` : ""}. You can undo this straight after.
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
@@ -554,7 +554,7 @@ function Section({ title, aside, children }: SectionProps) {
 	return (
 		<section className="mt-4">
 			<div className="flex items-center justify-between gap-3 border-b border-[var(--line)] pb-2">
-				<h3 className="text-[length:var(--text-base)] font-[var(--weight-medium)]">{title}</h3>
+				<h3 className="text-base font-[var(--weight-medium)]">{title}</h3>
 				{aside}
 			</div>
 			<div className="mt-3">{children}</div>
@@ -565,8 +565,8 @@ function Section({ title, aside, children }: SectionProps) {
 function Fact({ label, children }: FactProps) {
 	return (
 		<div>
-			<p className="mb-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{label}</p>
-			<p data-selectable className="text-[length:var(--text-base)]">
+			<p className="mb-1 text-sm text-[var(--ink-muted)]">{label}</p>
+			<p data-selectable className="text-base">
 				{children}
 			</p>
 		</div>

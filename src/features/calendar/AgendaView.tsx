@@ -114,7 +114,7 @@ export function AgendaView({
 					{days.map((date) => (
 						<section key={date} className="mb-6">
 							<h2
-								className={`sticky top-0 border-b border-[var(--line)] bg-[var(--paper)] pb-1.5 pt-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] ${
+								className={`sticky top-0 border-b border-[var(--line)] bg-[var(--paper)] pb-1.5 pt-2 text-dense font-[var(--weight-medium)] ${
 									date === today ? "text-[var(--accent)]" : ""
 								}`}
 							>
@@ -131,14 +131,14 @@ export function AgendaView({
 									className="flex w-full items-center gap-3 border-b border-[var(--line)] px-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
 									style={{ height: "var(--row-height)" }}
 								>
-									<span className="tabular w-24 shrink-0 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+									<span className="tabular w-24 shrink-0 text-dense text-[var(--ink-muted)]">
 										{p.dated
 											? "all day"
 											: `${formatMinutes(p.startMinute)}${p.endMinute > p.startMinute ? ` to ${formatMinutes(Math.min(1440, p.endMinute))}` : ""}`}
 									</span>
 									<span className={`h-2 w-2 shrink-0 rounded-[var(--radius-full)] ${dotTone(p.item)}`} aria-hidden />
-									<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{itemTitle(p.item)}</span>
-									<span className="min-w-0 shrink truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<span className="min-w-0 flex-1 truncate text-dense">{itemTitle(p.item)}</span>
+									<span className="min-w-0 shrink truncate text-sm text-[var(--ink-muted)]">
 										{subtitle(p.item)}
 									</span>
 								</button>

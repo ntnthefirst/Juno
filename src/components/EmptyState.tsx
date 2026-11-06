@@ -45,11 +45,11 @@ export function EmptyState({
 				</div>
 			) : null}
 
-			<h3 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] text-[var(--ink)]">
+			<h3 className="text-h3 text-[var(--ink)]">
 				{title}
 			</h3>
 
-			<p className="mt-2 max-w-[44ch] text-[length:var(--text-base)] leading-[var(--leading-normal)] text-[var(--ink-muted)]">
+			<p className="mt-2 max-w-[44ch] text-base text-[var(--ink-muted)]">
 				{description}
 			</p>
 
@@ -78,7 +78,7 @@ export function EmptyState({
 			) : null}
 
 			{tip ? (
-				<div className="mt-8 text-[length:var(--text-sm)] text-[var(--ink-faint)]">
+				<div className="mt-8 text-sm text-[var(--ink-faint)]">
 					{tip}
 				</div>
 			) : null}

@@ -65,7 +65,7 @@ export function TitleBar({
 						<button
 							type="button"
 							onClick={back.onSelect}
-							className="animate-fade inline-flex h-7 min-w-0 items-center gap-1 rounded-[var(--radius-md)] pr-2 pl-1 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] active:scale-[0.97]"
+							className="animate-fade inline-flex h-7 min-w-0 items-center gap-1 rounded-[var(--radius-md)] pr-2 pl-1 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] active:scale-[0.97]"
 						>
 							<Icon name="chevron-left" size={16} strokeWidth={2} className="flex-none" />
 							<span className="truncate">{back.label}</span>
@@ -79,7 +79,7 @@ export function TitleBar({
 				type="button"
 				onClick={onOpenPalette}
 				aria-label="Search and commands"
-				className="no-drag group flex h-7 w-[min(380px,34vw)] items-center gap-2 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] px-2.5 text-left text-[length:var(--text-dense)] text-[var(--ink-muted)] transition-[border-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:border-[var(--line-strong)] active:scale-[0.99]"
+				className="no-drag group flex h-7 w-[min(380px,34vw)] items-center gap-2 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] px-2.5 text-left text-dense text-[var(--ink-muted)] transition-[border-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:border-[var(--line-strong)] active:scale-[0.99]"
 			>
 				<Icon name="search" size={14} strokeWidth={2} className="flex-none" />
 				<span className="min-w-0 flex-1 truncate">Search or jump to</span>

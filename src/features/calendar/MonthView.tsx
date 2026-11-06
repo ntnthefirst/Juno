@@ -116,7 +116,7 @@ export function MonthView({
 				{dates.slice(0, 7).map((date) => (
 					<div
 						key={date}
-						className="px-2 py-1.5 text-[length:var(--text-micro)] uppercase tracking-[0.08em] text-[var(--ink-muted)]"
+						className="px-2 py-1.5 text-micro uppercase tracking-[0.08em] text-[var(--ink-muted)]"
 					>
 						{weekdayShort(date)}
 					</div>
@@ -163,7 +163,7 @@ export function MonthView({
 									onClick={() => onOpenDay(date)}
 									aria-label={`Open ${date}`}
 									className={[
-										"tabular inline-flex h-6 min-w-6 items-center justify-center rounded-[var(--radius-full)] px-1 text-[length:var(--text-dense)]",
+										"tabular inline-flex h-6 min-w-6 items-center justify-center rounded-[var(--radius-full)] px-1 text-dense",
 										isToday
 											? "bg-[var(--accent)] font-[var(--weight-medium)] text-[var(--accent-ink)]"
 											: inMonth
@@ -198,7 +198,7 @@ export function MonthView({
 									<button
 										type="button"
 										onClick={() => onOpenDay(date)}
-										className="tabular truncate rounded-[var(--radius-sm)] px-1.5 text-left text-[length:var(--text-micro)] text-[var(--ink-muted)] hover:bg-[var(--hover)]"
+										className="tabular truncate rounded-[var(--radius-sm)] px-1.5 text-left text-micro text-[var(--ink-muted)] hover:bg-[var(--hover)]"
 									>
 										{overflow} more
 									</button>
@@ -247,7 +247,7 @@ function Chip({ placed, onOpen, onDragStart, onDragEnd, onContextMenu }: ChipPro
 			onContextMenu={(event) => onContextMenu(event, item)}
 			title={itemTitle(item)}
 			className={[
-				"flex h-5 w-full min-w-0 shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-left text-[length:var(--text-micro)] font-[var(--weight-medium)] leading-none",
+				"flex h-5 w-full min-w-0 shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-left text-micro font-[var(--weight-medium)] leading-none",
 				chipTone(item),
 				placed.continued ? "rounded-l-none" : "",
 				placed.continues ? "rounded-r-none" : "",

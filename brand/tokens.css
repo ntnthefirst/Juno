@@ -30,7 +30,7 @@
 	--ink-faint: #868791; /* meta and large text only, NOT body copy. Clears 3:1 on every light surface including --hover */
 
 	/* ---- Lines ---- */
-	--line: #e3e3e8; /* default border, dividers */
+	--line: #ececf1; /* default border, dividers */
 	--line-strong: #cdcdd5; /* input borders, emphasised dividers */
 
 	/* ---- Accent: iris ---- */
@@ -80,19 +80,32 @@
 	--font-ui: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
 	--font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
-	/* A dense application scale, not a marketing-page scale. */
-	--text-micro: 0.6875rem; /* 11px, badges, table meta */
-	--text-sm: 0.75rem; /* 12px, secondary labels */
-	--text-dense: 0.8125rem; /* 13px, table cells, list rows */
-	--text-base: 0.875rem; /* 14px, default UI text */
-	--text-lg: 1rem; /* 16px, emphasised body, doc preview */
-	--text-h3: 1.25rem; /* 20px */
-	--text-h2: 1.5rem; /* 24px */
-	--text-h1: 2rem; /* 32px, one per screen at most */
+	/* The text styles of the design, one utility each (text-h1 ... text-document).
+	 * A style is a size and a pixel line height; headings, micro and the overline
+	 * also fix a weight, because the design does. The line heights and the rest
+	 * are mapped in @theme inline below, so the utility carries them. */
+	--text-micro: 0.6875rem; /* 11px / 16, medium, badges, table meta */
+	--text-sm: 0.75rem; /* 12px / 18, secondary labels */
+	--text-dense: 0.8125rem; /* 13px / 20, table cells, list rows */
+	--text-base: 0.875rem; /* 14px / 21, default UI text */
+	--text-lg: 1rem; /* 16px / 24, emphasised body */
+	--text-document: 1rem; /* 16px / 26, document and email body */
+	--text-h3: 1.25rem; /* 20px / 25, semibold */
+	--text-h2: 1.5rem; /* 24px / 30, semibold */
+	--text-h1: 2rem; /* 32px / 40, semibold, one per screen at most */
+	--text-overline: 0.6875rem; /* 11px / 16, semibold, 6% tracking, with uppercase */
 
-	--leading-tight: 1.25;
-	--leading-normal: 1.5;
-	--leading-relaxed: 1.65; /* long-form only: document body, email text */
+	--text-micro--line-height: 1rem;
+	--text-sm--line-height: 1.125rem;
+	--text-dense--line-height: 1.25rem;
+	--text-base--line-height: 1.3125rem;
+	--text-lg--line-height: 1.5rem;
+	--text-document--line-height: 1.625rem;
+	--text-h3--line-height: 1.5625rem;
+	--text-h2--line-height: 1.875rem;
+	--text-h1--line-height: 2.5rem;
+	--text-overline--line-height: 1rem;
+	--tracking-overline: 0.06em;
 
 	--weight-normal: 400;
 	--weight-medium: 500;
@@ -111,10 +124,10 @@
 	--space-16: 4rem;
 
 	/* ---- Radius: small. Minimalist means restrained, not pill-shaped. ---- */
-	--radius-sm: 4px; /* inputs, badges */
-	--radius-md: 6px; /* buttons, rows */
-	--radius-lg: 8px; /* cards, panels */
-	--radius-xl: 12px; /* modals, the app icon tile */
+	--radius-sm: 6px; /* inputs, badges */
+	--radius-md: 8px; /* buttons, rows */
+	--radius-lg: 12px; /* cards, panels */
+	--radius-xl: 16px; /* modals, the app icon tile */
 	--radius-full: 9999px; /* avatars and nothing else */
 
 	/* ---- Elevation: borders do the work. Shadow only for things that float. ---- */
@@ -154,8 +167,8 @@
 
 	/* ---- Layout ---- */
 	--sidebar-width: 248px;
-	/* The activity bar of a code editor: 48px wide, 48px items, 24px icons. */
-	--sidebar-rail-width: 48px;
+	/* The icon rail: a 56px strip holding 48px items with 24px icons, as drawn in the design. */
+	--sidebar-rail-width: 56px;
 	/* Matches the native window-control overlay height set in main-window.ts.
 	 * Changing one without the other puts the buttons off the bar. */
 	--titlebar-height: 40px;
@@ -172,7 +185,7 @@
 	 * they mirror --paper, --surface, --line and --line-strong in each mode. */
 	--swatch-light-paper: #f5f5f7;
 	--swatch-light-surface: #ffffff;
-	--swatch-light-line: #e3e3e8;
+	--swatch-light-line: #ececf1;
 	--swatch-light-mark: #cdcdd5;
 	--swatch-dark-paper: #101013;
 	--swatch-dark-surface: #18181c;
@@ -313,6 +326,7 @@
 	--shadow-panel: -12px 0 40px -12px rgb(0 0 0 / 0.7), -1px 0 0 0 rgb(255 255 255 / 0.05);
 }
 
+
 /* A range of days replacing the one before it, entering from the side it was
  * pulled in from: forward comes up from below, back comes down from above.
  *
@@ -345,6 +359,14 @@
 @keyframes juno-pop {
 	from {
 		transform: translateY(-4px);
+		opacity: 0;
+	}
+}
+
+/* Content replacing content in place: a thread opening in the reader. No
+ * movement, because the pane it lands in has not moved. */
+@keyframes juno-fade {
+	from {
 		opacity: 0;
 	}
 }
@@ -390,6 +412,17 @@
 	from {
 		transform: translateY(14px) scale(0.98);
 		opacity: 0;
+	}
+}
+
+@keyframes juno-breathe {
+	0%, 100% {
+		transform: scale(1);
+		opacity: 0.92;
+	}
+	50% {
+		transform: scale(1.04);
+		opacity: 1;
 	}
 }
 
@@ -456,13 +489,31 @@
 	--font-mono: var(--font-mono);
 
 	--text-micro: var(--text-micro);
+	--text-micro--line-height: var(--text-micro--line-height);
 	--text-sm: var(--text-sm);
+	--text-sm--line-height: var(--text-sm--line-height);
 	--text-dense: var(--text-dense);
+	--text-dense--line-height: var(--text-dense--line-height);
 	--text-base: var(--text-base);
+	--text-base--line-height: var(--text-base--line-height);
 	--text-lg: var(--text-lg);
+	--text-lg--line-height: var(--text-lg--line-height);
+	--text-document: var(--text-document);
+	--text-document--line-height: var(--text-document--line-height);
 	--text-h3: var(--text-h3);
+	--text-h3--line-height: var(--text-h3--line-height);
 	--text-h2: var(--text-h2);
+	--text-h2--line-height: var(--text-h2--line-height);
 	--text-h1: var(--text-h1);
+	--text-h1--line-height: var(--text-h1--line-height);
+	--text-overline: var(--text-overline);
+	--text-overline--line-height: var(--text-overline--line-height);
+	--text-h1--font-weight: var(--weight-semibold);
+	--text-h2--font-weight: var(--weight-semibold);
+	--text-h3--font-weight: var(--weight-semibold);
+	--text-micro--font-weight: var(--weight-medium);
+	--text-overline--font-weight: var(--weight-semibold);
+	--text-overline--letter-spacing: var(--tracking-overline);
 
 	--font-weight-normal: var(--weight-normal);
 	--font-weight-medium: var(--weight-medium);
@@ -492,6 +543,7 @@
 	--animate-scale: juno-scale 260ms var(--ease-smooth) backwards;
 	--animate-slide: juno-slide 340ms var(--ease-smooth) backwards;
 	--animate-lift: juno-lift 320ms var(--ease-spring) backwards;
+	--animate-fade: juno-fade var(--duration-base) var(--ease);
 	--duration-fast: var(--duration-fast);
 	--duration-base: var(--duration-base);
 	--duration-slow: var(--duration-slow);

@@ -29,7 +29,7 @@ export function SplitButton({ label, onClick, items, menuLabel, disabled = false
 	}
 
 	const part =
-		"inline-flex h-[40px] shrink-0 items-center justify-center bg-[var(--accent)] font-[var(--weight-medium)] text-[length:var(--text-base)] text-[var(--accent-ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-hover)] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]";
+		"inline-flex h-[40px] shrink-0 items-center justify-center bg-[var(--accent)] font-[var(--weight-medium)] text-base text-[var(--accent-ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-hover)] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]";
 
 	return (
 		<div className="inline-flex">

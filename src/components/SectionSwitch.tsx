@@ -63,7 +63,7 @@ export function SectionSwitch({ sections, current, label }: SectionSwitchProps) 
 							if (!active) requestOpen({ kind: "screen", screen: side.id });
 						}}
 						className={[
-							"relative z-10 h-8 whitespace-nowrap px-4 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-base)] ease-[var(--ease)]",
+							"relative z-10 h-8 whitespace-nowrap px-4 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-base)] ease-[var(--ease)]",
 							active ? "text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]",
 						].join(" ")}
 					>

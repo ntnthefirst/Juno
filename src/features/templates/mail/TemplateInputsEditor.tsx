@@ -62,7 +62,7 @@ export function TemplateInputsEditor({ inputs, onChange, disabled = false }: Tem
 	if (inputs.length === 0) {
 		return (
 			<div>
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="text-sm text-[var(--ink-muted)]">
 					Nothing declared yet. Add one for each value that changes from one use to the next: a
 					name, the scope of the work, an amount agreed on the phone, a deadline.
 				</p>
@@ -100,7 +100,7 @@ export function TemplateInputsEditor({ inputs, onChange, disabled = false }: Tem
 										required
 									/>
 									{input.key && !keyError ? (
-										<p className="mt-1 font-mono text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p className="mt-1 font-mono text-sm text-[var(--ink-muted)]">
 											{`{{document.${input.key}}}`}
 										</p>
 									) : null}
@@ -120,7 +120,7 @@ export function TemplateInputsEditor({ inputs, onChange, disabled = false }: Tem
 									disabled={disabled}
 								/>
 								<div className="flex items-end pb-2">
-									<label className="flex items-center gap-2 text-[length:var(--text-base)] text-[var(--ink)]">
+									<label className="flex items-center gap-2 text-base text-[var(--ink)]">
 										<input
 											type="checkbox"
 											checked={input.required}
@@ -139,7 +139,7 @@ export function TemplateInputsEditor({ inputs, onChange, disabled = false }: Tem
 									placeholder="Typed each time"
 									disabled={disabled}
 								/>
-								<div className="flex items-end pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<div className="flex items-end pb-2 text-sm text-[var(--ink-muted)]">
 									Filled in when a client or project is linked. You can still change it.
 								</div>
 								<div className="sm:col-span-2">
@@ -234,13 +234,13 @@ function OptionsEditor({ options, onChange, disabled }: OptionsEditorProps) {
 
 	return (
 		<div>
-			<span className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">Options</span>
+			<span className="mb-1 block text-sm text-[var(--ink-muted)]">Options</span>
 			{options.length > 0 ? (
 				<div className="flex flex-wrap gap-1.5">
 					{options.map((option) => (
 						<span
 							key={option}
-							className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-1 text-[length:var(--text-dense)]"
+							className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-1 text-dense"
 						>
 							{option}
 							<button
@@ -256,7 +256,7 @@ function OptionsEditor({ options, onChange, disabled }: OptionsEditorProps) {
 					))}
 				</div>
 			) : (
-				<p className="text-[length:var(--text-sm)] text-[var(--risk)]">Needs at least one option.</p>
+				<p className="text-sm text-[var(--risk)]">Needs at least one option.</p>
 			)}
 			<div className="mt-2 flex gap-2">
 				<input
@@ -270,7 +270,7 @@ function OptionsEditor({ options, onChange, disabled }: OptionsEditorProps) {
 						event.preventDefault();
 						add();
 					}}
-					className="w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-1.5 text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60"
+					className="w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-1.5 text-dense text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60"
 				/>
 				<Button size="dense" disabled={disabled || !draft.trim()} onClick={add}>
 					Add

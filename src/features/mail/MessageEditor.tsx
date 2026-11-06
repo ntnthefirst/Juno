@@ -319,7 +319,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 							{linkReady ? (
 								<Field label="Link to" value={linkUrl} onChange={setLinkUrl} placeholder="https://example.com" />
 							) : (
-								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="text-sm text-[var(--ink-muted)]">
 									Select the words that should become the link, then open this again.
 								</p>
 							)}
@@ -361,7 +361,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 				onFocus={refreshActiveFormats}
 				onBlur={refreshActiveFormats}
 				data-placeholder="Write your message"
-				className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-4 text-[length:var(--text-lg)] leading-[var(--leading-relaxed)] text-[var(--ink)] outline-none empty:before:text-[var(--ink-faint)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--accent)] [&_a]:underline [&_img]:max-w-full [&_img]:rounded-[var(--radius-md)] [&_img[data-juno-src]]:inline-block [&_img[data-juno-src]]:min-h-12 [&_img[data-juno-src]]:min-w-32 [&_img[data-juno-src]]:border [&_img[data-juno-src]]:border-dashed [&_img[data-juno-src]]:border-[var(--line-strong)] [&_img[data-juno-src]]:bg-[var(--sunken)] [&_img[data-juno-src]]:p-2 [&_img[data-juno-src]]:text-[length:var(--text-sm)] [&_img[data-juno-src]]:text-[var(--ink-muted)]"
+				className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-4 text-document text-[var(--ink)] outline-none empty:before:text-[var(--ink-faint)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--accent)] [&_a]:underline [&_img]:max-w-full [&_img]:rounded-[var(--radius-md)] [&_img[data-juno-src]]:inline-block [&_img[data-juno-src]]:min-h-12 [&_img[data-juno-src]]:min-w-32 [&_img[data-juno-src]]:border [&_img[data-juno-src]]:border-dashed [&_img[data-juno-src]]:border-[var(--line-strong)] [&_img[data-juno-src]]:bg-[var(--sunken)] [&_img[data-juno-src]]:p-2 [&_img[data-juno-src]]:text-sm [&_img[data-juno-src]]:text-[var(--ink-muted)]"
 			/>
 			{menu.at ? <ContextMenu at={menu.at} items={editItems} onClose={menu.close} ariaLabel="Edit message" /> : null}
 		</div>

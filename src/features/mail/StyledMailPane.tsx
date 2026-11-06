@@ -175,7 +175,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 			) : (
 				<>
 					<div className="flex flex-none items-center gap-1 px-4 pt-3 pb-2">
-						<h2 className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-[var(--weight-semibold)]">
+						<h2 className="min-w-0 flex-1 truncate text-base font-[var(--weight-semibold)]">
 							Styled mail
 						</h2>
 						<button
@@ -202,7 +202,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 								onChange={(event) => setSearch(event.target.value)}
 								placeholder="Find a template"
 								aria-label="Find a template"
-								className="min-w-0 flex-1 bg-transparent text-[length:var(--text-dense)] text-[var(--ink)] outline-none placeholder:text-[var(--ink-muted)]"
+								className="min-w-0 flex-1 bg-transparent text-dense text-[var(--ink)] outline-none placeholder:text-[var(--ink-muted)]"
 							/>
 						</label>
 					</div>
@@ -213,13 +213,13 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 						className="max-h-[38%] flex-none overflow-y-auto border-b border-[var(--line)] px-2 pb-2"
 					>
 						{loadError ? (
-							<li role="alert" data-selectable className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+							<li role="alert" data-selectable className="px-2 py-2 text-sm text-[var(--risk)]">
 								{loadError}
 							</li>
 						) : templates === null ? (
-							<li className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Loading.</li>
+							<li className="px-2 py-2 text-sm text-[var(--ink-muted)]">Loading.</li>
 						) : shown.length === 0 ? (
-							<li className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<li className="px-2 py-2 text-sm text-[var(--ink-muted)]">
 								{needle ? "Nothing matches." : "No styled mail yet. Make one in Styled mail."}
 							</li>
 						) : (
@@ -247,11 +247,11 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 											].join(" ")}
 										>
 											<span
-												className={`truncate text-[length:var(--text-dense)] font-[var(--weight-medium)] ${active ? "text-[var(--accent)]" : "text-[var(--ink)]"}`}
+												className={`truncate text-dense font-[var(--weight-medium)] ${active ? "text-[var(--accent)]" : "text-[var(--ink)]"}`}
 											>
 												{template.name}
 											</span>
-											<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="truncate text-sm text-[var(--ink-muted)]">
 												{template.description || template.subject}
 											</span>
 										</button>
@@ -266,8 +266,8 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 							<>
 								<div className="flex flex-none items-start gap-2">
 									<div className="min-w-0 flex-1">
-										<p className="truncate text-[length:var(--text-dense)] font-[var(--weight-semibold)]">{selected.name}</p>
-										<p className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p className="truncate text-dense font-[var(--weight-semibold)]">{selected.name}</p>
+										<p className="truncate text-sm text-[var(--ink-muted)]">
 											{current && "subject" in current ? current.subject : selected.subject}
 										</p>
 									</div>
@@ -279,7 +279,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 									<LoadPicturesNotice pending={remote.pending} onConfirm={remote.confirm} />
 								</div>
 								{current && "error" in current ? (
-									<p role="alert" data-selectable className="mt-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+									<p role="alert" data-selectable className="mt-2 text-sm text-[var(--risk)]">
 										{current.error}
 									</p>
 								) : current ? (
@@ -293,16 +293,16 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 										/>
 									</div>
 								) : (
-									<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Rendering.</p>
+									<p className="mt-2 text-sm text-[var(--ink-muted)]">Rendering.</p>
 								)}
 							</>
 						) : (
-							<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Pick a template to see it here.</p>
+							<p className="text-sm text-[var(--ink-muted)]">Pick a template to see it here.</p>
 						)}
 					</div>
 
 					<div className="flex flex-none items-center justify-between gap-2 border-t border-[var(--line)] px-4 py-2">
-						<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">Double click a template to use it.</span>
+						<span className="text-micro text-[var(--ink-muted)]">Double click a template to use it.</span>
 						<Button size="dense" onClick={() => requestOpen({ kind: "screen", screen: "mail-templates" })}>
 							Manage
 						</Button>

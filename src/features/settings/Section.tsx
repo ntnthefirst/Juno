@@ -31,7 +31,7 @@ export function Section({ title, description, action, anchor, children }: Sectio
 			<section data-setting={anchor}>
 				{description || action ? (
 					<div className="flex min-h-[32px] items-start justify-between gap-6">
-						<p className="max-w-[62ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						<p className="max-w-[62ch] text-dense text-[var(--ink-muted)]">
 							{description}
 						</p>
 						{action ? <div className="flex-none">{action}</div> : null}
@@ -45,11 +45,11 @@ export function Section({ title, description, action, anchor, children }: Sectio
 	return (
 		<section data-setting={anchor} className={SECTION_GAP}>
 			<div className="flex min-h-[32px] items-center justify-between gap-4">
-				<h2 className="text-[length:var(--text-lg)] font-[var(--weight-semibold)]">{title}</h2>
+				<h2 className="text-lg font-[var(--weight-semibold)]">{title}</h2>
 				{action}
 			</div>
 			{description ? (
-				<p className="mt-1 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 					{description}
 				</p>
 			) : null}
@@ -71,7 +71,7 @@ export function SectionError({ message }: { message: string | null }) {
 		<p
 			role="alert"
 			data-selectable
-			className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+			className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 		>
 			{message}
 		</p>

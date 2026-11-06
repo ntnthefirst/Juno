@@ -367,7 +367,7 @@ export function ThreadView({
 				<button
 					type="button"
 					onClick={onBack}
-					className="-ml-1.5 inline-flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-sm)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+					className="-ml-1.5 inline-flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-sm text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 				>
 					<Icon
 						name="chevron-left"
@@ -377,7 +377,7 @@ export function ThreadView({
 				</button>
 
 				<div className="mt-2 flex items-start justify-between gap-6">
-					<h2 className="min-w-0 text-[length:var(--text-h3)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.01em]">
+					<h2 className="min-w-0 text-h3">
 						{summary.subject}
 					</h2>
 					<div className="flex shrink-0 items-center gap-1">
@@ -438,14 +438,14 @@ export function ThreadView({
 
 				<div className="mt-2 flex items-center gap-2">
 					{summary.clientName ? (
-						<span className="rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-1 text-[length:var(--text-sm)] text-[var(--accent)]">
+						<span className="rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-1 text-sm text-[var(--accent)]">
 							{summary.clientName}
 							{summary.linkSource === "auto" ? (
 								<span className="text-[var(--ink-muted)]"> (matched)</span>
 							) : null}
 						</span>
 					) : null}
-					<p className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="tabular text-sm text-[var(--ink-muted)]">
 						{entries.length} {entries.length === 1 ? "message" : "messages"}
 					</p>
 				</div>

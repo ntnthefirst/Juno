@@ -101,7 +101,7 @@ export function Dialog({ title, onClose, children, width = "base" }: DialogProps
 			>
 				<h2
 					id={labelId}
-					className="px-6 pt-6 text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]"
+					className="px-6 pt-6 text-h3"
 				>
 					{title}
 				</h2>

@@ -39,9 +39,9 @@ function WidthField({ label, value, onChange }: WidthFieldProps) {
 				onKeyDown={(event) => {
 					if (event.key === "Enter") commit();
 				}}
-				className="tabular min-w-0 flex-1 bg-transparent text-right text-[length:var(--text-sm)] text-[var(--ink)] focus:outline-none"
+				className="tabular min-w-0 flex-1 bg-transparent text-right text-sm text-[var(--ink)] focus:outline-none"
 			/>
-			<span className="pl-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">px</span>
+			<span className="pl-0.5 text-micro text-[var(--ink-muted)]">px</span>
 		</label>
 	);
 }
@@ -84,7 +84,7 @@ function BreakpointRow({ name, width, active, onSelect, onRename, onWidth, onRem
 							setRenaming(null);
 						}
 					}}
-					className="h-[24px] min-w-0 flex-1 rounded-[var(--radius-sm)] bg-[var(--surface)] px-1.5 text-[length:var(--text-sm)] text-[var(--ink)] outline-1 outline-[var(--accent)] focus:outline-1"
+					className="h-[24px] min-w-0 flex-1 rounded-[var(--radius-sm)] bg-[var(--surface)] px-1.5 text-sm text-[var(--ink)] outline-1 outline-[var(--accent)] focus:outline-1"
 				/>
 			) : (
 				<button
@@ -93,7 +93,7 @@ function BreakpointRow({ name, width, active, onSelect, onRename, onWidth, onRem
 					title={onRename ? "Edit the canvas at this width. Double-click to rename" : "Edit the message as every width sees it"}
 					onClick={onSelect}
 					onDoubleClick={() => (onRename ? setRenaming(name) : undefined)}
-					className={`flex h-[28px] min-w-0 flex-1 items-center gap-1.5 pl-1.5 text-left text-[length:var(--text-sm)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
+					className={`flex h-[28px] min-w-0 flex-1 items-center gap-1.5 pl-1.5 text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
 						active ? "font-[var(--weight-medium)] text-[var(--accent)]" : "text-[var(--ink)]"
 					}`}
 				>

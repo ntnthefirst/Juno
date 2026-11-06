@@ -13,7 +13,7 @@ import { Icon, type IconName } from "../../../../components/Icon";
 import type { Lit, Spot } from "./alignment";
 
 const CONTROL =
-	"h-[28px] w-full min-w-0 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-2 text-[length:var(--text-sm)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none";
+	"h-[28px] w-full min-w-0 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none";
 
 type PanelSectionProps = {
 	title: string;
@@ -27,7 +27,7 @@ export function PanelSection({ title, action, children }: PanelSectionProps) {
 	return (
 		<section className="border-b border-[var(--line)] px-3 py-2">
 			<div className="flex h-[28px] items-center gap-2">
-				<h3 className="flex-1 text-[length:var(--text-sm)] font-[var(--weight-semibold)] text-[var(--ink)]">
+				<h3 className="flex-1 text-sm font-[var(--weight-semibold)] text-[var(--ink)]">
 					{title}
 				</h3>
 				{action}
@@ -134,7 +134,7 @@ export function NumberInput({
 			<label
 				htmlFor={id}
 				title={label}
-				className="flex flex-none items-center text-[length:var(--text-micro)] text-[var(--ink-muted)]"
+				className="flex flex-none items-center text-micro text-[var(--ink-muted)]"
 			>
 				{icon ? <Icon name={icon} size={12} /> : prefix}
 				<span className="sr-only">{label}</span>
@@ -154,10 +154,10 @@ export function NumberInput({
 				onKeyDown={(event) => {
 					if (event.key === "Enter") commit(event.currentTarget.value);
 				}}
-				className="tabular min-w-0 flex-1 bg-transparent py-0 text-[length:var(--text-sm)] text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				className="tabular min-w-0 flex-1 bg-transparent py-0 text-sm text-[var(--ink)] placeholder:text-[var(--ink-muted)] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 			/>
 			{suffix ? (
-				<span className="flex-none text-[length:var(--text-micro)] text-[var(--ink-faint)]">{suffix}</span>
+				<span className="flex-none text-micro text-[var(--ink-faint)]">{suffix}</span>
 			) : null}
 		</div>
 	);
@@ -189,7 +189,7 @@ export function TextInput({
 	onEnter,
 }: TextInputProps) {
 	const id = useId();
-	const classes = `${CONTROL}${mono ? " font-mono text-[length:var(--text-micro)]" : ""}`;
+	const classes = `${CONTROL}${mono ? " font-mono text-micro" : ""}`;
 	return (
 		<div>
 			<label htmlFor={id} className="sr-only">
@@ -313,7 +313,7 @@ export function ColorInput({ label, value, onChange, fallback = "#ffffff", requi
 					const hex = next.startsWith("#") ? next : `#${next}`;
 					if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex)) onChange(hex);
 				}}
-				className="tabular min-w-0 flex-1 bg-transparent font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)] uppercase placeholder:normal-case focus:outline-none"
+				className="tabular min-w-0 flex-1 bg-transparent font-mono text-micro text-[var(--ink-muted)] uppercase placeholder:normal-case focus:outline-none"
 			/>
 			{value && !required ? <PanelButton label={`Clear ${label}`} icon="close" onClick={() => onChange(null)} /> : null}
 		</div>
@@ -370,7 +370,7 @@ export function Segmented<T extends string>({
 						disabled={disabled}
 						title={option.title ?? option.label}
 						onClick={() => (active && onClear ? onClear() : onChange(option.value))}
-						className={`flex h-[26px] min-w-[26px] flex-1 items-center justify-center rounded-[3px] px-1 text-[length:var(--text-micro)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
+						className={`flex h-[26px] min-w-[26px] flex-1 items-center justify-center rounded-[3px] px-1 text-micro font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
 							active
 								? "bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-popover)]"
 								: "text-[var(--ink-muted)] hover:text-[var(--ink)]"
@@ -441,7 +441,7 @@ export function DimensionInput({
 
 	return (
 		<div className="flex h-[28px] min-w-0 items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-2 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
-			<label htmlFor={id} title={label} className="flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+			<label htmlFor={id} title={label} className="flex-none text-micro text-[var(--ink-muted)]">
 				{prefix}
 				<span className="sr-only">{label}</span>
 			</label>
@@ -456,7 +456,7 @@ export function DimensionInput({
 				onKeyDown={(event) => {
 					if (event.key === "Enter") commit();
 				}}
-				className={`tabular min-w-0 flex-1 bg-transparent text-[length:var(--text-sm)] placeholder:text-[var(--ink-muted)] focus:outline-none ${
+				className={`tabular min-w-0 flex-1 bg-transparent text-sm placeholder:text-[var(--ink-muted)] focus:outline-none ${
 					editable ? "text-[var(--ink)]" : "text-[var(--ink-muted)]"
 				}`}
 			/>
@@ -465,7 +465,7 @@ export function DimensionInput({
 					aria-label={`${label} resizing`}
 					value={mode}
 					onChange={(event) => onMode(event.target.value as DimensionMode)}
-					className="h-[26px] max-w-[52px] flex-none cursor-pointer rounded-[var(--radius-sm)] bg-transparent pr-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] hover:text-[var(--ink)] focus:outline-none focus-visible:outline-2 focus-visible:outline-focus"
+					className="h-[26px] max-w-[52px] flex-none cursor-pointer rounded-[var(--radius-sm)] bg-transparent pr-0.5 text-micro text-[var(--ink-muted)] hover:text-[var(--ink)] focus:outline-none focus-visible:outline-2 focus-visible:outline-focus"
 				>
 					{modes.map((option) => (
 						<option key={option} value={option}>
@@ -474,7 +474,7 @@ export function DimensionInput({
 					))}
 				</select>
 			) : (
-				<span className="pr-2 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+				<span className="pr-2 text-micro text-[var(--ink-muted)]">
 					{modeLabels[mode] ?? MODE_LABELS[mode]}
 				</span>
 			)}
@@ -490,7 +490,7 @@ type CheckboxProps = {
 
 export function PanelCheckbox({ label, checked, onChange }: CheckboxProps) {
 	return (
-		<label className="flex h-[28px] items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+		<label className="flex h-[28px] items-center gap-2 text-sm text-[var(--ink-muted)]">
 			<input
 				type="checkbox"
 				checked={checked}
@@ -508,7 +508,7 @@ type PanelNoteProps = { children: ReactNode; tone?: "muted" | "warn" };
 export function PanelNote({ children, tone = "muted" }: PanelNoteProps) {
 	return (
 		<p
-			className={`text-[length:var(--text-micro)] leading-[var(--leading-normal)] ${
+			className={`text-micro ${
 				tone === "warn" ? "border-l-2 border-[var(--warn)] pl-2 text-[var(--warn)]" : "text-[var(--ink-muted)]"
 			}`}
 		>
@@ -613,7 +613,7 @@ export function GapInput({ label, value, onValue, mode, onMode, max = 120 }: Gap
 
 	return (
 		<div className="flex h-[28px] min-w-0 items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-2 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
-			<label htmlFor={id} title={label} className="flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+			<label htmlFor={id} title={label} className="flex-none text-micro text-[var(--ink-muted)]">
 				Gap
 				<span className="sr-only">{label}</span>
 			</label>
@@ -628,14 +628,14 @@ export function GapInput({ label, value, onValue, mode, onMode, max = 120 }: Gap
 				onKeyDown={(event) => {
 					if (event.key === "Enter") commit();
 				}}
-				className="tabular min-w-0 flex-1 bg-transparent text-[length:var(--text-sm)] text-[var(--ink)] placeholder:text-[var(--ink)] focus:outline-none"
+				className="tabular min-w-0 flex-1 bg-transparent text-sm text-[var(--ink)] placeholder:text-[var(--ink)] focus:outline-none"
 			/>
 			{onMode ? (
 				<select
 					aria-label={`${label} spacing`}
 					value={mode}
 					onChange={(event) => onMode(event.target.value as GapMode)}
-					className="h-[26px] max-w-[52px] flex-none cursor-pointer rounded-[var(--radius-sm)] bg-transparent pr-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] hover:text-[var(--ink)] focus:outline-none focus-visible:outline-2 focus-visible:outline-focus"
+					className="h-[26px] max-w-[52px] flex-none cursor-pointer rounded-[var(--radius-sm)] bg-transparent pr-0.5 text-micro text-[var(--ink-muted)] hover:text-[var(--ink)] focus:outline-none focus-visible:outline-2 focus-visible:outline-focus"
 				>
 					<option value="fixed">Fixed</option>
 					<option value="between">Auto (space between)</option>

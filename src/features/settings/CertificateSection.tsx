@@ -82,7 +82,7 @@ export function CertificateSection() {
 			{load.status === "loading" ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : info ? (
-				<dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-4 gap-y-1 text-[length:var(--text-dense)]">
+				<dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-4 gap-y-1 text-dense">
 					<dt className="text-[var(--ink-muted)]">Issued to</dt>
 					<dd data-selectable>{info.subject}</dd>
 					<dt className="text-[var(--ink-muted)]">Issued by</dt>
@@ -92,13 +92,13 @@ export function CertificateSection() {
 						{day(info.validTo)}
 					</dd>
 					<dt className="text-[var(--ink-muted)]">Fingerprint</dt>
-					<dd data-selectable className="break-all font-[var(--font-mono)] text-[length:var(--text-sm)]">
+					<dd data-selectable className="break-all font-[var(--font-mono)] text-sm">
 						{info.fingerprint}
 					</dd>
 				</dl>
 			) : (
 				<div className="flex max-w-[420px] flex-col gap-3">
-					<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+					<p className="text-dense text-[var(--ink-muted)]">
 						Import the .p12 or .pfx file your certificate authority gave you. Enter its passphrase
 						first, or leave it empty when it has none, then choose the file.
 					</p>
@@ -116,7 +116,7 @@ export function CertificateSection() {
 				</div>
 			)}
 
-			<p className="mt-4 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-4 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 				The file is kept in the operating system keychain. The passphrase is not kept: you enter it
 				each time you sign. A signature made this way is only as trustworthy as the certificate
 				behind it, and it is not a qualified electronic signature under eIDAS.

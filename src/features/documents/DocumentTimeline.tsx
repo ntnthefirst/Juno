@@ -30,7 +30,7 @@ function toneClass(kind: DocumentTimelineKind): string {
  */
 export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 	if (entries.length === 0) {
-		return <p className="py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Nothing has happened yet.</p>;
+		return <p className="py-2 text-sm text-[var(--ink-muted)]">Nothing has happened yet.</p>;
 	}
 
 	return (
@@ -38,13 +38,13 @@ export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 			{entries.map((entry, index) => {
 				const body = (
 					<>
-						<span className="block text-[length:var(--text-dense)]">{entry.title}</span>
+						<span className="block text-dense">{entry.title}</span>
 						{entry.detail ? (
-							<span className="block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="block truncate text-sm text-[var(--ink-muted)]">
 								{entry.detail}
 							</span>
 						) : null}
-						<span className="tabular block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="tabular block text-sm text-[var(--ink-muted)]">
 							{formatInstant(entry.at)}
 						</span>
 					</>

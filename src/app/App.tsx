@@ -306,7 +306,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 function Placeholder({ title }: { title: string }) {
 	return (
 		<div className="p-8">
-			<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">{title}</h1>
+			<h1 className="text-h1">{title}</h1>
 			<p className="mt-3 max-w-[60ch] text-[var(--ink-muted)]">
 				Not built yet.
 			</p>

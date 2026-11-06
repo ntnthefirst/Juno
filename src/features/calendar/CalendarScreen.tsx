@@ -495,7 +495,7 @@ export function CalendarScreen() {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="flex flex-none min-w-0 items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:gap-3 sm:px-6">
-				<h1 className="min-w-0 shrink truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+				<h1 className="min-w-0 shrink truncate text-h3">
 					{heading}
 				</h1>
 				<div className="flex shrink-0 items-center gap-1">
@@ -533,7 +533,7 @@ export function CalendarScreen() {
 							aria-label={option.label}
 							title={option.label}
 							onClick={() => setView(option.kind)}
-							className={`h-[30px] rounded-[var(--radius-md)] px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+							className={`h-[30px] rounded-[var(--radius-md)] px-3 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 								view === option.kind ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
 							}`}
 						>
@@ -577,7 +577,7 @@ export function CalendarScreen() {
 				{load.status === "error" ? (
 					<div className="m-8 border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the calendar.</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{load.message}
 						</p>
 					</div>
@@ -655,7 +655,7 @@ export function CalendarScreen() {
 
 			{warnings ? (
 				<Dialog title="Imported with warnings" onClose={() => setWarnings(null)}>
-					<ul className="mt-4 flex flex-col gap-2 text-[length:var(--text-dense)]">
+					<ul className="mt-4 flex flex-col gap-2 text-dense">
 						{warnings.map((warning, index) => (
 							<li key={index} className="border-l-2 border-[var(--warn)] pl-3">
 								{warning}

@@ -88,7 +88,7 @@ export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProp
 
 	return (
 		<div>
-			<p className="max-w-[68ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+			<p className="max-w-[68ch] text-dense text-[var(--ink-muted)]">
 				Juno adds its address to the client's configuration and keeps a copy of the old file.
 				{serverRunning ? "" : " Switch the server on first."}
 			</p>
@@ -97,7 +97,7 @@ export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProp
 				<p
 					role="alert"
 					data-selectable
-					className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 				>
 					{loadError}
 				</p>
@@ -124,7 +124,7 @@ export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProp
 								<span className="font-[var(--weight-medium)]">{target.name}</span>
 								<Standing standing={standingOf(target)} />
 								{target.format === "toml" ? (
-									<span className="text-[length:var(--text-micro)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+									<span className="text-micro uppercase tracking-[0.06em] text-[var(--ink-faint)]">
 										toml
 									</span>
 								) : null}
@@ -132,7 +132,7 @@ export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProp
 							{target.path ? (
 								<span
 									data-selectable
-									className="mt-0.5 block truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-faint)]"
+									className="mt-0.5 block truncate font-mono text-micro text-[var(--ink-faint)]"
 									title={target.path}
 								>
 									{target.path}
@@ -142,7 +142,7 @@ export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProp
 								<span
 									role="alert"
 									data-selectable
-									className="mt-1 block text-[length:var(--text-sm)] text-[var(--risk)]"
+									className="mt-1 block text-sm text-[var(--risk)]"
 								>
 									{rowErrors[target.id]}
 								</span>
@@ -168,14 +168,14 @@ export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProp
 			</ul>
 
 			{absent > 0 ? (
-				<p className="mt-3 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="mt-3 max-w-[68ch] text-sm text-[var(--ink-muted)]">
 					The greyed ones are not installed. Connecting one prepares it for when you install it.
 				</p>
 			) : null}
 
 			{done ? (
 				<div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
-					<p className="flex items-center gap-1.5 text-[length:var(--text-dense)] text-[var(--ok)]">
+					<p className="flex items-center gap-1.5 text-dense text-[var(--ok)]">
 						<Icon name="check" size={14} />
 						{done.result.created
 							? `Created ${done.result.name}'s configuration.`
@@ -188,7 +188,7 @@ export function ClientInstaller({ onNotice, serverRunning }: ClientInstallerProp
 					{done.result.backupPath ? (
 						<p
 							data-selectable
-							className="mt-3 font-mono text-[length:var(--text-micro)] text-[var(--ink-faint)]"
+							className="mt-3 font-mono text-micro text-[var(--ink-faint)]"
 						>
 							Previous file kept at {done.result.backupPath}
 						</p>
@@ -206,7 +206,7 @@ type StandingProps = {
 function Standing({ standing }: StandingProps) {
 	if (standing === "connected") {
 		return (
-			<span className="flex items-center gap-1 text-[length:var(--text-sm)] text-[var(--ok)]">
+			<span className="flex items-center gap-1 text-sm text-[var(--ok)]">
 				<Icon name="check" size={13} />
 				Connected
 			</span>
@@ -214,19 +214,19 @@ function Standing({ standing }: StandingProps) {
 	}
 	if (standing === "elsewhere") {
 		return (
-			<span className="text-[length:var(--text-sm)] text-[var(--warn)]">
+			<span className="text-sm text-[var(--warn)]">
 				Configured, but pointing somewhere else
 			</span>
 		);
 	}
 	if (standing === "ready") {
 		return (
-			<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Not connected yet</span>
+			<span className="text-sm text-[var(--ink-muted)]">Not connected yet</span>
 		);
 	}
 	if (standing === "no-file") {
 		return (
-			<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<span className="text-sm text-[var(--ink-muted)]">
 				Installed, with no MCP servers of its own yet
 			</span>
 		);
@@ -234,7 +234,7 @@ function Standing({ standing }: StandingProps) {
 	return (
 		<span
 			title="Connecting writes the configuration file anyway, but does not install the program"
-			className="text-[length:var(--text-sm)] text-[var(--ink-faint)]"
+			className="text-sm text-[var(--ink-faint)]"
 		>
 			Not on this machine
 		</span>

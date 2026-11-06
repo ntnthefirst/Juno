@@ -88,7 +88,7 @@ export function LockSection() {
 			}
 			description="The lock screen does not protect the database file on disk."
 		>
-			<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+			<p className="text-dense text-[var(--ink-muted)]">
 				{configured
 					? `A ${state?.method === "pin" ? "PIN" : "passphrase"} is set.`
 					: "No lock is set. Juno opens straight to your records."}
@@ -142,7 +142,7 @@ function Toggle({
 	onChange: (checked: boolean) => void;
 }) {
 	return (
-		<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
+		<label className="flex cursor-default items-center gap-3 text-base">
 			<input
 				type="checkbox"
 				checked={checked}
@@ -215,7 +215,7 @@ function LockDialog({
 		<Dialog title={title} onClose={onClose} width="narrow">
 			<form onSubmit={submit} className="flex flex-col gap-4">
 				{mode === "disable" ? (
-					<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="text-sm text-[var(--ink-muted)]">
 						Juno will open straight to your records after this.
 					</p>
 				) : null}
@@ -262,13 +262,13 @@ function LockDialog({
 				) : null}
 
 				{error ? (
-					<p role="alert" className="text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p role="alert" className="text-sm text-[var(--risk)]">
 						{error}
 					</p>
 				) : null}
 
 				{needsNew ? (
-					<p className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+					<p className="text-micro text-[var(--ink-muted)]">
 						Juno stores a one-way check of this, never the value itself. There is no way to
 						recover it, and no way to reset it from inside the app.
 					</p>

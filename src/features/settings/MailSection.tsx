@@ -116,12 +116,12 @@ export function MailSection({ onSaved, header }: MailSectionProps) {
 										<div className="flex items-baseline gap-2">
 											<span className="truncate font-[var(--weight-medium)]">{account.label}</span>
 											{account.label !== account.email ? (
-												<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+												<span className="truncate text-sm text-[var(--ink-muted)]">
 													{account.email}
 												</span>
 											) : null}
 										</div>
-										<div className="mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<div className="mt-0.5 truncate text-sm text-[var(--ink-muted)]">
 											{account.imapHost}:{account.imapPort} {account.imapSecurity.toUpperCase()}
 											{", "}
 											{account.hasCredential ? "password set" : "no password"}
@@ -134,7 +134,7 @@ export function MailSection({ onSaved, header }: MailSectionProps) {
 											{account.lastSyncAt ? `, last synced ${formatWhen(account.lastSyncAt)}` : ""}
 										</div>
 										{account.lastSyncError ? (
-											<p data-selectable className="mt-0.5 text-[length:var(--text-sm)] text-[var(--risk)]">
+											<p data-selectable className="mt-0.5 text-sm text-[var(--risk)]">
 												{account.lastSyncError}
 											</p>
 										) : null}
@@ -207,7 +207,7 @@ function FoldersDialog({ accountId, onClose }: { accountId: string; onClose: () 
 
 	return (
 		<Dialog title="Folders" onClose={onClose} width="narrow">
-			<p className="mt-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-4 text-sm text-[var(--ink-muted)]">
 				Ticked folders are pulled on every sync. The inbox is on by default.
 			</p>
 			{folders === null ? (
@@ -229,7 +229,7 @@ function FoldersDialog({ accountId, onClose }: { accountId: string; onClose: () 
 									className="accent-[var(--accent)]"
 								/>
 								<span className="min-w-0 flex-1 truncate">{folder.path}</span>
-								<span className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="tabular text-sm text-[var(--ink-muted)]">
 									{folder.messageCount > 0 ? folder.messageCount : ""}
 								</span>
 							</label>
@@ -238,7 +238,7 @@ function FoldersDialog({ accountId, onClose }: { accountId: string; onClose: () 
 				</ul>
 			)}
 			{error ? (
-				<p role="alert" className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p role="alert" className="mt-3 text-sm text-[var(--risk)]">
 					{error}
 				</p>
 			) : null}

@@ -786,7 +786,7 @@ export function MailScreen() {
 	if (accounts.length === 0) {
 		return (
 			<div className="p-8">
-				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">Mail</h1>
+				<h1 className="text-h1">Mail</h1>
 				<EmptyState
 					icon="mail"
 					title="No mail accounts yet"
@@ -915,7 +915,7 @@ export function MailScreen() {
 					onClick={() => setStylesOpen((open) => !open)}
 					aria-pressed={stylesOpen}
 					className={[
-						"inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-[0.97]",
+						"inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-[0.97]",
 						stylesOpen ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 					].join(" ")}
 				>
@@ -1015,7 +1015,7 @@ export function MailScreen() {
 
 						{selectedFolder && !selectedFolder.syncEnabled ? (
 							<div className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2">
-								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="text-sm text-[var(--ink-muted)]">
 									This folder is not synced, so nothing here reflects the server yet.
 								</p>
 								<Button
@@ -1251,7 +1251,7 @@ function HorizonNote({ accounts, pending, onPullEverything }: HorizonNoteProps) 
 	const bounded = accounts.filter((account) => account.horizonDays < EVERYTHING_DAYS);
 	if (bounded.length === 0) {
 		return pending > 0 ? (
-			<p className="px-4 py-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="px-4 py-4 text-sm text-[var(--ink-muted)]">
 				<span className="tabular">{pending}</span> more messages are still coming in.
 			</p>
 		) : null;
@@ -1260,7 +1260,7 @@ function HorizonNote({ accounts, pending, onPullEverything }: HorizonNoteProps) 
 
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-			<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="text-sm text-[var(--ink-muted)]">
 				Juno pulled the last <span className="tabular">{days}</span> days. Anything older is still on the server
 				and is not on this machine yet.
 				{pending > 0 ? (

@@ -287,7 +287,7 @@ export function DocumentsScreen() {
 						<div className="flex items-center gap-3">
 							<SectionSwitch sections={DOCUMENT_SWITCH} current="documents" label="Document views" />
 							{load.status === "ready" ? (
-								<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="text-sm text-[var(--ink-muted)]">
 									{shown.length} {shown.length === 1 ? "document" : "documents"}
 								</span>
 							) : null}
@@ -320,7 +320,7 @@ export function DocumentsScreen() {
 								onClearSelection={clearRowSelection}
 							/>
 							{selectedIds.length > 0 ? (
-								<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
+								<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
 									{selectedIds.length} selected
 								</span>
 							) : null}
@@ -385,7 +385,7 @@ export function DocumentsScreen() {
 								</p>
 								<p
 									data-selectable
-									className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+									className="mt-1 text-sm text-[var(--ink-muted)]"
 								>
 									{load.message}
 								</p>
@@ -533,7 +533,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 						<th
 							key={head}
 							className={[
-								"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]",
+								"border-b border-[var(--line)] px-3 pb-2 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]",
 								head === "Issued" ? "text-right" : "text-left",
 							].join(" ")}
 						>
@@ -548,7 +548,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 				<tr aria-hidden>
 					<td
 						colSpan={HEADS.length + 1}
-						className="px-3 pt-5 pb-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]"
+						className="px-3 pt-5 pb-1 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]"
 					>
 						{group.label}
 					</td>
@@ -573,7 +573,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 							}`}
 						>
 							<td
-								className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]"
+								className="border-b border-[var(--line)]/60 px-3 text-dense"
 								style={{ height: "var(--row-height-roomy)" }}
 								onClick={(event) => event.stopPropagation()}
 							>
@@ -588,7 +588,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 								/>
 							</td>
 							<td
-								className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]"
+								className="border-b border-[var(--line)]/60 px-3 text-dense"
 								style={{ height: "var(--row-height-roomy)" }}
 							>
 								<div className="flex items-center gap-3">
@@ -616,15 +616,15 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 									) : null}
 								</div>
 							</td>
-							<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="border-b border-[var(--line)]/60 px-3 text-dense text-[var(--ink-muted)]">
 								<span className="block truncate">{belongsTo(row)}</span>
 							</td>
-							<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="border-b border-[var(--line)]/60 px-3 text-dense text-[var(--ink-muted)]">
 								<span className="block truncate">
 									{(row.statusId && labels.get(row.statusId)) || ""}
 								</span>
 							</td>
-							<td className="tabular whitespace-nowrap border-b border-[var(--line)]/60 px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="tabular whitespace-nowrap border-b border-[var(--line)]/60 px-3 text-right text-dense text-[var(--ink-muted)]">
 								{formatDate(row.issuedOn)}
 							</td>
 						</tr>

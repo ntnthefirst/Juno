@@ -73,7 +73,7 @@ export function AgentScreen() {
 						<Icon name="agent" size={24} />
 					</span>
 					<div>
-						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.02em]">
+						<h1 className="text-h2">
 							Agent
 						</h1>
 						<p className="mt-1 max-w-[68ch] text-[var(--ink-muted)]">
@@ -95,7 +95,7 @@ export function AgentScreen() {
 							role="tab"
 							aria-selected={tab === entry.id}
 							onClick={() => setTab(entry.id)}
-							className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+							className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 								tab === entry.id
 									? "border-[var(--accent)] text-[var(--accent)]"
 									: "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
@@ -104,7 +104,7 @@ export function AgentScreen() {
 							<Icon name={entry.icon} size={14} />
 							{entry.label}
 							{entry.id === "requests" && pending > 0 ? (
-								<span className="tabular rounded-[var(--radius-full)] bg-[var(--warn-soft)] px-1.5 text-[length:var(--text-micro)] text-[var(--warn)]">
+								<span className="tabular rounded-[var(--radius-full)] bg-[var(--warn-soft)] px-1.5 text-micro text-[var(--warn)]">
 									{pending}
 								</span>
 							) : null}
@@ -183,7 +183,7 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the log.</p>
 				<p
 					data-selectable
-					className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+					className="mt-1 text-sm text-[var(--ink-muted)]"
 				>
 					{error}
 				</p>
@@ -211,7 +211,7 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 					>
 						<ToolTile toolName={row.toolName} size="small" />
 						<div className="min-w-0 flex-1">
-							<p className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+							<p className="truncate text-dense font-[var(--weight-medium)]">
 								{view?.title ?? row.summary}
 							</p>
 							{view?.entity ? (
@@ -220,20 +220,20 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 								</div>
 							) : null}
 							{row.error ? (
-								<p data-selectable className="mt-1 truncate text-[length:var(--text-sm)] text-[var(--risk)]">
+								<p data-selectable className="mt-1 truncate text-sm text-[var(--risk)]">
 									{row.error}
 								</p>
 							) : null}
 						</div>
-						<span className="w-[78px] shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="w-[78px] shrink-0 text-sm text-[var(--ink-muted)]">
 							{ACTOR_LABELS[row.actor]}
 						</span>
 						<span
-							className={`w-[64px] shrink-0 text-right text-[length:var(--text-sm)] font-[var(--weight-medium)] ${RESULT_TONES[row.result]}`}
+							className={`w-[64px] shrink-0 text-right text-sm font-[var(--weight-medium)] ${RESULT_TONES[row.result]}`}
 						>
 							{RESULT_LABELS[row.result]}
 						</span>
-						<span className="tabular w-[92px] shrink-0 text-right text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="tabular w-[92px] shrink-0 text-right text-sm text-[var(--ink-muted)]">
 							{formatWhen(row.createdAt)}
 						</span>
 					</div>

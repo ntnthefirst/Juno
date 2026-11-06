@@ -97,7 +97,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 			{backups === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : backups.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No backups yet.
 				</p>
 			) : (
@@ -105,7 +105,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 					{backups.map((backup) => (
 						<li
 							key={backup.path}
-							className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<span className="tabular min-w-0 truncate">
 								{formatWhen(backup.createdAt)}
@@ -126,12 +126,12 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 
 			{confirming ? (
 				<Dialog title="Restore this backup" onClose={() => setConfirming(null)} width="narrow">
-					<p className="text-[length:var(--text-base)]">
+					<p className="text-base">
 						Everything currently in Juno is replaced by the copy from{" "}
 						{formatWhen(confirming.createdAt)}. Anything added since then is lost, and Juno
 						closes once it is done.
 					</p>
-					<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-3 text-sm text-[var(--ink-muted)]">
 						Back up now first if you are not certain.
 					</p>
 					<div className="mt-5 flex justify-end gap-2">

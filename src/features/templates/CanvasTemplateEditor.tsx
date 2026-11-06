@@ -947,7 +947,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 					/>
 				) : (
 					<div className="absolute top-2 left-2 z-10 flex h-[34px] max-w-[240px] items-center gap-1 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] pr-1 pl-3 shadow-[var(--shadow-popover)]">
-						<span className="truncate text-[length:var(--text-sm)] font-[var(--weight-semibold)]">
+						<span className="truncate text-sm font-[var(--weight-semibold)]">
 							{draft.name || "Untitled template"}
 						</span>
 						<button
@@ -967,7 +967,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 						<p
 							role="alert"
 							data-selectable
-							className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-[length:var(--text-dense)] text-[var(--risk)]"
+							className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-dense text-[var(--risk)]"
 						>
 							{error}
 						</p>
@@ -976,7 +976,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 					{onCanvas && paper && overflow.length > 0 ? (
 						<div
 							role="status"
-							className="flex flex-none items-center gap-3 border-b border-[var(--line)] bg-[var(--warn-soft)] px-4 py-1.5 text-[length:var(--text-dense)] text-[var(--warn)]"
+							className="flex flex-none items-center gap-3 border-b border-[var(--line)] bg-[var(--warn-soft)] px-4 py-1.5 text-dense text-[var(--warn)]"
 						>
 							<span className="min-w-0 flex-1">
 								{overflow.length === 1 ? `Page ${overflow[0]} runs` : `Pages ${overflow.join(", ")} run`} past the bottom
@@ -1028,7 +1028,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 								<p
 									role="alert"
 									data-selectable
-									className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-[length:var(--text-dense)] text-[var(--risk)]"
+									className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-dense text-[var(--risk)]"
 								>
 									{previewError}
 								</p>
@@ -1038,11 +1038,11 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 								read={readPreview}
 								caption={
 									preview && preview.missing.length > 0 ? (
-										<span className="truncate text-[length:var(--text-micro)] text-[var(--risk)]">
+										<span className="truncate text-micro text-[var(--risk)]">
 											No value for: {preview.missing.join(", ")}
 										</span>
 									) : (
-										<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<span className="text-micro text-[var(--ink-muted)]">
 											Printed with the starting value of each input.
 										</span>
 									)
@@ -1078,7 +1078,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 												type="button"
 												aria-pressed={active === entry.id}
 												onClick={() => setBreakpoint(entry.id)}
-												className={`h-[26px] rounded-[var(--radius-sm)] px-2 text-[length:var(--text-sm)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
+												className={`h-[26px] rounded-[var(--radius-sm)] px-2 text-sm transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
 													active === entry.id
 														? "bg-[var(--accent-soft)] text-[var(--accent)]"
 														: "text-[var(--ink-muted)] hover:text-[var(--ink)]"
@@ -1086,7 +1086,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 											>
 												{entry.name}
 												{entry.width !== null ? (
-													<span className="tabular text-[length:var(--text-micro)]"> {entry.width}</span>
+													<span className="tabular text-micro"> {entry.width}</span>
 												) : null}
 											</button>
 										))}
@@ -1100,17 +1100,17 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 									<p
 										role="alert"
 										data-selectable
-										className="mx-auto max-w-[620px] border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+										className="mx-auto max-w-[620px] border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 									>
 										{previewError}
 									</p>
 								) : preview?.kind === "html" ? (
 									<div className="mx-auto" style={{ width: shown ? shown.width : PREVIEW_WIDTHS[previewWidth] }}>
-										<p className="truncate pb-2 text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+										<p className="truncate pb-2 text-dense font-[var(--weight-medium)]">
 											{preview.subject || "No subject yet"}
 										</p>
 										{preview.missing.length > 0 ? (
-											<p className="pb-2 text-[length:var(--text-micro)] text-[var(--risk)]">
+											<p className="pb-2 text-micro text-[var(--risk)]">
 												No value for: {preview.missing.join(", ")}
 											</p>
 										) : null}
@@ -1172,7 +1172,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 									>
 										Apply to canvas
 									</Button>
-									<p className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+									<p className="text-micro text-[var(--ink-muted)]">
 										Markup the canvas knows comes back as the block it was. Anything else comes back as
 										a code block where you wrote it, so nothing is lost. The structure is kept, the
 										exact spacing is not.
@@ -1185,18 +1185,18 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 					{mode === "inputs" ? (
 						<div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-24">
 							<div className="w-full">
-								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+								<h2 className="text-h3">
 									What this asks for
 								</h2>
 								{paper ? (
-									<p className="mt-1 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 										Everything that changes each time this document is made. Nothing is filled in from a
 										client or from your details: each input is typed by hand, or by an agent, when the
 										template is used. Write one as {"{{document.<key>}}"} in a text, or place it as an
 										input block. An image input is a picture chosen when the template is used.
 									</p>
 								) : (
-									<p className="mt-1 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 										Everything that changes each time this message is sent. Nothing is filled in from a
 										client, a project or your details: each input is typed by hand, or by an agent, after
 										the recipient is chosen. Write one as {"{{document.<key>}}"} in a text, or place it as

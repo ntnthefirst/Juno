@@ -145,10 +145,10 @@ export function GenerateDialog({
 
 					{template && template.reviewedAt === null ? (
 						<div className="border-l-2 border-[var(--risk)] pl-3">
-							<p className="text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--risk)]">
+							<p className="text-sm font-[var(--weight-medium)] text-[var(--risk)]">
 								This template has not been reviewed.
 							</p>
-							<p className="mt-1 max-w-[58ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-1 max-w-[58ch] text-sm text-[var(--ink-muted)]">
 								Its wording is invented and legally worthless. The document you get is marked as a
 								specimen, the PDF carries a red banner, and it cannot be signed.
 							</p>
@@ -180,7 +180,7 @@ export function GenerateDialog({
 
 					{paths.length > 0 ? (
 						<div className="flex flex-col gap-4 border-t border-[var(--line)] pt-4">
-							<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="text-sm text-[var(--ink-muted)]">
 								This template asks for values that only you can supply.
 							</p>
 							{paths.map((path) => (
@@ -202,7 +202,7 @@ export function GenerateDialog({
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not generate this document.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

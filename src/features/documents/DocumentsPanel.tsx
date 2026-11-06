@@ -120,7 +120,7 @@ export function DocumentsPanel({
 			}`}
 		>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Documents</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Documents</h3>
 				<MenuButton
 					ariaLabel="Add a document"
 					items={[
@@ -136,21 +136,21 @@ export function DocumentsPanel({
 			) : load.status === "error" ? (
 				<div className="border-l-2 border-[var(--risk)] pl-4">
 					<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the documents.</p>
-					<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 						{load.message}
 					</p>
 				</div>
 			) : records.length === 0 ? (
 				<div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--line-strong)] px-6 py-10 text-center">
 					<p className="font-[var(--weight-medium)]">No documents yet</p>
-					<p className="mx-auto mt-1 max-w-[46ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+					<p className="mx-auto mt-1 max-w-[46ch] text-dense text-[var(--ink-muted)]">
 						Drop PDF files here, or use the plus to start one from a template or import one. A file that is an existing document again is offered as a new version.
 					</p>
 				</div>
 			) : (
 				<ul>
 					{records.map((record) => (
-						<li key={record.id} className="border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]">
+						<li key={record.id} className="border-b border-[var(--line)] py-2 text-dense">
 							<div className="flex items-center justify-between gap-4">
 							<div className="flex min-w-0 items-center gap-3">
 								<span
@@ -176,7 +176,7 @@ export function DocumentsPanel({
 								</div>
 							</div>
 							<div className="flex shrink-0 items-center gap-3">
-								<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+								<span className="tabular text-micro text-[var(--ink-faint)]">
 									{formatDate(record.issuedOn)}
 								</span>
 								<Button
@@ -207,13 +207,13 @@ export function DocumentsPanel({
 			) : null}
 
 			{notice ? (
-				<p role="status" className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p role="status" className="mt-3 text-sm text-[var(--ink-muted)]">
 					{notice}
 				</p>
 			) : null}
 			{problems.length > 0 ? (
 				<div className="mt-3 border-l-2 border-[var(--risk)] pl-4">
-					<ul className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<ul className="text-sm text-[var(--ink-muted)]">
 						{problems.map((message, index) => (
 							<li key={`${index}:${message}`} data-selectable>
 								{message}

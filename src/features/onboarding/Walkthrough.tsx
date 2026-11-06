@@ -379,15 +379,15 @@ export function Walkthrough({ onNavigate, onClose }: WalkthroughProps) {
 					boxShadow: "var(--shadow-popover)",
 				}}
 			>
-				<h2 id={headingId} className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+				<h2 id={headingId} className="text-h3 font-[var(--weight-medium)]">
 					{stop.title}
 				</h2>
-				<p className="mt-2 text-[length:var(--text-sm)] leading-[var(--leading-normal)] text-[var(--ink-muted)]">
+				<p className="mt-2 text-sm text-[var(--ink-muted)]">
 					{stop.body}
 				</p>
 				<div className="mt-4 flex flex-col gap-2">
 					<div className="flex items-center justify-between gap-2">
-						<span className="tabular whitespace-nowrap text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+						<span className="tabular whitespace-nowrap text-micro text-[var(--ink-muted)]">
 							Step {index + 1} of {STOPS.length}
 						</span>
 						<Button variant="quiet" onClick={() => void markSeen()}>

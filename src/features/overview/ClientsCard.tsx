@@ -47,13 +47,13 @@ export function ClientsCard({ clients }: ClientsCardProps) {
 							>
 								<Avatar name={client.name} size={32} shape="square" />
 								<span className="min-w-0 flex-1">
-									<span className="block truncate text-[length:var(--text-base)]">{client.name}</span>
-									<span className="block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<span className="block truncate text-base">{client.name}</span>
+									<span className="block truncate text-sm text-[var(--ink-muted)]">
 										{[client.city, client.status?.label].filter(Boolean).join(" · ") || " "}
 									</span>
 								</span>
 								{client.openProjectCount > 0 ? (
-									<span className="tabular flex-none text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<span className="tabular flex-none text-sm text-[var(--ink-muted)]">
 										{client.openProjectCount} open
 									</span>
 								) : null}

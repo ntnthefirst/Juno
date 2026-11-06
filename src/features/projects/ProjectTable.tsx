@@ -71,7 +71,7 @@ export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: Pr
 							<th
 								key={head}
 								className={[
-									"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]",
+									"border-b border-[var(--line)] px-3 pb-2 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]",
 									head === "Due" || head === "Value" ? "text-right" : "text-left",
 								].join(" ")}
 							>
@@ -92,7 +92,7 @@ export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: Pr
 							className="transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
 						>
 							<td
-								className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)]"
+								className="border-b border-[var(--line)] px-3 text-dense"
 								style={dense ? { height: "var(--row-height)" } : undefined}
 							>
 								<button
@@ -122,25 +122,25 @@ export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: Pr
 											))}
 										</span>
 										{dense || !row.description ? null : (
-											<span className="mt-0.5 block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="mt-0.5 block truncate text-sm text-[var(--ink-muted)]">
 												{row.description}
 											</span>
 										)}
 									</span>
 								</button>
 							</td>
-							<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="border-b border-[var(--line)] px-3 text-dense text-[var(--ink-muted)]">
 								<span className="block truncate">{row.clientName ?? "Your own work"}</span>
 							</td>
-							<td className="border-b border-[var(--line)] px-3 text-[length:var(--text-dense)]">
+							<td className="border-b border-[var(--line)] px-3 text-dense">
 								{row.status ? (
 									<StatusBadge label={row.status.label} tone={row.status.tone} />
 								) : null}
 							</td>
-							<td className="tabular truncate border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="tabular truncate border-b border-[var(--line)] px-3 text-right text-dense text-[var(--ink-muted)]">
 								{formatDate(row.dueOn)}
 							</td>
-							<td className="tabular truncate border-b border-[var(--line)] px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<td className="tabular truncate border-b border-[var(--line)] px-3 text-right text-dense text-[var(--ink-muted)]">
 								{formatCents(row.agreedValueCents)}
 							</td>
 						</tr>

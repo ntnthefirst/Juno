@@ -296,7 +296,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated, variant = "
 	const body = (
 		<>
 			{error ? (
-				<p role="alert" data-selectable className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p role="alert" data-selectable className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 					{error}
 				</p>
 			) : null}
@@ -345,16 +345,16 @@ export function UseMailTemplateScreen({ template, onBack, onCreated, variant = "
 			) : (
 				<div>
 					{renderError ? (
-						<p role="alert" data-selectable className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+						<p role="alert" data-selectable className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 							{renderError}
 						</p>
 					) : null}
 					{rendered ? (
 						<>
-							<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Subject</p>
+							<p className="text-sm text-[var(--ink-muted)]">Subject</p>
 							<p className="font-[var(--weight-medium)]">{rendered.subject}</p>
 							{rendered.missing.length > 0 ? (
-								<p className="mt-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+								<p className="mt-2 text-sm text-[var(--risk)]">
 									No value for: {rendered.missing.join(", ")}. Fill these in on the Fill step before sending: a message with a gap in it is refused.
 								</p>
 							) : null}

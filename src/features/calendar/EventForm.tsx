@@ -345,7 +345,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 							<LocationField value={values.location} onChange={(v) => set("location", v)} />
 						</div>
 						<div className="col-span-2">
-							<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
+							<label className="flex cursor-default items-center gap-3 text-base">
 								<input
 									type="checkbox"
 									checked={values.allDay}
@@ -387,7 +387,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 								disabled={singleOccurrence}
 							/>
 							{singleOccurrence ? (
-								<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="mt-2 text-sm text-[var(--ink-muted)]">
 									The repeat rule, zone and client belong to the whole series.
 								</p>
 							) : null}
@@ -397,7 +397,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 					<div className="grid grid-cols-2 gap-4">
 						{suggestedClient ? (
 							<div className="col-span-2 flex items-center gap-3 rounded-[var(--radius-md)] bg-[var(--accent-soft)] px-3 py-2">
-								<p className="min-w-0 flex-1 text-[length:var(--text-dense)]">
+								<p className="min-w-0 flex-1 text-dense">
 									The title mentions {suggestedClient.name}. Put this event on their record?
 								</p>
 								<Button
@@ -435,12 +435,12 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 						<div className="col-span-2">
 							<label
 								htmlFor={notesId}
-								className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+								className="mb-1 block text-sm text-[var(--ink-muted)]"
 							>
 								Notes
 							</label>
 							<MarkdownEditor id={notesId} value={values.notes} onChange={(v) => set("notes", v)} rows={4} />
-							<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-1 text-sm text-[var(--ink-muted)]">
 								Markdown is supported: **bold**, _italic_, a [link](https://example.com), a list.
 							</p>
 						</div>
@@ -450,7 +450,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 				{error ? (
 					<div className="mt-4 border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not save this event.</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

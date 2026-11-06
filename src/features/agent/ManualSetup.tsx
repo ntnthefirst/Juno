@@ -49,7 +49,7 @@ export function ManualSetup({ onNotice }: ManualSetupProps) {
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the client list.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{error}
 				</p>
 			</div>
@@ -85,7 +85,7 @@ export function ManualSetup({ onNotice }: ManualSetupProps) {
 					<Step number={1} title="Open its configuration file">
 						<p
 							data-selectable
-							className="overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-[length:var(--text-sm)] text-[var(--ink)]"
+							className="overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-sm text-[var(--ink)]"
 						>
 							{target.path}
 						</p>
@@ -99,7 +99,7 @@ export function ManualSetup({ onNotice }: ManualSetupProps) {
 					<Step number={2} title="Add the Juno entry">
 						<pre
 							data-selectable
-							className="overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-[length:var(--text-sm)] text-[var(--ink)]"
+							className="overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-sm text-[var(--ink)]"
 						>
 							{snippet}
 						</pre>
@@ -140,13 +140,13 @@ function Step({ number, title, children }: StepProps) {
 		<li className="flex gap-3 border-b border-[var(--line)] py-4 first:pt-0 last:border-b-0">
 			<span
 				aria-hidden
-				className="tabular mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent-soft)] text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--accent)]"
+				className="tabular mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent-soft)] text-sm font-[var(--weight-medium)] text-[var(--accent)]"
 			>
 				{number}
 			</span>
 			<div className="min-w-0 flex-1">
 				<p className="font-[var(--weight-medium)]">{title}</p>
-				<div className="mt-2 flex flex-col gap-2 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<div className="mt-2 flex flex-col gap-2 text-dense text-[var(--ink-muted)]">
 					{children}
 				</div>
 			</div>

@@ -62,7 +62,7 @@ function InlineCode({ children, ...rest }: HTMLAttributes<HTMLElement>) {
 	return (
 		<code
 			{...rest}
-			className="rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1 py-0.5 font-mono text-[length:var(--text-micro)]"
+			className="rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1 py-0.5 font-mono text-micro"
 		>
 			{children}
 		</code>

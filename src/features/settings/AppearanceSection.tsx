@@ -76,7 +76,7 @@ function ThemeCard({ option, selected, onSelect }: ThemeCardProps) {
 				) : null}
 				<span
 					className={[
-						"text-[length:var(--text-dense)]",
+						"text-dense",
 						selected
 							? "font-[var(--weight-medium)] text-[var(--accent)]"
 							: "text-[var(--ink-muted)]",

@@ -21,6 +21,8 @@ import type {
 	MailDraftPatch,
 	MailOutboxAttachment,
 	MailOutboxCounts,
+	MailFileKeep,
+	MailOutboxFile,
 	MailMessageClient,
 	MailOutboxListQuery,
 	MailOutboxMessage,
@@ -41,8 +43,10 @@ import {
 	mailOutbox,
 	mailOutboxAttachments,
 	mailOutboxClients,
+	mailOutboxFiles,
 	mailThreads,
 } from "../db/schema";
+import { isPdfName } from "../../shared/mime";
 import { formatDateTime } from "./document-context";
 import { htmlToText, quoteForReply, quoteHtmlForReply, textToHtml } from "./mail-html";
 import { announceAll, closeForSentDraft } from "./agent-actions";
@@ -153,6 +157,55 @@ function attachmentsFor(db: Db, outboxIds: string[]): Map<string, MailOutboxAtta
 	return out;
 }
 
+/**
+ * Where a file on a message would be kept once sent. Documents is the PDF
+ * paperwork (decision 49), so a PDF becomes a document; anything else becomes
+ * a file of the message's project, and with no project there is nowhere for it
+ * to go. A file that came from a project's files is one already.
+ */
+export function keepsAs(file: {
+	fileName: string;
+	sourceAssetId: string | null;
+	projectId: string | null;
+}): MailFileKeep | null {
+	if (file.sourceAssetId) return null;
+	if (isPdfName(file.fileName)) return "document";
+	return file.projectId ? "project-file" : null;
+}
+
+/**
+ * Files attached from this machine, by message id. Read here rather than in
+ * mail-outbox-files.ts, which writes them and needs this module in turn.
+ */
+function filesFor(db: Db, outboxIds: string[]): Map<string, MailOutboxFile[]> {
+	const out = new Map<string, MailOutboxFile[]>();
+	if (outboxIds.length === 0) return out;
+	const rows = db
+		.select({ file: mailOutboxFiles, projectId: mailOutbox.projectId })
+		.from(mailOutboxFiles)
+		.innerJoin(mailOutbox, eq(mailOutboxFiles.outboxId, mailOutbox.id))
+		.where(and(inArray(mailOutboxFiles.outboxId, outboxIds), isNull(mailOutboxFiles.deletedAt)))
+		.orderBy(asc(mailOutboxFiles.createdAt), asc(mailOutboxFiles.id))
+		.all();
+	for (const { file: row, projectId } of rows) {
+		const list = out.get(row.outboxId) ?? [];
+		list.push({
+			id: row.id,
+			fileName: row.fileName,
+			mimeType: row.mimeType,
+			byteSize: row.byteSize,
+			keep: row.keep,
+			keepsAs: keepsAs({ fileName: row.fileName, sourceAssetId: row.sourceAssetId, projectId }),
+			sourceAssetId: row.sourceAssetId,
+			documentId: row.documentId,
+			keptAssetId: row.keptAssetId,
+			keepError: row.keepError,
+		});
+		out.set(row.outboxId, list);
+	}
+	return out;
+}
+
 /** Every client each message concerns, by message id. */
 function clientsOf(db: Db, outboxIds: string[]): Map<string, MailMessageClient[]> {
 	const out = new Map<string, MailMessageClient[]>();
@@ -235,6 +288,7 @@ function toRecord(
 	clientName: string | null,
 	attachments: MailOutboxAttachment[],
 	messageClients: MailMessageClient[],
+	files: MailOutboxFile[] = [],
 ): MailOutboxMessage {
 	return {
 		id: row.id,
@@ -268,6 +322,7 @@ function toRecord(
 		appendedToSentAt: row.appendedToSentAt,
 		appendError: row.appendError,
 		attachments,
+		files,
 	};
 }
 
@@ -294,7 +349,40 @@ export async function get(id: string, db: Db = getDb()): Promise<MailOutboxMessa
 		row.clientName,
 		attachmentsFor(db, [id]).get(id) ?? [],
 		clientsOf(db, [id]).get(id) ?? [],
+		filesFor(db, [id]).get(id) ?? [],
 	);
+}
+
+/**
+ * The row of a message that can still be changed: a draft, a failed send, or
+ * one an agent asked to send that a person has not approved. Anything else
+ * has gone or is going, and changing it now would change nothing that is sent.
+ */
+export function requireEditable(id: string, db: Db = getDb()): Row {
+	const row = requireRow(id, db);
+	if (row.state !== "draft" && row.state !== "failed" && row.state !== "pending") {
+		throw new Error(`A ${row.state} message cannot be changed.`);
+	}
+	return row;
+}
+
+/**
+ * Marks a message changed after something attached to it changed. The same
+ * as editing it: an agent's pending request becomes the person's draft, and
+ * the seal moves, so an approval of what was there before is refused.
+ */
+export function touchDraft(id: string, db: Db = getDb()): void {
+	const row = requireEditable(id, db);
+	db.update(mailOutbox)
+		.set({
+			updatedAt: now(),
+			...(row.state === "pending" ? { state: "draft", requestedBy: "user" } : {}),
+		})
+		.where(eq(mailOutbox.id, id))
+		.run();
+	void get(id, db).then((message) => {
+		if (message) notifyChanged(message);
+	});
 }
 
 async function requireRecord(id: string, db: Db): Promise<MailOutboxMessage> {
@@ -324,8 +412,15 @@ export async function list(query: MailOutboxListQuery = {}, db: Db = getDb()): P
 	const ids = rows.map((r) => r.outbox.id);
 	const attachments = attachmentsFor(db, ids);
 	const linked = clientsOf(db, ids);
+	const files = filesFor(db, ids);
 	return rows.map((r) =>
-		toRecord(r.outbox, r.clientName, attachments.get(r.outbox.id) ?? [], linked.get(r.outbox.id) ?? []),
+		toRecord(
+			r.outbox,
+			r.clientName,
+			attachments.get(r.outbox.id) ?? [],
+			linked.get(r.outbox.id) ?? [],
+			files.get(r.outbox.id) ?? [],
+		),
 	);
 }
 
@@ -477,14 +572,16 @@ function replyHeaders(db: Db, replyToMessageId: string | null | undefined): {
 	references: string[];
 	threadId: string | null;
 	clientId: string | null;
+	projectId: string | null;
 } {
-	if (!replyToMessageId) return { inReplyTo: null, references: [], threadId: null, clientId: null };
+	if (!replyToMessageId) return { inReplyTo: null, references: [], threadId: null, clientId: null, projectId: null };
 	const original = db
 		.select({
 			messageId: mailMessages.messageId,
 			referencesJson: mailMessages.referencesJson,
 			threadId: mailMessages.threadId,
 			clientId: mailThreads.clientId,
+			projectId: mailThreads.projectId,
 		})
 		.from(mailMessages)
 		.leftJoin(mailThreads, eq(mailMessages.threadId, mailThreads.id))
@@ -498,6 +595,7 @@ function replyHeaders(db: Db, replyToMessageId: string | null | undefined): {
 		references,
 		threadId: original.threadId,
 		clientId: original.clientId ?? null,
+		projectId: original.projectId ?? null,
 	};
 }
 
@@ -547,7 +645,8 @@ async function insertDraft(input: MailDraftInput, db: Db): Promise<MailOutboxMes
 				replyToMessageId: input.replyToMessageId ?? null,
 				threadId: reply.threadId,
 				clientId: input.clientId ?? reply.clientId,
-				projectId: input.projectId ?? null,
+				// A reply carries on the job its conversation is filed under.
+				projectId: input.projectId ?? reply.projectId,
 				templateId: input.templateId ?? null,
 				requestedBy: input.actor ?? "user",
 				createdAt: stamp,
@@ -713,13 +812,14 @@ export async function updateDraft(id: string, patch: MailDraftPatch, db: Db = ge
 /** The marker the template renderer leaves where a value was missing. */
 const MISSING_MARKER = /\[ontbreekt: ([\w.]+)\]/g;
 
-/** Documents attached to a message that has not gone out. */
+/** Documents and files attached to a message that has not gone out. */
 function attachmentCount(db: Db, outboxId: string): number {
-	return db
+	const documentCount = db
 		.select({ id: mailOutboxAttachments.id })
 		.from(mailOutboxAttachments)
 		.where(and(eq(mailOutboxAttachments.outboxId, outboxId), isNull(mailOutboxAttachments.deletedAt)))
 		.all().length;
+	return documentCount + (filesFor(db, [outboxId]).get(outboxId)?.length ?? 0);
 }
 
 function validateSendable(row: Row, account: typeof mailAccounts.$inferSelect, attachments: number): void {
@@ -806,7 +906,7 @@ export async function reviewForSend(id: string, db: Db = getDb()): Promise<SendR
 			cc: record.cc,
 			bcc: record.bcc,
 			subject: record.subject,
-			attachments: record.attachments.map((a) => a.filename),
+			attachments: [...record.attachments.map((a) => a.filename), ...record.files.map((f) => f.fileName)],
 			bodyText: record.bodyText,
 		}),
 		seal: row.updatedAt,
@@ -986,7 +1086,7 @@ export async function replySeed(
 	db: Db = getDb(),
 ): Promise<MailReplySeed> {
 	const row = db
-		.select({ message: mailMessages, clientId: mailThreads.clientId })
+		.select({ message: mailMessages, clientId: mailThreads.clientId, projectId: mailThreads.projectId })
 		.from(mailMessages)
 		.leftJoin(mailThreads, eq(mailMessages.threadId, mailThreads.id))
 		.where(and(eq(mailMessages.id, messageId), isNull(mailMessages.deletedAt)))
@@ -1045,6 +1145,9 @@ export async function replySeed(
 		}),
 		replyToMessageId: forwarding ? null : message.id,
 		clientId: row.clientId ?? null,
+		// A forward is a new conversation and still about the same job: passing
+		// the client's photos on to a supplier is part of the kitchen.
+		projectId: row.projectId ?? null,
 	};
 }
 
@@ -1109,6 +1212,7 @@ export async function replySeedForOutgoing(
 		}),
 		replyToMessageId: forwarding ? null : row.replyToMessageId,
 		clientId: row.clientId ?? null,
+		projectId: row.projectId ?? null,
 	};
 }
 
@@ -1131,8 +1235,15 @@ export async function nextQueued(limit: number, db: Db = getDb()): Promise<Queue
 	const ids = rows.map((r) => r.outbox.id);
 	const attachments = attachmentsFor(db, ids);
 	const linked = clientsOf(db, ids);
+	const files = filesFor(db, ids);
 	return rows.map((r) => ({
-		...toRecord(r.outbox, r.clientName, attachments.get(r.outbox.id) ?? [], linked.get(r.outbox.id) ?? []),
+		...toRecord(
+			r.outbox,
+			r.clientName,
+			attachments.get(r.outbox.id) ?? [],
+			linked.get(r.outbox.id) ?? [],
+			files.get(r.outbox.id) ?? [],
+		),
 		references: parseReferences(r.outbox.referencesJson),
 	}));
 }

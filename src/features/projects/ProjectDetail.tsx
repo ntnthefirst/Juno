@@ -22,6 +22,7 @@ import { AssetList } from "./AssetList";
 import { CommandPanel } from "./CommandPanel";
 import { formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
 import { LinkPanel } from "./LinkPanel";
+import { ProjectMail } from "./ProjectMail";
 import { ProjectNotes } from "./ProjectNotes";
 import { RunConsole } from "./RunConsole";
 import { StorageDialog } from "./StorageDialog";
@@ -358,6 +359,12 @@ export function ProjectDetail({
 						onChanged={() => undefined}
 					/>
 				</div>
+
+				<ProjectMail
+					key={project.id}
+					projectId={project.id}
+					heading={(title) => <SectionHeading>{title}</SectionHeading>}
+				/>
 
 				<section className="mt-8">
 					<SectionHeading

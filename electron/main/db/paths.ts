@@ -64,6 +64,13 @@ export function mailDir(): string {
 	return dir;
 }
 
+/** Copies of files attached to unsent mail from this machine. Emptied as they go out. */
+export function outboxFilesDir(): string {
+	const dir = join(mailDir(), "outbox");
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
 export function settingsPath(): string {
 	return join(userDataDir(), "settings.json");
 }

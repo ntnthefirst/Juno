@@ -1,5 +1,6 @@
 import type { MailAddress, MailDraftInput, MailOutboxState, MailTemplateSendInput } from "../../shared/types";
 import * as outbox from "../services/mail-outbox";
+import * as outboxFiles from "../services/mail-outbox-files";
 import * as templates from "../services/mail-templates";
 import type { ToolDescriptor } from "./types";
 
@@ -517,5 +518,25 @@ export const mailOutboxTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => outbox.cancel(String(args.id)),
+	},
+	{
+		name: "mail.outbox.attach_project_file",
+		title: "Attach a project's file to a draft",
+		description:
+			"Copies one of a project's files onto a draft: a drawing, a photo, a price sheet. The draft must " +
+			"not have gone yet. Nothing is sent; ask with mail.send. Documents are attached with document_ids " +
+			"on mail.draft instead. Find the file with projects.list_assets.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				outbox_id: { type: "string", description: "The draft's id, from mail.draft or mail.outbox.list." },
+				asset_id: { type: "string", description: "The project file's id, from projects.list_assets." },
+			},
+			required: ["outbox_id", "asset_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => outboxFiles.addFromProject(String(args.outbox_id), String(args.asset_id)),
 	},
 ];

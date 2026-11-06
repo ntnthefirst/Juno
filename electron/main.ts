@@ -9,7 +9,6 @@
  * 6. Window last, so it never paints against a half-built backend.
  */
 import { app, nativeTheme, shell } from "electron";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -18,6 +17,7 @@ import {
 	databasePath,
 	documentsDir,
 	mailDir,
+	outboxFilesDir,
 	projectsDir,
 	templateAssetsDir,
 	userDataDir,
@@ -25,7 +25,6 @@ import {
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
 import * as agentAudit from "./main/services/agent-audit";
-import { configureAgentInstall } from "./main/services/agent-install";
 import { configureClaudeDesktop } from "./main/services/claude-desktop";
 import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
@@ -33,6 +32,7 @@ import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
+import { configureOutboxFiles, prune as pruneOutboxFiles } from "./main/services/mail-outbox-files";
 import { configureTemplateAssets } from "./main/services/document-template-assets";
 import { configureProjectStorage } from "./main/services/project-storage";
 import * as projectRunner from "./main/services/project-runner";
@@ -97,6 +97,7 @@ if (!app.requestSingleInstanceLock()) {
 		configureTemplateAssets(templateAssetsDir());
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
+		configureOutboxFiles(outboxFilesDir());
 		// Sync never starts while locked and stops at the next step when the lock
 		// comes on, per decision 15.
 		mailSync.configureMailSync({ mailDir: mailDir(), isPaused: () => lock.isLocked() });
@@ -171,6 +172,14 @@ if (!app.requestSingleInstanceLock()) {
 			console.error("Audit log purge failed:", cause instanceof Error ? cause.message : cause);
 		}
 
+		// Copies of files that went with a sent message, or with a draft that is
+		// gone. The same kind of housekeeping, and it never stops boot either.
+		try {
+			pruneOutboxFiles(db);
+		} catch (cause) {
+			console.error("Outbox file cleanup failed:", cause instanceof Error ? cause.message : cause);
+		}
+
 		// Restoring a backup replaces the live file, which cannot happen while the
 		// connection holds it open. The service asks for the close rather than
 		// importing app lifecycle code itself.
@@ -184,11 +193,6 @@ if (!app.requestSingleInstanceLock()) {
 		// Writing Juno into the agent clients on this machine needs the address
 		// the settings screen shows, so it is given the same answer rather than
 		// working it out a second time.
-		configureAgentInstall({
-			status: () => serverStatus(),
-			home: homedir(),
-			platform: process.platform,
-		});
 		// Claude Desktop takes an extension rather than an address. The bridge
 		// inside it is compiled beside the main process, and the icon ships in
 		// the package for this alone.
@@ -1125,6 +1129,14 @@ if (!app.requestSingleInstanceLock()) {
 									if (switched !== "ok") throw new Error(`Smoke: project layouts ${switched}`);
 								}
 								if (screen === "Project record") {
+									// A conversation filed under the project, the way a person files one
+									// from the reader's menu, so the project's Mail section has a row.
+									const smokeThreads = await import("./main/services/mail-threads");
+									const smokeProjects = await import("./main/services/projects");
+									const ownProject = (await smokeProjects.list({})).find((project) => project.name.includes("Juno"));
+									const [filedThread] = await smokeThreads.listThreads({ limit: 1 });
+									if (!ownProject || !filedThread) throw new Error("Smoke: no project or thread to file together");
+									await smokeThreads.linkProject(filedThread.id, ownProject.id);
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1143,6 +1155,9 @@ if (!app.requestSingleInstanceLock()) {
 											if (!notes) return "no notes editor on the project";
 											if (!notes.textContent.includes("Release notes")) return "the notes editor does not show the stored notes";
 											if (!main.querySelector("button[aria-label='Add a document']")) return "no documents section on the project";
+											const mailRow = [...main.querySelectorAll("section h2")].find((el) => el.textContent.trim() === "Mail");
+											if (!mailRow) return "no mail section on the project";
+											if (!mailRow.closest("section").textContent.includes(${JSON.stringify(filedThread.subject)})) return "the filed conversation is not listed on the project";
 											const addDate = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add date");
 											if (!addDate) return "no add date button on the project";
 											addDate.click();
@@ -1172,6 +1187,27 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: project record ${opened}`);
+									// The conversations filed under the project, in both themes, with
+									// the storage dialog closed and the section scrolled into view.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 500));
+											const heading = [...document.querySelectorAll("main section h2")].find((el) => el.textContent.trim() === "Mail");
+											heading?.scrollIntoView({ block: "start" });
+											await new Promise((r) => setTimeout(r, 400));
+										})()`,
+									);
+									if (shotDir) {
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											writeFileSync(joinPath(shotDir, `project-mail-${theme}.png`), (await capture(window.webContents)).toPNG());
+										}
+									}
 								}
 								if (screen === "Client record") {
 									const opened = await window.webContents.executeJavaScript(
@@ -1238,18 +1274,11 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.textContent.includes("http://127.0.0.1:")) return "no server address";
 											const power = main.querySelector("button[role=switch]");
 											if (!power || power.getAttribute("aria-checked") !== "true") return "the server switch is not on";
-											// The installers are one of two routes and the block of
-											// configuration is the other, so both sides of the switch
-											// are checked here rather than assuming which one is up.
-											if (!main.textContent.includes("Claude Code")) return "no client list";
-											const manual = [...main.querySelectorAll("button[role=radio]")].find((el) => el.textContent.trim() === "Do it myself");
-											if (!manual) return "no manual route";
-											manual.click();
-											await new Promise((r) => setTimeout(r, 400));
-											if (!(main.querySelector("pre")?.textContent ?? "").includes("http://127.0.0.1:")) return "no configuration block";
-											const installers = [...main.querySelectorAll("button[role=radio]")].find((el) => el.textContent.trim() === "Let Juno do it");
-											if (installers) installers.click();
-											await new Promise((r) => setTimeout(r, 400));
+											// A client is given the URL and nothing else, so the page says to
+											// add it, and Claude Desktop, which cannot take one, has its own row.
+											if (!main.textContent.includes("Add the server URL")) return "no instruction to add the URL";
+											if (!main.textContent.includes("Claude Desktop")) return "no Claude Desktop row";
+											if (main.querySelector("button[role=radio]")) return "a route switch is still there";
 											return "ok";
 										})()`,
 									);
@@ -3976,6 +4005,48 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (backToCompose !== "ok") throw new Error(`Smoke: back to the composer ${backToCompose}`);
+
+									// Attaching: every document, searchable, and this computer. The
+									// list opens over the message and closes on a second press.
+									const attachList = await window.webContents.executeJavaScript(
+										`(async () => {
+											const button = document.querySelector("button[aria-label='Attach']");
+											if (!button) return "no attach button";
+											button.click();
+											await new Promise((r) => setTimeout(r, 700));
+											if (!document.querySelector("input[aria-label='Search documents']")) return "no document search";
+											const fromHere = [...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "From this computer");
+											return fromHere ? "ok" : "no way to attach from this computer";
+										})()`,
+									);
+									if (attachList !== "ok") throw new Error(`Smoke: compose attach ${attachList}`);
+									await shoot("mail-compose-attach");
+									// Files dropped on the message: copied onto the draft and listed
+									// with their size. A PDF can be kept as a document once sent, and
+									// is not by default; anything else is sent only.
+									const dropped = await window.webContents.executeJavaScript(
+										`(async () => {
+											document.querySelector("button[aria-label='Attach']").click();
+											await new Promise((r) => setTimeout(r, 300));
+											const target = document.querySelector("button[aria-label='Attach']").closest(".relative.flex.h-full");
+											if (!target) return "no drop target";
+											const data = new DataTransfer();
+											data.items.add(new File(["smoke"], "Planning.xlsx"));
+											data.items.add(new File(["%PDF-1.4 smoke"], "Offerte.pdf"));
+											target.dispatchEvent(new DragEvent("dragenter", { bubbles: true, cancelable: true, dataTransfer: data }));
+											target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: data }));
+											await new Promise((r) => setTimeout(r, 1500));
+											const list = document.querySelector("ul[aria-label='Attachments']");
+											if (!list || !list.textContent.includes("Planning.xlsx") || !list.textContent.includes("Offerte.pdf")) return "the dropped files are not listed";
+											if (!list.textContent.includes("Sent only")) return "the spreadsheet is offered to Documents";
+											const boxes = list.querySelectorAll("input[type=checkbox]");
+											if (boxes.length !== 1) return "expected one choice to keep, for the PDF, found " + boxes.length;
+											if (boxes[0].checked) return "the PDF is kept by default";
+											return "ok";
+										})()`,
+									);
+									if (dropped !== "ok") throw new Error(`Smoke: compose drop ${dropped}`);
+									await shoot("mail-compose-files");
 									// A subject, then Escape, which is the composer's only way
 									// out since it became a full-screen form. Typing first is what
 									// gives autosave something to write, and the draft it leaves
@@ -4231,27 +4302,20 @@ if (!app.requestSingleInstanceLock()) {
 									await photograph("statuses-project");
 								}
 
-								// The MCP connect page hides half of itself behind a two-way switch, so the
-								// loop above only ever photographs the installers. The other side is the
-								// block someone pastes by hand, and it has broken before.
+								// The connect page is where a person gets the URL to give a client, so it
+								// has to carry the address and a way to copy it, not only the server page.
 								{
 									await openPage("mcp-connect", "mcp");
-									const switched = (await inSettings(
+									const shown = (await inSettings(
 										`(() => {
-											const b = [...document.querySelectorAll("button[role=radio]")]
-												.find((el) => el.textContent.trim() === "Do it myself");
-											if (!b) return false;
-											b.click();
-											return true;
+											const text = document.body.textContent;
+											if (!text.includes("http://127.0.0.1:")) return "no server address";
+											if (![...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "Copy URL")) return "no Copy URL button";
+											return "ok";
 										})()`,
-									)) as boolean;
-									if (!switched) throw new Error("Smoke: the MCP page had no way to the manual route");
-									await pause(350);
-									const pasted = (await inSettings(
-										`(document.querySelector("pre")?.textContent ?? "").includes("http://127.0.0.1:")`,
-									)) as boolean;
-									if (!pasted) throw new Error("Smoke: the manual route printed no configuration");
-									await photograph("mcp-manual", 300);
+									)) as string;
+									if (shown !== "ok") throw new Error(`Smoke: the MCP connect page has ${shown}`);
+									await photograph("mcp-connect-url", 300);
 								}
 
 								// The search lives above the groups and answers on a page of its own. It is

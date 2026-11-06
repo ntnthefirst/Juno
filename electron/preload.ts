@@ -157,6 +157,7 @@ const api: JunoApi = {
 		assets: {
 			list: (projectId) => call("projects.assets.list", projectId),
 			choose: (projectId, storage) => call("projects.assets.choose", projectId, storage),
+			addFromMail: (projectId, attachmentId) => call("projects.assets.addFromMail", projectId, attachmentId),
 			update: (id, patch) => call("projects.assets.update", id, patch),
 			remove: (id) => call("projects.assets.remove", id),
 			restore: (id) => call("projects.assets.restore", id),
@@ -298,10 +299,6 @@ const api: JunoApi = {
 			setEnabled: (enabled) => call("agent.server.setEnabled", enabled),
 			setBackground: (background) => call("agent.server.setBackground", background),
 			setPort: (port) => call("agent.server.setPort", port),
-		},
-		install: {
-			targets: () => call("agent.install.targets"),
-			write: (clientId) => call("agent.install.write", clientId),
 		},
 		claudeDesktop: {
 			connect: () => call("agent.claudeDesktop.connect"),
@@ -500,6 +497,7 @@ const api: JunoApi = {
 			get: (id) => call("mail.threads.get", id),
 			linkClient: (id, clientId) => call("mail.threads.linkClient", id, clientId),
 			unlinkClient: (id) => call("mail.threads.unlinkClient", id),
+			linkProject: (id, projectId) => call("mail.threads.linkProject", id, projectId),
 			countForClient: (clientId) => call("mail.threads.countForClient", clientId),
 		},
 		file: {
@@ -569,6 +567,13 @@ const api: JunoApi = {
 			cancel: (id) => call("mail.outbox.cancel", id),
 			retry: (id) => call("mail.outbox.retry", id),
 			remove: (id) => call("mail.outbox.remove", id),
+			files: {
+				choose: (outboxId) => call("mail.outbox.files.choose", outboxId),
+				add: (outboxId, input) => call("mail.outbox.files.add", outboxId, input),
+				addFromProject: (outboxId, assetId) => call("mail.outbox.files.addFromProject", outboxId, assetId),
+				remove: (fileId) => call("mail.outbox.files.remove", fileId),
+				setKeep: (fileId, keep) => call("mail.outbox.files.setKeep", fileId, keep),
+			},
 			onChange: (listener) => {
 				const handler = (_event: Electron.IpcRendererEvent, message: MailOutboxMessage) =>
 					listener(message);

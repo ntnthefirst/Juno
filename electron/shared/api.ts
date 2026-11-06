@@ -21,10 +21,8 @@ import type {
 	ComposeBlockPatch,
 	ComposeBlockRendered,
 	ComposeBlockResolution,
-	AgentClientTarget,
 	AgentConnection,
 	AgentTokenCreated,
-	AgentInstallResult,
 	ClaudeDesktopSetup,
 	AgentAction,
 	AgentActionListQuery,
@@ -372,6 +370,8 @@ export interface JunoApi {
 			 * path from here: the renderer never names a file on disk.
 			 */
 			choose(projectId: string, storage: ProjectAssetStorage): Promise<ProjectAsset[]>;
+			/** Copies an attachment of a received mail into the project, by the attachment's id. */
+			addFromMail(projectId: string, attachmentId: string): Promise<ProjectAsset>;
 			update(id: string, patch: ProjectAssetPatch): Promise<ProjectAsset>;
 			remove(id: string): Promise<ProjectAsset>;
 			restore(id: string): Promise<ProjectAsset>;
@@ -544,15 +544,6 @@ export interface JunoApi {
 			setBackground(background: boolean): Promise<McpServerStatus>;
 			/** A port of the person's choosing, or null for the default. */
 			setPort(port: number | null): Promise<McpServerStatus>;
-		};
-		/**
-		 * Writing Juno into the agent clients on this machine, rather than
-		 * leaving a person to find five config files and merge JSON by hand.
-		 */
-		install: {
-			targets(): Promise<AgentClientTarget[]>;
-			/** Edits that one client's file. Backs it up and keeps every other server. */
-			write(clientId: string): Promise<AgentInstallResult>;
 		};
 		/**
 		 * Claude Desktop cannot be given an address, so it gets an extension that
@@ -856,6 +847,8 @@ export interface JunoApi {
 			get(id: string): Promise<MailThread | null>;
 			linkClient(id: string, clientId: string): Promise<MailThreadSummary>;
 			unlinkClient(id: string): Promise<MailThreadSummary>;
+			/** Files the conversation under a project, or takes it off one with null. Leaves its client alone. */
+			linkProject(id: string, projectId: string | null): Promise<MailThreadSummary>;
 			countForClient(clientId: string): Promise<number>;
 		};
 		/**
@@ -965,6 +958,21 @@ export interface JunoApi {
 			cancel(id: string): Promise<MailOutboxMessage>;
 			retry(id: string): Promise<MailOutboxMessage>;
 			remove(id: string): Promise<MailOutboxMessage>;
+			/**
+			 * Files attached from this machine, of any kind. Sent and not kept,
+			 * unless keep is set for a PDF, which then becomes a document once the
+			 * message has gone.
+			 */
+			files: {
+				/** The operating system's picker. Null when it is cancelled. */
+				choose(outboxId: string): Promise<MailOutboxMessage | null>;
+				/** A dropped file, as bytes. Never a path. */
+				add(outboxId: string, input: { fileName: string; data: Uint8Array; fileDate?: string }): Promise<MailOutboxMessage>;
+				/** A file of a project, by its id. Copied onto the draft; never kept again. */
+				addFromProject(outboxId: string, assetId: string): Promise<MailOutboxMessage>;
+				remove(fileId: string): Promise<MailOutboxMessage>;
+				setKeep(fileId: string, keep: boolean): Promise<MailOutboxMessage>;
+			};
 			/** State changes, pushed by the sender as it works. */
 			onChange(listener: (message: MailOutboxMessage) => void): () => void;
 			/**

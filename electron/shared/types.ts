@@ -2171,6 +2171,9 @@ export interface MailThreadSummary {
 	clientId: string | null;
 	clientName: string | null;
 	linkSource: "auto" | "manual" | null;
+	/** The job the conversation is filed under, set by a person or a reply from the project. */
+	projectId: string | null;
+	projectName: string | null;
 	firstMessageAt: Iso;
 	lastMessageAt: Iso;
 	messageCount: number;
@@ -2300,6 +2303,8 @@ export interface MailThreadListQuery {
 	folderId?: string;
 	folderSpecialUse?: MailSpecialUse;
 	clientId?: string;
+	/** Only conversations filed under this project. */
+	projectId?: string;
 	/** Full-text over subject, body and sender. */
 	search?: string;
 	unreadOnly?: boolean;
@@ -2446,6 +2451,35 @@ export interface MailOutboxAttachment {
 	filename: string;
 }
 
+/**
+ * A file attached from this machine or from a project's files, rather than
+ * from Documents. Any kind. Sent and not kept, unless `keep` is set, and then
+ * kept only once the message has gone, where `keepsAs` says.
+ */
+export interface MailOutboxFile {
+	id: string;
+	fileName: string;
+	mimeType: string;
+	byteSize: number;
+	keep: boolean;
+	/**
+	 * Where a kept file goes: a PDF becomes a document, anything else a file of
+	 * the message's project. Null when it cannot be kept: another kind on a
+	 * message with no project, or a file that is a project file already.
+	 */
+	keepsAs: MailFileKeep | null;
+	/** The project file it was attached from, when it did not come from this computer. */
+	sourceAssetId: string | null;
+	/** The document it became, once sent. */
+	documentId: string | null;
+	/** The project file it became, once sent. */
+	keptAssetId: string | null;
+	/** Why keeping it failed. The message went regardless. */
+	keepError: string | null;
+}
+
+export type MailFileKeep = "document" | "project-file";
+
 export interface MailOutboxMessage extends Standard {
 	accountId: string;
 	state: MailOutboxState;
@@ -2478,6 +2512,8 @@ export interface MailOutboxMessage extends Standard {
 	appendedToSentAt: Iso | null;
 	appendError: string | null;
 	attachments: MailOutboxAttachment[];
+	/** Files attached from this machine. */
+	files: MailOutboxFile[];
 }
 
 export interface MailDraftInput {
@@ -2495,7 +2531,7 @@ export interface MailDraftInput {
 	clientId?: string | null;
 	projectId?: string | null;
 	templateId?: string | null;
-	/** Documents to attach. Their PDF is rendered at send time if needed. */
+	/** Documents to attach. Each goes as its newest version, rendered at send time if it has none yet. */
 	documentIds?: string[];
 	/** Who wrote it. An agent's draft is opened in the editor for a person; it is never sent. */
 	actor?: "user" | "agent";
@@ -2554,6 +2590,8 @@ export interface MailReplySeed {
 	/** Null for a forward: it starts a conversation rather than continuing one. */
 	replyToMessageId: string | null;
 	clientId: string | null;
+	/** The project the conversation is filed under, which the answer is filed under too. */
+	projectId: string | null;
 }
 
 export interface MailOutboxListQuery {
@@ -2964,62 +3002,6 @@ export interface Briefing {
 }
 
 /* ----------------------------------------------------------- the MCP server */
-
-/** What an agent client keeps its servers in. Codex is the one that is not JSON. */
-export type AgentConfigFormat = "json" | "toml";
-
-/**
- * An agent client on this machine, and where Juno stands with its MCP config.
- *
- * Two separate questions, because one answer used to stand for both and read
- * as the wrong one: `installed` is whether the client is on this machine, from
- * its own data folder or install directory, and `hasConfigFile` is whether the
- * file Juno would write already exists. A client that is installed but has
- * never had an MCP server added has no file yet, and writing it is exactly what
- * makes the client pick Juno up the next time it starts.
- */
-export interface AgentClientTarget {
-	id: string;
-	name: string;
-	/** Null when this client does not exist on this platform. */
-	path: string | null;
-	installed: boolean;
-	hasConfigFile: boolean;
-	/** Juno is in the file, under some settings. */
-	configured: boolean;
-	/** Juno is in the file with exactly the settings this install would write. */
-	upToDate: boolean;
-	format: AgentConfigFormat;
-	/**
-	 * The object or table the servers live under inside that client's file.
-	 * VS Code calls it "servers", Codex calls it "mcp_servers", everyone else
-	 * copied Claude Desktop and calls it "mcpServers".
-	 *
-	 * It is on the target rather than looked up by id in the renderer, because a
-	 * second copy of this mapping is one that drifts the day a client renames
-	 * its key, and the screen that would be wrong is the one telling a person
-	 * where to paste something by hand.
-	 */
-	configKey: string;
-	/**
-	 * The entry this client would be given, in the shape its file uses, ready to
-	 * paste. Built by the same code that writes it, so a person copying it by
-	 * hand and a click on Connect cannot end up with two different entries.
-	 */
-	snippet: string;
-	/** What the person has to do after the file changes, in one sentence. */
-	after: string;
-}
-
-/** What a write to one agent client's configuration did. */
-export interface AgentInstallResult {
-	name: string;
-	path: string;
-	/** Where the previous file was copied, when there was one. */
-	backupPath: string | null;
-	created: boolean;
-	after: string;
-}
 
 /**
  * The agent server: a listener on this machine's loopback address that an MCP

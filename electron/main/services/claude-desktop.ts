@@ -1,9 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { crc32 } from "node:zlib";
-import type { ClaudeDesktopSetup } from "../../shared/types";
+import type { ClaudeDesktopSetup, McpServerStatus } from "../../shared/types";
 import * as connections from "./agent-connections";
-import type { ServerInfo } from "./agent-install";
 
 /**
  * Connecting Claude Desktop, which cannot be given an address.
@@ -147,6 +146,9 @@ export function buildExtension(parts: ExtensionParts): Buffer {
 }
 
 /* ------------------------------------------------------------------ wiring */
+
+/** The part of the server's state this file needs. */
+export type ServerInfo = Pick<McpServerStatus, "enabled" | "running" | "url">;
 
 type Deps = {
 	status: () => Promise<ServerInfo>;

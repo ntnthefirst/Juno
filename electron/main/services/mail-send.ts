@@ -13,9 +13,10 @@ import { existsSync } from "node:fs";
 import { ownerDisplayName } from "../../shared/owner";
 import type { MailAddress, MailOutboxMessage } from "../../shared/types";
 import { getDb, type Db } from "../db";
-import { documentSignatures, documents, mailFolders } from "../db/schema";
+import { documents, mailFolders } from "../db/schema";
 import * as accounts from "./mail-accounts";
 import * as outbox from "./mail-outbox";
+import * as outboxFiles from "./mail-outbox-files";
 import { describeMailError } from "./mail-source";
 import { appendToSent, sendMessage, type OutgoingAttachment } from "./mail-transport";
 import * as settings from "./settings";
@@ -70,36 +71,28 @@ function isTransient(error: unknown): boolean {
 }
 
 /**
- * The file for a document attachment: the signed PDF when there is one, the
- * rendered PDF otherwise, rendered now if it never was.
+ * The file for a document attachment: the document's newest version, which is
+ * what sending it means (decision 39), rendered now if it has none. A signed
+ * copy is a version, so a signed document goes out signed, and a copy the
+ * client countersigned and sent back afterwards goes out as that copy rather
+ * than the older one Juno signed.
  */
 async function resolveAttachment(
 	db: Db,
 	attachment: { documentId: string; filename: string },
 ): Promise<OutgoingAttachment> {
-	const signed = db
-		.select({ path: documentSignatures.signedPdfPath })
-		.from(documentSignatures)
-		.where(eq(documentSignatures.documentId, attachment.documentId))
-		.all()
-		.map((r) => r.path)
-		.filter((p): p is string => Boolean(p))
-		.pop();
-	let path = signed ?? null;
-	if (!path) {
-		const document = db
-			.select({ pdfPath: documents.pdfPath })
-			.from(documents)
-			.where(and(eq(documents.id, attachment.documentId), isNull(documents.deletedAt)))
-			.get();
-		if (!document) throw new Error(`The attached document "${attachment.filename}" no longer exists.`);
-		path = document.pdfPath;
-		if (!path || !existsSync(path)) {
-			if (!config.renderDocumentPdf) {
-				throw new Error(`"${attachment.filename}" has no PDF yet. Open the document and render it first.`);
-			}
-			path = await config.renderDocumentPdf(attachment.documentId);
+	const document = db
+		.select({ pdfPath: documents.pdfPath })
+		.from(documents)
+		.where(and(eq(documents.id, attachment.documentId), isNull(documents.deletedAt)))
+		.get();
+	if (!document) throw new Error(`The attached document "${attachment.filename}" no longer exists.`);
+	let path = document.pdfPath;
+	if (!path || !existsSync(path)) {
+		if (!config.renderDocumentPdf) {
+			throw new Error(`"${attachment.filename}" has no PDF yet. Open the document and render it first.`);
 		}
+		path = await config.renderDocumentPdf(attachment.documentId);
 	}
 	if (!path || !existsSync(path)) {
 		throw new Error(`The PDF for "${attachment.filename}" could not be found or rendered.`);
@@ -124,6 +117,7 @@ async function sendOne(message: outbox.QueuedMessage, db: Db): Promise<void> {
 		for (const attachment of message.attachments) {
 			attachments.push(await resolveAttachment(db, attachment));
 		}
+		attachments.push(...outboxFiles.toSend(message.id, db));
 
 		const result = await sendMessage(smtp, {
 			messageId: message.messageId,
@@ -145,6 +139,15 @@ async function sendOne(message: outbox.QueuedMessage, db: Db): Promise<void> {
 		}
 		outbox.markSent(message.id, db);
 		await publish(message.id, db);
+
+		// Files from this machine are kept now, if they were marked to be, and
+		// their copies go. Never fails the send: the message has already left.
+		try {
+			await outboxFiles.afterSent(message, db);
+			await publish(message.id, db);
+		} catch {
+			// Each file records its own failure; anything left is tidied at startup.
+		}
 
 		// The copy in Sent is a courtesy to the phone, not part of sending. Its
 		// failure is recorded on the row and never turns a sent message into a

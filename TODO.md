@@ -90,7 +90,7 @@ like everything else (decision 2).
 
 ### 5a. Greetings and sign-offs
 
-Built as intros and outros in the mail composer (decision 52), following the
+Built as intros and outros in the mail composer (decision 55), following the
 design instead of the static-text plan that was written here before. The
 service is `services/mail-blocks.ts`, the screens are in
 `src/features/mail/blocks/`. The unfinished branch `wip/mail-phrases` is kept as
@@ -199,7 +199,7 @@ windows 720 wide) and are named `NN Screen / State`. Treat a screenshot as the
 truth for layout and the text in it as the truth for copy, except where a
 package says the copy is a placeholder.
 
-**The design is the reference for values** (decision 50). The tokens already match
+**The design is the reference for values** (decision 53). The tokens already match
 it, so use the token utilities and the text styles (`text-h1` to `text-overline`),
 never a pixel read off a frame. Take behaviour from the package text below.
 
@@ -267,7 +267,7 @@ the code that depends on it.
 6. **Where automations live.** The design's Agent screen no longer lists them and
    no frame shows another home. They exist in the app (`features/agent/
    AutomationList.tsx`). Decide a home, then draw it in Figma first (8.5).
-7. **Which wins, the tokens or the design.** Taken: the design (decision 50).
+7. **Which wins, the tokens or the design.** Taken: the design (decision 53).
 
 ### 8.2 Packages
 
@@ -508,7 +508,7 @@ use for every file.
 **Behaviour.** Windows toast notifications with action buttons (a due reminder
 has Complete and Snooze, an agent request has Review), a tray icon with a menu
 (Open Juno, New note once package 4 exists, Quit) and a setting for whether
-closing the window keeps Juno running (decision 49 already runs it in the
+closing the window keeps Juno running (decision 52 already runs it in the
 background), a taskbar overlay badge with the number of requests waiting, a global
 shortcut for a new note (off by default, set in Settings), and native file dialogs
 everywhere a file is picked. Nothing here sends anything off the machine.

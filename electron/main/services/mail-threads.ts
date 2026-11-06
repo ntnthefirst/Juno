@@ -21,7 +21,7 @@ import type {
 import { isOpenableAttachment } from "../../shared/attachment-kind";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
-import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
+import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads, projects } from "../db/schema";
 import { outgoingForThread } from "./mail-outbox";
 import { sanitiseHtml, textDocumentBody } from "./mail-sanitise";
 
@@ -261,6 +261,18 @@ function summarise(
 
 	// A thread with nothing filed in the listed folder still needs a message.
 	const fallbackIds = new Map<string, string>();
+	// The project names in one query, rather than a join in every caller.
+	const projectIds = [...new Set(threads.map(({ thread }) => thread.projectId).filter((id): id is string => Boolean(id)))];
+	const projectNames = new Map(
+		projectIds.length === 0
+			? []
+			: db
+					.select({ id: projects.id, name: projects.name })
+					.from(projects)
+					.where(inArray(projects.id, projectIds))
+					.all()
+					.map((row) => [row.id, row.name] as const),
+	);
 	for (const message of messages) if (!fallbackIds.has(message.threadId)) fallbackIds.set(message.threadId, message.id);
 
 	return threads.map(({ thread }) => {
@@ -272,6 +284,8 @@ function summarise(
 			clientId: thread.clientId,
 			clientName: group.clientName,
 			linkSource: thread.linkSource as "auto" | "manual" | null,
+			projectId: thread.projectId,
+			projectName: thread.projectId ? (projectNames.get(thread.projectId) ?? null) : null,
 			firstMessageAt: thread.firstMessageAt,
 			lastMessageAt: thread.lastMessageAt,
 			messageCount: group.messageCount,
@@ -293,6 +307,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 	const conditions = [isNull(mailThreads.deletedAt)];
 	if (query.accountId) conditions.push(eq(mailThreads.accountId, query.accountId));
 	if (query.clientId) conditions.push(eq(mailThreads.clientId, query.clientId));
+	if (query.projectId) conditions.push(eq(mailThreads.projectId, query.projectId));
 	if (query.before) conditions.push(lt(mailThreads.lastMessageAt, query.before));
 	if (query.folderId) {
 		conditions.push(
@@ -586,6 +601,43 @@ export async function unlinkClient(threadId: string, db: Db = getDb()): Promise<
 	await requireThread(threadId, db);
 	db.update(mailThreads)
 		.set({ clientId: null, linkSource: "manual", updatedAt: now() })
+		.where(eq(mailThreads.id, threadId))
+		.run();
+	return requireThread(threadId, db);
+}
+
+/**
+ * Files a conversation under a job, or takes it off one with null. Only a
+ * person, a reply sent from the project, or an agent does this: nothing is
+ * guessed from the addresses, because a supplier writing about a client's
+ * kitchen belongs to the kitchen and is not the client.
+ *
+ * So the thread's client is left alone. A thread with no client, such as that
+ * supplier's, can be filed under any project; one with a client only under a
+ * project of that client or a project of the owner's own, because a
+ * conversation with one client about another client's job is a slip.
+ */
+export async function linkProject(
+	threadId: string,
+	projectId: string | null,
+	db: Db = getDb(),
+): Promise<MailThreadSummary> {
+	const thread = await requireThread(threadId, db);
+	if (projectId) {
+		const project = db
+			.select({ id: projects.id, clientId: projects.clientId })
+			.from(projects)
+			.where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
+			.get();
+		if (!project) throw new Error("That project no longer exists. Pick another one.");
+		if (thread.clientId && project.clientId && project.clientId !== thread.clientId) {
+			throw new Error(
+				`That project belongs to another client than ${thread.clientName ?? "this conversation's"}. Pick one of their projects, or change the conversation's client first.`,
+			);
+		}
+	}
+	db.update(mailThreads)
+		.set({ projectId, updatedAt: now() })
 		.where(eq(mailThreads.id, threadId))
 		.run();
 	return requireThread(threadId, db);

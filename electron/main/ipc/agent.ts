@@ -21,7 +21,6 @@ import * as describe from "../services/agent-describe";
 import * as connections from "../services/agent-connections";
 import * as automations from "../services/automations";
 import * as briefing from "../services/briefing";
-import * as clientInstall from "../services/agent-install";
 import * as claudeDesktop from "../services/claude-desktop";
 import { serverStatus, setServerBackground, setServerEnabled, setServerPort, summaries } from "../mcp";
 import { getMainWindow, getSettingsWindow } from "../windows";
@@ -45,8 +44,6 @@ export function registerAgentIpc(): void {
 	ipcMain.handle("agent.server.setEnabled", (_event, enabled: boolean) => setServerEnabled(enabled === true));
 	ipcMain.handle("agent.server.setBackground", (_event, background: boolean) => setServerBackground(background === true));
 	ipcMain.handle("agent.server.setPort", (_event, port: number | null) => setServerPort(port));
-	ipcMain.handle("agent.install.targets", () => clientInstall.targets());
-	ipcMain.handle("agent.install.write", (_event, clientId: string) => clientInstall.install(clientId));
 	ipcMain.handle("agent.tools", () => summaries());
 
 	// Letting a client in is a person's decision. These have no tool, and there

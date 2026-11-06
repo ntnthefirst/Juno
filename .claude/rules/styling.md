@@ -82,7 +82,7 @@ already dense; don't reach past it.
   without scrolling or it is the wrong screen.
 - `text-h1` (32/40) appears at most once per screen, and most screens don't need
   it at all. A section heading is `text-h3` (20/25). `text-h2` is 24/30.
-- **The text styles are the Figma styles (decision 50), one utility each.** Each
+- **The text styles are the Figma styles (decision 53), one utility each.** Each
   carries its pixel line height, so never pair one with a `leading-*` to get the
   design's value. `text-h1`, `-h2` and `-h3` are semibold and `text-micro` is
   medium, built in. `text-lg` is 16/24 for large body, `text-document` is 16/26

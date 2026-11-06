@@ -1,6 +1,7 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { seededColumns, standardColumns } from "../columns";
 import { clients, projects } from "./clients";
+import { projectAssets } from "./projects";
 import { documents } from "./documents";
 import { mailAccounts, mailMessages, mailThreads } from "./mail";
 
@@ -108,6 +109,9 @@ export const mailOutbox = sqliteTable(
 		index("mail_outbox_state_idx").on(t.state),
 		index("mail_outbox_thread_idx").on(t.threadId),
 		index("mail_outbox_client_idx").on(t.clientId),
+		// Sync looks a Message-ID up here for every conversation it starts, to
+		// file one Juno sent from a project (mail-store.ts resolveThread).
+		index("mail_outbox_message_id_idx").on(t.messageId),
 		index("mail_outbox_deleted_idx").on(t.deletedAt),
 	],
 );
@@ -162,5 +166,53 @@ export const mailOutboxAttachments = sqliteTable(
 	(t) => [
 		index("mail_outbox_attachments_outbox_idx").on(t.outboxId),
 		index("mail_outbox_attachments_document_idx").on(t.documentId),
+	],
+);
+
+/**
+ * A file attached to an outgoing message from this machine rather than from
+ * Documents: picked in the composer or dropped on it.
+ *
+ * It is not kept unless `keep_as_document` is set, and even then only once the
+ * message has gone: a PDF as a document, anything else as a project file. Until it is sent, the
+ * bytes are a copy under the userData root at `relative_path`, so the draft
+ * still has its file when the original is moved or deleted. Once the message
+ * is sent or the draft is gone the copy is removed and the row stays, so the
+ * outbox can still say what went with it.
+ */
+export const mailOutboxFiles = sqliteTable(
+	"mail_outbox_files",
+	{
+		...standardColumns,
+		outboxId: text("outbox_id")
+			.notNull()
+			.references(() => mailOutbox.id),
+		/** The name the recipient sees, with any path stripped. */
+		fileName: text("file_name").notNull(),
+		mimeType: text("mime_type").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		/** The original's last-modified time, so a kept document dates from the file. */
+		fileDate: text("file_date").notNull(),
+		/** Relative to the outbox files folder, built by the service from ids. Null once removed. */
+		relativePath: text("relative_path"),
+		/**
+		 * Keep it once the message has gone: a PDF as a document, anything else as
+		 * a file of the message's project. The column kept the name it was given
+		 * when only PDFs could be kept.
+		 */
+		keep: integer("keep_as_document", { mode: "boolean" }).notNull().default(false),
+		/** The document it was kept as, once sent. */
+		documentId: text("document_id").references(() => documents.id),
+		/** The project file it was copied from, when it came from a project's files rather than this computer. */
+		sourceAssetId: text("source_asset_id").references(() => projectAssets.id),
+		/** The project file it was kept as, once sent, when it is not a PDF and the message has a project. */
+		keptAssetId: text("kept_asset_id").references(() => projectAssets.id),
+		/** Why keeping it failed. The message went regardless. */
+		keepError: text("keep_error"),
+	},
+	(t) => [
+		index("mail_outbox_files_outbox_idx").on(t.outboxId),
+		index("mail_outbox_files_document_idx").on(t.documentId),
+		index("mail_outbox_files_deleted_idx").on(t.deletedAt),
 	],
 );

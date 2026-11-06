@@ -20,6 +20,7 @@ import {
 	mailAttachments,
 	mailFolders,
 	mailMessages,
+	mailOutbox,
 	mailThreads,
 } from "../db/schema";
 import { normaliseSubject, snippetOf, type ParsedMessage } from "./mail-parse";
@@ -245,12 +246,23 @@ export function resolveThread(db: Db, accountId: string, key: ThreadKey): string
 	const [first, ...rest] = [...related];
 
 	if (!first) {
+		// A message Juno sent from a project starts a conversation about that
+		// project, so the thread its Sent copy makes is filed there. The outbox
+		// row is the only place that knows; the message itself carries nothing.
+		const sentFrom = key.messageId
+			? db
+					.select({ projectId: mailOutbox.projectId })
+					.from(mailOutbox)
+					.where(and(eq(mailOutbox.messageId, key.messageId), isNull(mailOutbox.deletedAt)))
+					.get()
+			: undefined;
 		return db
 			.insert(mailThreads)
 			.values({
 				accountId,
 				subject: key.subject,
 				subjectNorm: normaliseSubject(key.subject),
+				projectId: sentFrom?.projectId ?? null,
 				firstMessageAt: key.date,
 				lastMessageAt: key.date,
 				createdAt: stamp,
@@ -288,6 +300,16 @@ export function resolveThread(db: Db, accountId: string, key: ThreadKey): string
 			if (linked) {
 				db.update(mailThreads)
 					.set({ clientId: linked.clientId, linkSource: linked.linkSource, updatedAt: stamp })
+					.where(eq(mailThreads.id, first))
+					.run();
+			}
+		}
+		// The project travels the same way: a filing someone made is not lost.
+		if (!keep.projectId) {
+			const filed = threads.find((t) => t.projectId);
+			if (filed) {
+				db.update(mailThreads)
+					.set({ projectId: filed.projectId, updatedAt: stamp })
 					.where(eq(mailThreads.id, first))
 					.run();
 			}

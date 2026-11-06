@@ -1,5 +1,5 @@
 import { attachmentKind, type AttachmentKind } from "@shared/attachment-kind";
-import { Icon, type IconName } from "../../components/Icon";
+import { Icon, type IconName } from "./Icon";
 
 type AttachmentIconProps = {
 	filename: string;

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4f3edd25-6f33-4388-b922-1d6f485a7ce3",
-  "prevId": "5929654c-5510-439b-a2d2-b5b3c1a93efe",
+  "id": "8df71d44-612b-434d-a842-bdcb26e23ced",
+  "prevId": "8e9ca535-a79a-4762-af5c-945dde68d3a5",
   "tables": {
     "agent_actions": {
       "name": "agent_actions",
@@ -4859,6 +4859,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "first_message_at": {
           "name": "first_message_at",
           "type": "text",
@@ -4890,6 +4897,13 @@
           ],
           "isUnique": false
         },
+        "mail_threads_project_idx": {
+          "name": "mail_threads_project_idx",
+          "columns": [
+            "project_id"
+          ],
+          "isUnique": false
+        },
         "mail_threads_deleted_idx": {
           "name": "mail_threads_deleted_idx",
           "columns": [
@@ -4918,6 +4932,19 @@
           "tableTo": "clients",
           "columnsFrom": [
             "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "mail_threads_project_id_projects_id_fk": {
+          "name": "mail_threads_project_id_projects_id_fk",
+          "tableFrom": "mail_threads",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
           ],
           "columnsTo": [
             "id"
@@ -5173,6 +5200,13 @@
           "name": "mail_outbox_client_idx",
           "columns": [
             "client_id"
+          ],
+          "isUnique": false
+        },
+        "mail_outbox_message_id_idx": {
+          "name": "mail_outbox_message_id_idx",
+          "columns": [
+            "message_id"
           ],
           "isUnique": false
         },
@@ -5491,6 +5525,204 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "mail_outbox_files": {
+      "name": "mail_outbox_files",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "outbox_id": {
+          "name": "outbox_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_date": {
+          "name": "file_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relative_path": {
+          "name": "relative_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "keep_as_document": {
+          "name": "keep_as_document",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_asset_id": {
+          "name": "source_asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kept_asset_id": {
+          "name": "kept_asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "keep_error": {
+          "name": "keep_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "mail_outbox_files_outbox_idx": {
+          "name": "mail_outbox_files_outbox_idx",
+          "columns": [
+            "outbox_id"
+          ],
+          "isUnique": false
+        },
+        "mail_outbox_files_document_idx": {
+          "name": "mail_outbox_files_document_idx",
+          "columns": [
+            "document_id"
+          ],
+          "isUnique": false
+        },
+        "mail_outbox_files_deleted_idx": {
+          "name": "mail_outbox_files_deleted_idx",
+          "columns": [
+            "deleted_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "mail_outbox_files_outbox_id_mail_outbox_id_fk": {
+          "name": "mail_outbox_files_outbox_id_mail_outbox_id_fk",
+          "tableFrom": "mail_outbox_files",
+          "tableTo": "mail_outbox",
+          "columnsFrom": [
+            "outbox_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "mail_outbox_files_document_id_documents_id_fk": {
+          "name": "mail_outbox_files_document_id_documents_id_fk",
+          "tableFrom": "mail_outbox_files",
+          "tableTo": "documents",
+          "columnsFrom": [
+            "document_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "mail_outbox_files_source_asset_id_project_assets_id_fk": {
+          "name": "mail_outbox_files_source_asset_id_project_assets_id_fk",
+          "tableFrom": "mail_outbox_files",
+          "tableTo": "project_assets",
+          "columnsFrom": [
+            "source_asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "mail_outbox_files_kept_asset_id_project_assets_id_fk": {
+          "name": "mail_outbox_files_kept_asset_id_project_assets_id_fk",
+          "tableFrom": "mail_outbox_files",
+          "tableTo": "project_assets",
+          "columnsFrom": [
+            "kept_asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "mail_templates": {
       "name": "mail_templates",
       "columns": {
@@ -5651,184 +5883,6 @@
           "name": "mail_templates_hidden_idx",
           "columns": [
             "hidden_at"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "recent_items": {
-      "name": "recent_items",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "owner_id": {
-          "name": "owner_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "record_id": {
-          "name": "record_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "opened_at": {
-          "name": "opened_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "recent_items_record_idx": {
-          "name": "recent_items_record_idx",
-          "columns": [
-            "owner_id",
-            "kind",
-            "record_id"
-          ],
-          "isUnique": true
-        },
-        "recent_items_opened_idx": {
-          "name": "recent_items_opened_idx",
-          "columns": [
-            "owner_id",
-            "deleted_at",
-            "opened_at"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "mail_blocks": {
-      "name": "mail_blocks",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "owner_id": {
-          "name": "owner_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rule": {
-          "name": "rule",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'manual'"
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        }
-      },
-      "indexes": {
-        "mail_blocks_list_idx": {
-          "name": "mail_blocks_list_idx",
-          "columns": [
-            "owner_id",
-            "deleted_at",
-            "kind",
-            "sort_order"
           ],
           "isUnique": false
         }

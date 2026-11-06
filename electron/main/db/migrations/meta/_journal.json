@@ -152,22 +152,22 @@
     {
       "idx": 21,
       "version": "6",
-      "when": 1794002201326,
-      "tag": "0021_recent_items",
+      "when": 1792485400225,
+      "tag": "0021_mail_outbox_files",
       "breakpoints": true
     },
     {
       "idx": 22,
       "version": "6",
-      "when": 1794004100570,
-      "tag": "0022_mail_blocks",
+      "when": 1792494677085,
+      "tag": "0022_link_mail_to_projects",
       "breakpoints": true
     },
     {
       "idx": 23,
       "version": "6",
-      "when": 1794006823235,
-      "tag": "0023_mail_suggestion_states",
+      "when": 1794007766946,
+      "tag": "0023_recent_items_mail_blocks_suggestions",
       "breakpoints": true
     }
   ]

@@ -464,6 +464,41 @@ export const mailTools: ToolDescriptor[] = [
 		handler: async (args) => threads.unlinkClient(String(args.id)),
 	},
 	{
+		name: "mail.threads.link_project",
+		title: "File a thread under a project",
+		description:
+			"Records that this conversation is about a project, the job, so it is listed on the project. " +
+			"The thread's client is left as it is: a supplier writing about a client's job can be filed under " +
+			"that job without becoming the client. Refused when the thread has a client and the project " +
+			"belongs to another one. Find the project with projects.list.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: { type: "string", description: "The thread's id, from mail.threads.list." },
+				project_id: { type: "string", description: "The project's id, from projects.list." },
+			},
+			required: ["id", "project_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => threads.linkProject(String(args.id), String(args.project_id)),
+	},
+	{
+		name: "mail.threads.unlink_project",
+		title: "Take a thread off its project",
+		description: "Removes the project a conversation is filed under. Its client stays.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string", description: "The thread's id." } },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => threads.linkProject(String(args.id), null),
+	},
+	{
 		name: "mail.messages.get",
 		title: "Read a message's headers",
 		description: "One message: addresses, subject, dates, flags and attachments. Not the body.",

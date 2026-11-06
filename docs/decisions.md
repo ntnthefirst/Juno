@@ -778,6 +778,8 @@ stay visible and editable, and the connection test settles it.
 
 ## 32. Juno writes itself into agent clients, carefully
 
+**Reversed by decision 51.** Juno no longer writes into any client's files.
+
 Connecting an agent meant copying JSON into a file whose path differs per
 client and per platform, and merging it by hand without breaking the servers
 already there. `services/agent-install.ts` does it instead, for Claude Code,
@@ -1287,6 +1289,15 @@ same screen, shown once.
 settings is (decision 14) and one more: restoring a backup of the records must
 not bring back a token that was taken out since.
 
+**Only a missing file starts a new one.** Starting over makes a new signing
+secret and an empty list, so every client id and every token stops working at
+once, and every client has to be let in again. A file another program holds
+for a moment (a virus scanner, the installer during an update) is waited for,
+and one that still cannot be read leaves the server answering 500, never 401,
+because a 401 is what makes a client throw its token away. A file that was read
+and is not a store is kept beside the new one as
+`agent-connections.broken-<time>.json`.
+
 **No tool lets a client in, makes a token or switches the server.** They are
 IPC only, for the reason `approve` has no tool: the thing being gated is what
 would call it. Every call still checks the lock first, and a client cannot start
@@ -1391,7 +1402,7 @@ as a form, not a tool. What replaced it is deliberately less.
   top of their page, called Styled mail and Templates, so the rail stays at the
   places the work happens. An entry is a colour and nothing else.
 - **The title bar has no name and no path.** It holds a way back out of a record,
-  the search, and (until decision 51) the lock. The path was the only way back from a client, and is
+  the search, and (until decision 54) the lock. The path was the only way back from a client, and is
   replaced by a back button that appears only while a record is open, not by
   nothing.
 - **One search gets anywhere and starts anything**, and the keyboard reaches
@@ -1442,7 +1453,7 @@ named, forwarding to the address, not a second server.
   and a dependency for that would be larger than the code.
 
 **What would reverse this:** Claude Desktop taking a local URL as a server,
-with the handshake. Then it joins the list in `agent-install.ts` and the
+with the handshake. Then it is given the URL like every other client and the
 bridge goes.
 
 ## 47. A mail template fills in only what it asks for, after the recipient is chosen
@@ -1509,7 +1520,106 @@ project of the owner's own has no client, and neither does its document.
 Revisit if: a document ever needs more than one project. That is a join table,
 and the single column would have to move into it with its data.
 
-## 49. Juno runs in the background, so an agent can always reach it
+## 49. A mail carries any file, and Documents keeps the PDF paperwork
+
+Documents is the paperwork with a life of its own: made from a template or
+brought in as a PDF, with versions, a signature and a send. Mostly legal. A
+Word draft, a price sheet, a photo of a joint or a CAD drawing is not that; it
+is a file of a project (decision 35), and it does not appear on the Documents
+page. Keeping the two apart is what lets Sign always mean something there.
+
+A message is different, because a mail client is expected to carry anything.
+The composer attaches:
+
+- **Any document**, from a search over all of them with the mail's client
+  first, not only the client's own. A contract is often kept under a project or
+  under nothing yet. Each goes as its **newest version**, which is what sending
+  a document means (decision 39): a copy the client countersigned and sent back
+  goes out as that copy, not as the older one Juno signed.
+- **Any file from this computer**, by the operating system's picker or by
+  dropping it on the message. It is **sent and not kept**. The draft holds a
+  copy under `mail/outbox/<message>/<file>`, named by ids, so the original can
+  move. The copies go once the message is sent, and at startup for anything a
+  crash left behind.
+
+A PDF from this computer can be ticked "Add to documents when sent". It becomes
+a document under the mail's client and project only once the message has gone,
+so a draft thrown away leaves nothing in Documents. The same bytes are never
+kept twice, and a PDF named like a document in the same place becomes its next
+version. Another kind is sent only, and the composer says so.
+
+There is no MCP tool to attach a file from this computer, because adding one
+means naming a path on this machine (`mcp.md` section 7). An agent attaches
+documents by id, which it could already.
+
+A client's or project's documents also take **a document that already exists**,
+from the same search, so a contract imported elsewhere or kept from a mail is
+filed without opening it. It is a move (`documents.link`), and the question
+says where it is kept now.
+
+**What would reverse this:** a kind of paperwork that is not a PDF and still
+needs versions and a signature. Then Documents takes that kind, and Sign is
+offered only where the newest version can carry one.
+
+## 50. A project is the job, and a conversation can be filed under it
+
+A small business works in jobs: the website for Acme, the kitchen for the
+Peeters family. The job is where its mail, its paperwork and its files belong,
+so the project is the place everything about it can be found from. A client is
+who pays; a project is what the work is.
+
+**A conversation is filed under a project by a person, not by a guess.**
+`mail_threads.project_id` is set from the reader's menu, by an agent through
+`mail.threads.link_project`, or by Juno itself in exactly two cases that are
+not guesses: a reply carries the project of the conversation it answers, and a
+message sent from a project files the conversation its Sent copy starts. The
+addresses never decide it, because a supplier writing about the Peeters kitchen
+belongs to that kitchen and is not the client. So filing leaves the thread's
+client alone: a thread with no client can go under any project, and a thread
+with a client only under that client's projects or the owner's own.
+
+What follows from a conversation having a project, and nothing more:
+
+- The project's page lists its conversations (Mail), newest first.
+- An attachment can be added to the project's files from the reader, any
+  kind, copied in under its own name. A PDF can still go to Documents instead,
+  and then lands under the project.
+- The composer offers the project's files beside the documents, copied onto
+  the draft like any file. A file from this computer that is not a PDF can be
+  kept as a project file once sent (`mail_outbox_files.keep_as_document` now
+  means keep, wherever the kind goes; the column kept its name).
+
+Nothing new is required. A conversation with no project, a document with no
+project and a project with no client all stay ordinary.
+
+**What would reverse this:** a conversation that is about two jobs often
+enough to matter. That is a join table, and the column would move into it.
+
+## 51. A client is given the URL, and Juno writes into no one's files
+
+Decision 32 had Juno find the configuration file of six agent clients and write
+itself into it, with a backup, a careful merge and a page of steps for doing it
+by hand. Every one of those clients already has its own way to add a server by
+URL, and the handshake from decision 42 does the rest, so the writer was a
+second way in that edited files belonging to other programs, could fall out of
+step with each client's own format, and was one more thing to explain on a
+settings page that should say one thing.
+
+So `services/agent-install.ts`, the `agent.install.*` channels, the
+`agent.list_clients` and `agent.connect_client` tools and the two screens
+behind them are gone. Settings > MCP shows the URL with a Copy button, says to
+add it as a server in the client, and the first connection asks for the code.
+A file Juno wrote before stays where it is and keeps working, because what it
+holds is that same URL.
+
+Claude Desktop is the one exception and stays as decision 46 has it: it cannot
+reach an address on this machine, so it gets the extension and a token.
+
+**What would reverse this:** a client people use that cannot add a server by
+URL and has no extension format. Then it gets what Claude Desktop got, a bridge
+of its own, not a file written into its settings.
+
+## 52. Juno runs in the background, so an agent can always reach it
 
 The agent server lives in the Juno process (decision 42), and the Claude Desktop
 extension is only a bridge to it (decision 46). With Juno closed the bridge has
@@ -1536,7 +1646,7 @@ it is, which is what they do with the window open.
 **What would reverse this:** a client that can start Juno itself on demand, which
 would make an always-running process unnecessary.
 
-## 50. The Figma file is the reference for visual values and text styles
+## 53. The Figma file is the reference for visual values and text styles
 
 The design file now draws every screen and component, and the text in it is set
 in named text styles. Rather than keep two sets of numbers and a rule for which
@@ -1564,11 +1674,11 @@ when they differ.
 **What would reverse this:** the design file ceasing to be maintained alongside
 the app, at which point the tokens go back to being the reference.
 
-## 51. The title bar holds Search, Recent, Reminders and New, and the lock moves to the palette
+## 54. The title bar holds Search, Recent, Reminders and New, and the lock moves to the palette
 
 The Title Bar component and its frames draw four icon buttons at the left, the
 page title in the middle and the agent at the right, and no lock. The design is
-the reference (decision 50), so the lock button is gone from the bar.
+the reference (decision 53), so the lock button is gone from the bar.
 
 - **Search, Recent, Reminders, New.** Search opens the palette. Recent lists the
   last 20 records opened, newest first (`recent_items`, kept by
@@ -1585,7 +1695,7 @@ the reference (decision 50), so the lock button is gone from the bar.
 reminders count that has to be seen at all times, which would make the bell
 more than a link.
 
-## 52. Intros and outros follow the design, and the block higher in the list wins
+## 55. Intros and outros follow the design, and the block higher in the list wins
 
 The mail composer adds a line at the start and a line at the end of a message
 from blocks the owner keeps (`mail_blocks`, `services/mail-blocks.ts`). The model

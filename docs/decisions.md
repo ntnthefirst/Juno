@@ -1584,3 +1584,43 @@ the reference (decision 50), so the lock button is gone from the bar.
 **What would reverse this:** a frame that draws the lock in the bar, or a
 reminders count that has to be seen at all times, which would make the bell
 more than a link.
+
+## 52. Intros and outros follow the design, and the block higher in the list wins
+
+The mail composer adds a line at the start and a line at the end of a message
+from blocks the owner keeps (`mail_blocks`, `services/mail-blocks.ts`). The model
+is the one the design draws: a block is an **intro** or an **outro**, has a name,
+a Dutch text that may carry variables, and **one** rule for when it is added on
+its own. The rules are manual, a client, someone who is not a client yet, a
+reply, and a mail linked to a project.
+
+This replaces the earlier plan for greetings and sign-offs, which had static
+text with no variables and rules made of several conditions. That plan was only
+ever an unfinished branch (`wip/mail-phrases`), and the design was chosen after
+it was written. The branch stays where it is as a reference and is not merged:
+its model differs from the one built.
+
+- **Variables are tokens.** A text stores `{{client_name}}`, `{{first_name}}`,
+  `{{project}}`, `{{date}}` and `{{my_name}}`, and every screen draws them as
+  chips. A variable with no value for the message makes the rule not match, so a
+  block is never added with a hole in it. Picked by hand, it is added with the
+  value empty.
+- **When two blocks of one kind match, the one higher in the list wins.** The
+  design gives each block one rule and says nothing about two blocks sharing it.
+  The list is the owner's, reordered by dragging, so the answer is visible and
+  can be changed. Intros and outros are ordered separately.
+- **A block is ordinary text once it is in a message.** It is inserted once, when
+  the composer opens or the recipient becomes known, and never again after the
+  owner has chosen "No intro" or edited the line. A block never sends anything
+  by itself.
+- **The examples are ordinary rows.** A first install gets five (Formal,
+  Friendly, Short, Kind regards, Best wishes), written once in Dutch (Belgium)
+  and never restored. They are not system rows (decision 16 does not apply), and
+  no code may look one up by name.
+- **The agent can read and change them.** `mail.blocks.*` tools list, create,
+  change, delete and reorder. These are local writes, so they wait for approval
+  like any side-effectful call (decision 24) until that decision is amended.
+
+**What would reverse this:** a need for rules with more than one condition, which
+would take the static-text model back off the branch, or a person asking for a
+block to be added to a message that was already started.

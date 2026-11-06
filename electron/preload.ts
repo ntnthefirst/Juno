@@ -519,6 +519,16 @@ const api: JunoApi = {
 			save: (id) => call("mail.attachments.save", id),
 		},
 		openLink: (url) => call("mail.openLink", url),
+		blocks: {
+			list: (kind) => call("mail.blocks.list", kind),
+			get: (id) => call("mail.blocks.get", id),
+			create: (input) => call("mail.blocks.create", input),
+			update: (id, patch) => call("mail.blocks.update", id, patch),
+			remove: (id) => call("mail.blocks.remove", id),
+			reorder: (kind, ids) => call("mail.blocks.reorder", kind, ids),
+			resolve: (context) => call("mail.blocks.resolve", context),
+			render: (id, context) => call("mail.blocks.render", id, context),
+		},
 		templates: {
 			list: () => call("mail.templates.list"),
 			listAll: () => call("mail.templates.listAll"),

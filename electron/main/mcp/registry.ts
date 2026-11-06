@@ -19,6 +19,7 @@ import { documentTools, templateTools } from "./documents";
 import { geocodingTools } from "./geocoding";
 import { mailActionTools } from "./mail-actions";
 import { mailTools } from "./mail";
+import { mailBlockTools } from "./mail-blocks";
 import { mailOutboxTools } from "./mail-outbox";
 import { projectTools } from "./projects";
 import { referenceTools } from "./reference";
@@ -47,6 +48,7 @@ const lists: ToolDescriptor[][] = [
 	documentTools,
 	reminderTools,
 	mailTools,
+	mailBlockTools,
 	mailActionTools,
 	mailOutboxTools,
 	calendarTools,

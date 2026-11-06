@@ -155,6 +155,13 @@
       "when": 1794002201326,
       "tag": "0021_recent_items",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1794004100570,
+      "tag": "0022_mail_blocks",
+      "breakpoints": true
     }
   ]
 }

@@ -48,6 +48,7 @@ import { configureMailboxWriter } from "./main/services/mail-writer";
 import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
 import * as mailSync from "./main/services/mail-sync";
+import { ensureMailBlocksSeeded } from "./main/services/mail-blocks";
 import { adoptRecordValues, ensureMailTemplatesSeeded } from "./main/services/mail-templates";
 import { configureMailTransport } from "./main/services/mail-transport";
 import { configureMailThreads } from "./main/services/mail-threads";
@@ -149,6 +150,9 @@ if (!app.requestSingleInstanceLock()) {
 		// before any window, so nothing renders a template still reading records.
 		const adopted = await adoptRecordValues(db);
 		if (adopted.converted) console.log(`Mail templates: ${adopted.converted} given inputs for record values`);
+
+		const blockSeed = await ensureMailBlocksSeeded(db);
+		if (blockSeed.created) console.log(`Intros and outros: ${blockSeed.created} created`);
 
 		const reminderSeed = await ensureRemindersSeeded(db);
 		if (reminderSeed.created) {

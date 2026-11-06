@@ -573,6 +573,8 @@ export interface AppSettings {
 	 * the installation, and it is what tells a first install from an upgrade.
 	 */
 	mailTemplateSeedVersion: number;
+	/** The same for the intros and outros a first install is given. */
+	mailBlockSeedVersion: number;
 	/** The same for document templates: 0 is never, and it tells a first install from an upgrade. */
 	documentTemplateSeedVersion: number;
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
@@ -749,6 +751,68 @@ export interface RecentItem {
 	context: string | null;
 	/** UTC ISO-8601. */
 	openedAt: string;
+}
+
+/* Intros and outros: a line added at the start or end of a message. */
+
+export type ComposeBlockKind = "intro" | "outro";
+
+/**
+ * When a block is added on its own. Manual never is. The others are independent
+ * tests, and when two blocks of one kind pass, the one higher in the list wins.
+ */
+export type ComposeBlockRule = "manual" | "client" | "new_contact" | "reply" | "project";
+
+/** A value a block can carry. Stored in the text as {{name}}. */
+export type ComposeBlockVariable = "client_name" | "first_name" | "project" | "date" | "my_name";
+
+export interface ComposeBlock {
+	id: string;
+	ownerId: string;
+	createdAt: string;
+	updatedAt: string;
+	deletedAt: string | null;
+	kind: ComposeBlockKind;
+	name: string;
+	/** Dutch text with {{variable}} tokens. Line breaks are kept. */
+	body: string;
+	rule: ComposeBlockRule;
+	sortOrder: number;
+}
+
+export interface ComposeBlockInput {
+	kind: ComposeBlockKind;
+	name: string;
+	body: string;
+	rule?: ComposeBlockRule;
+}
+
+export interface ComposeBlockPatch {
+	name?: string;
+	body?: string;
+	rule?: ComposeBlockRule;
+}
+
+/** What the composer knows when it asks which block a message gets. */
+export interface ComposeBlockContext {
+	/** The message answers another one. */
+	reply?: boolean;
+	to?: MailAddress[];
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+/** A block with its variables filled in. Variables with no value come out empty. */
+export interface ComposeBlockRendered {
+	block: ComposeBlock;
+	text: string;
+	/** Variables that had no value for this message. */
+	missing: ComposeBlockVariable[];
+}
+
+export interface ComposeBlockResolution {
+	intro: ComposeBlockRendered | null;
+	outro: ComposeBlockRendered | null;
 }
 
 export interface SearchQuery {

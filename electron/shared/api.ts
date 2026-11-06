@@ -14,6 +14,13 @@
  * service behind it is synchronous.
  */
 import type {
+	ComposeBlock,
+	ComposeBlockContext,
+	ComposeBlockInput,
+	ComposeBlockKind,
+	ComposeBlockPatch,
+	ComposeBlockRendered,
+	ComposeBlockResolution,
 	AgentClientTarget,
 	AgentConnection,
 	AgentTokenCreated,
@@ -873,6 +880,21 @@ export interface JunoApi {
 		};
 		/** Opens a link from a message in the real browser, after a protocol check. */
 		openLink(url: string): Promise<void>;
+		/** Intros and outros, the lines added at the start and the end of a message. */
+		blocks: {
+			/** Intros first, then outros, each in the order that decides which wins. */
+			list(kind?: ComposeBlockKind): Promise<ComposeBlock[]>;
+			get(id: string): Promise<ComposeBlock>;
+			create(input: ComposeBlockInput): Promise<ComposeBlock>;
+			update(id: string, patch: ComposeBlockPatch): Promise<ComposeBlock>;
+			remove(id: string): Promise<ComposeBlock>;
+			/** Every block of the kind, once, in the new order. */
+			reorder(kind: ComposeBlockKind, ids: string[]): Promise<ComposeBlock[]>;
+			/** The intro and outro a new message gets, with variables filled in. */
+			resolve(context: ComposeBlockContext): Promise<ComposeBlockResolution>;
+			/** One block filled in for a message, whatever its rule says. */
+			render(id: string, context: ComposeBlockContext): Promise<ComposeBlockRendered>;
+		};
 		templates: {
 			/** What a picker offers: hidden templates are left out. */
 			list(): Promise<MailTemplate[]>;

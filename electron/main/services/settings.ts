@@ -133,6 +133,7 @@ const DEFAULTS: AppSettings = {
 	owner: DEFAULT_OWNER,
 	seedVersion: 0,
 	mailTemplateSeedVersion: 0,
+	mailBlockSeedVersion: 0,
 	documentTemplateSeedVersion: 0,
 	signaturePath: null,
 	accountingTool: DEFAULT_ACCOUNTING,
@@ -305,6 +306,7 @@ function normalise(raw: unknown): AppSettings {
 		owner,
 		seedVersion: Math.max(0, int(raw.seedVersion, DEFAULTS.seedVersion)),
 		mailTemplateSeedVersion: Math.max(0, int(raw.mailTemplateSeedVersion, DEFAULTS.mailTemplateSeedVersion)),
+		mailBlockSeedVersion: Math.max(0, int(raw.mailBlockSeedVersion, DEFAULTS.mailBlockSeedVersion)),
 		documentTemplateSeedVersion: Math.max(
 			0,
 			int(raw.documentTemplateSeedVersion, DEFAULTS.documentTemplateSeedVersion),
@@ -659,6 +661,14 @@ export async function getMailTemplateSeedVersion(): Promise<number> {
 
 export async function setMailTemplateSeedVersion(version: number): Promise<number> {
 	return write({ ...read(), mailTemplateSeedVersion: Math.max(0, Math.trunc(version)) }).mailTemplateSeedVersion;
+}
+
+export async function getMailBlockSeedVersion(): Promise<number> {
+	return read().mailBlockSeedVersion;
+}
+
+export async function setMailBlockSeedVersion(version: number): Promise<number> {
+	return write({ ...read(), mailBlockSeedVersion: Math.max(0, Math.trunc(version)) }).mailBlockSeedVersion;
 }
 
 export async function getDocumentTemplateSeedVersion(): Promise<number> {

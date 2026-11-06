@@ -118,6 +118,32 @@ describe("calling a tool", () => {
 	});
 });
 
+describe("intros and outros", () => {
+	it("reads without asking, and parks every write until a person approves", async () => {
+		expect(await callTool("mail.blocks.list", {})).toEqual([]);
+		expect(await audit.list({})).toHaveLength(0);
+
+		const parked = (await callTool("mail.blocks.create", {
+			kind: "intro",
+			name: "Friendly",
+			body: "Dag {{first_name}},",
+			rule: "new_contact",
+		})) as { status: string; actionId: string };
+		expect(parked.status).toBe("pending");
+		expect(await callTool("mail.blocks.list", {})).toEqual([]);
+
+		await actions.approve(parked.actionId);
+		const rows = (await callTool("mail.blocks.list", { kind: "intro" })) as { name: string; rule: string }[];
+		expect(rows).toMatchObject([{ name: "Friendly", rule: "new_contact" }]);
+	});
+
+	it("declares the three writes and the order as side-effectful, and none of them sends", () => {
+		const tools = ["create", "update", "delete", "reorder"].map((verb) => toolByName(`mail.blocks.${verb}`)!);
+		expect(tools.every((tool) => !tool.readOnly && tool.requiresConfirmation)).toBe(true);
+		expect(toolByName("mail.blocks.list")).toMatchObject({ readOnly: true, requiresConfirmation: false });
+	});
+});
+
 describe("sending", () => {
 	it("can only be asked for as a draft or a template, and both wait for a person", () => {
 		const sends = listTools().filter((tool) => /send|queue|approve|retry/i.test(tool.name));

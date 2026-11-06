@@ -7,3 +7,4 @@ export * from "./outbox";
 export * from "./calendar";
 export * from "./agent";
 export * from "./recent";
+export * from "./mail-blocks";

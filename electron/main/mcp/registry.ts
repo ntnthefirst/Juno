@@ -23,6 +23,7 @@ import { mailOutboxTools } from "./mail-outbox";
 import { projectTools } from "./projects";
 import { referenceTools } from "./reference";
 import { reminderTools } from "./reminders";
+import { recentTools } from "./recent";
 import { searchTools } from "./search";
 import { settingsTools } from "./settings";
 import { updateTools } from "./updates";
@@ -38,6 +39,7 @@ const lists: ToolDescriptor[][] = [
 	contactTools,
 	projectTools,
 	searchTools,
+	recentTools,
 	referenceTools,
 	settingsTools,
 	updateTools,

@@ -737,6 +737,20 @@ export interface SearchHit {
 	on?: IsoDate | null;
 }
 
+export type RecentKind = "client" | "project" | "document" | "thread";
+
+/** A record opened lately, with the name and place the menu draws. */
+export interface RecentItem {
+	id: string;
+	kind: RecentKind;
+	recordId: string;
+	name: string;
+	/** The client a project or document belongs to. Null when there is none. */
+	context: string | null;
+	/** UTC ISO-8601. */
+	openedAt: string;
+}
+
 export interface SearchQuery {
 	term: string;
 	/** Which kinds to look in. Left out means all of them. */

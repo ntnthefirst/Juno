@@ -277,6 +277,12 @@ const api: JunoApi = {
 		query: (input) => call("search.query", input),
 	},
 
+	recent: {
+		list: () => call("recent.list"),
+		touch: (kind, recordId) => call("recent.touch", kind, recordId),
+		clear: () => call("recent.clear"),
+	},
+
 	agent: {
 		server: {
 			status: () => call("agent.server.status"),

@@ -165,6 +165,8 @@ import type {
 	ResetResult,
 	ResetUserItems,
 	SearchHit,
+	RecentItem,
+	RecentKind,
 	ThemeSetting,
 	OwnerEmailInput,
 	OwnerEmailPatch,
@@ -498,6 +500,14 @@ export interface JunoApi {
 		global(term: string, limit?: number): Promise<SearchHit[]>;
 		/** The same search, narrowed to some kinds of record. */
 		query(input: SearchQuery): Promise<SearchHit[]>;
+	};
+
+	recent: {
+		/** Newest first, at most twenty. A record that no longer exists is left out. */
+		list(): Promise<RecentItem[]>;
+		/** Notes that a record was just opened. */
+		touch(kind: RecentKind, recordId: string): Promise<void>;
+		clear(): Promise<void>;
 	};
 
 	agent: {

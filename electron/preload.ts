@@ -21,6 +21,7 @@ import type {
 	MailOutboxMessage,
 	MailSyncStatus,
 	ProjectRun,
+	RunningTimer,
 	SettingsSection,
 	ThemeSetting,
 	UpdateStatus,
@@ -129,6 +130,25 @@ const api: JunoApi = {
 		setPrimary: (id) => call("clientAddresses.setPrimary", id),
 	},
 
+	time: {
+		list: (projectId) => call("time.list", projectId),
+		total: (projectId) => call("time.total", projectId),
+		running: () => call("time.running"),
+		start: (projectId, note) => call("time.start", projectId, note),
+		stop: (note) => call("time.stop", note),
+		create: (input) => call("time.create", input),
+		update: (id, patch) => call("time.update", id, patch),
+		remove: (id) => call("time.remove", id),
+		onRunningChange: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, running: RunningTimer | null) =>
+				listener(running);
+			ipcRenderer.on("time.runningChanged", handler);
+			return () => {
+				ipcRenderer.off("time.runningChanged", handler);
+			};
+		},
+	},
+
 	projects: {
 		list: (query) => call("projects.list", query),
 		get: (id) => call("projects.get", id),
@@ -136,6 +156,8 @@ const api: JunoApi = {
 		update: (id, patch) => call("projects.update", id, patch),
 		remove: (id) => call("projects.remove", id),
 		restore: (id) => call("projects.restore", id),
+		archive: (id) => call("projects.archive", id),
+		timeline: (query) => call("projects.timeline", query),
 		storage: (id) => call("projects.storage", id),
 		setStorage: (id, choice) => call("projects.setStorage", id, choice),
 		chooseStorageFolder: (id, move) => call("projects.chooseStorageFolder", id, move),

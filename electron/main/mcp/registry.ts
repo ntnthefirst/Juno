@@ -28,6 +28,7 @@ import { recentTools } from "./recent";
 import { searchTools } from "./search";
 import { settingsTools } from "./settings";
 import { suggestionTools } from "./suggestions";
+import { timeTools } from "./time";
 import { updateTools } from "./updates";
 import type { ToolDescriptor } from "./types";
 
@@ -40,6 +41,7 @@ const lists: ToolDescriptor[][] = [
 	clientAddressTools,
 	contactTools,
 	projectTools,
+	timeTools,
 	searchTools,
 	recentTools,
 	referenceTools,

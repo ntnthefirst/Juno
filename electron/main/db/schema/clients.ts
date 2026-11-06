@@ -168,6 +168,8 @@ export const projects = sqliteTable(
 		dueOn: text("due_on"),
 		/** Integer cents. Never a float, and never a decimal string. */
 		agreedValueCents: integer("agreed_value_cents"),
+		/** Whole minutes the work is expected to take. Null when nobody estimated it. */
+		estimatedMinutes: integer("estimated_minutes"),
 		notes: text("notes"),
 		/** The checkout on this machine. Read, never written by Juno. */
 		localPath: text("local_path"),

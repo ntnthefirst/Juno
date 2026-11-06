@@ -169,6 +169,13 @@
       "when": 1794007766946,
       "tag": "0023_recent_items_mail_blocks_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1794008814318,
+      "tag": "0024_time_entries_and_project_estimate",
+      "breakpoints": true
     }
   ]
 }

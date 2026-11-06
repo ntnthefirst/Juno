@@ -248,6 +248,8 @@ export interface Project extends Standard {
 	startsOn: IsoDate | null;
 	dueOn: IsoDate | null;
 	agreedValueCents: Cents | null;
+	/** Whole minutes the work is expected to take. Null when nobody estimated it. */
+	estimatedMinutes: number | null;
 	notes: string | null;
 	/** The checkout on this machine. Juno reads it and never writes to it. */
 	localPath: string | null;
@@ -296,6 +298,78 @@ export interface ProjectStorageChoice {
 	path?: string | null;
 	/** Carry the files that are already there across to the new folder. */
 	move?: boolean;
+}
+
+/* ------------------------------------------------------------ time entries */
+
+/**
+ * Time spent on a project. A running timer has no end and no duration; both
+ * are filled in when it stops. Only one runs at a time.
+ */
+export interface TimeEntry extends Standard {
+	projectId: string;
+	clientId: string | null;
+	startedAt: Iso;
+	endedAt: Iso | null;
+	/** Whole minutes. Null while the timer runs. */
+	durationMinutes: number | null;
+	note: string | null;
+}
+
+export interface TimeEntryInput {
+	projectId: string;
+	/** UTC ISO-8601. Defaults to the duration before now. */
+	startedAt?: Iso;
+	durationMinutes: number;
+	note?: string | null;
+}
+
+export interface TimeEntryPatch {
+	startedAt?: Iso;
+	durationMinutes?: number;
+	note?: string | null;
+}
+
+export interface TimeTotals {
+	/** Whole minutes of every finished entry. A running timer is not counted. */
+	loggedMinutes: number;
+	estimatedMinutes: number | null;
+	entryCount: number;
+}
+
+/** The timer that is running, with the project's name so the title bar can say what it is for. */
+export interface RunningTimer {
+	entry: TimeEntry;
+	projectName: string;
+}
+
+/* --------------------------------------------------------- project timeline */
+
+export type ProjectTimelineKind =
+	| "status"
+	| "mail"
+	| "quote"
+	| "time"
+	| "contract"
+	| "created"
+	| "folder";
+
+export interface ProjectTimelineEntry {
+	/** The kind and the row id, so a list key is safe. */
+	id: string;
+	kind: ProjectTimelineKind;
+	at: Iso;
+	title: string;
+	/** One line under the title. */
+	detail: string | null;
+	/** The row this came from, so the interface can open it. Null for "created". */
+	entityId: string | null;
+}
+
+export interface ProjectTimelineQuery {
+	projectId: string;
+	kinds?: ProjectTimelineKind[];
+	limit?: number;
 }
 
 /* ----------------------------------------------------------- project links */

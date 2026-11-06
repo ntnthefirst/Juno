@@ -161,6 +161,13 @@ import type {
 	ProjectStorageChoice,
 	ProjectStorageInfo,
 	ProjectSummary,
+	ProjectTimelineEntry,
+	ProjectTimelineQuery,
+	RunningTimer,
+	TimeEntry,
+	TimeEntryInput,
+	TimeEntryPatch,
+	TimeTotals,
 	ReferenceItem,
 	ReferenceItemInput,
 	ReferenceItemPatch,
@@ -326,6 +333,21 @@ export interface JunoApi {
 		setPrimary(id: string): Promise<ClientAddress>;
 	};
 
+	time: {
+		list(projectId: string): Promise<TimeEntry[]>;
+		total(projectId: string): Promise<TimeTotals>;
+		/** The one timer that is running, or null. */
+		running(): Promise<RunningTimer | null>;
+		/** Throws when another timer is already running. */
+		start(projectId: string, note?: string | null): Promise<TimeEntry>;
+		stop(note?: string | null): Promise<TimeEntry>;
+		create(input: TimeEntryInput): Promise<TimeEntry>;
+		update(id: string, patch: TimeEntryPatch): Promise<TimeEntry>;
+		remove(id: string): Promise<TimeEntry>;
+		/** Fires when a timer starts or stops, from the interface or from an agent. */
+		onRunningChange(listener: (running: RunningTimer | null) => void): () => void;
+	};
+
 	projects: {
 		list(query?: {
 			clientId?: string;
@@ -337,6 +359,9 @@ export interface JunoApi {
 		update(id: string, patch: ProjectPatch): Promise<Project>;
 		remove(id: string): Promise<Project>;
 		restore(id: string): Promise<Project>;
+		/** Sets the status to "Archived", adding that status the first time. */
+		archive(id: string): Promise<Project>;
+		timeline(query: ProjectTimelineQuery): Promise<ProjectTimelineEntry[]>;
 
 		/** Which folder this project's own files are in, and how much is in it. */
 		storage(id: string): Promise<ProjectStorageInfo>;

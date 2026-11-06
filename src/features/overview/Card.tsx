@@ -18,15 +18,15 @@ type CardProps = {
  */
 export function Card({ title, count, action, children }: CardProps) {
 	return (
-		<section className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] pb-2">
-			<header className="flex min-h-[44px] items-center gap-2 px-4 pt-1">
-				<h2 className="text-base font-[var(--weight-semibold)]">{title}</h2>
+		<section className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] px-4 pt-5 pb-4">
+			<header className="flex h-9 items-center gap-2 px-2">
+				<h2 className="text-lg font-[var(--weight-medium)]">{title}</h2>
 				{count !== undefined && count > 0 ? (
-					<span className="tabular text-sm text-[var(--ink-muted)]">{count}</span>
+					<span className="tabular text-base text-[var(--ink-muted)]">{count}</span>
 				) : null}
 				<span className="ml-auto flex items-center gap-1">{action}</span>
 			</header>
-			<div className="px-2">{children}</div>
+			<div>{children}</div>
 		</section>
 	);
 }
@@ -38,7 +38,7 @@ type GroupLabelProps = {
 /** The small label that splits a card by time: Today, Yesterday, Last 7 days. */
 export function GroupLabel({ children }: GroupLabelProps) {
 	return (
-		<p className="px-2 pt-3 pb-1 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-1">
+		<p className="flex h-8 items-center px-2 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]">
 			{children}
 		</p>
 	);
@@ -114,7 +114,7 @@ export function CardLink({ label, onClick }: CardLinkProps) {
 		<button
 			type="button"
 			onClick={onClick}
-			className="h-8 rounded-[var(--radius-md)] px-2 text-sm text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent)]"
+			className="h-8 rounded-[var(--radius-md)] px-2 text-base text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent)]"
 		>
 			{label}
 		</button>

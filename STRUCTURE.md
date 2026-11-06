@@ -86,7 +86,7 @@ electron/
 src/
   app/                  Shell, the icon rail, title bar
   features/             One folder per screen (11 of them)
-  components/           Dialog, FormPage, SidePanel, Button, Field, Toast
+  components/           Dialog, FormPage, SidePanel, Button, Field, Toast, Checkbox, Tabs, Segmented, Notice, CountBadge
   lib/                  Renderer-only helpers and the typed bridge client
   styles/tokens.css     Copied from brand/tokens.css
 scripts/                dev, build, smoke, the MCP bridge, icon generation

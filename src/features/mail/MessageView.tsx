@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type WheelEvent } from "react";
 import { isOpenableAttachment } from "@shared/attachment-kind";
+import { isHttpsLink } from "@shared/mail-link";
 import {
 	MAIL_FRAME_ORIGIN,
 	type ClientSummary,
@@ -16,6 +17,7 @@ import { messageOf } from "../../lib/errors";
 import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
 import { ImportFlow } from "../documents/ImportFlow";
 import { AttachmentIcon } from "./AttachmentIcon";
+import { LinkPopover } from "./LinkPopover";
 import { PersonChip } from "./PersonChip";
 import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 
@@ -93,6 +95,8 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 	const [linksOpen, setLinksOpen] = useState(false);
 	const [mine, setMine] = useState<ReadonlySet<string>>(() => new Set());
 	const [measuredFrame, setMeasuredFrame] = useState<{ messageId: string; height: number } | null>(null);
+	const [hoveredLink, setHoveredLink] = useState<{ messageId: string; href: string; x: number; y: number } | null>(null);
+	const hideTimer = useRef<number | null>(null);	const noticeRef = useRef(onNotice);
 	const frame = useRef<HTMLIFrameElement>(null);
 	const menu = useContextMenu();
 
@@ -113,17 +117,47 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 	}, [open, message.id, message.bodyFetched, clientLinked, trusted]);
 
 	useEffect(() => {
+		noticeRef.current = onNotice;
+	});
+
+	useEffect(() => {
+		function cancelHide() {
+			if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+			hideTimer.current = null;
+		}
+
 		function receiveHeight(event: MessageEvent<unknown>) {
 			if (event.source !== frame.current?.contentWindow) return;
 			if (!event.data || typeof event.data !== "object") return;
-			const data = event.data as { type?: unknown; height?: unknown };
+			const data = event.data as { type?: unknown; height?: unknown; href?: unknown; rect?: unknown };
+			if (data.type === "juno.mail.link") {
+				const rect = data.rect as { left?: unknown; bottom?: unknown } | undefined;
+				if (typeof data.href === "string" && rect && typeof rect.left === "number" && typeof rect.bottom === "number") {
+					const box = frame.current?.getBoundingClientRect();
+					if (!box) return;
+					cancelHide();
+					setHoveredLink({ messageId: message.id, href: data.href, x: box.left + rect.left, y: box.top + rect.bottom + 2 });
+				} else {
+					// A moment's grace, so the pointer can travel from the link to the popover.
+					cancelHide();
+					hideTimer.current = window.setTimeout(() => setHoveredLink(null), 220);
+				}
+				return;
+			}
+			if (data.type === "juno.mail.linkClick") {
+				if (typeof data.href === "string" && isHttpsLink(data.href)) window.juno.mail.openLink(data.href).catch((cause: unknown) => noticeRef.current(messageOf(cause)));
+				return;
+			}
 			if (data.type !== "juno.mail.height" || typeof data.height !== "number" || !Number.isFinite(data.height))
 				return;
 			setMeasuredFrame({ messageId: message.id, height: Math.max(1, Math.ceil(data.height)) });
 		}
 
 		window.addEventListener("message", receiveHeight);
-		return () => window.removeEventListener("message", receiveHeight);
+		return () => {
+			window.removeEventListener("message", receiveHeight);
+			cancelHide();
+		};
 	}, [message.id]);
 
 	// The owner's addresses and the accounts', which are not someone to look up.
@@ -223,6 +257,21 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
 		}
+	}
+
+	function scheduleHideLink() {
+		if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+		hideTimer.current = window.setTimeout(() => setHoveredLink(null), 220);
+	}
+
+	async function copyLink(href: string) {
+		try {
+			await navigator.clipboard.writeText(href);
+			onNotice("Link copied.");
+		} catch {
+			onNotice("Could not copy the link.");
+		}
+		setHoveredLink(null);
 	}
 
 	async function copyAddress() {
@@ -577,6 +626,23 @@ export function MessageView({ message, open, onToggle, onNotice, onReply, onChan
 				</div>
 			) : null}
 
+			{open && hoveredLink?.messageId === message.id ? (
+				<LinkPopover
+					href={hoveredLink.href}
+					x={hoveredLink.x}
+					y={hoveredLink.y}
+					onOpen={(href) => {
+						setHoveredLink(null);
+						void openLink(href);
+					}}
+					onCopy={(href) => void copyLink(href)}
+					onEnter={() => {
+						if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+						hideTimer.current = null;
+					}}
+					onLeave={scheduleHideLink}
+				/>
+			) : null}
 			{menu.at ? (
 				<ContextMenu
 					at={menu.at}

@@ -21,7 +21,7 @@
  */
 import { randomBytes } from "node:crypto";
 import sanitizeHtml from "sanitize-html";
-import { QUOTE_SCRIPT } from "./mail-frame-script";
+import { LINK_SCRIPT, QUOTE_SCRIPT } from "./mail-frame-script";
 import { plainTextToQuotedMarkup } from "./mail-html";
 
 export interface SanitiseOptions {
@@ -170,7 +170,7 @@ h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin: 1.2em 0 0.55em; }
 h1:first-child, h2:first-child, h3:first-child, h4:first-child, h5:first-child, h6:first-child { margin-top: 0; }
 p { margin: 0 0 1em; }
 img { max-width: 100%; height: auto; }
-a[data-href] { color: #4a3fa0; text-decoration: underline; cursor: default; }
+a[data-href] { color: #4a3fa0; text-decoration: underline; cursor: pointer; }
 /* !important because clients style their own quotes inline, each differently, and a thread should read the same whoever wrote each turn. */
 blockquote { margin: 8px 0 8px 8px !important; padding: 0 0 0 12px !important; border: 0 !important; border-left: 2px solid #d9d6cf !important; color: #5c5a55 !important; }
 pre { white-space: pre-wrap; }
@@ -313,7 +313,7 @@ export function sanitiseHtml(raw: string, options: SanitiseOptions = {}): Saniti
 		'<!doctype html><html><head><meta charset="utf-8">' +
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(Boolean(options.allowRemoteImages), scriptNonce))}">` +
 		`<style>${BASE_CSS}</style><style>${css}</style></head><body>${body}</body>` +
-		`<script nonce="${scriptNonce}">${QUOTE_SCRIPT}${HEIGHT_SCRIPT}</script></html>`;
+		`<script nonce="${scriptNonce}">${QUOTE_SCRIPT}${HEIGHT_SCRIPT}${LINK_SCRIPT}</script></html>`;
 
 	return { document, scriptNonce, remoteImages, suspicious, links };
 }
@@ -340,6 +340,6 @@ export function textDocumentBody(text: string): SanitisedBody {
 		'<!doctype html><html><head><meta charset="utf-8">' +
 		`<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(frameCsp(false, scriptNonce))}">` +
 		`<style>${BASE_CSS} body { white-space: pre-wrap; } ${TEXT_DARK_CSS}</style></head>` +
-		`<body>${body}</body><script nonce="${scriptNonce}">${HEIGHT_SCRIPT}</script></html>`;
+		`<body>${body}</body><script nonce="${scriptNonce}">${HEIGHT_SCRIPT}${LINK_SCRIPT}</script></html>`;
 	return { document, scriptNonce, remoteImages: 0, suspicious: false, links: [] };
 }

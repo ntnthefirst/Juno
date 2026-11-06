@@ -140,3 +140,48 @@ export const QUOTE_SCRIPT = String.raw`(() => {
     // A message that confuses the tidying is shown as it came.
   }
 })();`;
+
+/**
+ * Tells the window about a link under the pointer, so the window can draw the
+ * popover with the real address. The frame draws nothing and follows nothing:
+ * it posts the address and where the link is, and the window decides.
+ *
+ * It uses what the frame already has, which is running its own nonced script
+ * and posting to its parent. The sandbox gains nothing. The address is the
+ * data-href the sanitiser kept, the place a person would be sent, never the
+ * words on the link.
+ */
+export const LINK_SCRIPT = String.raw`(() => {
+  let current = null;
+
+  function anchorOf(target) {
+    return target && target.closest ? target.closest('a[data-href]') : null;
+  }
+
+  function report(anchor) {
+    if (anchor === current) return;
+    current = anchor;
+    if (!anchor) {
+      parent.postMessage({ type: 'juno.mail.link', href: null }, '*');
+      return;
+    }
+    const box = anchor.getBoundingClientRect();
+    parent.postMessage(
+      {
+        type: 'juno.mail.link',
+        href: anchor.getAttribute('data-href'),
+        rect: { left: box.left, top: box.top, right: box.right, bottom: box.bottom },
+      },
+      '*',
+    );
+  }
+
+  document.addEventListener('mouseover', (event) => report(anchorOf(event.target)));
+  document.documentElement.addEventListener('mouseleave', () => report(null));
+  document.addEventListener('click', (event) => {
+    const anchor = anchorOf(event.target);
+    if (!anchor) return;
+    event.preventDefault();
+    parent.postMessage({ type: 'juno.mail.linkClick', href: anchor.getAttribute('data-href') }, '*');
+  });
+})();`;

@@ -37,6 +37,7 @@ import type { MailFolderInput } from "../services/mail-folders";
 import * as outbox from "../services/mail-outbox";
 import * as purgeMail from "../services/mail-purge";
 import * as recipients from "../services/mail-recipients";
+import { isShellLink } from "../../shared/mail-link";
 import * as sender from "../services/mail-send";
 import * as sync from "../services/mail-sync";
 import * as templates from "../services/mail-templates";
@@ -167,7 +168,7 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.openLink", async (_event, url: string) => {
 		// The same rule as reminders.openAction: only a web address or a mailto
 		// reaches the shell. Anything else from a message is data.
-		if (!/^(https?:\/\/|mailto:)/i.test(url)) {
+		if (!isShellLink(url)) {
 			throw new Error("That link is not a web address, so Juno will not open it.");
 		}
 		await shell.openExternal(url);

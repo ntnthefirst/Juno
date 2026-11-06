@@ -112,7 +112,7 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 				ref={panel}
 				tabIndex={-1}
 				aria-label={title}
-				className="animate-slide absolute inset-y-0 right-0 z-30 flex w-[380px] max-w-full flex-col border-l border-[var(--line)] bg-[var(--paper)] focus:outline-none"
+				className="animate-slide absolute inset-y-0 right-0 z-30 flex w-[380px] max-w-full flex-col border-l border-[var(--line)] bg-[var(--surface)] focus:outline-none"
 				style={{ boxShadow: "var(--shadow-panel)" }}
 			>
 				<div className="flex flex-none items-start gap-2 border-b border-[var(--line)] px-4 py-3">

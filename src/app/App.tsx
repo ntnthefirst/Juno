@@ -255,7 +255,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 						onOpenSettings={() => void window.juno.window.openSettings()}
 					/>
 
-					<main key={`${screen}:${visit}`} className="animate-screen min-w-0 flex-1 overflow-hidden">
+					<main key={`${screen}:${visit}`} className="animate-screen mr-2 mb-2 min-w-0 flex-1 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
 						{screen === "overview" ? (
 							<OverviewScreen />
 						) : screen === "clients" ? (

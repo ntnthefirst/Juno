@@ -11,12 +11,11 @@ type SidebarProps = {
 };
 
 /**
- * A rail of icons, always, sized as the design draws it: a 56px strip,
- * 48px per entry, 24px icons. It never opens: the names are in the tooltips,
- * and the only states an entry has are its colour, soft at rest, firmer under
- * the pointer and iris once it is the page you are on. No fill and no outline
- * mark any of the three. The ring a keyboard user needs is the one global
- * `:focus-visible` rule, which a mouse click never triggers.
+ * A rail of icons, always, sized as the screen frames draw it: a 56px strip
+ * on the paper colour with no rule, 40 by 36px entries and 18px icons. It
+ * never opens: the names are in the tooltips. An entry is soft at rest, firmer
+ * under the pointer, and the page you are on is a grey tile with an iris
+ * icon. The ring a keyboard user needs is the global `:focus-visible` rule.
  *
  * The agent is not here. It is about Juno rather than a place the work
  * happens, so it sits in the title bar beside the window's own buttons.
@@ -27,9 +26,9 @@ export function Sidebar({ current, onNavigate, onOpenSettings }: SidebarProps) {
 			aria-label="Sections"
 			data-sidebar
 			style={{ width: "var(--sidebar-rail-width)" }}
-			className="flex flex-none flex-col items-stretch border-r border-[var(--line)] bg-[var(--paper)]"
+			className="flex flex-none flex-col items-center gap-1 bg-[var(--paper)] px-2 pt-2 pb-3"
 		>
-			<div className="flex min-h-0 w-full flex-1 flex-col">
+			<div className="flex min-h-0 w-full flex-1 flex-col items-center gap-0.5">
 				{SIDEBAR_TOP.map((item) => (
 					<NavButton
 						key={item.id}
@@ -43,7 +42,7 @@ export function Sidebar({ current, onNavigate, onOpenSettings }: SidebarProps) {
 				))}
 			</div>
 
-			<div className="flex w-full flex-none flex-col">
+			<div className="flex w-full flex-none flex-col items-center">
 				<NavButton
 					navId="settings"
 					icon="settings"
@@ -73,7 +72,7 @@ type NavButtonProps = {
 
 function NavButton({ navId, icon, label, active, combo, onClick }: NavButtonProps) {
 	return (
-		<Tooltip label={label} keys={combo ? formatCombo(combo) : undefined} className="flex w-full">
+		<Tooltip label={label} keys={combo ? formatCombo(combo) : undefined} className="flex">
 			<button
 				type="button"
 				data-nav={navId}
@@ -81,11 +80,11 @@ function NavButton({ navId, icon, label, active, combo, onClick }: NavButtonProp
 				aria-label={label}
 				onClick={onClick}
 				className={[
-					"relative flex h-12 w-full items-center justify-center transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-					active ? "text-[var(--accent)]" : "text-[var(--ink-faint)] hover:text-[var(--ink)]",
+					"relative flex h-9 w-10 items-center justify-center rounded-[var(--radius-md)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+					active ? "bg-[var(--hover)] text-[var(--accent)]" : "text-[var(--ink-faint)] hover:text-[var(--ink)]",
 				].join(" ")}
 			>
-				<Icon name={icon} size={24} strokeWidth={1.7} />
+				<Icon name={icon} size={18} strokeWidth={1.75} />
 			</button>
 		</Tooltip>
 	);

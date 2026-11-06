@@ -94,8 +94,8 @@ already dense; don't reach past it.
   no negative `tracking-*` on a heading. The only tracking is the overline's.
   `leading-none` and `leading-tight` stay for badges and dense blocks of fixed
   height, where the line box is the point.
-- The sidebar is `--sidebar-rail-width` (56px, holding 48px entries, as the
-  design draws it) and never wider, and the titlebar is `--titlebar-height`. Both are tokens because other things are measured
+- The sidebar is `--sidebar-rail-width` (56px, holding 40 by 36px entries,
+  as the screen frames draw it) and never wider, and the titlebar is `--titlebar-height`. Both are tokens because other things are measured
   against them, and because the title bar height is also the height of the
   native caption-button overlay ([architecture.md](architecture.md) section 4b).
 - A row that carries an avatar is `--row-height-roomy` (44px). A row with no
@@ -135,8 +135,12 @@ not resolving the OS preference yourself.
 
 ## 5a. The title bar is there and not seen
 
-The main window draws its own title bar in the page colour with no rule under
-it, so the window reads as one surface. It still exists: it is the drag region
+The main window draws its own title bar and rail in the page colour (`--paper`)
+with no rule under or beside them. The content is one `--surface` sheet with a
+`--radius-lg` corner, a hairline `--line` border and an 8px margin at the right
+and bottom (frames `25:16` and `29:1229`); the sheet is `main` in `App.tsx`.
+A screen never paints its own `--paper` background or its own left border at its
+edge: sticky headers and side columns inside the sheet use `--surface`. It still exists: it is the drag region
 and the caption buttons sit on it. A screen may put its own controls in it
 with `app/TitleBarSlot.tsx`, beside the way back (Mail puts New message and
 the styled mail pane there, and only while Mail is open).
@@ -152,12 +156,14 @@ application, not the native `title`) and in its `aria-label`.
   Projects, Mail, Documents; then Settings. `app/screens.ts` lists them. A
   seventh place is a decision, not an edit. The agent is in the title bar, at
   the right beside the window's own buttons, with the same three colours.
-- **An entry has three colours and nothing else.** Soft (`--ink-faint`) at rest,
-  firm (`--ink`) under the pointer, iris (`--accent`) when it is the page. No
-  fill, no outline, no indicator bar. The one ring is the global
-  `:focus-visible` one, which only a keyboard triggers, and it stays.
-- **Entries are 48px square inside the 56px strip, icons 24px with a 1.7 stroke.** Heroicons draw at 1.5, which is a hairline
-  next to the soft colour.
+- **An entry has three states.** Soft (`--ink-faint`) at rest, firm (`--ink`)
+  under the pointer, and when it is the page a `--hover` tile with an iris
+  (`--accent`) icon, as the Sidebar frame (`70:1584`) draws it. No outline, no
+  indicator bar. The one ring is the global `:focus-visible` one, which only a
+  keyboard triggers, and it stays.
+- **Entries are 40 by 36px inside the 56px strip** (8px padding, 2px between
+  entries), **icons 18px with a 1.75 stroke.** The older Rail frame (`14:550`)
+  draws 48px entries and 24px icons; the screens use the Sidebar, which wins.
 - **A badge is a dot,** and the count goes in the tooltip and the accessible name.
 - **Screens without an entry** light the entry they belong to
   (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail,

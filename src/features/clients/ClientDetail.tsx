@@ -1220,7 +1220,7 @@ function TimelineTab({
 						return (
 							<li key={entry.id}>
 								{showHeading ? (
-									<div className="sticky top-0 z-10 -mx-1 bg-[var(--paper)] px-1 py-1.5 text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+									<div className="sticky top-0 z-10 -mx-1 bg-[var(--surface)] px-1 py-1.5 text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
 										{monthLabelOf(month)}
 									</div>
 								) : null}

@@ -158,7 +158,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 	return (
 		<aside
 			aria-label="Styled mail"
-			className="animate-slide flex h-full min-h-0 flex-none flex-col border-l border-[var(--line)] bg-[var(--paper)] transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth)]"
+			className="animate-slide flex h-full min-h-0 flex-none flex-col border-l border-[var(--line)] bg-[var(--surface)] transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth)]"
 			style={{ width: wide ? "min(760px, 62%)" : "360px" }}
 		>
 			{using ? (

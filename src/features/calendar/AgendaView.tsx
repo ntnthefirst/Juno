@@ -114,7 +114,7 @@ export function AgendaView({
 					{days.map((date) => (
 						<section key={date} className="mb-6">
 							<h2
-								className={`sticky top-0 border-b border-[var(--line)] bg-[var(--paper)] pb-1.5 pt-2 text-dense font-[var(--weight-medium)] ${
+								className={`sticky top-0 border-b border-[var(--line)] bg-[var(--surface)] pb-1.5 pt-2 text-dense font-[var(--weight-medium)] ${
 									date === today ? "text-[var(--accent)]" : ""
 								}`}
 							>

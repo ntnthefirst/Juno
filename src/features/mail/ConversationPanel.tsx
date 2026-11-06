@@ -79,7 +79,7 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 	const height = TOP * 2 + entries.length * ROW;
 
 	return (
-		<aside aria-label="Conversation" className="flex w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--paper)]">
+		<aside aria-label="Conversation" className="flex w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]">
 			<h3 className="flex shrink-0 items-baseline justify-between px-4 pb-1 pt-4 text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
 				Conversation
 				<span className="tabular normal-case tracking-normal">{entries.length}</span>

@@ -9,17 +9,18 @@
  * local.
  *
  * The kinds are `event` (a day and a time in the words, offered as a calendar
- * event) and `project` (a project named in the words, offered as a link). The
- * project kind waits for conversations to be filed under projects, which the
- * schema on this branch does not have yet, so it is never offered here.
+ * event) and `project` (a project named in the words, offered as a link of the
+ * whole conversation to that project, through the same service the reader's
+ * Link to project button uses).
  */
 import { and, eq, isNull } from "drizzle-orm";
-import type { CalendarEvent, MessageSuggestion, SuggestionKind, SuggestionSources } from "../../shared/types";
+import type { MessageSuggestion, SuggestionKind, SuggestionOutcome, SuggestionSources } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now as stamp } from "../db/columns";
-import { mailAccounts, mailMessages, mailSuggestionStates, mailThreads } from "../db/schema";
+import { mailAccounts, mailMessages, mailSuggestionStates, mailThreads, projects } from "../db/schema";
 import * as calendar from "./calendar";
 import { htmlToText } from "./mail-html";
+import * as mailThreadsService from "./mail-threads";
 import * as settings from "./settings";
 import { detectMoment } from "./suggestions-detect";
 
@@ -100,6 +101,65 @@ function findEvent(db: Db, messageId: string, today: Date): Found | null {
 	};
 }
 
+interface FoundProject {
+	suggestion: MessageSuggestion;
+	threadId: string;
+	projectId: string;
+}
+
+/** A project's name has to be a word of its own in the text, not a piece of one. */
+function mentions(text: string, name: string): boolean {
+	const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return new RegExp(String.raw`(^|[^\p{L}\p{N}])${escaped}($|[^\p{L}\p{N}])`, "iu").test(text);
+}
+
+/**
+ * A project named in the subject or the words, on a conversation that is not
+ * filed under one yet. The longest name wins, and two different projects
+ * named at the same length are no suggestion at all, because a wrong guess
+ * costs more than a missing one. A project of another client than the
+ * conversation's is never offered, the same rule linking applies.
+ */
+function findProject(db: Db, messageId: string): FoundProject | null {
+	const row = db
+		.select({ message: mailMessages, thread: mailThreads })
+		.from(mailMessages)
+		.innerJoin(mailThreads, eq(mailMessages.threadId, mailThreads.id))
+		.where(and(eq(mailMessages.id, messageId), isNull(mailMessages.deletedAt)))
+		.get();
+	if (!row || row.thread.projectId) return null;
+	const { message, thread } = row;
+
+	const body = message.bodyText?.trim() ? message.bodyText : message.bodyHtml ? htmlToText(message.bodyHtml) : "";
+	const text = `${message.subject}
+${body}`;
+	if (!text.trim()) return null;
+
+	const matches = db
+		.select({ id: projects.id, name: projects.name, clientId: projects.clientId })
+		.from(projects)
+		.where(isNull(projects.deletedAt))
+		.all()
+		.filter((project) => project.name.trim().length >= 3)
+		.filter((project) => !thread.clientId || !project.clientId || project.clientId === thread.clientId)
+		.filter((project) => mentions(text, project.name.trim()));
+	if (matches.length === 0) return null;
+	const longest = Math.max(...matches.map((project) => project.name.trim().length));
+	const best = matches.filter((project) => project.name.trim().length === longest);
+	if (best.length !== 1) return null;
+	const chosen = best[0]!;
+	return {
+		threadId: thread.id,
+		projectId: chosen.id,
+		suggestion: {
+			kind: "project",
+			messageId,
+			headline: `This looks like part of ${chosen.name.trim()}.`,
+			question: "Link this message to the project?",
+		},
+	};
+}
+
 /** What can be offered under this message right now. Writes nothing. */
 export async function forMessage(
 	messageId: string,
@@ -110,6 +170,10 @@ export async function forMessage(
 	const out: MessageSuggestion[] = [];
 	if (sources.calendar && !answered(db, messageId, "event")) {
 		const found = findEvent(db, messageId, today);
+		if (found) out.push(found.suggestion);
+	}
+	if (sources.projects && !answered(db, messageId, "project")) {
+		const found = findProject(db, messageId);
 		if (found) out.push(found.suggestion);
 	}
 	return out;
@@ -132,37 +196,45 @@ export async function dismiss(messageId: string, kind: string, db: Db = getDb())
 }
 
 /**
- * Add to calendar. The press is the confirmation, and a local calendar entry
- * is not one of the things that need the gate. The answer is recorded before
- * the event is written, so a second press cannot make a second event, and
- * taken back if the event could not be made.
+ * The button that does what was offered. The press is the confirmation, and
+ * neither a local calendar entry nor a link between a conversation and a
+ * project is one of the things that need the gate. The answer is recorded
+ * before the work is done, so a second press cannot do it twice, and taken
+ * back if the work could not be done.
  */
 export async function accept(
 	messageId: string,
 	kind: string,
 	db: Db = getDb(),
 	today: Date = new Date(),
-): Promise<CalendarEvent> {
-	if (requireKind(kind) !== "event") {
-		throw new Error("Only a calendar suggestion can be added from here.");
-	}
+): Promise<SuggestionOutcome> {
+	const checked = requireKind(kind);
 	const sources = await settings.getSuggestionSources();
-	if (!sources.calendar) throw new Error("Calendar suggestions are switched off.");
-	if (answered(db, messageId, "event")) throw new Error("That suggestion was already answered.");
-	const found = findEvent(db, messageId, today);
-	if (!found) throw new Error("That suggestion is no longer there. Open the message again.");
+	if (checked === "event" && !sources.calendar) throw new Error("Calendar suggestions are switched off.");
+	if (checked === "project" && !sources.projects) throw new Error("Project suggestions are switched off.");
+	if (answered(db, messageId, checked)) throw new Error("That suggestion was already answered.");
+
+	const event = checked === "event" ? findEvent(db, messageId, today) : null;
+	const project = checked === "project" ? findProject(db, messageId) : null;
+	if (!event && !project) throw new Error("That suggestion is no longer there. Open the message again.");
 
 	const at = stamp();
 	const [state] = db
 		.insert(mailSuggestionStates)
-		.values({ messageId, kind: "event", state: "accepted", createdAt: at, updatedAt: at })
+		.values({ messageId, kind: checked, state: "accepted", createdAt: at, updatedAt: at })
 		.returning()
 		.all();
 	try {
-		return await calendar.create(
-			{ title: found.title, startLocal: found.startLocal, clientId: found.clientId },
-			db,
-		);
+		if (event) {
+			const created = await calendar.create(
+				{ title: event.title, startLocal: event.startLocal, clientId: event.clientId },
+				db,
+			);
+			return { kind: "event", event: created };
+		}
+		const found = project!;
+		const thread = await mailThreadsService.linkProject(found.threadId, found.projectId, db);
+		return { kind: "project", thread, projectId: found.projectId, projectName: thread.projectName ?? "" };
 	} catch (cause: unknown) {
 		db.update(mailSuggestionStates)
 			.set({ deletedAt: stamp(), updatedAt: stamp() })

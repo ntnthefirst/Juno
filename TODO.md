@@ -293,7 +293,7 @@ and `Kind=Add` (set `76:2231`), Tab (`13:166`), Section Card (`18:399`).
   Next event, Time logged.
 - **Mail.** "Linked mail. Threads you linked to this project." with Link a mail,
   the thread rows, and the line "Mail stays in your mailbox. Linking only shows
-  the thread here." Mail to project links do not exist on this branch: migration 0022 on main adds them, and this branch's 0022 is the mail blocks, so renumber when they meet. Once a thread can be filed under a project, add the project suggestion under a message ("This looks like part of Kitchen cabinets. Link this message to the project?", Not now and Link to project) in `services/suggestions.ts`, which already has the kind and the `projects` switch.
+  the thread here."
 - **Timeline.** A vertical graph grouped by month, newest first, with a filter:
   status changes, mail linked, quote sent for signature, time entries, contract
   signed, project created, folder connected. Reuse `services/client-timeline.ts`

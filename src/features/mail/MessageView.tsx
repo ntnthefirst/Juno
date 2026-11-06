@@ -393,9 +393,14 @@ export function MessageView({
 		if (offerBusy) return;
 		setOfferBusy(true);
 		try {
-			const event = await window.juno.suggestions.accept(suggestion.messageId, suggestion.kind);
+			const outcome = await window.juno.suggestions.accept(suggestion.messageId, suggestion.kind);
 			without(suggestion);
-			onNotice(`Added "${event.title}" to the calendar.`);
+			onNotice(
+				outcome.kind === "event"
+					? `Added "${outcome.event.title}" to the calendar.`
+					: `Linked this conversation to ${outcome.projectName}.`,
+			);
+			if (outcome.kind === "project") onChanged();
 		} catch (cause: unknown) {
 			onNotice(messageOf(cause));
 		} finally {

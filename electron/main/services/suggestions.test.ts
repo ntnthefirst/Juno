@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
-import { calendarEvents, mailFolders, mailMessages, mailThreads } from "../db/schema";
+import { calendarEvents, clients, mailFolders, mailMessages, mailThreads, projects } from "../db/schema";
 import * as accounts from "./mail-accounts";
 import { configureCredentialStore, MemoryCredentialStore } from "./mail-credentials";
 import { configureSettings } from "./settings";
@@ -122,7 +122,9 @@ describe("Not now", () => {
 describe("Add to calendar", () => {
 	it("makes one event, and a second press does not make another", async () => {
 		const id = message("Kunnen we vrijdag om 10:00 leveren?");
-		const event = await suggestions.accept(id, "event", db, TODAY);
+		const outcome = await suggestions.accept(id, "event", db, TODAY);
+		if (outcome.kind !== "event") throw new Error("expected an event");
+		const event = outcome.event;
 		expect(event.title).toBe("Delivery, oak table");
 		expect(event.startLocal).toBe("2026-11-06T10:00:00");
 		expect(db.select().from(calendarEvents).all()).toHaveLength(1);
@@ -139,9 +141,64 @@ describe("Add to calendar", () => {
 		expect(db.select().from(calendarEvents).all()).toHaveLength(0);
 	});
 
-	it("only accepts a calendar suggestion", async () => {
-		await expect(suggestions.accept(message("Vrijdag om 10:00."), "project", db, TODAY)).rejects.toThrow(
-			/Only a calendar suggestion/,
-		);
+});
+
+function project(name: string, clientId: string | null = null): string {
+	return db.insert(projects).values({ name, clientId }).returning().get().id;
+}
+
+describe("Link to project", () => {
+	it("offers the project named in the words, and links the conversation when accepted", async () => {
+		const kitchen = project("Kitchen cabinets");
+		project("Website");
+		const id = message("Over de Kitchen cabinets: de maten kloppen.");
+		const found = await suggestions.forMessage(id, db, TODAY);
+		expect(found).toEqual([
+			{
+				kind: "project",
+				messageId: id,
+				headline: "This looks like part of Kitchen cabinets.",
+				question: "Link this message to the project?",
+			},
+		]);
+
+		const outcome = await suggestions.accept(id, "project", db, TODAY);
+		if (outcome.kind !== "project") throw new Error("expected a project");
+		expect(outcome.projectId).toBe(kitchen);
+		expect(outcome.projectName).toBe("Kitchen cabinets");
+		expect(db.select().from(mailThreads).all()[0]!.projectId).toBe(kitchen);
+		await expect(suggestions.accept(id, "project", db, TODAY)).rejects.toThrow(/already answered/);
+		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([]);
+	});
+
+	it("offers nothing for part of a word, an ambiguous name, or a filed conversation", async () => {
+		const web = project("Web");
+		expect(await suggestions.forMessage(message("Het webdesign is klaar."), db, TODAY)).toEqual([]);
+		project("Webshop");
+		expect(await suggestions.forMessage(message("Web en Webshop samen?"), db, TODAY)).toHaveLength(1);
+		project("Oak table");
+		project("Oak table");
+		expect(await suggestions.forMessage(message("Hoe zit het met de oak table?"), db, TODAY)).toEqual([]);
+		db.update(mailThreads).set({ projectId: web }).run();
+		expect(await suggestions.forMessage(message("Web is klaar."), db, TODAY)).toEqual([]);
+	});
+
+	it("skips a project of another client, and respects Not now and the switch", async () => {
+		const mine = db.insert(clients).values({ name: "Janssens", sortName: "janssens" }).returning().get().id;
+		const other = db.insert(clients).values({ name: "Peeters", sortName: "peeters" }).returning().get().id;
+		db.update(mailThreads).set({ clientId: mine }).run();
+		project("Garden shed", other);
+		const id = message("Wat kost de Garden shed?");
+		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([]);
+
+		project("Garden gate", mine);
+		const gate = message("Wat kost de Garden gate?");
+		expect(await suggestions.forMessage(gate, db, TODAY)).toHaveLength(1);
+		await suggestions.setSources({ projects: false });
+		expect(await suggestions.forMessage(gate, db, TODAY)).toEqual([]);
+		await expect(suggestions.accept(gate, "project", db, TODAY)).rejects.toThrow(/switched off/);
+		await suggestions.setSources({ projects: true });
+		await suggestions.dismiss(gate, "project", db);
+		expect(await suggestions.forMessage(gate, db, TODAY)).toEqual([]);
 	});
 });

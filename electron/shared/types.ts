@@ -610,6 +610,11 @@ export interface MessageSuggestion {
 	question: string;
 }
 
+/** What pressing the button on a suggestion did. */
+export type SuggestionOutcome =
+	| { kind: "event"; event: CalendarEvent }
+	| { kind: "project"; thread: MailThreadSummary; projectId: string; projectName: string };
+
 /**
  * One switch per place a suggestion can come from. Both are on by default,
  * because a suggestion costs nothing until a button is pressed, and either can

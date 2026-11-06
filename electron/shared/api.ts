@@ -184,6 +184,7 @@ import type {
 	SettingsSection,
 	MessageSuggestion,
 	SuggestionKind,
+	SuggestionOutcome,
 	SuggestionSources,
 	UpdateStatus,
 } from "./types";
@@ -518,7 +519,7 @@ export interface JunoApi {
 		/** Not now: not offered under this message again. */
 		dismiss(messageId: string, kind: SuggestionKind): Promise<void>;
 		/** Add to calendar. Makes the event and records the answer. */
-		accept(messageId: string, kind: SuggestionKind): Promise<CalendarEvent>;
+		accept(messageId: string, kind: SuggestionKind): Promise<SuggestionOutcome>;
 		/** The switches behind each kind of suggestion, for the settings screen. */
 		sources: {
 			get(): Promise<SuggestionSources>;

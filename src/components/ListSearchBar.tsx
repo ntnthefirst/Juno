@@ -63,15 +63,15 @@ export function ListSearchBar({
 
 	return (
 		<div ref={wrapper} className="relative min-w-[200px] max-w-[360px] flex-1">
-			<div className="flex items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pr-1 pl-2 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
-				<Icon name="search" size={14} />
+			<div className="flex h-10 items-center gap-2 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pr-1.5 pl-3 focus-within:border-[var(--focus)]">
+				<Icon name="search" size={16} className="flex-none text-[var(--ink-faint)]" />
 				<input
 					type="search"
 					value={search}
 					onChange={(event) => onSearch(event.target.value)}
 					placeholder={placeholder}
 					aria-label={label}
-					className="min-w-0 flex-1 bg-transparent py-1.5 text-dense text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+					className="min-w-0 flex-1 bg-transparent text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
 				/>
 				{search ? (
 					<button

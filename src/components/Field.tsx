@@ -19,7 +19,7 @@ type FieldProps = {
 };
 
 const CONTROL =
-	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60";
+	"w-full rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--focus)] focus:shadow-[inset_0_0_0_1px_var(--focus)] disabled:opacity-50";
 
 export function Field({
 	label,
@@ -40,13 +40,13 @@ export function Field({
 	const errorId = `${id}-error`;
 	const helpId = `${id}-help`;
 	const describedBy = [error ? errorId : null, help ? helpId : null].filter(Boolean).join(" ");
-	const classes = `${CONTROL}${tabular ? " tabular" : ""}${error ? " border-[var(--risk)]" : ""}`;
+	const classes = `${CONTROL}${multiline ? " py-2" : " h-10"}${tabular ? " tabular" : ""}${error ? " !border-[var(--risk)]" : ""}`;
 
 	return (
 		<div>
 			<label
 				htmlFor={id}
-				className="mb-1 block text-sm text-[var(--ink-muted)]"
+				className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]"
 			>
 				{label}
 				{required ? <span aria-hidden> *</span> : null}

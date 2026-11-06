@@ -501,40 +501,14 @@ section 7). Service `services/notes.ts`: `list`, `get`, `search`, `create`,
 MarkdownEditor.tsx`. Pages: depends on decision 5, and then the document kind,
 the block model (stored as JSON) and the editor. If Notes gets a sidebar entry,
 add it to `app/screens.ts` (`ScreenId`, `SIDEBAR_TOP`, `SCREEN_LABELS`,
-`SIDEBAR_ENTRY`, `NEW_ON`) and to the palette.
+`SIDEBAR_ENTRY`, `NEW_ON`) and to the palette. The palette is grouped and has a tab
+per group (`SCOPES` in `app/CommandPalette.tsx`): add Notes there. Recent takes a
+new `RecentKind` in `shared/types.ts` and a case in `services/recent.ts`, and the
+New menu (`NEW_MENU` in `app/screens.ts`) gets New note and New page.
 
 **Done when.** A note and a page can be made, searched, found in, linked to a
 client or project, archived and driven by an agent. Tests cover search and the
 day grouping. The empty state exists.
-
-#### Package 5. Search, Recent and New in the title bar (M)
-
-**Figma.** `18 Command Palette / Default` (`32:3943`), `18 Search / Results`
-(`89:8018`), `04 Overview / Recent menu` (`92:9125`), `22 New menu / Default`
-(`73:5435`), `04 Overview / Sidebar tooltip` (`92:9250`). Components: Title Bar
-(`14:221`), Command Palette (`21:648`), Recent Menu (`91:2242`), New Menu
-(`72:1314`), Search Results (`88:2242`), Search Trigger (`11:170`).
-
-**Behaviour.** The title bar's left holds four icon buttons in this order:
-Search, Recent, Reminders (bell) and New (plus), then a divider and the page
-title (centred on the window). The agent button and the window buttons sit at the
-right. Search opens the palette. Recent opens a list of the last records opened,
-newest first, each with its kind icon, its name and its place. New opens a menu
-of what can be made on the screen in view, with the shortcut for each, and what
-it opens is what the same item in `NEW_ON` opens today. The sidebar tooltip is
-the one in `components/Tooltip.tsx`. Results in the palette are grouped (Go to,
-Clients, Projects, Documents, Mail, Notes) and each group is capped.
-
-**Build.** Recent: table `recent_items` (kind, record id, opened at), capped at
-20 per owner, written when a record opens. Service `services/recent.ts`: `touch`,
-`list`, `clear`. IPC `recent.*`. MCP `recent.list` read only. Notes enter the
-palette once package 4 exists. Check first: `app/TitleBar.tsx` and
-`app/CommandPalette.tsx` already carry back, search and lock, so this changes
-what sits there. Update `app/use-shortcuts.ts` and `SHORTCUT_GROUPS`.
-
-**Done when.** The four buttons and menus match the frames, the keyboard reaches
-all of it, and Recent survives a restart and is cleared by a button in Settings
-> Security and data.
 
 #### Package 6. Agent permissions and instructions (M, needs decision 3)
 

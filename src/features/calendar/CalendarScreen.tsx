@@ -1,3 +1,4 @@
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { Segmented } from "../../components/Segmented";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
@@ -466,7 +467,13 @@ export function CalendarScreen() {
 	}
 
 	const overflowItems: MenuItem[] = [
-		{ id: "import", label: "Import", icon: "import", onSelect: () => void importIcs() },
+		{
+			id: "new-reminder",
+			label: "New reminder",
+			icon: "reminders",
+			onSelect: () => anchor && createReminderAt(view === "month" ? (today ?? anchor) : anchor),
+		},
+		{ id: "import", label: "Import", icon: "import", separatorBefore: true, onSelect: () => void importIcs() },
 		{
 			id: "export",
 			label: "Export",
@@ -493,25 +500,25 @@ export function CalendarScreen() {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex min-h-12 flex-none min-w-0 items-center gap-3 px-6 py-2">
-				<h1 className="min-w-0 shrink truncate text-h2">
+			<TitleBarSlot side="left">
+				<span aria-hidden className="mx-1 h-4 w-px flex-none bg-[var(--line)]" />
+				<h1 className="mx-2 min-w-0 shrink-0 whitespace-nowrap text-dense font-[var(--weight-semibold)] text-[var(--ink)]">
 					{heading}
 				</h1>
-				<div className="flex shrink-0 items-center gap-3">
-					<IconButton icon="chevron-left" label="Previous" onClick={() => step(-1)} />
-					<Button
-						size="dense"
-						onClick={() => {
-							if (!today) return;
-							if (anchor) setDirection(today >= anchor ? 1 : -1);
-							setAnchor(today);
-						}}
-					>
-						Today
-					</Button>
-					<IconButton icon="chevron-right" label="Next" onClick={() => step(1)} />
-				</div>
-
+				<IconButton icon="chevron-left" label="Previous" onClick={() => step(-1)} />
+				<button
+					type="button"
+					onClick={() => {
+						if (!today) return;
+						if (anchor) setDirection(today >= anchor ? 1 : -1);
+						setAnchor(today);
+					}}
+					className="inline-flex h-7 items-center rounded-[var(--radius-md)] px-2.5 text-dense font-[var(--weight-medium)] text-[var(--ink)] transition-[background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] active:scale-[0.97]"
+				>
+					Today
+				</button>
+				<IconButton icon="chevron-right" label="Next" onClick={() => step(1)} />
+				<span className="ml-2" />
 				<Segmented
 					size="compact"
 					label="View"
@@ -519,31 +526,10 @@ export function CalendarScreen() {
 					onChange={setView}
 					options={VIEW_OPTIONS.map((option) => ({ id: option.kind, label: option.label, name: option.label }))}
 				/>
-
-				<div className="ml-auto flex shrink-0 items-center gap-1">
-					<MenuButton
-						items={[
-							{
-								id: "new-event",
-								label: "New event",
-								icon: "calendar",
-								onSelect: () => anchor && createAt(view === "month" ? (today ?? anchor) : anchor, 9 * 60),
-							},
-							{
-								id: "new-reminder",
-								label: "New reminder",
-								icon: "reminders",
-								onSelect: () => anchor && createReminderAt(view === "month" ? (today ?? anchor) : anchor),
-							},
-						]}
-						ariaLabel="New"
-						label="New"
-						icon="add"
-						size="dense"
-					/>
-					<MenuButton items={overflowItems} ariaLabel="More" icon="more" />
-				</div>
-			</div>
+			</TitleBarSlot>
+			<TitleBarSlot side="overflow">
+				<MenuButton items={overflowItems} ariaLabel="More" icon="more" />
+			</TitleBarSlot>
 
 			<div className="relative flex min-h-0 flex-1">
 				<div className="min-w-0 flex-1 overflow-hidden">

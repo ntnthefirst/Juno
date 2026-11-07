@@ -3,12 +3,11 @@ import type { MailTemplate } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { LoadPicturesNotice } from "../../components/LoadPicturesNotice";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { framed } from "../../lib/framed-preview";
 import { requestOpen } from "../../lib/open-entity";
 import { useRemotePictures } from "../../lib/remote-pictures";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { useCanvasFonts } from "../templates/mail/canvas/use-canvas-fonts";
 import { UseMailTemplateScreen } from "../templates/UseMailTemplateScreen";
 
@@ -43,8 +42,6 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 	const [usingId, setUsingId] = useState<string | null>(null);
 	const [wide, setWide] = useState(false);
 	const [rendered, setRendered] = useState<Rendered | null>(null);
-	const [menuTarget, setMenuTarget] = useState<MailTemplate | null>(null);
-	const menu = useContextMenu();
 	const rows = useRef(new Map<string, HTMLButtonElement>());
 
 	useEffect(() => {
@@ -127,32 +124,21 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 		}
 	}
 
-	function menuItems(template: MailTemplate): MenuItem[] {
-		return [
-			{ id: "use", label: "Use", icon: "mail", hint: "Double click", onSelect: () => setUsingId(template.id) },
+	// The platform's menu for a template (decision 59). It says "Show narrow"
+	// while this one is the template shown at full size.
+	function menuFor(template: MailTemplate) {
+		return contextMenuFor(
+			{ kind: "template", id: template.id, ...(wide && selectedId === template.id ? { context: "detail" as const } : {}) },
 			{
-				id: "show",
-				label: wide && selectedId === template.id ? "Show narrow" : "Show full size",
-				icon: wide && selectedId === template.id ? "collapse" : "expand",
-				onSelect: () => {
+				"use-template": () => setUsingId(template.id),
+				"show-wide": () => {
 					setSelectedId(template.id);
 					setWide((value) => !(value && selectedId === template.id));
 				},
+				"open-template": () => requestOpen({ kind: "mail-template", id: template.id, mode: "view" }),
+				edit: () => requestOpen({ kind: "mail-template", id: template.id, mode: "edit" }),
 			},
-			{
-				id: "open",
-				label: "Open in Styled mail",
-				icon: "external",
-				separatorBefore: true,
-				onSelect: () => requestOpen({ kind: "mail-template", id: template.id, mode: "view" }),
-			},
-			{
-				id: "edit",
-				label: "Edit",
-				icon: "edit",
-				onSelect: () => requestOpen({ kind: "mail-template", id: template.id, mode: "edit" }),
-			},
-		];
+		);
 	}
 
 	return (
@@ -235,10 +221,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 											}}
 											onClick={() => setSelectedId(template.id)}
 											onDoubleClick={() => setUsingId(template.id)}
-											onContextMenu={(event) => {
-												setMenuTarget(template);
-												menu.open(event);
-											}}
+											onContextMenu={menuFor(template)}
 											aria-current={active ? "true" : undefined}
 											title="Double click to use"
 											className={[
@@ -310,9 +293,6 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 				</>
 			)}
 
-			{menu.at && menuTarget ? (
-				<ContextMenu at={menu.at} items={menuItems(menuTarget)} onClose={menu.close} ariaLabel={`Actions for ${menuTarget.name}`} />
-			) : null}
 		</aside>
 	);
 }

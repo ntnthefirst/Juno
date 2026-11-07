@@ -4,6 +4,8 @@ import { Avatar } from "../../components/Avatar";
 import { Checkbox } from "../../components/Checkbox";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
+import { GroupHeader } from "../../components/GroupHeader";
+import { UnreadDot } from "../../components/UnreadDot";
 import { groupByDay } from "../../lib/day-groups";
 import { stagger } from "../../lib/motion";
 import { contextMenuFor } from "../../lib/native-menu";
@@ -21,6 +23,8 @@ export type ThreadAction =
 	| "junk"
 	| "move"
 	| "link"
+	| "reply"
+	| "forward"
 	| "trash"
 	| "deleteForever";
 
@@ -162,6 +166,8 @@ export function ThreadList({
 				move: () => onAction("move", ids),
 				junk: () => onAction("junk", ids),
 				link: () => onAction("link", ids),
+				reply: () => onAction("reply", ids),
+				forward: () => onAction("forward", ids),
 				delete: () => onAction("trash", ids),
 				"delete-forever": () => onAction("deleteForever", ids),
 			},
@@ -226,11 +232,8 @@ export function ThreadList({
 				{sections.map((section) => (
 					<Fragment key={section.key}>
 						{section.label ? (
-							<li
-								aria-hidden
-								className="px-3 pt-4 pb-1 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-2"
-							>
-								{section.label}
+							<li aria-hidden className="px-1 pt-2 first:pt-0">
+								<GroupHeader label={section.label} />
 							</li>
 						) : null}
 						{section.items.map((entry) => {
@@ -277,10 +280,7 @@ export function ThreadList({
 									>
 										{/* An unread row has a dot in the margin, so the avatar can stay a picture. */}
 										{unread ? (
-											<span
-												aria-hidden
-												className="absolute top-1/2 left-0.5 h-1.5 w-1.5 -translate-y-1/2 rounded-[var(--radius-full)] bg-[var(--accent)]"
-											/>
+											<UnreadDot className="absolute top-1/2 left-0 -translate-y-1/2" />
 										) : null}
 										{/*
 											The avatar doubles as the row's selector: hovering it, focusing

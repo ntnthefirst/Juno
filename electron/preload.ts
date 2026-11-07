@@ -45,6 +45,7 @@ const api: JunoApi = {
 
 	menu: {
 		show: (request) => call("menu.show", request),
+		setIcons: (icons) => call("menu.setIcons", icons),
 	},
 	window: {
 		openSettings: (section) => call("window.openSettings", section),

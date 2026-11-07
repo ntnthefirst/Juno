@@ -214,7 +214,7 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 							].join(" ")}
 						>
 							{item.icon ? (
-								<Icon name={item.icon} className={item.danger ? "" : "text-[var(--ink-muted)]"} />
+								<Icon name={item.icon} />
 							) : (
 								<span className="w-4 shrink-0" aria-hidden />
 							)}

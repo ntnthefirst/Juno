@@ -13,7 +13,7 @@
  * Every method is async because it crosses a process boundary, even where the
  * service behind it is synchronous.
  */
-import type { MenuOutcome, MenuRequest } from "./menu";
+import type { MenuIconSet, MenuOutcome, MenuRequest } from "./menu";
 import type {
 	DesktopPatch,
 	DesktopView,
@@ -313,6 +313,8 @@ export interface JunoApi {
 	 */
 	menu: {
 		show(request: MenuRequest): Promise<MenuOutcome>;
+		/** Hands over the pictures the native menus draw beside their labels. */
+		setIcons(icons: MenuIconSet): Promise<void>;
 	};
 
 	clients: {

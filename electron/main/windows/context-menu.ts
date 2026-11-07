@@ -10,9 +10,11 @@
  * The lock is checked here as well as in the IPC guard. A menu is a way to
  * reach a record, and a locked application has none to offer.
  */
-import { BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron";
+import { BrowserWindow, Menu, nativeImage, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import {
 	MENU_ACTIONS,
+	type MenuIcon,
+	type MenuIconSet,
 	MENU_MAIN_ACTIONS,
 	type MenuAction,
 	type MenuEntry,
@@ -34,12 +36,27 @@ async function outcomeOf(request: MenuRequest, entry: MenuEntry): Promise<MenuOu
 	return { type: "none" };
 }
 
+/** The pictures beside the labels, drawn by the renderer in the colour of the current theme. */
+let icons = new Map<MenuIcon, NativeImage>();
+
+export function setMenuIcons(set: MenuIconSet): void {
+	const next = new Map<MenuIcon, NativeImage>();
+	for (const [name, url] of Object.entries(set) as [MenuIcon, string][]) {
+		// Drawn at twice the size they are shown, so they stay sharp on a scaled display.
+		const base64 = url.slice(url.indexOf(",") + 1);
+		const image = nativeImage.createFromBuffer(Buffer.from(base64, "base64"), { scaleFactor: 2 });
+		if (!image.isEmpty()) next.set(name, image);
+	}
+	icons = next;
+}
+
 function template(entries: MenuEntry[], choose: (entry: MenuEntry) => void): MenuItemConstructorOptions[] {
 	const out: MenuItemConstructorOptions[] = [];
 	entries.forEach((entry, index) => {
 		if (entry.separatorBefore && index > 0) out.push({ type: "separator" });
 		out.push({
 			label: entry.label,
+			...(entry.icon && icons.has(entry.icon) ? { icon: icons.get(entry.icon) } : {}),
 			// Drawn beside the label and never registered, because the screen
 			// already listens for the key and a second listener would run it twice.
 			...(entry.accelerator ? { accelerator: entry.accelerator, registerAccelerator: false } : {}),

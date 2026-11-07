@@ -19,6 +19,8 @@ import type {
 	ProjectSummary,
 	ReferenceItem,
 } from "@shared/types";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
+import { ActionMenu } from "../../components/ActionMenu";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
@@ -183,6 +185,10 @@ type ClientDetailProps = {
 	clientId: string;
 	onEdit: (client: Client) => void;
 	onDelete: (client: Client) => void;
+	/** Opens the composer addressed to this client. */
+	onSendMail: (client: Client) => void;
+	/** The main process changed the client (archived it), so what is on screen is stale. */
+	onChanged: (message: string | undefined) => void;
 	/**
 	 * Contacts and projects are filled in on a page of their own, which needs
 	 * the whole screen rather than this pane, so the screen owns that state and
@@ -216,6 +222,8 @@ export function ClientDetail({
 	clientId,
 	onEdit,
 	onDelete,
+	onSendMail,
+	onChanged,
 	onEditContact,
 	onEditProject,
 	onSchedule,
@@ -457,18 +465,6 @@ export function ClientDetail({
 		{ id: "mail", label: "Mail", count: entryCounts.mail },
 	];
 
-	const cardMenuItems: MenuItem[] = [
-		{ id: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(client) },
-		{
-			id: "delete",
-			label: "Delete",
-			icon: "remove",
-			danger: true,
-			separatorBefore: true,
-			onSelect: () => onDelete(client),
-		},
-	];
-
 	return (
 		<div>
 			<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
@@ -496,7 +492,21 @@ export function ClientDetail({
 									onChange={(statusId) => void changeStatus(statusId)}
 								/>
 							</div>
-							<MenuButton ariaLabel={`${client.name} actions`} items={cardMenuItems} />
+							<TitleBarSlot side="overflow">
+								<ActionMenu
+									target={{ kind: "client", id: client.id, context: "detail" }}
+									ariaLabel={`${client.name} actions`}
+									size="dense"
+									handlers={{
+										edit: () => onEdit(client),
+										"new-project": () => openNewRecord("project", { clientId: client.id }),
+										"new-note": () => onEditNote(null),
+										"send-mail": () => onSendMail(client),
+										delete: () => onDelete(client),
+										done: onChanged,
+									}}
+								/>
+							</TitleBarSlot>
 						</div>
 
 						<div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-dense sm:grid-cols-2">
@@ -1207,7 +1217,7 @@ function TimelineTab({
 						return (
 							<li key={entry.id}>
 								{showHeading ? (
-									<div className="sticky top-0 z-10 -mx-1 bg-[var(--surface)] px-1 py-1.5 text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+									<div className="sticky top-0 z-10 -mx-1 bg-[var(--surface)] px-1 py-1.5 text-overline uppercase text-[var(--ink-faint)]">
 										{monthLabelOf(month)}
 									</div>
 								) : null}

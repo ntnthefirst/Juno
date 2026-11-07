@@ -1249,7 +1249,7 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											await new Promise((r) => setTimeout(r, 400));
 											const main = document.querySelector("main");
-											if (!main.querySelector("[role=group][aria-label=Layout]")) return "no layout switcher";
+											if (!document.querySelector("[role=group][aria-label=Layout]")) return "no layout switcher";
 											const cards = main.querySelectorAll("ul > li > button");
 											if (cards.length < 3) return "only " + cards.length + " cards";
 											const image = main.querySelector("ul img");
@@ -1270,7 +1270,7 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const main = document.querySelector("main");
-											const group = main.querySelector("[role=group][aria-label=Layout]");
+											const group = document.querySelector("[role=group][aria-label=Layout]");
 											if (!group) return "no layout switcher";
 											const button = (label) => [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === label);
 											if (!button("List")) return "no list layout";
@@ -1306,7 +1306,7 @@ if (!app.requestSingleInstanceLock()) {
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const group = document.querySelector("main [role=group][aria-label=Layout]");
+											const group = document.querySelector("[role=group][aria-label=Layout]");
 											const cards = group ? [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Cards") : null;
 											if (cards) { cards.click(); await wait(400); }
 											const own = [...document.querySelectorAll("main ul > li > button")].find((el) => el.textContent.includes("Juno"));
@@ -1369,7 +1369,7 @@ if (!app.requestSingleInstanceLock()) {
 
 											// The "..." and Add menus are the platform's now (decision 59), drawn by
 											// the main process, so the page can only prove the two buttons are there.
-											if (!main.querySelector("button[aria-label='More project actions']")) return "no actions menu";
+											if (!document.querySelector("header button[aria-label='More project actions']")) return "no actions menu";
 											if (!main.querySelector("button[aria-label='Add to this project']")) return "no add menu";
 
 											// Where the files are kept is one answer this screen still gives, from the files section.
@@ -1556,7 +1556,16 @@ if (!app.requestSingleInstanceLock()) {
 									// A notes field is CodeMirror now, not a textarea, and the only
 									// way to know typing into one still reaches the document is to
 									// type into one. The client form is the simplest place that has it.
-									const noted = (await window.webContents.executeJavaScript(
+									// The client's "..." is the platform's menu (decision 59), which a page
+									// cannot click, so Menu.popup is stood in for and chooses Edit.
+									const realClientPopup = Menu.prototype.popup;
+									Menu.prototype.popup = function (this: Menu, options) {
+										this.items.find((item) => item.label === "Edit")?.click();
+										options?.callback?.();
+									};
+									let noted: string;
+									try {
+									noted = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											// New client is a window now (decision 60), so the field is
@@ -1574,11 +1583,7 @@ if (!app.requestSingleInstanceLock()) {
 											const actions = document.querySelector("button[aria-label$=' actions']");
 											if (!actions) return "no client actions menu";
 											actions.click();
-											await wait(300);
-											const editItem = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Edit");
-											if (!editItem) return "no edit item on the client";
-											editItem.click();
-											await wait(600);
+											await wait(900);
 											const addNotes = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add notes");
 											if (addNotes) {
 												addNotes.click();
@@ -1613,6 +1618,9 @@ if (!app.requestSingleInstanceLock()) {
 											return "ok";
 										})()`,
 									)) as string;
+									} finally {
+										Menu.prototype.popup = realClientPopup;
+									}
 									if (noted !== "ok") throw new Error(`Smoke: notes editor ${noted}`);
 
 									const notesImage = await capture(window.webContents);
@@ -4829,13 +4837,13 @@ if (!app.requestSingleInstanceLock()) {
 									await openPage("statuses", "documents");
 									const picked = (await inSettings(
 										`(async () => {
-											const tabs = [...document.querySelectorAll("[role=tablist][aria-label='Which list'] [role=tab]")];
+											const tabs = [...document.querySelectorAll("[role=group][aria-label='Which list'] button")];
 											if (tabs.length < 4) return "only " + tabs.length + " lists";
 											const before = document.querySelector("main").textContent;
 											tabs[1].click();
 											await new Promise((r) => setTimeout(r, 250));
 											if (document.querySelector("main").textContent === before) return "the list did not change";
-											if (tabs[1].getAttribute("aria-selected") !== "true") return "the tab did not select";
+											if (tabs[1].getAttribute("aria-pressed") !== "true") return "the tab did not select";
 											return "ok";
 										})()`,
 									)) as string;

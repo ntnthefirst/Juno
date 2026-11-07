@@ -95,20 +95,35 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
 };
 
 /**
- * Everything the New menu in the title bar offers, in the order it is drawn.
- * Each item does what the same entry in `NEW_ON` does: it asks the screen that
- * owns the record to open its form.
+ * Everything the New menu in the title bar offers, in the order the design
+ * draws it. Each item does what the same entry in `NEW_ON` does: it asks the
+ * screen that owns the record to open its form. A reminder, a message or a
+ * document is not in the list, so the screen that makes one adds it at the top
+ * while it is in view, and the palette has all of them.
  */
-export const NEW_MENU: { screen: ScreenId; action?: ScreenAction; label: string; icon: IconName }[] = [
+export type NewMenuEntry = {
+	screen: ScreenId;
+	action?: ScreenAction;
+	label: string;
+	icon: IconName;
+	separatorBefore?: boolean;
+};
+
+export const NEW_MENU: NewMenuEntry[] = [
 	{ screen: "notes", label: "New note", icon: "note" },
 	{ screen: "documents", action: "new-page", label: "New page", icon: "documents" },
-	{ screen: "overview", label: "New reminder", icon: "reminders" },
 	{ screen: "calendar", label: "New event", icon: "calendar" },
 	{ screen: "clients", label: "New client", icon: "clients" },
 	{ screen: "projects", label: "New project", icon: "projects" },
-	{ screen: "mail", label: "New message", icon: "mail" },
-	{ screen: "documents", label: "New document", icon: "documents" },
+	{ screen: "documents", action: "import", label: "Import a file", icon: "import", separatorBefore: true },
 ];
+
+/** The glyph of the entry a screen adds to the New menu when the design's list has none for it. */
+export const NEW_OWN_ICON: Record<string, IconName> = {
+	"New reminder": "reminders",
+	"New message": "mail",
+	"New document": "documents",
+};
 
 /**
  * Screens where New is drawn at the right of the title bar, as a text button

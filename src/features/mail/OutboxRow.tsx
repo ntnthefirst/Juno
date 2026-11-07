@@ -1,6 +1,5 @@
 import type { MailOutboxMessage } from "@shared/types";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { formatWhen } from "./format";
 import { STATE_LABELS, STATE_TONES } from "./outbox-format";
 
@@ -22,34 +21,18 @@ type OutboxRowProps = {
  * send all live in the same place.
  */
 export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onCancel }: OutboxRowProps) {
-	const menu = useContextMenu();
-	const items: MenuItem[] = [
+	// The platform's menu for an unsent message (decision 59).
+	const onContextMenu = contextMenuFor(
+		{ kind: "outbox", id: message.id },
 		{
-			id: "open",
-			label: message.state === "draft" || message.state === "pending" ? "Edit" : "Open",
-			icon: message.state === "draft" || message.state === "pending" ? "edit" : "mail",
-			onSelect: () => onSelect(message.id),
+			open: () => onSelect(message.id),
+			retry: () => onRetry?.(message.id),
+			"cancel-send": () => onCancel?.(message.id),
 		},
-		{
-			id: "retry",
-			label: "Try again",
-			icon: "sync",
-			separatorBefore: true,
-			disabled: message.state !== "failed" || !onRetry,
-			onSelect: () => onRetry?.(message.id),
-		},
-		{
-			id: "cancel",
-			label: "Cancel sending",
-			icon: "close",
-			danger: true,
-			disabled: !(message.state === "queued" || message.state === "pending") || !onCancel,
-			onSelect: () => onCancel?.(message.id),
-		},
-	];
+	);
 
 	return (
-		<li data-draft-kind="outbox" className="border-b border-[var(--line)]/60" onContextMenu={menu.open}>
+		<li data-draft-kind="outbox" className="border-b border-[var(--line)]/60" onContextMenu={onContextMenu}>
 			<button
 				type="button"
 				ref={buttonRef}
@@ -81,9 +64,6 @@ export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onCan
 					) : null}
 				</div>
 			</button>
-			{menu.at ? (
-				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={`Actions for ${message.subject || "this message"}`} />
-			) : null}
 		</li>
 	);
 }

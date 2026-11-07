@@ -3,7 +3,8 @@ import type { MailFolder, MailMessage, MailReplyMode, MailThread, MailThreadOutg
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon, type IconName } from "../../components/Icon";
-import { MenuButton, type MenuItem } from "../../components/Menu";
+import { ActionMenu } from "../../components/ActionMenu";
+import type { MenuHandlers } from "../../lib/native-menu";
 import { messageOf } from "../../lib/errors";
 import { describeMailFileResult } from "./format";
 import { requestOpen } from "../../lib/open-entity";
@@ -324,63 +325,19 @@ export function ThreadView({
 		}
 	}
 
-	const moreItems: MenuItem[] = [
-		{
-			id: "archive",
-			label: "Archive",
-			icon: "archive",
-			disabled: !openMessage || openMessage.folderUse === "archive",
-			onSelect: () => void fileOpen("archive"),
-		},
-		{
-			id: "mark-unread",
-			label: "Mark unread",
-			icon: "unread",
-			disabled: !openMessage || !openMessage.isSeen,
-			onSelect: () => void markOpen({ seen: false }),
-		},
-		{
-			id: "move",
-			label: "Move to folder",
-			icon: "projects",
-			disabled: !openMessage,
-			onSelect: () => void chooseFolder(),
-		},
-		{
-			id: "junk",
-			label: "Junk",
-			icon: "junk",
-			disabled: !openMessage || openMessage.folderUse === "junk",
-			onSelect: () => void fileOpen("junk"),
-		},
-		{
-			id: "link-client",
-			label: summary.clientName ? "Change client" : "Link to client",
-			icon: "link",
-			separatorBefore: true,
-			onSelect: () => setLinking(true),
-		},
-		...(summary.clientName
-			? [{ id: "unlink-client", label: "Unlink client", icon: "link" as const, onSelect: () => void unlink() }]
-			: []),
-		{
-			id: "file-project",
-			label: summary.projectId ? "Change project" : "File under a project",
-			icon: "projects",
-			onSelect: () => setFiling(true),
-		},
-		...(summary.projectId
-			? [{ id: "unfile-project", label: "Take off the project", icon: "projects" as const, onSelect: () => void unfile() }]
-			: []),
-		{
-			id: "copy-address",
-			label: "Copy sender address",
-			icon: "copy",
-			disabled: !openMessage?.from,
-			separatorBefore: true,
-			onSelect: () => void copyOpenAddress(openMessage?.from?.address ?? ""),
-		},
-	];
+	// The "..." is the platform's menu for this conversation (decision 59). Each
+	// answer is one of the things this view already does to the message in view.
+	const moreHandlers: MenuHandlers = {
+		archive: () => void fileOpen("archive"),
+		"mark-unread": () => void markOpen({ seen: false }),
+		move: () => void chooseFolder(),
+		junk: () => void fileOpen("junk"),
+		link: () => setLinking(true),
+		"unlink-client": () => void unlink(),
+		"file-project": () => setFiling(true),
+		"unfile-project": () => void unfile(),
+		"copy-address": () => void copyOpenAddress(openMessage?.from?.address ?? ""),
+	};
 
 	return (
 		<div className="flex h-full min-h-0 flex-col animate-fade">
@@ -450,8 +407,9 @@ export function ThreadView({
 								/>
 							</>
 						) : null}
-						<MenuButton
-							items={moreItems}
+						<ActionMenu
+							target={{ kind: "mail", id: summary.id, context: "reader" }}
+							handlers={moreHandlers}
 							ariaLabel="More options"
 						/>
 					</div>

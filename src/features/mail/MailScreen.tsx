@@ -686,6 +686,12 @@ export function MailScreen() {
 				}
 				break;
 			}
+			case "reply":
+			case "forward": {
+				const thread = threadById(ids[0] ?? "");
+				if (thread) void reply(thread.messageId, action);
+				break;
+			}
 			case "deleteForever":
 				setDeleteConfirm(ids);
 				break;

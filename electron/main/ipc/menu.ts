@@ -6,8 +6,8 @@
  * record, and an agent reaches the same actions through their own tools.
  */
 import { BrowserWindow, ipcMain } from "electron";
-import { parseMenuRequest } from "../../shared/menu";
-import { showContextMenu } from "../windows/context-menu";
+import { parseMenuIcons, parseMenuRequest } from "../../shared/menu";
+import { setMenuIcons, showContextMenu } from "../windows/context-menu";
 
 export function registerMenuIpc(): void {
 	ipcMain.handle("menu.show", (event, raw: unknown) => {
@@ -15,5 +15,9 @@ export function registerMenuIpc(): void {
 		const window = BrowserWindow.fromWebContents(event.sender);
 		if (!window) return { type: "none" as const };
 		return showContextMenu(window, request);
+	});
+
+	ipcMain.handle("menu.setIcons", (_event, raw: unknown) => {
+		setMenuIcons(parseMenuIcons(raw));
 	});
 }

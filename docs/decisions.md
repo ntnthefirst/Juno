@@ -1878,6 +1878,35 @@ the edit fallback for text.
 (an icon on every row, a submenu with a preview), which would move the drawn
 menu back in under the same registry.
 
+**Amended after the design pass.** Windows draws an icon beside a menu item when
+the item carries a bitmap, so the menus now show the glyphs the frames draw.
+The renderer draws the glyphs it already has (`lib/menu-icons.tsx`, the set
+named in `MENU_ICONS`) to small PNGs in the ink colour of the current theme and
+hands them over with `menu.setIcons`, again when the theme changes; the main
+process keeps them as `nativeImage`s and attaches one to each entry the
+registry names an icon for. The channel takes a closed list of names and small
+PNG data URLs, answers while locked because it carries no data, and is not an
+MCP tool. A menu with no picture yet is still a menu.
+
+The list left out above is smaller now. Added: Duplicate on an event and Archive
+on a client (both through their services, the second by setting the Archived
+status), Send a mail on a client and Send by mail on a file (each opens the
+composer addressed or attached, and nothing is sent), New project on a client,
+Download on a file, and Reply and Forward from the mail list. Still left out,
+each for a reason: Send an invite (an event keeps no attendees, so there is
+nobody to invite), Rename on a file (no service renames a document; a page is
+renamed by its title), Open in a new window on a note (there is one main window,
+the one-main-window rule), and Paste on a blank area (nothing says what a
+paste would make outside an editor).
+
+The mail reader's "..." (`reader` context), an unsent message in the list
+(`outbox`) and a template in the Styled mail column (`template`) are native
+too. The drawn `ContextMenu` stays for menus that are not one record's: the New
+menu, filters, view options and overflow lists, a folder or account in the mail
+tree (they depend on expand and sync state only the tree holds), a timeline
+entry or attachment, an automation or request row, the template list (it acts on
+a selection, with counts in the labels) and the text edit fallback.
+
 ## 60. Making an event, client, project or reminder happens in a small window
 
 Amends decision 30. The design draws New event, New client, New project and New

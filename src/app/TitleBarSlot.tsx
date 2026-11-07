@@ -3,8 +3,11 @@ import { createPortal } from "react-dom";
 import { useTitleBarSlot } from "./titlebar-slot-context";
 
 type TitleBarSlotProps = {
-	/** Left sits beside the way back. Right sits before the agent button, where a screen's own actions go. */
-	side?: "left" | "right";
+	/**
+	 * Left sits beside the way back. Right sits before New, where a screen's own
+	 * actions go. Overflow is the "..." after New, where a record keeps its menu.
+	 */
+	side?: "left" | "right" | "overflow";
 	children: ReactNode;
 };
 

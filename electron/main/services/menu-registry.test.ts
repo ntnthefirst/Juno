@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseMenuRequest, type MenuKind, type MenuRequest } from "../../shared/menu";
+import { MENU_ICONS, parseMenuRequest, type MenuKind, type MenuRequest } from "../../shared/menu";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import * as calendar from "./calendar";
+import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
 import * as notes from "./notes";
 import * as pages from "./pages";
@@ -70,14 +71,30 @@ describe("event and client menus", () => {
 			{ title: "Call", startLocal: "2099-01-01T10:00", endLocal: "2099-01-01T10:30", timezone: "Europe/Brussels" },
 			db,
 		);
-		expect(ids(await ask("event", event.id))).toEqual(["open", "edit", "delete"]);
+		expect(ids(await ask("event", event.id))).toEqual(["open", "edit", "duplicate-event", "delete"]);
 	});
 
 	it("puts Delete last and marks it dangerous for a client", async () => {
 		const client = await clients.create({ name: "Obet" }, db);
 		const entries = await ask("client", client.id);
-		expect(ids(entries)).toEqual(["open", "edit", "new-note", "delete"]);
+		// No address yet, so there is nobody to send a mail to.
+		expect(ids(entries)).toEqual(["open", "edit", "new-project", "new-note", "archive-client", "delete"]);
 		expect(entries.at(-1)).toMatchObject({ danger: true, separatorBefore: true });
+	});
+
+	it("offers Send a mail once the client has an address, and no Open on its own page", async () => {
+		const client = await clients.create({ name: "Obet" }, db);
+		await clientEmails.create({ clientId: client.id, email: "info@obet.test" }, db);
+		expect(ids(await ask("client", client.id))).toContain("send-mail");
+		expect(ids(await ask("client", client.id, "detail"))).not.toContain("open");
+	});
+
+	it("gives every entry a picture the menu can draw", async () => {
+		const client = await clients.create({ name: "Obet" }, db);
+		const reminder = await reminders.create({ title: "Call", dueOn: "2099-01-01" }, db);
+		for (const entry of [...(await ask("client", client.id)), ...(await ask("reminder", reminder.id)), ...(await ask("blank", "notes"))]) {
+			expect(MENU_ICONS as readonly string[]).toContain(entry.icon);
+		}
 	});
 });
 

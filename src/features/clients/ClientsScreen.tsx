@@ -15,7 +15,6 @@ import type {
 import type { Crumb } from "../../app/breadcrumb-context";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
-import { AddButton } from "../../components/AddButton";
 import { Avatar } from "../../components/Avatar";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
@@ -23,6 +22,7 @@ import { messageOf } from "../../lib/errors";
 import { clearPendingClient, peekPendingClient } from "../../lib/open-client";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { contextMenuFor } from "../../lib/native-menu";
+import { ComposePage, type ComposeSeed } from "../mail/ComposePage";
 import { ClientAddressPanel } from "./ClientAddressPanel";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
@@ -105,6 +105,10 @@ export function ClientsScreen() {
 		initialKind?: ClientNoteKind;
 	} | null>(null);
 	const [deleted, setDeleted] = useState<Client | null>(null);
+	const [notice, setNotice] = useState<string | null>(null);
+	const dismissNotice = useCallback(() => setNotice(null), []);
+	// A mail to a client opens the composer here, addressed to their primary address.
+	const [compose, setCompose] = useState<ComposeSeed | null>(null);
 	const [view, setView] = useState<ClientView>(EMPTY_VIEW);
 
 	const fetchRows = useCallback(
@@ -207,6 +211,20 @@ export function ClientsScreen() {
 		}
 	}
 
+	async function startMail(clientId: string) {
+		try {
+			const emails = await window.juno.clientEmails.listForClient(clientId);
+			const to = emails.find((email) => email.isPrimary) ?? emails[0];
+			if (!to) {
+				setNotice("This client has no email address yet.");
+				return;
+			}
+			setCompose({ clientId, to: [{ name: null, address: to.email }] });
+		} catch (error: unknown) {
+			setNotice(messageOf(error));
+		}
+	}
+
 	async function restore() {
 		if (!deleted) return;
 		const id = deleted.id;
@@ -288,6 +306,23 @@ export function ClientsScreen() {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
+
+	if (compose) {
+		return (
+			<ComposePage
+				seed={compose}
+				onClose={() => setCompose(null)}
+				onDeleted={() => {
+					setCompose(null);
+					setNotice("Draft deleted.");
+				}}
+				onDone={(_message, queued) => {
+					setCompose(null);
+					setNotice(queued ? "Message queued. Follow it in the mail outbox." : "Draft saved in the mail outbox.");
+				}}
+			/>
+		);
+	}
 
 	// The form takes the screen rather than covering it. Nothing in the list
 	// behind it is worth reading while a client is being filled in.
@@ -398,6 +433,12 @@ export function ClientsScreen() {
 							clientId={selectedId}
 							onEdit={(client) => setForm({ client })}
 							onDelete={(client) => void remove(client)}
+							onSendMail={(client) => void startMail(client.id)}
+							onChanged={(message) => {
+								if (message) setNotice(message);
+								refreshList();
+								bumpDetail();
+							}}
 							onEditContact={(contact) => setContactForm({ contact })}
 							onEditProject={(project) => setProjectForm({ project })}
 							onSchedule={setScheduleForm}
@@ -480,18 +521,7 @@ export function ClientsScreen() {
 
 	return (
 		<div className="relative flex h-full flex-col p-8">
-			<div className="mb-6 flex w-full items-center justify-between gap-4">
-				<div className="flex items-baseline gap-3">
-					<h1 className="text-h2">
-						Clients
-					</h1>
-					{load.status === "ready" ? (
-						<span className="text-sm text-[var(--ink-muted)]">
-							{load.rows.length} {load.rows.length === 1 ? "client" : "clients"}
-						</span>
-					) : null}
-				</div>
-
+			<div className="mb-6 flex w-full items-center justify-end gap-4">
 				<div className="flex items-center gap-3">
 					<input
 						type="text"
@@ -501,7 +531,6 @@ export function ClientsScreen() {
 						aria-label="Search clients"
 						className="w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 					/>
-					<AddButton label="New client" onClick={() => openNewRecord("client")} />
 				</div>
 			</div>
 
@@ -526,10 +555,18 @@ export function ClientsScreen() {
 						onEdit={(row) => void editRow(row)}
 						onAddNote={(row) => setNotePanel({ clientId: row.id, note: null })}
 						onDelete={(row) => void deleteRow(row)}
+						onNewProject={(row) => openNewRecord("project", { clientId: row.id })}
+						onSendMail={(row) => void startMail(row.id)}
+						onDone={(message) => {
+							if (message) setNotice(message);
+							refreshList();
+						}}
+						onFailed={setNotice}
 					/>
 				)}
 			</div>
 
+			{deleted === null && notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
 			{deleted ? (
 				<Toast
 					message={`${deleted.name} deleted.`}
@@ -563,13 +600,31 @@ type ClientTableProps = {
 	onEdit: (row: ClientSummary) => void;
 	onAddNote: (row: ClientSummary) => void;
 	onDelete: (row: ClientSummary) => void;
+	onNewProject: (row: ClientSummary) => void;
+	onSendMail: (row: ClientSummary) => void;
+	/** The main process did what the menu asked, for example archiving. */
+	onDone: (message: string | undefined) => void;
+	onFailed: (message: string) => void;
 };
 
 /**
  * Rows are the structure. No outer border, no filled header, no card, per
  * brand/BRAND.md section 7.
  */
-function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAddNote, onDelete }: ClientTableProps) {
+function ClientTable({
+	allRows,
+	view,
+	onView,
+	selectedId,
+	onSelect,
+	onEdit,
+	onAddNote,
+	onDelete,
+	onNewProject,
+	onSendMail,
+	onDone,
+	onFailed,
+}: ClientTableProps) {
 	const rows = useMemo(() => applyView(allRows, view), [allRows, view]);
 	const statusOptions = useMemo(
 		() => [
@@ -598,7 +653,11 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 				open: () => onSelect(row),
 				edit: () => onEdit(row),
 				"new-note": () => onAddNote(row),
+				"new-project": () => onNewProject(row),
+				"send-mail": () => onSendMail(row),
 				delete: () => onDelete(row),
+				done: onDone,
+				failed: onFailed,
 			},
 		);
 

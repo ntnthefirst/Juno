@@ -7,7 +7,7 @@ import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
 import { RecentMenu } from "./RecentMenu";
 import { TimerPill } from "./TimerPill";
 import type { ScreenAction } from "../lib/screen-actions";
-import { NEW_AT_RIGHT, NEW_MENU, NEW_ON, type ScreenId } from "./screens";
+import { NEW_AT_RIGHT, NEW_MENU, NEW_ON, NEW_OWN_ICON, type NewMenuEntry, type ScreenId } from "./screens";
 
 type TitleBarProps = {
 	/**
@@ -36,6 +36,8 @@ type TitleBarProps = {
 	slotRef: (element: HTMLDivElement | null) => void;
 	/** Where a screen draws its own actions before the agent button (TitleBarSlot side="right"). */
 	rightSlotRef: (element: HTMLDivElement | null) => void;
+	/** Where a record draws its "..." menu, after New (TitleBarSlot side="overflow"). */
+	overflowSlotRef: (element: HTMLDivElement | null) => void;
 };
 
 type TitleButtonProps = {
@@ -105,6 +107,7 @@ export function TitleBar({
 	onOpenAgent,
 	slotRef,
 	rightSlotRef,
+	overflowSlotRef,
 }: TitleBarProps) {
 	const agentName = agentPending > 0 ? `Agent, ${agentPending} waiting for you` : "Agent";
 	const recentButton = useRef<HTMLButtonElement>(null);
@@ -122,21 +125,26 @@ export function TitleBar({
 	const here = NEW_ON[screen];
 	const newAtRight = NEW_AT_RIGHT.includes(screen) && here !== undefined;
 
-	// The screen in view comes first and carries the shortcut for it.
-	const newItems: MenuItem[] = [...NEW_MENU]
-		.sort((a, b) => Number(b.label === here?.label) - Number(a.label === here?.label))
-		.map((entry) => ({
-			id: entry.label,
-			label: entry.label,
-			icon: entry.icon,
-			hint:
-				entry.action === "new-page"
-					? formatCombo(COMBOS.newPage).join(" ")
-					: entry.screen === here?.screen && entry.label === here.label
-						? formatCombo(COMBOS.newItem).join(" ")
-						: undefined,
-			onSelect: () => onNew(entry.screen, entry.action),
-		}));
+	// What Ctrl N makes on the screen in view carries that shortcut. When the design's
+	// list has no entry for it (a message, a document, a reminder) the screen adds
+	// its own at the top, so writing mail is never further than the plus.
+	const own: NewMenuEntry[] =
+		here && !NEW_MENU.some((entry) => entry.label === here.label)
+			? [{ screen: here.screen, label: here.label, icon: NEW_OWN_ICON[here.label] ?? "add" }]
+			: [];
+	const newItems: MenuItem[] = [...own, ...NEW_MENU].map((entry) => ({
+		id: entry.label,
+		label: entry.label,
+		icon: entry.icon,
+		separatorBefore: entry.separatorBefore,
+		hint:
+			entry.action === "new-page"
+				? formatCombo(COMBOS.newPage).join(" ")
+				: entry.screen === here?.screen && entry.label === here.label
+					? formatCombo(COMBOS.newItem).join(" ")
+					: undefined,
+		onSelect: () => onNew(entry.screen, entry.action),
+	}));
 
 	function openNewMenu() {
 		const box = newButton.current?.getBoundingClientRect();
@@ -215,6 +223,7 @@ export function TitleBar({
 						New
 					</button>
 				) : null}
+				<div ref={overflowSlotRef} className="flex min-w-0 items-center" />
 				<Divider />
 				<Tooltip label={agentName} keys={SCREEN_COMBOS.agent ? formatCombo(SCREEN_COMBOS.agent) : undefined} side="bottom" className="no-drag flex">
 					<button

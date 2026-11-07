@@ -3,7 +3,6 @@ import type { DocumentRecord, GenerateDocumentResult, ReferenceItem } from "@sha
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { useScreenAction } from "../../lib/screen-actions";
 import { DOCUMENT_SWITCH } from "../../app/screens";
-import { AddButton } from "../../components/AddButton";
 import { Avatar } from "../../components/Avatar";
 import { Checkbox } from "../../components/Checkbox";
 import { EmptyState } from "../../components/EmptyState";
@@ -14,6 +13,9 @@ import { SectionSwitch } from "../../components/SectionSwitch";
 import { Select } from "../../components/Select";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { Toast } from "../../components/Toast";
+import { ComposePage } from "../mail/ComposePage";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
+import { GroupHeader } from "../../components/GroupHeader";
 import { groupByDay } from "../../lib/day-groups";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { contextMenuFor } from "../../lib/native-menu";
@@ -71,8 +73,10 @@ export function DocumentsScreen() {
 	useRecentTouch("document", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [generating, setGenerating] = useState(false);
+	const [sending, setSending] = useState<DocumentRecord | null>(null);
 	useScreenAction("documents", (action) => {
 		if (action === "new-page") void newPage();
+		else if (action === "import") void pickAndImport();
 		else setGenerating(true);
 	});
 	const [importItems, setImportItems] = useState<ImportItem[] | null>(null);
@@ -267,6 +271,24 @@ export function DocumentsScreen() {
 	const allSelected = shown.length > 0 && shown.every((r) => selectedIds.includes(r.id));
 	const someSelected = selectedIds.length > 0 && !allSelected;
 
+	// Sending a document by mail opens the composer with it attached. Nothing goes until it is sent there.
+	if (sending) {
+		return (
+			<ComposePage
+				seed={{ clientId: sending.clientId, projectId: sending.projectId, documentIds: [sending.id], subject: sending.title }}
+				onClose={() => setSending(null)}
+				onDeleted={() => {
+					setSending(null);
+					setNotice("Draft deleted.");
+				}}
+				onDone={(_message, queued) => {
+					setSending(null);
+					setNotice(queued ? "Message queued. Follow it in the mail outbox." : "Draft saved in the mail outbox.");
+				}}
+			/>
+		);
+	}
+
 	// The form takes the screen rather than covering the list it came from.
 	if (generating) {
 		return <GenerateDialog onClose={() => setGenerating(false)} onGenerated={generated} />;
@@ -325,9 +347,9 @@ export function DocumentsScreen() {
 							) : null}
 						</div>
 
-						<div className="flex items-center gap-2">
+						<TitleBarSlot side="overflow">
 							<MenuButton
-								size="base"
+								size="dense"
 								ariaLabel="More document actions"
 								items={[
 									{ id: "new-page", label: "New page", icon: "documents", onSelect: () => void newPage() },
@@ -339,8 +361,7 @@ export function DocumentsScreen() {
 									},
 								]}
 							/>
-							<AddButton label="New document" onClick={() => setGenerating(true)} />
-						</div>
+						</TitleBarSlot>
 					</div>
 
 					{load.status === "ready" && load.rows.records.length > 0 ? (
@@ -461,6 +482,7 @@ export function DocumentsScreen() {
 								}
 								onSelect={selectDocument}
 								onRemove={(record) => void removeFromList(record)}
+								onSend={setSending}
 								onFailed={setNotice}
 							/>
 						)}
@@ -505,6 +527,7 @@ type DocumentTableProps = {
 	onToggle: (id: string) => void;
 	onSelect: (id: string, title: string) => void;
 	onRemove: (record: DocumentRecord) => void;
+	onSend: (record: DocumentRecord) => void;
 	onFailed: (message: string) => void;
 };
 
@@ -514,7 +537,7 @@ const HEADS = ["Title", "Linked to", "Status", "Issued"];
  * Rows are the structure. No outer border, no filled header, no card, per
  * brand/BRAND.md section 7.
  */
-function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRemove, onFailed }: DocumentTableProps) {
+function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRemove, onSend, onFailed }: DocumentTableProps) {
 	const labels = new Map(rows.statuses.map((item) => [item.id, item.label]));
 	const [expanded, setExpanded] = useState<string[]>([]);
 	const hasSelection = selectedIds.length > 0;
@@ -535,7 +558,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 	const menuFor = (row: DocumentRecord) =>
 		contextMenuFor(
 			{ kind: "file", id: row.id },
-			{ open: () => onSelect(row.id, row.title), delete: () => onRemove(row), failed: onFailed },
+			{ open: () => onSelect(row.id, row.title), "send-file": () => onSend(row), delete: () => onRemove(row), failed: onFailed },
 		);
 
 	return (
@@ -563,11 +586,8 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 				{groups.map((group) => (
 				<Fragment key={group.key}>
 				<tr aria-hidden>
-					<td
-						colSpan={HEADS.length + 1}
-						className="px-3 pt-5 pb-1 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]"
-					>
-						{group.label}
+					<td colSpan={HEADS.length + 1} className="px-1 pt-3">
+						<GroupHeader label={group.label} />
 					</td>
 				</tr>
 				{group.items.map((row) => {

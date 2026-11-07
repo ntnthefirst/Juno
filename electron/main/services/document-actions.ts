@@ -496,6 +496,13 @@ export async function downloadVersion(versionId: string, db: Db = getDb()): Prom
 	return result.filePath;
 }
 
+/** Saves a copy of the newest version, which is what a list row stands for. */
+export async function downloadLatest(id: string, db: Db = getDb()): Promise<string | null> {
+	const latest = versions.list(id, db).find((version) => version.isLatest);
+	if (!latest) throw new Error("This document has no file yet.");
+	return downloadVersion(latest.id, db);
+}
+
 /**
  * Asks, in a native dialog, whether to go on when the version being looked at is
  * not the newest. True straight away for the newest.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
+import { installMenuIcons } from "../lib/menu-icons";
 import { LockScreen } from "../components/LockScreen";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { AgentNotices } from "../features/agent/AgentNotices";
@@ -58,6 +59,9 @@ function Shell() {
 	// setup window without answering it would reopen it on the focus that
 	// closing it causes, which is a window with no way out.
 	const setupOfferedRef = useRef(false);
+
+	// The right-click menus are the platform's own and take bitmaps for their icons.
+	useEffect(() => installMenuIcons(), []);
 
 	useEffect(() => {
 		void window.juno.lock.state().then(setLock);
@@ -141,6 +145,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	// screen that mounts before the bar has painted still finds it.
 	const [slot, setSlot] = useState<HTMLDivElement | null>(null);
 	const [rightSlot, setRightSlot] = useState<HTMLDivElement | null>(null);
+	const [overflowSlot, setOverflowSlot] = useState<HTMLDivElement | null>(null);
 	const [recentOpen, setRecentOpen] = useState(false);
 	const [agentPending, setAgentPending] = useState(0);
 
@@ -273,7 +278,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	);
 
 	return (
-		<TitleBarSlotContext.Provider value={{ left: slot, right: rightSlot }}>
+		<TitleBarSlotContext.Provider value={{ left: slot, right: rightSlot, overflow: overflowSlot }}>
 			<div className="flex h-full flex-col bg-[var(--paper)]">
 				<TitleBar
 					back={back}
@@ -290,6 +295,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					onOpenAgent={() => navigate("agent")}
 					slotRef={setSlot}
 					rightSlotRef={setRightSlot}
+					overflowSlotRef={setOverflowSlot}
 				/>
 				<div className="relative flex min-h-0 flex-1">
 					<Sidebar

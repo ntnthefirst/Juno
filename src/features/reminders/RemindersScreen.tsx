@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Reminder, ReminderBucket } from "@shared/types";
-import { AddButton } from "../../components/AddButton";
-import { Button } from "../../components/Button";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
-import { BUCKET_LABELS, BUCKET_ORDER, plural, todayIso } from "./format";
+import { BUCKET_LABELS, BUCKET_ORDER, todayIso } from "./format";
 import { ReminderForm } from "./ReminderForm";
 import { ReminderRow } from "./ReminderRow";
 import { SnoozeDialog } from "./SnoozeDialog";
@@ -99,28 +98,16 @@ export function RemindersScreen() {
 	return (
 		<div className="h-full overflow-y-auto p-8" onContextMenu={blankMenuFor("reminders")}>
 			<div className="w-full">
-				<div className="mb-6 flex items-center justify-between gap-4">
-					<div className="flex items-baseline gap-3">
-						<h1 className="text-h2">
-							Reminders
-						</h1>
-						{load.status === "ready" ? (
-							<span className="text-sm text-[var(--ink-muted)]">
-								{plural(rows.length, "reminder", "reminders")}
-							</span>
-						) : null}
-					</div>
-
-					<div className="flex items-center gap-2">
-						<Button
-							aria-pressed={includeDone}
-							onClick={() => setIncludeDone((current) => !current)}
-						>
-							{includeDone ? "Hide completed" : "Show completed"}
-						</Button>
-						<AddButton label="New reminder" onClick={() => openNewRecord("reminder")} />
-					</div>
-				</div>
+				<TitleBarSlot side="right">
+					<button
+						type="button"
+						aria-pressed={includeDone}
+						onClick={() => setIncludeDone((current) => !current)}
+						className="inline-flex h-7 items-center rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+					>
+						{includeDone ? "Hide completed" : "Show completed"}
+					</button>
+				</TitleBarSlot>
 
 				{load.status === "loading" ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>

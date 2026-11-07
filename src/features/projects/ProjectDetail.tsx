@@ -10,6 +10,7 @@ import type {
 	ReferenceItem,
 	TimeEntry,
 } from "@shared/types";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { ActionMenu } from "../../components/ActionMenu";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/Button";
@@ -368,8 +369,15 @@ export function ProjectDetail({
 					</div>
 					<div className="flex flex-none items-center gap-1">
 						<ActionMenu target={{ kind: "add", id: current.id }} handlers={addHandlers} ariaLabel="Add to this project" label="Add" icon="add" />
-						<ActionMenu target={{ kind: "project", id: current.id, context: "detail" }} handlers={moreHandlers} ariaLabel="More project actions" />
 					</div>
+					<TitleBarSlot side="overflow">
+						<ActionMenu
+							target={{ kind: "project", id: current.id, context: "detail" }}
+							handlers={moreHandlers}
+							ariaLabel="More project actions"
+							size="dense"
+						/>
+					</TitleBarSlot>
 				</header>
 
 				<Tabs tabs={tabs} value={tab} onChange={onTabChange} label="Project" />

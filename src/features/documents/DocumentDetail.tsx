@@ -14,6 +14,7 @@ import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFi
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { announceDocumentsChanged } from "../../lib/pdf-drop";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { ComposePage } from "../mail/ComposePage";
 import { DocumentTimeline } from "./DocumentTimeline";
 import { PdfViewer } from "../../components/PdfViewer";
@@ -363,44 +364,46 @@ export function DocumentDetail({
 						<Button variant="primary" disabled={!hasFile} onClick={() => void guarded("sign", () => onSign(record))}>
 							Sign
 						</Button>
-						<div className="ml-auto flex items-center gap-1">
+						<TitleBarSlot side="right">
 							<IconAction
-								size="base"
+								size="dense"
 								icon="mail"
 								label="Send by email"
 								disabled={!hasFile}
 								onClick={() => void guarded("email", () => setSending(true))}
 							/>
 							<IconAction
-								size="base"
+								size="dense"
 								icon="export"
 								label="Download a copy"
 								disabled={!hasFile}
 								onClick={() => void guarded("download", () => void download())}
 							/>
 							<IconAction
-								size="base"
+								size="dense"
 								icon="external"
 								label="Open outside Juno"
 								disabled={!hasFile}
 								onClick={() => viewing && void run(() => window.juno.documents.openVersion(viewing.id))}
 							/>
 							<IconAction
-								size="base"
+								size="dense"
 								icon="folder-open"
 								label="Show in folder"
 								disabled={!hasFile}
 								onClick={() => viewing && void run(() => window.juno.documents.revealVersion(viewing.id))}
 							/>
 							<IconAction
-									size="base"
+									size="dense"
 									icon="remove"
 									label="Delete this version"
 									disabled={!hasFile || versions.length < 2}
 									onClick={() => void deleteVersion()}
 								/>
+						</TitleBarSlot>
+						<TitleBarSlot side="overflow">
 								<MenuButton
-								size="base"
+								size="dense"
 								ariaLabel="More document actions"
 								items={[
 									...(!isImported
@@ -424,7 +427,7 @@ export function DocumentDetail({
 									},
 								]}
 							/>
-						</div>
+						</TitleBarSlot>
 					</div>
 				</div>
 

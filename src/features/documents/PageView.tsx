@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import type { Block } from "@shared/blocks";
 import type { DocumentRecord, PageDetail } from "@shared/types";
 import { BlockEditor } from "../../components/BlockEditor";
@@ -201,8 +202,9 @@ function PageEditor({ initial, onDeleted, onChanged, onTitleChange }: PageEditor
 							</span>
 							{where ? <span>{where}</span> : null}
 							<span className="tabular">{editedLabel(record.updatedAt)}</span>
-							<span className="ml-auto">
+							<TitleBarSlot side="overflow">
 								<MenuButton
+									size="dense"
 									ariaLabel="More page actions"
 									items={[
 										{ id: "find", label: "Find in page", icon: "search", hint: "Ctrl F", onSelect: () => setFinding(true) },
@@ -210,7 +212,7 @@ function PageEditor({ initial, onDeleted, onChanged, onTitleChange }: PageEditor
 										{ id: "delete", label: "Delete", icon: "remove", danger: true, separatorBefore: true, onSelect: () => setConfirmingDelete(true) },
 									]}
 								/>
-							</span>
+							</TitleBarSlot>
 						</div>
 						{error ? (
 							<p role="alert" data-selectable className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">

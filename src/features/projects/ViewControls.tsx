@@ -1,3 +1,4 @@
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { Segmented } from "../../components/Segmented";
 import type { ProjectsView } from "@shared/types";
 import type { IconName } from "../../components/Icon";
@@ -64,17 +65,22 @@ export function ViewControls({ view, onChange }: ViewControlsProps) {
 		})),
 	];
 
+	// Both live in the title bar, as the design draws them: the layout switch
+	// before New, and the options behind a "..." after it.
 	return (
-		<div className="flex items-center gap-2">
-			<Segmented
-				size="icons"
-				label="Layout"
-				value={view.layout}
-				onChange={(layout) => onChange({ layout })}
-				options={LAYOUTS.map((layout) => ({ id: layout.id, icon: layout.icon, name: layout.label }))}
-			/>
-
-			<MenuButton items={items} ariaLabel="How this screen is shown" size="base" />
-		</div>
+		<>
+			<TitleBarSlot side="right">
+				<Segmented
+					size="icons-compact"
+					label="Layout"
+					value={view.layout}
+					onChange={(layout) => onChange({ layout })}
+					options={LAYOUTS.map((layout) => ({ id: layout.id, icon: layout.icon, name: layout.label }))}
+				/>
+			</TitleBarSlot>
+			<TitleBarSlot side="overflow">
+				<MenuButton items={items} ariaLabel="How this screen is shown" size="dense" />
+			</TitleBarSlot>
+		</>
 	);
 }

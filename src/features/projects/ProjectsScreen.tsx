@@ -3,7 +3,6 @@ import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } 
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
-import { AddButton } from "../../components/AddButton";
 import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
@@ -310,23 +309,7 @@ export function ProjectsScreen() {
 	return (
 		<div className="flex h-full flex-col px-6 py-8 lg:px-8 xl:px-10">
 			<div className="mb-6 flex w-full flex-col gap-4">
-				<div className="flex items-center justify-between gap-4">
-					<div className="flex items-baseline gap-3">
-						<h1 className="text-h2">
-							Projects
-						</h1>
-						{rows ? (
-							<span className="text-sm text-[var(--ink-muted)]">
-								{shown.length} {shown.length === 1 ? "project" : "projects"}
-							</span>
-						) : null}
-					</div>
-
-					<div className="flex items-center gap-2">
-						{view ? <ViewControls view={view} onChange={changeView} /> : null}
-						<AddButton label="New project" onClick={() => openNewRecord("project")} />
-					</div>
-				</div>
+				{view ? <ViewControls view={view} onChange={changeView} /> : null}
 
 				{rows && rows.projects.length > 0 ? (
 					<div className="flex items-center gap-2">

@@ -233,7 +233,7 @@ means a decision or a thing only Nathan can do, as at the top of this file.
 
 **Order.** The decisions in 8.1 come first, because three packages are blocked
 on them. After that the packages are independent unless one says "needs".
-A sensible order is 8.2 package 3, then 5, 6, 7, 8, then 4 and 9.
+A sensible order is 8.2 package 5, then 6, 7, 8, then 4 and 9.
 
 ### 8.1 Decisions to take first - **you**
 
@@ -270,54 +270,6 @@ the code that depends on it.
 7. **Which wins, the tokens or the design.** Taken: the design (decision 53).
 
 ### 8.2 Packages
-
-#### Package 3. The project record (L, needs a migration)
-
-**Figma.** `13 Project Record / Notes` (`29:2223`), `Menu` (`98:10622`), `Add
-menu` (`98:10829`), `Mail` (`98:11026`), `Timeline` (`98:11246`), `Time`
-(`98:11492`), `Calendar` (`98:11719`). Components: Context Menu `Kind=Project`
-and `Kind=Add` (set `76:2231`), Tab (`13:166`), Section Card (`18:399`).
-
-**Behaviour.**
-
-- **Header.** Avatar tile, project name, a status badge, "client, due date", an
-  Add button and a "..." button. Tabs: Notes, Mail, Timeline, Time, Calendar.
-- **"..." menu.** Open folder (Ctrl O), Copy folder path, Change folder, Run start
-  command, a divider, Archive, Delete (Del). The folder, its path and the command
-  are not shown on the page any more. Run start command keeps its current
-  confirmation (decision 35) and still has no MCP tool.
-- **Add menu.** Link a mail, Add time entry, Add calendar event, Add file, Add
-  note. Each opens the same form page or picker the matching tab uses.
-- **Notes.** The existing Markdown notes, "Saved as you type", with the current
-  sections, and a Details column: Client, Status, Due date, "3 threads linked",
-  Next event, Time logged.
-- **Mail.** "Linked mail. Threads you linked to this project." with Link a mail,
-  the thread rows, and the line "Mail stays in your mailbox. Linking only shows
-  the thread here."
-- **Timeline.** A vertical graph grouped by month, newest first, with a filter:
-  status changes, mail linked, quote sent for signature, time entries, contract
-  signed, project created, folder connected. Reuse `services/client-timeline.ts`
-  for the shape and add a project timeline beside it.
-- **Time.** Three figures (Logged, Estimated, Entries), then "Time entries, newest
-  first" with date, title and duration, and a Start timer button. One timer may
-  run at a time, and it is shown in the title bar while it runs.
-- **Calendar.** "Events and reminders linked to this project", Add event, and
-  Upcoming and Past lists.
-
-**Build.** Migration: table `time_entries` (project id, optional client id,
-started at and ended at as UTC ISO strings, duration in whole minutes, note) and
-a nullable `estimated_minutes` on projects. Calendar events and reminders already
-carry a nullable `project_id` with an index, so the Calendar tab needs no
-migration. Service `services/time-entries.ts`:
-`start`, `stop`, `create`, `update`, `remove` (soft), `list(projectId)`, `total`.
-Project timeline in `services/projects.ts` or its own file. IPC `time.*`. MCP:
-`time.list`, `time.start`, `time.stop`, `time.create`, `time.update` (local writes,
-side-effectful flag, never scheduled). No tool runs or edits a command.
-
-**Done when.** The five tabs and both menus match the frames in both themes.
-Tests cover the timer (start, stop, a second start while one runs), the totals
-and a rebuild migration run against a database with rows
-(`.claude/rules/data.md` section 3).
 
 #### Package 4. Notes and Pages (L, needs decisions 2 and 5)
 

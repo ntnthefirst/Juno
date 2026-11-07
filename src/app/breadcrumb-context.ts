@@ -46,18 +46,26 @@ export function usePublishBreadcrumb(trail: Crumb[]): void {
 
 	const key = trail.map((crumb) => crumb.label).join("\u0000");
 
-	useEffect(() => {
-		if (context === null) return;
-		if (latest.current.length === 0) {
-			context.withdraw(id);
-			return;
-		}
-		context.publish(id, latest.current);
-		// `key` is the real dependency: the labels are what gets drawn.
-	}, [context, id, key]);
+	// The two callbacks, not the context value. The value carries the trail, so
+	// it is new after every publish, and an effect that depended on it published
+	// again, which made a new trail, which made a new value: a screen with a name
+	// in the title bar re-rendered the whole shell thousands of times a second
+	// for as long as it was open. The callbacks never change.
+	const publish = context?.publish;
+	const withdraw = context?.withdraw;
 
 	useEffect(() => {
-		if (context === null) return;
-		return () => context.withdraw(id);
-	}, [context, id]);
+		if (!publish || !withdraw) return;
+		if (latest.current.length === 0) {
+			withdraw(id);
+			return;
+		}
+		publish(id, latest.current);
+		// `key` is the real dependency: the labels are what gets drawn.
+	}, [publish, withdraw, id, key]);
+
+	useEffect(() => {
+		if (!withdraw) return;
+		return () => withdraw(id);
+	}, [withdraw, id]);
 }

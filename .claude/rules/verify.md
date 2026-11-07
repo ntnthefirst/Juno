@@ -29,7 +29,14 @@ Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
 screen and the settings window, and write a screenshot of each in both themes
 to `.smoke/`. That is the fastest honest look at a visual change.
 `JUNO_SMOKE_MANY=1` seeds 500 clients and prints how long the Clients list takes
-to show them and how a scroll holds up. Add
+to show them and how a scroll holds up. `JUNO_SMOKE_PERF=1` is the timing run
+(`electron/main/smoke-perf.ts`): it seeds 500 clients, 150 projects, 300
+notes, 400 events, 60 pages and 400 mail conversations through the bridge, then
+prints `SMOKE_PERF` lines for the boot, each of the seven places twice, opening
+each kind of record, the 500-row list, the IPC time spent in the main process,
+and a theme change from the main window and from settings. It fails the run
+when a screen is still changing after nine seconds, which is a render loop.
+Compare two runs line by line before and after a change that should be faster. Add
 `JUNO_SMOKE_FRONT=1` to keep the window above every other window for the run;
 without it, a window somebody covers produces stale captures (see the
 `capturePage` trap below).

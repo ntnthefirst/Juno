@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	MailAccount,
 	MailFolder,
@@ -7,6 +7,7 @@ import type {
 	MailOutboxMessage,
 	MailReplyMode,
 	MailSyncStatus,
+	MailThreadIdsQuery,
 	MailThreadSummary,
 } from "@shared/types";
 import { Button } from "../../components/Button";
@@ -18,6 +19,7 @@ import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { SPECIAL_LABELS } from "./folder-tree";
 import { messageOf } from "../../lib/errors";
+import { withAll } from "../../lib/select-all";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { useScreenAction } from "../../lib/screen-actions";
 import { blankMenuFor } from "../../lib/blank-menu";
@@ -132,7 +134,7 @@ export function MailScreen() {
 	const [outboxVersion, setOutboxVersion] = useState(0);
 	const [deleteConfirm, setDeleteConfirm] = useState<string[] | null>(null);
 	const [deleteBusy, setDeleteBusy] = useState(false);
-	const [moveTarget, setMoveTarget] = useState<string[] | null>(null);
+	const [moveTarget, setMoveTarget] = useState<{ ids: string[]; accountId: string } | null>(null);
 	const [moveBusy, setMoveBusy] = useState(false);
 	const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null);
 	const [folderForm, setFolderForm] = useState<FolderFormTarget | null>(null);
@@ -327,10 +329,12 @@ export function MailScreen() {
 		}
 	}
 
-	const fetchThreads = useCallback(() => {
-		if (!selection) return Promise.resolve<MailThreadSummary[]>([]);
+	// What the list is asking for, without paging. The rows on screen are a page
+	// of this and select all is all of it, so both are built from the same query.
+	const matchQuery = useMemo((): MailThreadIdsQuery | null => {
+		if (!selection) return null;
 		const active = showingDrafts ? NO_FILTERS : filters;
-		return window.juno.mail.threads.list({
+		return {
 			...(selection.accountId ? { accountId: selection.accountId } : {}),
 			// A search stays in the folder it was typed in. Dropping the folder
 			// showed the same conversation under Inbox, Sent and Trash alike, and
@@ -343,9 +347,18 @@ export function MailScreen() {
 			...(active.fromAddress.trim() ? { fromAddress: active.fromAddress.trim() } : {}),
 			...(active.since ? { since: active.since } : {}),
 			...(active.until ? { until: active.until } : {}),
-			limit: rowLimit,
-		});
-	}, [selection, showingDrafts, term, filters, rowLimit]);
+		};
+	}, [selection, showingDrafts, term, filters]);
+
+	const fetchThreads = useCallback(() => {
+		if (!matchQuery) return Promise.resolve<MailThreadSummary[]>([]);
+		return window.juno.mail.threads.list({ ...matchQuery, limit: rowLimit });
+	}, [matchQuery, rowLimit]);
+
+	// Every id the list matched when select all last asked. It belongs to that
+	// query and that sync, so once either changes it is ignored, not compared.
+	const [matched, setMatched] = useState<{ query: MailThreadIdsQuery; version: number; ids: string[] } | null>(null);
+	const matchingIds = matched && matched.query === matchQuery && matched.version === accountsVersion ? matched.ids : null;
 
 	useEffect(() => {
 		let cancelled = false;
@@ -508,10 +521,18 @@ export function MailScreen() {
 	 * put in the selection. Picking a few, searching again and adding a few more
 	 * is the whole point of leaving search working.
 	 */
-	function selectEveryThread() {
-		const rows = (threads ?? []).map((thread) => thread.id);
-		setSelectedThreadIds((current) => [...new Set([...current, ...rows])]);
-		setLastPicked(rows[rows.length - 1] ?? null);
+	async function selectEveryThread() {
+		if (!matchQuery) return;
+		try {
+			// Ids only, from the service, so a mailbox of thousands is selected
+			// without being rendered or paged in.
+			const ids = await window.juno.mail.threads.listIds(matchQuery);
+			setMatched({ query: matchQuery, version: accountsVersion, ids });
+			setSelectedThreadIds((current) => withAll(current, ids));
+			setLastPicked(ids[ids.length - 1] ?? null);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
 	}
 
 	function clearThreadSelection() {
@@ -614,16 +635,45 @@ export function MailScreen() {
 		}
 	}
 
-	function requestMove(ids: string[]) {
-		if (ids.length === 0) return;
-		const accountIds = new Set(
-			ids.map((id) => threadById(id)?.accountId).filter((id): id is string => Boolean(id)),
-		);
-		if (accountIds.size !== 1) {
-			setNotice("Select threads from one account to move them together.");
-			return;
+	/**
+	 * The accounts a selection spans. A selected row may never have been
+	 * rendered, so an id the list does not hold is placed by asking which
+	 * account's matches it is among.
+	 */
+	async function accountsOf(ids: string[]): Promise<Set<string>> {
+		const out = new Set<string>();
+		const unknown: string[] = [];
+		for (const id of ids) {
+			const known = threadById(id)?.accountId;
+			if (known) out.add(known);
+			else unknown.push(id);
 		}
-		setMoveTarget(ids);
+		if (unknown.length === 0 || !matchQuery) return out;
+		if (matchQuery.accountId) {
+			out.add(matchQuery.accountId);
+			return out;
+		}
+		const wanted = new Set(unknown);
+		for (const account of accounts ?? []) {
+			const inAccount = await window.juno.mail.threads.listIds({ ...matchQuery, accountId: account.id });
+			if (inAccount.some((id) => wanted.has(id))) out.add(account.id);
+		}
+		return out;
+	}
+
+	async function requestMove(ids: string[]) {
+		if (ids.length === 0) return;
+		try {
+			const accountIds = await accountsOf(ids);
+			const only = accountIds.size === 1 ? [...accountIds][0] : undefined;
+			if (!only) {
+				setNotice("Select threads from one account to move them together.");
+				return;
+			}
+			setMoveTarget({ ids, accountId: only });
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
 	}
 
 	async function moveThreadsTo(ids: string[], folderId: string) {
@@ -636,7 +686,7 @@ export function MailScreen() {
 		if (!moveTarget) return;
 		setMoveBusy(true);
 		try {
-			await moveThreadsTo(moveTarget, folderId);
+			await moveThreadsTo(moveTarget.ids, folderId);
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 		} finally {
@@ -688,7 +738,7 @@ export function MailScreen() {
 				void fileThreads("trash", ids);
 				break;
 			case "move":
-				requestMove(ids);
+				void requestMove(ids);
 				break;
 			case "link": {
 				const thread = threadById(ids[0] ?? "");
@@ -860,14 +910,14 @@ export function MailScreen() {
 	const selectedFolder = selection?.folderId
 		? (activeFolders.find((f) => f.id === selection.folderId) ?? null)
 		: null;
-	const moveAccountId = moveTarget ? (threadById(moveTarget[0] ?? "")?.accountId ?? null) : null;
+	const moveAccountId = moveTarget?.accountId ?? null;
 
 	const listMenu = blankMenuFor(
 		"mail",
 		{
 			"new-message": () => setCompose({ accountId: selection?.accountId ?? accounts?.[0]?.id }),
 			sync: () => void syncNow(selection?.accountId ?? undefined),
-			"select-all": selectEveryThread,
+			"select-all": () => void selectEveryThread(),
 			"mark-all-read": () => {
 				if (selectedFolder) handleFolderAction("markAllRead", selectedFolder);
 			},
@@ -1011,8 +1061,9 @@ export function MailScreen() {
 							}}
 							inTrash={inTrash}
 							visibleIds={(threads ?? []).map((thread) => thread.id)}
+							matchingIds={matchingIds}
 							selectedIds={selectedThreadIds}
-							onSelectAll={selectEveryThread}
+							onSelectAll={() => void selectEveryThread()}
 							onClearSelection={clearThreadSelection}
 							onAction={handleThreadAction}
 							heading={showingDrafts ? "Drafts" : undefined}
@@ -1187,7 +1238,7 @@ export function MailScreen() {
 			{moveTarget ? (
 				<MoveToFolderDialog
 					folders={moveAccountId ? (folders[moveAccountId] ?? []) : []}
-					count={moveTarget.length}
+					count={moveTarget.ids.length}
 					busy={moveBusy}
 					onClose={() => (!moveBusy ? setMoveTarget(null) : undefined)}
 					onMove={(folderId) => void confirmMove(folderId)}

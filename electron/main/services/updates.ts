@@ -18,8 +18,9 @@ import { app, type Event as ElectronEvent } from "electron";
 // main process compiles to CommonJS too, so a default import resolves to an
 // undefined `.default` and throws on the first line that touches it.
 import { autoUpdater } from "electron-updater";
-import type { UpdateStage, UpdateStatus } from "../../shared/types";
+import type { ReleaseNote, UpdateStage, UpdateStatus } from "../../shared/types";
 import { isLocked } from "./lock";
+import { fromUpdateFeed, type FeedNotes } from "./release-notes";
 import * as settings from "./settings";
 import { startInstallAnimation } from "./update-animation";
 import { allowManualCheck, MANUAL_LIMIT, nextCheckDelay } from "./update-policy";
@@ -31,6 +32,7 @@ const listeners = new Set<Listener>();
 let stage: UpdateStage = "idle";
 let newVersion: string | null = null;
 let releasedAt: string | null = null;
+let newNotes: ReleaseNote | null = null;
 let percent = 0;
 let failure: string | null = null;
 let lastCheckedAt: string | null = null;
@@ -60,6 +62,7 @@ export function status(): UpdateStatus {
 		currentVersion: app.getVersion(),
 		newVersion,
 		releasedAt,
+		newNotes,
 		percent,
 		lastCheckedAt,
 		nextCheckAt,
@@ -120,9 +123,10 @@ function ensureWired(): void {
 
 	autoUpdater.on("error", (error: Error) => fail(error));
 
-	autoUpdater.on("update-available", (info: { version: string; releaseDate?: string }) => {
+	autoUpdater.on("update-available", (info: { version: string; releaseDate?: string; releaseNotes?: FeedNotes }) => {
 		newVersion = info.version;
 		releasedAt = info.releaseDate ?? null;
+		newNotes = fromUpdateFeed(info.version, info.releaseNotes);
 		// autoDownload starts on its own when auto-install is on, and the first
 		// progress event moves this on. Until then "available" is the truth.
 		setStage("available");
@@ -131,6 +135,7 @@ function ensureWired(): void {
 	autoUpdater.on("update-not-available", () => {
 		newVersion = null;
 		releasedAt = null;
+		newNotes = null;
 		setStage("current");
 	});
 

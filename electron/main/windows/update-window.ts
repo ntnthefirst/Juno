@@ -16,7 +16,7 @@ import { windowIcon } from "./chrome";
 let win: BrowserWindow | null = null;
 
 const WIDTH = 380;
-const HEIGHT = 260;
+const HEIGHT = 300;
 
 export type UpdateWindowState = {
 	/** One short line, what Juno is doing right now. */
@@ -27,7 +27,12 @@ export type UpdateWindowState = {
 	error?: string | null;
 };
 
-function document_(dark: boolean, from: string, to: string | null): string {
+/** The summary comes from the release feed, so it is text and never markup. */
+function escapeHtml(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function document_(dark: boolean, from: string, to: string | null, summary: string | null): string {
 	const paper = dark ? "#111117" : "#f6f6fa";
 	const ink = dark ? "#eeeef5" : "#16161d";
 	const muted = dark ? "#757589" : "#8b8b9c";
@@ -58,6 +63,7 @@ function document_(dark: boolean, from: string, to: string | null): string {
   .bar { height: 100%; border-radius: 3px; background: ${accent}; transition: width 180ms ease; }
   .sweep { width: 40%; animation: sweep 1.4s ease-in-out infinite; }
   @keyframes sweep { 0% { transform: translateX(-110%) } 100% { transform: translateX(320%) } }
+  .summary { font-size: 12px; color: ${muted}; max-width: 300px; line-height: 1.4; }
   .step { font-size: 13px; min-height: 18px; }
   .note { font-size: 12px; color: ${muted}; min-height: 16px; }
   .error { color: ${risk}; }
@@ -69,13 +75,15 @@ function document_(dark: boolean, from: string, to: string | null): string {
   </svg>
   <div class="name">Updating Juno</div>
   <div class="versions">${versions}</div>
+  ${summary ? `<div class="summary">${escapeHtml(summary)}</div>` : ""}
   <div class="track"><div class="bar sweep" id="bar"></div></div>
   <div class="step" id="step">Preparing</div>
   <div class="note" id="note">Juno restarts on its own when this is done.</div>
 </body></html>`;
 }
 
-export function showUpdateWindow(from: string, to: string | null): void {
+/** `summary` is the new version's one or two sentence release note, when the feed carried one. */
+export function showUpdateWindow(from: string, to: string | null, summary: string | null = null): void {
 	if (win && !win.isDestroyed()) {
 		win.focus();
 		return;
@@ -100,7 +108,7 @@ export function showUpdateWindow(from: string, to: string | null): void {
 		win = null;
 	});
 	void win.loadURL(
-		`data:text/html;charset=utf-8,${encodeURIComponent(document_(nativeTheme.shouldUseDarkColors, from, to))}`,
+		`data:text/html;charset=utf-8,${encodeURIComponent(document_(nativeTheme.shouldUseDarkColors, from, to, summary))}`,
 	);
 }
 

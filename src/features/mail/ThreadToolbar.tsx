@@ -1,6 +1,7 @@
 import type { IconName } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { SelectAllButton } from "../../components/SelectAllButton";
+import { coversAll } from "../../lib/select-all";
 import type { MailFilters } from "./mail-filters";
 import { MailSearchBar } from "./MailSearchBar";
 import type { ThreadAction } from "./ThreadList";
@@ -14,6 +15,11 @@ type ThreadToolbarProps = {
 	inTrash: boolean;
 	/** The rows the list is showing, which is what the box selects. */
 	visibleIds: string[];
+	/**
+	 * Every id the list matches, once select all has asked. The list may render
+	 * only part of them, so "all selected" is judged against these when known.
+	 */
+	matchingIds: string[] | null;
 	selectedIds: string[];
 	onSelectAll: () => void;
 	onClearSelection: () => void;
@@ -49,6 +55,7 @@ export function ThreadToolbar({
 	onFilters,
 	inTrash,
 	visibleIds,
+	matchingIds,
 	selectedIds,
 	onSelectAll,
 	onClearSelection,
@@ -56,7 +63,7 @@ export function ThreadToolbar({
 	heading,
 }: ThreadToolbarProps) {
 	const hasSelection = selectedIds.length > 0;
-	const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+	const allSelected = coversAll(matchingIds ?? visibleIds, selectedIds);
 	const someSelected = hasSelection && !allSelected;
 	const removeAction: ThreadAction = inTrash ? "deleteForever" : "trash";
 

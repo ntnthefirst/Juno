@@ -9,7 +9,7 @@
 		"type": "git",
 		"url": "git+https://github.com/ntnthefirst/Juno.git"
 	},
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"private": true,
 	"type": "module",
 	"main": "dist-electron/main.js",
@@ -30,7 +30,7 @@
 		"test": "cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run",
 		"test:watch": "cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs",
 		"smoke": "npm run compile && node scripts/smoke.mjs",
-		"smoke:packaged": "npm run compile && electron-builder --win --dir --publish never && cross-env JUNO_SMOKE_EXE=release/win-unpacked/Juno.exe node scripts/smoke.mjs",
+		"smoke:packaged": "node scripts/release-notes.mjs && npm run compile && electron-builder --win --dir --publish never && cross-env JUNO_SMOKE_EXE=release/win-unpacked/Juno.exe node scripts/smoke.mjs",
 		"start": "npm run compile && electron .",
 		"icons": "electron scripts/make-icon.mjs && electron scripts/make-installer-art.mjs",
 		"db:generate": "drizzle-kit generate",

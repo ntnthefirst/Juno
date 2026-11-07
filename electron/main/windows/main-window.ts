@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import { join } from "node:path";
-import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
+import { hardenWindow, titleBarOptions, viewUrl, windowBackground, windowIcon } from "./chrome";
 
 /**
  * The one application window. There is never a second: see windows/index.ts,
@@ -15,7 +15,7 @@ export function createMainWindow(isDev: boolean): BrowserWindow {
 		minHeight: 520,
 		show: false,
 		icon: windowIcon(),
-		backgroundColor: "#f6f6fa",
+		backgroundColor: windowBackground(),
 		...titleBarOptions(),
 		webPreferences: {
 			// dist-electron/main/windows -> dist-electron/preload.js

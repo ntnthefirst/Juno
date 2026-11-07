@@ -42,7 +42,8 @@ export function LinkClientDialog({ threadId, currentClientId, senderAddress, onC
 				.catch((cause: unknown) => {
 					if (!cancelled) setError(messageOf(cause));
 				});
-		}, 120);
+			// Only a typed search waits; the list on opening is asked for at once.
+		}, search.trim() ? 120 : 0);
 		return () => {
 			cancelled = true;
 			clearTimeout(id);

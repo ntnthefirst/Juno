@@ -23,6 +23,7 @@ import { PAGE_PADDING, SoloSectionContext } from "../features/settings/section-l
 import { SettingsNav } from "../features/settings/SettingsNav";
 import { SignatureSection } from "../features/settings/SignatureSection";
 import { DesktopSection } from "../features/settings/DesktopSection";
+import { ReleaseNotesSection } from "../features/settings/ReleaseNotesSection";
 import { UpdatesSection } from "../features/settings/UpdatesSection";
 import { ConnectionPanel } from "../features/agent/ConnectionPanel";
 import { InstructionsPanel } from "../features/agent/InstructionsPanel";
@@ -247,6 +248,8 @@ function PageBody({ page, theme, onTheme, onNotice }: PageBodyProps): ReactNode 
 			);
 		case "updates":
 			return <UpdatesSection />;
+		case "release-notes":
+			return <ReleaseNotesSection />;
 		case "desktop":
 			return <DesktopSection />;
 		case "about":

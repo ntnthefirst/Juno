@@ -168,6 +168,7 @@ import type {
 	MailTemplatePatch,
 	MailTemplateRender,
 	MailThread,
+	MailThreadIdsQuery,
 	MailThreadListQuery,
 	MailTemplateSendInput,
 	MailThreadSummary,
@@ -226,6 +227,7 @@ import type {
 	SuggestionOutcome,
 	SuggestionSources,
 	UpdateStatus,
+	ReleaseNote,
 	AgentInstructions,
 	AgentInstructionsView,
 	AgentPermissions,
@@ -553,6 +555,12 @@ export interface JunoApi {
 		getTheme(): Promise<ThemeSetting>;
 		/** Also sets nativeTheme.themeSource, or the title bar disagrees with the window. */
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
+		/**
+		 * Says this window shows the theme it was last sent. The main process
+		 * waits for it before changing the caption buttons, so they do not flip
+		 * ahead of the page.
+		 */
+		themeApplied(): Promise<void>;
 		/** Fires in every window, so a change made in settings reaches the app. */
 		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
 		/** How the projects screen is drawn. A preference, not a record. */
@@ -605,6 +613,8 @@ export interface JunoApi {
 		/** Downloads if needed, then restarts into the new version. */
 		install(): Promise<UpdateStatus>;
 		setAutoInstall(value: boolean): Promise<UpdateStatus>;
+		/** Every version's notes shipped with this build, newest first. */
+		releaseNotes(): Promise<ReleaseNote[]>;
 		/** Fires while a download runs, which is the only slow part of this. */
 		onChange(listener: (status: UpdateStatus) => void): () => void;
 	};
@@ -1013,6 +1023,8 @@ export interface JunoApi {
 		};
 		threads: {
 			list(query?: MailThreadListQuery): Promise<MailThreadSummary[]>;
+			/** The id of every thread the same filters match, in list order, with no rows built. */
+			listIds(query?: MailThreadIdsQuery): Promise<string[]>;
 			get(id: string): Promise<MailThread | null>;
 			linkClient(id: string, clientId: string): Promise<MailThreadSummary>;
 			unlinkClient(id: string): Promise<MailThreadSummary>;

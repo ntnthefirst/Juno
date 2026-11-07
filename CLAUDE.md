@@ -46,6 +46,7 @@ amended by what actually happened, and the structure map says which.
 | [.claude/rules/security.md](.claude/rules/security.md) | Credentials, the preload bridge, CSP, treating mail HTML as hostile, the lock |
 | [.claude/rules/mcp.md](.claude/rules/mcp.md) | Tool naming and shapes, read-only vs side-effectful, confirmation |
 | [.claude/rules/styling.md](.claude/rules/styling.md) | Tokens not values, density, the three-state theme, focus, tabular numerals |
+| [.claude/rules/release-notes.md](.claude/rules/release-notes.md) | What each update says to the person using Juno, where it lives, and writing it before a `dev` to `main` pull request |
 | [.claude/rules/writing.md](.claude/rules/writing.md) | Interface English, client output Dutch, the AI-tells blacklist |
 | [.claude/rules/git.md](.claude/rules/git.md) | Commits, staging, **no AI attribution** |
 | [.claude/rules/verify.md](.claude/rules/verify.md) | What must pass, and the traps in this stack |

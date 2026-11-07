@@ -273,6 +273,7 @@ const api: JunoApi = {
 		getProjectsView: () => call("settings.getProjectsView"),
 		setProjectsView: (patch) => call("settings.setProjectsView", patch),
 		setTheme: (theme) => call("settings.setTheme", theme),
+		themeApplied: () => call("settings.themeApplied"),
 		onThemeChange: (listener) => {
 			const handler = (_event: Electron.IpcRendererEvent, theme: ThemeSetting) => listener(theme);
 			ipcRenderer.on("settings.themeChanged", handler);
@@ -304,6 +305,7 @@ const api: JunoApi = {
 		check: () => call("updates.check"),
 		install: () => call("updates.install"),
 		setAutoInstall: (value) => call("updates.setAutoInstall", value),
+		releaseNotes: () => call("updates.releaseNotes"),
 		onChange: (listener) => {
 			const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => listener(status);
 			ipcRenderer.on("updates.changed", handler);
@@ -583,6 +585,7 @@ const api: JunoApi = {
 		},
 		threads: {
 			list: (query) => call("mail.threads.list", query),
+			listIds: (query) => call("mail.threads.listIds", query),
 			get: (id) => call("mail.threads.get", id),
 			linkClient: (id, clientId) => call("mail.threads.linkClient", id, clientId),
 			unlinkClient: (id) => call("mail.threads.unlinkClient", id),

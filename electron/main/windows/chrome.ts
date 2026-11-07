@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { DEV_CSP_NONCE, DEV_URL, DEV_WS_URL } from "../../shared/dev";
 import { ASSET_ORIGIN, MAIL_FRAME_ORIGIN } from "../../shared/types";
 import { APP_ORIGIN } from "../scheme";
+import { nativePalette } from "./native-palette";
 
 export { DEV_URL };
 
@@ -88,36 +89,50 @@ export function installSessionPolicy(isDev: boolean): void {
  * The colours the operating system paints the caption buttons with. They are
  * read from the resolved theme rather than from the renderer, because the
  * overlay is drawn by the OS before any React has run.
- *
- * These are the --paper and --ink-muted values from tokens.css. They cannot be
- * `var(--paper)`: this is a native surface, not a document.
  */
 export function overlayColors(): { color: string; symbolColor: string; height: number } {
-	const dark = nativeTheme.shouldUseDarkColors;
-	return {
-		color: dark ? "#111117" : "#f6f6fa",
-		symbolColor: dark ? "#a3a4b5" : "#5d5e70",
-		height: TITLEBAR_HEIGHT,
-	};
+	const palette = nativePalette(nativeTheme.shouldUseDarkColors);
+	return { color: palette.paper, symbolColor: palette.symbol, height: TITLEBAR_HEIGHT };
 }
 
 /**
- * Repaints the caption buttons on every open window. Called when the theme
- * changes, because the overlay keeps the colour it was created with otherwise
- * and a light close button sits on a dark bar.
+ * What a window shows before its page paints, and around it while it resizes.
+ * A window made with the light colour in a dark theme flashes white on launch.
  */
-export function refreshOverlayTheme(): void {
-	if (process.platform === "darwin") return;
+export function windowBackground(): string {
+	return nativePalette(nativeTheme.shouldUseDarkColors).paper;
+}
+
+/**
+ * Repaints what the operating system draws on every open window: the caption
+ * buttons and the background behind the page. Called when the theme changes,
+ * because both keep the colour they were created with otherwise, and a light
+ * close button sits on a dark bar.
+ */
+export function refreshNativeTheme(): void {
+	const background = windowBackground();
+	const overlay = overlayColors();
 	for (const window of BrowserWindow.getAllWindows()) {
 		if (window.isDestroyed()) continue;
+		window.setBackgroundColor(background);
+		if (process.platform === "darwin") continue;
 		try {
-			window.setTitleBarOverlay(overlayColors());
+			window.setTitleBarOverlay(overlay);
 		} catch {
 			// A window created without an overlay throws rather than no-ops. That
 			// is not an error worth surfacing: it only means this window draws its
 			// own controls.
 		}
 	}
+}
+
+/**
+ * While the setting is "system", the OS can change theme under a running app.
+ * The page follows by itself through prefers-color-scheme; the native surfaces
+ * have to be told. Called once at startup.
+ */
+export function followSystemTheme(): void {
+	nativeTheme.on("updated", refreshNativeTheme);
 }
 
 /**

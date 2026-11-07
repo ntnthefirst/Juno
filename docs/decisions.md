@@ -152,6 +152,15 @@ on `<html>`, and the main process sets `nativeTheme.themeSource` to the same
 value so the title bar, menus and native dialogs match. Setting only one of the
 two produces a light title bar over a dark window.
 
+The order matters as much as the pair. The pages go first: the main process
+sends the theme to every window, each applies it with transitions held off and
+answers after the frame that shows it, and only then are `themeSource`, the
+caption-button overlay and the window background changed
+(`electron/main/windows/theme-switch.ts`). The other way round, the caption
+buttons flipped a third of a second before the page did. The stored theme is
+set on `themeSource` at startup, before the splash, so the first frame is
+already in it.
+
 The token cascade in `brand/tokens.css` already handles all three: `:root` is
 light, the `prefers-color-scheme` block follows the OS, and an explicit
 `data-theme` overrides both. Do not add a second mechanism.
@@ -2354,3 +2363,30 @@ Add to calendar and Link to project.
 
 **What would reverse this:** if the bar teaches people to ignore it, the cues are
 too wide and the list shrinks to the strongest ones.
+
+## 71. Release notes are one file, written before the release pull request
+
+Every version says what changed for the person using Juno, in the app, in the
+update that is waiting, and to an agent.
+
+- **One file, `build/release-notes.md`**, newest first, shipped in the package.
+  Not the GitHub release body, which is written after the fact and which an
+  offline copy cannot read. Not a database table, because it never changes on a
+  machine.
+- **The next update's notes travel in the release feed.**
+  `scripts/release-notes.mjs` writes the entry for the version being built into
+  `build/release-notes-latest.md`, `electron-builder.yml` names it as
+  `releaseInfo.releaseNotesFile`, and `electron-updater` reports it on
+  `update-available`. The build fails when the entry is missing.
+- **Read in Settings, Release notes** (a page of the General group), not a
+  rail place: the rail stays at seven (decision 61). The Updates page shows the
+  incoming version's notes, and the install window shows its summary.
+  `updates.release_notes` is a read tool in the Read row.
+- **Written before the `dev` to `main` pull request**, with `package.json` set
+  to the same version, so `version.yml` takes that number instead of numbering
+  from the highest tag. The structure and tone are in
+  `.claude/rules/release-notes.md`, and a test holds the file to them.
+
+**What would reverse this:** a release rhythm fast enough that writing notes by
+hand is skipped, in which case drafts are generated from the log and still edited
+by a person.

@@ -123,6 +123,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"mail.templates.render",
 		"mail.threads.get",
 		"mail.threads.list",
+		"mail.threads.list_ids",
 		"notes.get",
 		"notes.list",
 		"notes.search",
@@ -156,6 +157,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"templates.preview",
 		"time.list",
 		"updates.check",
+		"updates.release_notes",
 		"updates.status",
 	],
 	change: [

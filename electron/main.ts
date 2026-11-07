@@ -24,6 +24,7 @@ import {
 } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
+import { applyStoredTheme } from "./main/ipc/settings";
 import * as agentAudit from "./main/services/agent-audit";
 import { configureClaudeDesktop } from "./main/services/claude-desktop";
 import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
@@ -62,12 +63,15 @@ import { installNotifications } from "./main/notifications";
 import * as desktop from "./main/services/desktop";
 import { badgeCount, desktopPorts, isWindows, releaseDesktop, startBadge, syncBadge, trayExists } from "./main/tray";
 import { focusMainWindow, getMainWindow, onMainWindowCreated, openMainWindow } from "./main/windows";
-import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
+import { applyDevDockIcon, followSystemTheme, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
 import { installOnQuit, startUpdates } from "./main/services/updates";
 import { devDataDir } from "./main/dev-data";
 
 const isDev = Boolean(process.env.JUNO_DEV);
+
+/** When the boot reached each stage, on this process's clock. Read by the smoke run's timings. */
+const bootMarks = { ready: 0, windowCreated: 0, readyToShow: null as number | null };
 
 // A development run never touches installed data. Set before anything reads a
 // path, because app.getPath("userData") is resolved on first use and cached.
@@ -93,6 +97,7 @@ if (!app.requestSingleInstanceLock()) {
 	app.on("second-instance", () => openMainWindow(isDev));
 
 	app.whenReady().then(async () => {
+		bootMarks.ready = performance.now();
 		// Before the first window, so the splash is the first thing carrying the
 		// right icon rather than the second.
 		applyDevDockIcon();
@@ -104,6 +109,9 @@ if (!app.requestSingleInstanceLock()) {
 		// service has to import `electron` and every one stays testable in plain
 		// Node.
 		settings.configureSettings(userDataDir());
+		// Before the splash and the first window, so both open in the chosen theme.
+		await applyStoredTheme();
+		followSystemTheme();
 		const hidden = await launchedHidden();
 		if (!process.env.JUNO_SMOKE && !hidden) showSplash();
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
@@ -269,6 +277,10 @@ if (!app.requestSingleInstanceLock()) {
 		installSessionPolicy(isDev);
 
 		const window = hidden ? null : openMainWindow(isDev);
+		bootMarks.windowCreated = performance.now();
+		window?.once("ready-to-show", () => {
+			bootMarks.readyToShow = performance.now();
+		});
 		// Not on create: a window that exists but has not painted is a grey
 		// rectangle, which is the exact gap the splash is covering.
 		window?.once("ready-to-show", () => closeSplash());
@@ -333,6 +345,26 @@ if (!app.requestSingleInstanceLock()) {
 								joinPath(process.env.JUNO_SMOKE_SHOT, "mcp-notice.png"),
 								(await window.webContents.capturePage()).toPNG(),
 							);
+						}
+
+						// JUNO_SMOKE_PERF=1: the timings a person would feel, on a business of
+						// a realistic size, printed as SMOKE_PERF lines. See main/smoke-perf.ts.
+						if (process.env.JUNO_SMOKE_PERF) {
+							const { runPerfProbe } = await import("./main/smoke-perf");
+							try {
+								await runPerfProbe(window, bootMarks);
+							} catch (error) {
+								// Out at once with the reason, rather than waiting out the timeout.
+								console.error(`Smoke: ${error instanceof Error ? error.message : String(error)}`);
+								// A beat for the line to reach the pipe before the process goes.
+								setTimeout(() => app.exit(1), 300);
+								return;
+							}
+							// The timings are the whole of this run: the walk below expects a
+							// first run, which the probe has already answered.
+							console.log("SMOKE_READY perf");
+							app.quit();
+							return;
 						}
 
 						if (process.env.JUNO_SMOKE_DEMO) {
@@ -5133,6 +5165,16 @@ if (!app.requestSingleInstanceLock()) {
 										`document.querySelector("main").textContent.includes("Install updates automatically")`,
 									)) as boolean;
 									if (!shown) throw new Error("Smoke: the updates page did not show the update settings");
+								}
+
+								// The release notes page lists the running version first.
+								{
+									await openPage("release-notes", "general");
+									await pause(300);
+									const listed = (await inSettings(
+										`(() => { const first = document.querySelector("main article"); return first !== null && first.textContent.includes("Installed"); })()`,
+									)) as boolean;
+									if (!listed) throw new Error("Smoke: the release notes page did not list the installed version first");
 								}
 
 								// Statuses and labels shows one list at a time, and switching is a tab.

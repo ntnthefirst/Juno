@@ -3,7 +3,7 @@ import { NewClientWindow } from "../features/new-record/NewClientWindow";
 import { NewEventWindow } from "../features/new-record/NewEventWindow";
 import { NewProjectWindow } from "../features/new-record/NewProjectWindow";
 import { NewReminderWindow } from "../features/new-record/NewReminderWindow";
-import { useTheme } from "../lib/theme";
+import { useThemeSync } from "../lib/theme";
 
 type NewRecordWindowProps = {
 	record: NewRecordKind;
@@ -18,7 +18,7 @@ type NewRecordWindowProps = {
  */
 export function NewRecordWindow({ record, prefill }: NewRecordWindowProps) {
 	// The theme is application-wide, so this window follows the one the main window has.
-	useTheme();
+	useThemeSync();
 	switch (record) {
 		case "event":
 			return <NewEventWindow prefill={prefill} />;

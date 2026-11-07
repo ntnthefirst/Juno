@@ -9,18 +9,31 @@
  * local.
  *
  * The kinds are `event` (a day and a time in the words, offered as a calendar
- * event), `project` (a project named in the words, offered as a link of the
+ * event), `project` (the open project of the conversation's client, or a project named in the words, offered as a link of the
  * whole conversation to that project, through the same service the reader's
  * Link to project button uses) and `reminder` (something asked for by a day, or
  * a promise to come back, offered as a reminder through the reminders service).
  */
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, max } from "drizzle-orm";
+import { isOpenProjectStatus } from "../../shared/project-status";
 import type { MessageSuggestion, SuggestionKind, SuggestionOutcome, SuggestionSources } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now as stamp } from "../db/columns";
-import { mailAccounts, mailMessages, mailSuggestionStates, mailThreads, projects } from "../db/schema";
+import {
+	documents,
+	mailAccounts,
+	mailMessages,
+	mailSuggestionStates,
+	mailThreads,
+	notes,
+	projectStatusChanges,
+	projects,
+	referenceItems,
+	timeEntries,
+} from "../db/schema";
 import * as calendar from "./calendar";
 import { htmlToText } from "./mail-html";
+import { clientMatches } from "./mail-recipients";
 import * as mailThreadsService from "./mail-threads";
 import * as settings from "./settings";
 import * as remindersService from "./reminders";
@@ -163,35 +176,156 @@ function mentions(text: string, name: string): boolean {
 	return new RegExp(String.raw`(^|[^\p{L}\p{N}])${escaped}($|[^\p{L}\p{N}])`, "iu").test(text);
 }
 
+function parseAddresses(json: string): string[] {
+	try {
+		const list = JSON.parse(json) as { address?: string | null }[];
+		return Array.isArray(list) ? list.map((entry) => entry?.address ?? "").filter(Boolean) : [];
+	} catch {
+		return [];
+	}
+}
+
 /**
- * A project named in the subject or the words, on a conversation that is not
- * filed under one yet. The longest name wins, and two different projects
- * named at the same length are no suggestion at all, because a wrong guess
- * costs more than a missing one. A project of another client than the
+ * The client a conversation is about: the one it is filed under, or else the
+ * one client that the sender and recipients belong to once the owner's own
+ * address is left out. Two different clients on one thread is no answer.
+ */
+function clientOf(
+	db: Db,
+	thread: { clientId: string | null },
+	message: typeof mailMessages.$inferSelect,
+	own: string,
+): string | null {
+	if (thread.clientId) return thread.clientId;
+	const mine = own.toLowerCase();
+	const addresses = [message.fromAddress ?? "", ...parseAddresses(message.toJson), ...parseAddresses(message.ccJson)].filter(
+		(address) => address && address.toLowerCase() !== mine,
+	);
+	const found = new Set<string>();
+	for (const matches of clientMatches(db, addresses).values()) for (const match of matches) found.add(match.clientId);
+	return found.size === 1 ? [...found][0]! : null;
+}
+
+/** The latest sign of life per project. One bounded query per record kind, each indexed by project. */
+function lastActivity(db: Db, ids: string[], own: Map<string, string>): Map<string, string> {
+	const latest = new Map(own);
+	const bump = (id: string | null, at: string | null) => {
+		if (!id || !at) return;
+		const seen = latest.get(id);
+		if (!seen || at > seen) latest.set(id, at);
+	};
+	for (const row of db
+		.select({ id: mailThreads.projectId, at: max(mailThreads.lastMessageAt) })
+		.from(mailThreads)
+		.where(and(inArray(mailThreads.projectId, ids), isNull(mailThreads.deletedAt)))
+		.groupBy(mailThreads.projectId)
+		.all())
+		bump(row.id, row.at);
+	for (const row of db
+		.select({ id: timeEntries.projectId, at: max(timeEntries.startedAt) })
+		.from(timeEntries)
+		.where(and(inArray(timeEntries.projectId, ids), isNull(timeEntries.deletedAt)))
+		.groupBy(timeEntries.projectId)
+		.all())
+		bump(row.id, row.at);
+	for (const row of db
+		.select({ id: documents.projectId, at: max(documents.updatedAt) })
+		.from(documents)
+		.where(and(inArray(documents.projectId, ids), isNull(documents.deletedAt)))
+		.groupBy(documents.projectId)
+		.all())
+		bump(row.id, row.at);
+	for (const row of db
+		.select({ id: notes.projectId, at: max(notes.updatedAt) })
+		.from(notes)
+		.where(and(inArray(notes.projectId, ids), isNull(notes.deletedAt)))
+		.groupBy(notes.projectId)
+		.all())
+		bump(row.id, row.at);
+	for (const row of db
+		.select({ id: projectStatusChanges.projectId, at: max(projectStatusChanges.changedAt) })
+		.from(projectStatusChanges)
+		.where(and(inArray(projectStatusChanges.projectId, ids), isNull(projectStatusChanges.deletedAt)))
+		.groupBy(projectStatusChanges.projectId)
+		.all())
+		bump(row.id, row.at);
+	return latest;
+}
+
+/**
+ * A project to offer for a conversation that is not filed under one yet.
+ *
+ * When the conversation belongs to a client, the candidates are that client's
+ * open projects and nothing else: a single one is offered, and with several
+ * the one named in the words wins, then the most recently active, so the owner
+ * gets one offer rather than none. A project of another client than the
  * conversation's is never offered, the same rule linking applies.
+ *
+ * With no open project of a client to go on, a project named in the subject or the
+ * words still counts. The longest name wins, and two different projects named
+ * at the same length are no suggestion, because a wrong guess costs more than
+ * a missing one.
  */
 function findProject(db: Db, messageId: string): FoundProject | null {
 	const row = db
-		.select({ message: mailMessages, thread: mailThreads })
+		.select({ message: mailMessages, thread: mailThreads, account: mailAccounts })
 		.from(mailMessages)
 		.innerJoin(mailThreads, eq(mailMessages.threadId, mailThreads.id))
+		.innerJoin(mailAccounts, eq(mailMessages.accountId, mailAccounts.id))
 		.where(and(eq(mailMessages.id, messageId), isNull(mailMessages.deletedAt)))
 		.get();
 	if (!row || row.thread.projectId) return null;
-	const { message, thread } = row;
+	const { message, thread, account } = row;
 
 	const body = message.bodyText?.trim() ? message.bodyText : message.bodyHtml ? htmlToText(message.bodyHtml) : "";
 	const text = `${message.subject}
 ${body}`;
-	if (!text.trim()) return null;
 
+	const clientId = clientOf(db, thread, message, account.email);
+	if (clientId) {
+		const open = db
+			.select({ id: projects.id, name: projects.name, updatedAt: projects.updatedAt, statusKey: referenceItems.key })
+			.from(projects)
+			.leftJoin(referenceItems, eq(projects.statusId, referenceItems.id))
+			.where(and(eq(projects.clientId, clientId), isNull(projects.deletedAt)))
+			.limit(200)
+			.all()
+			.filter((project) => isOpenProjectStatus(project.statusKey));
+		if (open.length > 0) {
+			let chosen = open[0]!;
+			if (open.length > 1) {
+				const named = open.filter((project) => project.name.trim().length >= 3 && mentions(text, project.name.trim()));
+				const pool = named.length > 0 ? named : open;
+				const activity = lastActivity(
+					db,
+					pool.map((project) => project.id),
+					new Map(pool.map((project) => [project.id, project.updatedAt])),
+				);
+				chosen = [...pool].sort(
+					(a, b) => (activity.get(b.id) ?? "").localeCompare(activity.get(a.id) ?? "") || b.id.localeCompare(a.id),
+				)[0]!;
+			}
+			return {
+				threadId: thread.id,
+				projectId: chosen.id,
+				suggestion: {
+					kind: "project",
+					messageId,
+					headline: `You are working on ${chosen.name.trim()} with this client`,
+					question: "Link this conversation to the project?",
+				},
+			};
+		}
+	}
+
+	if (!text.trim()) return null;
 	const matches = db
 		.select({ id: projects.id, name: projects.name, clientId: projects.clientId })
 		.from(projects)
 		.where(isNull(projects.deletedAt))
 		.all()
 		.filter((project) => project.name.trim().length >= 3)
-		.filter((project) => !thread.clientId || !project.clientId || project.clientId === thread.clientId)
+		.filter((project) => !clientId || !project.clientId || project.clientId === clientId)
 		.filter((project) => mentions(text, project.name.trim()));
 	if (matches.length === 0) return null;
 	const longest = Math.max(...matches.map((project) => project.name.trim().length));
@@ -205,7 +339,7 @@ ${body}`;
 			kind: "project",
 			messageId,
 			headline: `This looks like part of ${chosen.name.trim()}`,
-			question: "Link this message to the project?",
+			question: "Link this conversation to the project?",
 		},
 	};
 }

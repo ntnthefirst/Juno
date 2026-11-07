@@ -562,3 +562,52 @@ describe("moving to a named folder", () => {
 // that is not synced is still a real move on the server; the message simply is
 // not pulled back until that folder is turned on.
 void folders;
+
+describe("select all", () => {
+	/** More threads than the biggest page a list will ever hold. */
+	const MANY = 620;
+
+	beforeEach(async () => {
+		const inbox = box.messages.get("INBOX")!;
+		const base = Date.now() - 3_600_000;
+		for (let i = 0; i < MANY; i++) {
+			inbox.push({
+				uid: 100 + i,
+				from: `sender${i}@example.be`,
+				subject: `Order ${i}${i % 10 === 0 ? " gutter" : ""}`,
+				messageId: `<bulk-${i}@example.be>`,
+				date: new Date(base + i * 1000).toISOString(),
+				flags: [],
+			});
+		}
+		await sync.syncAccount(accountId, db);
+	});
+
+	it("names every thread the filters match, past the page limit, in list order", async () => {
+		const ids = await threads.listThreadIds({ accountId, folderSpecialUse: "inbox" }, db);
+		expect(ids).toHaveLength(MANY + 1);
+		expect(new Set(ids).size).toBe(MANY + 1);
+
+		const firstPage = await threads.listThreads({ accountId, folderSpecialUse: "inbox", limit: 500 }, db);
+		expect(ids.slice(0, 500)).toEqual(firstPage.map((t) => t.id));
+	});
+
+	it("applies the same filters as the list, search included", async () => {
+		const query = { accountId, folderSpecialUse: "inbox" as const, search: "gutter" };
+		const ids = await threads.listThreadIds(query, db);
+		expect(ids).toHaveLength(MANY / 10);
+		const listed = await threads.listThreads({ ...query, limit: 500 }, db);
+		expect(new Set(ids)).toEqual(new Set(listed.map((t) => t.id)));
+
+		expect(await threads.listThreadIds({ accountId, folderSpecialUse: "sent" }, db)).toEqual([]);
+		expect(await threads.listThreadIds({ accountId, unreadOnly: true, folderSpecialUse: "trash" }, db)).toEqual([]);
+	});
+
+	it("files every thread named, including more than one statement can carry", async () => {
+		const ids = await threads.listThreadIds({ accountId, folderSpecialUse: "inbox" }, db);
+		const result = await actions.archiveThreads(ids, db);
+		expect(result.moved).toBe(MANY + 1);
+		expect(await threads.listThreadIds({ accountId, folderSpecialUse: "inbox" }, db)).toEqual([]);
+		expect(await threads.listThreadIds({ accountId, folderSpecialUse: "archive" }, db)).toHaveLength(MANY + 1);
+	});
+});

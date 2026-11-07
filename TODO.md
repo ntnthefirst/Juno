@@ -233,7 +233,7 @@ means a decision or a thing only Nathan can do, as at the top of this file.
 
 **Order.** The decisions in 8.1 come first, because three packages are blocked
 on them. After that the packages are independent unless one says "needs".
-A sensible order is 8.2 package 5, then 6, 7, 8, then 4 and 9.
+A sensible order is 8.2 package 5, then 7, 8, then 4 and 9.
 
 ### 8.1 Decisions to take first - **you**
 
@@ -245,14 +245,6 @@ the code that depends on it.
    a seventh place is a decision and not an edit. Options: add the entry (and
    change that section), or reach Notes from the Documents switch. Blocks
    package 4.
-3. **What "Allow" may do for an agent.** The design's permissions page lets the
-   owner set Read, Change records, and Write drafts to Allow, meaning the call
-   runs without parking. Decision 24 as built parks every side-effectful call.
-   `.claude/rules/mcp.md` section 4 already says a write that only touches local
-   records may run directly, so Allow for those two is compatible with the rule
-   and not with decision 24. Send, sign, file and delete stay locked to "Ask
-   first" in both. Recommended: allow it for Change records and Write drafts and
-   amend decision 24. Blocks package 6.
 4. **Separate windows for creating a record.** The design draws New event, New
    client, New project and New reminder as small windows (frames listed in
    package 8). Decision 30 says anything with fields is a page, and decision 34
@@ -264,9 +256,6 @@ the code that depends on it.
    sits in the Documents list and belongs to a client or a project, which is
    what a document does (decision 48). Recommended: a document kind, so the
    versions, ownership and timeline already built apply. Blocks package 4.
-6. **Where automations live.** The design's Agent screen no longer lists them and
-   no frame shows another home. They exist in the app (`features/agent/
-   AutomationList.tsx`). Decide a home, then draw it in Figma first (8.5).
 7. **Which wins, the tokens or the design.** Taken: the design (decision 53).
 
 ### 8.2 Packages
@@ -312,41 +301,6 @@ New menu (`NEW_MENU` in `app/screens.ts`) gets New note and New page.
 **Done when.** A note and a page can be made, searched, found in, linked to a
 client or project, archived and driven by an agent. Tests cover search and the
 day grouping. The empty state exists.
-
-#### Package 6. Agent permissions and instructions (M, needs decision 3)
-
-**Figma.** `19 Settings / Agent` (`86:7434`, the Permissions page),
-`19 Settings / Instructions` (`86:7569`), `17 Agent / Requests` (`32:3006`),
-`17 Agent / Log` (`32:3369`). Components: Permission Row (`84:2243`), Permission
-Switch (`84:2242`), Text Area (`84:2264`), Request Card (`18:562`).
-
-**Behaviour.**
-
-- **Settings > MCP gets two pages** after "What an agent can do": Permissions and
-  Instructions. The MCP group is then Server, Connect a client, What an agent
-  can do, Permissions, Instructions (`features/settings/pages.ts`).
-- **Permissions** has five rows, each a three-way switch Off, Ask first, Allow:
-  Read everything (clients, projects, documents, notes and mail), Change records
-  and notes, Write mail drafts, Send mail, sign and file, Delete. Defaults: Allow,
-  Ask first, Allow, Ask first, Ask first. The last two cannot be set to Allow, and
-  the switch shows a lock on that option. Below, a "Suggestions" section with a
-  switch per source ("From mail", and the same for documents).
-- **Instructions** has "For everyone" and "For mail only" text areas, "Saved as
-  you type", and "Add instructions for another area". They are handed to every
-  connected agent as the server's instructions text when it connects.
-- **Requests** and **Log** keep their layouts. The Log has When, Tool, Outcome and
-  Who columns and keeps entries for six months.
-
-**Build.** Keep the levels in `settings.json`, not the database. Enforce them in
-`services/agent-actions.ts` (the service, not the adapter): Off returns a typed
-error that names the setting ("Turned off under Settings > MCP > Permissions");
-Ask first parks as today; Allow runs directly for the capabilities decision 3
-permits. Send, sign, file and delete ignore the setting and always park. Return
-the instructions text from the MCP server at initialisation. Check first:
-`mcp/host.test.ts` must keep failing when a flag does not match the rules.
-
-**Done when.** Tests prove the locked options cannot be reached through the
-service, through IPC or through MCP. Both pages are in the settings search.
 
 #### Package 7. Context menus everywhere, native (M)
 
@@ -472,14 +426,6 @@ guard the rest with a platform check, do not stub a Mac or Linux version.
 
 **Done when.** Each action works from a real toast on Windows, and the badge
 clears when the last request is answered.
-
-#### Package 12. Automations get a home (S to M, needs decision 6)
-
-The app has automations (`features/agent/AutomationList.tsx`, `AutomationForm.tsx`,
-`services/automations.ts`) and the design no longer shows them. Once the home is
-decided and drawn, move the screen there and remove it from the Agent screen. The
-rules in `.claude/rules/mcp.md` section 5 stand: a recording of service calls, no
-second engine, a step that parks stops the run.
 
 ### 8.3 Layout rules the design learned the hard way
 

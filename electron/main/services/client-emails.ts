@@ -61,7 +61,8 @@ export async function listForClient(clientId: string, db: Db = getDb()): Promise
 		.all();
 }
 
-export async function create(input: ClientEmailInput, db: Db = getDb()): Promise<ClientEmail> {
+/** The synchronous body of `create`, so a caller can compose it into one transaction. */
+export function insertEmail(input: ClientEmailInput, db: Db): ClientEmail {
 	const email = requireEmail(input.email);
 
 	return db.transaction((tx) => {
@@ -77,6 +78,10 @@ export async function create(input: ClientEmailInput, db: Db = getDb()): Promise
 		if (makePrimary) clearPrimaryOnSiblings(tx, row.clientId, row.id);
 		return row;
 	});
+}
+
+export async function create(input: ClientEmailInput, db: Db = getDb()): Promise<ClientEmail> {
+	return insertEmail(input, db);
 }
 
 export async function update(

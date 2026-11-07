@@ -227,7 +227,8 @@ export async function get(id: string, db: Db = getDb()): Promise<Client | null> 
 	return row ?? null;
 }
 
-export async function create(input: ClientInput, db: Db = getDb()): Promise<Client> {
+/** The synchronous body of `create`, so a caller can compose it into one transaction. */
+export function insertClient(input: ClientInput, db: Db): Client {
 	const name = requireName(input.name);
 	checkStatus(input.statusId, db);
 
@@ -236,6 +237,10 @@ export async function create(input: ClientInput, db: Db = getDb()): Promise<Clie
 		.values({ ...input, name, sortName: sortNameFor(name) })
 		.returning()
 		.get();
+}
+
+export async function create(input: ClientInput, db: Db = getDb()): Promise<Client> {
+	return insertClient(input, db);
 }
 
 /**

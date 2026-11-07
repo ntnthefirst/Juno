@@ -1,19 +1,22 @@
 import { ipcMain } from "electron";
 import type { ListClientsQuery } from "../../shared/api";
 import type {
-	ClientInput,
+	ClientIntakeInput,
 	ClientNoteInput,
 	ClientNotePatch,
 	ClientPatch,
 	ClientTimelineQuery,
 } from "../../shared/types";
+import * as intake from "../services/client-intake";
 import * as timeline from "../services/client-timeline";
 import * as clients from "../services/clients";
 
 export function registerClientsIpc(): void {
 	ipcMain.handle("clients.list", (_event, query?: ListClientsQuery) => clients.list(query));
 	ipcMain.handle("clients.get", (_event, id: string) => clients.get(id));
-	ipcMain.handle("clients.create", (_event, input: ClientInput) => clients.create(input));
+	ipcMain.handle("clients.create", (_event, input: ClientIntakeInput) =>
+		intake.createWithContact(input),
+	);
 	ipcMain.handle("clients.update", (_event, id: string, patch: ClientPatch) =>
 		clients.update(id, patch),
 	);

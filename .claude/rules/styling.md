@@ -144,7 +144,9 @@ edge: sticky headers and side columns inside the sheet use `--surface`. It still
 and the caption buttons sit on it. A screen may put its own controls in it
 with `app/TitleBarSlot.tsx`: `side="left"` is beside the way back (Mail puts
 the styled mail pane button there, and only while Mail is open) and
-`side="right"` is before the agent button.
+`side="right"` is before the agent button. The one running time entry is drawn
+there too, from any screen, by `app/TimerPill.tsx` (decision 56): a clock, the
+project name and a stop button, and nothing while no timer runs.
 
 What the bar holds, from the Title Bar component (`14:221`) and its variants:
 Search, Recent, Reminders and New (a plus) at the left, then a divider and the

@@ -1734,3 +1734,38 @@ its model differs from the one built.
 **What would reverse this:** a need for rules with more than one condition, which
 would take the static-text model back off the branch, or a person asking for a
 block to be added to a message that was already started.
+
+---
+
+## 56. Time is logged per project, one timer runs, and a project's timeline is read back
+
+A one-person business sells hours and needs to know where they went. A project
+keeps time entries (`time_entries`): a start, an end and a duration in whole
+minutes, with the client copied from the project so a report by client needs no
+join. A project may carry an estimate, `projects.estimated_minutes`.
+
+- **One timer runs at a time, in the whole app.** A running timer is a row with
+  no end. The service refuses a second and names the project it is running on,
+  and a partial unique index on the owner refuses it again underneath, so two
+  windows racing cannot both start one. It is shown in the title bar from any
+  screen and stopped there.
+- **The summed figure is the stored whole minutes**, not the difference of two
+  timestamps. A person who types "1 h 30" means ninety. A finished timer rounds
+  to the nearest minute and never to zero.
+- **The tools are local writes**, so they carry the side-effectful flag, are
+  never scheduled, and wait for approval like every other write until decision
+  24 is amended. There is no tool that deletes an entry.
+- **A project's timeline is read from the records**, as a client's is. The one
+  thing with no other trace is a status change, so `project_status_changes`
+  holds one row per change. A mail thread and a document have no "linked on" or
+  "sent on" instant of their own, so they sit at their last message and their
+  last edit, and the interface does not claim more.
+- **Archive is a status.** The shipped set has none, so the first archive adds
+  "Archived" to the project statuses as an ordinary item of the owner's own, and
+  it is found by its key afterwards.
+- **The "..." and Add menus are drawn by the application for now**, behind one
+  component (`components/ActionMenu.tsx`), so making them native later is a
+  swap in one place.
+
+**What would reverse this:** a need to time several things at once, which would
+move the unique index from the owner to the owner and the project.

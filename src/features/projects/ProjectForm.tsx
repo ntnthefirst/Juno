@@ -7,6 +7,7 @@ import { Icon } from "../../components/Icon";
 import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { minutesToHours, parseHours } from "./time-format";
 
 type ProjectFormProps = {
 	/** Null creates, a project edits. */
@@ -31,6 +32,7 @@ type Values = {
 	startsOn: string;
 	dueOn: string;
 	agreedValue: string;
+	estimatedHours: string;
 	localPath: string;
 };
 
@@ -72,6 +74,7 @@ function toValues(project: Project | null): Values {
 		startsOn: project?.startsOn ?? "",
 		dueOn: project?.dueOn ?? "",
 		agreedValue: centsToInput(project?.agreedValueCents ?? null),
+		estimatedHours: minutesToHours(project?.estimatedMinutes ?? null),
 		localPath: project?.localPath ?? "",
 	};
 }
@@ -104,6 +107,7 @@ export function ProjectForm({
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [valueError, setValueError] = useState<string | null>(null);
+	const [hoursError, setHoursError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
@@ -146,10 +150,12 @@ export function ProjectForm({
 
 		const name = values.name.trim();
 		const amount = parseAmount(values.agreedValue);
+		const hours = parseHours(values.estimatedHours);
 
 		setNameError(name.length === 0 ? "Enter a name." : null);
 		setValueError(amount.ok ? null : "Use an amount like 1250,00.");
-		if (name.length === 0 || !amount.ok) return;
+		setHoursError(hours.ok ? null : "Use hours like 14 or 7,5.");
+		if (name.length === 0 || !amount.ok || !hours.ok) return;
 
 		setError(null);
 		setBusy(true);
@@ -164,6 +170,7 @@ export function ProjectForm({
 			startsOn: textOrNull(values.startsOn),
 			dueOn: textOrNull(values.dueOn),
 			agreedValueCents: amount.cents,
+			estimatedMinutes: hours.minutes,
 			localPath: textOrNull(values.localPath),
 		};
 
@@ -244,6 +251,16 @@ export function ProjectForm({
 						error={valueError}
 						inputMode="decimal"
 						placeholder="1250,00"
+						tabular
+					/>
+					<Field
+						label="Estimated hours"
+						value={values.estimatedHours}
+						onChange={(value) => set("estimatedHours", value)}
+						error={hoursError}
+						inputMode="decimal"
+						placeholder="14"
+						help="Shown next to the time logged."
 						tabular
 					/>
 

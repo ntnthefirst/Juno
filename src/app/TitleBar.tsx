@@ -5,6 +5,7 @@ import { Tooltip } from "../components/Tooltip";
 import { overlayGutter } from "../lib/platform";
 import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
 import { RecentMenu } from "./RecentMenu";
+import { TimerPill } from "./TimerPill";
 import { NEW_AT_RIGHT, NEW_MENU, NEW_ON, type ScreenId } from "./screens";
 
 type TitleBarProps = {
@@ -196,6 +197,7 @@ export function TitleBar({
 			</h1>
 
 			<nav aria-label="Window" className="flex min-w-0 items-center justify-end gap-0.5">
+				<TimerPill />
 				<div ref={rightSlotRef} className="flex min-w-0 items-center" />
 				{newAtRight && here ? (
 					<button

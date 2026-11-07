@@ -94,6 +94,8 @@ export const COMBOS = {
 	lock: "mod+shift+l",
 	help: "mod+/",
 	find: "mod+f",
+	openFolder: "mod+o",
+	deleteRecord: "delete",
 } as const;
 
 export type ShortcutRow = { combos: string[]; label: string };
@@ -133,6 +135,13 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 	{
 		title: "Reading a message",
 		rows: [{ combos: [COMBOS.find], label: "Find in the open message" }],
+	},
+	{
+		title: "In a project",
+		rows: [
+			{ combos: [COMBOS.openFolder], label: "Open the project folder" },
+			{ combos: [COMBOS.deleteRecord], label: "Delete the project" },
+		],
 	},
 	{
 		title: "In the mail list",

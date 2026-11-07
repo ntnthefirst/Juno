@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Project, ProjectSummary, ProjectsView, ReferenceItem } from "@shared/types";
+import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { useScreenAction } from "../../lib/screen-actions";
 import { AddButton } from "../../components/AddButton";
@@ -12,10 +12,11 @@ import { useRecentTouch } from "../../lib/use-recent-touch";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
 import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
 import { GenerateDialog } from "../documents/GenerateDialog";
-import { ProjectDetail } from "./ProjectDetail";
+import { ProjectDetail, type ProjectTab } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 import { ProjectGrid } from "./ProjectGrid";
 import { ProjectTable } from "./ProjectTable";
+import { TimeEntryFormPage } from "./TimeEntryFormPage";
 import { ViewControls } from "./ViewControls";
 
 type Rows = { projects: ProjectSummary[]; statuses: ReferenceItem[] };
@@ -76,6 +77,9 @@ export function ProjectsScreen() {
 	const [editing, setEditing] = useState<Project | null | "new">(null);
 	useScreenAction("projects", () => setEditing("new"));
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
+	// A time entry is a form too: null is closed, an entry of null is a new one.
+	const [timeForm, setTimeForm] = useState<{ entry: TimeEntry | null } | null>(null);
+	const [tab, setTab] = useState<ProjectTab>("notes");
 	// A document from a template is a page of its own, the same as on a client.
 	const [generating, setGenerating] = useState(false);
 	const [deleted, setDeleted] = useState<ProjectSummary | null>(null);
@@ -114,6 +118,7 @@ export function ProjectsScreen() {
 	const clearSelection = useCallback(() => {
 		setSelectedId(null);
 		setSelectedName(null);
+		setTab("notes");
 	}, []);
 
 	// The view is written through so it survives a restart, and applied
@@ -127,6 +132,7 @@ export function ProjectsScreen() {
 	}
 
 	function open(project: ProjectSummary) {
+		setTab("notes");
 		setSelectedId(project.id);
 		setSelectedName(project.name);
 	}
@@ -174,7 +180,7 @@ export function ProjectsScreen() {
 	// nothing floats above it: a dialog on top handles Escape itself, and
 	// without this guard both would fire.
 	useEffect(() => {
-		if (selectedId === null || editing !== null || scheduleForm !== null || generating) return;
+		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || generating) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			if (document.querySelector("[role='dialog']")) return;
@@ -182,7 +188,7 @@ export function ProjectsScreen() {
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, editing, scheduleForm, generating, clearSelection]);
+	}, [selectedId, editing, scheduleForm, timeForm, generating, clearSelection]);
 
 	const rows = load.status === "ready" ? load.rows : null;
 	const needle = term.trim().toLowerCase();
@@ -207,6 +213,12 @@ export function ProjectsScreen() {
 						{ label: "Projects", onSelect: clearSelection },
 						{ label: selectedName ?? "Project", onSelect: () => setGenerating(false) },
 						{ label: "New document" },
+					]
+				: selectedId !== null && timeForm !== null
+				? [
+						{ label: "Projects", onSelect: clearSelection },
+						{ label: selectedName ?? "Project", onSelect: () => setTimeForm(null) },
+						{ label: timeForm.entry ? "Edit time entry" : "Add time entry" },
 					]
 				: selectedId !== null && scheduleForm !== null
 				? [
@@ -243,6 +255,22 @@ export function ProjectsScreen() {
 		);
 	}
 
+	if (selectedId !== null && timeForm !== null) {
+		return (
+			<TimeEntryFormPage
+				projectId={selectedId}
+				entry={timeForm.entry}
+				backLabel="Project"
+				onClose={() => setTimeForm(null)}
+				onSaved={() => {
+					setTimeForm(null);
+					setTab("time");
+					setDetailVersion((version) => version + 1);
+				}}
+			/>
+		);
+	}
+
 	if (selectedId !== null && scheduleForm !== null) {
 		return (
 			<ScheduleFormPage
@@ -251,6 +279,7 @@ export function ProjectsScreen() {
 				onClose={() => setScheduleForm(null)}
 				onSaved={() => {
 					setScheduleForm(null);
+					setTab("calendar");
 					setDetailVersion((version) => version + 1);
 				}}
 			/>
@@ -262,11 +291,14 @@ export function ProjectsScreen() {
 			<ProjectDetail
 				key={`${selectedId}:${detailVersion}`}
 				projectId={selectedId}
+				tab={tab}
+				onTabChange={setTab}
 				onBack={clearSelection}
 				onChanged={refreshList}
 				onEdit={(project) => setEditing(project)}
 				onSchedule={setScheduleForm}
 				onGenerateDocument={() => setGenerating(true)}
+				onTimeForm={(entry) => setTimeForm({ entry })}
 				onNameChange={setSelectedName}
 				onDeleted={(project) => {
 					clearSelection();

@@ -1137,6 +1137,14 @@ if (!app.requestSingleInstanceLock()) {
 									const [filedThread] = await smokeThreads.listThreads({ limit: 1 });
 									if (!ownProject || !filedThread) throw new Error("Smoke: no project or thread to file together");
 									await smokeThreads.linkProject(filedThread.id, ownProject.id);
+									const smokeTime = await import("./main/services/time-entries");
+									for (const [day, minutes, note] of [
+										["2026-09-12", 60, "Contract and measurements"],
+										["2026-09-24", 240, "Assembly"],
+										["2026-10-02", 180, "Delivery and fitting"],
+									] as const) {
+										await smokeTime.create({ projectId: ownProject.id, startedAt: `${day}T09:00:00.000Z`, durationMinutes: minutes, note });
+									}
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1150,31 +1158,78 @@ if (!app.requestSingleInstanceLock()) {
 											const main = document.querySelector("main");
 											if (!main.textContent.includes("Repository")) return "the links are not shown";
 											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
-											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the project";
+											const tab = (name) => [...main.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === name);
+											for (const name of ["Notes", "Mail", "Timeline", "Time", "Calendar"]) {
+												if (!tab(name)) return "no " + name + " tab";
+											}
+											if (!main.querySelector("button[aria-label='Add to this project']")) return "no Add menu";
 											const notes = main.querySelector("[aria-label='Project notes']");
 											if (!notes) return "no notes editor on the project";
 											if (!notes.textContent.includes("Release notes")) return "the notes editor does not show the stored notes";
+											if (!main.textContent.includes("Details")) return "no details column";
 											if (!main.querySelector("button[aria-label='Add a document']")) return "no documents section on the project";
-											const mailRow = [...main.querySelectorAll("section h2")].find((el) => el.textContent.trim() === "Mail");
-											if (!mailRow) return "no mail section on the project";
-											if (!mailRow.closest("section").textContent.includes(${JSON.stringify(filedThread.subject)})) return "the filed conversation is not listed on the project";
-											const addDate = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add date");
-											if (!addDate) return "no add date button on the project";
-											addDate.click();
+											if (!main.textContent.includes("Repository")) return "the links are not shown";
+											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
+											if (main.textContent.includes("Dates and reminders")) return "the old dates section is still on the first tab";
+
+											// The Mail tab lists the filed conversation.
+											tab("Mail").click();
+											await wait(700);
+											if (!main.textContent.includes("Linked mail")) return "no linked mail card";
+											if (!main.textContent.includes(${JSON.stringify(filedThread.subject)})) return "the filed conversation is not listed on the project";
+											if (!main.textContent.includes("Mail stays in your mailbox")) return "no mailbox line on the mail tab";
+
+											// The Time tab: the entries the smoke wrote, and the timer.
+											tab("Time").click();
+											await wait(700);
+											if (!main.textContent.includes("Time entries")) return "no time entries card";
+											if (!main.textContent.includes("Delivery and fitting")) return "the time entries are not listed";
+											if (![...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start timer")) return "no start timer button";
+
+											// The Timeline tab reads the records back.
+											tab("Timeline").click();
+											await wait(700);
+											if (!main.textContent.includes("Project created")) return "no created line on the timeline";
+											if (!main.textContent.includes("Time entry:")) return "no time entry on the timeline";
+
+											// The Calendar tab: adding an event opens a page, and back returns to the tab.
+											tab("Calendar").click();
+											await wait(700);
+											const addEvent = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add event");
+											if (!addEvent) return "no add event button on the project";
+											addEvent.click();
 											await wait(600);
 											if (!document.querySelector("main").textContent.includes("New event")) return "the date form did not open from the project";
 											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(700);
-											if (!document.querySelector("main").textContent.includes("Dates and reminders")) return "back did not return to the project";
-											const start = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start");
-											if (!start) return "no start button";
-											const files = main.textContent.includes("Files");
-											if (!files) return "no files section";
-											// The three dots say where the files are kept, which is the
-											// one answer this screen exists to give.
+											if (!document.querySelector("main").textContent.includes("Events and reminders linked to this project")) return "back did not return to the calendar tab";
+											document.querySelector("main [role=tab]").click();
+											await wait(500);
+
+											// The "..." menu holds the folder actions, and the Add menu holds the five adds.
 											const more = main.querySelector("button[aria-label='More project actions']");
 											if (!more) return "no actions menu";
 											more.click();
+											await wait(300);
+											const labels = [...document.querySelectorAll("[role=menuitem]")].map((el) => el.textContent.trim());
+											for (const label of ["Open folder", "Copy folder path", "Change folder", "Run start command", "Archive", "Delete"]) {
+												if (!labels.some((one) => one.startsWith(label))) return "the menu has no " + label;
+											}
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											main.querySelector("button[aria-label='Add to this project']").click();
+											await wait(300);
+											const adds = [...document.querySelectorAll("[role=menuitem]")].map((el) => el.textContent.trim());
+											for (const label of ["Link a mail", "Add time entry", "Add calendar event", "Add file", "Add note"]) {
+												if (!adds.includes(label)) return "the Add menu has no " + label;
+											}
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+
+											// Where the files are kept is one answer this screen still gives, from the files section.
+											const otherWays = main.querySelector("button[aria-label='Other ways to add a file']");
+											if (!otherWays) return "no other ways to add a file";
+											otherWays.click();
 											await wait(300);
 											const where = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Where the files are kept");
 											if (!where) return "the menu does not say where the files are";
@@ -1187,26 +1242,43 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: project record ${opened}`);
-									// The conversations filed under the project, in both themes, with
-									// the storage dialog closed and the section scrolled into view.
+									// Every tab and both menus, in both themes, with the storage dialog
+									// closed first. The timer runs for the Time tab shots, so the title bar
+									// pill is in them, and it is stopped again afterwards.
 									await window.webContents.executeJavaScript(
 										`(async () => {
 											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await new Promise((r) => setTimeout(r, 500));
-											const heading = [...document.querySelectorAll("main section h2")].find((el) => el.textContent.trim() === "Mail");
-											heading?.scrollIntoView({ block: "start" });
-											await new Promise((r) => setTimeout(r, 400));
 										})()`,
 									);
+									const timeService = await import("./main/services/time-entries");
 									if (shotDir) {
-										for (const theme of ["light", "dark"] as const) {
-											nativeTheme.themeSource = theme;
-											await window.webContents.executeJavaScript(
-												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
-											);
-											await new Promise((r) => setTimeout(r, 400));
-											writeFileSync(joinPath(shotDir, `project-mail-${theme}.png`), (await capture(window.webContents)).toPNG());
-										}
+										const shoot = async (name: string, before: string, after = "") => {
+											for (const theme of ["light", "dark"] as const) {
+												nativeTheme.themeSource = theme;
+												await window.webContents.executeJavaScript(
+													`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+												);
+												await window.webContents.executeJavaScript(`(async () => { ${before} })()`);
+												await new Promise((r) => setTimeout(r, 450));
+												writeFileSync(joinPath(shotDir, `project-${name}-${theme}.png`), (await capture(window.webContents)).toPNG());
+												if (after) await window.webContents.executeJavaScript(`(async () => { ${after} })()`);
+											}
+										};
+										const clickTab = (label: string) =>
+											`const t = [...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === ${JSON.stringify(label)}); t.click(); await new Promise((r) => setTimeout(r, 500));`;
+										await shoot("notes", clickTab("Notes"));
+										await shoot("mail", clickTab("Mail"));
+										await shoot("timeline", clickTab("Timeline"));
+										await shoot("calendar", clickTab("Calendar"));
+										await timeService.start(ownProject.id, "Smoke timer");
+										await shoot("time", clickTab("Time"));
+										await timeService.stop();
+										const openMenu = (label: string) =>
+											`document.querySelector("main button[aria-label='${label}']").click(); await new Promise((r) => setTimeout(r, 350));`;
+										const closeMenu = `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await new Promise((r) => setTimeout(r, 300));`;
+										await shoot("menu", clickTab("Notes") + openMenu("More project actions"), closeMenu);
+										await shoot("add-menu", openMenu("Add to this project"), closeMenu);
 									}
 								}
 								if (screen === "Client record") {

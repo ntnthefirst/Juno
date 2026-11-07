@@ -29,7 +29,6 @@ export type SettingsPageId =
 	| "certificate"
 	| "lock"
 	| "backup"
-	| "recent"
 	| "mcp-server"
 	| "mcp-connect"
 	| "mcp-tools"
@@ -78,12 +77,11 @@ export const PAGES: SettingsPage[] = [
 	{ id: "mail", group: "mail", label: "Mail accounts", anchors: ["mail-accounts", "mail-rules", "mail-rule-history", "mail-folders", "removed-accounts"], solo: false },
 
 	{ id: "statuses", group: "documents", label: "Statuses and labels", anchors: ["reference"], solo: true },
-	{ id: "signature", group: "documents", label: "Signature image", anchors: ["signature"], solo: true },
+	{ id: "signature", group: "documents", label: "Signature image", anchors: ["documents-folder", "signature"], solo: false },
 	{ id: "certificate", group: "documents", label: "Digital signature", anchors: ["certificate"], solo: true },
 
 	{ id: "lock", group: "security", label: "Lock", anchors: ["lock"], solo: true },
-	{ id: "backup", group: "security", label: "Backup", anchors: ["backup"], solo: true },
-	{ id: "recent", group: "security", label: "Recent", anchors: ["recent"], solo: true },
+	{ id: "backup", group: "security", label: "Backup", anchors: ["backup", "agent-log", "recent"], solo: false },
 
 	{ id: "mcp-server", group: "mcp", label: "Server", anchors: ["mcp-server", "mcp-clients"], solo: false },
 	{ id: "mcp-connect", group: "mcp", label: "Connect a client", anchors: ["mcp-connect"], solo: true },

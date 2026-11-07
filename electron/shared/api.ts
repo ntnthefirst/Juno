@@ -108,6 +108,7 @@ import type {
 	SigningCertificateInfo,
 	AddressCandidate,
 	BackupInfo,
+	DocumentsFolder,
 	Client,
 	ClientAddress,
 	ClientAddressInput,
@@ -543,6 +544,12 @@ export interface JunoApi {
 		/** Opens a file picker in the main process and copies the image in. */
 		chooseSignature(): Promise<string | null>;
 		clearSignature(): Promise<void>;
+		/** The folder new documents are written to. */
+		getDocumentsFolder(): Promise<DocumentsFolder>;
+		/** Opens a folder picker in the main process. Null when it is cancelled. */
+		chooseDocumentsFolder(): Promise<DocumentsFolder | null>;
+		/** Back to the folder inside the data folder. Nothing is moved. */
+		resetDocumentsFolder(): Promise<DocumentsFolder>;
 		getTheme(): Promise<ThemeSetting>;
 		/** Also sets nativeTheme.themeSource, or the title bar disagrees with the window. */
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
@@ -732,6 +739,8 @@ export interface JunoApi {
 			list(query?: AuditListQuery): Promise<AuditEvent[]>;
 			/** The record each row touched, by name. */
 			describe(ids: string[]): Promise<AgentAuditView[]>;
+			/** Deletes entries past their retention now, and says how many. Never offered to an agent. */
+			purge(): Promise<number>;
 		};
 	};
 

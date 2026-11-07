@@ -5,7 +5,7 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { approve, configureAgentActions, request, resetForTests } from "./agent-actions";
-import { list, purgeOldEvents, record, recordRead, type RecordInput } from "./agent-audit";
+import { callCounts, list, purgeOldEvents, record, recordRead, type RecordInput } from "./agent-audit";
 
 const migrations = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 
@@ -128,5 +128,19 @@ describe("logging reads", () => {
 		expect(purgeOldEvents(db, NOW)).toBe(1);
 		const left = await list({}, db);
 		expect(left.map((event) => event.result).sort()).toEqual(["ok", "read"]);
+	});
+});
+
+describe("counting calls per tool", () => {
+	it("counts what an agent or an automation ran, and nothing a person did or is still waiting on", () => {
+		writeRowAt(NOW, { actor: "agent", toolName: "clients.update", result: "ok" });
+		writeRowAt(NOW, { actor: "agent", toolName: "clients.update", result: "failed" });
+		writeRowAt(NOW, { actor: "automation", toolName: "clients.update", result: "ok" });
+		writeRowAt(NOW, { actor: "agent", toolName: "mail.send", result: "pending" });
+		writeRowAt(NOW, { actor: "user", toolName: "clients.update", result: "ok" });
+
+		const counts = callCounts(db);
+		expect(counts.get("clients.update")).toBe(3);
+		expect(counts.has("mail.send")).toBe(false);
 	});
 });

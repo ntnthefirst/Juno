@@ -1,11 +1,13 @@
-import { IconButton } from "../../components/IconButton";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { MailAccount } from "@shared/types";
-import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { Icon } from "../../components/Icon";
+import { isMac } from "../../lib/platform";
+import { PageHeader } from "./PageHeader";
+import type { SettingsPage } from "./pages";
+import { StatusBadge } from "../../components/StatusBadge";
 import { messageOf } from "../../lib/errors";
-import { formatWhen } from "../mail/format";
 import { MailAccountForm } from "./MailAccountForm";
 import { MailAccountPage } from "./mail-account/MailAccountPage";
 import { RemovedAccounts } from "./RemovedAccounts";
@@ -14,11 +16,11 @@ import { PAGE_PADDING } from "./section-layout";
 
 type MailSectionProps = {
 	onSaved: (message: string) => void;
-	/** The page title. It is drawn here, because the account form replaces the whole page, header included. */
-	header: ReactNode;
+	/** The page whose title is drawn here, because the account form replaces the whole page, header included. */
+	page: SettingsPage;
 };
 
-export function MailSection({ onSaved, header }: MailSectionProps) {
+export function MailSection({ onSaved, page }: MailSectionProps) {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [form, setForm] = useState<{ account: MailAccount | null } | null>(null);
@@ -104,66 +106,69 @@ export function MailSection({ onSaved, header }: MailSectionProps) {
 	// The list keeps its own padding, because the form above reaches the edges.
 	return (
 		<div className={PAGE_PADDING}>
-			{header}
+			<PageHeader
+				page={page}
+				action={
+					<Button variant="primary" size="dense" onClick={() => setForm({ account: null })}>
+						<Icon name="add" size={14} />
+						Add account
+					</Button>
+				}
+			/>
 			{/* Wrapped, so the first section is the first child and drops its rule. */}
 			<div>
 				<Section
 					title="Accounts"
 					anchor="mail-accounts"
-					description="Passwords are kept in the operating system keychain. Open an account for its folders, its rules and what they did."
-					action={
-						<AddButton label="Add account" onClick={() => setForm({ account: null })} />
-					}
+					lead
+					description={`Passwords are stored by ${isMac ? "macOS" : "Windows"} and never shown again. Open an account for its folders, its rules and what they did.`}
 				>
 					{accounts === null ? (
 						<p className="text-[var(--ink-muted)]">Loading.</p>
 					) : accounts.length === 0 ? (
 						<p className="text-[var(--ink-muted)]">No accounts yet.</p>
 					) : (
-						<ul className="flex flex-col">
-							{accounts.map((account) => (
-								<li
-									key={account.id}
-									className="flex items-center gap-4 border-b border-[var(--line)]/60 py-2 last:border-b-0"
-								>
-									<button
-										type="button"
-										aria-label={`Open ${account.label}`}
-										data-account={account.id}
-										onClick={() => setOpened(account.id)}
-										className="min-w-0 flex-1 rounded-[var(--radius-md)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+						<ul className="flex flex-col gap-3">
+							{accounts.map((account) => {
+								const status = accountStatus(account);
+								return (
+									<li
+										key={account.id}
+										className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] px-5 py-3.5"
 									>
-										<span className="flex items-baseline gap-2">
-											<span className="truncate font-[var(--weight-medium)]">{account.label}</span>
-											{account.label !== account.email ? (
-												<span className="truncate text-sm text-[var(--ink-muted)]">
-													{account.email}
+										<button
+											type="button"
+											aria-label={`Open ${account.label}`}
+											data-account={account.id}
+											onClick={() => setOpened(account.id)}
+											className="min-w-0 flex-1 rounded-[var(--radius-md)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+										>
+											<span className="block truncate text-base font-[var(--weight-medium)]">
+												{account.email}
+											</span>
+											<span className="mt-0.5 block truncate font-mono text-sm text-[var(--ink-muted)]">
+												{account.imapHost}:{account.imapPort}
+												{account.smtpHost ? ` · ${account.smtpHost}:${account.smtpPort}` : " · read only"}
+											</span>
+											{account.lastSyncError ? (
+												<span className="mt-0.5 block truncate text-sm text-[var(--risk)]">
+													{account.lastSyncError}
 												</span>
 											) : null}
-										</span>
-										<span className="mt-0.5 block truncate text-sm text-[var(--ink-muted)]">
-											{account.imapHost}:{account.imapPort} {account.imapSecurity.toUpperCase()}
-											{", "}
-											{account.hasCredential ? "password set" : "no password"}
-											{", "}
-											{account.smtpHost ? `sends via ${account.smtpHost}:${account.smtpPort}` : "read only"}
-											{", "}
-											{account.syncEnabled
-												? `every ${account.syncIntervalMinutes} min, ${account.horizonDays} days back`
-												: "sync off"}
-											{account.lastSyncAt ? `, last synced ${formatWhen(account.lastSyncAt)}` : ""}
-										</span>
-										{account.lastSyncError ? (
-											<span className="mt-0.5 block text-sm text-[var(--risk)]">{account.lastSyncError}</span>
-										) : null}
-									</button>
-									<Button size="dense" onClick={() => void toggleSync(account)}>
-										{account.syncEnabled ? "Pause" : "Resume"}
-									</Button>
-									<IconButton icon="edit" label="Edit" onClick={() => setForm({ account })} />
-									<IconButton icon="remove" label="Remove" danger onClick={() => setRemoving(account)} />
-								</li>
-							))}
+										</button>
+										<StatusBadge label={status.label} tone={status.tone} />
+										<Button size="dense" onClick={() => void toggleSync(account)}>
+											{account.syncEnabled ? "Pause" : "Resume"}
+										</Button>
+										<Button size="dense" onClick={() => setForm({ account })}>
+											Edit
+										</Button>
+										<Button size="dense" variant="danger" onClick={() => setRemoving(account)}>
+											Remove
+										</Button>
+									</li>
+								);
+							})}
 						</ul>
 					)}
 					<SectionError message={error} />
@@ -187,4 +192,21 @@ export function MailSection({ onSaved, header }: MailSectionProps) {
 			</div>
 		</div>
 	);
+}
+
+/** What the badge on an account row says, from what the last sync left behind. */
+function accountStatus(account: MailAccount): { label: string; tone: string } {
+	if (account.lastSyncError) {
+		return /password|auth|credential|login/i.test(account.lastSyncError)
+			? { label: "Password rejected", tone: "risk" }
+			: { label: "Sync failed", tone: "risk" };
+	}
+	if (!account.hasCredential) return { label: "No password", tone: "warn" };
+	if (!account.syncEnabled) return { label: "Paused", tone: "neutral" };
+	if (account.lastSyncAt) return { label: `Synced ${formatClock(account.lastSyncAt)}`, tone: "ok" };
+	return { label: "Not synced yet", tone: "neutral" };
+}
+
+function formatClock(iso: string): string {
+	return new Intl.DateTimeFormat("nl-BE", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }

@@ -691,6 +691,12 @@ export interface AppSettings {
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
 	/**
+	 * A folder the person chose for new generated and imported documents, or null
+	 * for the one inside the application's own data folder. Files already filed
+	 * keep the path they were given, so changing this moves nothing.
+	 */
+	documentsFolder: string | null;
+	/**
 	 * Where invoicing actually happens. Juno never raises an invoice; an invoice
 	 * reminder links here instead. See decision 9.
 	 */
@@ -954,6 +960,12 @@ export interface UnlockResult {
 }
 
 /* ------------------------------------------------------------------- backup */
+
+/** Where new documents are written, and whether that is the folder Juno made itself. */
+export interface DocumentsFolder {
+	path: string;
+	isDefault: boolean;
+}
 
 export interface BackupInfo {
 	path: string;
@@ -3209,6 +3221,10 @@ export interface ToolSummary {
 	readOnly: boolean;
 	/** True when a person has to approve each call before it runs. */
 	requiresConfirmation: boolean;
+	/** The permission row the tool belongs to, which is what Settings > MCP > Permissions sets. */
+	row: AgentPermissionKind;
+	/** How often an agent or an automation ran it, from the log. */
+	calls: number;
 }
 
 /* -------------------------------------------------------------- automations */

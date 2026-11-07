@@ -29,13 +29,12 @@ export function RecentSection({ onDone }: RecentSectionProps) {
 		<Section
 			title="Recent"
 			anchor="recent"
+			large
 			description="Juno remembers the last 20 records you opened, so the Recent menu can take you back to them. Clearing the list does not delete any record."
-			action={
-				<Button size="dense" disabled={busy} onClick={() => void clear()}>
-					Clear recent
-				</Button>
-			}
 		>
+			<Button disabled={busy} onClick={() => void clear()}>
+				Clear recent
+			</Button>
 			<SectionError message={error} />
 		</Section>
 	);

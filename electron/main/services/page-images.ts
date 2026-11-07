@@ -25,8 +25,19 @@ import { MAX_ASSET_BYTES, sniffImage } from "./document-template-assets";
 
 const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
 
+let picturesDirectory: string | null = null;
+
+/**
+ * Page pictures are stored relative to a folder, so unlike a document file they
+ * cannot follow the documents folder when the owner changes it. Startup pins
+ * them to the default one; a test that never calls this uses the storage folder.
+ */
+export function configurePageImages(directory: string | null): void {
+	picturesDirectory = directory;
+}
+
 function pageFolder(pageId: string): string {
-	const root = resolve(documentStorageDir(), "pages");
+	const root = resolve(picturesDirectory ?? documentStorageDir(), "pages");
 	const folder = resolve(root, pageId);
 	if (!folder.startsWith(root + sep)) throw new Error("That is not a page.");
 	return folder;

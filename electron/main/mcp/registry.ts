@@ -86,7 +86,7 @@ export function toolByName(name: string): ToolDescriptor | null {
 }
 
 /** What the settings screen lists. No handlers cross the bridge. */
-export function toolSummaries(): ToolSummary[] {
+export function toolSummaries(): Omit<ToolSummary, "row" | "calls">[] {
 	return allTools().map((tool) => ({
 		name: tool.name,
 		title: tool.title,

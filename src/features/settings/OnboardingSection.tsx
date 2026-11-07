@@ -47,7 +47,8 @@ export function OnboardingSection({ onNotice }: OnboardingSectionProps) {
 		<Section
 			title="Getting started"
 			anchor="onboarding"
-			description="Starts when you close this window."
+			lead
+			description="Replay the walkthrough or the first-run questions. Either starts when you close this window."
 		>
 			<div className="flex flex-col gap-5">
 				<Row

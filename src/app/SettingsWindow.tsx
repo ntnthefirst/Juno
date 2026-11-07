@@ -6,6 +6,8 @@ import { AccountingSection } from "../features/settings/AccountingSection";
 import { AppearanceSection } from "../features/settings/AppearanceSection";
 import { BackupSection } from "../features/settings/BackupSection";
 import { RecentSection } from "../features/settings/RecentSection";
+import { AgentLogSection } from "../features/settings/AgentLogSection";
+import { DocumentsFolderSection } from "../features/settings/DocumentsFolderSection";
 import { CertificateSection } from "../features/settings/CertificateSection";
 import { LockSection } from "../features/settings/LockSection";
 import { MailSection } from "../features/settings/MailSection";
@@ -202,7 +204,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 					) : (
 						<SoloSectionContext.Provider value={current.solo}>
 							{page === "mail" ? (
-								<MailSection onSaved={setToast} header={<PageHeader page={current} />} />
+								<MailSection onSaved={setToast} page={current} />
 							) : (
 								<div className={PAGE_PADDING}>
 									<PageHeader page={current} />
@@ -263,15 +265,24 @@ function PageBody({ page, theme, onTheme, onNotice }: PageBodyProps): ReactNode 
 		case "statuses":
 			return <ReferenceSection />;
 		case "signature":
-			return <SignatureSection />;
+			return (
+				<>
+					<DocumentsFolderSection onDone={onNotice} />
+					<SignatureSection />
+				</>
+			);
 		case "certificate":
 			return <CertificateSection />;
 		case "lock":
 			return <LockSection />;
-		case "recent":
-			return <RecentSection onDone={onNotice} />;
 		case "backup":
-			return <BackupSection onDone={onNotice} />;
+			return (
+				<>
+					<BackupSection onDone={onNotice} />
+					<AgentLogSection onDone={onNotice} />
+					<RecentSection onDone={onNotice} />
+				</>
+			);
 		case "mcp-server":
 			return <ConnectionPanel part="server" onNotice={onNotice} />;
 		case "mcp-connect":
@@ -307,7 +318,7 @@ function AboutSection() {
 	}, []);
 
 	return (
-		<Section title="About" anchor="about" description="Where this installation keeps its data.">
+		<Section title="About" anchor="about" large description="Where this installation keeps its data.">
 			{error ? (
 				<p className="text-[var(--risk)]">{error}</p>
 			) : info === null ? (

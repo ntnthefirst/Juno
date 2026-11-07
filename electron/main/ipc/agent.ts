@@ -92,6 +92,8 @@ export function registerAgentIpc(): void {
 	ipcMain.handle("agent.actions.remove", (_event, id: string) => actions.remove(id));
 
 	ipcMain.handle("agent.audit.list", (_event, query?: AuditListQuery) => audit.list(query ?? {}));
+	// Owner only, and deliberately not a tool: an agent must not be able to erase its own trail.
+	ipcMain.handle("agent.audit.purge", () => audit.purgeOldEvents());
 
 	// What a request or a log row is, in words: the records it names instead of
 	// their ids. Reads only.

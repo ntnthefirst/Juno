@@ -162,6 +162,7 @@ const DEFAULTS: AppSettings = {
 	mailBlockSeedVersion: 0,
 	documentTemplateSeedVersion: 0,
 	signaturePath: null,
+	documentsFolder: null,
 	accountingTool: DEFAULT_ACCOUNTING,
 	lastNotifiedOn: null,
 	onboarding: DEFAULT_ONBOARDING,
@@ -346,6 +347,7 @@ function normalise(raw: unknown): AppSettings {
 			int(raw.documentTemplateSeedVersion, DEFAULTS.documentTemplateSeedVersion),
 		),
 		signaturePath: typeof raw.signaturePath === "string" && raw.signaturePath ? raw.signaturePath : null,
+		documentsFolder: typeof raw.documentsFolder === "string" && raw.documentsFolder ? raw.documentsFolder : null,
 		lastNotifiedOn:
 			typeof raw.lastNotifiedOn === "string" && raw.lastNotifiedOn ? raw.lastNotifiedOn : null,
 		accountingTool: {
@@ -775,6 +777,14 @@ export async function getSignaturePath(): Promise<string | null> {
 
 export async function setSignaturePath(path: string | null): Promise<string | null> {
 	return write({ ...read(), signaturePath: path }).signaturePath;
+}
+
+export async function getDocumentsFolder(): Promise<string | null> {
+	return read().documentsFolder;
+}
+
+export async function setDocumentsFolder(path: string | null): Promise<string | null> {
+	return write({ ...read(), documentsFolder: path }).documentsFolder;
 }
 
 export async function getSeedVersion(): Promise<number> {

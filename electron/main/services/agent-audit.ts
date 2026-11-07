@@ -12,7 +12,7 @@
  * copy of the business in a table nobody thinks about.
  */
 import { createHash } from "node:crypto";
-import { and, count, desc, eq, gte, inArray, isNull, lt, lte, notInArray, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lt, lte, ne, notInArray, or, type SQL } from "drizzle-orm";
 import type {
 	AgentActionState,
 	AuditActor,
@@ -190,6 +190,22 @@ export async function listForEntity(
 		.map(toRecord);
 }
 
+/**
+ * How many times each tool ran for an agent or an automation, from the rows the
+ * log still holds. A call parked for approval counts once it has run, not while
+ * it waits. Reads that repeat inside thirty seconds are one row, so this is a
+ * floor for a busy read tool, which is all the settings page claims.
+ */
+export function callCounts(db: Db = getDb()): Map<string, number> {
+	const rows = db
+		.select({ toolName: auditEvents.toolName, calls: count() })
+		.from(auditEvents)
+		.where(and(isNull(auditEvents.deletedAt), ne(auditEvents.actor, "user"), inArray(auditEvents.result, ["ok", "failed", "read"])))
+		.groupBy(auditEvents.toolName)
+		.all();
+	return new Map(rows.map((row) => [row.toolName, row.calls]));
+}
+
 /** States that mean a request has not been closed yet (agent-actions.ts). */
 const OPEN_ACTION_STATES: AgentActionState[] = ["pending", "approved"];
 
@@ -208,8 +224,9 @@ const READ_KEEP = 2000;
  * record anything else is built from: the client timeline reads notes,
  * documents and mail directly, never this table, so nothing on a timeline
  * disappears when a row here is gone. Retention is the owner's decision
- * (decision 24), not the interface's or the agent's, so it runs on launch
- * with no IPC channel and no MCP tool.
+ * (decision 24): it runs on launch, and the owner can run it from Settings >
+ * Security and data. It is never an MCP tool, because an agent must not be
+ * able to erase its own trail.
  *
  * A row an open request still points at survives regardless of age, because
  * a request's own history has to stay legible until somebody closes it.

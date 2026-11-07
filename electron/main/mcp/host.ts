@@ -77,7 +77,12 @@ export function listTools(): ToolListing[] {
 }
 
 export function summaries(): ToolSummary[] {
-	return toolSummaries();
+	const calls = audit.callCounts();
+	return toolSummaries().map((tool) => ({
+		...tool,
+		row: permissions.rowOf(tool.name),
+		calls: calls.get(tool.name) ?? 0,
+	}));
 }
 
 export function toolCount(): number {

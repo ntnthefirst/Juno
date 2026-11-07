@@ -7,6 +7,13 @@ type SectionProps = {
 	action?: ReactNode;
 	/** The name the settings search jumps to. Listed in search.ts and pages.ts. */
 	anchor?: string;
+	/**
+	 * Drawn like the only section on a page even when others follow: no heading,
+	 * since the page's title is this section's name. The frames draw Backup this way.
+	 */
+	lead?: boolean;
+	/** A heading the size of a page title, for a page that stacks a few subjects. */
+	large?: boolean;
 	children: ReactNode;
 };
 
@@ -23,15 +30,15 @@ type SectionProps = {
  * page's own title says it. What stays is the line that explains the section
  * and the button that acts on it, on one row.
  */
-export function Section({ title, description, action, anchor, children }: SectionProps) {
-	const solo = useContext(SoloSectionContext);
+export function Section({ title, description, action, anchor, lead = false, large = false, children }: SectionProps) {
+	const solo = useContext(SoloSectionContext) || lead;
 
 	if (solo) {
 		return (
 			<section data-setting={anchor}>
 				{description || action ? (
-					<div className="flex min-h-[32px] items-start justify-between gap-6">
-						<p className="max-w-[62ch] text-dense text-[var(--ink-muted)]">
+					<div className={`flex items-start justify-between gap-6 ${action ? "min-h-[32px]" : ""}`}>
+						<p className="max-w-[62ch] text-base text-[var(--ink-muted)]">
 							{description}
 						</p>
 						{action ? <div className="flex-none">{action}</div> : null}
@@ -45,7 +52,7 @@ export function Section({ title, description, action, anchor, children }: Sectio
 	return (
 		<section data-setting={anchor} className={SECTION_GAP}>
 			<div className="flex min-h-[32px] items-center justify-between gap-4">
-				<h2 className="text-lg font-[var(--weight-semibold)]">{title}</h2>
+				<h2 className={large ? "text-h2" : "text-lg font-[var(--weight-semibold)]"}>{title}</h2>
 				{action}
 			</div>
 			{description ? (

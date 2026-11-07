@@ -266,6 +266,9 @@ const api: JunoApi = {
 		getSignatureImage: () => call("settings.getSignatureImage"),
 		chooseSignature: () => call("settings.chooseSignature"),
 		clearSignature: () => call("settings.clearSignature"),
+		getDocumentsFolder: () => call("settings.getDocumentsFolder"),
+		chooseDocumentsFolder: () => call("settings.chooseDocumentsFolder"),
+		resetDocumentsFolder: () => call("settings.resetDocumentsFolder"),
 		getTheme: () => call("settings.getTheme"),
 		getProjectsView: () => call("settings.getProjectsView"),
 		setProjectsView: (patch) => call("settings.setProjectsView", patch),
@@ -410,6 +413,7 @@ const api: JunoApi = {
 		audit: {
 			list: (query) => call("agent.audit.list", query),
 			describe: (ids) => call("agent.audit.describe", ids),
+			purge: () => call("agent.audit.purge"),
 		},
 	},
 

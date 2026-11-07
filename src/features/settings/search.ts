@@ -343,6 +343,27 @@ export const SETTING_ENTRIES: SettingEntry[] = [
 	},
 	{
 		tab: "documents",
+		anchor: "documents-folder",
+		title: "Documents folder",
+		description: "The folder new documents are saved in. Files already saved stay where they are.",
+		keywords: [
+			"documents folder",
+			"folder",
+			"directory",
+			"where",
+			"save",
+			"saved",
+			"location",
+			"path",
+			"pdf",
+			"versions",
+			"keep every version",
+			"files",
+			"store",
+		],
+	},
+	{
+		tab: "documents",
 		anchor: "signature",
 		title: "Signature",
 		description: "The image stamped onto a PDF when you sign it.",
@@ -450,6 +471,13 @@ export const SETTING_ENTRIES: SettingEntry[] = [
 		],
 	},
 
+	{
+		tab: "security",
+		anchor: "agent-log",
+		title: "Agent log",
+		description: "Purge the log of what an agent did, past its six months.",
+		keywords: ["agent log", "log", "audit", "purge", "delete", "clear", "history", "retention", "mcp", "agent"],
+	},
 	{
 		tab: "security",
 		anchor: "recent",

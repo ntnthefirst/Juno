@@ -32,6 +32,8 @@ import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
+import { apply as applyDocumentsFolder, configureDocumentsFolder } from "./main/services/documents-folder";
+import { configurePageImages } from "./main/services/page-images";
 import { configureOutboxFiles, prune as pruneOutboxFiles } from "./main/services/mail-outbox-files";
 import { configureTemplateAssets } from "./main/services/document-template-assets";
 import { configureProjectStorage } from "./main/services/project-storage";
@@ -105,8 +107,17 @@ if (!app.requestSingleInstanceLock()) {
 		const hidden = await launchedHidden();
 		if (!process.env.JUNO_SMOKE && !hidden) showSplash();
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
-		configureDocuments(documentsDir());
-		configureDocumentStorage(documentsDir());
+		// The folder new documents go to is the owner's to choose, and an unusable
+		// one falls back to the default. Page pictures stay under the default.
+		configurePageImages(documentsDir());
+		configureDocumentsFolder({
+			defaultDirectory: documentsDir(),
+			apply: (directory) => {
+				configureDocuments(directory);
+				configureDocumentStorage(directory);
+			},
+		});
+		await applyDocumentsFolder();
 		configureTemplateAssets(templateAssetsDir());
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
@@ -1070,7 +1081,7 @@ if (!app.requestSingleInstanceLock()) {
 								// Walks the steps rather than skipping them, so each one is
 								// photographed and each one's own controls are proven to advance.
 								const steps = [
-									{ id: "you", label: "Your name" },
+									{ id: "you", label: "About you" },
 									{ id: "business", label: "Your business" },
 									{ id: "appearance", label: "Appearance" },
 									{ id: "lock", label: "Lock" },
@@ -1128,7 +1139,7 @@ if (!app.requestSingleInstanceLock()) {
 								// offers itself on a first run or an unseen upgrade.
 								const startedTour = (await flow.executeJavaScript(
 									`(() => {
-										const tour = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Take the walkthrough");
+										const tour = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Open Juno");
 										if (!tour) return false;
 										tour.click();
 										return true;
@@ -5484,6 +5495,43 @@ if (!app.requestSingleInstanceLock()) {
 								await expectNewRecordWindow("client", "Ctrl N on Clients");
 								console.log("SMOKE_DEMO shortcuts=ok");
 							}
+							// The lock screen, photographed in both themes the way a person meets it:
+							// a PIN is set, Juno locks, and the right PIN opens it again. The values
+							// are throwaway ones in this run's own data folder, never a real secret.
+							{
+								const mainWindow = getMainWindow();
+								if (!mainWindow) throw new Error("Smoke: no main window to lock");
+								lock.configure({ method: "pin", secret: "4831" });
+								lock.lock();
+								await new Promise((r) => setTimeout(r, 700));
+								for (const theme of ["light", "dark"] as const) {
+									nativeTheme.themeSource = theme;
+									await mainWindow.webContents.executeJavaScript(
+										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+									);
+									await new Promise((r) => setTimeout(r, 400));
+									const locked = await mainWindow.webContents.executeJavaScript(
+										`document.body.textContent.includes("Juno is locked")`,
+									);
+									if (!locked) throw new Error("Smoke: the lock screen did not cover the window");
+									writeFileSync(joinPath(shotDir, `lock-screen-${theme}.png`), (await capture(mainWindow.webContents)).toPNG());
+								}
+								const opened = lock.unlock("4831");
+								if (!opened.ok) throw new Error("Smoke: the lock screen would not open with its own PIN");
+								lock.disable("4831");
+								console.log("SMOKE_DEMO lock screen ok");
+							}
+
+							// The splash is a window of its own that a smoke run never shows, so it is
+							// opened here once per theme and photographed where it stands.
+							for (const theme of ["light", "dark"] as const) {
+								nativeTheme.themeSource = theme;
+								const splash = showSplash();
+								await new Promise((r) => setTimeout(r, 1400));
+								writeFileSync(joinPath(shotDir, `splash-${theme}.png`), (await capture(splash.webContents)).toPNG());
+								closeSplash();
+							}
+							nativeTheme.themeSource = "light";
 						}
 						if (isWindows) {
 							// What can be seen without a person at a real toast: the tray icon, the

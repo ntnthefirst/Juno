@@ -82,24 +82,21 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 		<Section
 			title="Backup"
 			anchor="backup"
-			description="Nothing is backed up unless you do it here."
-			action={
-				<div className="flex gap-1">
-					<Button size="dense" onClick={() => void window.juno.backup.revealFolder()}>
-						Show folder
-					</Button>
-					<Button size="dense" variant="primary" disabled={busy} onClick={() => void create()}>
-						Back up now
-					</Button>
-				</div>
-			}
+			lead
+			description="Copy the whole Juno folder while Juno is closed, or export a single file."
 		>
+			<div className="flex items-center gap-1">
+				<Button variant="primary" disabled={busy} onClick={() => void create()}>
+					Export a backup
+				</Button>
+				<Button onClick={() => void window.juno.backup.revealFolder()}>Open data folder</Button>
+			</div>
+
+			<div className="mt-5">
 			{backups === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : backups.length === 0 ? (
-				<p className="text-dense text-[var(--ink-muted)]">
-					No backups yet.
-				</p>
+				<p className="text-dense text-[var(--ink-muted)]">No backups yet.</p>
 			) : (
 				<ul className="max-w-[620px]">
 					{backups.map((backup) => (
@@ -121,6 +118,8 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 					))}
 				</ul>
 			)}
+
+			</div>
 
 			<SectionError message={error} />
 

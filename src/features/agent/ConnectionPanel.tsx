@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import type { McpServerStatus, ToolSummary } from "@shared/types";
+import type { AgentPermissionKind, McpServerStatus, ToolSummary } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { Notice } from "../../components/Notice";
+import { StatusBadge } from "../../components/StatusBadge";
 import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { Section } from "../settings/Section";
@@ -198,50 +199,58 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 				<Section
 					title="What an agent can do"
 					anchor="mcp-tools"
-					action={
-						<span className="text-sm text-[var(--ink-muted)]">
+					description="Tools an agent can call. Anything that sends, signs, files or deletes waits for your approval."
+				>
+					<div className="flex items-center gap-3">
+						<input
+							type="search"
+							value={filter}
+							onChange={(event) => setFilter(event.target.value)}
+							placeholder="Filter tools"
+							aria-label="Filter tools"
+							className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+						/>
+						<span className="flex-none text-sm text-[var(--ink-muted)]">
 							{readOnly} read, {tools.length - readOnly} that change something
 						</span>
-					}
-				>
-					<input
-						type="search"
-						value={filter}
-						onChange={(event) => setFilter(event.target.value)}
-						placeholder="Filter tools"
-						aria-label="Filter tools"
-						className="w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-					/>
+					</div>
 
-					<div className="mt-3">
-						{shown.map((tool) => (
-							<div
-								key={tool.name}
-								className="flex items-center gap-3 border-b border-[var(--line)] px-2 py-1.5 hover:bg-[var(--hover)]"
-							>
-								<span className="w-[220px] shrink-0 truncate font-mono text-sm">
-									{tool.name}
-								</span>
-								<span className="min-w-0 flex-1 truncate text-dense text-[var(--ink-muted)]">
-									{tool.title}
-								</span>
-								<span
-									className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-micro font-[var(--weight-medium)] ${
-										tool.readOnly
-											? "bg-[var(--sunken)] text-[var(--ink-muted)]"
-											: tool.requiresConfirmation
-												? "bg-[var(--warn-soft)] text-[var(--warn)]"
-												: "bg-[var(--accent-soft)] text-[var(--accent)]"
-									}`}
+					<div role="table" aria-label="Tools" className="mt-3">
+						<div
+							role="row"
+							className="flex items-center gap-3 border-b border-[var(--line)] px-2 py-2 text-base text-[var(--ink-muted)]"
+						>
+							<span role="columnheader" className="min-w-0 flex-1">
+								Tool
+							</span>
+							<span role="columnheader" className="w-[170px] flex-none">
+								Kind
+							</span>
+							<span role="columnheader" className="w-[48px] flex-none text-right">
+								Calls
+							</span>
+						</div>
+						{shown.map((tool) => {
+							const kind = TOOL_KINDS[tool.row];
+							return (
+								<div
+									key={tool.name}
+									role="row"
+									title={tool.title}
+									className="flex min-h-[44px] items-center gap-3 border-b border-[var(--line)] px-2 py-1.5 hover:bg-[var(--hover)]"
 								>
-									{tool.readOnly
-										? "reads"
-										: tool.requiresConfirmation
-											? "you approve"
-											: "runs"}
-								</span>
-							</div>
-						))}
+									<span role="cell" className="min-w-0 flex-1 truncate font-mono text-dense">
+										{tool.name}
+									</span>
+									<span role="cell" className="w-[170px] flex-none">
+										<StatusBadge label={kind.label} tone={kind.tone} />
+									</span>
+									<span role="cell" className="tabular w-[48px] flex-none text-right text-base">
+										{tool.calls}
+									</span>
+								</div>
+							);
+						})}
 						{shown.length === 0 ? (
 							<p className="mt-3 text-[var(--ink-muted)]">Nothing matches that.</p>
 						) : null}
@@ -251,6 +260,15 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 		</div>
 	);
 }
+
+/** What the Kind column says, by the permission row a tool sits in. The row is also what decides whether it can run unattended. */
+const TOOL_KINDS: Record<AgentPermissionKind, { label: string; tone: string | null }> = {
+	read: { label: "Read", tone: null },
+	change: { label: "Changes a record", tone: "warn" },
+	drafts: { label: "Writes a draft", tone: "warn" },
+	send: { label: "Sends, signs or files", tone: "risk" },
+	delete: { label: "Deletes", tone: "risk" },
+};
 
 type PortRowProps = {
 	status: McpServerStatus;

@@ -5167,6 +5167,16 @@ if (!app.requestSingleInstanceLock()) {
 									if (!shown) throw new Error("Smoke: the updates page did not show the update settings");
 								}
 
+								// The release notes page lists the running version first.
+								{
+									await openPage("release-notes", "general");
+									await pause(300);
+									const listed = (await inSettings(
+										`(() => { const first = document.querySelector("main article"); return first !== null && first.textContent.includes("Installed"); })()`,
+									)) as boolean;
+									if (!listed) throw new Error("Smoke: the release notes page did not list the installed version first");
+								}
+
 								// Statuses and labels shows one list at a time, and switching is a tab.
 								{
 									await openPage("statuses", "documents");

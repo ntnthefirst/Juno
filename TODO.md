@@ -257,6 +257,14 @@ Not code, but the packages above wait on some of it.
   `Documents`, `MCP`, `Agent`). Rename them to the page each now shows (Your
   details, Signature image, What an agent can do, Permissions).
 
+- **Mail, where the app and the frames still differ.** The composer toolbar has an
+  emoji button the frame does not draw. The Suggestion Bar frame has a reminder
+  kind ("Add reminder") and no detector offers one. The intros and outros page keeps
+  a second help line about a variable with no value, which the frame leaves out. The
+  reader draws a message on a white sheet in dark, because the sanitised document
+  carries its own colours (`mail-sanitise.ts`); the frame has no dark
+  reading screen.
+
 ### 8.6 What is already built and matches the design
 
 So nobody redoes it. The settings window already has the nav the design now shows

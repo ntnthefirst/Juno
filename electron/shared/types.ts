@@ -2635,6 +2635,8 @@ export interface MailThreadListQuery {
 	limit?: number;
 	/** The `lastMessageAt` of the last row seen, for the next page. */
 	before?: Iso;
+	/** Rows to skip, for the next page of a list without a search. A search is ranked, so it ignores this. */
+	offset?: number;
 }
 
 /**
@@ -3440,6 +3442,8 @@ export interface NoteQuery {
 	projectId?: string;
 	/** At most this many, newest edit first. Default 200. */
 	limit?: number;
+	/** Rows to skip, for the next page. */
+	offset?: number;
 }
 
 /** A hit of a search over notes, with the words around it. */

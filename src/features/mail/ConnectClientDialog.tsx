@@ -98,6 +98,9 @@ export function ConnectClientDialog({ address, onClose, onConnected }: ConnectCl
 					))
 				)}
 			</ul>
+			{(clients ?? []).length >= 50 ? (
+				<p className="mt-2 text-sm text-[var(--ink-muted)]">Showing the first 50. Type to narrow the list.</p>
+			) : null}
 			<div className="mt-4 flex justify-end">
 				<Button onClick={onClose}>Cancel</Button>
 			</div>

@@ -20,6 +20,7 @@ import { LoadPicturesNotice } from "../../components/LoadPicturesNotice";
 import { framed } from "../../lib/framed-preview";
 import { useRemotePictures } from "../../lib/remote-pictures";
 import { useCanvasFonts } from "./mail/canvas/use-canvas-fonts";
+import { listAllClients } from "../../lib/list-all-clients";
 
 type UseMailTemplateScreenProps = {
 	template: MailTemplate;
@@ -137,7 +138,7 @@ export function UseMailTemplateScreen({ template, onBack, onCreated, variant = "
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.juno.clients.list({ limit: 200 }), window.juno.mail.accounts.list()])
+		Promise.all([listAllClients(), window.juno.mail.accounts.list()])
 			.then(([clientRows, accountRows]) => {
 				if (cancelled) return;
 				setClients(clientRows);

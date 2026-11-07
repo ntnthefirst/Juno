@@ -6,6 +6,7 @@ import { Icon } from "../../components/Icon";
 import { MenuButton } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
+import { listAllThreads } from "../../lib/list-all-threads";
 
 type ProjectMailProps = {
 	projectId: string;
@@ -52,8 +53,7 @@ export function ProjectMail({ projectId, version, onLinkMail, onChanged }: Proje
 
 	useEffect(() => {
 		let cancelled = false;
-		window.juno.mail.threads
-			.list({ projectId, limit: 100 })
+		listAllThreads({ projectId })
 			.then((threads) => {
 				if (!cancelled) setLoad({ status: "ready", threads });
 			})

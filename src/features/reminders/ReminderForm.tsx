@@ -1,3 +1,4 @@
+import { listAllClients } from "../../lib/list-all-clients";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import type {
 	ClientSummary,
@@ -72,8 +73,7 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 
 	useEffect(() => {
 		let cancelled = false;
-		window.juno.clients
-			.list()
+		listAllClients()
 			.then((rows) => {
 				if (!cancelled) setClients(rows);
 			})

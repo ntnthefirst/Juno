@@ -1,3 +1,4 @@
+import { listAllClients } from "../../lib/list-all-clients";
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type {
 	CalendarEvent,
@@ -118,8 +119,7 @@ export function EventForm({ event, occurrence = null, scope = "all", backLabel, 
 
 	useEffect(() => {
 		let cancelled = false;
-		window.juno.clients
-			.list()
+		listAllClients()
 			.then((rows) => {
 				if (!cancelled) setClients(rows);
 			})

@@ -27,6 +27,7 @@ import { Inspector, type InspectorTarget } from "./page/Inspector";
 import { InsertToolbar, type PlacementMode } from "./page/InsertToolbar";
 import { PageCanvas, type CanvasSelection } from "./page/PageCanvas";
 import { TemplateInputsEditor } from "./mail/TemplateInputsEditor";
+import { listAllClients } from "../../lib/list-all-clients";
 
 type Loaded = {
 	template: DocumentTemplate;
@@ -93,7 +94,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 	const fetchAll = useCallback(async (): Promise<Loaded | null> => {
 		const [template, clients] = await Promise.all([
 			window.juno.templates.get(templateId),
-			window.juno.clients.list(),
+			listAllClients(),
 		]);
 		return template ? { template, clients } : null;
 	}, [templateId]);

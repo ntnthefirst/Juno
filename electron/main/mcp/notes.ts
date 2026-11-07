@@ -29,6 +29,7 @@ function scope(args: Record<string, unknown>) {
 		...(typeof args.client_id === "string" ? { clientId: args.client_id } : {}),
 		...(typeof args.project_id === "string" ? { projectId: args.project_id } : {}),
 		...(typeof args.limit === "number" ? { limit: args.limit } : {}),
+		...(typeof args.offset === "number" ? { offset: args.offset } : {}),
 	};
 }
 
@@ -47,6 +48,7 @@ export const noteTools: ToolDescriptor[] = [
 				client_id: { type: "string", description: "Only the notes of this client." },
 				project_id: { type: "string", description: "Only the notes of this project." },
 				limit: { type: "integer", description: "At most this many." },
+				offset: { type: "integer", minimum: 0, description: "Notes to skip, for the next page." },
 			},
 			additionalProperties: false,
 		},

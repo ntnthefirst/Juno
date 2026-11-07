@@ -8,6 +8,7 @@ import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { minutesToHours, parseHours } from "./time-format";
+import { listAllClients } from "../../lib/list-all-clients";
 
 type ProjectFormProps = {
 	/** The stored project being edited. A new one is made in its own window (decision 60). */
@@ -116,7 +117,7 @@ export function ProjectForm({
 		Promise.all([
 			window.juno.reference.getSet("project_status"),
 			// Nothing to pick from when the client is already decided.
-			lockedClientId ? Promise.resolve([]) : window.juno.clients.list(),
+			lockedClientId ? Promise.resolve([]) : listAllClients(),
 		])
 			.then(([set, clientRows]) => {
 				if (cancelled) return;

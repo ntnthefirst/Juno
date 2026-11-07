@@ -5,6 +5,7 @@ import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
 import { useLoaded } from "../../lib/use-loaded";
 import { notePreview, noteTitle, rowTime } from "./note-format";
+import { listAllNotes } from "../../lib/list-all-notes";
 
 type LinkedNotesProps = {
 	projectId: string;
@@ -17,7 +18,7 @@ type LinkedNotesProps = {
  * above; this is the rest of what is written down about the work.
  */
 export function LinkedNotes({ projectId }: LinkedNotesProps) {
-	const load = useCallback(() => window.juno.notes.list({ projectId }), [projectId]);
+	const load = useCallback(() => listAllNotes({ projectId }), [projectId]);
 	const notes = useLoaded(load);
 	const [error, setError] = useState<string | null>(null);
 

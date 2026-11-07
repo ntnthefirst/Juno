@@ -408,8 +408,10 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 		.from(mailThreads)
 		.leftJoin(clients, eq(mailThreads.clientId, clients.id))
 		.where(and(...conditions))
-		.orderBy(desc(mailThreads.lastMessageAt))
+		// The id breaks a tie, or two pages could repeat or skip a thread that shares a minute.
+		.orderBy(desc(mailThreads.lastMessageAt), desc(mailThreads.id))
 		.limit(limit)
+		.offset(Math.max(Math.trunc(query.offset ?? 0), 0))
 		.all();
 	return summarise(db, rows, scope);
 }

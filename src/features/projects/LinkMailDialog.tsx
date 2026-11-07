@@ -14,6 +14,9 @@ type LinkMailDialogProps = {
 /** Long enough that a word typed in one go is one search. */
 const SEARCH_DELAY_MS = 250;
 
+/** How many conversations one search lists. */
+const PAGE = 30;
+
 /**
  * Picks a conversation to show on a project. Picking is the answer, so there is
  * no second step. It is the same link the reader's "File under a project" makes
@@ -24,15 +27,19 @@ export function LinkMailDialog({ projectId, projectName, onClose, onLinked }: Li
 	const [threads, setThreads] = useState<MailThreadSummary[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	// Whether the service filled the page, so more mail exists than is listed.
+	const [pageFull, setPageFull] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
 		const timer = window.setTimeout(
 			() => {
 				window.juno.mail.threads
-					.list({ ...(search.trim() ? { search: search.trim() } : {}), limit: 30 })
+					.list({ ...(search.trim() ? { search: search.trim() } : {}), limit: PAGE })
 					.then((rows) => {
-						if (!cancelled) setThreads(rows.filter((row) => row.projectId !== projectId));
+						if (cancelled) return;
+						setPageFull(rows.length >= PAGE);
+						setThreads(rows.filter((row) => row.projectId !== projectId));
 					})
 					.catch((cause: unknown) => {
 						if (!cancelled) setError(messageOf(cause));
@@ -107,6 +114,9 @@ export function LinkMailDialog({ projectId, projectName, onClose, onLinked }: Li
 					})
 				)}
 			</ul>
+			{pageFull ? (
+				<p className="mt-2 text-sm text-[var(--ink-muted)]">Showing the first {PAGE}. Type to narrow the list.</p>
+			) : null}
 		</Dialog>
 	);
 }

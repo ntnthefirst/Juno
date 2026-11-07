@@ -75,6 +75,18 @@ describe("notes", () => {
 		expect(c.id).toBeTruthy();
 	});
 
+	it("reads the next page from an offset, with no repeat and no gap", async () => {
+		const db = freshDb();
+		for (const title of ["A", "B", "C", "D", "E"]) await notes.create({ title }, db);
+		const first = await notes.list({ limit: 2 }, db);
+		const second = await notes.list({ limit: 2, offset: 2 }, db);
+		const third = await notes.list({ limit: 2, offset: 4 }, db);
+		const all = [...first, ...second, ...third].map((n) => n.title);
+		expect(all).toHaveLength(5);
+		expect(new Set(all).size).toBe(5);
+		expect(third).toHaveLength(1);
+	});
+
 	it("filters by client and project", async () => {
 		const db = freshDb();
 		const client = await clients.create({ name: "Peeters" }, db);

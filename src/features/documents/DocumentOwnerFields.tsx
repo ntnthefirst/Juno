@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ClientSummary, ProjectSummary } from "@shared/types";
 import { Select } from "../../components/Select";
+import { listAllClients } from "../../lib/list-all-clients";
 
 export type DocumentOwnerChoice = { clientId: string; projectId: string };
 
@@ -26,7 +27,7 @@ export function DocumentOwnerFields({ value, onChange, disabled = false, lockCli
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.juno.clients.list({ limit: 500 }), window.juno.projects.list()])
+		Promise.all([listAllClients(), window.juno.projects.list()])
 			.then(([clientRows, projectRows]) => {
 				if (cancelled) return;
 				setClients(clientRows);

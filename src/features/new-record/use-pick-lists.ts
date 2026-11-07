@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ClientSummary, ProjectSummary } from "@shared/types";
 import { messageOf } from "../../lib/errors";
+import { listAllClients } from "../../lib/list-all-clients";
 
 /**
  * The clients and projects a new-record window offers as owners, read once when
@@ -14,7 +15,7 @@ export function usePickLists(): { clients: ClientSummary[]; projects: ProjectSum
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([window.juno.clients.list(), window.juno.projects.list()])
+		Promise.all([listAllClients(), window.juno.projects.list()])
 			.then(([clientRows, projectRows]) => {
 				if (cancelled) return;
 				setClients(clientRows);

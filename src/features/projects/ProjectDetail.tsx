@@ -42,6 +42,7 @@ import { ProjectTimeline } from "./ProjectTimeline";
 import { RunConsole } from "./RunConsole";
 import { StorageDialog } from "./StorageDialog";
 import { dayLabel, formatDuration } from "./time-format";
+import { listAllThreads } from "../../lib/list-all-threads";
 
 export type ProjectTab = "notes" | "mail" | "timeline" | "time" | "calendar";
 
@@ -126,7 +127,7 @@ export function ProjectDetail({
 			window.juno.projects.links.list(projectId),
 			window.juno.projects.assets.list(projectId),
 			window.juno.projects.commands.list(projectId),
-			window.juno.mail.threads.list({ projectId, limit: 100 }),
+			listAllThreads({ projectId }),
 			window.juno.calendar.list({
 				from: today,
 				to: addDays(today, 365),

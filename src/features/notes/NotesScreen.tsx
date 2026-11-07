@@ -18,8 +18,9 @@ import { useScreenAction } from "../../lib/screen-actions";
 import { useLoaded } from "../../lib/use-loaded";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { editedLabel, groupLabel, noteTitle, notePreview, rowTime } from "./note-format";
+import { listAllNotes } from "../../lib/list-all-notes";
 
-const loadNotes = () => window.juno.notes.list();
+const loadNotes = () => listAllNotes();
 
 /** How long typing has to pause before it is written, so a note is saved as it is typed without a write per key. */
 const SAVE_AFTER_MS = 500;

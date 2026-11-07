@@ -14,6 +14,7 @@ import type { ScreenAction } from "../lib/screen-actions";
 import type { ScreenId } from "./screens";
 import { belongsTo } from "../features/documents/belongs-to";
 import { noteTitleFallback } from "../features/notes/note-format";
+import { listAllNotes } from "../lib/list-all-notes";
 
 type PaletteItem = {
 	id: string;
@@ -64,7 +65,7 @@ const RECORD_LABEL: Record<string, string> = {
 const loadClients = () => listAllClients();
 const loadProjects = () => window.juno.projects.list();
 const loadDocuments = () => window.juno.documents.list();
-const loadNotes = () => window.juno.notes.list();
+const loadNotes = () => listAllNotes();
 
 /** How many of each kind of record are offered under All. More is scrolling, not finding. */
 const PER_KIND = 4;

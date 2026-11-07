@@ -70,6 +70,7 @@ export async function list(query: NoteQuery = {}, db: Db = getDb()): Promise<Not
 		// Pinned first, then the newest edit. The id breaks a tie inside one millisecond.
 		.orderBy(sql`${notes.pinnedAt} is null`, desc(notes.pinnedAt), desc(notes.updatedAt), desc(notes.id))
 		.limit(limit)
+		.offset(Math.max(Math.trunc(query.offset ?? 0), 0))
 		.all();
 	return rows.map((row) => toNote(row.note, row));
 }

@@ -4,6 +4,7 @@ import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
+import { listAllThreads } from "../../lib/list-all-threads";
 
 type ClientMailProps = {
 	clientId: string;
@@ -41,8 +42,7 @@ export function ClientMail({ clientId, onNewMessage }: ClientMailProps) {
 
 	useEffect(() => {
 		let cancelled = false;
-		window.juno.mail.threads
-			.list({ clientId, limit: 100 })
+		listAllThreads({ clientId })
 			.then((threads) => {
 				if (!cancelled) setLoad({ status: "ready", threads });
 			})

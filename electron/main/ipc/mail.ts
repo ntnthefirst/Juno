@@ -43,7 +43,7 @@ import * as outboxPicker from "../services/mail-outbox-picker";
 import * as purgeMail from "../services/mail-purge";
 import * as recipients from "../services/mail-recipients";
 import * as rules from "../services/mail-rules";
-import { isShellLink } from "../../shared/mail-link";
+import { isHttpsLink } from "../../shared/mail-link";
 import * as sender from "../services/mail-send";
 import * as sync from "../services/mail-sync";
 import * as templates from "../services/mail-templates";
@@ -175,10 +175,10 @@ export function registerMailIpc(): void {
 	});
 
 	ipcMain.handle("mail.openLink", async (_event, url: string) => {
-		// The same rule as reminders.openAction: only a web address or a mailto
-		// reaches the shell. Anything else from a message is data.
-		if (!isShellLink(url)) {
-			throw new Error("That link is not a web address, so Juno will not open it.");
+		// security.md section 3: a link from a message reaches the shell on https
+		// only, the same check the reader makes before it offers the button.
+		if (!isHttpsLink(url)) {
+			throw new Error("Juno only opens https links from a message. Copy the address to use it elsewhere.");
 		}
 		await shell.openExternal(url);
 	});

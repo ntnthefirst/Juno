@@ -82,6 +82,7 @@ electron/
   main/ipc/             Thin adapters over services, behind the lock guard
   main/mcp/             Thin adapters over the same services, for agents
   main/windows/         Main, settings, setup, new-record, splash, the shared chrome, and `context-menu.ts` (the native right-click menu)
+  main/tray.ts, notifications.ts, background.ts  The Windows half of the desktop: tray icon, taskbar badge, global shortcut, toasts (decision 63). Rules are in `services/desktop.ts` and `services/notifications.ts`
   main/vault.ts         safeStorage read and write, keyed by account id
   shared/               The contract both processes typecheck against
 src/

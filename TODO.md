@@ -64,6 +64,16 @@ your hands, a real account or a real client, rather than code.
   no hover colour on the button; expect Outlook on Windows to stack the two
   columns, keep the comparison table side by side, and paint no gradient,
   shadow, rounded corner or transparent colour. Anything else is a finding.
+- **No real Windows toast has been clicked yet.** Complete, Snooze and Review
+  are tested in the service and the toast is built with those buttons, but a
+  smoke run cannot press one. Leave one reminder due today and no others, wait
+  for the summary (or clear `lastNotifiedOn` in settings.json), press Complete
+  and Snooze a day on two of them, then make an agent request, wait a minute
+  and press Review. Also lock Juno first and check the toast shows no names and
+  has no buttons. Same page: the tray menu (Open, New note, Quit), the number
+  on the taskbar button clearing with the last request, and the Ctrl+Alt+N
+  shortcut from another program, including the message when another program
+  already owns the combination. Settings > General > Notifications and tray.
 
 ## 4. Not tasks
 
@@ -272,24 +282,6 @@ the SVGs, animation only for loading and only with `prefers-reduced-motion` hono
 **Done when.** Every empty state in the design list above shows a pose, the icon
 reads at 16px in both themes, and `SOURCES.md` names a licence that allows this
 use for every file.
-
-#### Package 11. Native Windows integration (M)
-
-**Behaviour.** Windows toast notifications with action buttons (a due reminder
-has Complete and Snooze, an agent request has Review), a tray icon with a menu
-(Open Juno, New note, Quit) and a setting for whether
-closing the window keeps Juno running (decision 52 already runs it in the
-background), a taskbar overlay badge with the number of requests waiting, a global
-shortcut for a new note (off by default, set in Settings), and native file dialogs
-everywhere a file is picked. Nothing here sends anything off the machine.
-
-**Build.** `electron/main/notifications.ts` and `services/notifications.ts` exist
-(check what they cover), add `electron/main/tray.ts`. A new settings page under
-General called "Notifications and tray" with an entry in the search. Windows only:
-guard the rest with a platform check, do not stub a Mac or Linux version.
-
-**Done when.** Each action works from a real toast on Windows, and the badge
-clears when the last request is answered.
 
 ### 8.3 Layout rules the design learned the hard way
 

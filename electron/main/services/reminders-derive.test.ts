@@ -7,9 +7,8 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { clients, projects, referenceItems, referenceSets, reminders } from "../db/schema";
-import { accept, ensureRemindersSeeded, invoiceSuggestions, suggestions } from "./reminders-derive";
-import { create } from "./reminders";
-import { configureSettings, setAccountingTool } from "./settings";
+import { accept, ensureRemindersSeeded, suggestions } from "./reminders-derive";
+import { configureSettings } from "./settings";
 
 const migrations = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 
@@ -90,59 +89,24 @@ describe("ensureRemindersSeeded", () => {
 
 describe("accept", () => {
 	it("makes the suggestion a real reminder, and then it is no longer suggested", async () => {
-		const { project } = makeProject("delivered", 210000);
+		const { project } = makeProject("active", null, "2026-05-20");
 		const [offer] = await suggestions(db, "2026-05-10");
 		const made = await accept(offer!.key, db, "2026-05-10");
 		expect(made.title).toBe(offer!.title);
 		expect(made.projectId).toBe(project.id);
-		expect(made.category).toBe("invoice");
 		expect(await suggestions(db, "2026-05-10")).toHaveLength(0);
 	});
 
 	it("refuses a suggestion that has gone away", async () => {
-		await expect(accept("invoice:nothing", db, "2026-05-10")).rejects.toThrow(/gone/);
+		await expect(accept("deadline:nothing", db, "2026-05-10")).rejects.toThrow(/gone/);
 	});
 });
 
-describe("invoiceSuggestions", () => {
-	it("suggests a delivered project that has a value", async () => {
+describe("invoices", () => {
+	it("never suggests one, since Juno does not invoice", async () => {
 		makeProject("delivered", 210000);
-		const rows = await invoiceSuggestions(db, "2026-05-10");
-		expect(rows).toHaveLength(1);
-		expect(rows[0]!.title).toContain("obet");
-		expect(rows[0]!.category).toBe("invoice");
-	});
-
-	it("ignores a project that is still active", async () => {
-		makeProject("active", 210000);
-		expect(await invoiceSuggestions(db, "2026-05-10")).toHaveLength(0);
-	});
-
-	it("ignores a delivered project with no agreed value", async () => {
-		makeProject("delivered", null);
-		expect(await invoiceSuggestions(db, "2026-05-10")).toHaveLength(0);
-	});
-
-	it("stops suggesting once a real invoice reminder exists", async () => {
-		const { project } = makeProject("delivered", 210000);
-		expect(await invoiceSuggestions(db, "2026-05-10")).toHaveLength(1);
-
-		await create(
-			{ title: "Invoice it", dueOn: "2026-05-10", category: "invoice", projectId: project.id },
-			db,
-			"2026-05-10",
-		);
-		expect(await invoiceSuggestions(db, "2026-05-10")).toHaveLength(0);
-	});
-
-	it("carries the accounting tool link, since Juno never invoices itself", async () => {
-		makeProject("delivered", 210000);
-		await setAccountingTool({ name: "Accountable", url: "https://example.invalid" });
-
-		const rows = await invoiceSuggestions(db, "2026-05-10");
-		expect(rows[0]!.actionUrl).toBe("https://example.invalid");
-		expect(rows[0]!.actionLabel).toContain("Accountable");
-		expect(rows[0]!.notes).toContain("does not raise invoices");
+		const rows = await suggestions(db, "2026-05-10");
+		expect(rows.some((row) => row.category === "invoice" || row.key.startsWith("invoice:"))).toBe(false);
 	});
 });
 

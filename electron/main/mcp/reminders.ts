@@ -76,8 +76,7 @@ export const reminderTools: ToolDescriptor[] = [
 		name: "reminders.suggestions",
 		title: "List suggested reminders",
 		description:
-			"Reminders worked out from the records rather than stored: projects marked delivered " +
-			"with a value and no invoice reminder, and deadlines approaching without one. " +
+			"Reminders worked out from the records rather than stored: deadlines approaching without a reminder. " +
 			"Offers, not commitments. Accept one with reminders.accept.",
 		readOnly: true,
 		requiresConfirmation: false,

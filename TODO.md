@@ -244,26 +244,6 @@ the code that depends on it.
 
 ### 8.2 Packages
 
-#### Package 9. Overview (M)
-
-**Figma.** `04 Overview / Default` (`25:16`), `Dark` (`25:555`), `Empty`
-(`25:358`), `Context menu`, `Recent menu`, `Sidebar tooltip`.
-
-**Behaviour.** A greeting with the owner's name, one sentence about what is
-overdue and waiting, four counts (Clients, Projects, Documents, Unread mail) that
-open their screens, "Coming up" (Reminders and Calendar links, grouped by day with
-the day at the left: Overdue, Today, a weekday), a "Suggestions" block ("Worked out
-from your records. Nothing is saved until you add it."), and a right column with
-Unread mail, Documents and Clients. An agent request waiting shows as a row with
-Review. The Empty frame shows the mascot (package 10).
-
-**Build.** `features/overview/` already has every card. Compare the frames with it
-first and change only the layout and the grouping that differ. One thing to
-fix in the data: a suggestion must never offer to invoice, because Juno does not
-invoice (decision 9), so drop that suggestion kind or reword it.
-
-**Done when.** Default, dark and empty match the frames.
-
 #### Package 10. The mascot (M, partly needs you)
 
 **State.** Parked. Two attempts were rejected: a hand-drawn set (`brand/mascot`,

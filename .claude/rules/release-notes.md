@@ -17,6 +17,8 @@ inside the package, newest version first.
   `electron-builder.yml` puts that file in the release feed, which is how a
   running copy shows **what an update changes** before it installs it: in
   Settings, Updates, and as a line in the install window.
+- The release workflow (`.github/workflows/release.yml`) puts the same entry,
+  without its heading, on the GitHub release page when it creates the draft.
 - The build fails when the version being built has no entry. That is on purpose.
 - `release-notes.test.ts` fails when the top entry is not the `package.json`
   version, when an entry has no date, summary or items, and when the text breaks

@@ -604,6 +604,16 @@ const api: JunoApi = {
 			resolve: (context) => call("mail.blocks.resolve", context),
 			render: (id, context) => call("mail.blocks.render", id, context),
 		},
+		rules: {
+			list: (accountId) => call("mail.rules.list", accountId),
+			get: (id) => call("mail.rules.get", id),
+			create: (input) => call("mail.rules.create", input),
+			update: (id, patch) => call("mail.rules.update", id, patch),
+			remove: (id) => call("mail.rules.remove", id),
+			reorder: (accountId, ids) => call("mail.rules.reorder", accountId, ids),
+			describe: (id) => call("mail.rules.describe", id),
+			runs: (query) => call("mail.rules.runs", query),
+		},
 		templates: {
 			list: () => call("mail.templates.list"),
 			listAll: () => call("mail.templates.listAll"),

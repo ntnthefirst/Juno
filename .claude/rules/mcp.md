@@ -102,6 +102,15 @@ In practice:
 - Bulk operations are one pending action listing every affected row, not N
   approvals and not one blanket yes.
 
+**One exception, and it is narrow (decision 64): a mailbox rule the owner wrote and
+switched on.** It files mail on its own, after each sync, on mail that arrives
+after it exists, because it is the owner's standing instruction and not a
+choice an agent made. It covers the owner's rules only. An agent may create,
+change, reorder or remove a rule only through this gate: `mail.rules.create`,
+`update` and `reorder` are in the Send row and `delete` in the Delete row, so they
+park whatever the levels say, and the owner reads the whole rule in plain words
+before approving. No other tool, and no automation, gains the right to file.
+
 Writes that only touch local records (`clients.update`, `reminders.complete`,
 `time.*`, `mail.blocks.*`) and mail drafts are the rows the owner may set to Allow
 under Settings > MCP > Permissions (decision 57). At Allow they execute directly;
@@ -127,6 +136,9 @@ calls with their arguments, replayed in order.
   same reason an agent cannot.
 - A step that hits a pending action stops the run and waits. It does not skip and
   it does not continue past it.
+- **An automation may not add, change or remove a mailbox rule.** The gate
+  refuses `mail.rules.*` writes from an automation outright and an automation
+  cannot be saved with one as a step (decision 64). Reading rules is fine.
 - **A level of Allow does not apply to a step.** An automation is unattended, so
   any step that is not a plain read parks, whatever the permission says
   (decision 57).

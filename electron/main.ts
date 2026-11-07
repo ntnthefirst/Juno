@@ -47,6 +47,7 @@ import { configureMailboxSource } from "./main/services/mail-source";
 import { configureMailboxWriter } from "./main/services/mail-writer";
 import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
+import * as mailRules from "./main/services/mail-rules";
 import * as mailSync from "./main/services/mail-sync";
 import { ensureMailBlocksSeeded } from "./main/services/mail-blocks";
 import { adoptRecordValues, ensureMailTemplatesSeeded } from "./main/services/mail-templates";
@@ -112,7 +113,13 @@ if (!app.requestSingleInstanceLock()) {
 		configureOutboxFiles(outboxFilesDir());
 		// Sync never starts while locked and stops at the next step when the lock
 		// comes on, per decision 15.
-		mailSync.configureMailSync({ mailDir: mailDir(), isPaused: () => lock.isLocked() });
+		// The mailbox rules run on the mail a sync has just pulled into the inbox,
+		// and only while unlocked (decision 64).
+		mailSync.configureMailSync({
+			mailDir: mailDir(),
+			isPaused: () => lock.isLocked(),
+			afterInbox: (accountId, db) => mailRules.runForAccount(accountId, db, { isPaused: () => lock.isLocked() }),
+		});
 		configureMailboxSource(openImapSource);
 		configureMailboxWriter(openImapWriter);
 		configureMailTransport(smtpTransport, imapSentAppender);
@@ -4544,6 +4551,43 @@ if (!app.requestSingleInstanceLock()) {
 									return old.id;
 								})()`)) as string;
 
+								// Mailbox rules (decision 64). A message arrives after the account was
+								// connected, two rules are written the way the owner would write them, and
+								// a sync runs them against an in-memory writer. What they did is the
+								// history the account page lists. The real writer comes back afterwards.
+								{
+									const smokeBox = await import("./main/smoke-mailbox");
+									configureMailboxWriter(smokeBox.openSmokeWriter);
+									smokeBox.arriveSmokeMessage();
+									const done = (await window.webContents.executeJavaScript(`(async () => {
+										const b = window.juno;
+										const [account] = await b.mail.accounts.list();
+										const folders = await b.mail.folders.list(account.id);
+										const offers = folders.find((f) => f.path === "Offertes");
+										if (!offers) throw new Error("Smoke: no Offertes folder to move to");
+										await b.mail.rules.create({
+											accountId: account.id, name: "Newsletters",
+											conditions: [{ kind: "text", field: "sender", test: "ends_with", value: "@hyge.be" }],
+											actions: [{ kind: "mark_read" }, { kind: "move", folderId: offers.id }],
+										});
+										await b.mail.rules.create({
+											accountId: account.id, name: "Clients with files", match: "all",
+											conditions: [{ kind: "sender_is_client", value: true }, { kind: "has_attachments", value: true }],
+											actions: [{ kind: "flag" }, { kind: "link_client" }],
+										});
+										const runs = await b.mail.sync.run(account.id);
+										if (runs.some((r) => r.phase !== "done")) throw new Error("Smoke: the sync that runs the rules did not finish: " + JSON.stringify(runs));
+										const history = await b.mail.rules.runs({ accountId: account.id });
+										return history.map((h) => h.ruleName + ":" + h.action + ":" + h.result + ":" + (h.detail ?? "")).sort();
+									})()`)) as string[];
+									configureMailboxWriter(openImapWriter);
+									const wanted = ["Newsletters:mark_read:done:", "Newsletters:move:done:Offertes"];
+									if (JSON.stringify(done) !== JSON.stringify(wanted)) {
+										throw new Error("Smoke: the rules did " + JSON.stringify(done) + " and not " + JSON.stringify(wanted));
+									}
+									console.log("SMOKE_DEMO mailbox rules ran " + done.length + " actions");
+								}
+
 								openSettingsWindow();
 								const settingsWindow = getSettingsWindow();
 								if (!settingsWindow) throw new Error("Smoke: the settings window did not open");
@@ -4720,6 +4764,115 @@ if (!app.requestSingleInstanceLock()) {
 									)) as boolean;
 									if (!cleared) throw new Error("Smoke: Escape did not clear the search");
 									if (settingsWindow.isDestroyed()) throw new Error("Smoke: Escape in the search closed the window");
+								}
+
+								// The account page (decision 64): its details, the rules the step above
+								// wrote and what they did, its folders, and a rule written through the form
+								// the way a person writes one. The page has to fit the fixed window.
+								{
+									const fits = `(() => {
+										const main = document.querySelector("main");
+										const edge = main.getBoundingClientRect().right;
+										const wide = [];
+										for (const el of main.querySelectorAll("*")) {
+											const box = el.getBoundingClientRect();
+											if (box.width > 0 && box.right > edge + 1) wide.push(el.tagName + "." + String(el.className).slice(0, 40));
+										}
+										return { overflowX: main.scrollWidth - main.clientWidth, wide: wide.slice(0, 5) };
+									})()`;
+									const mustFit = async (where: string) => {
+										const fit = (await inSettings(fits)) as { overflowX: number; wide: string[] };
+										if (fit.overflowX > 1 || fit.wide.length > 0) {
+											throw new Error("Smoke: " + where + " does not fit the settings window: " + JSON.stringify(fit));
+										}
+									};
+
+									await openPage("mail", "mail");
+									await pause(400);
+									const hasFoldersButton = (await inSettings(
+										`[...document.querySelectorAll("main button")].some((b) => b.textContent.trim() === "Folders")`,
+									)) as boolean;
+									if (hasFoldersButton) throw new Error("Smoke: the account list still has a Folders button");
+									const opened = (await inSettings(
+										`(() => { const b = document.querySelector("main [data-account]"); if (!b) return false; b.click(); return true; })()`,
+									)) as boolean;
+									if (!opened) throw new Error("Smoke: no account to open on the mail page");
+									await pause(600);
+									const page = (await inSettings(`document.querySelector("main").textContent`)) as string;
+									for (const wanted of ["Details", "Rules", "History", "Folders", "Newsletters", "Marked read", "Moved to Offertes", "INBOX"]) {
+										if (!page.includes(wanted)) throw new Error("Smoke: the account page has no " + JSON.stringify(wanted));
+									}
+									await mustFit("the account page");
+									await photograph("mail-account");
+
+									const clicked = (name: string) =>
+										inSettings(
+											`(() => { const b = [...document.querySelectorAll("main button")].find((el) => el.getAttribute("aria-label") === ` + JSON.stringify(name) + ` || el.textContent.trim() === ` + JSON.stringify(name) + `); if (!b) return false; b.click(); return true; })()`,
+										) as Promise<boolean>;
+									if (!(await clicked("New rule"))) throw new Error("Smoke: the account page has no New rule button");
+									await pause(500);
+									const filled = (await inSettings(`(async () => {
+										const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+										const set = (el, value) => {
+											const select = el instanceof HTMLSelectElement;
+											Object.getOwnPropertyDescriptor(select ? HTMLSelectElement.prototype : HTMLInputElement.prototype, "value").set.call(el, value);
+											el.dispatchEvent(new Event(select ? "change" : "input", { bubbles: true }));
+										};
+										const form = document.querySelector("main form");
+										set(form.querySelector("input"), "Offers from Hyge");
+										set(form.querySelector("[aria-label='Condition 1: what to look at']"), "subject");
+										await wait(80);
+										set(form.querySelector("[aria-label='Condition 1: the text']"), "offerte");
+										[...document.querySelectorAll("main button")].find((b) => b.textContent.trim() === "Add condition").click();
+										await wait(80);
+										set(form.querySelector("[aria-label='Condition 2: what to look at']"), "attachments");
+										await wait(80);
+										[...form.querySelectorAll("label")].find((l) => l.textContent.includes("Mark it read")).querySelector("input").click();
+										[...document.querySelectorAll("main button")].find((b) => b.textContent.trim() === "Move to a folder").click();
+										await wait(120);
+										const folder = form.querySelector("[aria-label='Folder to move to']");
+										const option = [...folder.options].find((o) => o.textContent.includes("Offertes"));
+										if (!option) return "no Offertes option";
+										set(folder, option.value);
+										await wait(150);
+										return [...form.querySelectorAll("[data-selectable]")].map((el) => el.textContent).join(" | ");
+									})()`)) as string;
+									if (!filled.includes('Rule "Offers from Hyge" for hallo@juno.test') || !filled.includes("move it to Offertes") || !filled.includes("it has attachments")) {
+										throw new Error("Smoke: the rule form read the rule back as " + JSON.stringify(filled));
+									}
+									await mustFit("the rule form");
+									await photograph("mail-rule-form");
+									if (!(await clicked("Save rule"))) throw new Error("Smoke: the rule form has no Save rule button");
+									await pause(700);
+									const saved = (await inSettings(`document.body.textContent`)) as string;
+									if (!saved.includes("Offers from Hyge saved.") || !saved.includes("Offers from Hyge")) {
+										throw new Error("Smoke: saving the rule did not return to the account page with it listed");
+									}
+									const stored = (await window.webContents.executeJavaScript(
+										`(async () => { const [account] = await window.juno.mail.accounts.list(); return (await window.juno.mail.rules.list(account.id)).map((r) => r.name + ":" + r.enabled + ":" + r.sortOrder); })()`,
+									)) as string[];
+									if (JSON.stringify(stored) !== JSON.stringify(["Newsletters:true:0", "Clients with files:true:1", "Offers from Hyge:true:2"])) {
+										throw new Error("Smoke: the rules are " + JSON.stringify(stored));
+									}
+
+									// A rule's switch applies at once.
+									const flipped = (await inSettings(
+										`(() => { const b = [...document.querySelectorAll("main [role=switch]")].find((el) => el.textContent.includes("Offers from Hyge")); if (!b) return false; b.click(); return true; })()`,
+									)) as boolean;
+									if (!flipped) throw new Error("Smoke: the new rule has no switch");
+									await pause(500);
+									const off = (await window.webContents.executeJavaScript(
+										`(async () => { const [account] = await window.juno.mail.accounts.list(); return (await window.juno.mail.rules.list(account.id)).find((r) => r.name === "Offers from Hyge").enabled; })()`,
+									)) as boolean;
+									if (off) throw new Error("Smoke: switching the rule off did not reach the database");
+									await mustFit("the account page with three rules");
+									await photograph("mail-account-rules");
+
+									if (!(await clicked("Mail accounts"))) throw new Error("Smoke: the account page has no way back");
+									await pause(500);
+									const back = (await inSettings(`document.querySelector("main [data-account]") !== null`)) as boolean;
+									if (!back) throw new Error("Smoke: going back did not show the list of accounts");
+									console.log("SMOKE_DEMO mail account page and rule form");
 								}
 
 								// The removed account's mail is deleted the way a person does it: the

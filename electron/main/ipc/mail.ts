@@ -19,6 +19,9 @@ import type {
 	MailDraftInput,
 	MailDraftPatch,
 	MailOutboxListQuery,
+	MailRuleInput,
+	MailRulePatch,
+	MailRuleRunQuery,
 	MailReplyMode,
 	MailTemplateDraft,
 	MailTemplateSendInput,
@@ -39,6 +42,7 @@ import * as outboxFiles from "../services/mail-outbox-files";
 import * as outboxPicker from "../services/mail-outbox-picker";
 import * as purgeMail from "../services/mail-purge";
 import * as recipients from "../services/mail-recipients";
+import * as rules from "../services/mail-rules";
 import { isShellLink } from "../../shared/mail-link";
 import * as sender from "../services/mail-send";
 import * as sync from "../services/mail-sync";
@@ -197,6 +201,19 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.blocks.reorder", (_event, kind: ComposeBlockKind, ids: string[]) =>
 		blocks.reorder(kind, ids),
 	);
+	// The owner writing a rule is the one way a rule comes to exist; an agent goes
+	// through the tools, which ask first.
+	ipcMain.handle("mail.rules.list", (_event, accountId: string) => rules.list(accountId));
+	ipcMain.handle("mail.rules.get", (_event, id: string) => rules.get(id));
+	ipcMain.handle("mail.rules.create", (_event, input: MailRuleInput) => rules.create(input));
+	ipcMain.handle("mail.rules.update", (_event, id: string, patch: MailRulePatch) => rules.update(id, patch));
+	ipcMain.handle("mail.rules.remove", (_event, id: string) => rules.remove(id));
+	ipcMain.handle("mail.rules.reorder", (_event, accountId: string, ids: string[]) =>
+		rules.reorder(accountId, ids),
+	);
+	ipcMain.handle("mail.rules.describe", (_event, id: string) => rules.explain(id));
+	ipcMain.handle("mail.rules.runs", (_event, query: MailRuleRunQuery) => rules.runs(query));
+
 	ipcMain.handle("mail.blocks.resolve", (_event, context: ComposeBlockContext) => blocks.resolve(context));
 	ipcMain.handle("mail.blocks.render", (_event, id: string, context: ComposeBlockContext) =>
 		blocks.render(id, context),

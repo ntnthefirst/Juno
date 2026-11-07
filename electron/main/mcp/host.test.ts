@@ -21,6 +21,9 @@ const audit = await import("../services/agent-audit");
 const { executeApproved } = await import("./host");
 const { toolByName } = await import("./registry");
 const permissions = await import("../services/agent-permissions");
+const mailAccounts = await import("../services/mail-accounts");
+const { configureCredentialStore, MemoryCredentialStore } = await import("../services/mail-credentials");
+const rules = await import("../services/mail-rules");
 const settings = await import("../services/settings");
 const { PERMISSION_KINDS, isLocked } = await import("../../shared/agent-permissions");
 
@@ -285,6 +288,173 @@ describe("intros and outros", () => {
 		const tools = ["create", "update", "delete", "reorder"].map((verb) => toolByName(`mail.blocks.${verb}`)!);
 		expect(tools.every((tool) => !tool.readOnly && tool.requiresConfirmation)).toBe(true);
 		expect(toolByName("mail.blocks.list")).toMatchObject({ readOnly: true, requiresConfirmation: false });
+	});
+});
+
+describe("mailbox rules", () => {
+	/** Decision 64: a rule files mail by itself, so only the owner (or an approved request) can make one. */
+	async function connected() {
+		configureCredentialStore(new MemoryCredentialStore());
+		return mailAccounts.create({ email: "me@juno.test", imapHost: "imap.juno.test", password: "secret" });
+	}
+
+	const NEWSLETTERS = (accountId: string) => ({
+		account_id: accountId,
+		name: "Newsletters",
+		conditions: [{ kind: "text", field: "sender", test: "contains", value: "news@" }],
+		actions: [{ kind: "mark_read" }, { kind: "trash" }],
+	});
+
+	const WRITES = ["mail.rules.create", "mail.rules.update", "mail.rules.reorder", "mail.rules.delete"];
+
+	it("reads without asking and puts every write in a row that cannot be Allow", () => {
+		for (const name of ["mail.rules.list", "mail.rules.get", "mail.rules.history"]) {
+			expect(permissions.rowOf(name)).toBe("read");
+			expect(toolByName(name)).toMatchObject({ readOnly: true, requiresConfirmation: false });
+		}
+		expect(permissions.rowOf("mail.rules.create")).toBe("send");
+		expect(permissions.rowOf("mail.rules.update")).toBe("send");
+		expect(permissions.rowOf("mail.rules.reorder")).toBe("send");
+		expect(permissions.rowOf("mail.rules.delete")).toBe("delete");
+		for (const name of WRITES) {
+			expect(permissions.isLockedTool(name), name).toBe(true);
+			expect(toolByName(name)).toMatchObject({ readOnly: false, requiresConfirmation: true });
+		}
+	});
+
+	it("declares no tool that runs a rule or switches the engine on", () => {
+		const names = listTools().map((tool) => tool.name).filter((name) => name.startsWith("mail.rules."));
+		expect(names.sort()).toEqual([
+			"mail.rules.create",
+			"mail.rules.delete",
+			"mail.rules.get",
+			"mail.rules.history",
+			"mail.rules.list",
+			"mail.rules.reorder",
+			"mail.rules.update",
+		]);
+	});
+
+	it("parks an agent's new rule even when the file says allow, shows the whole rule, and makes nothing until approved", async () => {
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "allow", delete: "allow" });
+		const account = await connected();
+
+		const parked = (await callTool("mail.rules.create", NEWSLETTERS(account.id))) as {
+			status: string;
+			actionId: string;
+			summary: string;
+		};
+		expect(parked.status).toBe("pending");
+		expect(await callTool("mail.rules.list", { account_id: account.id })).toEqual([]);
+
+		const [pending] = await actions.list({ states: ["pending"] });
+		expect(pending!.preview).toContain('Rule "Newsletters" for me@juno.test, switched on.');
+		expect(pending!.preview).toContain('the sender\'s address contains "news@"');
+		expect(pending!.preview).toContain("mark it read and move it to Trash");
+		expect(pending!.preview).toContain("standing instruction");
+		expect(pending!.summary).toBe('Add the rule "Newsletters" to me@juno.test');
+
+		await actions.approve(parked.actionId);
+		const made = (await callTool("mail.rules.list", { account_id: account.id })) as { name: string; enabled: boolean }[];
+		expect(made).toMatchObject([{ name: "Newsletters", enabled: true }]);
+	});
+
+	it("refuses at once a rule that could never be stored, instead of parking a dead request", async () => {
+		const account = await connected();
+		await expect(callTool("mail.rules.create", { ...NEWSLETTERS(account.id), conditions: [] })).rejects.toThrow(/condition/);
+		await expect(
+			callTool("mail.rules.create", { ...NEWSLETTERS(account.id), conditions: [{ kind: "regex", value: ".*" }] }),
+		).rejects.toThrow(/not a condition/);
+		expect(await actions.list({})).toHaveLength(0);
+	});
+
+	it("shows a change as it is and as it would become, and refuses an approval of a rule that moved on", async () => {
+		const account = await connected();
+		const made = rules.create(
+			{ accountId: account.id, name: "Newsletters", conditions: NEWSLETTERS(account.id).conditions as never, actions: [{ kind: "flag" }] },
+		);
+
+		const parked = (await callTool("mail.rules.update", { id: made.id, enabled: false, actions: [{ kind: "trash" }] })) as {
+			status: string;
+			actionId: string;
+		};
+		expect(parked.status).toBe("pending");
+		const [pending] = await actions.list({ states: ["pending"] });
+		expect(pending!.preview).toContain("Now: Rule \"Newsletters\" for me@juno.test, switched on.");
+		expect(pending!.preview).toContain("After: Rule \"Newsletters\" for me@juno.test, switched off.");
+		// Nothing has changed.
+		expect(rules.get(made.id)).toMatchObject({ enabled: true, actions: [{ kind: "flag" }] });
+
+		// The owner edits it before getting to the request: what they read is not what would apply.
+		rules.update(made.id, { name: "Edited by hand" });
+		await expect(actions.approve(parked.actionId)).rejects.toThrow(/changed after/);
+		const [answered] = await actions.list({ states: ["failed"] });
+		expect(answered!.error).toMatch(/changed after/);
+		expect(rules.get(made.id)).toMatchObject({ enabled: true, name: "Edited by hand" });
+	});
+
+	it("parks a reorder and a removal with the rules named, and does neither until approved", async () => {
+		const account = await connected();
+		const a = rules.create({ accountId: account.id, name: "A", conditions: NEWSLETTERS(account.id).conditions as never, actions: [{ kind: "flag" }] });
+		const b = rules.create({ accountId: account.id, name: "B", conditions: NEWSLETTERS(account.id).conditions as never, actions: [{ kind: "flag" }] });
+
+		const reorder = (await callTool("mail.rules.reorder", { account_id: account.id, ids: [b.id, a.id] })) as { status: string; actionId: string };
+		const removal = (await callTool("mail.rules.delete", { id: a.id })) as { status: string; actionId: string };
+		expect([reorder.status, removal.status]).toEqual(["pending", "pending"]);
+		expect(rules.list(account.id).map((rule) => rule.name)).toEqual(["A", "B"]);
+
+		const previews = (await actions.list({ states: ["pending"] })).map((action) => action.preview);
+		expect(previews.some((text) => text?.includes("1. B") && text.includes("2. A"))).toBe(true);
+		expect(previews.some((text) => text?.startsWith("Remove a rule."))).toBe(true);
+
+		await actions.approve(reorder.actionId);
+		expect(rules.list(account.id).map((rule) => rule.name)).toEqual(["B", "A"]);
+	});
+
+	it("cannot be called by an automation at all, parked or not", async () => {
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "ask", delete: "ask" });
+		const account = await connected();
+		const made = rules.create({ accountId: account.id, name: "A", conditions: NEWSLETTERS(account.id).conditions as never, actions: [{ kind: "flag" }] });
+		const attempts: [string, Record<string, unknown>][] = [
+			["mail.rules.create", NEWSLETTERS(account.id)],
+			["mail.rules.update", { id: made.id, enabled: false }],
+			["mail.rules.reorder", { account_id: account.id, ids: [made.id] }],
+			["mail.rules.delete", { id: made.id }],
+		];
+		for (const [name, args] of attempts) {
+			await expect(callTool(name, args, { source: "automation", automationRunId: "r" }), name).rejects.toThrow(/automation cannot/);
+		}
+		// Not parked either: there is nothing for a person to approve.
+		expect(await actions.list({})).toHaveLength(0);
+		expect(rules.get(made.id)).toMatchObject({ enabled: true });
+		// Reading what the rules are is fine.
+		const read = await callTool("mail.rules.list", { account_id: account.id }, { source: "automation", automationRunId: "r" });
+		expect(read).toHaveLength(1);
+	});
+
+	it("cannot be recorded as a step of an automation", async () => {
+		const { configureAutomations, create } = await import("../services/automations");
+		configureAutomations({ callTool: async () => null, hasTool: (name) => toolByName(name) !== null });
+		await expect(
+			create({ name: "Sneaky", steps: [{ tool: "mail.rules.create", args: {} }] }),
+		).rejects.toThrow(/cannot add, change or remove a mailbox rule/);
+		await expect(create({ name: "Reading", steps: [{ tool: "mail.rules.list", args: { account_id: "x" } }] })).resolves.toMatchObject({
+			name: "Reading",
+		});
+	});
+
+	it("is refused for an agent while Juno is locked", async () => {
+		const account = await connected();
+		locked = true;
+		await expect(callTool("mail.rules.list", { account_id: account.id })).rejects.toThrow(/locked/);
+		await expect(callTool("mail.rules.create", NEWSLETTERS(account.id))).rejects.toThrow(/locked/);
+		expect(await actions.list({})).toHaveLength(0);
+	});
+
+	it("is refused for an agent when the row is off", async () => {
+		const account = await connected();
+		await permissions.setPermissions({ send: "off" });
+		await expect(callTool("mail.rules.create", NEWSLETTERS(account.id))).rejects.toThrow(/turned off/);
 	});
 });
 

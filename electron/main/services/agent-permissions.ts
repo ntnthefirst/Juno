@@ -43,7 +43,7 @@ import * as settings from "./settings";
 
 /** What a caller is told, in words that point at the setting. Code lets an adapter pick its own shape. */
 export class AgentPermissionError extends Error {
-	readonly code: "TURNED_OFF" | "LOCKED" | "UNKNOWN_ROW" | "UNCLASSIFIED";
+	readonly code: "TURNED_OFF" | "LOCKED" | "UNKNOWN_ROW" | "UNCLASSIFIED" | "NOT_FOR_AUTOMATIONS";
 	constructor(code: AgentPermissionError["code"], message: string) {
 		super(message);
 		this.name = "AgentPermissionError";
@@ -60,6 +60,9 @@ export class AgentPermissionError extends Error {
  * - **drafts**: writes a mail draft that opens in the editor. Nothing leaves.
  * - **send**: anything that sends, signs or files. Filing is every move on the
  *   mail server, which is why `mail.file.*` is here and not under change.
+ *   Writing a mailbox rule is here too, because a rule files mail by itself on
+ *   every new message: it is a standing permission to file, and `mail.rules.*`
+ *   cannot be used from an automation at all (decision 64).
  * - **delete**: anything that removes. Soft deletes count, because to the
  *   owner they are gone.
  */
@@ -109,6 +112,9 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"mail.outbox.list",
 		"mail.recipients.clients_for",
 		"mail.recipients.suggest",
+		"mail.rules.get",
+		"mail.rules.history",
+		"mail.rules.list",
 		"mail.sync",
 		"mail.sync_status",
 		"mail.templates.get",
@@ -266,6 +272,9 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"mail.file.set_seen",
 		"mail.file.trash",
 		"mail.file.trash_messages",
+		"mail.rules.create",
+		"mail.rules.reorder",
+		"mail.rules.update",
 		"mail.send",
 		"mail.send_from_template",
 	],
@@ -287,6 +296,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"mail.file.delete_messages",
 		"mail.file.empty_folder",
 		"mail.folders.remove",
+		"mail.rules.delete",
 		"notes.delete",
 		"projects.delete",
 		"projects.delete_asset",
@@ -392,6 +402,13 @@ export async function gate(input: GateInput): Promise<Verdict> {
 	const kind = rowOf(input.name);
 	if (FOLLOW_UP_TOOLS.has(input.name)) return "run";
 
+	if (input.source === "automation" && isForbiddenInAutomation(input.name)) {
+		throw new AgentPermissionError(
+			"NOT_FOR_AUTOMATIONS",
+			"An automation cannot add, change or remove a mailbox rule. A person does that in Juno, or approves an agent's request for it.",
+		);
+	}
+
 	const levels = await settings.getAgentPermissions();
 	const level = levels[kind];
 
@@ -404,6 +421,18 @@ export async function gate(input: GateInput): Promise<Verdict> {
 	if (isLocked(kind)) return "park";
 	if (input.source === "automation" && kind !== "read") return "park";
 	return level === "allow" ? "run" : "park";
+}
+
+/**
+ * A tool an automation may not call, parked or not: the ones that write a mailbox
+ * rule. A rule files mail on its own, so an automation that could add or change
+ * one would be an unattended way to give itself the permission to file, which
+ * is what the approval gate exists to prevent (decision 64). Reading rules is
+ * fine. Derived from the row, so a rule tool added later is covered without
+ * being listed here.
+ */
+export function isForbiddenInAutomation(toolName: string): boolean {
+	return toolName.startsWith("mail.rules.") && ROW_OF.get(toolName) !== "read";
 }
 
 /** True for a tool in a row that can never be Allow. False for one nobody classified. */

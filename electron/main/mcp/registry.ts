@@ -21,6 +21,7 @@ import { mailActionTools } from "./mail-actions";
 import { mailTools } from "./mail";
 import { mailBlockTools } from "./mail-blocks";
 import { mailOutboxTools } from "./mail-outbox";
+import { mailRuleTools } from "./mail-rules";
 import { noteTools } from "./notes";
 import { pageTools } from "./pages";
 import { projectTools } from "./projects";
@@ -58,6 +59,7 @@ const lists: ToolDescriptor[][] = [
 	reminderTools,
 	mailTools,
 	mailBlockTools,
+	mailRuleTools,
 	mailActionTools,
 	mailOutboxTools,
 	suggestionTools,

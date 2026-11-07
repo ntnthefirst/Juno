@@ -2012,3 +2012,82 @@ system. Nothing in it sends anything off the machine.
 **What would reverse this:** a second platform. Then the tray and the badge get
 their own adapter for it, and the services, which hold the rules, stay as they
 are.
+
+## 64. A mailbox rule the owner wrote may file mail on its own
+
+Amends the rule in `.claude/rules/mcp.md` section 4 and decision 44, which say
+that nothing files, signs, sends or deletes without a person pressing a button.
+Each mailbox now has an ordered list of rules (Settings > Mail accounts > the
+account), and a rule the owner wrote and switched on moves, trashes, archives,
+flags, marks read and links mail without asking each time. That is a standing
+instruction, which is different from a decision made per message, and it is the
+only exception.
+
+- **What a rule is.** A name, a switch, conditions, actions and a choice of
+  whether a match stops the rules below. The conditions are tests on the sender
+  address, the recipient addresses, the subject, whether the sender is a client
+  and whether there are attachments, joined by all or any. The actions are move
+  to a folder, trash, archive, mark read, flag and link the conversation to the
+  sender's client, with at most one of the three that move. Rules are checked top
+  to bottom, reordered by dragging.
+- **When they run.** After the inbox of an account has been pulled by a sync,
+  on messages that arrived since the account was connected and that no rule has
+  looked at. Not on sent mail, not on other folders, not on mail that was already
+  there.
+- **A message is looked at once, ever.** `mail_rule_seen` holds the Message-ID
+  (or a hash of the headers for a message without one), per account. It is in the
+  database, so a restart forgets nothing, and it is keyed by the Message-ID
+  rather than the local id or the UID, so a UIDVALIDITY change, which throws the
+  local rows away and reads the same mail back, and a message moved back into
+  the inbox are not new messages. Every message a pass reaches is marked before
+  anything is done to any of them, whether or not a rule matched, so a failure, a
+  crash or the lock cannot make one come round again, and a rule written today
+  does not reach back to what arrived yesterday.
+- **Years of mail are history.** `mail_accounts.rules_since` is set when the
+  account is first synced, before anything is pulled (the migration sets it for
+  accounts that exist). A message older than that is never a candidate, however
+  it comes to be read. The first sync of an account with ten years of mail files
+  none of it, and a test holds that with a rule already written.
+- **Filing is the filing service.** Every action calls `mail-actions.ts`, which
+  changes the server first and the local rows second, so the two cannot
+  disagree. Actions of one kind go as one call per folder, because a call is a
+  connection. Mark read and flag happen before the move, because a moved message
+  is no longer where they would find it, and a message a rule has moved is not
+  offered to the rules below it.
+- **A failed action does not stop the sync and is not tried again.** The batch
+  is retried message by message, gives up on the rest after three failures in a
+  row so a server that is down is not asked a hundred times, and every
+  message that did not get its action has a history row saying why. The sync
+  still finishes with its own result.
+- **Every action writes a history row** (`mail_rule_runs`) naming the rule, the
+  message, the action, the folder it went to and the result: done, skipped or
+  failed with the error. The rule's name, the subject and the sender are copies,
+  cut short, so a removed rule or a purged message still reads. The account page
+  lists them, newest first, which is the answer to "why did this message move".
+- **Conditions are data, never code.** A value is compared with `includes`,
+  `startsWith`, `endsWith` or equality, after both sides are put in one form
+  (composed, lower case, without zero-width characters) and cut to a fixed length.
+  Nothing a person or a sender wrote is turned into a pattern or evaluated. A
+  sender is matched on the address only, because a display name can say
+  anything. Tests hold a pattern in a rule and a hundred-kilobyte subject.
+- **An agent may ask, and the owner decides.** `mail.rules.create`, `update` and
+  `reorder` are in the Send and file row and `delete` in the Delete row, so
+  they park whatever the levels say and can never be Allow. A parked request
+  shows the whole rule in plain words (and for a change, the rule as it is and as
+  it would become), says that it is a standing instruction, and is sealed: if the
+  rule changes between the request and the approval, the approval fails. A rule
+  that could never be stored is refused at once instead of parked.
+- **An automation may not touch a rule.** The gate refuses `mail.rules.*` writes
+  from an automation outright, not by parking them, and an automation cannot be
+  saved with one as a step. Reading rules is allowed. There is no tool that runs
+  a rule: they run when a mailbox syncs, however the sync was started, because
+  what matters is when the mail arrived and not who asked for the sync.
+- **Rules do not run while Juno is locked.** The sync does not start, and a pass
+  that is running when the lock comes on records what it had not reached as
+  skipped.
+- The folders dialog of the mail settings moved onto the account page, with the
+  same ticks, and the dialog is gone.
+
+**What would reverse this:** a rule that filed something the owner did not
+mean to file, which would take it back to suggestions the owner approves. The
+history and the plain-words reading exist so that this is seen early.

@@ -75,7 +75,7 @@ export const PAGES: SettingsPage[] = [
 	{ id: "contact", group: "business", label: "Emails and phones", anchors: ["owner-emails", "owner-phones"], solo: false },
 	{ id: "accounting", group: "business", label: "Accounting", anchors: ["accounting"], solo: true },
 
-	{ id: "mail", group: "mail", label: "Mail accounts", anchors: ["mail-accounts", "removed-accounts"], solo: false },
+	{ id: "mail", group: "mail", label: "Mail accounts", anchors: ["mail-accounts", "mail-rules", "mail-rule-history", "mail-folders", "removed-accounts"], solo: false },
 
 	{ id: "statuses", group: "documents", label: "Statuses and labels", anchors: ["reference"], solo: true },
 	{ id: "signature", group: "documents", label: "Signature image", anchors: ["signature"], solo: true },

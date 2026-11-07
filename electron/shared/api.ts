@@ -25,6 +25,11 @@ import type {
 	ComposeBlockPatch,
 	ComposeBlockRendered,
 	ComposeBlockResolution,
+	MailRule,
+	MailRuleInput,
+	MailRulePatch,
+	MailRuleRun,
+	MailRuleRunQuery,
 	AgentConnection,
 	AgentTokenCreated,
 	ClaudeDesktopSetup,
@@ -1023,6 +1028,25 @@ export interface JunoApi {
 			resolve(context: ComposeBlockContext): Promise<ComposeBlockResolution>;
 			/** One block filled in for a message, whatever its rule says. */
 			render(id: string, context: ComposeBlockContext): Promise<ComposeBlockRendered>;
+		};
+		/**
+		 * Rules per mailbox, checked top to bottom against new mail in the inbox
+		 * after each sync (decision 64). They file on their own, so only the owner
+		 * writes one here; an agent has to ask through the approval gate.
+		 */
+		rules: {
+			/** The rules of one mailbox, in the order they are checked. */
+			list(accountId: string): Promise<MailRule[]>;
+			get(id: string): Promise<MailRule>;
+			create(input: MailRuleInput): Promise<MailRule>;
+			update(id: string, patch: MailRulePatch): Promise<MailRule>;
+			remove(id: string): Promise<MailRule>;
+			/** Every rule of the mailbox, once, in the new order. */
+			reorder(accountId: string, ids: string[]): Promise<MailRule[]>;
+			/** The rule in plain words, as an approval would show it. */
+			describe(id: string): Promise<string>;
+			/** What rules did to messages, newest first. */
+			runs(query: MailRuleRunQuery): Promise<MailRuleRun[]>;
 		};
 		templates: {
 			/** What a picker offers: hidden templates are left out. */

@@ -3357,3 +3357,104 @@ export interface PagePatch {
 	projectId?: string | null;
 	blocks?: unknown;
 }
+
+/* --------------------------------------------------------------- mail rules */
+
+/** What a text condition looks at. The sender and recipients are addresses, never display names. */
+export type MailRuleTextField = "sender" | "recipient" | "subject";
+
+export type MailRuleTextTest = "contains" | "is" | "starts_with" | "ends_with" | "not_contains";
+
+/**
+ * One test on a new message. Plain data: nothing in here is a pattern or a
+ * program, so the text a person (or a sender) supplies is only ever compared,
+ * never interpreted.
+ */
+export type MailRuleCondition =
+	| { kind: "text"; field: MailRuleTextField; test: MailRuleTextTest; value: string }
+	| { kind: "sender_is_client"; value: boolean }
+	| { kind: "has_attachments"; value: boolean };
+
+/** What a matching rule does. A rule may move a message at most once. */
+export type MailRuleAction =
+	| { kind: "move"; folderId: string }
+	| { kind: "trash" }
+	| { kind: "archive" }
+	| { kind: "mark_read" }
+	| { kind: "flag" }
+	| { kind: "link_client" };
+
+export type MailRuleActionKind = MailRuleAction["kind"];
+
+/** all: every condition has to hold. any: one is enough. */
+export type MailRuleMatch = "all" | "any";
+
+export interface MailRule extends Standard {
+	accountId: string;
+	name: string;
+	enabled: boolean;
+	match: MailRuleMatch;
+	conditions: MailRuleCondition[];
+	actions: MailRuleAction[];
+	/** True: a message this rule matched is not offered to the rules below it. */
+	stopOnMatch: boolean;
+	/** Rules are checked from the lowest number up. */
+	sortOrder: number;
+}
+
+export interface MailRuleInput {
+	accountId: string;
+	name: string;
+	enabled?: boolean;
+	match?: MailRuleMatch;
+	conditions: MailRuleCondition[];
+	actions: MailRuleAction[];
+	stopOnMatch?: boolean;
+}
+
+export interface MailRulePatch {
+	name?: string;
+	enabled?: boolean;
+	match?: MailRuleMatch;
+	conditions?: MailRuleCondition[];
+	actions?: MailRuleAction[];
+	stopOnMatch?: boolean;
+}
+
+/** done: it happened. skipped: there was nothing to do. failed: it was tried and the error says why. */
+export type MailRuleResult = "done" | "skipped" | "failed";
+
+/**
+ * One thing a rule did (or tried to do) to one message. The subject and sender
+ * are copies taken at the time, cut short, because the message may be gone and
+ * both are text the sender chose.
+ */
+export interface MailRuleRun extends Standard {
+	accountId: string;
+	ruleId: string;
+	/** The rule's name when it ran, so a renamed or removed rule still reads. */
+	ruleName: string;
+	messageId: string;
+	subject: string;
+	fromAddress: string | null;
+	action: MailRuleActionKind;
+	/** Where it went, for a move: the folder's name when it ran. */
+	detail: string | null;
+	result: MailRuleResult;
+	error: string | null;
+}
+
+export interface MailRuleRunQuery {
+	accountId: string;
+	ruleId?: string;
+	limit?: number;
+}
+
+/** What one pass over the new mail of an account did. */
+export interface MailRulePass {
+	checked: number;
+	matched: number;
+	done: number;
+	skipped: number;
+	failed: number;
+}

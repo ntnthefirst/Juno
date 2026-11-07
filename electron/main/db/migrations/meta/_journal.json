@@ -183,6 +183,13 @@
       "when": 1794021177135,
       "tag": "0025_notes_and_pages",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1794027577207,
+      "tag": "0026_mail_rules",
+      "breakpoints": true
     }
   ]
 }

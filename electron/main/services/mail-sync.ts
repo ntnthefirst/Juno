@@ -9,7 +9,9 @@
  * checked on every open, and a change throws the folder's local state away.
  *
  * Nothing in here writes to the server. The source interface has no method
- * that could.
+ * that could. The one thing that does act on the server after a pass is the
+ * mailbox rules, and they are not called from here: the app hands this module a
+ * hook (`afterInbox`), so the sync keeps no import of the filing code.
  */
 import type { MailSyncStatus } from "../../shared/types";
 import { getDb, type Db } from "../db";
@@ -55,6 +57,13 @@ interface SyncConfig {
 	 * across several runs can be exercised without two thousand fake messages.
 	 */
 	headerBatch?: number;
+	/**
+	 * Runs after the inbox of an account has been pulled, with that account. The
+	 * mailbox rules are this (decision 64). It is awaited so that the folder
+	 * counts written at the end of the pass include what it moved, and an error
+	 * from it never fails the sync.
+	 */
+	afterInbox?: (accountId: string, db: Db) => Promise<unknown>;
 }
 
 let config: SyncConfig | null = null;
@@ -248,6 +257,17 @@ async function syncFolder(
 	// exists to make visible, and the scheduler uses it to come straight back.
 	progress.pending += outstanding.length - missing.length + store.countPendingBodies(db, folder.id);
 
+	// New mail in the inbox is the only thing the mailbox rules look at. A rule
+	// that cannot run, or a hook that throws, leaves the mail where it is and
+	// the sync going.
+	if (folder.specialUse === "inbox" && config?.afterInbox && !paused()) {
+		try {
+			await config.afterInbox(account.id, db);
+		} catch {
+			// The rules write their own failures to the history. Nothing to add.
+		}
+	}
+
 	db.update(mailFolders)
 		.set({
 			uidValidity: mailbox.uidValidity,
@@ -279,6 +299,10 @@ export async function syncAccount(accountId: string, db: Db = getDb()): Promise<
 
 	const account = await accounts.get(accountId, db);
 	if (!account) throw new Error("That mail account does not exist.");
+
+	// Before anything is pulled, so what the mailbox already holds counts as
+	// history for the rules and never as new mail.
+	store.ensureRulesSince(db, accountId);
 
 	running.add(accountId);
 	const progress: MailSyncStatus = {

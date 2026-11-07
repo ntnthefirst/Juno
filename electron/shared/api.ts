@@ -28,6 +28,14 @@ import type {
 	AgentAction,
 	AgentActionListQuery,
 	AppInfo,
+	Note,
+	NoteHit,
+	NoteInput,
+	NotePatch,
+	NoteQuery,
+	PageDetail,
+	PageInput,
+	PagePatch,
 	AppSettings,
 	AuditEvent,
 	AgentActionView,
@@ -372,6 +380,26 @@ export interface JunoApi {
 		remove(id: string): Promise<TimeEntry>;
 		/** Fires when a timer starts or stops, from the interface or from an agent. */
 		onRunningChange(listener: (running: RunningTimer | null) => void): () => void;
+	};
+
+	notes: {
+		list(query?: NoteQuery): Promise<Note[]>;
+		get(id: string): Promise<Note | null>;
+		/** Notes holding every word typed, best match first, each with the words around it. */
+		search(term: string, query?: NoteQuery): Promise<NoteHit[]>;
+		create(input?: NoteInput): Promise<Note>;
+		/** Saved as it is typed. `pinned` sets or clears the pin. */
+		update(id: string, patch: NotePatch): Promise<Note>;
+		duplicate(id: string): Promise<Note>;
+		remove(id: string): Promise<Note>;
+		restore(id: string): Promise<Note>;
+	};
+
+	/** A page is a document of kind `page`. Listing and deleting go through `documents`. */
+	pages: {
+		get(id: string): Promise<PageDetail>;
+		create(input?: PageInput): Promise<PageDetail>;
+		update(id: string, patch: PagePatch): Promise<PageDetail>;
 	};
 
 	projects: {

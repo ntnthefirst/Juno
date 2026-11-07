@@ -18,11 +18,13 @@ const KIND: Record<RecentKind, { label: string; icon: IconName }> = {
 	project: { label: "Project", icon: "projects" },
 	document: { label: "Document", icon: "documents" },
 	thread: { label: "Mail", icon: "mail" },
+	note: { label: "Note", icon: "note" },
 };
 
 function open(item: RecentItem): void {
 	if (item.kind === "client") requestOpenClient(item.recordId, item.name);
 	else if (item.kind === "project") requestOpen({ kind: "project", id: item.recordId, name: item.name });
+	else if (item.kind === "note") requestOpen({ kind: "note", id: item.recordId });
 	else if (item.kind === "document") requestOpen({ kind: "document", id: item.recordId, name: item.name });
 	else requestOpen({ kind: "thread", id: item.recordId, messageId: null });
 }

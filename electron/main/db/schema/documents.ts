@@ -121,11 +121,16 @@ export const documents = sqliteTable(
 		 */
 		isSpecimen: integer("is_specimen", { mode: "boolean" }).notNull().default(true),
 		/**
-		 * `generated` came from a template, `imported` was a PDF that already
+		 * `generated` came from a template, `page` was written in the page editor, `imported` was a PDF that already
 		 * existed. An imported document has no body to render and no template
 		 * version, so anything that re-renders has to check this first.
 		 */
 		sourceKind: text("source_kind").notNull().default("generated"),
+		/**
+		 * The blocks of a `page`, as JSON. Null for every other kind. `bodyHtml` is
+		 * compiled from this on every save, so anything that reads a body still works.
+		 */
+		blocksJson: text("blocks_json"),
 	},
 	(t) => [
 		index("documents_client_idx").on(t.clientId),

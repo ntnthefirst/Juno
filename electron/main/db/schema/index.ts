@@ -10,3 +10,4 @@ export * from "./recent";
 export * from "./mail-blocks";
 export * from "./mail-suggestions";
 export * from "./time";
+export * from "./notes";

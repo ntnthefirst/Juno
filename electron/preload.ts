@@ -156,6 +156,23 @@ const api: JunoApi = {
 		},
 	},
 
+	notes: {
+		list: (query) => call("notes.list", query),
+		get: (id) => call("notes.get", id),
+		search: (term, query) => call("notes.search", term, query),
+		create: (input) => call("notes.create", input),
+		update: (id, patch) => call("notes.update", id, patch),
+		duplicate: (id) => call("notes.duplicate", id),
+		remove: (id) => call("notes.remove", id),
+		restore: (id) => call("notes.restore", id),
+	},
+
+	pages: {
+		get: (id) => call("pages.get", id),
+		create: (input) => call("pages.create", input),
+		update: (id, patch) => call("pages.update", id, patch),
+	},
+
 	projects: {
 		list: (query) => call("projects.list", query),
 		get: (id) => call("projects.get", id),

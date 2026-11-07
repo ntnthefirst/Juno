@@ -1916,3 +1916,61 @@ and the Figma file wins over an older rule.
 **What would reverse this:** a fifth record whose form needs steps or a table,
 which is a page; or a platform where a modal child cannot be told apart from the
 window behind it.
+
+## 61. Notes are a place of their own, the seventh on the rail
+
+The design's rail has Notes between Mail and Documents (frames `73:4831` and
+`70:1584`), and `.claude/rules/styling.md` section 5b said a seventh place was a
+decision and not an edit. It is taken.
+
+- **The rail is seven places and Settings.** Overview, Calendar, Clients,
+  Projects, Mail, Notes, Documents. The digits follow it from the top, so
+  Notes is Ctrl or Cmd 6, Documents 7 and the Agent 8. `NEW_MENU` offers New
+  note and New page, New page is Ctrl or Cmd Shift N, and the palette has a
+  Notes tab and the same two commands. Recent takes a `note` kind.
+- **A note is not a client note.** `client_notes` are entries on a client's
+  timeline with a moment they happened at, and cannot exist without a client.
+  A note has a title of its own, a Markdown body saved as it is typed, may
+  belong to a client, a project or nothing, and can be pinned. It is its own
+  table (`notes`, migration 0025) with an FTS5 table kept in step by triggers,
+  because one store would have meant a client on every note or a nullable
+  timeline.
+- **The agent has `notes.list`, `get`, `search`, `create`, `update`,
+  `duplicate`, `delete` and `restore`.** Reading is in the Read row, writing in
+  Change records, and `notes.delete` in Delete, so it parks like any other
+  delete. There is no archive: a deleted note is soft deleted and comes back
+  with an undo.
+- **The Note right-click menu is native** (decision 59): Pin to the top,
+  Duplicate, Move to a project, Delete. The design's Open in a new window is
+  left out, because Juno has one main window and that is not something a menu
+  item should break (decision 34 and the window rules).
+
+**What would reverse this:** a rail that has to carry a ninth place, which is a
+screen switch instead, as Documents and Templates are.
+
+## 62. A page is a kind of document
+
+A page in the design sits in the Documents list, belongs to a client or a
+project and reads like a document (frame `73:5038`). That is what a document is
+(decision 48), so a page is one: `documents.source_kind = 'page'`.
+
+- **What a page adds is one column.** `documents.blocks_json` holds the blocks
+  (text, heading, bullet, checklist, table) and `body_html` is compiled from
+  them on every save, so anything that reads a document's body still works. A
+  page has no PDF, no versions to show and no signature. Its owner, its listing,
+  its timeline, its delete and its undo are the document's own.
+- **Blocks are one model for notes and pages.** `shared/blocks.ts` reads and
+  writes them. A note stores them as Markdown, a page as JSON, and both are
+  edited by `components/BlockEditor.tsx`. Text inside a block is a small subset
+  of HTML (bold, italic, underline), cleaned in the service and again when it is
+  read, so a script in a pasted page never reaches the editor.
+- **The service is `services/pages.ts`** (`get`, `create`, `update`), the tools
+  are `pages.get`, `pages.create` and `pages.update` (Read and Change records),
+  and deleting a page is `documents.remove`, which already parks.
+- **Where it is not a PDF:** the Documents list marks a page with a Page badge,
+  the file menu leaves out Open in the default app, and the viewer is
+  `features/documents/PageView.tsx` in place of the PDF viewer.
+
+**What would reverse this:** pages that need to be signed or sent as a file. That
+is a render to PDF, which `documents.render_pdf` already does from the body, and
+not a different table.

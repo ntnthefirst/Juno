@@ -10,13 +10,13 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { RecentItem, RecentKind } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { LOCAL_OWNER_ID, now } from "../db/columns";
-import { clients, documents, mailThreads, projects, recentItems } from "../db/schema";
+import { clients, documents, mailThreads, notes, projects, recentItems } from "../db/schema";
 
 type Row = typeof recentItems.$inferSelect;
 
 export const RECENT_LIMIT = 20;
 
-const KINDS: RecentKind[] = ["client", "project", "document", "thread"];
+const KINDS: RecentKind[] = ["client", "project", "document", "thread", "note"];
 
 export class RecentError extends Error {
 	constructor(message: string) {
@@ -141,6 +141,17 @@ function resolve(row: Row, db: Db): { name: string; context: string | null } | n
 				.where(and(eq(mailThreads.id, row.recordId), isNull(mailThreads.deletedAt)))
 				.get();
 			return thread ? { name: thread.subject || "(no subject)", context: clientName(thread.clientId, db) } : null;
+		}
+		case "note": {
+			const note = db
+				.select({ title: notes.title, body: notes.body, clientId: notes.clientId })
+				.from(notes)
+				.where(and(eq(notes.id, row.recordId), isNull(notes.deletedAt)))
+				.get();
+			if (!note) return null;
+			const lines = note.body.split("\n").map((line) => line.replace(/^\s*(#+\s+|[-*]\s+(\[[ xX]\]\s*)?)/, "").trim());
+			const first = lines.find((line) => line !== "") ?? "";
+			return { name: note.title || first.slice(0, 80) || "Untitled note", context: clientName(note.clientId, db) };
 		}
 		default:
 			return null;

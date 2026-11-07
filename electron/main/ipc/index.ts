@@ -22,6 +22,7 @@ import { registerGeocodingIpc } from "./geocoding";
 import { registerLockIpc } from "./lock";
 import { registerMailIpc } from "./mail";
 import { registerMenuIpc } from "./menu";
+import { registerNotesIpc } from "./notes";
 import { registerProjectsIpc } from "./projects";
 import { registerReferenceIpc } from "./reference";
 import { registerRemindersIpc } from "./reminders";
@@ -52,6 +53,7 @@ export function registerAllIpc(): void {
 	registerContactsIpc();
 	registerProjectsIpc();
 	registerTimeIpc();
+	registerNotesIpc();
 	registerSearchIpc();
 	registerRecentIpc();
 	registerReferenceIpc();

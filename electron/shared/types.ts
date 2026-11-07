@@ -929,7 +929,7 @@ export interface SearchHit {
 	on?: IsoDate | null;
 }
 
-export type RecentKind = "client" | "project" | "document" | "thread";
+export type RecentKind = "client" | "project" | "document" | "thread" | "note";
 
 /** A record opened lately, with the name and place the menu draws. */
 export interface RecentItem {
@@ -1887,7 +1887,7 @@ export interface DocumentRecord extends Standard {
 	latestVersion: { id: string; kind: DocumentVersionKind; fileDate: Iso } | null;
 }
 
-export type DocumentSourceKind = "generated" | "imported";
+export type DocumentSourceKind = "generated" | "imported" | "page";
 
 export interface ImportDocumentInput {
 	/** An absolute path to a PDF that exists. Copied in, never referenced. */
@@ -3236,4 +3236,65 @@ export interface ClaudeDesktopSetup {
 	/** Whether the system handed the file to a program, which is Claude when it is installed. */
 	opened: boolean;
 	url: string;
+}
+
+/* ------------------------------------------------------------------- notes */
+
+/** A note, with the names of what it belongs to so a row needs no second read. */
+export interface Note extends Standard {
+	title: string;
+	/** Markdown. A checklist is `- [ ] item` and `- [x] item`. */
+	body: string;
+	clientId: string | null;
+	clientName: string | null;
+	projectId: string | null;
+	projectName: string | null;
+	/** Set while the note is pinned to the top of the list. */
+	pinnedAt: Iso | null;
+}
+
+export interface NoteInput {
+	title?: string;
+	body?: string;
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+export interface NotePatch extends NoteInput {
+	pinned?: boolean;
+}
+
+export interface NoteQuery {
+	clientId?: string;
+	projectId?: string;
+	/** At most this many, newest edit first. Default 200. */
+	limit?: number;
+}
+
+/** A hit of a search over notes, with the words around it. */
+export interface NoteHit {
+	note: Note;
+	snippet: string;
+}
+
+/* ------------------------------------------------------------------- pages */
+
+/** A page is a document of kind `page`: the record, and the blocks it is written in. */
+export interface PageDetail {
+	document: DocumentRecord;
+	blocks: import("./blocks").Block[];
+}
+
+export interface PageInput {
+	title?: string;
+	clientId?: string | null;
+	projectId?: string | null;
+	blocks?: unknown;
+}
+
+export interface PagePatch {
+	title?: string;
+	clientId?: string | null;
+	projectId?: string | null;
+	blocks?: unknown;
 }

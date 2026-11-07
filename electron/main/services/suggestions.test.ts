@@ -1,11 +1,24 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
-import { calendarEvents, clients, mailFolders, mailMessages, mailThreads, projects, reminders } from "../db/schema";
+import {
+	calendarEvents,
+	clientEmails,
+	clients,
+	mailFolders,
+	mailMessages,
+	mailThreads,
+	projects,
+	referenceItems,
+	referenceSets,
+	reminders,
+	timeEntries,
+} from "../db/schema";
 import * as accounts from "./mail-accounts";
 import { configureCredentialStore, MemoryCredentialStore } from "./mail-credentials";
 import { configureSettings } from "./settings";
@@ -158,7 +171,7 @@ describe("Link to project", () => {
 				kind: "project",
 				messageId: id,
 				headline: "This looks like part of Kitchen cabinets",
-				question: "Link this message to the project?",
+				question: "Link this conversation to the project?",
 			},
 		]);
 
@@ -200,6 +213,107 @@ describe("Link to project", () => {
 		await suggestions.setSources({ projects: true });
 		await suggestions.dismiss(gate, "project", db);
 		expect(await suggestions.forMessage(gate, db, TODAY)).toEqual([]);
+	});
+});
+
+describe("Link to the client's open project", () => {
+	let set: string;
+	let koffie: string;
+
+	beforeEach(() => {
+		set = db.insert(referenceSets).values({ key: "project_status", label: "Project status" }).returning().get().id;
+		koffie = db.insert(clients).values({ name: "Koffiebar Noir", sortName: "koffiebar noir" }).returning().get().id;
+		db.update(mailThreads).set({ clientId: koffie }).run();
+	});
+
+	function owned(name: string, key: string | null, clientId: string = koffie): string {
+		const statusId = key
+			? db.insert(referenceItems).values({ setId: set, key, label: key }).returning().get().id
+			: null;
+		return db.insert(projects).values({ name, clientId, statusId }).returning().get().id;
+	}
+
+	function headline(name: string): string {
+		return `You are working on ${name} with this client`;
+	}
+
+	it("offers the only open project without it being named", async () => {
+		const site = owned("Website Noir Koffiebar", "active");
+		const id = message("Kunnen we morgen bellen?");
+		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([
+			{
+				kind: "project",
+				messageId: id,
+				headline: headline("Website Noir Koffiebar"),
+				question: "Link this conversation to the project?",
+			},
+		]);
+		const outcome = await suggestions.accept(id, "project", db, TODAY);
+		if (outcome.kind !== "project") throw new Error("expected a project");
+		expect(outcome.projectId).toBe(site);
+	});
+
+	it("finds the client from the sender when the thread is not linked", async () => {
+		db.update(mailThreads).set({ clientId: null }).run();
+		db.insert(clientEmails).values({ clientId: koffie, email: "info@koffienoir.be" }).run();
+		owned("Menu cards", "active");
+		const id = message("Hallo", "Info@KoffieNoir.be");
+		expect(await suggestions.forMessage(id, db, TODAY)).toHaveLength(1);
+	});
+
+	it("prefers the mentioned project when several are open", async () => {
+		owned("Website", "active");
+		const cards = owned("Menu cards", "on_hold");
+		owned("Logo", null);
+		const id = message("De menu cards zijn goedgekeurd.");
+		const found = await suggestions.forMessage(id, db, TODAY);
+		expect(found).toHaveLength(1);
+		expect(found[0]!.headline).toBe(headline("Menu cards"));
+		const outcome = await suggestions.accept(id, "project", db, TODAY);
+		if (outcome.kind !== "project") throw new Error("expected a project");
+		expect(outcome.projectId).toBe(cards);
+	});
+
+	it("takes the most recently active of several when none is mentioned", async () => {
+		owned("Website", "active");
+		const busy = owned("Logo", "active");
+		db.update(projects).set({ updatedAt: "2026-01-01T00:00:00.000Z" }).run();
+		db.insert(timeEntries)
+			.values({ projectId: busy, clientId: koffie, startedAt: "2026-10-30T09:00:00.000Z", durationMinutes: 30 })
+			.run();
+		const found = await suggestions.forMessage(message("Een korte vraag."), db, TODAY);
+		expect(found).toHaveLength(1);
+		expect(found[0]!.headline).toBe(headline("Logo"));
+	});
+
+	it("ignores closed and deleted projects", async () => {
+		owned("Old site", "delivered");
+		owned("Shelved", "archived");
+		owned("Lost one", "cancelled");
+		const gone = owned("Removed", "active");
+		db.update(projects).set({ deletedAt: "2026-10-01T00:00:00.000Z" }).where(eq(projects.id, gone)).run();
+		expect(await suggestions.forMessage(message("Hallo"), db, TODAY)).toEqual([]);
+		const live = owned("Live", "active");
+		const found = await suggestions.forMessage(message("Hallo opnieuw"), db, TODAY);
+		expect(found).toHaveLength(1);
+		const outcome = await suggestions.accept(found[0]!.messageId, "project", db, TODAY);
+		if (outcome.kind !== "project") throw new Error("expected a project");
+		expect(outcome.projectId).toBe(live);
+	});
+
+	it("never offers the project of another client", async () => {
+		const other = db.insert(clients).values({ name: "Peeters", sortName: "peeters" }).returning().get().id;
+		owned("Garden shed", "active", other);
+		expect(await suggestions.forMessage(message("Wat kost de Garden shed?"), db, TODAY)).toEqual([]);
+	});
+
+	it("offers nothing after Not now or for a conversation that is already filed", async () => {
+		const site = owned("Website", "active");
+		const id = message("Hallo");
+		await suggestions.dismiss(id, "project", db);
+		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([]);
+		db.update(mailThreads).set({ projectId: site }).run();
+		expect(await suggestions.forMessage(message("Nog iets"), db, TODAY)).toEqual([]);
 	});
 });
 

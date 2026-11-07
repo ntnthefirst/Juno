@@ -2218,3 +2218,24 @@ they take their values when the message is sent or its preview is drawn.
 **What would reverse this:** a client who needed to see the resolved line while
 writing, rather than a flagged chip, would ask for a live preview beside the
 composer, not for the value in the text.
+
+## 67. A client has a language, and it is the client's, not the template's
+
+The new-client window draws a Language beside the VAT number, where the app had a
+Status. A client now carries `language`, one of `nl` (Dutch, "u"), `nl-je` (Dutch,
+"je"), `fr` and `en`, defaulting to `nl` (`shared/client-language.ts`, migration
+`0028_client_language`).
+
+- **It is a column on `clients`, validated in the service.** An unknown value is
+  refused there, so the window, an agent's `clients.create` and `clients.update`
+  and an import all get the same answer.
+- **The window asks for it and the status moves.** A status is set on the record,
+  beside the name, as the record frame draws it. The edit page offers both.
+- **A template can read it** as `{{ client.language }}`. Choosing the register
+  stays the template's job (writing.md section 1); the field only says which one
+  this client expects, so a person or an agent picking a template has something
+  to check against.
+
+**What would reverse this:** a second language of output actually shipping, with
+French templates, would make the field drive which template is offered instead of
+informing the choice.

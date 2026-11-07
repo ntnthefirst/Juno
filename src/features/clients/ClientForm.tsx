@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useId, useState } from "react";
 import type { Client, ClientPatch, ReferenceItem } from "@shared/types";
+import { CLIENT_LANGUAGES } from "@shared/client-language";
 import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
@@ -19,6 +20,7 @@ type Values = {
 	statusId: string;
 	vatNumber: string;
 	website: string;
+	language: string;
 	notes: string;
 };
 
@@ -28,6 +30,7 @@ function toValues(client: Client): Values {
 		statusId: client.statusId ?? "",
 		vatNumber: client.vatNumber ?? "",
 		website: client.website ?? "",
+		language: client.language,
 		notes: client.notes ?? "",
 	};
 }
@@ -89,6 +92,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 			statusId: values.statusId.length > 0 ? values.statusId : null,
 			vatNumber: textOrNull(values.vatNumber),
 			website: textOrNull(values.website),
+			language: values.language,
 			notes: notesOpen ? textOrNull(values.notes) : null,
 		};
 
@@ -140,14 +144,18 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						onChange={(value) => set("vatNumber", value)}
 					/>
 
-					<div className="col-span-2">
-						<Field
-							label="Website"
-							type="url"
-							value={values.website}
-							onChange={(value) => set("website", value)}
-						/>
-					</div>
+					<Field
+						label="Website"
+						type="url"
+						value={values.website}
+						onChange={(value) => set("website", value)}
+					/>
+					<Select
+						label="Language"
+						value={values.language}
+						onChange={(value) => set("language", value)}
+						options={CLIENT_LANGUAGES.map((item) => ({ value: item.value, label: item.label }))}
+					/>
 				</div>
 
 				<div className="mt-6 border-t border-[var(--line)] pt-6">

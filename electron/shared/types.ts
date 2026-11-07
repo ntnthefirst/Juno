@@ -124,6 +124,8 @@ export interface Client extends Standard {
 	vatNumber: string | null;
 	/** Free text, Markdown. Rendered the way a calendar event's notes are. */
 	notes: string | null;
+	/** A value of `CLIENT_LANGUAGES`. */
+	language: string;
 }
 
 /** What a list row needs, resolved, so the renderer does not join by hand. */

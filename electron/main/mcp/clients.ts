@@ -1,5 +1,6 @@
 import type { ListClientsQuery } from "../../shared/api";
 import type { ClientIntakeInput, ClientPatch } from "../../shared/types";
+import { CLIENT_LANGUAGES } from "../../shared/client-language";
 import * as intake from "../services/client-intake";
 import * as clients from "../services/clients";
 import type { ToolDescriptor } from "./types";
@@ -10,6 +11,7 @@ const FIELDS = {
 	website: "website",
 	vat_number: "vatNumber",
 	notes: "notes",
+	language: "language",
 } as const;
 
 function fields(args: Record<string, unknown>): Record<string, unknown> {
@@ -31,6 +33,12 @@ const writableProperties: Record<string, unknown> = {
 	notes: {
 		type: ["string", "null"],
 		description: "Free text notes about the client, rendered as Markdown.",
+	},
+	language: {
+		type: "string",
+		enum: CLIENT_LANGUAGES.map((language) => language.value),
+		description:
+			"What the client is written to in: nl is Dutch with u, nl-je is Dutch with je, fr or en. Defaults to nl.",
 	},
 };
 

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { ReferenceItem } from "@shared/types";
+import { useState } from "react";
+import { CLIENT_LANGUAGES, DEFAULT_CLIENT_LANGUAGE } from "@shared/client-language";
 import { Field } from "../../components/Field";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
@@ -7,9 +7,8 @@ import { FieldRow } from "./FieldRow";
 import { RecordWindow } from "./RecordWindow";
 
 /**
- * New client (frame 90:9301). The status stands where the frame draws the
- * language: a client has no language of its own yet, and a status is what the
- * list and the timeline already read.
+ * New client (frame 90:9301). A status is not asked for here, as the frame
+ * does not draw one: it is set on the record, beside the name.
  */
 export function NewClientWindow() {
 	const [name, setName] = useState("");
@@ -17,27 +16,11 @@ export function NewClientWindow() {
 	const [phone, setPhone] = useState("");
 	const [address, setAddress] = useState("");
 	const [vatNumber, setVatNumber] = useState("");
-	const [statusId, setStatusId] = useState("");
+	const [language, setLanguage] = useState<string>(DEFAULT_CLIENT_LANGUAGE);
 	const [notes, setNotes] = useState("");
-	const [statuses, setStatuses] = useState<ReferenceItem[]>([]);
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
-
-	useEffect(() => {
-		let cancelled = false;
-		window.juno.reference
-			.getSet("client_status")
-			.then((set) => {
-				if (!cancelled) setStatuses(set ? set.items.filter((item) => item.hiddenAt === null) : []);
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setError(`Could not load the status list. ${messageOf(cause)}`);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
 
 	async function save() {
 		const trimmed = name.trim();
@@ -51,7 +34,7 @@ export function NewClientWindow() {
 		try {
 			await window.juno.clients.create({
 				name: trimmed,
-				statusId: statusId.length > 0 ? statusId : null,
+				language,
 				vatNumber: vatNumber.trim() || null,
 				notes: notes.trim() || null,
 				email,
@@ -76,14 +59,13 @@ export function NewClientWindow() {
 			<FieldRow columns="1fr 1fr">
 				<Field label="VAT number" value={vatNumber} onChange={setVatNumber} />
 				<Select
-					label="Status"
-					value={statusId}
-					onChange={setStatusId}
-					placeholder="No status"
-					options={statuses.map((item) => ({ value: item.id, label: item.label }))}
+					label="Language"
+					value={language}
+					onChange={setLanguage}
+					options={CLIENT_LANGUAGES.map((item) => ({ value: item.value, label: item.label }))}
 				/>
 			</FieldRow>
-			<Field label="Notes" multiline rows={2} value={notes} onChange={setNotes} />
+			<Field label="Notes" multiline rows={1} value={notes} onChange={setNotes} />
 		</RecordWindow>
 	);
 }

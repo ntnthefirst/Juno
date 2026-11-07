@@ -17,6 +17,8 @@ export const clients = sqliteTable(
 		vatNumber: text("vat_number"),
 		/** Free text, Markdown. Rendered like a calendar event's notes. */
 		notes: text("notes"),
+		/** What a client reads in: nl is Dutch with "u", nl-je Dutch with "je", fr, en. */
+		language: text("language").notNull().default("nl"),
 	},
 	(t) => [
 		index("clients_owner_idx").on(t.ownerId),

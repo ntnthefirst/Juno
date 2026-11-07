@@ -122,7 +122,7 @@ addressing a person stays grammatical.
 
 ### `client.*`
 
-`name`, `email`, `phone`, `website`, `vatNumber`, `addressLine1`,
+`name`, `email`, `phone`, `website`, `vatNumber`, `language` (`nl`, `nl-je`, `fr` or `en`), `addressLine1`,
 `addressLine2`, `postalCode`, `city`, `country`
 
 Plus, from the client's **primary** contact: `contactName`, `contactRole`,

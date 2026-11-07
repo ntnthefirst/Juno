@@ -68,6 +68,16 @@ describe("clients", () => {
 		expect(renamed.sortName).toBe("van acker nv");
 	});
 
+	it("defaults the language to nl, stores another and refuses an unknown one", async () => {
+		const db = freshDb();
+		const made = await clients.create({ name: "Peeters" }, db);
+		expect(made.language).toBe("nl");
+		const changed = await clients.update(made.id, { language: "fr" }, db);
+		expect(changed.language).toBe("fr");
+		await expect(clients.update(made.id, { language: "de" }, db)).rejects.toThrow(/not a client language/);
+		await expect(clients.create({ name: "Janssens", language: "xx" }, db)).rejects.toThrow(/not a client language/);
+	});
+
 	it("refuses a client with no name", async () => {
 		const db = freshDb();
 		await expect(clients.create({ name: "   " }, db)).rejects.toThrow(/needs a name/);

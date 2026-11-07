@@ -130,4 +130,4 @@ export const NEW_OWN_ICON: Record<string, IconName> = {
  * beside the screen's own actions. On every other screen it is the plus at the
  * left, beside Search, Recent and Reminders.
  */
-export const NEW_AT_RIGHT: ScreenId[] = ["notes", "calendar", "clients", "projects", "documents", "document-templates", "reminders"];
+export const NEW_AT_RIGHT: ScreenId[] = ["notes", "calendar", "clients", "projects", "documents", "reminders"];

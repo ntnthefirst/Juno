@@ -345,9 +345,9 @@ export function DocumentDetail({
 
 			<aside
 				aria-label="Document"
-				className="flex h-full w-[380px] shrink-0 flex-col overflow-y-auto border-l border-[var(--line)] bg-[var(--surface)]"
+				className="flex h-full w-[500px] shrink-0 flex-col overflow-y-auto border-l border-[var(--line)] bg-[var(--surface)]"
 			>
-				<div className="px-5 pt-5">
+				<div className="px-7 pt-6">
 					<div className="flex flex-wrap items-center gap-2">
 						<h2
 							data-selectable
@@ -361,9 +361,12 @@ export function DocumentDetail({
 					<p className="mt-1 text-sm text-[var(--ink-muted)]">{belongsTo(record)}</p>
 
 					<div className="mt-4 flex items-center gap-1">
-						<Button variant="primary" disabled={!hasFile} onClick={() => void guarded("sign", () => onSign(record))}>
-							Sign
-						</Button>
+						{/* The design draws no Sign on a specimen, which cannot be signed. */}
+						{record.isSpecimen ? null : (
+							<Button variant="primary" disabled={!hasFile} onClick={() => void guarded("sign", () => onSign(record))}>
+								Sign
+							</Button>
+						)}
 						<TitleBarSlot side="right">
 							<IconAction
 								size="dense"
@@ -432,7 +435,7 @@ export function DocumentDetail({
 				</div>
 
 				{record.isSpecimen ? (
-					<p className="mx-5 mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
+					<p className="mx-7 mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 						This came from a template nobody had reviewed. The wording is invented, the PDF carries a
 						red banner, and it cannot be signed.
 					</p>
@@ -442,18 +445,18 @@ export function DocumentDetail({
 					<p
 						role="alert"
 						data-selectable
-						className="mx-5 mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
+						className="mx-7 mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 					>
 						{action}
 					</p>
 				) : null}
 				{notice ? (
-					<p role="status" className="mx-5 mt-4 border-l-2 border-[var(--ok)] pl-3 text-sm text-[var(--ok)]">
+					<p role="status" className="mx-7 mt-4 border-l-2 border-[var(--ok)] pl-3 text-sm text-[var(--ok)]">
 						{notice}
 					</p>
 				) : null}
 
-				<div className="mt-2 flex flex-col gap-2 px-5 pb-6">
+				<div className="mt-2 flex flex-col gap-2 px-7 pb-6">
 					<Section title="Details">
 						<div className="grid grid-cols-2 gap-4">
 							<Select
@@ -495,9 +498,6 @@ export function DocumentDetail({
 							</Button>
 						}
 					>
-						<p className="mb-2 text-sm text-[var(--ink-muted)]">
-							Pick one to read it here. Sending and signing use the latest.
-						</p>
 						<VersionSwitcher
 							versions={versions}
 							viewingId={viewing?.id ?? null}

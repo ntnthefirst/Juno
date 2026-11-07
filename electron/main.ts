@@ -418,9 +418,9 @@ if (!app.requestSingleInstanceLock()) {
 								await b.notes.create({ title: "Prices for the autumn", body: "Hourly rate, materials and the new delivery costs." });
 								await b.notes.create({ title: "Ideas for the stand at the fair", body: "A small stool in ash, a tray, the cutting boards." });
 								await b.notes.create({ title: "Workshop checklist", body: ["- [x] Sharpen the chisels", "- [x] Check the dust extractor", "- [ ] Order screws and glue", "- [ ] Call De Smet about the delivery", "- [ ] Clean the bench", "Remember: the oak for the Peeters table arrives on Friday. Leave space in the workshop for the planks to settle."].join("\\n") });
-								await b.pages.create({ title: "Oak dining table, quote", clientId: made[0].id, blocks: [
+								const quotePage = await b.pages.create({ title: "Oak dining table, quote", clientId: made[0].id, blocks: [
 									{ type: "heading", text: "The job" },
-									{ type: "text", text: "A solid oak dining table for six, 200 by 90 cm, with a hardwax oil finish. Delivery and fitting in the dining room are included." },
+									{ type: "text", text: "A solid oak dining table for six, 200 by 90 cm, with a hardwax oil finish. Delivery and fitting in the dining room are included. See the <a href='https://www.example.com/oak'>oak supplier</a>." },
 									{ type: "heading", text: "Materials and price" },
 									{ type: "table", header: ["Item", "Quantity", "Price"], rows: [["Oak planks, 38 mm", "6", "€ 540,00"], ["Hardwax oil", "2", "€ 64,00"], ["Labour", "24 h", "€ 960,00"], ["Total", "", "€ 1 564,00"]] },
 									{ type: "text", text: "" },
@@ -652,9 +652,63 @@ if (!app.requestSingleInstanceLock()) {
 								await b.projects.commands.create({ projectId: own.id, label: "Dev server", command: "npm run dev" });
 								await b.projects.commands.create({ projectId: own.id, label: "Database", command: "docker compose up -d", kind: "docker" });
 
-								return { clients: (await b.clients.list()).length, projectId: own.id };
-							})()`)) as { clients: number; projectId: string };
+								return { clients: (await b.clients.list()).length, projectId: own.id, quotePageId: quotePage.document.id };
+							})()`)) as { clients: number; projectId: string; quotePageId: string };
 							console.log(`SMOKE_DEMO clients=${created.clients}`);
+
+						{
+							// A picture is a file the page keeps, stored the way the picker
+							// stores it, and a block names it by a relative path.
+							const { deflateSync } = await import("node:zlib");
+							const crcTable = Array.from({ length: 256 }, (_, n) => {
+								let c = n;
+								for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+								return c >>> 0;
+							});
+							const crc = (bytes: Buffer) => {
+								let c = 0xffffffff;
+								for (const byte of bytes) c = crcTable[(c ^ byte) & 0xff]! ^ (c >>> 8);
+								return (c ^ 0xffffffff) >>> 0;
+							};
+							const chunk = (type: string, data: Buffer) => {
+								const head = Buffer.alloc(8);
+								head.writeUInt32BE(data.length, 0);
+								head.write(type, 4, "ascii");
+								const tail = Buffer.alloc(4);
+								tail.writeUInt32BE(crc(Buffer.concat([head.subarray(4), data])), 0);
+								return Buffer.concat([head, data, tail]);
+							};
+							const width = 360;
+							const height = 120;
+							const rows = Buffer.alloc((width * 3 + 1) * height);
+							for (let y = 0; y < height; y += 1) {
+								for (let x = 0; x < width; x += 1) {
+									const at = y * (width * 3 + 1) + 1 + x * 3;
+									rows[at] = 150 + Math.round((x / width) * 60);
+									rows[at + 1] = 110 + Math.round((y / height) * 50);
+									rows[at + 2] = 70;
+								}
+							}
+							const header = Buffer.alloc(13);
+							header.writeUInt32BE(width, 0);
+							header.writeUInt32BE(height, 4);
+							header[8] = 8;
+							header[9] = 2;
+							const png = Buffer.concat([
+								Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+								chunk("IHDR", header),
+								chunk("IDAT", deflateSync(rows)),
+								chunk("IEND", Buffer.alloc(0)),
+							]);
+							const pageImages = await import("./main/services/page-images");
+							const pageService = await import("./main/services/pages");
+							const picture = pageImages.store(created.quotePageId, { fileName: "Oak table.png", data: new Uint8Array(png) });
+							const current = await pageService.get(created.quotePageId);
+							const at = current.blocks.findIndex((block) => block.type === "table");
+							await pageService.update(created.quotePageId, {
+								blocks: [...current.blocks.slice(0, at), picture, ...current.blocks.slice(at)],
+							});
+						}
 
 							// Two files on the project, added through the service rather than
 							// the bridge: the bridge's only way in is a file picker, on purpose
@@ -752,6 +806,15 @@ if (!app.requestSingleInstanceLock()) {
 										bodyText: "Hallo.",
 									});
 									await callTool("mail.outbox.cancel", { id: spare.id }, { source: "mcp" });
+									// One sent by hand while the request waited (it closes on its own),
+									// one rejected, and two reads, so the answered cards and the log show
+									// every kind of row.
+									await callTool("mail.send", { id: spare.id }, { source: "mcp" });
+									agentActions.closeForSentDraft(spare.id);
+									const declined = (await callTool("clients.update", { id: target.id, notes: "Call back on Monday." }, { source: "mcp" })) as { actionId: string };
+									await agentActions.reject(declined.actionId);
+									await callTool("clients.list", {}, { source: "mcp" });
+									await callTool("reminders.list", {}, { source: "mcp" });
 									console.log("SMOKE_DEMO agent requests with records and a mail preview");
 								}
 							}
@@ -1264,14 +1327,36 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											await wait(500);
-											const row = [...document.querySelectorAll("main table button")].find((el) => el.textContent.includes("Oak dining table, quote"));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Oak dining table, quote"));
 											if (!row) return "the page is not in the list";
-											if (!row.textContent.includes("Page")) return "the row does not say it is a page";
+											if (!row.closest("li").textContent.includes("Page")) return "the row does not say it is a page";
 											row.click();
 											await wait(900);
 											const main = document.querySelector("main");
 											if (!main.querySelector("[role=toolbar][aria-label=Format]")) return "no format toolbar";
 											if (!main.querySelector("table")) return "the table is not drawn";
+											// The toolbar draws a link and a picture button, a link in the text is a link,
+											// and the picture is the file the page keeps.
+											if (!main.querySelector("[role=toolbar] button[aria-label=Link]")) return "no link button";
+											if (!main.querySelector("[role=toolbar] button[aria-label=Picture]")) return "no picture button";
+											if (!main.querySelector("a[href='https://www.example.com/oak']")) return "the link in the text is gone";
+											const picture = main.querySelector("figure img");
+											if (!picture || !picture.src.startsWith("app://asset/page/")) return "the picture is not drawn from the page's folder";
+											await new Promise((r) => (picture.complete ? r() : picture.addEventListener("load", r, { once: true })));
+											if (picture.naturalWidth !== 360) return "the picture did not load";
+											// Find reaches a table cell, which is an input and not text.
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+											await wait(300);
+											const findInput = document.querySelector("input[aria-label='Find']") ?? [...document.querySelectorAll("main input")].find((el) => /find/i.test(el.getAttribute("aria-label") ?? "") || /find/i.test(el.placeholder ?? ""));
+											if (!findInput) return "the find bar did not open";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											setValue.call(findInput, "hardwax");
+											findInput.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(500);
+											if (!main.querySelector("input[data-find]")) return "find did not reach the table cell";
+											document.querySelector("button[aria-label='Close find']")?.click();
+											await wait(300);
 											const lines = [...main.querySelectorAll("[data-block-text]")];
 											const last = lines[lines.length - 1];
 											last.focus();
@@ -1295,6 +1380,13 @@ if (!app.requestSingleInstanceLock()) {
 											// the records it names as buttons that open them, not ids.
 											if (!text.includes("Offerte website") || !text.includes("Beste Laura")) return "the mail to send is not shown";
 											if (!document.querySelector("main button[title^='Open ']")) return "no record is named as a link";
+											// What has been answered stays in the list, with the sentence for each and, for a
+											// mail the person sent, a way to read it.
+											if (!text.includes("Answered")) return "no answered section";
+											if (!text.includes("You rejected it at")) return "the rejected request is not answered";
+											if (!text.includes("the request closed on its own")) return "the closed request is not answered";
+											if (![...document.querySelectorAll("main button")].some((el) => el.textContent.trim() === "View mail")) return "no View mail on the closed request";
+											if (text.includes("(id:") || /[0-9a-f]{8}-[0-9a-f]{4}-/.test(text.split("Technical details")[0])) return "a raw id is on a request";
 											const approve = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Approve");
 											return approve ? "ok" : "no approve button";
 										})()`,
@@ -1573,6 +1665,9 @@ if (!app.requestSingleInstanceLock()) {
 											await new Promise((r) => setTimeout(r, 700));
 											const main = document.querySelector("main");
 											if (!main.textContent.includes("kept for six months")) return "no log intro";
+											const badges = [...main.querySelectorAll("tbody span")].map((el) => el.textContent.trim());
+											if (!badges.includes("Read")) return "the log does not show a read";
+											if (!badges.includes("Rejected")) return "the log does not show the rejected request";
 											return "ok";
 										})()`,
 									);
@@ -1769,7 +1864,7 @@ if (!app.requestSingleInstanceLock()) {
 									const viewed = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = document.querySelector("tbody tr button[type='button']");
+											const row = [...document.querySelectorAll("main ul li button[type='button']")].find((el) => !el.closest("li").textContent.includes("Page ·"));
 											if (!row) return "no document row to open";
 											row.click();
 											await wait(2000);
@@ -2324,7 +2419,10 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(500);
 											back()?.click();
 											await wait(500);
-											const open = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Components");
+											// Components is in the title bar's more menu, where the design leaves room for it.
+											document.querySelector("button[aria-label='More template actions']")?.click();
+											await wait(300);
+											const open = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Components");
 											if (!open) return "no components action on the templates list";
 											open.click();
 											await wait(700);

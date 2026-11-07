@@ -1,11 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DocumentRecord, GenerateDocumentResult, ReferenceItem } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { useScreenAction } from "../../lib/screen-actions";
 import { DOCUMENT_SWITCH } from "../../app/screens";
-import { Avatar } from "../../components/Avatar";
 import { Checkbox } from "../../components/Checkbox";
 import { EmptyState } from "../../components/EmptyState";
+import { Icon, type IconName } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { MenuButton } from "../../components/Menu";
@@ -32,13 +32,6 @@ import { VersionCount } from "./VersionCount";
 import { VersionList } from "./VersionList";
 import { SignPage } from "./SignPage";
 import { belongsTo } from "./belongs-to";
-
-/** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
-function formatDate(date: string | null): string {
-	if (!date) return "";
-	const parts = date.split("-");
-	return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
-}
 
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
 
@@ -342,7 +335,7 @@ export function DocumentsScreen() {
 							<SectionSwitch sections={DOCUMENT_SWITCH} current="documents" label="Document views" />
 							{load.status === "ready" ? (
 								<span className="text-sm text-[var(--ink-muted)]">
-									{shown.length} {shown.length === 1 ? "document" : "documents"}
+									{shown.length} {shown.length === 1 ? "file" : "files"}
 								</span>
 							) : null}
 						</div>
@@ -469,7 +462,7 @@ export function DocumentsScreen() {
 								}}
 							/>
 						) : (
-							<DocumentTable
+							<DocumentList
 								rows={{ records: shown, statuses }}
 								selectedId={selectedId}
 								selectedIds={selectedIds}
@@ -518,7 +511,7 @@ export function DocumentsScreen() {
 	);
 }
 
-type DocumentTableProps = {
+type DocumentListProps = {
 	rows: Rows;
 	selectedId: string | null;
 	selectedIds: string[];
@@ -529,20 +522,43 @@ type DocumentTableProps = {
 	onFailed: (message: string) => void;
 };
 
-const HEADS = ["Title", "Linked to", "Status", "Issued"];
+/** What a row's tile and first words say it is. */
+function kindOf(record: DocumentRecord): { label: string; tile: string; icon: IconName } {
+	if (record.sourceKind === "page") return { label: "Page", tile: "bg-[var(--accent-soft)] text-[var(--accent)]", icon: "edit" };
+	if (record.sourceKind === "imported") return { label: "PDF", tile: "bg-[var(--risk-soft)] text-[var(--risk)]", icon: "documents" };
+	return { label: "Generated", tile: "bg-[var(--sunken)] text-[var(--ink-muted)]", icon: "documents" };
+}
+
+const SHORT_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** When it last changed, as the file row draws it: Today, a weekday inside the week, otherwise the date. */
+function changedLabel(iso: string, now: Date = new Date()): string {
+	const at = new Date(iso);
+	if (Number.isNaN(at.getTime())) return "";
+	const day = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+	const days = Math.round((day(now) - day(at)) / 86_400_000);
+	if (days <= 0) return "Today";
+	if (days === 1) return "Yesterday";
+	if (days < 7) return SHORT_WEEKDAYS[at.getDay()] ?? "";
+	const label = `${at.getDate()} ${SHORT_MONTHS[at.getMonth()]}`;
+	return at.getFullYear() === now.getFullYear() ? label : `${label} ${at.getFullYear()}`;
+}
 
 /**
- * Rows are the structure. No outer border, no filled header, no card, per
- * brand/BRAND.md section 7.
+ * Every kind of document in one list, as the File Row draws it: a tile that
+ * says what it is, the title, a line of what and whose, and when it changed. A
+ * row has no checkbox until the pointer is on it or something is ticked, and the
+ * ticked state replaces the tile's colour, so the row stays the design's 56px.
  */
-function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRemove, onSend, onFailed }: DocumentTableProps) {
+function DocumentList({ rows, selectedId, selectedIds, onToggle, onSelect, onRemove, onSend, onFailed }: DocumentListProps) {
 	const labels = new Map(rows.statuses.map((item) => [item.id, item.label]));
 	const [expanded, setExpanded] = useState<string[]>([]);
 	const hasSelection = selectedIds.length > 0;
 	const toggleVersions = (id: string) =>
 		setExpanded((current) => (current.includes(id) ? current.filter((other) => other !== id) : [...current, id]));
 
-	// Newest first and split by day, so the table reads as what changed lately
+	// Newest first and split by day, so the list reads as what changed lately
 	// and not as an archive in the order it happened to be filed.
 	const groups = useMemo(
 		() =>
@@ -560,123 +576,79 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 		);
 
 	return (
-		<>
-		<table className="w-full border-collapse">
-			<thead>
-				<tr>
-					<th className="w-10 border-b border-[var(--line)] px-3 pb-2">
-						<span className="sr-only">Select</span>
-					</th>
-					{HEADS.map((head) => (
-						<th
-							key={head}
-							className={[
-								"border-b border-[var(--line)] px-3 pb-2 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]",
-								head === "Issued" ? "text-right" : "text-left",
-							].join(" ")}
-						>
-							{head}
-						</th>
-					))}
-				</tr>
-			</thead>
-			<tbody>
-				{groups.map((group) => (
-				<Fragment key={group.key}>
-				<tr aria-hidden>
-					<td colSpan={HEADS.length + 1} className="px-1 pt-3">
-						<GroupHeader label={group.label} />
-					</td>
-				</tr>
-				{group.items.map((row) => {
-					const selected = row.id === selectedId;
-					const checked = selectedIds.includes(row.id);
-					// A plain click opens the record; once anything is ticked, the
-					// same click ticks instead, the way the mail template rows do.
-					const open = () => (hasSelection ? onToggle(row.id) : onSelect(row.id, row.title));
-					const unfolded = expanded.includes(row.id);
-					return (
-						<Fragment key={row.id}>
-						<tr
-							onClick={open}
-							onContextMenu={menuFor(row)}
-							className={`group transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								selected || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
-							}`}
-						>
-							<td
-								className="border-b border-[var(--line)]/60 px-3 text-dense"
-								style={{ height: "var(--row-height-roomy)" }}
-								onClick={(event) => event.stopPropagation()}
-							>
-								<Checkbox
-									checked={checked}
-									onChange={() => onToggle(row.id)}
-									aria-label={`Select ${row.title}`}
-									className={hasSelection ? "" : "opacity-0 group-hover:opacity-100 has-[:focus-visible]:opacity-100"}
-								/>
-							</td>
-							<td
-								className="border-b border-[var(--line)]/60 px-3 text-dense"
-								style={{ height: "var(--row-height-roomy)" }}
-							>
-								<div className="flex items-center gap-3">
-									<Avatar name={row.clientName ?? row.projectName ?? row.title} size={28} shape="square" />
-									<button
-										type="button"
-										aria-current={selected ? "true" : undefined}
-										onClick={(event) => {
-											// The row handles the same click; without this a tick
-											// would be made and undone by the one press.
-											event.stopPropagation();
-											open();
-										}}
-										className="flex min-w-0 items-center gap-2 text-left"
+		<div>
+			{groups.map((group) => (
+				<section key={group.key} className="pb-3">
+					<GroupHeader label={group.label} className="mt-2 mb-3" />
+					<ul className="flex flex-col gap-6">
+						{group.items.map((row) => {
+							const selected = row.id === selectedId;
+							const checked = selectedIds.includes(row.id);
+							// A plain click opens the record; once anything is ticked, the
+							// same click ticks instead, the way the mail template rows do.
+							const open = () => (hasSelection ? onToggle(row.id) : onSelect(row.id, row.title));
+							const unfolded = expanded.includes(row.id);
+							const kind = kindOf(row);
+							const status = row.statusId ? labels.get(row.statusId) : undefined;
+							const meta = [kind.label, belongsTo(row), status ? status.toLowerCase() : ""].filter(Boolean).join(" · ");
+							return (
+								<li key={row.id}>
+									<div
+										onClick={open}
+										onContextMenu={menuFor(row)}
+										className={`group flex h-14 cursor-default items-center gap-4 rounded-[var(--radius-md)] p-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+											selected || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
+										}`}
 									>
-										<span className="truncate">{row.title}</span>
-										{row.isSpecimen ? <SpecimenMark /> : null}
-										{row.sourceKind === "page" ? (
-											<span className="flex-none rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--accent)]">
-												Page
-											</span>
-										) : null}
-									</button>
-									{row.versionCount > 0 ? (
-										<VersionCount
-											count={row.versionCount}
-											open={unfolded}
-											onToggle={() => toggleVersions(row.id)}
-										/>
+										<span
+											className={`relative flex size-9 flex-none items-center justify-center rounded-[var(--radius-md)] ${kind.tile}`}
+											onClick={(event) => event.stopPropagation()}
+										>
+											<Icon name={kind.icon} size={18} />
+											<Checkbox
+												checked={checked}
+												onChange={() => onToggle(row.id)}
+												aria-label={`Select ${row.title}`}
+												className={`absolute inset-0 m-auto bg-[var(--surface)] ${
+													hasSelection ? "" : "opacity-0 group-hover:opacity-100 has-[:focus-visible]:opacity-100"
+												}`}
+											/>
+										</span>
+										<div className="min-w-0 flex-1">
+											<button
+												type="button"
+												aria-current={selected ? "true" : undefined}
+												onClick={(event) => {
+													// The row handles the same click; without this a tick
+													// would be made and undone by the one press.
+													event.stopPropagation();
+													open();
+												}}
+												className="flex max-w-full min-w-0 items-center gap-2 text-left text-base"
+											>
+												<span className="truncate">{row.title}</span>
+												{row.isSpecimen ? <SpecimenMark /> : null}
+											</button>
+											<div className="flex min-w-0 items-center gap-1 text-sm text-[var(--ink-muted)]">
+												<span className="truncate">{meta}</span>
+												{row.versionCount > 1 ? (
+													<VersionCount count={row.versionCount} open={unfolded} onToggle={() => toggleVersions(row.id)} />
+												) : null}
+											</div>
+										</div>
+										<span className="tabular flex-none text-dense text-[var(--ink-muted)]">{changedLabel(row.updatedAt)}</span>
+									</div>
+									{unfolded ? (
+										<div className="pl-[60px]">
+											<VersionList documentId={row.id} nested />
+										</div>
 									) : null}
-								</div>
-							</td>
-							<td className="border-b border-[var(--line)]/60 px-3 text-dense text-[var(--ink-muted)]">
-								<span className="block truncate">{belongsTo(row)}</span>
-							</td>
-							<td className="border-b border-[var(--line)]/60 px-3 text-dense text-[var(--ink-muted)]">
-								<span className="block truncate">
-									{(row.statusId && labels.get(row.statusId)) || ""}
-								</span>
-							</td>
-							<td className="tabular whitespace-nowrap border-b border-[var(--line)]/60 px-3 text-right text-dense text-[var(--ink-muted)]">
-								{formatDate(row.issuedOn)}
-							</td>
-						</tr>
-						{unfolded ? (
-							<tr>
-								<td />
-								<td colSpan={HEADS.length} className="border-b border-[var(--line)] px-3 pb-2">
-									<VersionList documentId={row.id} nested />
-								</td>
-							</tr>
-						) : null}
-						</Fragment>
-					);
-				})}
-				</Fragment>
-				))}
-			</tbody>
-		</table>
-		</>
+								</li>
+							);
+						})}
+					</ul>
+				</section>
+			))}
+		</div>
 	);
 }

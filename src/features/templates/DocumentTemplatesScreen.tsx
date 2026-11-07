@@ -3,7 +3,10 @@ import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import type { DocumentTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { DOCUMENT_SWITCH } from "../../app/screens";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { Button } from "../../components/Button";
+import { Checkbox } from "../../components/Checkbox";
+import { MenuButton } from "../../components/Menu";
 import { Dialog } from "../../components/Dialog";
 import { IconAction } from "../../components/IconAction";
 import { InlineAdd } from "../../components/InlineAdd";
@@ -19,7 +22,7 @@ import {
 } from "./document-template-filters";
 import { ComponentCanvasEditor, DocumentCanvasEditor } from "./CanvasTemplateEditor";
 import { ComponentsScreen } from "./ComponentsScreen";
-import { paperLabel } from "@shared/paper";
+import { paperLabel, pagesOf } from "@shared/paper";
 import { TemplateEditor } from "./TemplateEditor";
 import { UseCanvasTemplateScreen } from "./UseCanvasTemplateScreen";
 import { UseDocumentTemplateScreen } from "./UseDocumentTemplateScreen";
@@ -304,9 +307,13 @@ export function DocumentTemplatesScreen() {
 						</span>
 					) : null}
 					<span className="ml-auto" />
-					<Button size="dense" onClick={() => setView({ status: "components" })}>
-						Components
-					</Button>
+					<TitleBarSlot side="overflow">
+						<MenuButton
+							size="dense"
+							ariaLabel="More template actions"
+							items={[{ id: "components", label: "Components", icon: "templates", onSelect: () => setView({ status: "components" }) }]}
+						/>
+					</TitleBarSlot>
 					<Button size="dense" disabled={importing} onClick={() => void importWord()}>
 						{importing ? "Importing" : "Import Word file"}
 					</Button>
@@ -317,9 +324,6 @@ export function DocumentTemplatesScreen() {
 						onSubmit={(name) => void create(name)}
 					/>
 				</div>
-				<p className="mt-3 max-w-[62ch] text-sm text-[var(--ink-muted)]">
-						The contracts and letters you make again and again, laid out on paper and printed to PDF. Mark one as reviewed once you have read its text.
-					</p>
 				{createError ? (
 					<p
 						role="alert"
@@ -404,7 +408,7 @@ export function DocumentTemplatesScreen() {
 				) : shown.length === 0 ? (
 					<p className="text-[var(--ink-muted)]">Nothing matches.</p>
 				) : (
-					<ul>
+					<ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6 pt-6">
 						{shown.map((row) => (
 							<DocumentTemplateRow
 								key={row.id}
@@ -458,56 +462,66 @@ type DocumentTemplateRowProps = {
 	onSelect: (id: string) => void;
 };
 
+/** The sheet a card shows. A stand-in drawn from the paper's shape, not a render, so a list of them costs nothing. */
+function PaperThumb({ landscape }: { landscape: boolean }) {
+	return (
+		<span
+			aria-hidden
+			className={`flex flex-col gap-[6px] rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] p-3 ${
+				landscape ? "h-[110px] w-[150px]" : "h-[148px] w-[110px]"
+			}`}
+		>
+			<span className="h-1.5 w-1/2 rounded-full bg-[var(--accent-soft)]" />
+			<span className="h-1.5 w-full rounded-full bg-[var(--accent-soft)]" />
+			<span className="h-1.5 w-5/6 rounded-full bg-[var(--accent-soft)]" />
+			<span className="h-1.5 w-full rounded-full bg-[var(--accent-soft)]" />
+			<span className="h-1.5 w-2/3 rounded-full bg-[var(--accent-soft)]" />
+		</span>
+	);
+}
+
 function DocumentTemplateRow({ template, checked, hasSelection, onToggle, onSelect }: DocumentTemplateRowProps) {
-	const count = template.placeholders.length;
 	const reviewed = template.reviewedAt !== null;
+	const pages = template.canvas ? pagesOf(template.canvas.layout).length : 1;
+	const inputs = template.canvas ? template.inputs.length : template.placeholders.length;
+	const meta = [
+		template.canvas ? paperLabel(template.canvas.paper).split(" ")[0] : "HTML",
+		`${pages} ${pages === 1 ? "page" : "pages"}`,
+		`${inputs} ${inputs === 1 ? "input" : "inputs"}`,
+	].join(" · ");
 
 	return (
-		<li className="border-b border-[var(--line)]">
-			<div
-				className={`group flex items-center gap-2 rounded-[var(--radius-md)] px-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-					checked ? "bg-[var(--sunken)]" : "hover:bg-[var(--hover)]"
+		<li className="group relative">
+			<button
+				type="button"
+				onClick={() => (hasSelection ? onToggle(template.id) : onSelect(template.id))}
+				className={`block w-full overflow-hidden rounded-[var(--radius-lg)] border text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
+					checked ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)] bg-[var(--surface)] hover:border-[var(--line-strong)]"
 				}`}
-				style={{ minHeight: "var(--row-height)" }}
 			>
-				<input
-					type="checkbox"
-					checked={checked}
-					onChange={() => onToggle(template.id)}
-					aria-label={`Select ${template.name}`}
-					className={`h-4 w-4 flex-none accent-[var(--accent)] ${
-						hasSelection ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-					}`}
-				/>
-				<button
-					type="button"
-					onClick={() => (hasSelection ? onToggle(template.id) : onSelect(template.id))}
-					className="min-w-0 flex-1 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-				>
+				<span className="flex h-[180px] items-center justify-center bg-[var(--sunken)]">
+					<PaperThumb landscape={template.canvas?.paper.orientation === "landscape"} />
+				</span>
+				<span className="block px-4 py-3">
 					<span className="flex items-center gap-2">
-						<span className="truncate text-dense font-[var(--weight-medium)]">
-							{template.name}
-						</span>
+						<span className="truncate text-base">{template.name}</span>
 						{reviewed ? null : (
 							<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--risk)]">
 								Not reviewed
 							</span>
 						)}
 					</span>
-					{template.description ? (
-						<span className="mt-0.5 block truncate text-dense text-[var(--ink-muted)]">
-							{template.description}
-						</span>
-					) : null}
-					<span className="tabular mt-0.5 block text-sm text-[var(--ink-muted)]">
-						Version {template.version}
-						{"  ·  "}
-						{template.canvas
-							? `${paperLabel(template.canvas.paper).split(",")[0]}, ${template.inputs.length} ${template.inputs.length === 1 ? "input" : "inputs"}`
-							: `${count} ${count === 1 ? "placeholder" : "placeholders"}`}
-					</span>
-				</button>
-			</div>
+					<span className="tabular block text-sm text-[var(--ink-muted)]">{meta}</span>
+				</span>
+			</button>
+			<span className="absolute top-3 left-3">
+				<Checkbox
+					checked={checked}
+					onChange={() => onToggle(template.id)}
+					aria-label={`Select ${template.name}`}
+					className={`bg-[var(--surface)] ${hasSelection ? "" : "opacity-0 group-hover:opacity-100 has-[:focus-visible]:opacity-100"}`}
+				/>
+			</span>
 		</li>
 	);
 }

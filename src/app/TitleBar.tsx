@@ -124,6 +124,9 @@ export function TitleBar({
 
 	const here = NEW_ON[screen];
 	const newAtRight = NEW_AT_RIGHT.includes(screen) && here !== undefined;
+	// With a document open the text New goes, as the design draws it, and the plus
+	// comes back at the left, which is where a page frame has it.
+	const openDocument = screen === "documents" && back !== null;
 
 	// What Ctrl N makes on the screen in view carries that shortcut. When the design's
 	// list has no entry for it (a message, a document, a reminder) the screen adds
@@ -177,7 +180,7 @@ export function TitleBar({
 					active={remindersActive}
 					onClick={onOpenReminders}
 				/>
-				{newAtRight ? null : (
+				{newAtRight && !openDocument ? null : (
 					<TitleButton
 						icon="add"
 						label="New"
@@ -213,7 +216,7 @@ export function TitleBar({
 			<nav aria-label="Window" className="flex min-w-0 items-center justify-end gap-0.5">
 				<TimerPill />
 				<div ref={rightSlotRef} className="flex min-w-0 items-center" />
-				{newAtRight && here ? (
+				{newAtRight && here && !openDocument ? (
 					<button
 						type="button"
 						onClick={() => onNew(here.screen)}

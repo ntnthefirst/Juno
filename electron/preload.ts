@@ -305,6 +305,7 @@ const api: JunoApi = {
 		check: () => call("updates.check"),
 		install: () => call("updates.install"),
 		setAutoInstall: (value) => call("updates.setAutoInstall", value),
+		releaseNotes: () => call("updates.releaseNotes"),
 		onChange: (listener) => {
 			const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => listener(status);
 			ipcRenderer.on("updates.changed", handler);

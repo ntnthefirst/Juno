@@ -227,6 +227,7 @@ import type {
 	SuggestionOutcome,
 	SuggestionSources,
 	UpdateStatus,
+	ReleaseNote,
 	AgentInstructions,
 	AgentInstructionsView,
 	AgentPermissions,
@@ -612,6 +613,8 @@ export interface JunoApi {
 		/** Downloads if needed, then restarts into the new version. */
 		install(): Promise<UpdateStatus>;
 		setAutoInstall(value: boolean): Promise<UpdateStatus>;
+		/** Every version's notes shipped with this build, newest first. */
+		releaseNotes(): Promise<ReleaseNote[]>;
 		/** Fires while a download runs, which is the only slow part of this. */
 		onChange(listener: (status: UpdateStatus) => void): () => void;
 	};

@@ -8,6 +8,7 @@
  * (.claude/rules/security.md section 8). Auto-install can be turned on, and
  * then the install happens at a close a person chose.
  */
+import * as releaseNotes from "../services/release-notes";
 import * as updates from "../services/updates";
 import type { ToolDescriptor } from "./types";
 
@@ -23,6 +24,29 @@ export const updateTools: ToolDescriptor[] = [
 		requiresConfirmation: false,
 		inputSchema: { type: "object", properties: {}, additionalProperties: false },
 		handler: async () => updates.status(),
+	},
+	{
+		name: "updates.release_notes",
+		title: "Release notes",
+		description:
+			"What each version of Juno changed, newest first, as written for the person using it: a " +
+			"summary and short lists of what is new, improved and fixed. Pass version to get one " +
+			"version, for example 1.0.0. Covers the versions shipped with the running build.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				version: { type: "string", description: "One version in 1.2.3 format. Leave out for all of them." },
+			},
+			additionalProperties: false,
+		},
+		handler: async (args) => {
+			if (typeof args.version !== "string" || args.version.trim() === "") return releaseNotes.list();
+			const note = releaseNotes.get(args.version);
+			if (!note) throw new Error(`There are no release notes for version ${args.version.trim()} in this build.`);
+			return note;
+		},
 	},
 	{
 		name: "updates.check",

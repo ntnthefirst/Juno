@@ -157,6 +157,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"templates.preview",
 		"time.list",
 		"updates.check",
+		"updates.release_notes",
 		"updates.status",
 	],
 	change: [

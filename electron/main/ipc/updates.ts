@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import type { UpdateStatus } from "../../shared/types";
+import * as releaseNotes from "../services/release-notes";
 import * as updates from "../services/updates";
 import { closeUpdateWindow, setUpdateWindow, showUpdateWindow, updateWindowOpen } from "../windows/update-window";
 
@@ -16,7 +17,7 @@ function followInstall(status: UpdateStatus): void {
 		return;
 	}
 	if (!status.installRequested) return;
-	if (!updateWindowOpen()) showUpdateWindow(app.getVersion(), status.newVersion);
+	if (!updateWindowOpen()) showUpdateWindow(app.getVersion(), status.newVersion, status.newNotes?.summary ?? null);
 	if (status.stage === "downloading") {
 		setUpdateWindow({ step: `Downloading version ${status.newVersion ?? ""}`.trim(), percent: status.percent });
 	} else {
@@ -30,6 +31,7 @@ export function registerUpdatesIpc(): void {
 	// applies to. The interval checks without going through here.
 	ipcMain.handle("updates.check", () => updates.check({ manual: true }));
 	ipcMain.handle("updates.install", () => updates.install());
+	ipcMain.handle("updates.releaseNotes", () => releaseNotes.list());
 	ipcMain.handle("updates.setAutoInstall", (_event, value: boolean) =>
 		updates.setAutoInstall(value === true),
 	);

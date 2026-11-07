@@ -901,6 +901,23 @@ export type UpdateStage =
 	| "installing"
 	| "error";
 
+/** One headed list inside a version's notes: New, Improvements or Fixes. */
+export interface ReleaseNoteSection {
+	title: string;
+	/** Each a plain sentence about what the person notices. */
+	items: string[];
+}
+
+/** What changed in one version, as written in build/release-notes.md. */
+export interface ReleaseNote {
+	version: string;
+	/** `YYYY-MM-DD`, or null for notes that came without a date. */
+	releasedAt: string | null;
+	/** One or two sentences. */
+	summary: string;
+	sections: ReleaseNoteSection[];
+}
+
 export interface UpdateStatus {
 	stage: UpdateStage;
 	/** The version running right now. */
@@ -909,6 +926,8 @@ export interface UpdateStatus {
 	newVersion: string | null;
 	/** When that release was published, so the screen can say how old it is. */
 	releasedAt: Iso | null;
+	/** What the newer version changes, as the update feed reports it. Null when it came without notes. */
+	newNotes: ReleaseNote | null;
 	/** 0 to 100 while downloading, 0 otherwise. */
 	percent: number;
 	lastCheckedAt: Iso | null;

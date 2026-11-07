@@ -10,7 +10,6 @@ import type {
 	ReferenceItem,
 	TimeEntry,
 } from "@shared/types";
-import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { ActionMenu } from "../../components/ActionMenu";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/Button";
@@ -358,26 +357,23 @@ export function ProjectDetail({
 	return (
 		<div className="relative h-full overflow-y-auto">
 			<div className="flex w-full flex-col gap-5 p-6">
-				<header className="flex items-center gap-4 rounded-[var(--radius-lg)] border border-[var(--line)] px-5 py-4">
-					<Avatar name={current.name} size={48} shape="square" />
+				<header className="flex items-center gap-4 rounded-[var(--radius-lg)] border border-[var(--line)] p-6">
+					<Avatar name={current.name} size={59} shape="square" />
 					<div className="min-w-0 flex-1">
 						<div className="flex flex-wrap items-center gap-3">
 							<h1 className="text-h2">{current.name}</h1>
 							{status ? <StatusBadge label={status.label} tone={status.tone} /> : null}
 						</div>
-						<p className="text-sm text-[var(--ink-muted)]">{subtitle}</p>
+						<p className="mt-1 text-base text-[var(--ink-muted)]">{subtitle}</p>
 					</div>
 					<div className="flex flex-none items-center gap-1">
 						<ActionMenu target={{ kind: "add", id: current.id }} handlers={addHandlers} ariaLabel="Add to this project" label="Add" icon="add" />
-					</div>
-					<TitleBarSlot side="overflow">
 						<ActionMenu
 							target={{ kind: "project", id: current.id, context: "detail" }}
 							handlers={moreHandlers}
 							ariaLabel="More project actions"
-							size="dense"
 						/>
-					</TitleBarSlot>
+					</div>
 				</header>
 
 				<Tabs tabs={tabs} value={tab} onChange={onTabChange} label="Project" />
@@ -409,18 +405,18 @@ export function ProjectDetail({
 					/>
 				) : (
 					<>
-						<div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-							<section className="min-h-[420px] rounded-[var(--radius-lg)] border border-[var(--line)] p-5">
+						<div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+							<section className="min-h-[420px] rounded-[var(--radius-lg)] border border-[var(--line)] p-6">
 								<div className="mb-3 flex items-baseline gap-3">
-									<h2 className="text-base font-[var(--weight-medium)]">Notes</h2>
+									<h2 className="text-lg font-[var(--weight-medium)]">Notes</h2>
 									<span className="text-sm text-[var(--ink-muted)]">Saved as you type</span>
 								</div>
 								<ProjectNotes key={current.id} projectId={current.id} notes={current.notes} />
 							</section>
 
-							<aside className="rounded-[var(--radius-lg)] border border-[var(--line)] p-5">
+							<aside className="rounded-[var(--radius-lg)] border border-[var(--line)] p-6">
 								<div className="flex items-center justify-between">
-									<h2 className="text-base font-[var(--weight-medium)]">Details</h2>
+									<h2 className="text-lg font-[var(--weight-medium)]">Details</h2>
 									<button
 										type="button"
 										aria-label="Edit project details"

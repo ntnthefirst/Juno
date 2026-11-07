@@ -27,7 +27,9 @@ Run from the repo root. The project uses npm.
 
 Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
 screen and the settings window, and write a screenshot of each in both themes
-to `.smoke/`. That is the fastest honest look at a visual change. Add
+to `.smoke/`. That is the fastest honest look at a visual change.
+`JUNO_SMOKE_MANY=1` seeds 500 clients and prints how long the Clients list takes
+to show them and how a scroll holds up. Add
 `JUNO_SMOKE_FRONT=1` to keep the window above every other window for the run;
 without it, a window somebody covers produces stale captures (see the
 `capturePage` trap below).

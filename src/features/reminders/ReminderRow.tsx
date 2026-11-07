@@ -18,6 +18,13 @@ type ReminderRowProps = {
 	/** The screen owns the undo toast, because this row unmounts on the re-read. */
 	onDeleted: (reminder: Reminder) => void;
 	onError: (message: string) => void;
+	/**
+	 * "agenda" is the Overview's row (Agenda Row in the design): a ruled line,
+	 * a 24px lead and a trailing label the caller words, with no hover tile.
+	 */
+	variant?: "agenda";
+	/** The trailing label in the agenda variant. The list variant words the due date itself. */
+	trailing?: string;
 };
 
 /**
@@ -38,6 +45,8 @@ export function ReminderRow({
 	onSnooze,
 	onDeleted,
 	onError,
+	variant,
+	trailing,
 }: ReminderRowProps) {
 	const [busy, setBusy] = useState(false);
 	// Set the moment a reminder is ticked, so the row folds away while the write happens.
@@ -99,6 +108,7 @@ export function ReminderRow({
 		failed: onError,
 	};
 	const target = { kind: "reminder", id: reminder.id } as const;
+	const agenda = variant === "agenda";
 
 	return (
 		<div
@@ -108,9 +118,13 @@ export function ReminderRow({
 			<div className={leaving ? "min-h-0 overflow-hidden" : "min-h-0"}>
 				<div
 					onContextMenu={contextMenuFor(target, handlers)}
-					className="group flex items-center gap-1 rounded-[var(--radius-lg)] px-1 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+					className={
+						agenda
+							? "group relative flex min-h-14 items-center gap-4 border-b border-line py-3"
+							: "group flex items-center gap-1 rounded-[var(--radius-lg)] px-1 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+					}
 				>
-					<span className="flex h-8 w-8 flex-none items-center justify-center">
+					<span className={agenda ? "flex h-8 w-6 flex-none items-center justify-center" : "flex h-8 w-8 flex-none items-center justify-center"}>
 						<Checkbox
 							shape="round"
 							checked={done || leaving}
@@ -120,7 +134,7 @@ export function ReminderRow({
 						/>
 					</span>
 
-					<div className="min-w-0 flex-1 py-2 pl-1">
+					<div className={agenda ? "min-w-0 flex-1" : "min-w-0 flex-1 py-2 pl-1"}>
 						<p
 							className={`truncate text-base ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
 						>
@@ -133,14 +147,18 @@ export function ReminderRow({
 
 					<span
 						className={[
-							"tabular shrink-0 whitespace-nowrap pl-2 text-dense",
+							agenda ? "tabular-nums shrink-0 whitespace-nowrap text-base" : "tabular shrink-0 whitespace-nowrap pl-2 text-dense",
 							overdue ? "font-[var(--weight-medium)] text-[var(--risk)]" : "text-[var(--ink-muted)]",
 						].join(" ")}
 					>
-						{today ? describeDue(reminder.dueOn, today) : formatDate(reminder.dueOn)}
+						{agenda && trailing !== undefined
+							? trailing
+							: today
+								? describeDue(reminder.dueOn, today)
+								: formatDate(reminder.dueOn)}
 					</span>
 
-					<span className="flex-none opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100">
+					<span className={`${agenda ? "absolute right-0 top-1/2 -translate-y-1/2 bg-surface" : ""} flex-none opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100`}>
 						<ActionMenu target={target} handlers={handlers} ariaLabel={`More for ${reminder.title}`} size="dense" />
 					</span>
 

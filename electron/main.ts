@@ -1080,7 +1080,7 @@ if (!app.requestSingleInstanceLock()) {
 								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
 								await new Promise((r) => setTimeout(r, 800));
 								const inPage: Record<string, string> = {
-									"Reminders": "All reminders",
+									"Reminders": "Reminders",
 									"Document templates": "Templates",
 								};
 								const route = inPage[screen];

@@ -418,6 +418,7 @@ const api: JunoApi = {
 
 	briefing: {
 		today: () => call("briefing.today"),
+		overview: () => call("briefing.overview"),
 		client: (clientId) => call("briefing.client", clientId),
 		month: (month) => call("briefing.month", month),
 	},

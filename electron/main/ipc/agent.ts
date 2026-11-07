@@ -134,6 +134,7 @@ export function registerAgentIpc(): void {
 	});
 
 	ipcMain.handle("briefing.today", () => briefing.today());
+	ipcMain.handle("briefing.overview", () => briefing.overview());
 	ipcMain.handle("briefing.client", (_event, clientId: string) => briefing.client(clientId));
 	ipcMain.handle("briefing.month", (_event, month: string) => briefing.month(month));
 }

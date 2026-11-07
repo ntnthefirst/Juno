@@ -14,7 +14,7 @@
  * open, which is the test it has to pass: an answer he can verify by
  * clicking through.
  */
-import type { Briefing, BriefingItem, BriefingSection } from "../../shared/types";
+import type { Briefing, BriefingItem, BriefingSection, OverviewSummary } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import * as actions from "./agent-actions";
 import * as calendar from "./calendar";
@@ -32,6 +32,13 @@ const LOOKAHEAD_DAYS = 7;
 
 function plural(count: number, one: string, many: string): string {
 	return `${count} ${count === 1 ? one : many}`;
+}
+
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+
+/** A small count in words, because the overview says "one reminder", not "1 reminder". */
+function spelled(count: number): string {
+	return NUMBER_WORDS[count] ?? String(count);
 }
 
 function section(
@@ -55,6 +62,40 @@ function headlineOf(parts: string[], nothing: string): string {
 	if (real.length === 0) return nothing;
 	if (real.length === 1) return `${real[0]!}.`;
 	return `${real.slice(0, -1).join(", ")} and ${real[real.length - 1]}.`;
+}
+
+/**
+ * The four counts the Overview opens with, and one sentence for what is
+ * overdue and waiting. It counts what the screens list, so the number on the
+ * Overview is the number of rows behind it.
+ */
+export async function overview(
+	db: Db = getDb(),
+	date: string = todayIsoDate(),
+): Promise<OverviewSummary> {
+	const [clientRows, projectRows, documentRows, unread, actionable, waiting] = await Promise.all([
+		clients.list({}, db),
+		projects.list({}, db),
+		documents.list({}, db),
+		threads.listThreads({ folderSpecialUse: "inbox", unreadOnly: true, limit: 1000 }, db),
+		reminders.list({ actionableOnly: true }, db, date),
+		actions.list({ states: ["pending"] }, db),
+	]);
+	const overdueReminders = actionable.filter((row) => row.bucket === "overdue").length;
+	const waitingRequests = waiting.length;
+	const parts = [
+		overdueReminders > 0 ? `${spelled(overdueReminders)} ${overdueReminders === 1 ? "reminder is" : "reminders are"} overdue` : "",
+		waitingRequests > 0 ? `${spelled(waitingRequests)} ${waitingRequests === 1 ? "request is" : "requests are"} waiting for you` : "",
+	].filter(Boolean);
+	return {
+		clients: clientRows.length,
+		projects: projectRows.length,
+		documents: documentRows.length,
+		unreadMail: unread.length,
+		overdueReminders,
+		waitingRequests,
+		headline: parts.length === 0 ? "Nothing is waiting for you." : `${parts.join(" and ").replace(/^./, (letter) => letter.toUpperCase())}.`,
+	};
 }
 
 /**

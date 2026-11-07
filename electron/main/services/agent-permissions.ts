@@ -73,6 +73,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"automations.runs",
 		"briefing.client",
 		"briefing.month",
+		"briefing.overview",
 		"briefing.today",
 		"calendar.export_ics",
 		"calendar.get_event",

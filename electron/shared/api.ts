@@ -46,6 +46,7 @@ import type {
 	AutomationPatch,
 	AutomationRun,
 	Briefing,
+	OverviewSummary,
 	McpServerStatus,
 	PairingAnswer,
 	PairingRequest,
@@ -708,6 +709,8 @@ export interface JunoApi {
 
 	briefing: {
 		today(): Promise<Briefing>;
+		/** The four counts and the sentence the Overview opens with. */
+		overview(): Promise<OverviewSummary>;
 		client(clientId: string): Promise<Briefing>;
 		/** `YYYY-MM`. */
 		month(month: string): Promise<Briefing>;

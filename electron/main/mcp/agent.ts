@@ -57,6 +57,18 @@ export const agentTools: ToolDescriptor[] = [
 			),
 	},
 	{
+		name: "briefing.overview",
+		title: "The counts on the Overview",
+		description:
+			"How many clients, projects, documents and unread mails there are, how many reminders " +
+			"are overdue, how many agent requests wait for a person, and one sentence saying so. " +
+			"Cheaper than briefing.today when only the numbers are needed.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: { type: "object", properties: {}, additionalProperties: false },
+		handler: async () => briefing.overview(),
+	},
+	{
 		name: "briefing.client",
 		title: "Where a client stands",
 		description:

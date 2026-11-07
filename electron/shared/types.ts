@@ -3155,6 +3155,22 @@ export interface BriefingSection {
 	emptyText: string;
 }
 
+/**
+ * What the Overview screen opens with. Every number is counted here, so the
+ * window and an agent read the same ones.
+ */
+export interface OverviewSummary {
+	clients: number;
+	projects: number;
+	documents: number;
+	unreadMail: number;
+	overdueReminders: number;
+	/** Requests an agent made that are waiting for a person to answer. */
+	waitingRequests: number;
+	/** One sentence: what is overdue and waiting, or that nothing is. */
+	headline: string;
+}
+
 export interface Briefing {
 	/** The day or range the briefing is about. */
 	title: string;

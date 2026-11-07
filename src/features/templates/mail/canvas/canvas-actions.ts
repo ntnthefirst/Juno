@@ -637,6 +637,9 @@ export function canMoveInto(layout: MailLayout, id: string, toParentId: ParentId
 	if (id === toParentId) return false;
 	const node = findNode(layout, id);
 	if (!node) return false;
+	// A placed component is its component's content, so nothing can be put inside it.
+	const target = toParentId === null ? null : findNode(layout, toParentId);
+	if (target && isContainer(target) && target.component) return false;
 	if (toParentId !== null && (isContainer(node) || isColumns(node)) && idsIn(node).includes(toParentId)) return false;
 	const depth = depthForChildrenOf(layout, toParentId);
 	if (depth === null) return false;
@@ -690,7 +693,7 @@ export function insertTarget(
 		const parentId = cell || !node ? null : parentOf(layout, selectedId);
 		const target = cell
 			? { parentId: cell.id, afterId: null }
-			: node && isContainer(node)
+			: node && isContainer(node) && !node.component
 				? { parentId: node.id, afterId: null }
 				: node && parentId !== undefined
 					? { parentId, afterId: selectedId }

@@ -1495,6 +1495,23 @@ export interface MailContainer {
 	box: MailBoxStyle;
 	actions: MailAction[];
 	children: MailNode[];
+	/**
+	 * Set on a document template's container that is a component placed rather
+	 * than drawn (decision 65). Its children are not stored: they are the
+	 * component's, read when the template is drawn or printed, so editing the
+	 * component changes it here. Left out on everything else.
+	 */
+	component?: ComponentPlacement | null;
+}
+
+/**
+ * What a placement holds: which component, and a value for each input it asks
+ * for. A value that is exactly `{{document.<key>}}` passes one of the
+ * template's own inputs through; anything else is the text itself.
+ */
+export interface ComponentPlacement {
+	componentId: string;
+	values: Record<string, string>;
 }
 
 /**
@@ -1849,6 +1866,82 @@ export interface DocumentCanvasPdf {
 	pdf: Uint8Array;
 	/** Inputs with no value, by key. Each one is a marked gap in the PDF. */
 	missing: string[];
+}
+
+/* ----------------------------------- document templates: the components */
+
+/**
+ * A piece of a page made once and placed in many document templates: a
+ * letterhead, a signature block, a price table (decision 65). `root` is a
+ * container rather than a page, with the content of the component under it.
+ * It declares inputs of its own, written `{{document.<key>}}` inside it, and
+ * its pictures belong to it (`DocumentComponentAsset`).
+ */
+export interface DocumentComponent extends Standard {
+	name: string;
+	description: string | null;
+	root: MailContainer;
+	/** The fonts `root` uses, which a template that places it takes on. */
+	fonts: MailFont[];
+	inputs: TemplateInput[];
+	/** How many live templates place it. */
+	usedBy: number;
+}
+
+export interface DocumentComponentInput {
+	name: string;
+	description?: string | null;
+	root?: MailContainer;
+	fonts?: MailFont[];
+	inputs?: TemplateInput[];
+}
+
+export type DocumentComponentPatch = Partial<DocumentComponentInput>;
+
+/** A template that places a component, for the message that stops a delete. */
+export interface ComponentUse {
+	templateId: string;
+	templateName: string;
+}
+
+/** A picture a component keeps. The canvas writes it as `{{asset.<key>}}`, like a template's own. */
+export interface DocumentComponentAsset extends Standard {
+	componentId: string;
+	fileName: string;
+	mimeType: string;
+	byteSize: number;
+	token: string;
+	url: string;
+}
+
+export interface DocumentComponentAssetInput {
+	componentId: string;
+	fileName: string;
+	data: Uint8Array;
+}
+
+/** A component drawn on paper by itself, with its inputs at their starting values. */
+export interface DocumentComponentRender {
+	componentId: string;
+	/** A draft to print instead of the stored one, for the editor. */
+	canvas?: DocumentCanvas;
+	inputs?: TemplateInput[];
+	values: Record<string, string>;
+}
+
+/** Detaching a placed component from a draft of a template. */
+export interface DetachInput {
+	templateId: string;
+	/** The draft the editor holds. Left out, the stored canvas and inputs. */
+	canvas?: DocumentCanvas;
+	inputs?: TemplateInput[];
+	/** The id of the placement: a container with a `component`. */
+	nodeId: string;
+}
+
+export interface DetachResult {
+	canvas: DocumentCanvas;
+	inputs: TemplateInput[];
 }
 
 /* ---------------------------------------------------------------- documents */

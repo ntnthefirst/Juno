@@ -1229,9 +1229,9 @@ Templates without a canvas, the page model and hand-written HTML, keep working
 exactly as before, record values included. The PDF takes its paper from the
 document's own `@page` rule, so they still print on A4.
 
-Revisit if: components (a block made once and placed in several templates, with
-inputs of its own) are built, which is in TODO.md; or a document needs a value
-from a record again, which would need the client chosen before the PDF.
+Revisit if: a document needs a value from a record again, which would need the
+client chosen before the PDF. Components, which this note once named, are
+decision 65.
 
 ## 42. The agent server is a URL on this machine, and a client is let in with a code
 
@@ -2091,3 +2091,69 @@ only exception.
 **What would reverse this:** a rule that filed something the owner did not
 mean to file, which would take it back to suggestions the owner approves. The
 history and the plain-words reading exist so that this is seen early.
+
+## 65. A component is a piece of a page made once and placed by reference
+
+A component is a letterhead, a signature block or a price table: a container
+and what is in it, made in the same canvas editor as a template and stored in
+its own table (`document_components`, with its pictures in
+`document_component_assets`, both with the five standard columns). It declares
+inputs of its own, written `{{document.<key>}}` inside it. The rules are in
+`services/document-components.ts`, the expansion is in `shared/components.ts`,
+and the agent has `templates.components.*`.
+
+**Placed, not pasted.** A template holds a container with a `component` on it,
+the component's id and a value for each of its inputs, and none of its content.
+When the template is drawn, compiled or printed, that container is replaced by a
+copy of the component's content, so editing the component changes every
+template that places it. A value is either text typed at the placement, or
+exactly `{{document.<key>}}`, which passes one of the template's own inputs
+through. Typed text never goes into the markup: its input is renamed to a key of
+its own and the text becomes that key's value, so it is escaped like anything a
+person typed and the template's list of inputs does not grow. A value left out
+falls back to the starting value of the component's input, and with none it is a
+marked gap, reported as missing in the same way a template's own unfilled input
+is. A component can place other components, one that contains itself directly or
+through another is refused when it is saved (and expanding one throws), and the
+template service refuses to save a canvas that places one that no longer exists.
+
+**Editing a component clears the review of every template that uses it.** Their
+text is what the component renders to, so it has changed under whoever read it.
+Each of those templates, including ones that use it through another component,
+is compiled again, its version moves on and its review is cleared, which is what
+an edit to the template itself does. Renaming a component or describing it
+changes no text and clears nothing.
+
+**A document already generated keeps the component as it was.** The body is
+frozen at generation, like every other part of it, and a component edited later
+changes the next document and none already made.
+
+**Deleting is refused while anything places it.** A template that points at a
+gone component cannot be printed, which is the case data.md section 9 describes
+for any row that is referenced, so the service says which templates or
+components place it and asks for them to be taken off those pages or detached
+first. Once nothing does, it is a soft delete. The agent's `templates.components.delete`
+is in the Delete row, so it parks whatever the levels say; `create`, `update`,
+`add_image` and `detach` are in Change records, like `templates.create`.
+
+**Detach copies the nodes in and drops the link.** It works on a draft, like
+the editor's other edits, so it can be undone. Text a placement was given becomes
+an input of the template with that text as its starting value, a value passed
+through stays the template's own input, and the component's pictures are copied
+into the template's own, which is what keeps them working after the component is
+deleted. A component placed inside the detached one stays placed.
+
+**Pictures belong to the component.** Every template that places it draws the
+same files, and none holds a copy until it detaches.
+
+**Where it is reached.** From the Templates screen, a Components button beside
+Import Word file opens the list, and a row opens the component in the template
+editor on a sheet of A4 with one page, which shows how wide it will be once
+placed. In a template, the design panel with nothing selected lists what can be
+placed, and a placed component has its own panel with its values, Edit the
+component and Detach. No frame draws any of this, so it follows the canvas
+editor and the Templates frame (`32:3699`).
+
+**What would reverse this:** a component edited by mistake that sent a hundred
+templates back to unreviewed would ask for a way to see what an edit changes
+before it is saved, not for copies. Copies are what detach is for.

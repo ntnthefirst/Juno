@@ -8,12 +8,14 @@
  * clearing that flag is a deliberate act, never a side effect of an edit.
  */
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { expandCanvas } from "../../shared/components";
 import { emptyCanvas } from "../../shared/paper";
 import type { DocumentCanvas, DocumentLayout, TemplateInput as TemplateField } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { documentTemplates } from "../db/schema";
 import { assertOwnPlaceholders, canvasContext, compileCanvas, missingImage, normaliseDocumentCanvas, parseCanvas, serialiseCanvas } from "./document-canvas";
+import { lookupFor } from "./document-component-lookup";
 import { compileLayout, parseLayout, serialiseLayout } from "./document-layout";
 import { DOCUMENT_TEMPLATE_SEED_VERSION, exampleTemplate } from "./document-templates-seed";
 import * as assets from "./document-template-assets";
@@ -120,10 +122,21 @@ function readCanvas(raw: DocumentCanvas | null | undefined): DocumentCanvas | nu
 	return canvas;
 }
 
-/** The body a canvas compiles to, after checking it only fills in what it asks for. */
-function canvasBody(canvas: DocumentCanvas, inputs: TemplateField[]): string {
-	const body = compileCanvas(canvas, inputs);
-	assertOwnPlaceholders(body, inputs);
+/**
+ * The body a canvas compiles to, after checking it only fills in what it asks
+ * for. Placed components are expanded first, so the stored body holds what they
+ * say today, and a template that places one that is gone cannot be saved.
+ */
+function canvasBody(canvas: DocumentCanvas, inputs: TemplateField[], db: Db): string {
+	const expansion = expandCanvas(canvas, inputs, lookupFor(db));
+	if (expansion.missing.length > 0) {
+		throw new Error(
+			"This template places a component that no longer exists. Take it off the page, or restore the component first.",
+		);
+	}
+	const all = [...inputs, ...expansion.inputs];
+	const body = compileCanvas(expansion.canvas, all);
+	assertOwnPlaceholders(body, all);
 	return body;
 }
 
@@ -182,7 +195,7 @@ export async function create(input: TemplateInput, db: Db = getDb()): Promise<Do
 	// A blank template is a canvas: one page of A4, the paper a new document
 	// is most often printed on.
 	const canvas = given ?? (layout || input.bodyHtml?.trim() ? null : emptyCanvas());
-	const body = canvas ? canvasBody(canvas, inputs) : (bodyFor(layout, input.bodyHtml) ?? "");
+	const body = canvas ? canvasBody(canvas, inputs, db) : (bodyFor(layout, input.bodyHtml) ?? "");
 
 	const key = await uniqueKey(input.key ?? name, db);
 
@@ -232,7 +245,7 @@ export async function update(
 	// the person edited the page rather than the markup.
 	const nextBody =
 		canvas && canvasChanged
-			? canvasBody(canvas, inputs)
+			? canvasBody(canvas, inputs, db)
 			: canvas
 				? undefined
 				: bodyFor(patch.layout, patch.bodyHtml);
@@ -309,7 +322,9 @@ export function renderTemplate(template: DocumentTemplate, context: TemplateCont
  */
 export function renderCanvas(
 	input: {
-		templateId: string;
+		/** The template whose pictures are drawn, or a component's when `componentId` is given instead. */
+		templateId?: string;
+		componentId?: string;
 		canvas: DocumentCanvas;
 		inputs: TemplateField[];
 		values: Record<string, string>;
@@ -317,13 +332,22 @@ export function renderCanvas(
 	},
 	db: Db = getDb(),
 ): RenderResult {
-	const body = compileCanvas(input.canvas, input.inputs, input.fontCss ?? "");
-	const pictures = assets.dataUrls(input.templateId, db);
+	// Placed components are read at the moment of rendering, so a document made
+	// today says what the component says today, and is frozen from then on.
+	const expansion = expandCanvas(input.canvas, input.inputs, lookupFor(db));
+	const inputs = [...input.inputs, ...expansion.inputs];
+	const body = compileCanvas(expansion.canvas, inputs, input.fontCss ?? "");
+	const pictures = input.componentId
+		? assets.componentDataUrls(input.componentId, db)
+		: input.templateId
+			? assets.dataUrls(input.templateId, db)
+			: {};
+	for (const id of expansion.components) Object.assign(pictures, assets.componentDataUrls(id, db));
 	const gone = placeholdersIn(body)
 		.filter((path) => path.startsWith("asset.") && !pictures[path.slice("asset.".length)])
 		.map((path) => path.slice("asset.".length));
 	for (const key of gone) pictures[key] = missingImage(`asset.${key}`);
-	const { context, missing } = canvasContext(input.inputs, input.values, pictures);
+	const { context, missing } = canvasContext(inputs, { ...input.values, ...expansion.fixed }, pictures);
 	const rendered = render(body, context);
 	const all = new Set([
 		...rendered.missing,
@@ -349,6 +373,26 @@ export async function fillCanvas(
 	const inputs = input.inputs ?? template.inputs;
 	if (input.inputs) validateInputs(input.inputs);
 	return renderCanvas({ templateId: template.id, canvas, inputs, values: input.values }, db);
+}
+
+/**
+ * Compiles a template's body again from its canvas, for when a component it
+ * places has changed. The text is different, so the version moves on and the
+ * review is cleared, which is what an edit to the template itself does too
+ * (decision 65). A template with nothing to change is left alone.
+ */
+export async function recompile(id: string, db: Db = getDb()): Promise<DocumentTemplate | null> {
+	const existing = await get(id, db);
+	if (!existing?.canvas) return existing;
+	const body = canvasBody(existing.canvas, existing.inputs, db);
+	if (body === existing.bodyHtml) return existing;
+	const [row] = db
+		.update(documentTemplates)
+		.set({ bodyHtml: body, reviewedAt: null, version: existing.version + 1, updatedAt: now() })
+		.where(eq(documentTemplates.id, id))
+		.returning()
+		.all();
+	return toTemplate(row!);
 }
 
 /**

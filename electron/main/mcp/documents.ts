@@ -2,6 +2,7 @@ import type { GenerateDocumentInput, ImportDocumentInput } from "../../shared/ty
 import * as actions from "../services/document-actions";
 import * as templates from "../services/document-templates";
 import { importDocxFile } from "../services/document-docx";
+import * as componentsService from "../services/document-components";
 import * as templateAssets from "../services/document-template-assets";
 import * as imports from "../services/document-import";
 import * as timeline from "../services/document-timeline";
@@ -69,6 +70,25 @@ const templateProperties: Record<string, unknown> = {
 			"template gets one empty page of A4 on the canvas, ready to be filled in in the editor.",
 	},
 	canvas: CANVAS_SCHEMA,
+	inputs: INPUTS_SCHEMA,
+};
+
+const COMPONENT_ROOT_SCHEMA = {
+	type: "object",
+	description:
+		"The content of a component: one container node, { id, kind: container, tag, hidden, name, alignSelf, grow, " +
+		"layout, box, actions, children }, in the shape of a node of the canvas a template is drawn on. It is not " +
+		"a page: its size comes from where it is placed. Read templates.components.get and send it back with the " +
+		"change made. Every placeholder in it is {{document.<input key>}} for an input the component declares, " +
+		"and a picture it keeps is {{asset.<key>}} from templates.components.add_image. It may place other " +
+		"components (a container with component: { componentId, values }), never itself and never in a loop.",
+};
+
+const componentProperties: Record<string, unknown> = {
+	name: { type: "string", description: "Shown in the list of components, for example Briefhoofd." },
+	description: { type: ["string", "null"], description: "One line on what it is for." },
+	root: COMPONENT_ROOT_SCHEMA,
+	fonts: { type: "array", description: "The linked fonts the content uses, as on a mail template's layout." },
 	inputs: INPUTS_SCHEMA,
 };
 
@@ -249,6 +269,154 @@ export const templateTools: ToolDescriptor[] = [
 		handler: async (args) =>
 			templateAssets.add({
 				templateId: String(args.template_id),
+				fileName: String(args.file_name),
+				data: new Uint8Array(Buffer.from(String(args.data_base64), "base64")),
+			}),
+	},
+	{
+		name: "templates.components.list",
+		title: "List components",
+		description:
+			"The components for document templates: pieces of a page made once and placed in many templates, " +
+			"such as a letterhead or a signature block. Each has the inputs it asks for and how many templates place it.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: { type: "object", properties: {}, additionalProperties: false },
+		handler: async () => componentsService.list(),
+	},
+	{
+		name: "templates.components.get",
+		title: "Read a component",
+		description: "One component with its content, its inputs and how many templates place it.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string", description: "Component id." } },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => componentsService.get(String(args.id)),
+	},
+	{
+		name: "templates.components.create",
+		title: "Create a component",
+		description:
+			"Adds a component. Place it in a template by putting a container with component: { componentId, values } " +
+			"on a page of the template's canvas, where values gives each input of the component either its text or " +
+			"exactly {{document.<key>}} to pass one of the template's own inputs through.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: componentProperties,
+			required: ["name"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			componentsService.create({
+				name: String(args.name),
+				description: args.description === undefined ? null : (args.description as string | null),
+				...(args.root !== undefined ? { root: args.root as never } : {}),
+				...(Array.isArray(args.fonts) ? { fonts: args.fonts as never } : {}),
+				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
+			}),
+	},
+	{
+		name: "templates.components.update",
+		title: "Edit a component",
+		description:
+			"Changes a component, and with it every template that places it. Each of those templates is compiled " +
+			"again and loses its review, because its text changed under it. A document already generated keeps the " +
+			"component as it was. The content replaces the old content, so read the component first.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string" }, ...componentProperties },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			componentsService.update(String(args.id), {
+				...(args.name !== undefined ? { name: String(args.name) } : {}),
+				...(args.description !== undefined ? { description: args.description as string | null } : {}),
+				...(args.root !== undefined ? { root: args.root as never } : {}),
+				...(Array.isArray(args.fonts) ? { fonts: args.fonts as never } : {}),
+				...(Array.isArray(args.inputs) ? { inputs: args.inputs as never } : {}),
+			}),
+	},
+	{
+		name: "templates.components.delete",
+		title: "Delete a component",
+		description:
+			"Removes a component. Refused while a template or another component still places it, and the refusal " +
+			"names them: take it off those pages or detach it there first.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string" } },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => componentsService.remove(String(args.id)),
+	},
+	{
+		name: "templates.components.detach",
+		title: "Detach a component from a template",
+		description:
+			"Copies one placed component's content into the template and drops the link, so editing the component " +
+			"no longer changes this template. node_id is the id of the placing container on the template's canvas. " +
+			"Text the placement was given becomes an input of the template, and the component's pictures are copied " +
+			"into the template. The template loses its review, as for any edit to its text.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { template_id: { type: "string" }, node_id: { type: "string" } },
+			required: ["template_id", "node_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			componentsService.detachAndSave({ templateId: String(args.template_id), nodeId: String(args.node_id) }),
+	},
+	{
+		name: "templates.components.list_images",
+		title: "List a component's pictures",
+		description: "The pictures a component keeps, each with the token to write as an image block's src in its content.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: { component_id: { type: "string" } },
+			required: ["component_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => templateAssets.listForComponent(String(args.component_id)),
+	},
+	{
+		name: "templates.components.add_image",
+		title: "Add a picture to a component",
+		description:
+			"Stores a PNG, JPEG, GIF or WebP picture of at most 10 MB for a component and returns it with its token, " +
+			"{{asset.<key>}}, to use as the src of an image block in its content. Every template that places the " +
+			"component draws it. The same picture twice gives back the one already there.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				component_id: { type: "string" },
+				file_name: { type: "string", description: "Shown in the editor, for example logo.png." },
+				data_base64: { type: "string", description: "The picture's bytes, base64 encoded." },
+			},
+			required: ["component_id", "file_name", "data_base64"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			templateAssets.addToComponent({
+				componentId: String(args.component_id),
 				fileName: String(args.file_name),
 				data: new Uint8Array(Buffer.from(String(args.data_base64), "base64")),
 			}),

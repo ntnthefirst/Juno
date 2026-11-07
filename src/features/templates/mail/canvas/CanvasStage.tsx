@@ -7,6 +7,7 @@ import {
 	type WheelEvent,
 } from "react";
 import type { DocumentPaper, MailBlock, MailLayout, TemplateInput } from "@shared/types";
+import type { ComponentLookup } from "@shared/components";
 import { pagesOf, paperLabel } from "@shared/paper";
 import { CanvasView, type DropTarget, type Editing, type Measured, type Selection } from "./CanvasView";
 import { isTyping, keysFor, shortcutFor } from "./shortcuts";
@@ -35,6 +36,8 @@ type CanvasStageProps = {
 	paper?: DocumentPaper | null;
 	/** A document's pictures, by the key an image block names them with. */
 	pictures?: Record<string, string>;
+	/** The components a document may have placed. */
+	components?: ComponentLookup;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -66,6 +69,7 @@ export function CanvasStage({
 	onContentHeight,
 	paper = null,
 	pictures,
+	components,
 }: CanvasStageProps) {
 	const [zoom, setZoom] = useState(1);
 	// Whether the zoom is the author's rather than the one the stage picked. A
@@ -319,6 +323,7 @@ export function CanvasStage({
 							onMeasure={onMeasure}
 							sheets={paper !== null}
 							pictures={pictures}
+							components={components}
 						/>
 
 						{paper ? null : (

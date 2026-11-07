@@ -506,3 +506,47 @@ describe("what the declarations promise", () => {
 		expect(names.filter((name) => /\.install$|restart/i.test(name))).toEqual([]);
 	});
 });
+
+describe("components for document templates", () => {
+	const TOOLS = [
+		"templates.components.add_image",
+		"templates.components.create",
+		"templates.components.delete",
+		"templates.components.detach",
+		"templates.components.get",
+		"templates.components.list",
+		"templates.components.list_images",
+		"templates.components.update",
+	];
+
+	it("puts every tool in a row, reads in Read, writes in Change records and the delete in Delete", () => {
+		const names = listTools().map((tool) => tool.name).filter((name) => name.startsWith("templates.components."));
+		expect(names.sort()).toEqual(TOOLS);
+		for (const name of ["get", "list", "list_images"]) {
+			expect(permissions.rowOf(`templates.components.${name}`)).toBe("read");
+		}
+		for (const name of ["create", "update", "add_image", "detach"]) {
+			expect(permissions.rowOf(`templates.components.${name}`)).toBe("change");
+		}
+		expect(permissions.rowOf("templates.components.delete")).toBe("delete");
+		expect(permissions.isLockedTool("templates.components.delete")).toBe(true);
+	});
+
+	it("makes nothing until approved, and parks the delete whatever the levels say", async () => {
+		const parked = (await callTool("templates.components.create", { name: "Briefhoofd" })) as {
+			status: string;
+			actionId: string;
+		};
+		expect(parked.status).toBe("pending");
+		expect(await callTool("templates.components.list", {})).toEqual([]);
+
+		await actions.approve(parked.actionId);
+		const made = (await callTool("templates.components.list", {})) as { id: string; name: string }[];
+		expect(made).toMatchObject([{ name: "Briefhoofd" }]);
+
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "allow", delete: "allow" });
+		const removal = (await callTool("templates.components.delete", { id: made[0]!.id })) as { status: string };
+		expect(removal.status).toBe("pending");
+		expect(await callTool("templates.components.list", {})).toHaveLength(1);
+	});
+});

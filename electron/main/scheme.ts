@@ -104,12 +104,17 @@ async function serveAsset(url: URL): Promise<Response> {
 	// Same reasoning as the mail host: the lock guard covers IPC, not a URL.
 	if (isLocked()) return new Response("Locked", { status: 423 });
 
-	const match = /^\/(file|template)\/([a-z0-9-]+)$/i.exec(url.pathname);
+	const match = /^\/(file|template|component)\/([a-z0-9-]+)$/i.exec(url.pathname);
 	if (!match) return new Response("Not found", { status: 404 });
 
 	let file: { path: string; mimeType: string | null };
 	try {
-		file = match[1] === "template" ? templateAssets.pathOf(match[2]!) : projectAssets.pathOf(match[2]!);
+		file =
+			match[1] === "template"
+				? templateAssets.pathOf(match[2]!)
+				: match[1] === "component"
+					? templateAssets.componentPathOf(match[2]!)
+					: projectAssets.pathOf(match[2]!);
 	} catch {
 		// A missing file is an ordinary state here, not an error worth a message:
 		// a linked asset whose original moved is exactly this.

@@ -73,6 +73,15 @@ import type {
 	DocumentCanvasRender,
 	DocumentTemplate,
 	DocumentTemplateAsset,
+	ComponentUse,
+	DetachInput,
+	DetachResult,
+	DocumentComponent,
+	DocumentComponentAsset,
+	DocumentComponentAssetInput,
+	DocumentComponentInput,
+	DocumentComponentPatch,
+	DocumentComponentRender,
 	DocumentTemplateAssetInput,
 	DocumentTemplateInput,
 	DocumentTemplatePatch,
@@ -775,6 +784,28 @@ export interface JunoApi {
 			/** Stores a picture for the template. The same bytes twice give the same picture. */
 			add(input: DocumentTemplateAssetInput): Promise<DocumentTemplateAsset>;
 			remove(id: string): Promise<DocumentTemplateAsset>;
+		};
+		/**
+		 * Pieces of a page made once and placed in many templates (decision 65).
+		 * Deleting one that a template still places is refused with the names.
+		 */
+		components: {
+			list(): Promise<DocumentComponent[]>;
+			get(id: string): Promise<DocumentComponent | null>;
+			create(input: DocumentComponentInput): Promise<DocumentComponent>;
+			update(id: string, patch: DocumentComponentPatch): Promise<DocumentComponent>;
+			remove(id: string): Promise<DocumentComponent>;
+			/** The templates that place it, directly or through another component. */
+			usedBy(id: string): Promise<ComponentUse[]>;
+			/** Copies a placed component into a draft of a template and drops the link. Stores nothing. */
+			detach(input: DetachInput): Promise<DetachResult>;
+			/** The component alone on a page, printed. Stores nothing. */
+			renderPdf(input: DocumentComponentRender): Promise<DocumentCanvasPdf>;
+			assets: {
+				list(componentId: string): Promise<DocumentComponentAsset[]>;
+				add(input: DocumentComponentAssetInput): Promise<DocumentComponentAsset>;
+				remove(id: string): Promise<DocumentComponentAsset>;
+			};
 		};
 	};
 

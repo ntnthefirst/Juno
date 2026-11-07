@@ -426,6 +426,47 @@ if (!app.requestSingleInstanceLock()) {
 								await b.templates.update(longTemplate.id, {
 									canvas: { ...longTemplate.canvas, layout: { ...longTemplate.canvas.layout, children: [{ ...longPage, children: [logoBlock, ...paragraphs] }] } },
 								});
+								// A component placed in a template (decision 65): a letterhead that
+								// asks for a reference, with a picture it keeps, placed with a value.
+								// Its text has to reach the template's PDF and its generated document.
+								const letterhead = await b.templates.components.create({
+									name: "Briefhoofd",
+									inputs: [{ key: "reference", label: "Referentie", kind: "text", required: true }],
+									root: {
+										id: "smoke-letterhead", kind: "container", tag: "div", hidden: false, name: "Briefhoofd", alignSelf: "auto", grow: 0,
+										layout: { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 4, wrap: false },
+										box: { ...scopeText.box }, actions: [],
+										children: [{ ...scopeText, id: "smoke-letterhead-text", html: "<strong>Juno</strong><br>Onze referentie: {{document.reference}}" }],
+									},
+								});
+								const letterheadLogo = await b.templates.components.assets.add({ componentId: letterhead.id, fileName: "logo.png", data: pixel });
+								await b.templates.components.update(letterhead.id, {
+									root: { ...letterhead.root, children: [{ ...letterhead.root.children[0], id: "smoke-letterhead-text" }, { ...logoBlock, id: "smoke-letterhead-logo", src: letterheadLogo.token }] },
+								});
+								const placedTemplate = await b.templates.create({ name: "Offerte met briefhoofd" });
+								const placedPage = placedTemplate.canvas.layout.children[0];
+								await b.templates.update(placedTemplate.id, {
+									canvas: {
+										...placedTemplate.canvas,
+										layout: {
+											...placedTemplate.canvas.layout,
+											children: [{
+												...placedPage,
+												children: [
+													{ ...letterhead.root, id: "smoke-placement", name: "Briefhoofd", children: [], component: { componentId: letterhead.id, values: { reference: "OFF-2026-14" } } },
+													{ ...scopeText, id: "smoke-placed-text", html: "Omvang: {{document.omvang}}" },
+												],
+											}],
+										},
+									},
+									inputs: [{ key: "omvang", label: "Omvang", kind: "textarea", required: true }],
+								});
+								const placedPdf = await b.templates.renderPdf({ templateId: placedTemplate.id, values: { omvang: "Een website" } });
+								if (placedPdf.missing.length !== 0) throw new Error("Smoke: a template with a component left gaps: " + placedPdf.missing.join(", "));
+								const placedDocument = await b.documents.generate({ clientId: made[0].id, templateId: placedTemplate.id, extras: { omvang: "Een website" } });
+								if (placedDocument.pdfError !== null || !placedDocument.document.bodyHtml.includes("Onze referentie: OFF-2026-14") || !placedDocument.document.bodyHtml.includes("data:image/png;base64,")) {
+									throw new Error("Smoke: the component did not reach the generated document: " + placedDocument.pdfError);
+								}
 								const paperDocument = await b.documents.generate({ clientId: made[0].id, templateId: paperTemplate.id, extras: { omvang: "Een website" } });
 								if (paperDocument.pdfError !== null || !paperDocument.document.bodyHtml.includes("Omvang: Een website")) {
 									throw new Error("Smoke: a canvas template did not generate its document: " + paperDocument.pdfError);
@@ -753,8 +794,8 @@ if (!app.requestSingleInstanceLock()) {
 									}
 									sheetCounts.push(paperPdf.getPageCount());
 								}
-								if (sheetCounts.sort().join() !== "1,2") {
-									throw new Error(`Smoke: the example and the small document should print on 2 and 1 sheets, got ${sheetCounts.join(", ")}`);
+								if (sheetCounts.sort().join() !== "1,1,2") {
+									throw new Error(`Smoke: the example, the small document and the one with a component should print on 2, 1 and 1 sheets, got ${sheetCounts.join(", ")}`);
 								}
 								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheetCounts.join("+")}`);
 							}
@@ -1723,8 +1764,8 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											if (!back()) return "no back action from the editor";
-											back().click();
+											// The canvas editor has no back button of its own: Escape leaves it.
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(400);
 											const dialog = document.querySelector("[role=dialog]");
 											if (dialog) {
@@ -2132,6 +2173,111 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(500);
 											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
 											if (back) back.click();
+											await wait(500);
+										})()`,
+									);
+								}
+								if (screen === "Document templates") {
+									// Components: placed in a template, listed on their own, and edited in
+									// the same canvas as a template. The list is reached from the button
+									// beside Import Word file.
+									const placed = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const find = () => [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Offerte met briefhoofd"));
+											for (let tries = 0; tries < 3 && !find(); tries++) {
+												window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(500);
+												[...(document.querySelector("[role=dialog]")?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
+												await wait(300);
+												[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back")?.click();
+												await wait(500);
+											}
+											const row = find();
+											if (!row) return "no row for the template with a component";
+											row.click();
+											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
+											if (!document.querySelector("main canvas")) return "the preview drew no PDF";
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
+											const content = document.querySelector("[data-canvas-content]");
+											if (!content) return "no canvas";
+											if (!content.textContent.includes("Onze referentie")) return "the placed component's text is not drawn on the page";
+											const logo = content.querySelector("img");
+											if (!logo) return "the component's picture is not drawn";
+											for (let tries = 0; tries < 20 && !logo.complete; tries++) await wait(100);
+											if (!logo.src.startsWith("app://asset/component/") || logo.naturalWidth !== 1) return "the component's picture did not load: " + logo.src;
+											return "ok";
+										})()`,
+									)) as string;
+									if (placed !== "ok") throw new Error(`Smoke: a template with a component ${placed}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-component-placed-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									const listed = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(500);
+											const dialog = document.querySelector("[role=dialog]");
+											const discard = dialog && [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
+											discard?.click();
+											await wait(500);
+											back()?.click();
+											await wait(500);
+											const open = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Components");
+											if (!open) return "no components action on the templates list";
+											open.click();
+											await wait(700);
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Briefhoofd"));
+											if (!row) return "the components list has no row for the letterhead";
+											if (!row.textContent.includes("Placed in 1 template")) return "the row does not say where it is placed: " + row.textContent;
+											return "ok";
+										})()`,
+									)) as string;
+									if (listed !== "ok") throw new Error(`Smoke: the components list ${listed}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-components-list-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									const editedComponent = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Briefhoofd"));
+											row.click();
+											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
+											const content = document.querySelector("[data-canvas-content]");
+											if (!content) return "no canvas for the component";
+											if (!content.textContent.includes("referentie")) return "the component does not show its text";
+											return "ok";
+										})()`,
+									)) as string;
+									if (editedComponent !== "ok") throw new Error(`Smoke: the component editor ${editedComponent}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-component-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									// Out to the list of templates again, so the steps after this start where they always did.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(500);
+											const dialog = document.querySelector("[role=dialog]");
+											[...(dialog?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
+											await wait(500);
+											[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Templates")?.click();
 											await wait(500);
 										})()`,
 									);

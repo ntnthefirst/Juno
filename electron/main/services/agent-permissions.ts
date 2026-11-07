@@ -146,6 +146,9 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"settings.get_owner",
 		"settings.get_theme",
 		"suggestions.list",
+		"templates.components.get",
+		"templates.components.list",
+		"templates.components.list_images",
 		"templates.fill",
 		"templates.get",
 		"templates.list",
@@ -250,6 +253,10 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"settings.update_owner_email",
 		"settings.update_owner_phone",
 		"templates.add_image",
+		"templates.components.add_image",
+		"templates.components.create",
+		"templates.components.detach",
+		"templates.components.update",
 		"templates.create",
 		"templates.import_docx",
 		"templates.update",
@@ -302,6 +309,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"projects.delete_asset",
 		"projects.delete_link",
 		"reminders.remove",
+		"templates.components.delete",
 	],
 };
 

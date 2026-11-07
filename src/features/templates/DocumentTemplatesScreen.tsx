@@ -17,7 +17,8 @@ import {
 	NO_DOCUMENT_TEMPLATE_FILTERS,
 	type DocumentTemplateFilters,
 } from "./document-template-filters";
-import { DocumentCanvasEditor } from "./CanvasTemplateEditor";
+import { ComponentCanvasEditor, DocumentCanvasEditor } from "./CanvasTemplateEditor";
+import { ComponentsScreen } from "./ComponentsScreen";
 import { paperLabel } from "@shared/paper";
 import { TemplateEditor } from "./TemplateEditor";
 import { UseCanvasTemplateScreen } from "./UseCanvasTemplateScreen";
@@ -33,7 +34,10 @@ type View =
 	| { status: "preview"; id: string }
 	/** `flow` for a template just made from a Word file, which lands on one page. */
 	| { status: "edit"; id: string; flow?: boolean }
-	| { status: "use"; id: string };
+	| { status: "use"; id: string }
+	/** The components for templates, and one of them in the editor. `from` is the template it was opened from. */
+	| { status: "components" }
+	| { status: "component"; id: string; from: string | null };
 
 function matches(template: DocumentTemplate, needle: string): boolean {
 	return `${template.name} ${template.description ?? ""}`.toLowerCase().includes(needle);
@@ -141,18 +145,26 @@ export function DocumentTemplatesScreen() {
 	const allSelected = shown.length > 0 && shown.every((row) => selectedIds.includes(row.id));
 	const someSelected = selectedIds.length > 0 && !allSelected;
 
-	const selected = view.status !== "list" && load.status === "ready"
-		? load.rows.find((row) => row.id === view.id) ?? null
-		: null;
+	const ofTemplate = view.status === "preview" || view.status === "edit" || view.status === "use" ? view : null;
+	const selected = ofTemplate && load.status === "ready" ? load.rows.find((row) => row.id === ofTemplate.id) ?? null : null;
 
 	// A row can disappear out from under an open view (removed elsewhere); the
 	// list is the only place left to be. Derived at render time rather than
 	// reset through an effect, since it is a plain function of state already
 	// in hand and needs no synchronisation with anything external.
-	const effectiveView: View = view.status !== "list" && load.status === "ready" && !selected ? { status: "list" } : view;
+	const effectiveView: View = ofTemplate && load.status === "ready" && !selected ? { status: "list" } : view;
 
+	const editedComponent = effectiveView.status === "component" ? effectiveView : null;
 	usePublishBreadcrumb(
-		!selected
+		effectiveView.status === "components"
+			? [{ label: "Document templates", onSelect: () => setView({ status: "list" }) }, { label: "Components" }]
+			: editedComponent
+				? [
+						{ label: "Document templates", onSelect: () => setView({ status: "list" }) },
+						{ label: "Components", onSelect: () => setView({ status: "components" }) },
+						{ label: "Edit" },
+					]
+				: !selected
 			? []
 			: effectiveView.status === "preview"
 				? [{ label: "Document templates", onSelect: () => setView({ status: "list" }) }, { label: selected.name }]
@@ -184,6 +196,30 @@ export function DocumentTemplatesScreen() {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [effectiveView.status]);
 
+	if (effectiveView.status === "components") {
+		return (
+			<div className="h-full min-h-0">
+				<ComponentsScreen
+					onOpen={(id) => setView({ status: "component", id, from: null })}
+					onBack={() => setView({ status: "list" })}
+				/>
+			</div>
+		);
+	}
+
+	if (editedComponent) {
+		// Back goes where the person came from: the template that placed it, or the list of components.
+		const back = () => {
+			refresh();
+			setView(editedComponent.from ? { status: "edit", id: editedComponent.from } : { status: "components" });
+		};
+		return (
+			<div className="h-full min-h-0">
+				<ComponentCanvasEditor key={editedComponent.id} templateId={editedComponent.id} onSaved={refresh} onBack={back} />
+			</div>
+		);
+	}
+
 	if (effectiveView.status === "edit" && selected && selected.canvas) {
 		return (
 			<div className="h-full min-h-0">
@@ -192,6 +228,7 @@ export function DocumentTemplatesScreen() {
 					templateId={selected.id}
 					flowOnOpen={effectiveView.flow === true}
 					onSaved={refresh}
+					onOpenComponent={(id) => setView({ status: "component", id, from: selected.id })}
 					onBack={() => setView({ status: "preview", id: selected.id })}
 				/>
 			</div>
@@ -267,6 +304,9 @@ export function DocumentTemplatesScreen() {
 						</span>
 					) : null}
 					<span className="ml-auto" />
+					<Button size="dense" onClick={() => setView({ status: "components" })}>
+						Components
+					</Button>
 					<Button size="dense" disabled={importing} onClick={() => void importWord()}>
 						{importing ? "Importing" : "Import Word file"}
 					</Button>

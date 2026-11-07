@@ -452,6 +452,21 @@ const api: JunoApi = {
 			add: (input) => call("templates.assets.add", input),
 			remove: (id) => call("templates.assets.remove", id),
 		},
+		components: {
+			list: () => call("templates.components.list"),
+			get: (id) => call("templates.components.get", id),
+			create: (input) => call("templates.components.create", input),
+			update: (id, patch) => call("templates.components.update", id, patch),
+			remove: (id) => call("templates.components.remove", id),
+			usedBy: (id) => call("templates.components.usedBy", id),
+			detach: (input) => call("templates.components.detach", input),
+			renderPdf: (input) => call("templates.components.renderPdf", input),
+			assets: {
+				list: (componentId) => call("templates.components.assets.list", componentId),
+				add: (input) => call("templates.components.assets.add", input),
+				remove: (id) => call("templates.components.assets.remove", id),
+			},
+		},
 	},
 
 	documents: {

@@ -35,6 +35,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type {
+	ComponentPlacement,
 	MailAction,
 	MailAlign,
 	MailBlock,
@@ -971,7 +972,20 @@ function parseContainer(raw: UnknownRecord, depth: number, budget: { left: numbe
 		box: parseBox(raw.box),
 		actions: parseActions(raw.actions),
 		children: parseNodes(raw.children, depth + 1, budget),
+		...(parsePlacement(raw.component) ? { component: parsePlacement(raw.component) } : {}),
 	};
+}
+
+/** A placed component, or null. Values are plain text: nothing here is ever read as markup or a pattern. */
+function parsePlacement(raw: unknown): ComponentPlacement | null {
+	if (!isRecord(raw) || typeof raw.componentId !== "string" || !raw.componentId.trim()) return null;
+	const values: Record<string, string> = {};
+	if (isRecord(raw.values)) {
+		for (const [key, value] of Object.entries(raw.values)) {
+			if (typeof value === "string" && /^[a-z][a-z0-9_]*$/.test(key)) values[key] = value.slice(0, 2000);
+		}
+	}
+	return { componentId: raw.componentId.trim().slice(0, 100), values };
 }
 
 /**

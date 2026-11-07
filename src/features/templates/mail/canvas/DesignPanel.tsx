@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type {
+	DocumentComponent,
 	DocumentPaper,
 	MailAction,
 	MailBlock,
@@ -38,6 +39,7 @@ import {
 } from "./alignment";
 import { PictureAddressNotice } from "./PictureAddressNotice";
 import { ActionsSection } from "./ActionsSection";
+import { ComponentSection, ComponentsSection } from "./ComponentPanel";
 import { flowAutoSides, pictureAutoSides, type AutoSides } from "./box-style";
 import { BreakpointsSection } from "./BreakpointsSection";
 import {
@@ -146,6 +148,11 @@ type DesignPanelProps = {
 	onPaper?: (paper: DocumentPaper) => void;
 	/** A document's pictures, by key, to say whether a block's picture is still stored. */
 	pictures?: Record<string, string>;
+	/** The components a document can place, with what places and detaches them. */
+	components?: DocumentComponent[];
+	onPlaceComponent?: (componentId: string) => void;
+	onDetachComponent?: (nodeId: string) => void;
+	onOpenComponent?: (componentId: string) => void;
 	/** Opens the picker to choose a picture for an image block, for a document. */
 	onPicture?: (blockId: string) => void;
 };
@@ -1001,6 +1008,10 @@ export function DesignPanel({
 	onPaper,
 	pictures = {},
 	onPicture,
+	components,
+	onPlaceComponent,
+	onDetachComponent,
+	onOpenComponent,
 }: DesignPanelProps) {
 	// A container, a columns table or a block, anywhere in the tree; a cell,
 	// which is none of those, separately. Both are found by id alone, so a
@@ -1060,6 +1071,7 @@ export function DesignPanel({
 					onRetry={fonts.retry}
 					printed
 				/>
+				{components && onPlaceComponent ? <ComponentsSection components={components} onPlace={onPlaceComponent} /> : null}
 				<SelectionColors colors={colors} onReplace={recolor} />
 			</div>
 		);
@@ -1452,6 +1464,29 @@ export function DesignPanel({
 	// table and a block each returned their own panel above.
 	if (!node || node.kind !== "container") return null;
 	const section = node;
+	if (section.component) {
+		const placed = section.component;
+		const source = components?.find((component) => component.id === placed.componentId) ?? null;
+		return (
+			<div className="flex flex-col">
+				<Header
+					label="Component"
+					name={{ value: section.name, onChange: (name) => onSection(section.id, { name }) }}
+					deleteLabel="Delete component"
+					onDelete={() => onRemove(section.id)}
+					hidden={{ value: section.hidden, onChange: (hidden) => onSection(section.id, { hidden }) }}
+				/>
+				<ComponentSection
+					placement={placed}
+					component={source}
+					inputs={inputs}
+					onPlacement={(next) => onSection(section.id, { component: next })}
+					onDetach={() => onDetachComponent?.(section.id)}
+					onOpen={() => onOpenComponent?.(placed.componentId)}
+				/>
+			</div>
+		);
+	}
 	const placer = placerOf(layout, section.id);
 	const arrangement = section.layout;
 	const onSectionBox: BoxPatch = (patch) => onSection(section.id, { box: { ...section.box, ...patch } });

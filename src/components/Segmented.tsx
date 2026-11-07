@@ -8,6 +8,11 @@ export type SegmentedOption<Id extends string> = {
 	icon?: IconName;
 	/** The spoken name and tooltip, required when there is no text. */
 	name?: string;
+	/**
+	 * Drawn with a lock and not selectable, for a choice that is shown but never
+	 * available (the Allow of a permission that always asks).
+	 */
+	locked?: boolean;
 };
 
 type SegmentedProps<Id extends string> = {
@@ -51,14 +56,21 @@ export function Segmented<Id extends string>({ options, value, onChange, label, 
 						aria-pressed={active}
 						aria-label={option.name}
 						title={option.name}
-						onClick={() => onChange(option.id)}
+						disabled={option.locked}
+						onClick={() => {
+							if (!option.locked) onChange(option.id);
+						}}
 						className={[
 							"flex items-center whitespace-nowrap font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 							OPTION[size],
-							active ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]",
+							option.locked
+								? "gap-1 cursor-not-allowed text-[var(--ink-faint)]"
+								: active
+									? "bg-[var(--surface)] text-[var(--ink)]"
+									: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
 						].join(" ")}
 					>
-						{option.icon ? <Icon name={option.icon} size={16} /> : null}
+						{option.locked ? <Icon name="lock" size={12} /> : option.icon ? <Icon name={option.icon} size={16} /> : null}
 						{option.label}
 					</button>
 				);

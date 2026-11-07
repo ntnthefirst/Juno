@@ -22,6 +22,8 @@ import { SettingsNav } from "../features/settings/SettingsNav";
 import { SignatureSection } from "../features/settings/SignatureSection";
 import { UpdatesSection } from "../features/settings/UpdatesSection";
 import { ConnectionPanel } from "../features/agent/ConnectionPanel";
+import { InstructionsPanel } from "../features/agent/InstructionsPanel";
+import { PermissionsPanel } from "../features/agent/PermissionsPanel";
 import { PairingDialog } from "../features/agent/PairingDialog";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
@@ -273,6 +275,10 @@ function PageBody({ page, theme, onTheme, onNotice }: PageBodyProps): ReactNode 
 			return <ConnectionPanel part="connect" onNotice={onNotice} />;
 		case "mcp-tools":
 			return <ConnectionPanel part="tools" onNotice={onNotice} />;
+		case "mcp-permissions":
+			return <PermissionsPanel onNotice={onNotice} />;
+		case "mcp-instructions":
+			return <InstructionsPanel onNotice={onNotice} />;
 		case "mail":
 			return null;
 	}

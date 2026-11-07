@@ -31,7 +31,9 @@ export type SettingsPageId =
 	| "recent"
 	| "mcp-server"
 	| "mcp-connect"
-	| "mcp-tools";
+	| "mcp-tools"
+	| "mcp-permissions"
+	| "mcp-instructions";
 
 export type SettingsPage = {
 	id: SettingsPageId;
@@ -84,6 +86,14 @@ export const PAGES: SettingsPage[] = [
 	{ id: "mcp-server", group: "mcp", label: "Server", anchors: ["mcp-server", "mcp-clients"], solo: false },
 	{ id: "mcp-connect", group: "mcp", label: "Connect a client", anchors: ["mcp-connect"], solo: true },
 	{ id: "mcp-tools", group: "mcp", label: "What an agent can do", anchors: ["mcp-tools"], solo: true },
+	{
+		id: "mcp-permissions",
+		group: "mcp",
+		label: "Permissions",
+		anchors: ["mcp-permissions", "mcp-suggestions"],
+		solo: false,
+	},
+	{ id: "mcp-instructions", group: "mcp", label: "Instructions", anchors: ["mcp-instructions"], solo: true },
 ];
 
 export function pageById(id: SettingsPageId): SettingsPage {

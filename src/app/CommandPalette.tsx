@@ -319,7 +319,6 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 		<div
 			data-popover-root
 			className="animate-fade fixed inset-0 z-[80] flex items-start justify-center bg-[var(--ink)]/25 px-6 pt-[13vh]"
-			style={{ backdropFilter: "blur(var(--overlay-blur))" }}
 			onMouseDown={(event) => {
 				if (event.target === event.currentTarget) onClose();
 			}}
@@ -353,7 +352,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 						autoComplete="off"
 						className="min-w-0 flex-1 bg-transparent text-lg text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
 					/>
-					{term === "" ? <Kbd keys={["Esc"]} /> : <span className="font-mono text-micro text-[var(--ink-faint)]">Esc</span>}
+					{term === "" ? <Kbd keys={formatCombo(COMBOS.palette)} /> : <span className="font-mono text-micro text-[var(--ink-faint)]">Esc</span>}
 				</div>
 
 				{term !== "" ? (
@@ -419,7 +418,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 													<Icon name={item.record as IconName} size={16} strokeWidth={1.9} />
 												</span>
 											) : (
-												<span className="flex h-6 w-6 flex-none items-center justify-center text-[var(--ink-muted)]">
+												<span className={`flex h-6 w-6 flex-none items-center justify-center ${isActive ? "text-[var(--accent)]" : "text-[var(--ink-muted)]"}`}>
 													{item.icon ? <Icon name={item.icon} size={16} strokeWidth={1.9} /> : null}
 												</span>
 											)}
@@ -435,9 +434,6 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 											{item.keys ? (
 												<span className="flex-none font-mono text-micro text-[var(--ink-faint)]">{item.keys.join(" ")}</span>
 											) : null}
-											{isActive && !item.keys ? (
-												<span className="flex-none font-mono text-micro text-[var(--ink-faint)]">Enter</span>
-											) : null}
 										</div>
 									);
 								})}
@@ -446,11 +442,13 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 					)}
 				</div>
 
-				<div className="flex flex-none items-center gap-4 bg-[var(--sunken)] px-4 py-2.5 text-sm text-[var(--ink-muted)]">
-					<span>Enter to open</span>
-					{term !== "" ? <span>Tab to change where it looks</span> : null}
-					<span>{formatCombo(COMBOS.find).join(" ")} finds inside a message or a page</span>
-				</div>
+				{term !== "" ? (
+					<div className="flex flex-none items-center gap-4 bg-[var(--sunken)] px-4 py-2.5 text-sm text-[var(--ink-muted)]">
+						<span>Enter to open</span>
+						<span>Tab to change where it looks</span>
+						<span>{formatCombo(COMBOS.find).join(" ")} finds inside the page you are on</span>
+					</div>
+				) : null}
 			</div>
 		</div>,
 		document.body,

@@ -9,12 +9,12 @@
  * go to a record, ask first).
  */
 
-/** The kinds drawn in the design's Context Menu set. A note joins them with the notes package. */
-export const MENU_KINDS = ["reminder", "event", "client", "file", "mail", "blank", "project", "add", "block"] as const;
+/** The kinds drawn in the design's Context Menu set. */
+export const MENU_KINDS = ["reminder", "event", "client", "file", "mail", "blank", "project", "add", "block", "note"] as const;
 export type MenuKind = (typeof MENU_KINDS)[number];
 
 /** A blank area is named by the screen it is on, so the menu can start with what belongs there. */
-export const BLANK_AREAS = ["overview", "reminders", "calendar", "clients", "projects", "mail", "documents"] as const;
+export const BLANK_AREAS = ["overview", "reminders", "calendar", "clients", "projects", "mail", "notes", "documents"] as const;
 export type BlankArea = (typeof BLANK_AREAS)[number];
 
 /** The two block menus in the composer toolbar. */
@@ -70,6 +70,8 @@ export const MENU_ACTIONS = [
 	"new-client",
 	"new-project",
 	"new-document",
+	"new-page",
+	"move-to-project",
 	"new-message",
 	"sync",
 	"select-all",
@@ -87,7 +89,7 @@ export const MENU_ACTIONS = [
 export type MenuAction = (typeof MENU_ACTIONS)[number];
 
 /** What the main process does itself, through the same services the buttons use. */
-export const MENU_MAIN_ACTIONS = ["snooze-tomorrow", "open-in-default-app", "open-folder", "copy-path"] as const;
+export const MENU_MAIN_ACTIONS = ["snooze-tomorrow", "open-in-default-app", "open-folder", "copy-path", "pin-note", "unpin-note", "duplicate-note"] as const;
 export type MenuMainAction = (typeof MENU_MAIN_ACTIONS)[number];
 
 export type MenuOutcome =

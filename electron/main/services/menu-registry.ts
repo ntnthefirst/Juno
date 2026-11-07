@@ -21,6 +21,7 @@ import { referenceItems } from "../db/schema";
 import * as calendar from "./calendar";
 import * as clients from "./clients";
 import * as documents from "./documents";
+import * as notes from "./notes";
 import * as threads from "./mail-threads";
 import * as commands from "./project-commands";
 import * as runner from "./project-runner";
@@ -35,6 +36,7 @@ const OWN_NEW: Record<BlankArea, MenuEntry | null> = {
 	clients: { id: "new-client", label: "New client" },
 	projects: { id: "new-project", label: "New project" },
 	mail: { id: "new-message", label: "New message" },
+	notes: { id: "new-note", label: "New note" },
 	documents: { id: "new-document", label: "New document" },
 };
 
@@ -48,6 +50,15 @@ const EVERYWHERE: MenuEntry[] = [
 function blank(area: string, context: MenuRequest["context"]): MenuEntry[] {
 	if (!(BLANK_AREAS as readonly string[]).includes(area)) return [];
 	// The mail list has things to do to a list that no other screen has.
+	if (area === "notes") {
+		const [first, ...rest] = EVERYWHERE;
+		return [
+			{ id: "new-note", label: "New note" },
+			{ id: "new-page", label: "New page" },
+			...(first ? [{ ...first, separatorBefore: true }] : []),
+			...rest,
+		];
+	}
 	if (area === "mail") {
 		return [
 			{ id: "new-message", label: "New message" },
@@ -118,10 +129,12 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 		}
 
 		case "file": {
-			if (!(await documents.get(id, db))) return [];
+			const file = await documents.get(id, db);
+			if (!file) return [];
+			// A page has no file to hand to another program.
 			return [
 				{ id: "open", label: "Open" },
-				{ id: "open-in-default-app", label: "Open in the default app" },
+				...(file.sourceKind === "page" ? [] : [{ id: "open-in-default-app", label: "Open in the default app" } as const]),
 				REMOVE,
 			];
 		}
@@ -187,6 +200,17 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 				{ id: "add-event", label: "Add calendar event" },
 				{ id: "add-file", label: "Add file" },
 				{ id: "add-note", label: "Add note" },
+			];
+		}
+
+		case "note": {
+			const note = await notes.get(id, db);
+			if (!note) return [];
+			return [
+				note.pinnedAt ? { id: "unpin-note", label: "Unpin from the top" } : { id: "pin-note", label: "Pin to the top" },
+				{ id: "duplicate-note", label: "Duplicate", accelerator: "CommandOrControl+D" },
+				{ id: "move-to-project", label: "Move to a project" },
+				{ ...REMOVE, accelerator: "Delete" },
 			];
 		}
 

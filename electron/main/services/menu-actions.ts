@@ -15,6 +15,7 @@ import { getDb, type Db } from "../db";
 import * as documentActions from "./document-actions";
 import { todayIsoDate } from "./document-context";
 import * as projectActions from "./project-actions";
+import * as notes from "./notes";
 import * as projects from "./projects";
 import { addDays } from "./recurrence";
 import * as reminders from "./reminders";
@@ -25,6 +26,15 @@ export async function perform(request: MenuRequest, action: MenuMainAction, db: 
 			case "snooze-tomorrow":
 				await reminders.snooze(request.id, addDays(todayIsoDate(), 1), db);
 				return { type: "done" };
+
+			case "pin-note":
+			case "unpin-note":
+				await notes.update(request.id, { pinned: action === "pin-note" }, db);
+				return { type: "done" };
+
+			case "duplicate-note":
+				await notes.duplicate(request.id, db);
+				return { type: "done", message: "Note duplicated." };
 
 			case "open-in-default-app":
 				await documentActions.openPdf(request.id, db);

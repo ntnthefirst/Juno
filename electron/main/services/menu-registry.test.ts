@@ -7,6 +7,8 @@ import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import * as calendar from "./calendar";
 import * as clients from "./clients";
+import * as notes from "./notes";
+import * as pages from "./pages";
 import { entriesFor } from "./menu-registry";
 import * as projects from "./projects";
 import * as reminders from "./reminders";
@@ -103,6 +105,26 @@ describe("project, add and block menus", () => {
 			"Manage intros and outros",
 		]);
 		expect(await ask("block", "footer")).toEqual([]);
+	});
+});
+
+describe("note menu", () => {
+	it("offers Pin on a note and Unpin once it is pinned, and nothing for a note that is gone", async () => {
+		const note = await notes.create({ title: "Prices" }, db);
+		expect(ids(await ask("note", note.id))).toEqual(["pin-note", "duplicate-note", "move-to-project", "delete"]);
+		await notes.update(note.id, { pinned: true }, db);
+		expect(ids(await ask("note", note.id))[0]).toBe("unpin-note");
+		await notes.remove(note.id, db);
+		expect(await ask("note", note.id)).toEqual([]);
+	});
+
+	it("takes Open in the default app off a page, which has no file", async () => {
+		const page = await pages.create({}, db);
+		expect(ids(await ask("file", page.document.id))).toEqual(["open", "delete"]);
+	});
+
+	it("starts the Notes blank menu with a note and a page", async () => {
+		expect(ids(await ask("blank", "notes")).slice(0, 3)).toEqual(["new-note", "new-page", "new-event"]);
 	});
 });
 

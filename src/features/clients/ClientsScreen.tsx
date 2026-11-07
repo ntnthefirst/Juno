@@ -125,7 +125,9 @@ export function ClientsScreen() {
 
 	useEffect(() => {
 		let cancelled = false;
-		// Debounced so typing does not fire a query per keystroke.
+		// Debounced so typing does not fire a query per keystroke. Only while
+		// something is typed: opening the screen, or clearing the search, asks at
+		// once rather than showing an empty list for the length of the wait.
 		const id = setTimeout(() => {
 			fetchRows()
 				.then((rows) => {
@@ -134,12 +136,12 @@ export function ClientsScreen() {
 				.catch((error: unknown) => {
 					if (!cancelled) setLoad({ status: "error", message: messageOf(error) });
 				});
-		}, 150);
+		}, search.trim() ? 150 : 0);
 		return () => {
 			cancelled = true;
 			clearTimeout(id);
 		};
-	}, [fetchRows]);
+	}, [fetchRows, search]);
 
 	const refreshList = useCallback(() => {
 		fetchRows()

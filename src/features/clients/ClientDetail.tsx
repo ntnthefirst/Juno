@@ -21,6 +21,10 @@ import type {
 } from "@shared/types";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { ActionMenu } from "../../components/ActionMenu";
+import { Avatar } from "../../components/Avatar";
+import { ClientMail } from "./ClientMail";
+import { isOpenProjectStatus } from "@shared/project-status";
+import { clientLanguageLabel } from "@shared/client-language";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
@@ -98,22 +102,6 @@ function monthLabelOf(key: string): string {
 	return `${MONTHS[index] ?? month} ${year}`;
 }
 
-/** The glyph for one line of the timeline. A note's own kind picks the glyph
- *  among note, call and meeting; every other source has one glyph. */
-function iconForEntry(entry: ClientTimelineEntry): IconName {
-	if (entry.kind === "note") {
-		if (entry.variant === "call") return "phone";
-		if (entry.variant === "meeting") return "calendar";
-		return "note";
-	}
-	if (entry.kind === "mail") return "mail";
-	if (entry.kind === "document") return "documents";
-	if (entry.kind === "event") return "calendar";
-	if (entry.kind === "reminder") return "reminders";
-	if (entry.kind === "status") return "move-right";
-	return "projects";
-}
-
 type StatusNameProps = {
 	name: { label: string; tone: string | null } | null;
 };
@@ -122,14 +110,6 @@ type StatusNameProps = {
  *  tag, no box, no background. "No status" reads in the muted ink. */
 function StatusName({ name }: StatusNameProps) {
 	return <span className={statusTextClass(name?.tone ?? null)}>{name?.label ?? "No status"}</span>;
-}
-
-/** First and last initial, for the card's monogram. Never a photo. */
-function initialsOf(name: string): string {
-	const words = name.trim().split(/\s+/).filter(Boolean);
-	if (words.length === 0) return "?";
-	if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-	return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
 }
 
 /** A website is shown as typed but only ever opened over https, per the app's
@@ -454,8 +434,13 @@ export function ClientDetail({
 	const primaryPhone = phones.find((phone) => phone.isPrimary) ?? phones[0] ?? null;
 	const primaryAddress = addresses.find((address) => address.isPrimary) ?? null;
 
+	const openProjects = projects.filter((project) => isOpenProjectStatus(project.status?.key));
+	const changeTab = (id: TabId) => {
+		setTab(id);
+		onTabChange?.(id);
+	};
+
 	const totalEntries = Object.values(entryCounts).reduce((sum, count) => sum + count, 0);
-	const mailEntries = entries.filter((entry) => entry.kind === "mail");
 
 	const tabs: TabItem<TabId>[] = [
 		{ id: "overview", label: "Overview", count: null },
@@ -467,14 +452,9 @@ export function ClientDetail({
 
 	return (
 		<div>
-			<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
-				<div className="flex items-start gap-3">
-					<span
-						aria-hidden
-						className="flex h-10 w-10 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent-soft)] text-base font-[var(--weight-semibold)] text-[var(--accent)]"
-					>
-						{initialsOf(client.name)}
-					</span>
+			<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-6">
+				<div className="flex items-start gap-4">
+					<Avatar name={client.name} size={59} />
 
 					<div className="min-w-0 flex-1">
 						<div className="flex items-start justify-between gap-3">
@@ -509,7 +489,7 @@ export function ClientDetail({
 							</TitleBarSlot>
 						</div>
 
-						<div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-dense sm:grid-cols-2">
+						<div className="mt-3 flex flex-wrap items-center gap-x-12 gap-y-1.5 text-base">
 							{primaryEmail ? (
 								<div className="flex min-w-0 items-center gap-2">
 									<Icon name="mail" className="shrink-0 text-[var(--ink-muted)]" />
@@ -524,14 +504,6 @@ export function ClientDetail({
 									</a>
 								</div>
 							) : null}
-							{primaryPhone ? (
-								<div className="flex min-w-0 items-center gap-2">
-									<Icon name="phone" className="shrink-0 text-[var(--ink-muted)]" />
-									<span data-selectable className="tabular min-w-0 truncate">
-										{primaryPhone.phone}
-									</span>
-								</div>
-							) : null}
 							{primaryAddress?.city ? (
 								<div className="flex min-w-0 items-center gap-2">
 									<Icon name="address" className="shrink-0 text-[var(--ink-muted)]" />
@@ -540,37 +512,15 @@ export function ClientDetail({
 									</span>
 								</div>
 							) : null}
-							{client.website ? (
-								<div className="flex min-w-0 items-center gap-2">
-									<Icon name="external" className="shrink-0 text-[var(--ink-muted)]" />
-									<a
-										data-selectable
-										href={websiteHref(client.website)}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="min-w-0 truncate text-[var(--accent)] hover:text-[var(--accent-hover)]"
-									>
-										{client.website}
-									</a>
-								</div>
-							) : null}
-							{client.vatNumber ? (
-								<div className="flex min-w-0 items-center gap-2">
-									<span className="shrink-0 text-[var(--ink-faint)]">VAT</span>
-									<span data-selectable className="tabular min-w-0 truncate">
-										{client.vatNumber}
-									</span>
-								</div>
-							) : null}
 						</div>
 					</div>
 				</div>
 			</div>
 
-			<div className="mt-8">
+			<div className="mt-6">
 				<Tabs
 					label="Client"
-					tabs={tabs.map((entry) => ({ ...entry, countTone: "quiet" as const }))}
+					tabs={tabs}
 					value={tab}
 					onChange={(id) => {
 						setTab(id);
@@ -582,11 +532,107 @@ export function ClientDetail({
 			<div className="mt-6">
 				{tab === "overview" ? (
 					<div className="flex flex-col gap-10">
-						{client.notes && client.notes.trim().length > 0 ? (
-							<div className="text-dense">
-								<MarkdownNotes text={client.notes} />
+						<div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_420px]">
+							<section>
+								<h3 className="mb-2 text-h3">Details</h3>
+								<dl>
+									{[
+										{ label: "Email", value: primaryEmail?.email ?? null },
+										{ label: "Phone", value: primaryPhone?.phone ?? null },
+										{
+											label: "Address",
+											value: primaryAddress
+												? [primaryAddress.addressLine1, [primaryAddress.postalCode, primaryAddress.city].filter(Boolean).join(" ")]
+														.filter(Boolean)
+														.join(", ")
+												: null,
+										},
+										{ label: "Website", value: client.website, href: client.website ? websiteHref(client.website) : undefined },
+										{ label: "VAT number", value: client.vatNumber },
+										{ label: "Language", value: clientLanguageLabel(client.language) },
+									].map((row) => (
+										<div key={row.label} className="flex min-h-14 items-center gap-6 border-b border-[var(--line)]">
+											<dt className="w-32 flex-none text-base text-[var(--ink-muted)]">{row.label}</dt>
+											<dd data-selectable className="tabular min-w-0 flex-1 truncate text-base">
+												{row.value && row.value.length > 0 ? (
+													"href" in row && row.href ? (
+														<a
+															href={row.href}
+															target="_blank"
+															rel="noopener noreferrer"
+															className="text-[var(--accent)] hover:text-[var(--accent-hover)]"
+														>
+															{row.value}
+														</a>
+													) : (
+														row.value
+													)
+												) : (
+													"Not set"
+												)}
+											</dd>
+										</div>
+									))}
+								</dl>
+							</section>
+							<div className="flex flex-col gap-8">
+								<section>
+									<div className="mb-4 flex items-center justify-between gap-4">
+										<h3 className="text-h3">Open work</h3>
+										<button
+											type="button"
+											onClick={() => changeTab("projects")}
+											className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+										>
+											Projects
+										</button>
+									</div>
+									{openProjects.length === 0 ? (
+										<p className="text-base text-[var(--ink-muted)]">Nothing open for this client.</p>
+									) : (
+										<ul className="flex flex-col gap-3">
+											{openProjects.map((project) => (
+												<li key={project.id} className="flex items-center gap-3">
+													<Avatar name={project.name} size={24} shape="square" />
+													<button
+														type="button"
+														onClick={() => requestOpen({ kind: "project", id: project.id, name: project.name })}
+														className="min-w-0 flex-1 text-left"
+													>
+														<span className="block truncate text-base font-[var(--weight-medium)]">{project.name}</span>
+														{project.dueOn ? (
+															<span className="tabular block text-sm text-[var(--ink-muted)]">Due {formatDate(project.dueOn)}</span>
+														) : null}
+													</button>
+													{project.status ? <StatusBadge label={project.status.label} tone={project.status.tone} /> : null}
+												</li>
+											))}
+										</ul>
+									)}
+								</section>
+								<section>
+									<div className="mb-4 flex items-center justify-between gap-4">
+										<h3 className="text-h3">Notes</h3>
+										<span data-opens-panel>
+											<button
+												type="button"
+												onClick={() => onEditNote(null)}
+												className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+											>
+												New note
+											</button>
+										</span>
+									</div>
+									{client.notes && client.notes.trim().length > 0 ? (
+										<div className="text-document">
+											<MarkdownNotes text={client.notes} />
+										</div>
+									) : (
+										<p className="text-base text-[var(--ink-muted)]">No notes yet.</p>
+									)}
+								</section>
 							</div>
-						) : null}
+						</div>
 
 						<ScheduleSection clientId={clientId} showProject onOpenForm={onSchedule} />
 
@@ -656,7 +702,10 @@ export function ClientDetail({
 						onChanged={refresh}
 					/>
 				) : (
-					<EntryList title="Mail" entries={mailEntries} emptyText="No mail linked to this client yet." />
+					<ClientMail
+						clientId={clientId}
+						onNewMessage={() => onSendMail(client)}
+					/>
 				)}
 			</div>
 
@@ -738,7 +787,7 @@ function StatusMenuButton({ clientName, status, options, onChange }: StatusMenuB
 				{status ? (
 					<StatusBadge label={status.label} tone={status.tone} />
 				) : (
-					<span className="inline-block text-micro text-[var(--ink-muted)]">
+					<span className="inline-block text-sm text-[var(--ink-muted)]">
 						No status
 					</span>
 				)}
@@ -1092,11 +1141,15 @@ type ProjectsSectionProps = {
 function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionProps) {
 	return (
 		<section>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3 font-[var(--weight-medium)]">Projects</h3>
-				<Button size="dense" onClick={onAdd}>
-					Add project
-				</Button>
+			<div className="mt-6 mb-4 flex items-center justify-between gap-4">
+				<h3 className="text-h3">Projects</h3>
+				<button
+					type="button"
+					onClick={onAdd}
+					className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				>
+					New project
+				</button>
 			</div>
 
 			{projects.length === 0 ? (
@@ -1117,10 +1170,11 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 								title={`Open ${project.name}`}
 								className="-mx-2 min-w-0 flex-1 rounded-[var(--radius-md)] px-2 py-1 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-visible:bg-[var(--accent-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 							>
-								<div className="flex items-center gap-2">
-									<span className="truncate font-[var(--weight-medium)]">
-										{project.name}
-									</span>
+								<div className="flex items-center gap-3">
+									<Avatar name={project.name} size={24} shape="square" />
+									<div className="min-w-0 flex-1">
+										<span className="block truncate font-[var(--weight-medium)]">{project.name}</span>
+									</div>
 									{project.status ? (
 										<StatusBadge label={project.status.label} tone={project.status.tone} />
 									) : null}
@@ -1147,6 +1201,19 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 		</section>
 	);
 }
+
+type TimelineRow = { type: "month"; key: string } | { type: "entry"; entry: ClientTimelineEntry };
+
+/** The node on the line: iris for work, brass for what was due or signed, green for mail. */
+const DOT_TONE: Record<ClientTimelineKind, string> = {
+	project: "bg-[var(--accent)]",
+	event: "bg-[var(--accent)]",
+	reminder: "bg-[var(--seal)]",
+	document: "bg-[var(--seal)]",
+	mail: "bg-[var(--ok)]",
+	status: "bg-[var(--ink-faint)]",
+	note: "bg-[var(--ink-faint)]",
+};
 
 type TimelineTabProps = {
 	entries: ClientTimelineEntry[];
@@ -1192,10 +1259,19 @@ function TimelineTab({
 		];
 	}
 
+	// Month headings and entries in one run, so the line can be drawn through both.
+	const rows: TimelineRow[] = [];
+	entries.forEach((entry, index) => {
+		const month = monthKeyOf(entry);
+		const previous = index > 0 ? entries[index - 1] : null;
+		if (!previous || monthKeyOf(previous) !== month) rows.push({ type: "month", key: month });
+		rows.push({ type: "entry", entry });
+	});
+
 	return (
 		<div>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3 font-[var(--weight-medium)]">Timeline</h3>
+			<div className="mt-6 mb-6 flex items-center justify-between gap-4">
+				<h3 className="text-h3">Timeline</h3>
 				<span data-opens-panel className="flex gap-2">
 					<Button size="dense" onClick={onLogCall}>
 						Log a call
@@ -1210,69 +1286,76 @@ function TimelineTab({
 				</p>
 			) : (
 				<ul>
-					{entries.map((entry, index) => {
-						const month = monthKeyOf(entry);
-						const previous = index > 0 ? entries[index - 1] : null;
-						const showHeading = !previous || monthKeyOf(previous) !== month;
-						return (
-							<li key={entry.id}>
-								{showHeading ? (
-									<div className="sticky top-0 z-10 -mx-1 bg-[var(--surface)] px-1 py-1.5 text-overline uppercase text-[var(--ink-faint)]">
-										{monthLabelOf(month)}
+					{rows.map((row, index) => {
+						const first = index === 0;
+						const last = index === rows.length - 1;
+						// The line runs through every row, starting level with the first
+						// node and stopping at the last one (Timeline graph, 83:7194).
+						const line = (
+							<span
+								aria-hidden
+								className={`absolute left-[11px] w-[2px] bg-[var(--line-strong)] ${first ? "top-5" : "top-0"} ${last ? "h-5" : "bottom-0"}`}
+							/>
+						);
+						if (row.type === "month") {
+							return (
+								<li key={`month-${row.key}`} className="flex items-start gap-4">
+									<div className="relative w-6 flex-none self-stretch">
+										{line}
+										<span
+											aria-hidden
+											className="absolute top-[13px] left-[5px] h-3.5 w-3.5 rounded-[var(--radius-full)] border-2 border-[var(--line-strong)] bg-[var(--surface)]"
+										/>
 									</div>
-								) : null}
-								<div
-									className="flex items-start gap-3 border-b border-[var(--line)] py-3"
-									onContextMenu={
-										entry.kind === "note"
-											? (event) => {
-													setMenuEntry(entry);
-													open(event);
-												}
-											: undefined
-									}
-								>
+									<p className="min-w-0 flex-1 pt-2.5 pb-1.5 text-overline uppercase text-[var(--ink-muted)]">
+										{monthLabelOf(row.key)}
+									</p>
+								</li>
+							);
+						}
+						const entry = row.entry;
+						return (
+							<li
+								key={entry.id}
+								className="flex items-start gap-4"
+								onContextMenu={
+									entry.kind === "note"
+										? (event) => {
+												setMenuEntry(entry);
+												open(event);
+											}
+										: undefined
+								}
+							>
+								<div className="relative w-6 flex-none self-stretch">
+									{line}
 									<span
 										aria-hidden
-										className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--sunken)] text-[var(--ink-muted)]"
-									>
-										<Icon name={iconForEntry(entry)} size={14} />
+										className={`absolute top-3.5 left-1.5 h-3 w-3 rounded-[var(--radius-full)] ${DOT_TONE[entry.kind]}`}
+									/>
+								</div>
+								<div className="min-w-0 flex-1 pt-2 pb-4">
+									<span data-selectable className="block truncate text-lg">
+										{entry.kind === "status" ? (
+											<>
+												Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
+												<StatusName name={entry.statusChange?.to ?? null} />
+											</>
+										) : (
+											entry.title
+										)}
 									</span>
-									<div className="min-w-0 flex-1">
-										<div className="flex items-start justify-between gap-2">
-											<div className="min-w-0">
-												<span
-													data-selectable
-													className="block truncate text-dense font-[var(--weight-medium)]"
-												>
-													{entry.kind === "status" ? (
-														<>
-															Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
-															<StatusName name={entry.statusChange?.to ?? null} />
-														</>
-													) : (
-														entry.title
-													)}
-												</span>
-												{entry.detail ? (
-													<span
-														data-selectable
-														className="mt-0.5 block truncate text-sm text-[var(--ink-muted)]"
-													>
-														{entry.detail}
-													</span>
-												) : null}
-											</div>
-											<div className="flex flex-none items-center gap-1">
-												<span className="tabular text-micro text-[var(--ink-faint)]">
-													{dateLabelOf(entry)}
-												</span>
-												{entry.kind === "note" ? (
-													<MenuButton ariaLabel={`${entry.title} actions`} items={itemsFor(entry)} />
-												) : null}
-											</div>
-										</div>
-									</div>
+									{entry.detail ? (
+										<span data-selectable className="mt-0.5 block truncate text-base text-[var(--ink-muted)]">
+											{entry.detail}
+										</span>
+									) : null}
+								</div>
+								<div className="flex flex-none items-start gap-1 pt-1.5">
+									<span className="tabular text-base text-[var(--ink-muted)]">{dateLabelOf(entry)}</span>
+									{entry.kind === "note" ? (
+										<MenuButton ariaLabel={`${entry.title} actions`} items={itemsFor(entry)} />
+									) : null}
 								</div>
 							</li>
 						);
@@ -1292,55 +1375,5 @@ function TimelineTab({
 				<ContextMenu at={at} items={itemsFor(menuEntry)} ariaLabel={`${menuEntry.title} actions`} onClose={close} />
 			) : null}
 		</div>
-	);
-}
-
-type EntryListProps = {
-	title: string;
-	entries: ClientTimelineEntry[];
-	emptyText: string;
-};
-
-/** A read-only view of one kind of timeline entry. Documents and mail are
- *  changed on their own screens; this is where they show up for this client. */
-function EntryList({ title, entries, emptyText }: EntryListProps) {
-	return (
-		<section>
-			<h3 className="mb-4 text-h3 font-[var(--weight-medium)]">{title}</h3>
-			{entries.length === 0 ? (
-				<p className="text-dense text-[var(--ink-muted)]">{emptyText}</p>
-			) : (
-				<ul>
-					{entries.map((entry) => (
-						<li
-							key={entry.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
-						>
-							<div className="flex min-w-0 items-start gap-3">
-								<span
-									aria-hidden
-									className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--sunken)] text-[var(--ink-muted)]"
-								>
-									<Icon name={iconForEntry(entry)} size={14} />
-								</span>
-								<div className="min-w-0">
-									<span data-selectable className="block truncate font-[var(--weight-medium)]">
-										{entry.title}
-									</span>
-									{entry.detail ? (
-										<span data-selectable className="mt-0.5 block truncate text-[var(--ink-muted)]">
-											{entry.detail}
-										</span>
-									) : null}
-								</div>
-							</div>
-							<span className="tabular shrink-0 text-micro text-[var(--ink-faint)]">
-								{dateLabelOf(entry)}
-							</span>
-						</li>
-					))}
-				</ul>
-			)}
-		</section>
 	);
 }

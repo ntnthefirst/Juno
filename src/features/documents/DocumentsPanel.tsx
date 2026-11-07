@@ -123,7 +123,7 @@ export function DocumentsPanel({
 			}`}
 		>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3 font-[var(--weight-medium)]">Documents</h3>
+				<h3 className="text-h3">Documents</h3>
 				<MenuButton
 					ariaLabel="Add a document"
 					items={[
@@ -139,6 +139,7 @@ export function DocumentsPanel({
 							},
 						},
 					]}
+					label="New"
 					icon="add"
 				/>
 			</div>
@@ -162,17 +163,23 @@ export function DocumentsPanel({
 			) : (
 				<ul>
 					{records.map((record) => (
-						<li key={record.id} className="border-b border-[var(--line)] py-2 text-dense">
+						<li key={record.id} className="border-b border-[var(--line)] py-3 text-base">
 							<div className="flex items-center justify-between gap-4">
 							<div className="flex min-w-0 items-center gap-3">
 								<span
 									aria-hidden
-									className="flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--sunken)] text-[var(--ink-muted)]"
+									className={`flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] ${
+										record.sourceKind === "page"
+											? "bg-[var(--accent-soft)] text-[var(--accent)]"
+											: record.sourceKind === "imported"
+												? "bg-[var(--risk-soft)] text-[var(--risk)]"
+												: "bg-[var(--sunken)] text-[var(--ink-muted)]"
+									}`}
 								>
-									<Icon name="documents" size={14} />
+									<Icon name={record.sourceKind === "page" ? "edit" : "documents"} size={16} />
 								</span>
 								<div className="min-w-0">
-									<span data-selectable className="block truncate font-[var(--weight-medium)]">
+									<span data-selectable className="block truncate text-base font-[var(--weight-medium)]">
 										{record.title}
 									</span>
 									<span className="flex items-center gap-2 text-[var(--ink-muted)]">

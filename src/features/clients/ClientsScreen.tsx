@@ -15,7 +15,10 @@ import type {
 import type { Crumb } from "../../app/breadcrumb-context";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { Avatar } from "../../components/Avatar";
+import { Icon } from "../../components/Icon";
+import { MenuButton } from "../../components/Menu";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
@@ -110,6 +113,8 @@ export function ClientsScreen() {
 	// A mail to a client opens the composer here, addressed to their primary address.
 	const [compose, setCompose] = useState<ComposeSeed | null>(null);
 	const [view, setView] = useState<ClientView>(EMPTY_VIEW);
+
+	const filtersOn = JSON.stringify({ ...view, sort: null }) !== JSON.stringify({ ...EMPTY_VIEW, sort: null });
 
 	const fetchRows = useCallback(
 		() => window.juno.clients.list({ search: search.trim() || undefined }),
@@ -522,16 +527,41 @@ export function ClientsScreen() {
 	return (
 		<div className="relative flex h-full flex-col p-8">
 			<div className="mb-6 flex w-full items-center justify-end gap-4">
-				<div className="flex items-center gap-3">
+				<div className="relative">
+					<span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)]">
+						<Icon name="search" />
+					</span>
 					<input
-						type="text"
+						type="search"
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 						placeholder="Search clients"
 						aria-label="Search clients"
-						className="w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+						className="h-[36px] w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-9 pr-3 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 					/>
 				</div>
+				<TitleBarSlot side="overflow">
+					<MenuButton
+						ariaLabel="How this list is shown"
+						size="dense"
+						items={[
+							{
+								id: "clear-filters",
+								label: "Clear filters",
+								icon: "close",
+								disabled: !filtersOn,
+								onSelect: () => setView({ ...EMPTY_VIEW, sort: view.sort }),
+							},
+							{
+								id: "reset-sort",
+								label: "Reset sorting",
+								icon: "undo",
+								disabled: view.sort === null,
+								onSelect: () => setView({ ...view, sort: null }),
+							},
+						]}
+					/>
+				</TitleBarSlot>
 			</div>
 
 			<div className="w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("clients")}>
@@ -788,14 +818,12 @@ function Empty({
 		<EmptyState
 			icon="clients"
 			title="No clients yet"
-			description="Every business you work with, their contacts, projects and paperwork in one place."
+			description="Add your first client to start a record, a project or a document."
 			action={{
-				label: "New client",
+				label: "Add client",
 				icon: "add",
 				onClick: onAdd,
-				shortcut: ["Ctrl", "N"],
 			}}
-			tip="Client records link contracts, mail threads and dates automatically."
 		/>
 	);
 }

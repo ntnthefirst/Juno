@@ -44,7 +44,9 @@ sustainable rather than a trial period.
 | | |
 | --- | --- |
 | **Clients** | One record per client, with contacts, projects and every document and mail thread attached to it |
-| **Documents** | Fill your own `.docx` contract templates from a client record, output PDF, stamp a signature image with a timestamp and an audit trail |
+| **Projects** | A piece of work, with or without a client: notes, files, links, the mail filed under it, time entries and a calendar of its dates |
+| **Notes** | Quick notes and written pages, saved as you type, each optionally kept under a client or a project |
+| **Documents** | Fill your own templates (laid out on a canvas, or imported from `.docx`) from a client record, output PDF, import PDFs, keep every version, stamp a signature image or sign with your own certificate, with an audit page beside the file |
 | **Mail** | Pull several IMAP accounts into local storage, read and search them offline, link any thread to the client it belongs to, send from designed HTML templates |
 | **Calendar** | Deadlines and appointments tied to projects, with `.ics` import and export |
 | **Reminders** | Paperwork that is due, invoices that need writing, payments that need making. Juno tells you; it does not act on its own |

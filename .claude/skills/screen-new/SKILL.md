@@ -45,8 +45,8 @@ The second feature that needs a piece is what moves it to `src/components/`.
 Don't pre-abstract the first one, don't copy-paste the second one. A shared
 component takes everything through props and hardcodes no domain copy.
 
-One component per file, `kebab-case.tsx`, default export, `PascalCase` name
-matching the file. Props type named `<Name>Props`, declared first after the
+One component per file, `PascalCase.tsx`, a named export matching the file. Props
+type named `<Name>Props`, declared first after the
 imports, never an inline signature type.
 
 ## Step 2 — Data access, only through the bridge
@@ -55,7 +55,7 @@ imports, never an inline signature type.
 const clients = await window.juno.clients.list({ includeArchived: false });
 ```
 
-- **Only the preload bridge.** No `better-sqlite3` import, no Drizzle import, no
+- **Only the preload bridge.** No `node:sqlite` import, no Drizzle import, no
   `ipcRenderer` used directly, no service import
   ([architecture.md](../../rules/architecture.md)).
 - **No credential ever reaches this layer.** There is no bridge call that returns

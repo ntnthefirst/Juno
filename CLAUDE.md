@@ -20,7 +20,7 @@ all of it. No invoicing, no payments, no cloud requirement.
 | --- | --- |
 | Shell | **Electron**, React 19, TypeScript, Vite |
 | Styling | **Tailwind CSS v4**, tokens in `brand/tokens.css` |
-| Storage | **SQLite** via `better-sqlite3`, typed with **Drizzle** |
+| Storage | **SQLite** through `node:sqlite` behind a shim (decision 18), typed with **Drizzle** |
 | Secrets | Electron `safeStorage`, main process only |
 | Mail | `imapflow`, `mailparser`, `nodemailer` |
 | Documents | `docxtemplater`, Electron `printToPDF`, `pdf-lib` |

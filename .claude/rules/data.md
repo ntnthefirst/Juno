@@ -5,18 +5,18 @@ trustworthy and syncable later.
 
 ---
 
-## 1. SQLite via better-sqlite3, typed with Drizzle
+## 1. SQLite through `node:sqlite`, typed with Drizzle
 
-Decision 3 in [../../docs/decisions.md](../../docs/decisions.md). One file, no
+Decisions 3 and 18 in [../../docs/decisions.md](../../docs/decisions.md). One file, no
 server, synchronous API, generated migrations.
 
-- Tables are declared in `electron/main/db/schema.ts`. That file is the schema.
+- Tables are declared in `electron/main/db/schema/`. That folder is the schema.
   There is no second source of truth and no hand-written `CREATE TABLE`.
 - Types come from the schema: `type Client = typeof clients.$inferSelect;` and
   `typeof clients.$inferInsert` for writes. Never retype a row shape by hand.
 - Queries live in `electron/main/services/`. A Drizzle query in a component, an
   IPC handler or an MCP tool is an architecture bug ([architecture.md](architecture.md)).
-- `better-sqlite3` is synchronous, so a long query blocks the main process and
+- The `node:sqlite` shim is synchronous, so a long query blocks the main process and
   therefore the window. Keep queries indexed and bounded; paginate lists.
 - Enable WAL mode and foreign keys once, when the connection opens:
   `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;`.
@@ -47,7 +47,7 @@ So **order by the timestamp and then by `id`** wherever the order is meaningful.
 A query that orders on `created_at` alone is relying on SQLite handing back
 rowid order, which it does not promise.
 
-Put them in a shared `baseColumns` object in `schema.ts` and spread it into every
+Put them in a shared `standardColumns` object in `db/columns.ts` and spread it into every
 table, so a new table cannot forget one. `created_at` and `updated_at` are set in
 the service, not by a DB default, so the value is the same on every platform.
 

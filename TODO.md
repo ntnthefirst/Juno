@@ -1,11 +1,17 @@
 # Todo
 
-Things that are deliberately not done yet, and what unblocks each. Anything with
-a **you** tag needs Nathan rather than a session.
+What is genuinely still open. The first part is what only Nathan can do or
+decide. The second is what code could still do. The third is what is left out
+on purpose, so nobody builds it by accident.
+
+The Figma screen passes are finished: every frame has been compared with the
+app and what still differs is listed at the end, with the reason it was left.
 
 ---
 
-## 1. Your own real document templates - **you**
+## A. Only you can do these
+
+### A1. Your own real document templates
 
 Nothing that ships is fit to send to a client. A new install gets one example
 document template and it is a specimen. An install that still has the five
@@ -13,50 +19,30 @@ invented templates from phase 1 (`nda`, `development_agreement`,
 `hosting_agreement`, `project_scope`, `addendum`) keeps them as they are, and
 they are specimens too.
 
-**Still yours.** Write your real contract templates in the app, from the
-example or from nothing. The placeholder syntax and the fields are in
-`docs/templates.md`. **Do not send a document generated from an unreviewed
-template to a client.** That is what the banner is for.
+Write your real contract templates in the app, from the example or from
+nothing. The placeholder syntax and the fields are in `docs/templates.md`. **Do
+not send a document generated from an unreviewed template to a client.** That
+is what the banner is for.
 
-## 2. Decide what the in-app assistant runs on - **you**, parked
+### A2. Things that need a real account, client or program
 
-**Parked on purpose.** Not now; picked up later. Until then an external agent
-does the job, as below.
-
-Phase 6 is built except its assistant panel. Everything the panel would drive
-is there: 170 tools, the approval gate, briefings and automations. What it needs
-and nothing else does is a model, which means three answers from you.
-
-- **Which provider**, and whether Juno ever talks to one at all. PLAN.md is
-  binding that the app opens, syncs and works with no key configured, so the
-  panel is additive and absent by default.
-- **Where the key lives.** `safeStorage`, like a mail password, by decision 6.
-  Nothing about a key belongs in `.env` or the build.
-- **What it may do unattended.** Nothing changes about the gate: an assistant
-  is a caller like any other and its side-effectful calls park for approval.
-
-Until then an external agent does the same work. Connect Claude Desktop
-(an extension) or Claude Code (an address) under Settings > MCP. That also
-answers phase 6's done-when in PLAN.md.
-
-## 3. Things only you can try - **you**
-
-Everything decided and buildable in this section is built. What is left needs
-your hands, a real account or a real client, rather than code.
+Everything decided and buildable here is built. What is left needs your hands.
 
 - **No real mail server has been used yet.** Reading and sending are proven
-  against a mailbox and a transport held in memory.
+  against a mailbox and a transport held in memory, which never disagree with
+  the RFCs. Expect the first real account to find something the fakes could not.
 - **No other calendar has read a Juno .ics file yet.** Export a month, open
   it in Google Calendar or Outlook, and check the moved occurrence of a
   recurring event after the October change. Then import an Outlook export the
   other way; its Windows zone names are handled through the file's VTIMEZONE,
   which is tested against a hand-written one and not yet a real one.
 - **Claude Desktop has not installed the extension yet.** Claude Code
-  connects by address and works. Press Connect next to Claude Desktop in
-  Settings > MCP, install, paste the token, and call a tool from a chat. Then
-  close Juno, check the chat says Juno is not running, and open it again.
+  connects by address and works. Press Connect next to Claude Desktop under
+  Settings > MCP > Connect a client, install, paste the token, and call a tool
+  from a chat. Then close Juno, check the chat says Juno is not running, and
+  open it again.
 - **The example mail template has not been read in a real mail client yet.**
-  Use it on a client whose address is yours (Mail templates, the example,
+  Use it on a client whose address is yours (Mail, Styled mail, the example,
   Use), create the draft and send it to yourself. Put a real logo and a real
   photo address in first: the two at example.com will not load. Then open it in
   Gmail on a phone and in Outlook on Windows, and write down what each shows.
@@ -75,8 +61,7 @@ your hands, a real account or a real client, rather than code.
   shortcut from another program, including the message when another program
   already owns the combination. Settings > General > Notifications and tray.
 - **No mailbox rule has run against a real server yet.** The rules (Settings >
-  Mail accounts > an account) are proven against a mailbox held in memory, which
-  never disagrees with a real server about what a move or a flag does. Use a
+  Mail accounts > an account) are proven against a mailbox held in memory. Use a
   spare account first, not your working one. Connect it and let the first sync
   finish, and check that none of the mail already there is touched. Write a rule
   for your own address that marks read, flags and moves to a folder, send
@@ -88,13 +73,93 @@ your hands, a real account or a real client, rather than code.
   and whether it answered the move with the new UID or only at the next sync.
 - **No real Word file has been imported yet.** The reader is tested against
   Mammoth's own output and a hand-built `.docx`. Import one of your contracts
-  (Templates, Import Word file) and write down what comes across wrong.
+  (Documents, Templates, Import Word file) and write down what comes across
+  wrong.
 - **No component has been used on a real contract yet.** Components are proven
   through the services and the smoke walk. Make your letterhead as one, place it in
   two templates, change it, and check both templates lose their review and a
   document made before the change still reads as it did.
+- **The release itself.** `npm run smoke:packaged` and an installer on a clean
+  machine, then the first published release, are yours to run.
 
-## 4. Not tasks
+### A3. Decisions that are yours
+
+- **What the in-app assistant runs on (parked on purpose).** Phase 6 is built
+  except its assistant panel. Everything it would drive is there: more than 200
+  tools, the approval gate, briefings and automations. What it needs and nothing
+  else does is a model, which means three answers. Which provider, and whether
+  Juno ever talks to one at all (the app must open, sync and work with no key
+  configured, so the panel is additive and absent by default). Where the key
+  lives (`safeStorage`, like a mail password, decision 6, never `.env` or the
+  build). What it may do unattended (nothing changes about the gate). Until then
+  an external agent does the same work, connected under Settings > MCP.
+- **itsme and eID signing.** A digital signature uses a .p12 or .pfx
+  certificate imported under Settings > Documents > Digital signature. itsme
+  needs an agreement and client credentials, and the eID key never leaves the
+  card, so it needs a card reader driver and a native module. Needs an itsme or
+  signing-provider agreement, or a decision to take on eID through PKCS#11
+  (decision 38).
+- **The mascot.** Parked. Two attempts were rejected: a hand-drawn set
+  (`brand/mascot`, delete it) and ten free CC0 outline candidates from
+  Openclipart (`brand/mascot-candidates`, contact sheet in `preview.html`,
+  licences in `SOURCES.md`), none of which was liked. Nothing is chosen, and
+  the design still uses the stand-in mark. The next attempt needs a different
+  source or a commissioned drawing, and you pick the direction and the artwork.
+  Once chosen: files in `brand/mascot/` with `SOURCES.md` and the licence text,
+  `brand/BRAND.md` and `brand/logo/` updated, `npm run icons`, poses in
+  `components/EmptyState.tsx`, `components/LoadingScreen.tsx` and
+  `components/LockScreen.tsx`, and the splash and setup windows drawn with it.
+  No raster in the renderer bundle, no text inside the SVGs, animation only for
+  loading with `prefers-reduced-motion` honoured (already global).
+
+### A4. Work in the Figma file
+
+The file is read only from the code side. These are yours to draw or tidy.
+
+- **Draw** the document-from-template window, the Sign flow (place the stamp,
+  sign digitally, the audit page), the Notes empty state (the screen uses the
+  shared empty state until it is drawn), and a home for automations (they are
+  the Agent screen's third tab until then).
+- **Place the mascot** in the logo frames, the splash, setup, lock and every
+  empty state, once one is chosen.
+- **Settle the title bar height.** The Title Bar component, the main window
+  frames and the Settings frames draw 40px, and the Setup frames draw 44. The
+  app draws 40 everywhere, so only Setup differs. Pick one and the other side
+  follows.
+- **Small overflows left in components,** all a few pixels: Stat Card (91 tall
+  in an 88px slot), Notice (45 in 40), Suggestion Bar (59 in 56), Toggle (43 in
+  40), Setting Row (64 in 56), Request Card (183 in 160). Make them hug.
+- **Component upkeep.** Re-stack the Components page sections with an 80px gap
+  and check for overlaps, since the Settings rebuild added sets (Settings Nav
+  Row, Settings Search, Editor Tool, Block Menu, Block Menu Row).
+- **Frame names** in the Settings row are the old page names (`Your business`,
+  `Documents`, `MCP`, `Agent`). Rename them to the page each now shows (Your
+  details, Signature image, What an agent can do, Permissions).
+
+---
+
+## B. What code could still do
+
+Nothing here needs a decision, only time.
+
+- **The walkthrough has no Notes step.** `features/onboarding/Walkthrough.tsx`
+  lists the places from Overview to Documents without Notes, which became the
+  seventh place on the rail (decision 61).
+- **No detector offers a reminder.** The Suggestion Bar frame has an "Add
+  reminder" kind; the mail suggestions detect calendar and project links only.
+- **Scans.** A PDF with no text layer cannot be matched to a document, only
+  imported, until there is OCR.
+- **Rotated pages.** A page with a rotation is refused by the stamp, with a
+  message. Rotate it upright first.
+- **A trust check and a timestamp for digital signatures.** The certificate is
+  checked for a key, a validity period and its intended use. It is not checked
+  against a trust list, and no timestamp authority is used, so a signature does
+  not carry a trusted time. Adding both would make it verifiable after the
+  certificate expires.
+
+---
+
+## C. Not tasks
 
 Written down so nobody builds them by accident.
 
@@ -106,182 +171,37 @@ Written down so nobody builds them by accident.
 - **An automation cannot pass one step's result to the next.** Anything that
   needs the output of a previous step is a job for an agent, which can read and
   then decide, rather than for a recording.
+- **The branch `wip/mail-phrases` is a reference only.** Its model of greetings
+  differs from the intros and outros that were built (decision 55) and it is not
+  to be merged.
+- **A picture cannot be added to a page by an agent.** Only a person picks a
+  file (decision 68).
 
-## 5. Mail: greetings for every message
+### Where the app differs from the frames on purpose
 
-Greetings and sign-offs became intros and outros in the composer, and are
-built (decision 55), following the design instead of the static-text plan that
-was written here before. The service is `services/mail-blocks.ts`, the screens
-are in `src/features/mail/blocks/`. The unfinished branch `wip/mail-phrases`
-is kept as a reference only: its model differs and it is not to be merged.
+Each of these was compared with its frame and kept, for the reason given.
 
----
-
-## Signing: what is deliberately not there
-
-- **itsme and eID.** A digital signature uses a .p12 or .pfx certificate the
-  owner imports in Settings > Documents. itsme needs an agreement and client
-  credentials, and the eID key never leaves the card, so it needs a card reader
-  driver and a native module. **You**: an itsme or signing-provider agreement, or
-  a decision to take on eID through PKCS#11. See decision 38.
-- **A trust check.** The certificate is checked for a key, a validity period
-  and its intended use. It is not checked against a trust list, and no
-  timestamp authority is used, so a signature does not carry a trusted time.
-  Adding both is what would make it verifiable after the certificate expires.
-- **Deleting a version.** Versions are only ever added. Removing one changes
-  what the document opens as, so it needs the same confirmation as any delete.
-- **Scans.** A PDF with no text layer cannot be matched to a document, only
-  imported, until there is OCR.
-- **Rotated pages.** A page with a rotation is refused by the stamp, with a
-  message. Rotate it upright first.
-
-## 8. The Figma design: what to build, and exactly how
-
-The design file goes further than the app, and in a few places the app is ahead
-of it. This section is the hand-over. Every package below can be picked up on
-its own by someone who has read this file, `CLAUDE.md` and the rules it links.
-
-Nothing in section 8 is started unless it says so.
-
-### 8.0 How to work from this section
-
-**The design file.** `https://www.figma.com/design/NtjBTCWVPZ8DGghqdCxOeR/Juno`
-(file key `NtjBTCWVPZ8DGghqdCxOeR`). Windows only for now. Three pages:
-Stylesheet (`1:2`, palette, type, spacing, radius, logo), Components (`0:1`) and
-Screens (`1:3`).
-
-**Reading a node.** A node id is written `84:8459`. In a link it is
-`?node-id=84-8459`. With the Figma tools, call `get_design_context` for the code
-view and `get_screenshot` for the picture, with the file key above and the node
-id. Screen frames are 1440 by 940 (settings windows 888 by 664, new-record
-windows 720 wide) and are named `NN Screen / State`. Treat a screenshot as the
-truth for layout and the text in it as the truth for copy, except where a
-package says the copy is a placeholder.
-
-**The design is the reference for values** (decision 53). The tokens already match
-it, so use the token utilities and the text styles (`text-h1` to `text-overline`),
-never a pixel read off a frame. Take behaviour from the package text below.
-
-**Every package follows the same rules.**
-
-- One capability is a service function first, then an IPC handler and an MCP tool
-  in the same commit (decision 2, `.claude/rules/architecture.md`,
-  `.claude/rules/mcp.md`). A screen with no tool behind it is unfinished, except
-  where the package says "interface only".
-- A new table has the five columns and a soft-delete filter on every read
-  (`.claude/rules/data.md`). A schema change is a migration made with
-  `/migration-new`.
-- Anything that sends, signs, files or deletes is confirmed in the service and
-  never fires unattended (`.claude/rules/mcp.md` section 4).
-- The interface is English, anything a client reads is Dutch (Belgium), and the
-  copy has no em dashes, no exclamation marks and none of the phrases in
-  `.claude/rules/writing.md`. Run its section 7 sweep before a hand-off.
-- Styling uses tokens only, rows are 36px, numbers are tabular, both themes get
-  looked at (`.claude/rules/styling.md`). A form is a page, not a modal.
-- A new shortcut goes in `SHORTCUT_GROUPS` in `lib/shortcuts.ts` in the same
-  commit. A new settings section gets an entry in `features/settings/search.ts`
-  and an anchor in `features/settings/pages.ts`.
-- Done means `npm run check` and `npm run smoke` clean, the screen looked at in
-  both themes with `JUNO_SMOKE_DEMO=1 npm run smoke`, a test for the service
-  function, and the MCP host test passing (`.claude/rules/verify.md` section 5).
-- One commit per logical unit, no attribution of any kind, no push, no PR unless
-  asked (`.claude/rules/git.md`). Commit this file's changes separately from code.
-
-**Size tags.** S is under a day, M is a few days, L is a week or more. **you**
-means a decision or a thing only Nathan can do, as at the top of this file.
-
-**Order.** The decisions in 8.1 come first, because three packages are blocked
-on them. After that the packages are independent unless one says "needs".
-A sensible order is 8.2 package 5, then 7, 8, then 9.
-
-### 8.1 Decisions to take first - **you**
-
-Each one is written into `docs/decisions.md` (next free number is 63) in the same commit as
-the code that depends on it.
-
-7. **Which wins, the tokens or the design.** Taken: the design (decision 53).
-
-### 8.2 Packages
-
-#### Package 10. The mascot (M, partly needs you)
-
-**State.** Parked. Two attempts were rejected: a hand-drawn set (`brand/mascot`,
-delete it) and ten free CC0 outline candidates from Openclipart
-(`brand/mascot-candidates`, contact sheet in `preview.html`, licences in
-`SOURCES.md`), none of which was liked. Nothing is chosen, and the design still
-uses the stand-in mark. The search found no stand-alone character doing work in
-outline style and no friendly monster, so the next attempt needs a different
-source or a commissioned drawing. **you** pick the direction and the artwork.
-
-**Behaviour.** One outline character, called Juno, drawn with `currentColor`
-strokes so it themes. It replaces the logo mark. Its head alone is the app icon
-and tab icon (readable at 16px). Full-body poses fill empty states (no clients,
-no mail, no notes, nothing found, inbox zero), loading and syncing, the lock
-screen (sleeping), the splash, the first run and the update dialog.
-
-**Build.** Put the chosen files in `brand/mascot/` with `SOURCES.md` and the
-licence text. Update `brand/BRAND.md` (name, character, use rules, where it may
-and may not appear) and `brand/logo/`. Run `npm run icons` for the application
-icon and installer art. Place the poses in `components/EmptyState.tsx`,
-`components/LoadingScreen.tsx` and `components/LockScreen.tsx`, and draw the
-splash and setup windows with it. No raster in the renderer bundle, no text inside
-the SVGs, animation only for loading and only with `prefers-reduced-motion` honoured
-(already global in `global.css`).
-
-**Done when.** Every empty state in the design list above shows a pose, the icon
-reads at 16px in both themes, and `SOURCES.md` names a licence that allows this
-use for every file.
-
-### 8.5 Open design work in Figma
-
-Not code, but the packages above wait on some of it.
-
-- **Draw** the document-from-template window, the Sign flow (place the stamp, sign
-  digitally, the audit page), the Notes empty state (the screen uses the shared empty state until it is drawn), and a home for automations.
-- **Place the mascot** (package 10) in the logo frames on the Stylesheet page, the
-  splash, setup, lock and every empty state, once one is chosen.
-- **Settings, setup, splash and lock, where the app and the frames still differ.** The frame
-  `Signature image` draws a switch for "Keep every version"; the app says every version is
-  kept and has no control, since turning it off would delete history (decision 69). The
-  Mail step of setup draws three fields and an Add account button; the app opens the
-  account form in Settings instead, because an account needs SMTP and a connection test.
-  The Security frame draws Lock, Backup and Agent log on one page under a nav that lists
-  two; the app puts the agent log and Recent on the Backup page. The Help and about frame
-  draws no About card, and the app keeps it (version and database path). Mail accounts
-  rows keep Pause, Edit and Remove beside the status badge, which the frame omits. The
-  title bar of the setup and settings windows is 40px, the frames draw 44.
-- **Documents, Templates, Agent and Notes, where the app and the frames still differ.**
-  The viewer frame draws a pencil in the title bar for a generated document, which has
-  no edit (a new version is the way), a viewer bar 125px tall (the app keeps 48) and the
-  details as plain text (the app keeps the status, client and project as fields, and the
-  template and timeline under them). The Templates frame has no search row and no
-  Components button (the app keeps the search, and Components is in the title bar's
-  more menu). The mail editor frame draws a reduced layers and design panel, where the
-  editor has breakpoints, spacing, typography and a code view. The Notes list frame
-  says "Previous 7 days" where the app uses the shared day split. A picture cannot be
-  added by an agent, since only a person picks a file.
-- **Small overflows left in components,** all a few pixels: Stat Card (91 tall in
-  an 88px slot), Notice (45 in 40), Suggestion Bar (59 in 56), Toggle (43 in 40),
-  Setting Row (64 in 56), Request Card (183 in 160). Make them hug.
-- **Component upkeep.** After the Settings rebuild the Components page has the
-  new sets (Settings Nav Row, Settings Search, Editor Tool, Block Menu, Block
-  Menu Row). Re-stack the sections with an 80px gap and check for overlaps.
-- **Frame names** for the Settings row are the old page names (`Your business`,
-  `Documents`, `MCP`, `Agent`). Rename them to the page each now shows (Your
-  details, Signature image, What an agent can do, Permissions).
-
-- **Mail, where the app and the frames still differ.** The composer toolbar has an
-  emoji button the frame does not draw. The Suggestion Bar frame has a reminder
-  kind ("Add reminder") and no detector offers one. The intros and outros page keeps
-  a second help line about a variable with no value, which the frame leaves out. The
-  reader draws a message on a white sheet in dark, because the sanitised document
-  carries its own colours (`mail-sanitise.ts`); the frame has no dark
-  reading screen.
-
-### 8.6 What is already built and matches the design
-
-So nobody redoes it. The settings window already has the nav the design now shows
-(search, groups, pages under a guide line, a breadcrumb): `features/settings/
-SettingsNav.tsx` and `pages.ts`. The icon rail is a fixed 56px strip of icons with
-tooltips and no other state, which is final. Context for these two is in
-`.claude/rules/styling.md` sections 5b and 5c.
+- **Settings, setup, splash and lock.** The `Signature image` frame draws a
+  switch for "Keep every version"; the app says every version is kept and has no
+  control, since turning it off would delete history (decision 69). The Mail
+  step of setup draws three fields and an Add account button; the app opens the
+  account form in Settings instead, because an account needs SMTP and a
+  connection test. The Security frame draws Lock, Backup and Agent log on one
+  page under a nav that lists two; the app puts the agent log and Recent on the
+  Backup page. The Help and about frame draws no About card, and the app keeps
+  it (version and database path). Mail accounts rows keep Pause, Edit and Remove
+  beside the status badge, which the frame omits.
+- **Documents, Templates, Agent and Notes.** The viewer frame draws a pencil in
+  the title bar for a generated document, which has no edit (a new version is the
+  way), a viewer bar 125px tall (the app keeps 48) and the details as plain text
+  (the app keeps the status, client and project as fields, and the template and
+  timeline under them). The Templates frame has no search row and no Components
+  button (the app keeps the search, and Components is in the title bar's more
+  menu). The mail editor frame draws a reduced layers and design panel, where the
+  editor has breakpoints, spacing, typography and a code view. The Notes list
+  frame says "Previous 7 days" where the app uses the shared day split.
+- **Mail.** The composer toolbar has an emoji button the frame does not draw.
+  The intros and outros page keeps a second help line about a variable with no
+  value, which the frame leaves out. The reader draws a message on a white sheet
+  in dark, because the sanitised document carries its own colours
+  (`mail-sanitise.ts`); the frame has no dark reading screen.

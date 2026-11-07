@@ -77,17 +77,17 @@ brand/
 electron/
   main.ts               Entry point. The boot order is commented and matters
   preload.ts            The contextBridge surface, and the whole of it
-  main/db/              Schema, 21 migrations, the node:sqlite shim
+  main/db/              Schema, 29 migrations, the node:sqlite shim
   main/services/        All business logic. The API
   main/ipc/             Thin adapters over services, behind the lock guard
   main/mcp/             Thin adapters over the same services, for agents
-  main/windows/         Main, settings, setup, new-record, splash, the shared chrome, and `context-menu.ts` (the native right-click menu)
+  main/windows/         Main, settings, setup, new-record, update, splash, the shared chrome, and `context-menu.ts` (the native right-click menu)
   main/tray.ts, notifications.ts, background.ts  The Windows half of the desktop: tray icon, taskbar badge, global shortcut, toasts (decision 63). Rules are in `services/desktop.ts` and `services/notifications.ts`
   main/vault.ts         safeStorage read and write, keyed by account id
   shared/               The contract both processes typecheck against
 src/
   app/                  Shell, the icon rail, title bar
-  features/             One folder per screen (11 of them)
+  features/             One folder per screen or family (13 of them, including `new-record/` and `onboarding/`)
   components/           Dialog, FormPage, SidePanel, Button, Field, Toast, Checkbox, Tabs, Segmented, Notice, CountBadge
   lib/                  Renderer-only helpers and the typed bridge client
   styles/tokens.css     Copied from brand/tokens.css
@@ -182,8 +182,8 @@ scripts/                dev, build, smoke, the MCP bridge, icon generation
 ## The first run
 
 An empty install is met by a small modal window in front of the application,
-the same shape as settings and smaller (decision 34): welcome, name, business,
-appearance, the lock, mail, done. It cannot be skipped as a whole, and closing
+the same shape as settings and smaller (decision 34, sizes in 69): welcome, about you, your business,
+appearance, lock, mail, ready. It cannot be skipped as a whole, and closing
 the window quits Juno. The two answers it insists on are the owner's name and
 the business name, because every generated document carries both. A walkthrough
 over the real app follows, and both can be replayed from Settings > General.

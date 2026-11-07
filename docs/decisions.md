@@ -33,6 +33,8 @@ shape. Fix the service, don't special-case the adapter.
 
 ## 3. SQLite via better-sqlite3, typed with Drizzle
 
+**Amended by decision 18**, which swapped the driver for `node:sqlite` behind a shim and kept Drizzle.
+
 Local file, synchronous API, no server, no daemon. Drizzle gives a typed schema
 and generated migrations, which matters because the schema is large and most of
 the code is written against it.
@@ -577,6 +579,8 @@ only reason to pay the cost of moving `userData` a second time.
 
 ## 26. Settings is a modal window, not a screen
 
+**Amended by decision 69**, which changes the window size. The reason stands.
+
 Settings edits the things every other screen is made of: mail accounts,
 reference data, the owner profile, the lock. A settings *screen* lets someone
 remove a document status in one tab while another tab is showing twelve
@@ -710,6 +714,8 @@ than none.
 flash, which would make it noise rather than an answer.
 
 ## 30. A form is a page, a question is a modal, a row is a side panel
+
+**Amended by decision 60**, which makes a new event, client, project or reminder a small modal window.
 
 Three shapes, and picking the wrong one is the bug this decision prevents.
 
@@ -851,6 +857,8 @@ valid: a suggestion is offered, never required, and nothing here validates
 what gets saved.
 
 ## 34. The first run is a window, and the profile it fills is two lists
+
+**Amended by decision 69**, which changes the window size and the steps it asks.
 
 Setup used to replace the shell: the whole window, six steps, one of them
 eleven fields long. On any monitor wider than a laptop that read as an

@@ -9,7 +9,7 @@
  * PDF and no signature, and `documents.ts` is where it is listed and removed.
  */
 import { and, eq, isNull } from "drizzle-orm";
-import { blocksToHtml, cleanBlocks, newBlockId, type Block } from "../../shared/blocks";
+import { IMAGE_PATH, blocksToHtml, cleanBlocks, newBlockId, type Block } from "../../shared/blocks";
 import type { PageDetail, PageInput, PagePatch } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
@@ -31,6 +31,20 @@ function emptyBlocks(): Block[] {
 	return [{ id: newBlockId(), type: "text", text: "" }];
 }
 
+/**
+ * A picture in a page is a file in that page's own folder, put there by
+ * page-images.ts. A block that names any other page's file, or one before the
+ * page exists, is refused rather than quietly followed.
+ */
+function checkImages(blocks: Block[], pageId: string | null): void {
+	for (const block of blocks) {
+		if (block.type !== "image") continue;
+		const owner = IMAGE_PATH.exec(block.path)?.[1];
+		if (pageId === null) throw new Error("Add a picture once the page exists. It is a file the page keeps.");
+		if (owner !== pageId) throw new Error("A picture can only come from the page it is shown on.");
+	}
+}
+
 function readBlocks(json: string | null): Block[] {
 	if (!json) return [];
 	try {
@@ -43,6 +57,7 @@ function readBlocks(json: string | null): Block[] {
 export async function create(input: PageInput = {}, db: Db = getDb()): Promise<PageDetail> {
 	const title = input.title === undefined ? "Untitled page" : cleanTitle(input.title) || "Untitled page";
 	const blocks = input.blocks === undefined ? emptyBlocks() : cleanBlocks(input.blocks);
+	checkImages(blocks, null);
 	const owner = resolveOwner(input, db);
 	const stamp = now();
 	const row = db
@@ -82,6 +97,7 @@ export async function update(id: string, patch: PagePatch, db: Db = getDb()): Pr
 	if (patch.title !== undefined) set.title = cleanTitle(patch.title) || "Untitled page";
 	if (patch.blocks !== undefined) {
 		const blocks = cleanBlocks(patch.blocks);
+		checkImages(blocks, id);
 		set.blocksJson = JSON.stringify(blocks);
 		set.bodyHtml = blocksToHtml(blocks);
 	}

@@ -180,6 +180,8 @@ const api: JunoApi = {
 		get: (id) => call("pages.get", id),
 		create: (input) => call("pages.create", input),
 		update: (id, patch) => call("pages.update", id, patch),
+		chooseImage: (id) => call("pages.chooseImage", id),
+		openLink: (url) => call("pages.openLink", url),
 	},
 
 	projects: {

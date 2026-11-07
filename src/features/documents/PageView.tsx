@@ -178,6 +178,8 @@ function PageEditor({ initial, onDeleted, onChanged, onTitleChange }: PageEditor
 				<BlockEditor
 					blocks={shown}
 					variant="page"
+					pageId={id}
+					onError={setError}
 					header={
 						<>
 						<input

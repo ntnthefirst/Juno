@@ -11,7 +11,7 @@ const BLOCKS = {
 	type: "array",
 	description:
 		"The page's blocks, in order. Each is { type, text } for type text, heading or bullet; { type: 'check', text, done } for a checklist line; " +
-		"or { type: 'table', header: [..], rows: [[..]] }. Text may hold <b>, <i> and <u> and nothing else. An id is optional. The list replaces the whole page.",
+		"or { type: 'table', header: [..], rows: [[..]] }. Text may hold <b>, <i>, <u> and <a href='https://...'> (https and mailto links only). A picture block, { type: 'image', path, alt }, is one pages.get returned: keep it as it was, because only a person can add a picture. An id is optional. The list replaces the whole page.",
 	items: { type: "object" },
 } as const;
 

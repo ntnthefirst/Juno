@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState, type RefObject } from "react";
 
+type Match = { range: Range } | { cell: HTMLInputElement };
+
+/** Takes every mark of a search off the page: the painted ranges and the marked cells. */
+function clear(root: HTMLElement | null): void {
+	if (typeof CSS !== "undefined" && "highlights" in CSS) {
+		CSS.highlights.delete("find");
+		CSS.highlights.delete("find-current");
+	}
+	root?.querySelectorAll<HTMLElement>("[data-find]").forEach((element) => delete element.dataset.find);
+}
+
 /**
  * Find inside an editor. The matches are painted with the CSS Custom Highlight
  * API rather than wrapped in markup, so the text the person is editing is never
@@ -19,38 +30,57 @@ export function useFind(container: RefObject<HTMLElement | null>, query: string,
 		const root = container.current;
 		const needle = query.toLowerCase();
 		const frame = window.requestAnimationFrame(() => {
-			const ranges: Range[] = [];
+			// A match is a stretch of text, or a table cell, whose words live in an
+			// input's value where no text node and no Range can reach them. A cell is
+			// marked with an attribute instead, and the document order of both kinds
+			// is kept so Next and Previous walk the page top to bottom.
+			const matches: Match[] = [];
 			if (active && root && needle !== "") {
-				const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+				const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
 				for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+					if (node instanceof HTMLInputElement) {
+						const value = node.value.toLowerCase();
+						for (let from = value.indexOf(needle); from >= 0; from = value.indexOf(needle, from + needle.length)) {
+							matches.push({ cell: node });
+						}
+						continue;
+					}
+					if (node.nodeType !== Node.TEXT_NODE) continue;
 					const text = (node.textContent ?? "").toLowerCase();
 					for (let from = text.indexOf(needle); from >= 0; from = text.indexOf(needle, from + needle.length)) {
 						const range = document.createRange();
 						range.setStart(node, from);
 						range.setEnd(node, from + needle.length);
-						ranges.push(range);
+						matches.push({ range });
 					}
 				}
 			}
-			setCount(ranges.length);
-			if (typeof CSS === "undefined" || !("highlights" in CSS)) return;
-			CSS.highlights.delete("find");
-			CSS.highlights.delete("find-current");
-			if (ranges.length === 0) return;
-			const index = Math.min(current, ranges.length - 1);
-			CSS.highlights.set("find", new Highlight(...ranges.filter((_, i) => i !== index)));
-			const here = ranges[index];
-			if (here) {
-				CSS.highlights.set("find-current", new Highlight(here));
-				here.startContainer.parentElement?.scrollIntoView({ block: "nearest" });
+			setCount(matches.length);
+			clear(root);
+			if (matches.length === 0) return;
+			const index = Math.min(current, matches.length - 1);
+			const ranges: Range[] = [];
+			let currentRange: Range | undefined;
+			for (const [i, match] of matches.entries()) {
+				if ("cell" in match) {
+					match.cell.dataset.find = i === index ? "current" : "match";
+				} else if (i === index) {
+					currentRange = match.range;
+				} else {
+					ranges.push(match.range);
+				}
 			}
+			if (typeof CSS !== "undefined" && "highlights" in CSS) {
+				CSS.highlights.set("find", new Highlight(...ranges));
+				if (currentRange) CSS.highlights.set("find-current", new Highlight(currentRange));
+			}
+			const here = matches[index];
+			const target = here && ("cell" in here ? here.cell : here.range.startContainer.parentElement);
+			target?.scrollIntoView({ block: "nearest" });
 		});
 		return () => {
 			window.cancelAnimationFrame(frame);
-			if (typeof CSS !== "undefined" && "highlights" in CSS) {
-				CSS.highlights.delete("find");
-				CSS.highlights.delete("find-current");
-			}
+			clear(root);
 		};
 	}, [container, query, active, version, current]);
 

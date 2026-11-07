@@ -43,6 +43,10 @@ May not expose, ever:
   node object.
 - A function that takes a SQL string, a file path chosen by the renderer, or a URL
   the main process will fetch. Pass an id and let the service resolve it.
+  `pages.openLink` takes an address from a page the person wrote and opens it only
+  after `safeLinkHref` (https or mailto), the same check the page was saved with.
+  `pages.chooseImage` takes no path at all: the file is picked in a dialog in the main
+  process and copied into the page's own folder (decision 68). Neither is an MCP tool.
   The one exception is `mail.templates.loadPicture`, reached only after the person
   confirms a source in a dialog (`services/mail-pictures.ts`): https only, a public
   host on every redirect, a size cap, and raster formats only. It is not an MCP tool.

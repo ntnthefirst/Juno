@@ -20,7 +20,8 @@
  * itself, so the renderer never names a file. Anything that is not an image it
  * is willing to decode is a 404 rather than a download, because a response this
  * origin serves is only ever the source of an `<img>`. A document template's
- * pictures come from the same host under `/template/<id>`, by the same rule.
+ * pictures come from the same host under `/template/<id>`, by the same rule,
+ * and a page's under `/page/<page id>/<file>`.
  */
 import { net, protocol } from "electron";
 import { normalize, resolve, sep } from "node:path";
@@ -30,6 +31,7 @@ import { renderBody } from "./services/mail-threads";
 import { frameCsp } from "./services/mail-sanitise";
 import * as projectAssets from "./services/project-assets";
 import * as templateAssets from "./services/document-template-assets";
+import * as pageImages from "./services/page-images";
 
 export const APP_ORIGIN = "app://bundle";
 
@@ -105,16 +107,16 @@ async function serveAsset(url: URL): Promise<Response> {
 	if (isLocked()) return new Response("Locked", { status: 423 });
 
 	const match = /^\/(file|template|component)\/([a-z0-9-]+)$/i.exec(url.pathname);
-	if (!match) return new Response("Not found", { status: 404 });
+	const pageMatch = /^\/page\/([a-z0-9-]+)\/([a-z0-9-]+\.[a-z]+)$/i.exec(url.pathname);
+	if (!match && !pageMatch) return new Response("Not found", { status: 404 });
 
 	let file: { path: string; mimeType: string | null };
 	try {
-		file =
-			match[1] === "template"
-				? templateAssets.pathOf(match[2]!)
-				: match[1] === "component"
-					? templateAssets.componentPathOf(match[2]!)
-					: projectAssets.pathOf(match[2]!);
+		if (pageMatch) file = pageImages.serve(pageMatch[1]!, pageMatch[2]!);
+		else if (match?.[1] === "template") file = templateAssets.pathOf(match[2]!);
+		else if (match?.[1] === "component") file = templateAssets.componentPathOf(match[2]!);
+		else if (match) file = projectAssets.pathOf(match[2]!);
+		else return new Response("Not found", { status: 404 });
 	} catch {
 		// A missing file is an ordinary state here, not an error worth a message:
 		// a linked asset whose original moved is exactly this.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blocksText, blocksToHtml, cleanBlocks, parseMarkdown, sanitiseInline, toMarkdown } from "./blocks";
+import { blocksText, blocksToHtml, cleanBlocks, parseMarkdown, safeLinkHref, sanitiseInline, toMarkdown, type ImageBlock } from "./blocks";
 
 describe("blocks", () => {
 	it("reads a checklist, a bullet, a heading and text from Markdown, and writes them back", () => {
@@ -48,5 +48,48 @@ describe("blocks", () => {
 		expect(html).toContain("&#9745; Tick");
 		expect(html).toContain("<td>Oak</td>");
 		expect(blocksText(blocks)).toBe("The job Tick Item Oak");
+	});
+});
+
+describe("links in a line", () => {
+	it("keeps an https link and a mail link, and nothing else with an address", () => {
+		expect(sanitiseInline('see <a href="https://juno.test/a?b=1&amp;c=2">this</a>')).toBe(
+			'see <a href="https://juno.test/a?b=1&amp;c=2">this</a>',
+		);
+		expect(sanitiseInline('<a href="mailto:hallo@juno.test">mail</a>')).toBe('<a href="mailto:hallo@juno.test">mail</a>');
+		expect(sanitiseInline('<a href="javascript:alert(1)">x</a>')).toBe("x");
+		expect(sanitiseInline('<a href="data:text/html,hi">x</a>')).toBe("x");
+		expect(sanitiseInline('<a href="file:///c:/secret" onclick="x()">x</a>')).toBe("x");
+		expect(sanitiseInline('<a href="http://plain.test">x</a>')).toBe("x");
+	});
+
+	it("closes a link that was left open and drops a stray close", () => {
+		expect(sanitiseInline('<a href="https://juno.test">open')).toBe('<a href="https://juno.test/">open</a>');
+		expect(sanitiseInline("none</a>")).toBe("none");
+	});
+
+	it("gives a bare domain https and refuses a word", () => {
+		expect(safeLinkHref("juno.test/path")).toBe("https://juno.test/path");
+		expect(safeLinkHref("nothing")).toBeNull();
+		expect(safeLinkHref("https://")).toBeNull();
+		expect(safeLinkHref("ftp://juno.test")).toBeNull();
+	});
+});
+
+describe("pictures in a page", () => {
+	const good = { id: "i1", type: "image", path: "pages/0190a000-0000-7000-8000-000000000000/0190a000-0000-7000-8000-000000000001.png", alt: "Table" };
+
+	it("keeps a picture whose path is the one the service makes", () => {
+		expect(cleanBlocks([good])).toEqual([good]);
+	});
+
+	it("drops a path that is absolute, climbs out, or is not a picture type", () => {
+		const bad = ["C:/secret.png", "../x.png", "pages/../../x.png", "pages/a/b.svg", "pages/a/b/c.png", "/pages/a/b.png"];
+		for (const path of bad) expect(cleanBlocks([{ ...good, path }])).toEqual([]);
+	});
+
+	it("reads as its caption in search and has no markdown", () => {
+		expect(blocksText([good as ImageBlock])).toBe("Table");
+		expect(toMarkdown([good as ImageBlock])).toBe("Table");
 	});
 });

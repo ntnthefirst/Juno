@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import type { NoteInput, NotePatch, NoteQuery, PageInput, PagePatch } from "../../shared/types";
 import * as notes from "../services/notes";
+import * as pageActions from "../services/page-actions";
 import * as pages from "../services/pages";
 
 export function registerNotesIpc(): void {
@@ -16,4 +17,6 @@ export function registerNotesIpc(): void {
 	ipcMain.handle("pages.get", (_event, id: string) => pages.get(id));
 	ipcMain.handle("pages.create", (_event, input?: PageInput) => pages.create(input));
 	ipcMain.handle("pages.update", (_event, id: string, patch: PagePatch) => pages.update(id, patch));
+	ipcMain.handle("pages.chooseImage", (_event, id: string) => pageActions.chooseImage(id));
+	ipcMain.handle("pages.openLink", (_event, url: string) => pageActions.openLink(url));
 }

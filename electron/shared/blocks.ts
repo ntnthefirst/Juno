@@ -10,7 +10,36 @@
 export type TextBlock = { id: string; type: "text" | "heading" | "bullet"; text: string };
 export type CheckBlock = { id: string; type: "check"; text: string; done: boolean };
 export type TableBlock = { id: string; type: "table"; header: string[]; rows: string[][] };
-export type Block = TextBlock | CheckBlock | TableBlock;
+/**
+ * A picture in a page. `path` is relative to the documents folder and always
+ * `pages/<page id>/<file>`, a file the page's own folder holds (services/page-images.ts).
+ * It is never a blob and never a path the renderer chose.
+ */
+export type ImageBlock = { id: string; type: "image"; path: string; alt: string };
+export type Block = TextBlock | CheckBlock | TableBlock | ImageBlock;
+
+/** The shape of an image's path: the page it belongs to, then a file the service named. */
+export const IMAGE_PATH = /^pages\/([a-z0-9-]+)\/([a-z0-9-]+\.(?:png|jpg|gif|webp))$/;
+
+/**
+ * An address a link in a page may carry: https, or mailto. Anything else
+ * (javascript:, data:, file:, a bare word) is refused, here and again at the
+ * moment it is opened (security.md section 3). A bare domain is given https.
+ */
+export function safeLinkHref(raw: string): string | null {
+	const text = raw.trim();
+	if (text === "" || text.length > 2000 || /[\s<>"]/.test(text)) return null;
+	const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(text) ? text : /^[^/@]+\.[^/@]+/.test(text) ? "https://" + text : null;
+	if (!withScheme) return null;
+	try {
+		const url = new URL(withScheme);
+		if (url.protocol === "https:" && url.hostname !== "") return url.href;
+		if (url.protocol === "mailto:" && url.pathname !== "") return url.href;
+	} catch {
+		// Not an address.
+	}
+	return null;
+}
 
 export const MAX_BLOCKS = 2000;
 const MAX_TEXT = 20_000;
@@ -38,17 +67,40 @@ function decodeEntities(text: string): string {
 		.replace(/&amp;/g, "&");
 }
 
-const TAG = /<(\/?)(b|strong|i|em|u)\s*>|<[^>]*>|[^<]+|</gi;
+const TAG = /<(\/?)(b|strong|i|em|u)\s*>|<a\s[^>]*>|<\/a\s*>|<[^>]*>|[^<]+|</gi;
 
 const MARK = { strong: "b", em: "i", b: "b", i: "i", u: "u" } as const;
 
-/** Keeps b, i and u, drops every other tag, and escapes the text between them. */
+function escapeAttribute(text: string): string {
+	return escapeHtml(text).replace(/"/g, "&quot;");
+}
+
+/** The address a tag carries, checked. Null when it has none or it is not one a page may link to. */
+function hrefOf(tag: string): string | null {
+	const match = /\shref\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+	const value = match?.[1] ?? match?.[2];
+	return value === undefined ? null : safeLinkHref(decodeEntities(value));
+}
+
+/** Keeps b, i, u and a link, drops every other tag, and escapes the text between them. */
 export function sanitiseInline(html: string): string {
 	const open = { b: false, i: false, u: false };
+	let link = false;
 	let out = "";
 	for (const match of html.slice(0, MAX_TEXT).matchAll(TAG)) {
 		const [token, slash, name] = match;
-		if (name) {
+		if (/^<a\s/i.test(token)) {
+			const href = link ? null : hrefOf(token);
+			if (href) {
+				link = true;
+				out += '<a href="' + escapeAttribute(href) + '">';
+			}
+		} else if (/^<\/a\s*>/i.test(token)) {
+			if (link) {
+				link = false;
+				out += "</a>";
+			}
+		} else if (name) {
 			const tag = MARK[name.toLowerCase() as keyof typeof MARK];
 			if (slash) {
 				if (open[tag]) {
@@ -67,6 +119,7 @@ export function sanitiseInline(html: string): string {
 			out += escapeHtml(decodeEntities(token).replace(/\r?\n/g, " "));
 		}
 	}
+	if (link) out += "</a>";
 	for (const tag of ["u", "i", "b"] as const) if (open[tag]) out += `</${tag}>`;
 	return out;
 }
@@ -113,6 +166,10 @@ export function toMarkdown(blocks: Block[]): string {
 			for (const row of [block.header, ...block.rows]) lines.push(row.join(" | "));
 			continue;
 		}
+		if (block.type === "image") {
+			if (block.alt.trim() !== "") lines.push(block.alt.trim());
+			continue;
+		}
 		const text = plainText(block.text).replace(/\r?\n/g, " ");
 		if (block.type === "check") lines.push(`- [${block.done ? "x" : " "}] ${text}`);
 		else if (block.type === "bullet") lines.push(`- ${text}`);
@@ -126,7 +183,9 @@ export function toMarkdown(blocks: Block[]): string {
 /** The words of every block, for search and for a one-line preview. */
 export function blocksText(blocks: Block[]): string {
 	return blocks
-		.map((block) => (block.type === "table" ? [block.header, ...block.rows].flat().join(" ") : plainText(block.text)))
+		.map((block) =>
+			block.type === "table" ? [block.header, ...block.rows].flat().join(" ") : block.type === "image" ? block.alt : plainText(block.text),
+		)
 		.filter((line) => line.trim() !== "")
 		.join(" ");
 }
@@ -158,6 +217,7 @@ export function blocksToHtml(blocks: Block[]): string {
 			close();
 			if (block.type === "heading") html += `<h2>${block.text}</h2>`;
 			else if (block.type === "text") html += block.text.trim() === "" ? "" : `<p>${block.text}</p>`;
+			else if (block.type === "image") html += block.alt.trim() === "" ? "" : "<p>" + escapeHtml(block.alt) + "</p>";
 			else if (block.type === "table") {
 				const head = block.header.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("");
 				const rows = block.rows
@@ -186,11 +246,16 @@ export function cleanBlocks(value: unknown): Block[] {
 		if (typeof raw !== "object" || raw === null) continue;
 		const item = raw as Record<string, unknown>;
 		const type = item.type;
-		if (type !== "table" && type !== "check" && type !== "text" && type !== "heading" && type !== "bullet") continue;
+		if (type !== "table" && type !== "image" && type !== "check" && type !== "text" && type !== "heading" && type !== "bullet") continue;
 		const wanted = typeof item.id === "string" ? item.id.slice(0, 60) : "";
 		const id = wanted !== "" && !seen.has(wanted) ? wanted : newBlockId();
 		seen.add(id);
-		if (type === "table") {
+		if (type === "image") {
+			const path = typeof item.path === "string" ? item.path : "";
+			// A path that is not one the image service makes is dropped, not repaired.
+			if (!IMAGE_PATH.test(path)) continue;
+			out.push({ id, type, path, alt: String(item.alt ?? "").slice(0, 300) });
+		} else if (type === "table") {
 			const header = cells(item.header);
 			const rows = Array.isArray(item.rows) ? item.rows.slice(0, 500).map(cells) : [];
 			out.push({ id, type, header, rows });

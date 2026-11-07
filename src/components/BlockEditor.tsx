@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { newBlockId, plainText, sanitiseInline, type Block, type CheckBlock, type TableBlock, type TextBlock } from "@shared/blocks";
+import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { newBlockId, plainText, safeLinkHref, sanitiseInline, type Block, type CheckBlock, type ImageBlock, type TableBlock, type TextBlock } from "@shared/blocks";
+import { ASSET_ORIGIN } from "@shared/types";
 import { Checkbox } from "./Checkbox";
 import { Icon, type IconName } from "./Icon";
 import { ContextMenu, type MenuItem } from "./Menu";
@@ -14,6 +15,10 @@ type BlockEditorProps = {
 	autoFocus?: boolean;
 	/** Drawn under the toolbar and above the first block: a page's title and what it is. */
 	header?: ReactNode;
+	/** The page being edited. A picture is a file the page keeps, so adding one needs it. */
+	pageId?: string;
+	/** Told when a picture or a link could not be handled, in a sentence. */
+	onError?: (message: string) => void;
 };
 
 type Kind = "text" | "heading" | "bullet" | "check" | "table";
@@ -72,8 +77,19 @@ function splitAtCaret(element: HTMLElement): { head: string; tail: string } {
 	return { head: sanitiseInline(element.innerHTML), tail: sanitiseInline(holder.innerHTML) };
 }
 
+/** What the style button says for the block the caret is in. */
+function styleLabel(block: Block | undefined): string {
+	if (!block || block.type === "image") return "Text";
+	return block.type === "bullet" ? "List" : KIND_LABEL[block.type];
+}
+
 function isTextual(block: Block): block is TextBlock | CheckBlock {
-	return block.type !== "table";
+	return block.type !== "table" && block.type !== "image";
+}
+
+/** The address a page's picture is shown from. The path is relative and the service built it. */
+function imageUrl(block: ImageBlock): string {
+	return `${ASSET_ORIGIN}/${block.path.replace(/^pages\//, "page/")}`;
 }
 
 function blank(type: "text" | "heading" | "bullet" | "check" = "text", text = ""): TextBlock | CheckBlock {
@@ -87,7 +103,7 @@ function emptyTable(): TableBlock {
 /** Turns a block into another kind, keeping its words. */
 function convert(block: Block, kind: Kind): Block {
 	if (kind === "table") return { ...emptyTable(), id: block.id };
-	const text = block.type === "table" ? "" : block.text;
+	const text = isTextual(block) ? block.text : "";
 	return kind === "check" ? { id: block.id, type: "check", text, done: block.type === "check" ? block.done : false } : { id: block.id, type: kind, text };
 }
 
@@ -101,13 +117,14 @@ function convert(block: Block, kind: Kind): Block {
  * Backspace at the start of one folds it into the line above, and an empty
  * list line turns back into text.
  */
-export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus = false, header }: BlockEditorProps) {
+export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus = false, header, pageId, onError }: BlockEditorProps) {
 	const page = variant === "page";
 	const [active, setActive] = useState<string | null>(null);
 	const [slash, setSlash] = useState<{ id: string; query: string } | null>(null);
 	const [slashIndex, setSlashIndex] = useState(0);
 	const [marks, setMarks] = useState({ bold: false, italic: false, underline: false });
 	const [menu, setMenu] = useState<{ at: { x: number; y: number }; label: string; items: MenuItem[] } | null>(null);
+	const [link, setLink] = useState<LinkEdit | null>(null);
 	const caret = useRef<Caret | null>(autoFocus && blocks[0] ? { id: blocks[0].id, at: "end" } : null);
 	const root = useRef<HTMLDivElement>(null);
 	const own = containerRef ?? root;
@@ -144,7 +161,7 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 
 	function patchText(id: string, text: string): void {
 		const block = blocks.find((item) => item.id === id);
-		if (!block || block.type === "table" || block.text === text) return;
+		if (!block || !isTextual(block) || block.text === text) return;
 		replace(id, { ...block, text });
 	}
 
@@ -157,7 +174,7 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 		const block = blocks.find((item) => item.id === id);
 		if (!block) return;
 		setSlash(null);
-		const converted = convert({ ...(block as TextBlock), text: "" }, kind);
+		const converted = convert(isTextual(block) ? { ...block, text: "" } : { id: block.id, type: "text", text: "" }, kind);
 		if (converted.type === "table") {
 			// A table has no line to type in, so the cursor goes on to a fresh one after it.
 			const after = blank();
@@ -243,7 +260,7 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 			const before = list[index - 1];
 			if (!before) return;
 			event.preventDefault();
-			if (before.type === "table") {
+			if (!isTextual(before)) {
 				if (plainText(block.text) === "") onChange(list.filter((item) => item.id !== block.id));
 				return;
 			}
@@ -320,6 +337,9 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 	const choices = slash ? slashChoices(slash.query) : [];
 
 	function renderBlock(block: Block, index: number): ReactNode {
+		if (block.type === "image") {
+			return <ImageView key={block.id} block={block} onRemove={() => onChange(blocks.filter((item) => item.id !== block.id))} />;
+		}
 		if (block.type === "table") {
 			return <TableView key={block.id} block={block} onChange={(next) => replace(block.id, next)} />;
 		}
@@ -368,6 +388,67 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 		);
 	}
 
+	function report(cause: unknown): void {
+		onError?.(cause instanceof Error ? cause.message : String(cause));
+	}
+
+	/** Opens the link box on the words selected in a line, or on the link the caret is in. */
+	function openLinkBox(box: DOMRect): void {
+		const selection = window.getSelection();
+		const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+		const line = range ? lineOf(range.startContainer) : null;
+		if (!range || !line || !own.current?.contains(line)) {
+			onError?.("Put the cursor in a line and select the words to link.");
+			return;
+		}
+		const anchor = anchorOf(range.startContainer);
+		let saved = range.cloneRange();
+		if (anchor && line.contains(anchor)) {
+			saved = document.createRange();
+			saved.selectNodeContents(anchor);
+		}
+		setLink({ at: { x: box.left, y: box.bottom + 6 }, range: saved, href: anchor?.getAttribute("href") ?? "", existing: Boolean(anchor), selected: !saved.collapsed });
+	}
+
+	function applyLink(href: string | null): void {
+		const current = link;
+		if (!current) return;
+		setLink(null);
+		const selection = window.getSelection();
+		const line = lineOf(current.range.startContainer);
+		if (!selection || !line) return;
+		line.focus();
+		selection.removeAllRanges();
+		selection.addRange(current.range);
+		if (href === null) document.execCommand("unlink");
+		else document.execCommand("createLink", false, href);
+		if (line.dataset.blockText) onInput(line.dataset.blockText, line);
+	}
+
+	async function addImage(): Promise<void> {
+		if (!pageId) return;
+		try {
+			const picked = await window.juno.pages.chooseImage(pageId);
+			if (!picked) return;
+			const index = blocks.findIndex((item) => item.id === active);
+			const at = index < 0 ? blocks.length : index + 1;
+			const next = [...blocks.slice(0, at), picked, ...blocks.slice(at)];
+			// The cursor needs a line to go on to after a picture.
+			if (!next.slice(at + 1).some(isTextual)) {
+				const after = blank();
+				next.push(after);
+				caret.current = { id: after.id, at: "start" };
+			}
+			onChange(next);
+		} catch (cause: unknown) {
+			report(cause);
+		}
+	}
+
+	function openLinkAddress(href: string): void {
+		window.juno.pages.openLink(href).catch(report);
+	}
+
 	// Built when a button is pressed, not while drawing, because choosing one moves the caret.
 	function openStyleMenu(box: DOMRect): void {
 		setMenu({
@@ -389,8 +470,16 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 		});
 	}
 
+	function onContainerClick(event: MouseEvent<HTMLDivElement>): void {
+		if (!page || !(event.ctrlKey || event.metaKey) || !(event.target instanceof Element)) return;
+		const href = event.target.closest("a[href]")?.getAttribute("href");
+		if (!href) return;
+		event.preventDefault();
+		openLinkAddress(href);
+	}
+
 	return (
-		<div ref={own} className="relative">
+		<div ref={own} className="relative" onClick={onContainerClick}>
 			{page ? (
 				<div className="pointer-events-none sticky top-3 z-20 mb-6 flex justify-center">
 					<div
@@ -404,7 +493,7 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 							onClick={(event) => openStyleMenu(event.currentTarget.getBoundingClientRect())}
 							className="flex h-8 w-[72px] items-center gap-[6px] rounded-[var(--radius-md)] pr-[6px] pl-2 text-dense font-[var(--weight-medium)] text-[var(--ink)] hover:bg-[var(--hover)]"
 						>
-							{KIND_LABEL[current?.type ?? "text"] === "Bullet list" ? "List" : KIND_LABEL[current?.type ?? "text"]}
+							{styleLabel(current)}
 							<Icon name="chevron-down" size={12} strokeWidth={2} />
 						</button>
 						<Divider />
@@ -414,6 +503,8 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 						<Divider />
 						<ToolButton icon="list" label="Bullet list" on={current?.type === "bullet"} onClick={() => setActiveKind("bullet")} />
 						<ToolButton icon="check" label="Checklist" on={current?.type === "check"} onClick={() => setActiveKind("check")} />
+						<ToolButton icon="link" label="Link" on={link !== null} onClick={openLinkBox} />
+						<ToolButton icon="image" label="Picture" disabled={!pageId} onClick={() => void addImage()} />
 						<ToolButton
 							icon="more"
 							label="More"
@@ -424,6 +515,14 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 			) : null}
 			{header}
 			{blocks.map(renderBlock)}
+			{link ? (
+				<LinkBox
+					link={link}
+					onApply={applyLink}
+					onOpen={openLinkAddress}
+					onClose={() => setLink(null)}
+				/>
+			) : null}
 			{menu ? (
 				<ContextMenu
 					at={menu.at}
@@ -462,18 +561,19 @@ function MarkButton({ label, on, onClick, children }: MarkButtonProps) {
 	);
 }
 
-type ToolButtonProps = { icon: IconName; label: string; on?: boolean; onClick: (box: DOMRect) => void };
+type ToolButtonProps = { icon: IconName; label: string; on?: boolean; disabled?: boolean; onClick: (box: DOMRect) => void };
 
-function ToolButton({ icon, label, on = false, onClick }: ToolButtonProps) {
+function ToolButton({ icon, label, on = false, disabled = false, onClick }: ToolButtonProps) {
 	return (
 		<button
 			type="button"
+			disabled={disabled}
 			aria-label={label}
 			title={label}
 			onMouseDown={(event) => event.preventDefault()}
 			onClick={(event) => onClick(event.currentTarget.getBoundingClientRect())}
 			className={[
-				"flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+				"flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:opacity-40",
 				on ? "bg-[var(--hover)] text-[var(--ink)]" : "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 			].join(" ")}
 		>
@@ -667,5 +767,152 @@ function TableView({ block, onChange }: TableViewProps) {
 				) : null}
 			</div>
 		</div>
+	);
+}
+
+type LinkEdit = {
+	at: { x: number; y: number };
+	/** The words the link will wrap, kept because the box takes focus from the line. */
+	range: Range;
+	href: string;
+	existing: boolean;
+	selected: boolean;
+};
+
+/** The editable line a node sits in. */
+function lineOf(node: Node): HTMLElement | null {
+	const element = node instanceof Element ? node : node.parentElement;
+	return element?.closest<HTMLElement>("[data-block-text]") ?? null;
+}
+
+function anchorOf(node: Node): HTMLAnchorElement | null {
+	const element = node instanceof Element ? node : node.parentElement;
+	return element?.closest("a") ?? null;
+}
+
+type LinkBoxProps = {
+	link: LinkEdit;
+	onApply: (href: string | null) => void;
+	onOpen: (href: string) => void;
+	onClose: () => void;
+};
+
+/**
+ * Where a link's address is typed. It checks the address with the same rule
+ * the page is saved with (https or mail, a bare domain gets https), so what is
+ * accepted here is what survives the save.
+ */
+function LinkBox({ link, onApply, onOpen, onClose }: LinkBoxProps) {
+	const [value, setValue] = useState(link.href);
+	const [error, setError] = useState<string | null>(null);
+	const input = useRef<HTMLInputElement>(null);
+
+	useEffect(() => input.current?.focus(), []);
+
+	function submit(): void {
+		const href = safeLinkHref(value);
+		if (!href) {
+			setError("Use an https address or a mail address.");
+			return;
+		}
+		onApply(href);
+	}
+
+	return (
+		<>
+			<div className="fixed inset-0 z-40" onMouseDown={onClose} aria-hidden />
+			<div
+				role="dialog"
+				aria-label="Link"
+				style={{ left: Math.max(8, link.at.x - 120), top: link.at.y }}
+				className="animate-scale fixed z-50 w-[320px] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-popover)]"
+				onKeyDown={(event) => {
+					if (event.key === "Escape") {
+						event.stopPropagation();
+						onClose();
+					}
+				}}
+			>
+				<input
+					ref={input}
+					value={value}
+					aria-label="Address"
+					placeholder="https://"
+					onChange={(event) => {
+						setValue(event.target.value);
+						setError(null);
+					}}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") {
+							event.preventDefault();
+							submit();
+						}
+					}}
+					className="h-8 w-full rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--paper)] px-2 text-dense text-[var(--ink)] outline-none focus-visible:border-[var(--accent)]"
+				/>
+				{error ? <p className="mt-1 text-sm text-[var(--risk)]">{error}</p> : null}
+				{!link.selected && !link.existing ? (
+					<p className="mt-1 text-sm text-[var(--ink-muted)]">Select the words to link first.</p>
+				) : null}
+				<div className="mt-3 flex items-center justify-end gap-1">
+					{link.existing ? (
+						<>
+							<button
+								type="button"
+								onClick={() => onOpen(link.href)}
+								className="h-8 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+							>
+								Open
+							</button>
+							<button
+								type="button"
+								onClick={() => onApply(null)}
+								className="h-8 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+							>
+								Remove
+							</button>
+						</>
+					) : null}
+					<button
+						type="button"
+						disabled={!link.selected && !link.existing}
+						onClick={submit}
+						className="h-8 rounded-[var(--radius-md)] bg-[var(--accent)] px-3 text-dense font-[var(--weight-medium)] text-[var(--accent-ink)] disabled:opacity-40"
+					>
+						Apply
+					</button>
+				</div>
+			</div>
+		</>
+	);
+}
+
+type ImageViewProps = { block: ImageBlock; onRemove: () => void };
+
+/** A picture the page keeps. If the file has gone, the line says so instead of showing a broken image. */
+function ImageView({ block, onRemove }: ImageViewProps) {
+	const [missing, setMissing] = useState(false);
+	return (
+		<figure data-block={block.id} className="group/image relative py-3">
+			{missing ? (
+				<p className="rounded-[var(--radius-md)] border border-dashed border-[var(--line-strong)] px-4 py-6 text-dense text-[var(--ink-muted)]">
+					This picture is no longer on this machine.
+				</p>
+			) : (
+				<img
+					src={imageUrl(block)}
+					alt={block.alt}
+					onError={() => setMissing(true)}
+					className="max-h-[480px] max-w-full rounded-[var(--radius-md)] border border-[var(--line)]"
+				/>
+			)}
+			<button
+				type="button"
+				onClick={onRemove}
+				className="absolute top-5 right-2 h-8 rounded-[var(--radius-md)] bg-[var(--surface)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] opacity-0 shadow-[var(--shadow-popover)] transition-opacity duration-[var(--duration-fast)] group-focus-within/image:opacity-100 group-hover/image:opacity-100 hover:text-[var(--ink)]"
+			>
+				Remove
+			</button>
+		</figure>
 	);
 }

@@ -428,6 +428,10 @@ export interface JunoApi {
 		get(id: string): Promise<PageDetail>;
 		create(input?: PageInput): Promise<PageDetail>;
 		update(id: string, patch: PagePatch): Promise<PageDetail>;
+		/** Asks for a picture and keeps it with the page. Null when cancelled. */
+		chooseImage(id: string): Promise<import("./blocks").ImageBlock | null>;
+		/** Opens an https or mail link in the system. Anything else is refused. */
+		openLink(url: string): Promise<void>;
 	};
 
 	projects: {

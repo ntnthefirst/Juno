@@ -136,3 +136,13 @@
 	background-color: var(--accent);
 	color: var(--accent-ink);
 }
+
+/* A table cell is an input, so Find marks it with an attribute where text gets a highlight. */
+[data-find="match"] {
+	background-color: var(--warn-soft);
+}
+
+[data-find="current"] {
+	background-color: var(--accent);
+	color: var(--accent-ink);
+}

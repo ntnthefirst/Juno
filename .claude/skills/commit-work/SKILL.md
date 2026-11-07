@@ -150,6 +150,15 @@ commit, not an amend of a commit that was already good.
 
 ## Step 6 — Only if asked: PR text
 
+**A pull request from `dev` to `main` is a release, so write its notes first.**
+Before drafting the text, follow
+[release-notes.md](../../rules/release-notes.md): pick the next version, set
+`package.json` and `package-lock.json` to it, add the entry at the top of
+`build/release-notes.md` from `git log <last tag>..dev`, and commit that on its
+own as "Add release notes for <version>". `npm run check` must pass, because the
+release-notes test compares the top entry with `package.json`. The PR
+description then links the same entry rather than retelling it.
+
 Produce it as text in the chat. Don't push, don't run `gh pr create` unless the
 user explicitly asked.
 

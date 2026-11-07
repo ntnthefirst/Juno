@@ -159,6 +159,13 @@ With the packaged build running, walk every screen:
 - [ ] Nothing in the UI claims the signature is a qualified electronic signature.
 - [ ] Nothing in the UI issues, numbers or sends an invoice.
 
+## Release notes
+
+`build/release-notes.md` must have an entry at the top for the `package.json`
+version, written by [release-notes.md](../../rules/release-notes.md), and
+`node scripts/release-notes.mjs` must run clean. A build without them stops.
+Report a missing or thin entry under "Before this is installed".
+
 ## Step 8 — Report
 
 Three short blocks, nothing else:

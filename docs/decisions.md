@@ -2363,3 +2363,30 @@ Add to calendar and Link to project.
 
 **What would reverse this:** if the bar teaches people to ignore it, the cues are
 too wide and the list shrinks to the strongest ones.
+
+## 71. Release notes are one file, written before the release pull request
+
+Every version says what changed for the person using Juno, in the app, in the
+update that is waiting, and to an agent.
+
+- **One file, `build/release-notes.md`**, newest first, shipped in the package.
+  Not the GitHub release body, which is written after the fact and which an
+  offline copy cannot read. Not a database table, because it never changes on a
+  machine.
+- **The next update's notes travel in the release feed.**
+  `scripts/release-notes.mjs` writes the entry for the version being built into
+  `build/release-notes-latest.md`, `electron-builder.yml` names it as
+  `releaseInfo.releaseNotesFile`, and `electron-updater` reports it on
+  `update-available`. The build fails when the entry is missing.
+- **Read in Settings, Release notes** (a page of the General group), not a
+  rail place: the rail stays at seven (decision 61). The Updates page shows the
+  incoming version's notes, and the install window shows its summary.
+  `updates.release_notes` is a read tool in the Read row.
+- **Written before the `dev` to `main` pull request**, with `package.json` set
+  to the same version, so `version.yml` takes that number instead of numbering
+  from the highest tag. The structure and tone are in
+  `.claude/rules/release-notes.md`, and a test holds the file to them.
+
+**What would reverse this:** a release rhythm fast enough that writing notes by
+hand is skipped, in which case drafts are generated from the log and still edited
+by a person.

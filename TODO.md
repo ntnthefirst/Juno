@@ -233,74 +233,16 @@ means a decision or a thing only Nathan can do, as at the top of this file.
 
 **Order.** The decisions in 8.1 come first, because three packages are blocked
 on them. After that the packages are independent unless one says "needs".
-A sensible order is 8.2 package 5, then 7, 8, then 4 and 9.
+A sensible order is 8.2 package 5, then 7, 8, then 9.
 
 ### 8.1 Decisions to take first - **you**
 
-Each one is written into `docs/decisions.md` (next free number is 53) in the same commit as
+Each one is written into `docs/decisions.md` (next free number is 63) in the same commit as
 the code that depends on it.
 
-2. **Notes as a place of its own.** The design's icon rail has a seventh entry,
-   Notes, between Mail and Documents. `.claude/rules/styling.md` section 5b says
-   a seventh place is a decision and not an edit. Options: add the entry (and
-   change that section), or reach Notes from the Documents switch. Blocks
-   package 4.
-5. **Pages: a kind of document or a table of their own.** A page in the design
-   sits in the Documents list and belongs to a client or a project, which is
-   what a document does (decision 48). Recommended: a document kind, so the
-   versions, ownership and timeline already built apply. Blocks package 4.
 7. **Which wins, the tokens or the design.** Taken: the design (decision 53).
 
 ### 8.2 Packages
-
-#### Package 4. Notes and Pages (L, needs decisions 2 and 5)
-
-**Figma.** `20 Notes / List and editor` (`73:4831`), `20 Notes / Context menu`
-(`76:7290`), `21 Page / Editor` (`73:5038`), `21 Page / Find` (`89:7801`),
-`15 Documents / New menu` (`73:5344`). Components: Note Row (`72:1200`), Editor
-Toolbar (`72:1238`), Slash Menu (`72:1272`), File Row (`72:1237`), Find Bar
-(`88:2241`), New Menu (`72:1314`).
-
-**Behaviour.**
-
-- **Notes.** A list on the left with a search field ("Search notes") and the count,
-  split with `lib/day-groups.ts` (Today, Previous 7 days, then months) when
-  ordered by time and not split when a search is active. Each row: title, time
-  or weekday, one line of text. The editor on the right: title, "Edited today at
-  09:12", checklists that tick, plain text, saved as typed. A note may belong to
-  a client or a project, or nothing.
-- **Pages.** A page opens from Documents (it is a kind of document, decision
-  to be taken) and reads like a document: title, "Page", the client, "Edited
-  today at 10:05", then blocks: text, heading, checklist, table. "Type to add a
-  block" at the end, and a slash menu with Text, Heading, Checklist and the rest
-  drawn in the frame. Find works as in a message: `components/FindBar.tsx` is the bar, and the page asks it for the count.
-- **Mixed files in a project.** A project lists Word files, PDFs and images next
-  to its notes and pages, with File Row.
-- **Empty state.** Not drawn yet. Draw it first (8.5) with the mascot.
-
-**Build.** Notes: table `notes` (title, Markdown body, optional client id and
-project id) with an FTS5 table kept by the service (`.claude/rules/data.md`
-section 7). Service `services/notes.ts`: `list`, `get`, `search`, `create`,
-`update`, `archive`. IPC `notes.*`. MCP `notes.list`, `notes.get`, `notes.search`,
-`notes.create`, `notes.update`, `notes.archive`. Reuse `components/
-MarkdownEditor.tsx`. Pages: depends on decision 5, and then the document kind,
-the block model (stored as JSON) and the editor. If Notes gets a sidebar entry,
-add it to `app/screens.ts` (`ScreenId`, `SIDEBAR_TOP`, `SCREEN_LABELS`,
-`SIDEBAR_ENTRY`, `NEW_ON`) and to the palette. The palette is grouped and has a tab
-per group (`SCOPES` in `app/CommandPalette.tsx`): add Notes there. Recent takes a
-new `RecentKind` in `shared/types.ts` and a case in `services/recent.ts`, and the
-New menu (`NEW_MENU` in `app/screens.ts`) gets New note and New page.
-
-**The Note context menu.** Right click on a note row is the one kind of menu
-not built (decision 59). Add `"note"` to `MENU_KINDS` in `shared/menu.ts`, a case
-in `services/menu-registry.ts` (Open in a new window, Pin to the top, Duplicate,
-Move to a project, Delete, as `20 Notes / Context menu`, `76:7290`, and the
-Context Menu set, `76:2231`, draw them) and the handlers beside the note rows with
-`contextMenuFor`. Add the Blank menu's New note and New page there too.
-
-**Done when.** A note and a page can be made, searched, found in, linked to a
-client or project, archived and driven by an agent. Tests cover search and the
-day grouping. The empty state exists.
 
 #### Package 9. Overview (M)
 
@@ -355,7 +297,7 @@ use for every file.
 
 **Behaviour.** Windows toast notifications with action buttons (a due reminder
 has Complete and Snooze, an agent request has Review), a tray icon with a menu
-(Open Juno, New note once package 4 exists, Quit) and a setting for whether
+(Open Juno, New note, Quit) and a setting for whether
 closing the window keeps Juno running (decision 52 already runs it in the
 background), a taskbar overlay badge with the number of requests waiting, a global
 shortcut for a new note (off by default, set in Settings), and native file dialogs
@@ -398,7 +340,7 @@ build into the app, so check for them in every screen.
 Not code, but the packages above wait on some of it.
 
 - **Draw** the document-from-template window, the Sign flow (place the stamp, sign
-  digitally, the audit page), the Notes empty state, and a home for automations.
+  digitally, the audit page), the Notes empty state (the screen uses the shared empty state until it is drawn), and a home for automations.
 - **Place the mascot** (package 10) in the logo frames on the Stylesheet page, the
   splash, setup, lock and every empty state, once one is chosen.
 - **Settings content that is design only.** `19 Settings / Documents` (`34:4424`)

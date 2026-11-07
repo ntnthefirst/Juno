@@ -247,6 +247,16 @@ Not code, but the packages above wait on some of it.
   from the frame. `19 Settings / Security and data` (`34:4475`) draws Lock, Backup
   and the agent log purge on one page where the app has Lock and Backup as
   separate pages. Redraw to match `features/settings/pages.ts`.
+- **Documents, Templates, Agent and Notes, where the app and the frames still differ.**
+  The viewer frame draws a pencil in the title bar for a generated document, which has
+  no edit (a new version is the way), a viewer bar 125px tall (the app keeps 48) and the
+  details as plain text (the app keeps the status, client and project as fields, and the
+  template and timeline under them). The Templates frame has no search row and no
+  Components button (the app keeps the search, and Components is in the title bar's
+  more menu). The mail editor frame draws a reduced layers and design panel, where the
+  editor has breakpoints, spacing, typography and a code view. The Notes list frame
+  says "Previous 7 days" where the app uses the shared day split. A picture cannot be
+  added by an agent, since only a person picks a file.
 - **Small overflows left in components,** all a few pixels: Stat Card (91 tall in
   an 88px slot), Notice (45 in 40), Suggestion Bar (59 in 56), Toggle (43 in 40),
   Setting Row (64 in 56), Request Card (183 in 160). Make them hug.

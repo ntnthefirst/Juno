@@ -2239,3 +2239,42 @@ Status. A client now carries `language`, one of `nl` (Dutch, "u"), `nl-je` (Dutc
 **What would reverse this:** a second language of output actually shipping, with
 French templates, would make the field drive which template is offered instead of
 informing the choice.
+
+## 68. The agent log records reads, a page holds links and pictures, one switch for mail suggestions
+
+The Agent frames draw a Log with a "Read" outcome, so the log now records what an
+agent looked at as well as what it changed (it replaces the rule in the host that
+said reads are left out).
+
+- **A read row names the tool and who asked, and nothing else.** No argument, no
+  result, no search text, no id and no message body reaches the row
+  (`recordRead` in `services/agent-audit.ts`). It carries the result `read`, which
+  the Log draws as a "Read" badge and a muted tool name, so a look and a change
+  are told apart at a glance. The two tools an agent uses to follow its own
+  requests are not logged, since they are polled.
+- **Reads do not grow the log without limit.** A repeat of the same tool by the
+  same caller inside thirty seconds is one row, reads are purged after thirty days
+  where writes keep six months, and no more than the newest 2000 reads are kept,
+  all in the launch purge.
+- **A request is put into one sentence in the service**, per tool, the same for
+  every caller (`services/agent-summary.ts`): "Change the client Obet", not
+  "Update a client (id: ..., notes: ...)". It names the record when it can, falls
+  back to the tool's title, and never carries a secret, an id or a body. The
+  request's preview and fields still hold everything a person needs to decide.
+- **A page can hold a link and a picture.** A link is an `<a>` whose address passes
+  `safeLinkHref` (https or mailto, a bare domain gets https) when it is saved and
+  again when it is opened (`pages.openLink`). A picture is a file in the page's own
+  folder under the documents folder, stored by `services/page-images.ts` from bytes
+  the person chose in a dialog, read as PNG, JPEG, GIF or WebP from its first bytes
+  and capped at 10 MB. The block keeps the relative path `pages/<page id>/<file>`
+  and is served over `app://asset/page/...`. Only a person adds a picture; an
+  agent keeps the blocks it was given. A deleted page keeps its pictures, like any
+  document file, so the delete can be undone.
+- **Mail suggestions have one switch.** The Permissions page draws "From mail", and
+  it sets both the calendar and the project source. Switching one source off and
+  the other on is no longer offered in the window; an install that had one off
+  shows the switch off, and turning it on brings both back.
+
+**What would reverse this:** a client that polls reads so often that thirty days of
+them is still too many would want a count instead of rows. A need to see one
+source without the other would bring the second switch back.

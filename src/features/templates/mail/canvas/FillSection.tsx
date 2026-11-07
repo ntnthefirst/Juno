@@ -29,7 +29,7 @@ function GradientStops({ fill, active, onActive }: GradientStopsProps) {
 			aria-pressed={active === which}
 			onClick={() => onActive(which)}
 			style={{ background: `linear-gradient(${fill[which]}, ${fill[which]}), ${CHECKERS}` }}
-			className={`h-[18px] w-[18px] flex-none rounded-full border-2 shadow-[var(--shadow-popover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus ${
+			className={`h-[18px] w-[18px] flex-none rounded-[var(--radius-full)] border-2 shadow-[var(--shadow-popover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus ${
 				active === which ? "border-[var(--accent)]" : "border-[var(--surface)]"
 			}`}
 		/>

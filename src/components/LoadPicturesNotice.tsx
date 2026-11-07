@@ -39,7 +39,7 @@ export function LoadPicturesNotice({ pending, onConfirm }: LoadPicturesNoticePro
 	}
 
 	return (
-		<div className="mb-3 flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+		<div className="mb-3 flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] bg-[var(--sunken)] px-3 py-2 text-sm text-[var(--ink-muted)]">
 			<span className="min-w-0 flex-1">
 				{pending.length === 1 ? "1 picture is" : `${pending.length} pictures are`} linked from {hosts.join(", ")} and not shown here.
 			</span>
@@ -58,11 +58,11 @@ export function LoadPicturesNotice({ pending, onConfirm }: LoadPicturesNoticePro
 						{pending.length === 1 ? "it" : "them"} here. The server sees your address when it does. Only continue if you trust this
 						source.
 					</p>
-					<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-2 text-sm text-[var(--ink-muted)]">
 						The message is not changed. The recipient&apos;s mail client still loads the pictures itself.
 					</p>
 					{error ? (
-						<p role="alert" data-selectable className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+						<p role="alert" data-selectable className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 							{error}
 						</p>
 					) : null}

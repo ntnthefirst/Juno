@@ -31,7 +31,7 @@ export function Inspector({ target, onUpdateBlock, onMoveBlock, onUpdateBoxPosit
 	if (!target) {
 		return (
 			<div className="flex h-full flex-col gap-4 overflow-y-auto border-l border-[var(--line)] p-4">
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="text-sm text-[var(--ink-muted)]">
 					Select a block on the page to edit it.
 				</p>
 			</div>
@@ -43,7 +43,7 @@ export function Inspector({ target, onUpdateBlock, onMoveBlock, onUpdateBoxPosit
 	return (
 		<div className="flex h-full flex-col gap-5 overflow-y-auto border-l border-[var(--line)] p-4">
 			<div className="flex items-center justify-between gap-2">
-				<p className="text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink)]">
+				<p className="text-sm font-[var(--weight-medium)] text-[var(--ink)]">
 					{BLOCK_KIND_LABELS[block.kind]}
 				</p>
 				<div className="flex gap-1">
@@ -149,7 +149,7 @@ function BlockFields({ block, onUpdate }: BlockFieldsProps) {
 			);
 		case "divider":
 			return (
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="text-sm text-[var(--ink-muted)]">
 					A rule drawn across the column. Nothing to set.
 				</p>
 			);
@@ -219,7 +219,7 @@ function ListFields({ block, onUpdate }: ListFieldsProps) {
 				]}
 			/>
 			<div>
-				<p className="mb-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Items</p>
+				<p className="mb-1 text-sm text-[var(--ink-muted)]">Items</p>
 				<div className="flex flex-col gap-2">
 					{block.items.map((item, index) => (
 						<div key={index} className="flex items-start gap-1.5">
@@ -288,14 +288,14 @@ function TableFields({ block, onUpdate }: TableFieldsProps) {
 	return (
 		<div className="flex flex-col gap-4">
 			<div className="flex items-center justify-between">
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Header row</p>
+				<p className="text-sm text-[var(--ink-muted)]">Header row</p>
 				<Button size="dense" aria-pressed={block.headerRow} onClick={() => onUpdate({ headerRow: !block.headerRow })}>
 					{block.headerRow ? "Shown" : "Hidden"}
 				</Button>
 			</div>
 
 			<div>
-				<p className="mb-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Columns</p>
+				<p className="mb-1 text-sm text-[var(--ink-muted)]">Columns</p>
 				<div className="flex flex-col gap-2">
 					{block.columns.map((col, index) => (
 						<div key={index} className="flex items-end gap-1.5">
@@ -331,7 +331,7 @@ function TableFields({ block, onUpdate }: TableFieldsProps) {
 			</div>
 
 			<div>
-				<p className="mb-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Rows</p>
+				<p className="mb-1 text-sm text-[var(--ink-muted)]">Rows</p>
 				<div className="flex flex-col gap-3">
 					{block.rows.map((row, rowIndex) => (
 						<div key={rowIndex} className="rounded-[var(--radius-sm)] bg-[var(--sunken)] p-2">
@@ -371,7 +371,7 @@ type BoxPositionFieldsProps = {
 function BoxPositionFields({ box, onUpdate }: BoxPositionFieldsProps) {
 	return (
 		<div className="border-t border-[var(--line)] pt-4">
-			<p className="mb-3 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink)]">
+			<p className="mb-3 text-sm font-[var(--weight-medium)] text-[var(--ink)]">
 				Position on the page
 			</p>
 			<div className="grid grid-cols-3 gap-2">

@@ -107,23 +107,23 @@ export function MailStatusBar({ accounts, sync, online, outbox, onRetry, onShowO
 	}
 
 	return (
-		<div role="status" aria-live="polite" className="flex flex-none flex-col gap-1 border-t border-[var(--line)] px-4 py-2.5">
+		<div role="status" aria-live="polite" className="flex flex-none flex-col gap-1 border-t border-[var(--line)] px-4 py-3">
 			{lines.map((line) => (
 				<div key={line.key} className="flex min-w-0 items-start gap-2">
 					{line.tone === "busy" ? (
 						<Icon name="sync" size={12} className="mt-[3px] flex-none animate-spin text-[var(--accent)]" />
 					) : (
-						<span aria-hidden className={`mt-[6px] h-1.5 w-1.5 flex-none rounded-[var(--radius-full)] ${DOT[line.tone]}`} />
+						<span aria-hidden className={`mt-[6px] h-2 w-2 flex-none rounded-[var(--radius-full)] ${DOT[line.tone]}`} />
 					)}
 					<div className="min-w-0 flex-1">
 						<p
-							className={`truncate text-[length:var(--text-sm)] ${line.tone === "risk" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
+							className={`truncate text-dense ${line.tone === "risk" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
 							title={line.detail ?? line.text}
 						>
 							<span className="tabular">{line.text}</span>
 						</p>
 						{line.detail ? (
-							<p data-selectable className="line-clamp-2 text-[length:var(--text-micro)] text-[var(--ink-muted)]" title={line.detail}>
+							<p data-selectable className="line-clamp-2 text-micro text-[var(--ink-muted)]" title={line.detail}>
 								{line.detail}
 							</p>
 						) : null}
@@ -132,7 +132,7 @@ export function MailStatusBar({ accounts, sync, online, outbox, onRetry, onShowO
 						<button
 							type="button"
 							onClick={line.action.onClick}
-							className="flex-none rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--accent)] hover:bg-[var(--hover)]"
+							className="flex-none rounded-[var(--radius-sm)] px-1.5 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--accent)] hover:bg-[var(--hover)]"
 						>
 							{line.action.label}
 						</button>

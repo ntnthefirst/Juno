@@ -1,8 +1,6 @@
 import type { ProjectSummary, ProjectsView } from "@shared/types";
 import { Icon } from "../../components/Icon";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
-import { useContextMenu } from "../../lib/use-context-menu";
-import { useState } from "react";
+import { contextMenuFor } from "../../lib/native-menu";
 import { formatCents, formatDate, LINK_ICONS, LINK_LABELS } from "./format";
 import { ProjectCover } from "./ProjectCover";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -13,7 +11,8 @@ type ProjectGridProps = {
 	previews: boolean;
 	onOpen: (project: ProjectSummary) => void;
 	onRemove: (project: ProjectSummary) => void;
-	onOpenFolder: (project: ProjectSummary) => void;
+	/** The main process could not do what the menu asked. */
+	onFailed: (message: string) => void;
 };
 
 /**
@@ -40,32 +39,8 @@ export function ProjectGrid({
 	previews,
 	onOpen,
 	onRemove,
-	onOpenFolder,
+	onFailed,
 }: ProjectGridProps) {
-	const menu = useContextMenu();
-	const [target, setTarget] = useState<ProjectSummary | null>(null);
-
-	const items: MenuItem[] = target
-		? [
-				{ id: "open", label: "Open", icon: "projects", onSelect: () => onOpen(target) },
-				{
-					id: "folder",
-					label: "Open the folder",
-					icon: "folder-open",
-					disabled: !target.localPath,
-					onSelect: () => onOpenFolder(target),
-				},
-				{
-					id: "delete",
-					label: "Delete",
-					icon: "remove",
-					danger: true,
-					separatorBefore: true,
-					onSelect: () => onRemove(target),
-				},
-			]
-		: [];
-
 	return (
 		<>
 			<ul
@@ -77,10 +52,7 @@ export function ProjectGrid({
 						<button
 							type="button"
 							onClick={() => onOpen(row)}
-							onContextMenu={(event) => {
-								setTarget(row);
-								menu.open(event);
-							}}
+							onContextMenu={contextMenuFor({ kind: "project", id: row.id }, { open: () => onOpen(row), delete: () => onRemove(row), failed: onFailed })}
 							className="group flex w-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:border-[var(--line-strong)] hover:bg-[var(--hover)]"
 						>
 							{previews ? (
@@ -99,7 +71,7 @@ export function ProjectGrid({
 									{row.status ? <StatusBadge label={row.status.label} tone={row.status.tone} /> : null}
 								</div>
 
-								<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="truncate text-sm text-[var(--ink-muted)]">
 									{row.clientName ?? "Your own work"}
 								</span>
 
@@ -112,14 +84,14 @@ export function ProjectGrid({
 										</span>
 									))}
 									{row.assetCount > 0 ? (
-										<span className="tabular flex items-center gap-1 text-[length:var(--text-micro)]">
+										<span className="tabular flex items-center gap-1 text-micro">
 											<Icon name="image" size={14} />
 											{row.assetCount}
 										</span>
 									) : null}
 									{row.commandCount > 0 ? <Icon name="terminal" size={14} /> : null}
 
-									<span className="tabular ml-auto whitespace-nowrap text-[length:var(--text-micro)]">
+									<span className="tabular ml-auto whitespace-nowrap text-micro">
 										{row.dueOn ? formatDate(row.dueOn) : formatCents(row.agreedValueCents)}
 									</span>
 								</div>
@@ -129,9 +101,6 @@ export function ProjectGrid({
 				))}
 			</ul>
 
-			{menu.at && target ? (
-				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={target.name} />
-			) : null}
 		</>
 	);
 }

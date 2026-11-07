@@ -63,7 +63,7 @@ export function EmojiPicker({ disabled = false, onInsert }: EmojiPickerProps) {
 								onInsert(emoji);
 								setOpen(false);
 							}}
-							className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[length:var(--text-base)] hover:bg-[var(--hover)]"
+							className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-base hover:bg-[var(--hover)]"
 						>
 							{emoji}
 						</button>

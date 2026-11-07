@@ -22,7 +22,7 @@
  */
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont } from "pdf-lib";
 import { pdflibAddPlaceholder } from "@signpdf/placeholder-pdf-lib";
 import { P12Signer } from "@signpdf/signer-p12";
 import signpdf from "@signpdf/signpdf";
@@ -91,6 +91,35 @@ function fitted(value: string, font: PDFFont, size: number, maxWidth: number): n
 }
 
 /** `contract-ondertekend.pdf` gets `contract-ondertekend.cert.pdf` beside it. */
+/**
+ * A page as a person sees it. `/Rotate` turns the page clockwise when it is
+ * shown, so the visible page is as wide as the stored one is tall on a quarter
+ * turn. The stamp is laid out in this frame, with the origin at the visible
+ * bottom left and `v` growing upward, and `toPage` says where a point of it
+ * sits in the stored page, which is the space PDF drawing happens in.
+ */
+export function visibleFrame(
+	box: { x: number; y: number; width: number; height: number },
+	angle: number,
+): { width: number; height: number; rotation: 0 | 90 | 180 | 270; toPage: (u: number, v: number) => { x: number; y: number } } {
+	const turn = ((angle % 360) + 360) % 360;
+	if (turn !== 0 && turn !== 90 && turn !== 180 && turn !== 270) {
+		throw new Error(`A page turned ${angle} degrees cannot be stamped. Only quarter turns are valid in a PDF.`);
+	}
+	const { width: w, height: h } = box;
+	const sideways = turn === 90 || turn === 270;
+	return {
+		width: sideways ? h : w,
+		height: sideways ? w : h,
+		rotation: turn,
+		toPage: (u, v) => {
+			const [px, py] =
+				turn === 0 ? [u, v] : turn === 90 ? [w - v, u] : turn === 180 ? [w - u, h - v] : [v, h - u];
+			return { x: box.x + px, y: box.y + py };
+		},
+	};
+}
+
 export function certificatePathFor(signedPath: string): string {
 	return `${signedPath.replace(/\.pdf$/i, "")}.cert.pdf`;
 }
@@ -199,9 +228,9 @@ export async function signPdf(options: SignOptions): Promise<SignResult> {
 	const placement = options.placement ?? { page: pages.length, ...DEFAULT_PLACEMENT };
 	const page = pages[placement.page - 1];
 	if (!page) throw new Error(`The document has no page ${placement.page}.`);
-	if (page.getRotation().angle !== 0) {
-		throw new Error(`Page ${placement.page} is rotated. Rotate it upright in a PDF editor first.`);
-	}
+	const frame = visibleFrame(page.getMediaBox(), page.getRotation().angle);
+	// Drawn at this angle, anything on the page reads upright once the viewer turns the page.
+	const turned = degrees(frame.rotation);
 
 	const image =
 		options.signatureImagePath === null ? null : await pdf.embedPng(readFileSync(options.signatureImagePath));
@@ -209,27 +238,31 @@ export async function signPdf(options: SignOptions): Promise<SignResult> {
 	if (!showDetails && !image) {
 		throw new Error("A stamp without the name and the date needs a signature image. Turn the name and time back on.");
 	}
-	const box = page.getMediaBox();
-	const stampWidth = box.width * placement.width;
+	const stampWidth = frame.width * placement.width;
 	const metrics = stampMetrics(stampWidth, image ? image.height / image.width : null, showDetails);
 
-	// Top left of the stamp, in PDF space where y grows upward.
-	const left = box.x + box.width * placement.x;
-	const top = box.y + box.height - box.height * placement.y;
+	// Top left of the stamp, in the visible frame where v grows upward.
+	const left = frame.width * placement.x;
+	const top = frame.height - frame.height * placement.y;
 	let cursor = top - metrics.padding;
 	if (image) {
 		const scale = Math.min((stampWidth - metrics.padding * 2) / image.width, metrics.imageHeight / image.height);
 		const drawWidth = image.width * scale;
 		const drawHeight = image.height * scale;
-		page.drawImage(image, { x: left + metrics.padding, y: cursor - drawHeight, width: drawWidth, height: drawHeight });
+		page.drawImage(image, {
+			...frame.toPage(left + metrics.padding, cursor - drawHeight),
+			width: drawWidth,
+			height: drawHeight,
+			rotate: turned,
+		});
 		cursor -= metrics.imageHeight + metrics.gap;
 	}
 	if (showDetails) {
 		const who = text(`${options.signerName}${options.signerRole ? `, ${options.signerRole}` : ""}`, true);
 		const inner = stampWidth - metrics.padding * 2;
 		page.drawText(who, {
-			x: left + metrics.padding,
-			y: cursor - metrics.nameSize,
+			...frame.toPage(left + metrics.padding, cursor - metrics.nameSize),
+			rotate: turned,
 			size: fitted(who, helveticaBold, metrics.nameSize, inner),
 			font: helveticaBold,
 			color: rgb(0.07, 0.07, 0.07),
@@ -237,8 +270,8 @@ export async function signPdf(options: SignOptions): Promise<SignResult> {
 		cursor -= metrics.nameSize * 1.2 + metrics.gap;
 		const when = text(`Ondertekend op ${formatDateTime(options.signedAt)}`);
 		page.drawText(when, {
-			x: left + metrics.padding,
-			y: cursor - metrics.dateSize,
+			...frame.toPage(left + metrics.padding, cursor - metrics.dateSize),
+			rotate: turned,
 			size: fitted(when, helvetica, metrics.dateSize, inner),
 			font: helvetica,
 			color: rgb(0.35, 0.35, 0.35),

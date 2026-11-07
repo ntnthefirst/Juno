@@ -124,6 +124,8 @@ export interface Client extends Standard {
 	vatNumber: string | null;
 	/** Free text, Markdown. Rendered the way a calendar event's notes are. */
 	notes: string | null;
+	/** A value of `CLIENT_LANGUAGES`. */
+	language: string;
 }
 
 /** What a list row needs, resolved, so the renderer does not join by hand. */
@@ -142,6 +144,17 @@ export interface ClientSummary {
 }
 
 export type ClientInput = Partial<Omit<Client, keyof Standard | "sortName">> & { name: string };
+
+/**
+ * What the new-client window sends: the client, plus the contact details typed
+ * beside it. Each detail becomes the client's primary row of its kind.
+ */
+export type ClientIntakeInput = ClientInput & {
+	email?: string | null;
+	phone?: string | null;
+	/** One line, stored as the first address line. */
+	address?: string | null;
+};
 
 export type ClientPatch = Partial<Omit<Client, keyof Standard | "sortName">>;
 
@@ -248,6 +261,8 @@ export interface Project extends Standard {
 	startsOn: IsoDate | null;
 	dueOn: IsoDate | null;
 	agreedValueCents: Cents | null;
+	/** Whole minutes the work is expected to take. Null when nobody estimated it. */
+	estimatedMinutes: number | null;
 	notes: string | null;
 	/** The checkout on this machine. Juno reads it and never writes to it. */
 	localPath: string | null;
@@ -296,6 +311,78 @@ export interface ProjectStorageChoice {
 	path?: string | null;
 	/** Carry the files that are already there across to the new folder. */
 	move?: boolean;
+}
+
+/* ------------------------------------------------------------ time entries */
+
+/**
+ * Time spent on a project. A running timer has no end and no duration; both
+ * are filled in when it stops. Only one runs at a time.
+ */
+export interface TimeEntry extends Standard {
+	projectId: string;
+	clientId: string | null;
+	startedAt: Iso;
+	endedAt: Iso | null;
+	/** Whole minutes. Null while the timer runs. */
+	durationMinutes: number | null;
+	note: string | null;
+}
+
+export interface TimeEntryInput {
+	projectId: string;
+	/** UTC ISO-8601. Defaults to the duration before now. */
+	startedAt?: Iso;
+	durationMinutes: number;
+	note?: string | null;
+}
+
+export interface TimeEntryPatch {
+	startedAt?: Iso;
+	durationMinutes?: number;
+	note?: string | null;
+}
+
+export interface TimeTotals {
+	/** Whole minutes of every finished entry. A running timer is not counted. */
+	loggedMinutes: number;
+	estimatedMinutes: number | null;
+	entryCount: number;
+}
+
+/** The timer that is running, with the project's name so the title bar can say what it is for. */
+export interface RunningTimer {
+	entry: TimeEntry;
+	projectName: string;
+}
+
+/* --------------------------------------------------------- project timeline */
+
+export type ProjectTimelineKind =
+	| "status"
+	| "mail"
+	| "quote"
+	| "time"
+	| "contract"
+	| "created"
+	| "folder";
+
+export interface ProjectTimelineEntry {
+	/** The kind and the row id, so a list key is safe. */
+	id: string;
+	kind: ProjectTimelineKind;
+	at: Iso;
+	title: string;
+	/** One line under the title. */
+	detail: string | null;
+	/** The row this came from, so the interface can open it. Null for "created". */
+	entityId: string | null;
+}
+
+export interface ProjectTimelineQuery {
+	projectId: string;
+	kinds?: ProjectTimelineKind[];
+	limit?: number;
 }
 
 /* ----------------------------------------------------------- project links */
@@ -496,6 +583,30 @@ export type ThemeSetting = "system" | "light" | "dark";
  */
 export type SettingsSection = "general" | "business" | "mail" | "documents" | "security" | "mcp";
 
+/** The four records that are made in a small window of their own (decision 60). */
+export type NewRecordKind = "event" | "client" | "project" | "reminder";
+
+/**
+ * What a new-record window starts from. Every field is optional and checked on
+ * both sides of the window boundary (shared/new-record.ts), because it travels
+ * in the window's address.
+ */
+export interface NewRecordPrefill {
+	clientId?: string;
+	projectId?: string;
+	/** YYYY-MM-DD. The day an event or a reminder falls on. */
+	date?: string;
+	/** Wall-clock, YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD for an all-day event. */
+	startLocal?: string;
+	endLocal?: string;
+	allDay?: boolean;
+}
+
+/** What `window.childClosed` carries: which record the closed window saved, if any. */
+export interface ChildClosedInfo {
+	created: NewRecordKind | null;
+}
+
 /**
  * One of the owner's email addresses. Several are normal, at most one is
  * primary, and an address nobody reads is still worth recording: the one on an
@@ -573,10 +684,18 @@ export interface AppSettings {
 	 * the installation, and it is what tells a first install from an upgrade.
 	 */
 	mailTemplateSeedVersion: number;
+	/** The same for the intros and outros a first install is given. */
+	mailBlockSeedVersion: number;
 	/** The same for document templates: 0 is never, and it tells a first install from an upgrade. */
 	documentTemplateSeedVersion: number;
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
+	/**
+	 * A folder the person chose for new generated and imported documents, or null
+	 * for the one inside the application's own data folder. Files already filed
+	 * keep the path they were given, so changing this moves nothing.
+	 */
+	documentsFolder: string | null;
 	/**
 	 * Where invoicing actually happens. Juno never raises an invoice; an invoice
 	 * reminder links here instead. See decision 9.
@@ -592,7 +711,134 @@ export interface AppSettings {
 	updates: UpdateSettings;
 	/** Whether the agent server is on, and the port it was given if it was given one. */
 	mcpServer: McpServerSettings;
+	/** Toasts, the tray icon, the taskbar badge and the global shortcut. */
+	desktop: DesktopSettings;
+	/** Which kinds of suggestion the reader may make under a message. */
+	suggestions: SuggestionSources;
+	/** How far an agent may go on its own, per kind of thing it can do. */
+	agentPermissions: AgentPermissions;
+	/** The owner's standing instructions for every connected agent. */
+	agentInstructions: AgentInstructions;
 }
+
+export type SuggestionKind = "event" | "project" | "reminder";
+
+/** One thing offered under a message. The words are the whole of what a person is asked. */
+export interface MessageSuggestion {
+	kind: SuggestionKind;
+	messageId: string;
+	/** "Janssens mentions Friday at 10:00" */
+	headline: string;
+	/** "Add "Delivery, oak table" to the calendar?" */
+	question: string;
+}
+
+/** What pressing the button on a suggestion did. */
+export type SuggestionOutcome =
+	| { kind: "event"; event: CalendarEvent }
+	| { kind: "reminder"; reminder: Reminder }
+	| { kind: "project"; thread: MailThreadSummary; projectId: string; projectName: string };
+
+/**
+ * One switch per place a suggestion can come from. Both are on by default,
+ * because a suggestion costs nothing until a button is pressed, and either can
+ * be turned off without touching the other.
+ */
+export interface SuggestionSources {
+	/** A day and a time in a message, offered as a calendar event. */
+	calendar: boolean;
+	/** A project's name in a message, offered as a link to that project. */
+	projects: boolean;
+	/** A request by a day, or a promise to come back, offered as a reminder. */
+	reminders: boolean;
+}
+
+/**
+ * The five rows of the permissions page. Every tool belongs to exactly one
+ * (services/agent-permissions.ts), and the level of that row decides whether
+ * a call is refused, parked for a person, or run.
+ */
+export type AgentPermissionKind = "read" | "change" | "drafts" | "send" | "delete";
+
+export type AgentLevel = "off" | "ask" | "allow";
+
+export type AgentPermissions = Record<AgentPermissionKind, AgentLevel>;
+
+/** What one row of the permissions page says about itself, so the page and the service cannot drift. */
+export interface AgentPermissionRow {
+	kind: AgentPermissionKind;
+	label: string;
+	description: string;
+	/** Send, sign, file and delete: "Allow" is never available. */
+	locked: boolean;
+}
+
+/** The permissions page: the rows as they are drawn, and where each is set. */
+export interface AgentPermissionsView {
+	rows: AgentPermissionRow[];
+	levels: AgentPermissions;
+}
+
+/** The instructions page: what is written, and the areas that can be added. */
+export interface AgentInstructionsView {
+	instructions: AgentInstructions;
+	areas: { id: string; label: string }[];
+	maxLength: number;
+}
+
+/** Text for the agent about one area of the business, such as clients or documents. */
+export interface AgentInstructionArea {
+	area: string;
+	text: string;
+}
+
+/** What the owner wants every connected agent to read before it starts. */
+export interface AgentInstructions {
+	everyone: string;
+	mail: string;
+	areas: AgentInstructionArea[];
+}
+
+/**
+ * What Juno does at the edge of the desktop on Windows: toasts, the tray icon,
+ * the taskbar badge and one global shortcut. Whether closing the window keeps
+ * Juno running is `McpServerSettings.background`, shown on the same page.
+ */
+export interface DesktopSettings {
+	/** Show Windows notifications at all. */
+	toasts: boolean;
+	/** Keep an icon in the notification area. It stays while Juno runs in the background, whatever this says. */
+	tray: boolean;
+	/** The number of agent requests waiting, drawn on the taskbar button. */
+	badge: boolean;
+	/** A shortcut that works from any program. Off until a person turns it on. */
+	newNoteShortcut: { enabled: boolean; accelerator: string };
+}
+
+/** The shortcut as the settings page shows it: taken, or why it is not. */
+export interface ShortcutStatus {
+	registered: boolean;
+	/** Set when it is on but could not be taken, in words that say what to do. */
+	problem: string | null;
+}
+
+/** Any of the switches, each on its own. */
+export type DesktopPatch = Partial<Omit<DesktopSettings, "newNoteShortcut">> & {
+	newNoteShortcut?: Partial<DesktopSettings["newNoteShortcut"]>;
+};
+
+/** What the page reads in one go. */
+export interface DesktopView {
+	settings: DesktopSettings;
+	shortcut: ShortcutStatus;
+	/** Whether closing the window keeps Juno running. */
+	keepRunning: boolean;
+	/** False off Windows, where none of this exists. */
+	supported: boolean;
+}
+
+/** What the main process asks the main window to do for it. Only sent while Juno is unlocked. */
+export type ShellRequest = { kind: "agent" } | { kind: "new-note" };
 
 export interface McpServerSettings {
 	/** On by default: the point of it is that an agent can just be pointed at it. */
@@ -718,6 +964,12 @@ export interface UnlockResult {
 
 /* ------------------------------------------------------------------- backup */
 
+/** Where new documents are written, and whether that is the folder Juno made itself. */
+export interface DocumentsFolder {
+	path: string;
+	isDefault: boolean;
+}
+
 export interface BackupInfo {
 	path: string;
 	createdAt: Iso;
@@ -735,6 +987,82 @@ export interface SearchHit {
 	subtitle: string | null;
 	/** `YYYY-MM-DD` for a hit that has a date, so a list can be read in order. */
 	on?: IsoDate | null;
+}
+
+export type RecentKind = "client" | "project" | "document" | "thread" | "note";
+
+/** A record opened lately, with the name and place the menu draws. */
+export interface RecentItem {
+	id: string;
+	kind: RecentKind;
+	recordId: string;
+	name: string;
+	/** The client a project or document belongs to. Null when there is none. */
+	context: string | null;
+	/** UTC ISO-8601. */
+	openedAt: string;
+}
+
+/* Intros and outros: a line added at the start or end of a message. */
+
+export type ComposeBlockKind = "intro" | "outro";
+
+/**
+ * When a block is added on its own. Manual never is. The others are independent
+ * tests, and when two blocks of one kind pass, the one higher in the list wins.
+ */
+export type ComposeBlockRule = "manual" | "client" | "new_contact" | "reply" | "project";
+
+/** A value a block can carry. Stored in the text as {{name}}. */
+export type ComposeBlockVariable = "client_name" | "first_name" | "project" | "date" | "my_name";
+
+export interface ComposeBlock {
+	id: string;
+	ownerId: string;
+	createdAt: string;
+	updatedAt: string;
+	deletedAt: string | null;
+	kind: ComposeBlockKind;
+	name: string;
+	/** Dutch text with {{variable}} tokens. Line breaks are kept. */
+	body: string;
+	rule: ComposeBlockRule;
+	sortOrder: number;
+}
+
+export interface ComposeBlockInput {
+	kind: ComposeBlockKind;
+	name: string;
+	body: string;
+	rule?: ComposeBlockRule;
+}
+
+export interface ComposeBlockPatch {
+	name?: string;
+	body?: string;
+	rule?: ComposeBlockRule;
+}
+
+/** What the composer knows when it asks which block a message gets. */
+export interface ComposeBlockContext {
+	/** The message answers another one. */
+	reply?: boolean;
+	to?: MailAddress[];
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+/** A block with its variables filled in. Variables with no value come out empty. */
+export interface ComposeBlockRendered {
+	block: ComposeBlock;
+	text: string;
+	/** Variables that had no value for this message. */
+	missing: ComposeBlockVariable[];
+}
+
+export interface ComposeBlockResolution {
+	intro: ComposeBlockRendered | null;
+	outro: ComposeBlockRendered | null;
 }
 
 export interface SearchQuery {
@@ -1184,6 +1512,23 @@ export interface MailContainer {
 	box: MailBoxStyle;
 	actions: MailAction[];
 	children: MailNode[];
+	/**
+	 * Set on a document template's container that is a component placed rather
+	 * than drawn (decision 65). Its children are not stored: they are the
+	 * component's, read when the template is drawn or printed, so editing the
+	 * component changes it here. Left out on everything else.
+	 */
+	component?: ComponentPlacement | null;
+}
+
+/**
+ * What a placement holds: which component, and a value for each input it asks
+ * for. A value that is exactly `{{document.<key>}}` passes one of the
+ * template's own inputs through; anything else is the text itself.
+ */
+export interface ComponentPlacement {
+	componentId: string;
+	values: Record<string, string>;
 }
 
 /**
@@ -1540,6 +1885,82 @@ export interface DocumentCanvasPdf {
 	missing: string[];
 }
 
+/* ----------------------------------- document templates: the components */
+
+/**
+ * A piece of a page made once and placed in many document templates: a
+ * letterhead, a signature block, a price table (decision 65). `root` is a
+ * container rather than a page, with the content of the component under it.
+ * It declares inputs of its own, written `{{document.<key>}}` inside it, and
+ * its pictures belong to it (`DocumentComponentAsset`).
+ */
+export interface DocumentComponent extends Standard {
+	name: string;
+	description: string | null;
+	root: MailContainer;
+	/** The fonts `root` uses, which a template that places it takes on. */
+	fonts: MailFont[];
+	inputs: TemplateInput[];
+	/** How many live templates place it. */
+	usedBy: number;
+}
+
+export interface DocumentComponentInput {
+	name: string;
+	description?: string | null;
+	root?: MailContainer;
+	fonts?: MailFont[];
+	inputs?: TemplateInput[];
+}
+
+export type DocumentComponentPatch = Partial<DocumentComponentInput>;
+
+/** A template that places a component, for the message that stops a delete. */
+export interface ComponentUse {
+	templateId: string;
+	templateName: string;
+}
+
+/** A picture a component keeps. The canvas writes it as `{{asset.<key>}}`, like a template's own. */
+export interface DocumentComponentAsset extends Standard {
+	componentId: string;
+	fileName: string;
+	mimeType: string;
+	byteSize: number;
+	token: string;
+	url: string;
+}
+
+export interface DocumentComponentAssetInput {
+	componentId: string;
+	fileName: string;
+	data: Uint8Array;
+}
+
+/** A component drawn on paper by itself, with its inputs at their starting values. */
+export interface DocumentComponentRender {
+	componentId: string;
+	/** A draft to print instead of the stored one, for the editor. */
+	canvas?: DocumentCanvas;
+	inputs?: TemplateInput[];
+	values: Record<string, string>;
+}
+
+/** Detaching a placed component from a draft of a template. */
+export interface DetachInput {
+	templateId: string;
+	/** The draft the editor holds. Left out, the stored canvas and inputs. */
+	canvas?: DocumentCanvas;
+	inputs?: TemplateInput[];
+	/** The id of the placement: a container with a `component`. */
+	nodeId: string;
+}
+
+export interface DetachResult {
+	canvas: DocumentCanvas;
+	inputs: TemplateInput[];
+}
+
 /* ---------------------------------------------------------------- documents */
 
 export interface DocumentTemplate extends Standard {
@@ -1619,7 +2040,7 @@ export interface DocumentRecord extends Standard {
 	latestVersion: { id: string; kind: DocumentVersionKind; fileDate: Iso } | null;
 }
 
-export type DocumentSourceKind = "generated" | "imported";
+export type DocumentSourceKind = "generated" | "imported" | "page";
 
 export interface ImportDocumentInput {
 	/** An absolute path to a PDF that exists. Copied in, never referenced. */
@@ -2217,6 +2638,8 @@ export interface MailThreadListQuery {
 	limit?: number;
 	/** The `lastMessageAt` of the last row seen, for the next page. */
 	before?: Iso;
+	/** Rows to skip, for the next page of a list without a search. A search is ranked, so it ignores this. */
+	offset?: number;
 }
 
 /**
@@ -2681,7 +3104,12 @@ export interface AddressCandidate {
  * action carrying the arguments it would use, and a person approves or rejects
  * it in the app. See .claude/rules/mcp.md section 4.
  */
-export type AgentActionState = "pending" | "approved" | "rejected" | "expired" | "executed" | "failed";
+/**
+ * `closed` is a request a person answered by doing the thing themselves:
+ * they opened the draft the agent asked to send and pressed Send. Nothing ran
+ * on the agent's behalf, and it can no longer be approved.
+ */
+export type AgentActionState = "pending" | "approved" | "rejected" | "expired" | "executed" | "failed" | "closed";
 
 /** Where the request came from. Never "user": a person's own click is not a request. */
 export type AgentActionSource = "mcp" | "assistant" | "automation";
@@ -2766,7 +3194,8 @@ export interface AgentActionListQuery {
 }
 
 export type AuditActor = "user" | "agent" | "automation";
-export type AuditResult = "ok" | "failed" | "pending" | "rejected" | "expired";
+/** "read" is a call that looked and changed nothing; every other result is a write or a decision. */
+export type AuditResult = "ok" | "read" | "failed" | "pending" | "rejected" | "expired" | "closed";
 
 export interface AuditEvent extends Standard {
 	actor: AuditActor;
@@ -2797,6 +3226,10 @@ export interface ToolSummary {
 	readOnly: boolean;
 	/** True when a person has to approve each call before it runs. */
 	requiresConfirmation: boolean;
+	/** The permission row the tool belongs to, which is what Settings > MCP > Permissions sets. */
+	row: AgentPermissionKind;
+	/** How often an agent or an automation ran it, from the log. */
+	calls: number;
 }
 
 /* -------------------------------------------------------------- automations */
@@ -2882,6 +3315,22 @@ export interface BriefingSection {
 	emptyText: string;
 }
 
+/**
+ * What the Overview screen opens with. Every number is counted here, so the
+ * window and an agent read the same ones.
+ */
+export interface OverviewSummary {
+	clients: number;
+	projects: number;
+	documents: number;
+	unreadMail: number;
+	overdueReminders: number;
+	/** Requests an agent made that are waiting for a person to answer. */
+	waitingRequests: number;
+	/** One sentence: what is overdue and waiting, or that nothing is. */
+	headline: string;
+}
+
 export interface Briefing {
 	/** The day or range the briefing is about. */
 	title: string;
@@ -2963,4 +3412,168 @@ export interface ClaudeDesktopSetup {
 	/** Whether the system handed the file to a program, which is Claude when it is installed. */
 	opened: boolean;
 	url: string;
+}
+
+/* ------------------------------------------------------------------- notes */
+
+/** A note, with the names of what it belongs to so a row needs no second read. */
+export interface Note extends Standard {
+	title: string;
+	/** Markdown. A checklist is `- [ ] item` and `- [x] item`. */
+	body: string;
+	clientId: string | null;
+	clientName: string | null;
+	projectId: string | null;
+	projectName: string | null;
+	/** Set while the note is pinned to the top of the list. */
+	pinnedAt: Iso | null;
+}
+
+export interface NoteInput {
+	title?: string;
+	body?: string;
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+export interface NotePatch extends NoteInput {
+	pinned?: boolean;
+}
+
+export interface NoteQuery {
+	clientId?: string;
+	projectId?: string;
+	/** At most this many, newest edit first. Default 200. */
+	limit?: number;
+	/** Rows to skip, for the next page. */
+	offset?: number;
+}
+
+/** A hit of a search over notes, with the words around it. */
+export interface NoteHit {
+	note: Note;
+	snippet: string;
+}
+
+/* ------------------------------------------------------------------- pages */
+
+/** A page is a document of kind `page`: the record, and the blocks it is written in. */
+export interface PageDetail {
+	document: DocumentRecord;
+	blocks: import("./blocks").Block[];
+}
+
+export interface PageInput {
+	title?: string;
+	clientId?: string | null;
+	projectId?: string | null;
+	blocks?: unknown;
+}
+
+export interface PagePatch {
+	title?: string;
+	clientId?: string | null;
+	projectId?: string | null;
+	blocks?: unknown;
+}
+
+/* --------------------------------------------------------------- mail rules */
+
+/** What a text condition looks at. The sender and recipients are addresses, never display names. */
+export type MailRuleTextField = "sender" | "recipient" | "subject";
+
+export type MailRuleTextTest = "contains" | "is" | "starts_with" | "ends_with" | "not_contains";
+
+/**
+ * One test on a new message. Plain data: nothing in here is a pattern or a
+ * program, so the text a person (or a sender) supplies is only ever compared,
+ * never interpreted.
+ */
+export type MailRuleCondition =
+	| { kind: "text"; field: MailRuleTextField; test: MailRuleTextTest; value: string }
+	| { kind: "sender_is_client"; value: boolean }
+	| { kind: "has_attachments"; value: boolean };
+
+/** What a matching rule does. A rule may move a message at most once. */
+export type MailRuleAction =
+	| { kind: "move"; folderId: string }
+	| { kind: "trash" }
+	| { kind: "archive" }
+	| { kind: "mark_read" }
+	| { kind: "flag" }
+	| { kind: "link_client" };
+
+export type MailRuleActionKind = MailRuleAction["kind"];
+
+/** all: every condition has to hold. any: one is enough. */
+export type MailRuleMatch = "all" | "any";
+
+export interface MailRule extends Standard {
+	accountId: string;
+	name: string;
+	enabled: boolean;
+	match: MailRuleMatch;
+	conditions: MailRuleCondition[];
+	actions: MailRuleAction[];
+	/** True: a message this rule matched is not offered to the rules below it. */
+	stopOnMatch: boolean;
+	/** Rules are checked from the lowest number up. */
+	sortOrder: number;
+}
+
+export interface MailRuleInput {
+	accountId: string;
+	name: string;
+	enabled?: boolean;
+	match?: MailRuleMatch;
+	conditions: MailRuleCondition[];
+	actions: MailRuleAction[];
+	stopOnMatch?: boolean;
+}
+
+export interface MailRulePatch {
+	name?: string;
+	enabled?: boolean;
+	match?: MailRuleMatch;
+	conditions?: MailRuleCondition[];
+	actions?: MailRuleAction[];
+	stopOnMatch?: boolean;
+}
+
+/** done: it happened. skipped: there was nothing to do. failed: it was tried and the error says why. */
+export type MailRuleResult = "done" | "skipped" | "failed";
+
+/**
+ * One thing a rule did (or tried to do) to one message. The subject and sender
+ * are copies taken at the time, cut short, because the message may be gone and
+ * both are text the sender chose.
+ */
+export interface MailRuleRun extends Standard {
+	accountId: string;
+	ruleId: string;
+	/** The rule's name when it ran, so a renamed or removed rule still reads. */
+	ruleName: string;
+	messageId: string;
+	subject: string;
+	fromAddress: string | null;
+	action: MailRuleActionKind;
+	/** Where it went, for a move: the folder's name when it ran. */
+	detail: string | null;
+	result: MailRuleResult;
+	error: string | null;
+}
+
+export interface MailRuleRunQuery {
+	accountId: string;
+	ruleId?: string;
+	limit?: number;
+}
+
+/** What one pass over the new mail of an account did. */
+export interface MailRulePass {
+	checked: number;
+	matched: number;
+	done: number;
+	skipped: number;
+	failed: number;
 }

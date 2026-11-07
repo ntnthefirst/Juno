@@ -49,6 +49,9 @@ import {
 import { isPdfName } from "../../shared/mime";
 import { formatDateTime } from "./document-context";
 import { htmlToText, quoteForReply, quoteHtmlForReply, textToHtml } from "./mail-html";
+import { announceAll, closeForSentDraft } from "./agent-actions";
+import { fillVariables, chipsToTokens, missingMessage, variablesUsed } from "../../shared/mail-variables";
+import { valuesFor } from "./mail-blocks";
 import { clientsFor } from "./mail-recipients";
 import { renderTemplate } from "./mail-templates";
 
@@ -523,7 +526,7 @@ export function outgoingForThread(threadId: string, db: Db = getDb()): MailThrea
 async function bodies(input: { bodyText: string; bodyHtml?: string | null }): Promise<{ bodyText: string; bodyHtml: string }> {
 	if (input.bodyHtml) {
 		return {
-			bodyText: input.bodyText.trim() || htmlToText(input.bodyHtml),
+			bodyText: input.bodyText.trim() || htmlToText(chipsToTokens(input.bodyHtml)),
 			bodyHtml: input.bodyHtml,
 		};
 	}
@@ -808,6 +811,28 @@ export async function updateDraft(id: string, patch: MailDraftPatch, db: Db = ge
 	return record;
 }
 
+/**
+ * The body of a draft with its variables filled in for this message. A draft
+ * keeps them as chips so they follow the recipient; the values go in when the
+ * message is sent or its preview is drawn, and a variable with no value stops
+ * it, because a client must never receive an empty hole where a name should be.
+ */
+async function filledBody(row: Row, db: Db): Promise<{ bodyText: string; bodyHtml: string | null }> {
+	if (variablesUsed(row.bodyText, row.bodyHtml).length === 0) return { bodyText: row.bodyText, bodyHtml: row.bodyHtml };
+	const values = await valuesFor(
+		{
+			to: parseAddresses(row.toJson),
+			clientId: row.clientId,
+			projectId: row.projectId,
+			reply: row.replyToMessageId !== null,
+		},
+		db,
+	);
+	const filled = fillVariables({ text: row.bodyText, html: row.bodyHtml }, values);
+	if (filled.missing.length > 0) throw new Error(missingMessage(filled.missing));
+	return { bodyText: filled.text, bodyHtml: filled.html };
+}
+
 /** The marker the template renderer leaves where a value was missing. */
 const MISSING_MARKER = /\[ontbreekt: ([\w.]+)\]/g;
 
@@ -896,6 +921,7 @@ export async function reviewForSend(id: string, db: Db = getDb()): Promise<SendR
 	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, row.accountId)).get();
 	if (!account || account.deletedAt) throw new Error("The account this message belongs to no longer exists.");
 	validateSendable(row, account, attachmentCount(db, row.id));
+	const filled = await filledBody(row, db);
 	const record = await requireRecord(id, db);
 	return {
 		summary: summaryOf(record.subject, record.to),
@@ -906,7 +932,7 @@ export async function reviewForSend(id: string, db: Db = getDb()): Promise<SendR
 			bcc: record.bcc,
 			subject: record.subject,
 			attachments: [...record.attachments.map((a) => a.filename), ...record.files.map((f) => f.fileName)],
-			bodyText: record.bodyText,
+			bodyText: filled.bodyText,
 		}),
 		seal: row.updatedAt,
 	};
@@ -1006,12 +1032,28 @@ export async function requestSend(id: string, db: Db = getDb()): Promise<MailOut
 	const account = db.select().from(mailAccounts).where(eq(mailAccounts.id, row.accountId)).get();
 	if (!account || account.deletedAt) throw new Error("The account this message belongs to no longer exists.");
 	validateSendable(row, account, attachmentCount(db, row.id));
+	const filled = await filledBody(row, db);
 
 	const stamp = now();
-	db.update(mailOutbox)
-		.set({ state: "queued", requestedBy: "user", approvedAt: stamp, queuedAt: stamp, lastError: null, updatedAt: stamp })
-		.where(eq(mailOutbox.id, id))
-		.run();
+	// The request an agent made for this draft closes in the same transaction,
+	// so a message is never queued with its request still open to approve.
+	const closed = db.transaction((tx) => {
+		tx.update(mailOutbox)
+			.set({
+				state: "queued",
+				requestedBy: "user",
+				approvedAt: stamp,
+				queuedAt: stamp,
+				lastError: null,
+				updatedAt: stamp,
+				bodyText: filled.bodyText,
+				bodyHtml: filled.bodyHtml,
+			})
+			.where(and(eq(mailOutbox.id, id), inArray(mailOutbox.state, ["draft", "failed", "pending"])))
+			.run();
+		return closeForSentDraft(id, tx);
+	});
+	announceAll(closed);
 	notifyQueued();
 	const record = await requireRecord(id, db);
 	notifyChanged(record);

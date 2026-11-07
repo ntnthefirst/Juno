@@ -60,7 +60,7 @@ export function DocumentDropLayer() {
 					aria-hidden
 					className="pointer-events-none fixed inset-x-0 top-[var(--titlebar-height)] z-40 flex justify-center pt-4"
 				>
-					<p className="rounded-[var(--radius-lg)] border border-[var(--accent)] bg-[var(--surface)] px-4 py-2 text-[length:var(--text-base)] text-[var(--ink)] shadow-[var(--shadow-popover)]">
+					<p className="rounded-[var(--radius-lg)] border border-[var(--accent)] bg-[var(--surface)] px-4 py-2 text-base text-[var(--ink)] shadow-[var(--shadow-popover)]">
 						Drop a PDF to import it
 					</p>
 				</div>

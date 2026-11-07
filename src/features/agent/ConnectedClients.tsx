@@ -93,7 +93,7 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 
 	if (error) {
 		return (
-			<p role="alert" data-selectable className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+			<p role="alert" data-selectable className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 				{error}
 			</p>
 		);
@@ -113,11 +113,11 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 							<span className="min-w-0 flex-1">
 								<span className="flex flex-wrap items-center gap-2">
 									<span className="font-[var(--weight-medium)]">{connection.name}</span>
-									<span className="rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+									<span className="rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-micro text-[var(--ink-muted)]">
 										{connection.kind === "token" ? "access token" : "signed in with a code"}
 									</span>
 								</span>
-								<span className="tabular mt-0.5 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="tabular mt-0.5 block text-sm text-[var(--ink-muted)]">
 									Added {day(connection.createdAt)}, {lastUsed(connection)}
 								</span>
 							</span>
@@ -135,7 +135,7 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 					<div className="mt-2 flex items-center gap-2">
 						<p
 							data-selectable
-							className="min-w-0 flex-1 break-all rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-[length:var(--text-sm)] text-[var(--ink)]"
+							className="min-w-0 flex-1 break-all rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-sm text-[var(--ink)]"
 						>
 							{created.token}
 						</p>
@@ -144,7 +144,7 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 							Copy
 						</Button>
 					</div>
-					<p className="mt-2 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-2 max-w-[68ch] text-sm text-[var(--ink-muted)]">
 						Send it as an Authorization header: Bearer followed by the token. It is not shown again.
 					</p>
 					<div className="mt-3">
@@ -162,7 +162,7 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 					}}
 				>
 					<label className="block">
-						<span className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">Name</span>
+						<span className="mb-1 block text-sm text-[var(--ink-muted)]">Name</span>
 						<input
 							value={name}
 							onChange={(event) => setName(event.target.value)}
@@ -185,7 +185,7 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 						<Icon name="add" />
 						Create an access token
 					</Button>
-					<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<span className="text-sm text-[var(--ink-muted)]">
 						For a client that cannot show a code.
 					</span>
 				</div>

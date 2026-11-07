@@ -41,25 +41,25 @@ export function OutgoingMessageView({ message, open, onToggle, onEdit }: Outgoin
 						<span className="truncate font-[var(--weight-medium)]">{from}</span>
 						{message.state !== "sent" ? (
 							<span
-								className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[length:var(--text-micro)] ${STATE_TONES[message.state]}`}
+								className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-micro ${STATE_TONES[message.state]}`}
 							>
 								{STATE_LABELS[message.state]}
 							</span>
 						) : null}
 						{message.from.name ? (
-							<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="min-w-0 truncate text-sm text-[var(--ink-muted)]">
 								{message.from.address}
 							</span>
 						) : null}
 					</div>
 					{!open ? (
-						<span className="mt-0.5 block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="mt-0.5 block truncate text-sm text-[var(--ink-muted)]">
 							{message.bodyText.replace(/\s+/g, " ").trim()}
 						</span>
 					) : null}
 				</div>
 				<span
-					className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+					className="tabular shrink-0 text-sm text-[var(--ink-muted)]"
 					title={formatFull(message.date)}
 				>
 					{formatWhen(message.date)}
@@ -68,7 +68,7 @@ export function OutgoingMessageView({ message, open, onToggle, onEdit }: Outgoin
 
 			{open ? (
 				<div className="px-8">
-					<p className="pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="pb-2 text-sm text-[var(--ink-muted)]">
 						<span data-selectable className="block truncate">
 							To {participantsLine(message.to, "(nobody)")}
 							{message.cc.length > 0 ? `, Cc ${participantsLine(message.cc)}` : ""}
@@ -85,17 +85,17 @@ export function OutgoingMessageView({ message, open, onToggle, onEdit }: Outgoin
 					) : (
 						<pre
 							data-selectable
-							className="whitespace-pre-wrap border-t border-[var(--line)] py-4 text-[length:var(--text-base)] leading-[var(--leading-relaxed)]"
+							className="whitespace-pre-wrap border-t border-[var(--line)] py-4 text-base leading-[var(--leading-relaxed)]"
 						>
 							{message.bodyText}
 						</pre>
 					)}
 					{message.attachments.length > 0 ? (
-						<p className="border-t border-[var(--line)] py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="border-t border-[var(--line)] py-2 text-sm text-[var(--ink-muted)]">
 							Attached: {message.attachments.map((a) => a.filename).join(", ")}
 						</p>
 					) : null}
-					<p className="border-t border-[var(--line)] py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="border-t border-[var(--line)] py-2 text-sm text-[var(--ink-muted)]">
 						{message.state === "sent"
 							? "Sent from Juno. The copy in Sent takes its place after the next sync."
 							: message.state === "draft"

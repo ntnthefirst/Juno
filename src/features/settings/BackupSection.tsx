@@ -82,30 +82,27 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 		<Section
 			title="Backup"
 			anchor="backup"
-			description="Nothing is backed up unless you do it here."
-			action={
-				<div className="flex gap-1">
-					<Button size="dense" onClick={() => void window.juno.backup.revealFolder()}>
-						Show folder
-					</Button>
-					<Button size="dense" variant="primary" disabled={busy} onClick={() => void create()}>
-						Back up now
-					</Button>
-				</div>
-			}
+			lead
+			description="Copy the whole Juno folder while Juno is closed, or export a single file."
 		>
+			<div className="flex items-center gap-1">
+				<Button variant="primary" disabled={busy} onClick={() => void create()}>
+					Export a backup
+				</Button>
+				<Button onClick={() => void window.juno.backup.revealFolder()}>Open data folder</Button>
+			</div>
+
+			<div className="mt-5">
 			{backups === null ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : backups.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-					No backups yet.
-				</p>
+				<p className="text-dense text-[var(--ink-muted)]">No backups yet.</p>
 			) : (
 				<ul className="max-w-[620px]">
 					{backups.map((backup) => (
 						<li
 							key={backup.path}
-							className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<span className="tabular min-w-0 truncate">
 								{formatWhen(backup.createdAt)}
@@ -122,16 +119,18 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 				</ul>
 			)}
 
+			</div>
+
 			<SectionError message={error} />
 
 			{confirming ? (
 				<Dialog title="Restore this backup" onClose={() => setConfirming(null)} width="narrow">
-					<p className="text-[length:var(--text-base)]">
+					<p className="text-base">
 						Everything currently in Juno is replaced by the copy from{" "}
 						{formatWhen(confirming.createdAt)}. Anything added since then is lost, and Juno
 						closes once it is done.
 					</p>
-					<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-3 text-sm text-[var(--ink-muted)]">
 						Back up now first if you are not certain.
 					</p>
 					<div className="mt-5 flex justify-end gap-2">

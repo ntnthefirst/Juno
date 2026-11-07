@@ -111,7 +111,7 @@ export function InsertImageControl({ disabled = false, onInsert }: InsertImageCo
 						</Button>
 					</div>
 
-					<div className="my-3 flex items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<div className="my-3 flex items-center gap-2 text-sm text-[var(--ink-muted)]">
 						<span aria-hidden className="h-px flex-1 bg-[var(--line)]" />
 						or
 						<span aria-hidden className="h-px flex-1 bg-[var(--line)]" />
@@ -130,7 +130,7 @@ export function InsertImageControl({ disabled = false, onInsert }: InsertImageCo
 					<Button size="dense" onClick={() => fileInputRef.current?.click()}>
 						Embed a local file
 					</Button>
-					{fileError ? <p className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">{fileError}</p> : null}
+					{fileError ? <p className="mt-1 text-sm text-[var(--risk)]">{fileError}</p> : null}
 				</div>
 			) : null}
 

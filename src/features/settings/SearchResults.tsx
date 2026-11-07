@@ -33,8 +33,8 @@ export function SearchResults({ query, results, active, onActive, onPick, onSugg
 	return (
 		<div className="px-8 py-7">
 			<header className="mb-5">
-				<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]">Search</h1>
-				<p role="status" aria-live="polite" className="mt-1 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<h1 className="text-h2">Search</h1>
+				<p role="status" aria-live="polite" className="mt-1 text-dense text-[var(--ink-muted)]">
 					{results.length === 0
 						? `Nothing matches "${query.trim()}".`
 						: `${results.length} ${results.length === 1 ? "setting matches" : "settings match"} "${query.trim()}".`}
@@ -52,7 +52,7 @@ export function SearchResults({ query, results, active, onActive, onPick, onSugg
 								key={word}
 								type="button"
 								onClick={() => onSuggest(word)}
-								className="h-8 rounded-[var(--radius-full)] border border-[var(--line-strong)] px-3 text-[length:var(--text-dense)] text-[var(--ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+								className="h-8 rounded-[var(--radius-full)] border border-[var(--line-strong)] px-3 text-dense text-[var(--ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 							>
 								{word}
 							</button>
@@ -86,14 +86,14 @@ export function SearchResults({ query, results, active, onActive, onPick, onSugg
 											<Icon name={groupById(entry.tab).icon} size={16} />
 										</span>
 										<span className="flex min-w-0 flex-1 flex-col gap-0.5">
-											<span className="truncate text-[length:var(--text-base)] text-[var(--ink)]">
+											<span className="truncate text-base text-[var(--ink)]">
 												<Marked text={entry.title} words={words} />
 											</span>
-											<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="truncate text-sm text-[var(--ink-muted)]">
 												<Marked text={entry.description} words={words} />
 											</span>
 										</span>
-										<span className="flex flex-none items-center gap-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<span className="flex flex-none items-center gap-1 text-sm text-[var(--ink-muted)]">
 											{location.map((part, partIndex) => (
 												<Fragment key={part}>
 													{partIndex > 0 ? <Icon name="chevron-right" size={10} /> : null}
@@ -106,7 +106,7 @@ export function SearchResults({ query, results, active, onActive, onPick, onSugg
 							);
 						})}
 					</ul>
-					<p className="mt-5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-5 text-sm text-[var(--ink-muted)]">
 						Up and down move between results, Enter opens one, Escape clears the search.
 					</p>
 				</>

@@ -29,12 +29,12 @@ export function PanelFrame({ title, onBack, backLabel, steps, step = 0, onStep, 
 				<button
 					type="button"
 					onClick={onBack}
-					className="-ml-1.5 inline-flex h-7 items-center gap-1 rounded-[var(--radius-md)] pr-2 pl-1 text-[length:var(--text-sm)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+					className="-ml-1.5 inline-flex h-7 items-center gap-1 rounded-[var(--radius-md)] pr-2 pl-1 text-sm text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 				>
 					<Icon name="chevron-left" size={14} strokeWidth={2} />
 					{backLabel}
 				</button>
-				<h2 className="mt-1 truncate text-[length:var(--text-base)] font-[var(--weight-semibold)]">{title}</h2>
+				<h2 className="mt-1 truncate text-base font-[var(--weight-semibold)]">{title}</h2>
 				{steps && steps.length > 1 ? (
 					<ol className="mt-2 flex flex-wrap items-center gap-1" aria-label="Steps">
 						{steps.map((entry, index) => {
@@ -49,7 +49,7 @@ export function PanelFrame({ title, onBack, backLabel, steps, step = 0, onStep, 
 										onClick={() => onStep?.(index)}
 										aria-current={current ? "step" : undefined}
 										className={[
-											"rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)]",
+											"rounded-[var(--radius-sm)] px-1.5 py-0.5 text-micro font-[var(--weight-medium)]",
 											current
 												? "bg-[var(--accent-soft)] text-[var(--accent)]"
 												: passed
@@ -65,7 +65,7 @@ export function PanelFrame({ title, onBack, backLabel, steps, step = 0, onStep, 
 					</ol>
 				) : null}
 				{steps?.[step]?.hint ? (
-					<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{steps[step]?.hint}</p>
+					<p className="mt-2 text-sm text-[var(--ink-muted)]">{steps[step]?.hint}</p>
 				) : null}
 			</div>
 			<div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>

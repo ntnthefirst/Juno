@@ -7,15 +7,13 @@
  * the situation that produced it changes, instead of leaving a stale row behind
  * that has to be cleaned up.
  *
- * Decision 9 again: a "time to invoice" suggestion links to wherever invoicing
- * actually happens. Juno never generates, numbers or sends one.
+ * Decision 9: no suggestion here offers to invoice, because Juno does not.
  */
 import { and, eq, isNull, or } from "drizzle-orm";
 import { getDb, type Db } from "../db";
-import { clients, projects, referenceItems, reminders } from "../db/schema";
-import { formatDate, formatEuros, todayIsoDate } from "./document-context";
+import { clients, projects, reminders } from "../db/schema";
+import { formatDate, todayIsoDate } from "./document-context";
 import { SEED_REMINDERS, type SeedReminder } from "./reminders-seed";
-import * as settings from "./settings";
 import { addDays, compare, nextOccurrence } from "./recurrence";
 import { create, type ReminderCategory, type ReminderRecord } from "./reminders";
 
@@ -30,62 +28,6 @@ export interface ReminderSuggestion {
 	projectId: string | null;
 	actionUrl: string | null;
 	actionLabel: string | null;
-}
-
-/** Project statuses that mean the work is finished and can be billed. */
-const BILLABLE_STATUS_KEYS = ["delivered", "done", "completed"];
-
-/**
- * Projects that look ready to invoice.
- *
- * A heuristic, and deliberately a shy one: it suggests, it does not nag, and a
- * project the owner has already made a reminder for is left alone.
- */
-export async function invoiceSuggestions(
-	db: Db = getDb(),
-	today: string = todayIsoDate(),
-): Promise<ReminderSuggestion[]> {
-	const tool = await settings.getAccountingTool();
-
-	// Inner, deliberately: an invoice suggestion needs somebody to invoice, so a
-	// project with no client is not one of these and never should be.
-	const rows = db
-		.select({ project: projects, client: clients, status: referenceItems })
-		.from(projects)
-		.innerJoin(clients, eq(projects.clientId, clients.id))
-		.leftJoin(referenceItems, eq(projects.statusId, referenceItems.id))
-		.where(and(isNull(projects.deletedAt), isNull(clients.deletedAt)))
-		.all();
-
-	const existing = new Set(
-		db
-			.select({ projectId: reminders.projectId })
-			.from(reminders)
-			.where(and(isNull(reminders.deletedAt), eq(reminders.category, "invoice")))
-			.all()
-			.map((row) => row.projectId)
-			.filter((id): id is string => id !== null),
-	);
-
-	return rows
-		.filter((row) => {
-			if (!row.status || !BILLABLE_STATUS_KEYS.includes(row.status.key)) return false;
-			if (!row.project.agreedValueCents || row.project.agreedValueCents <= 0) return false;
-			return !existing.has(row.project.id);
-		})
-		.map((row) => ({
-			key: `invoice:${row.project.id}`,
-			title: `Invoice ${row.client.name} for ${row.project.name}`,
-			notes:
-				`Marked ${row.status!.label.toLowerCase()}, agreed value ` +
-				`${formatEuros(row.project.agreedValueCents)}. Juno does not raise invoices.`,
-			category: "invoice" as const,
-			dueOn: today,
-			clientId: row.client.id,
-			projectId: row.project.id,
-			actionUrl: tool.url || null,
-			actionLabel: tool.url ? `Open ${tool.name || "your accounting tool"}` : null,
-		}));
 }
 
 /** Projects with a due date approaching and no reminder pointing at them. */
@@ -141,11 +83,7 @@ export async function suggestions(
 	db: Db = getDb(),
 	today: string = todayIsoDate(),
 ): Promise<ReminderSuggestion[]> {
-	const [invoices, deadlines] = await Promise.all([
-		invoiceSuggestions(db, today),
-		deadlineSuggestions(db, today),
-	]);
-	return [...invoices, ...deadlines].sort((a, b) => compare(a.dueOn, b.dueOn));
+	return (await deadlineSuggestions(db, today)).sort((a, b) => compare(a.dueOn, b.dueOn));
 }
 
 /**

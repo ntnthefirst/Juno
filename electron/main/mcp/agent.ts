@@ -25,6 +25,7 @@ const ACTION_STATES: AgentActionState[] = [
 	"expired",
 	"executed",
 	"failed",
+	"closed",
 ];
 
 const ACTORS: AuditActor[] = ["user", "agent", "automation"];
@@ -54,6 +55,18 @@ export const agentTools: ToolDescriptor[] = [
 				args.date ? String(args.date) : undefined,
 				args.timezone ? String(args.timezone) : undefined,
 			),
+	},
+	{
+		name: "briefing.overview",
+		title: "The counts on the Overview",
+		description:
+			"How many clients, projects, documents and unread mails there are, how many reminders " +
+			"are overdue, how many agent requests wait for a person, and one sentence saying so. " +
+			"Cheaper than briefing.today when only the numbers are needed.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: { type: "object", properties: {}, additionalProperties: false },
+		handler: async () => briefing.overview(),
 	},
 	{
 		name: "briefing.client",

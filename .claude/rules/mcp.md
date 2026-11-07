@@ -102,9 +102,27 @@ In practice:
 - Bulk operations are one pending action listing every affected row, not N
   approvals and not one blanket yes.
 
-Writes that only touch local records (`clients.update`, `reminders.complete`)
-execute directly, but are still marked side-effectful so they are excluded from
-anything that runs on a schedule without a person watching.
+**One exception, and it is narrow (decision 64): a mailbox rule the owner wrote and
+switched on.** It files mail on its own, after each sync, on mail that arrives
+after it exists, because it is the owner's standing instruction and not a
+choice an agent made. It covers the owner's rules only. An agent may create,
+change, reorder or remove a rule only through this gate: `mail.rules.create`,
+`update` and `reorder` are in the Send row and `delete` in the Delete row, so they
+park whatever the levels say, and the owner reads the whole rule in plain words
+before approving. No other tool, and no automation, gains the right to file.
+
+Writes that only touch local records (`clients.update`, `reminders.complete`,
+`time.*`, `mail.blocks.*`) and mail drafts are the rows the owner may set to Allow
+under Settings > MCP > Permissions (decision 57). At Allow they execute directly;
+at Ask first they park; at Off they are refused with a sentence naming the
+setting. They are still marked side-effectful so they are excluded from anything
+that runs on a schedule without a person watching.
+
+**Every tool belongs to exactly one permission row**, in `TOOL_ROWS` in
+`services/agent-permissions.ts`, and `host.test.ts` fails for a tool that has no
+row. Send, sign, file and delete are the rows that can never be Allow: the
+service refuses to store it, the settings file is clamped when read, and the gate
+parks them whatever it reads. A new tool picks its row in the same commit.
 
 ## 5. Automations are recorded sequences of tool calls
 
@@ -118,6 +136,12 @@ calls with their arguments, replayed in order.
   same reason an agent cannot.
 - A step that hits a pending action stops the run and waits. It does not skip and
   it does not continue past it.
+- **An automation may not add, change or remove a mailbox rule.** The gate
+  refuses `mail.rules.*` writes from an automation outright and an automation
+  cannot be saved with one as a step (decision 64). Reading rules is fine.
+- **A level of Allow does not apply to a step.** An automation is unattended, so
+  any step that is not a plain read parks, whatever the permission says
+  (decision 57).
 - Every run writes a log row: which steps ran, what they returned, where it
   stopped. An automation nobody can audit is an automation nobody should trust.
 
@@ -141,7 +165,8 @@ If step 3 cannot be one line, stop and fix the service first.
   path or statement. See [security.md](security.md).
 - Don't expose a tool that returns a credential, in any form, masked or not.
 - Don't add a tool that drives the UI ("open the clients screen"). The agent
-  operates the business, not the window.
+  operates the business, not the window. The right-click menus (`menu.show`,
+  decision 59) are interface only for the same reason.
 - Don't let a tool be the only caller of a service function. If the UI cannot do
   it, question whether it should exist.
 - Don't version tools by suffix (`clients.list_v2`). Change the schema and the

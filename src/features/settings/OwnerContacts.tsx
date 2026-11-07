@@ -29,7 +29,7 @@ type OwnerContactListProps<T extends OwnerContactRow> = {
 };
 
 const ROW_INPUT =
-	"h-8 min-w-0 rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] disabled:opacity-60";
+	"h-8 min-w-0 rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-dense text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] disabled:opacity-60";
 
 /**
  * One list, reused for the owner's emails and phones. Both are one value plus
@@ -134,21 +134,21 @@ export function OwnerContactList<T extends OwnerContactRow>({
 								className="flex items-center gap-3 border-b border-[var(--line)]/60 py-1 last:border-b-0"
 								style={{ minHeight: "var(--row-height)" }}
 							>
-								<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
+								<span className="min-w-0 flex-1 truncate text-dense">
 									{value}
 									{item.label ? (
-										<span className="ml-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<span className="ml-2 text-sm text-[var(--ink-muted)]">
 											{item.label}
 										</span>
 									) : null}
 								</span>
 								{item.isPrimary ? (
-									<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 py-0.5 text-[length:var(--text-micro)] text-[var(--accent)]">
+									<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 py-0.5 text-micro text-[var(--accent)]">
 										Primary
 									</span>
 								) : null}
 								{marked ? (
-									<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+									<span className="shrink-0 text-micro text-[var(--ink-faint)]">
 										{markedText}
 									</span>
 								) : null}

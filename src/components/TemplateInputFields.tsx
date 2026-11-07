@@ -150,7 +150,7 @@ function PictureField({ label, value, onChange, error, help, required, disabled 
 	const chosen = value.startsWith("data:image/");
 	return (
 		<div>
-			<label htmlFor={id} className="block text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink)]">
+			<label htmlFor={id} className="block text-sm font-[var(--weight-medium)] text-[var(--ink)]">
 				{label}
 				{required ? <span className="text-[var(--ink-muted)]"> (required)</span> : null}
 			</label>
@@ -177,7 +177,7 @@ function PictureField({ label, value, onChange, error, help, required, disabled 
 						};
 						reader.readAsDataURL(file);
 					}}
-					className="min-w-0 flex-1 text-[length:var(--text-sm)] text-[var(--ink-muted)] file:mr-3 file:h-[32px] file:rounded-[var(--radius-md)] file:border file:border-[var(--line)] file:bg-[var(--surface)] file:px-3 file:text-[var(--ink)]"
+					className="min-w-0 flex-1 text-sm text-[var(--ink-muted)] file:mr-3 file:h-[32px] file:rounded-[var(--radius-md)] file:border file:border-[var(--line)] file:bg-[var(--surface)] file:px-3 file:text-[var(--ink)]"
 				/>
 				{chosen ? (
 					<Button size="dense" disabled={disabled} onClick={() => onChange("")}>
@@ -185,8 +185,8 @@ function PictureField({ label, value, onChange, error, help, required, disabled 
 					</Button>
 				) : null}
 			</div>
-			{help ? <p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{help}</p> : null}
-			{error ? <p className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">{error}</p> : null}
+			{help ? <p className="mt-1 text-sm text-[var(--ink-muted)]">{help}</p> : null}
+			{error ? <p className="mt-1 text-sm text-[var(--risk)]">{error}</p> : null}
 		</div>
 	);
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `clients` ADD `language` text DEFAULT 'nl' NOT NULL;

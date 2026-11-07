@@ -1,5 +1,7 @@
+import { TitleBarSlot } from "../../app/TitleBarSlot";
+import { Segmented } from "../../components/Segmented";
 import type { ProjectsView } from "@shared/types";
-import { Icon, type IconName } from "../../components/Icon";
+import type { IconName } from "../../components/Icon";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 
 type ViewControlsProps = {
@@ -63,38 +65,22 @@ export function ViewControls({ view, onChange }: ViewControlsProps) {
 		})),
 	];
 
+	// Both live in the title bar, as the design draws them: the layout switch
+	// before New, and the options behind a "..." after it.
 	return (
-		<div className="flex items-center gap-2">
-			<div
-				role="group"
-				aria-label="Layout"
-				className="flex items-center gap-px rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5"
-			>
-				{LAYOUTS.map((layout) => {
-					const active = view.layout === layout.id;
-					return (
-						<button
-							key={layout.id}
-							type="button"
-							aria-pressed={active}
-							aria-label={layout.label}
-							title={layout.label}
-							onClick={() => onChange({ layout: layout.id })}
-							className={[
-								"flex h-[32px] w-[32px] items-center justify-center rounded-[var(--radius-sm)]",
-								"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-								active
-									? "bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-popover)]"
-									: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
-							].join(" ")}
-						>
-							<Icon name={layout.icon} />
-						</button>
-					);
-				})}
-			</div>
-
-			<MenuButton items={items} ariaLabel="How this screen is shown" size="base" />
-		</div>
+		<>
+			<TitleBarSlot side="right">
+				<Segmented
+					size="icons-compact"
+					label="Layout"
+					value={view.layout}
+					onChange={(layout) => onChange({ layout })}
+					options={LAYOUTS.map((layout) => ({ id: layout.id, icon: layout.icon, name: layout.label }))}
+				/>
+			</TitleBarSlot>
+			<TitleBarSlot side="overflow">
+				<MenuButton items={items} ariaLabel="How this screen is shown" size="dense" />
+			</TitleBarSlot>
+		</>
 	);
 }

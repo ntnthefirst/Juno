@@ -122,7 +122,7 @@ export function TypographySection({ text, onText, fonts, onLinkAndUse, color }: 
 						type="button"
 						disabled={!clean}
 						onClick={link}
-						className="h-[28px] rounded-[var(--radius-sm)] bg-[var(--accent)] px-3 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--accent-ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-hover)] disabled:pointer-events-none disabled:opacity-50"
+						className="h-[28px] rounded-[var(--radius-sm)] bg-[var(--accent)] px-3 text-sm font-[var(--weight-medium)] text-[var(--accent-ink)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-hover)] disabled:pointer-events-none disabled:opacity-50"
 					>
 						Link and use
 					</button>

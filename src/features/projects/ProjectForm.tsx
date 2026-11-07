@@ -7,10 +7,12 @@ import { Icon } from "../../components/Icon";
 import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { minutesToHours, parseHours } from "./time-format";
+import { listAllClients } from "../../lib/list-all-clients";
 
 type ProjectFormProps = {
-	/** Null creates, a project edits. */
-	project: Project | null;
+	/** The stored project being edited. A new one is made in its own window (decision 60). */
+	project: Project;
 	/**
 	 * Set when the form was reached from a client, which fixes the client and
 	 * hides the picker. A project opened from the projects screen may be moved
@@ -31,6 +33,7 @@ type Values = {
 	startsOn: string;
 	dueOn: string;
 	agreedValue: string;
+	estimatedHours: string;
 	localPath: string;
 };
 
@@ -63,16 +66,17 @@ function parseAmount(raw: string): ParsedAmount {
 	return { ok: true, cents: match[1] === "-" ? -cents : cents };
 }
 
-function toValues(project: Project | null): Values {
+function toValues(project: Project): Values {
 	return {
-		name: project?.name ?? "",
-		clientId: project?.clientId ?? "",
-		statusId: project?.statusId ?? "",
-		description: project?.description ?? "",
-		startsOn: project?.startsOn ?? "",
-		dueOn: project?.dueOn ?? "",
-		agreedValue: centsToInput(project?.agreedValueCents ?? null),
-		localPath: project?.localPath ?? "",
+		name: project.name,
+		clientId: project.clientId ?? "",
+		statusId: project.statusId ?? "",
+		description: project.description ?? "",
+		startsOn: project.startsOn ?? "",
+		dueOn: project.dueOn ?? "",
+		agreedValue: centsToInput(project.agreedValueCents),
+		estimatedHours: minutesToHours(project.estimatedMinutes),
+		localPath: project.localPath ?? "",
 	};
 }
 
@@ -104,6 +108,7 @@ export function ProjectForm({
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [valueError, setValueError] = useState<string | null>(null);
+	const [hoursError, setHoursError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
@@ -112,7 +117,7 @@ export function ProjectForm({
 		Promise.all([
 			window.juno.reference.getSet("project_status"),
 			// Nothing to pick from when the client is already decided.
-			lockedClientId ? Promise.resolve([]) : window.juno.clients.list(),
+			lockedClientId ? Promise.resolve([]) : listAllClients(),
 		])
 			.then(([set, clientRows]) => {
 				if (cancelled) return;
@@ -146,10 +151,12 @@ export function ProjectForm({
 
 		const name = values.name.trim();
 		const amount = parseAmount(values.agreedValue);
+		const hours = parseHours(values.estimatedHours);
 
 		setNameError(name.length === 0 ? "Enter a name." : null);
 		setValueError(amount.ok ? null : "Use an amount like 1250,00.");
-		if (name.length === 0 || !amount.ok) return;
+		setHoursError(hours.ok ? null : "Use hours like 14 or 7,5.");
+		if (name.length === 0 || !amount.ok || !hours.ok) return;
 
 		setError(null);
 		setBusy(true);
@@ -164,13 +171,12 @@ export function ProjectForm({
 			startsOn: textOrNull(values.startsOn),
 			dueOn: textOrNull(values.dueOn),
 			agreedValueCents: amount.cents,
+			estimatedMinutes: hours.minutes,
 			localPath: textOrNull(values.localPath),
 		};
 
 		try {
-			const saved = project
-				? await window.juno.projects.update(project.id, patch)
-				: await window.juno.projects.create({ ...patch, name });
+			const saved = await window.juno.projects.update(project.id, patch);
 			onSaved(saved);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -180,7 +186,7 @@ export function ProjectForm({
 
 	return (
 		<FormPage
-			title={project ? "Edit project" : "New project"}
+			title="Edit project"
 			onBack={onClose}
 			backLabel={backLabel}
 			actions={
@@ -246,6 +252,16 @@ export function ProjectForm({
 						placeholder="1250,00"
 						tabular
 					/>
+					<Field
+						label="Estimated hours"
+						value={values.estimatedHours}
+						onChange={(value) => set("estimatedHours", value)}
+						error={hoursError}
+						inputMode="decimal"
+						placeholder="14"
+						help="Shown next to the time logged."
+						tabular
+					/>
 
 					<div className="col-span-2">
 						<div className="flex items-end gap-2">
@@ -268,7 +284,7 @@ export function ProjectForm({
 					<div className="col-span-2">
 						<label
 							htmlFor={descriptionId}
-							className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mb-1 block text-sm text-[var(--ink-muted)]"
 						>
 							Description
 						</label>
@@ -286,7 +302,7 @@ export function ProjectForm({
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not save this project.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

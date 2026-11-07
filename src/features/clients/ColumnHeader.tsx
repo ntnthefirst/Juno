@@ -80,7 +80,7 @@ export function ColumnHeader({
 			ref={cell}
 			aria-sort={ariaSort}
 			className={[
-				"border-b border-[var(--line)] px-3 pb-2 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]",
+				"border-b border-[var(--line)] px-3 pb-2 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]",
 				align === "right" ? "text-right" : "text-left",
 			].join(" ")}
 		>
@@ -213,7 +213,7 @@ function ColumnPopover({
 				ref={surface}
 				role="dialog"
 				aria-label={`${label} options`}
-				className="fixed z-[61] flex w-[260px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] text-[length:var(--text-dense)] normal-case tracking-normal text-[var(--ink)]"
+				className="fixed z-[61] flex w-[260px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] text-dense normal-case tracking-normal text-[var(--ink)]"
 				style={{
 					left: position?.left ?? 0,
 					top: position?.top ?? 0,
@@ -222,7 +222,7 @@ function ColumnPopover({
 					visibility: position ? "visible" : "hidden",
 				}}
 			>
-				<div className="px-3 pb-1 pt-2 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+				<div className="px-3 pb-1 pt-2 text-overline uppercase text-[var(--ink-faint)]">
 					Sort
 				</div>
 				<div role="radiogroup" aria-label={`Sort ${label}`} className="flex flex-col pb-1">
@@ -250,14 +250,14 @@ function ColumnPopover({
 				{children ? (
 					<div className="flex min-h-0 flex-col border-t border-[var(--line)]">
 						<div className="flex items-center justify-between px-3 pb-1 pt-2">
-							<span className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+							<span className="text-overline uppercase text-[var(--ink-faint)]">
 								Filter
 							</span>
 							{filtered && onClearFilter ? (
 								<button
 									type="button"
 									onClick={onClearFilter}
-									className="rounded-[var(--radius-sm)] px-1 text-[length:var(--text-sm)] text-[var(--accent)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
+									className="rounded-[var(--radius-sm)] px-1 text-sm text-[var(--accent)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
 								>
 									Clear
 								</button>

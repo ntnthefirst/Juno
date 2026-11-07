@@ -102,7 +102,7 @@ export function UpdatesSection() {
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : (
 				<div className="flex flex-col gap-5">
-					<dl className="flex flex-col gap-2 text-[length:var(--text-dense)]">
+					<dl className="flex flex-col gap-2 text-dense">
 						<Row label="Version">
 							<span className="tabular">{status.currentVersion}</span>
 						</Row>
@@ -114,7 +114,7 @@ export function UpdatesSection() {
 
 					{canInstall ? (
 						<div className="flex items-center justify-between gap-4">
-							<p className="max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="max-w-[46ch] text-sm text-[var(--ink-muted)]">
 								Juno restarts. Anything unsaved is lost.
 							</p>
 							<Button

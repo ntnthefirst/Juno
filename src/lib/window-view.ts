@@ -1,4 +1,5 @@
-import type { SettingsSection } from "@shared/types";
+import { isNewRecordKind, prefillFromQuery } from "@shared/new-record";
+import type { NewRecordKind, NewRecordPrefill, SettingsSection } from "@shared/types";
 
 /**
  * Which shell this window is, read from its own URL.
@@ -11,7 +12,8 @@ import type { SettingsSection } from "@shared/types";
 export type WindowView =
 	| { kind: "main" }
 	| { kind: "settings"; section: SettingsSection | null }
-	| { kind: "setup" };
+	| { kind: "setup" }
+	| { kind: "new"; record: NewRecordKind; prefill: NewRecordPrefill };
 
 const SECTIONS: SettingsSection[] = ["general", "business", "mail", "documents", "security", "mcp"];
 
@@ -20,7 +22,13 @@ export function isSettingsSection(value: string): value is SettingsSection {
 }
 
 export function viewFromHash(hash: string): WindowView {
-	const parts = hash.replace(/^#\/?/, "").split("/");
+	const [path = "", query = ""] = hash.replace(/^#\/?/, "").split("?");
+	const parts = path.split("/");
+	if (parts[0] === "new") {
+		const record = parts[1] ?? "";
+		if (isNewRecordKind(record)) return { kind: "new", record, prefill: prefillFromQuery(query) };
+		return { kind: "main" };
+	}
 	if (parts[0] === "setup") return { kind: "setup" };
 	if (parts[0] === "settings") {
 		const section = parts[1] ?? "";

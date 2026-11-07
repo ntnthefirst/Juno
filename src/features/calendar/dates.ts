@@ -169,6 +169,12 @@ export function formatDateLong(date: string): string {
 	return `${weekdayLong(date)} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+/** "Wednesday 14 October", the agenda's day heading: the year is the toolbar's. */
+export function formatDateAgenda(date: string): string {
+	const d = toFloating(date);
+	return `${weekdayLong(date)} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+}
+
 /** "22 Sep" for a heading inside a month that is already named. */
 export function formatDayShort(date: string): string {
 	const d = toFloating(date);

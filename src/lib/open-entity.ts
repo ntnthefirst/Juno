@@ -6,6 +6,7 @@ const EVENT = "juno:open-entity";
 export type OpenTarget =
 	| { kind: "project"; id: string; name: string }
 	| { kind: "document"; id: string; name: string }
+	| { kind: "note"; id: string }
 	| { kind: "thread"; id: string; messageId: string | null }
 	| { kind: "mail-template"; id: string; mode: "view" | "edit" }
 	| { kind: "screen"; screen: ScreenId };

@@ -68,7 +68,7 @@ export function ColorRow({ label, value, fallback = "#ffffff", onChange, paint, 
 					}`}
 				/>
 				{paint ? (
-					<span className="min-w-0 flex-1 truncate px-2 text-[length:var(--text-sm)] text-[var(--ink)]">{paint.name}</span>
+					<span className="min-w-0 flex-1 truncate px-2 text-sm text-[var(--ink)]">{paint.name}</span>
 				) : (
 					<input
 						value={hex}
@@ -80,7 +80,7 @@ export function ColorRow({ label, value, fallback = "#ffffff", onChange, paint, 
 						onKeyDown={(event) => {
 							if (event.key === "Enter") commitHex();
 						}}
-						className="tabular min-w-0 flex-1 bg-transparent px-2 font-mono text-[length:var(--text-micro)] text-[var(--ink)] uppercase placeholder:text-[var(--ink-muted)] focus:outline-none"
+						className="tabular min-w-0 flex-1 bg-transparent px-2 font-mono text-micro text-[var(--ink)] uppercase placeholder:text-[var(--ink-muted)] focus:outline-none"
 					/>
 				)}
 				<span aria-hidden className="h-[16px] w-px flex-none bg-[var(--line)]" />
@@ -93,11 +93,11 @@ export function ColorRow({ label, value, fallback = "#ffffff", onChange, paint, 
 					onKeyDown={(event) => {
 						if (event.key === "Enter") commitPercent();
 					}}
-					className={`tabular w-[34px] flex-none bg-transparent pl-1.5 text-right text-[length:var(--text-sm)] focus:outline-none ${
+					className={`tabular w-[34px] flex-none bg-transparent pl-1.5 text-right text-sm focus:outline-none ${
 						value === null && !paint ? "text-[var(--ink-muted)]" : "text-[var(--ink)]"
 					}`}
 				/>
-				<span className="flex-none pr-2 pl-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">%</span>
+				<span className="flex-none pr-2 pl-0.5 text-micro text-[var(--ink-muted)]">%</span>
 			</div>
 			{anchor ? (
 				<PickerPopover anchor={anchor} title={label} onClose={() => setAnchor(null)}>

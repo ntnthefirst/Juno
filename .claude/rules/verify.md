@@ -27,7 +27,9 @@ Run from the repo root. The project uses npm.
 
 Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
 screen and the settings window, and write a screenshot of each in both themes
-to `.smoke/`. That is the fastest honest look at a visual change. Add
+to `.smoke/`. That is the fastest honest look at a visual change.
+`JUNO_SMOKE_MANY=1` seeds 500 clients and prints how long the Clients list takes
+to show them and how a scroll holds up. Add
 `JUNO_SMOKE_FRONT=1` to keep the window above every other window for the run;
 without it, a window somebody covers produces stale captures (see the
 `capturePage` trap below).
@@ -78,12 +80,11 @@ A clean typecheck is not proof a screen works.
   is filtered out of the rest (source maps, type declarations, the parts of pdf.js and
   pdf-lib the app never loads). The source smoke cannot see a mistake here, because it
   runs against the full `node_modules`. `npm run smoke:packaged` can.
-- **`better-sqlite3` is a native module and must be rebuilt against Electron's
-  ABI, not Node's.** Installing it normally builds for your system Node, and then
-  `npm run dev` throws `NODE_MODULE_VERSION mismatch` on the first query.
-  `electron-rebuild` (or the builder's install step) runs after every `npm install`
-  and after every Electron version bump. If the app worked yesterday and throws on
-  startup today, check this first.
+- **Storage is Electron's own `node:sqlite`, so there is no native module to
+  rebuild** (decision 18). The trap is the other way round: a host Node older
+  than 24 lacks `StatementSync.setReturnArrays`, which the shim needs, so
+  anything run outside `npm run test` and the app itself throws on the first
+  query.
 - **Run the tests with `npm run test`, never `npx vitest` or a bare `vitest`.**
   The script runs them under Electron's own Node, which has the SQLite build
   the app ships, FTS5 included. Plain Node's SQLite has no `fts5`, so the mail
@@ -162,7 +163,7 @@ A clean typecheck is not proof a screen works.
   `src/styles/tokens.css` and the `@theme inline` block before changing anything
   else ([styling.md](styling.md)).
 - **Renderer code importing a node-only module works in dev and breaks when
-  packaged.** Vite resolves `path`, `fs` or `better-sqlite3` in the dev server and
+  packaged.** Vite resolves `path`, `fs` or `node:sqlite` in the dev server and
   then ships a broken bundle, or the import silently pulls a browser shim that
   behaves differently. Anything under `src/` that needs main-process work goes
   through the preload bridge. A shared type is imported with `import type`, which

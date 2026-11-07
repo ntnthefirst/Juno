@@ -7,6 +7,7 @@ import {
 	type WheelEvent,
 } from "react";
 import type { DocumentPaper, MailBlock, MailLayout, TemplateInput } from "@shared/types";
+import type { ComponentLookup } from "@shared/components";
 import { pagesOf, paperLabel } from "@shared/paper";
 import { CanvasView, type DropTarget, type Editing, type Measured, type Selection } from "./CanvasView";
 import { isTyping, keysFor, shortcutFor } from "./shortcuts";
@@ -35,6 +36,8 @@ type CanvasStageProps = {
 	paper?: DocumentPaper | null;
 	/** A document's pictures, by the key an image block names them with. */
 	pictures?: Record<string, string>;
+	/** The components a document may have placed. */
+	components?: ComponentLookup;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -66,6 +69,7 @@ export function CanvasStage({
 	onContentHeight,
 	paper = null,
 	pictures,
+	components,
 }: CanvasStageProps) {
 	const [zoom, setZoom] = useState(1);
 	// Whether the zoom is the author's rather than the one the stage picked. A
@@ -231,7 +235,7 @@ export function CanvasStage({
 							zoomed.current = true;
 							setZoom((current) => clamp(current - 0.1, ZOOM_MIN, ZOOM_MAX));
 						}}
-						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-[length:var(--text-base)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						<span aria-hidden>-</span>
 					</button>
@@ -242,7 +246,7 @@ export function CanvasStage({
 							fit();
 						}}
 						title={`Fit the sheet (${keysFor("Zoom to fit")})`}
-						className="tabular h-[28px] rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="tabular h-[28px] rounded-[var(--radius-sm)] px-1.5 text-micro text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						{Math.round(zoom * 100)}%
 					</button>
@@ -254,7 +258,7 @@ export function CanvasStage({
 							zoomed.current = true;
 							setZoom((current) => clamp(current + 0.1, ZOOM_MIN, ZOOM_MAX));
 						}}
-						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-[length:var(--text-base)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						<span aria-hidden>+</span>
 					</button>
@@ -295,12 +299,12 @@ export function CanvasStage({
 						style={{ width, transform: `scale(${zoom})`, transformOrigin: "top left" }}
 					>
 						{paper ? (
-							<p className="tabular pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+							<p className="tabular pb-1 text-micro text-[var(--ink-muted)]">
 								<span className="font-[var(--weight-medium)] text-[var(--ink)]">{paperLabel(paper)}</span>{" "}
 								{pagesOf(layout).length === 1 ? "1 page" : `${pagesOf(layout).length} pages`}
 							</p>
 						) : (
-							<p className="tabular pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+							<p className="tabular pb-1 text-micro text-[var(--ink-muted)]">
 								<span className="font-[var(--weight-medium)] text-[var(--ink)]">{label}</span> {width} x {height}
 							</p>
 						)}
@@ -319,6 +323,7 @@ export function CanvasStage({
 							onMeasure={onMeasure}
 							sheets={paper !== null}
 							pictures={pictures}
+							components={components}
 						/>
 
 						{paper ? null : (
@@ -336,7 +341,7 @@ export function CanvasStage({
 							}}
 							className="flex h-[32px] w-full cursor-ns-resize items-center justify-center rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 						>
-							<span className="h-[3px] w-[48px] rounded-full bg-[var(--line-strong)]" />
+							<span className="h-[3px] w-[48px] rounded-[var(--radius-full)] bg-[var(--line-strong)]" />
 						</button>
 						)}
 					</div>

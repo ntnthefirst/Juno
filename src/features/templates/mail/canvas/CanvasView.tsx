@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent, type HTMLAttributes } from "react";
 import type { MailBlock, MailColumns, MailColumnsCell, MailContainer, MailFont, MailLayout, MailNode, TemplateInput } from "@shared/types";
+import { drawPlacement, type ComponentLookup } from "@shared/components";
 import { assetKeyOf } from "@shared/paper";
 import { Icon } from "../../../../components/Icon";
 import { asListItems, canMoveInto, firstChildOf } from "./canvas-actions";
@@ -66,7 +67,27 @@ type CanvasViewProps = {
 	sheets?: boolean;
 	/** A document's pictures, by the key an image block names them with (`{{asset.<key>}}`). */
 	pictures?: Record<string, string>;
+	/** The components a document may have placed, to draw what a placement stands for. */
+	components?: ComponentLookup;
 };
+
+/**
+ * A placement drawn, kept until its component or its values change. Drawing
+ * gives every node a new id, and a tree whose ids change on every render is a
+ * tree React rebuilds on every render.
+ */
+const drawn = new Map<string, { source: object | null; signature: string; node: MailContainer | null }>();
+
+function placementView(container: MailContainer, lookup: ComponentLookup | undefined): MailContainer | null {
+	if (!container.component || !lookup) return null;
+	const source = lookup(container.component.componentId);
+	const signature = JSON.stringify([container.component, container.name, container.box.margin, container.grow, container.alignSelf]);
+	const known = drawn.get(container.id);
+	if (known && known.source === source && known.signature === signature) return known.node;
+	const node = drawPlacement(container, lookup);
+	drawn.set(container.id, { source, signature, node });
+	return node;
+}
 
 /**
  * What the canvas adds to the element a node is drawn as: its handlers, its
@@ -219,7 +240,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 				<span
 					{...own}
 					style={host.place}
-					className={`flex items-center gap-1.5 text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)] ${host.className}`}
+					className={`flex items-center gap-1.5 text-micro text-[var(--canvas-ink-muted)] ${host.className}`}
 				>
 					<Icon name="image" size={14} /> {key ? "This picture is no longer stored" : "No image address yet"}
 				</span>
@@ -261,7 +282,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 					<span
 						{...own}
 						style={host.place}
-						className={`text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)] ${host.className}`}
+						className={`text-micro text-[var(--canvas-ink-muted)] ${host.className}`}
 					>
 						No input chosen
 					</span>
@@ -299,7 +320,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 				<span
 					{...own}
 					style={host.place}
-					className={`text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)] ${host.className}`}
+					className={`text-micro text-[var(--canvas-ink-muted)] ${host.className}`}
 				>
 					Empty HTML block
 				</span>
@@ -379,6 +400,7 @@ export function CanvasView({
 	onMeasure,
 	sheets = false,
 	pictures = NO_PICTURES,
+	components,
 }: CanvasViewProps) {
 	const content = useRef<HTMLDivElement>(null);
 	const [over, setOver] = useState<DropTarget | null>(null);
@@ -560,7 +582,10 @@ export function CanvasView({
 	const renderContainer = (container: MailContainer, topLevel: boolean) => {
 		const selected = selection?.id === container.id;
 		const overEnd = over !== null && over.parentId === container.id && over.beforeId === null;
-		const shown = container.children.filter((node) => !node.hidden);
+		// A placed component is drawn from the component, read-only: a click on
+		// anything inside it selects the placement, which is the unit that moves.
+		const placed = placementView(container, components);
+		const shown = (placed ?? container).children.filter((node) => !node.hidden);
 		return (
 			<div
 				key={container.id}
@@ -571,7 +596,7 @@ export function CanvasView({
 				onDragOver={(event) => dragOverTarget(event, { parentId: container.id, beforeId: null })}
 				onDragLeave={() => setOver(null)}
 				onDrop={(event) => finishDrag(event, { parentId: container.id, beforeId: null })}
-				style={sectionCss(container, topLevel)}
+				style={sectionCss(placed ?? container, topLevel)}
 				className={`outline-offset-[-2px] ${
 					selected
 						? "outline-2 outline-[var(--accent)]"
@@ -580,7 +605,12 @@ export function CanvasView({
 							: "hover:outline-1 hover:outline-[var(--line-strong)]"
 				}`}
 			>
-				{shown.length === 0 && container.box.minHeight === null ? (
+				{container.component && !placed ? (
+					<p data-canvas-chrome style={{ gridColumn: "1 / -1" }} className="flex-1 px-3 py-6 text-center text-micro text-[var(--canvas-ink-muted)]">
+						This component no longer exists
+					</p>
+				) : null}
+				{shown.length === 0 && !container.component && container.box.minHeight === null ? (
 					// Only on the canvas: an empty container is sent as nothing, and
 					// this is what there is to click and to drop onto. One with a
 					// height of its own is drawn at that height, because it is a
@@ -588,12 +618,18 @@ export function CanvasView({
 					<p
 						data-canvas-chrome
 						style={{ gridColumn: "1 / -1" }}
-						className="flex-1 px-3 py-6 text-center text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
+						className="flex-1 px-3 py-6 text-center text-micro text-[var(--canvas-ink-muted)]"
 					>
 						{container.name} is empty
 					</p>
 				) : null}
-				{shown.map((node) => renderNode(node, container.id, false))}
+				{container.component ? (
+					<div style={{ display: "contents", pointerEvents: "none" }}>
+						{shown.map((node) => renderNode(node, container.id, false))}
+					</div>
+				) : (
+					shown.map((node) => renderNode(node, container.id, false))
+				)}
 			</div>
 		);
 	};
@@ -653,7 +689,7 @@ export function CanvasView({
 				{shown.length === 0 ? (
 					<span
 						data-canvas-chrome
-						className="block px-2 py-4 text-center text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
+						className="block px-2 py-4 text-center text-micro text-[var(--canvas-ink-muted)]"
 					>
 						Empty
 					</span>

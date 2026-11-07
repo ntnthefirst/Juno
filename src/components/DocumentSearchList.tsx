@@ -1,5 +1,6 @@
 import type { DocumentRecord } from "@shared/types";
 import { AttachmentIcon } from "./AttachmentIcon";
+import { Checkbox } from "./Checkbox";
 
 type DocumentSearchListProps = {
 	documents: DocumentRecord[] | null;
@@ -49,13 +50,13 @@ export function DocumentSearchList({
 }: DocumentSearchListProps) {
 	if (documents === null) return <p className="px-2 py-2 text-[var(--ink-muted)]">Loading.</p>;
 	if (documents.length === 0) {
-		return <p className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{emptyText}</p>;
+		return <p className="px-2 py-2 text-sm text-[var(--ink-muted)]">{emptyText}</p>;
 	}
 
 	const found = documents.filter((record) => matches(record, search));
 	if (found.length === 0) {
 		return (
-			<p className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="px-2 py-2 text-sm text-[var(--ink-muted)]">
 				No document matches "{search.trim()}".
 			</p>
 		);
@@ -72,7 +73,7 @@ export function DocumentSearchList({
 			{groups.map((group) => (
 				<div key={group.key}>
 					{group.label ? (
-						<p className="px-2 pt-2 pb-1 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+						<p className="px-2 pt-2 pb-1 text-overline uppercase text-[var(--ink-muted)]">
 							{group.label}
 						</p>
 					) : null}
@@ -83,13 +84,13 @@ export function DocumentSearchList({
 								<>
 									<AttachmentIcon filename={name} mimeType="application/pdf" />
 									<span className="min-w-0 flex-1">
-										<span className="block truncate text-[length:var(--text-dense)]">{record.title}</span>
-										<span className="block truncate text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<span className="block truncate text-dense">{record.title}</span>
+										<span className="block truncate text-micro text-[var(--ink-muted)]">
 											{placeOf(record)}
 										</span>
 									</span>
 									{record.isSpecimen ? (
-										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--risk)]">specimen</span>
+										<span className="shrink-0 text-micro text-[var(--risk)]">specimen</span>
 									) : null}
 								</>
 							);
@@ -100,9 +101,7 @@ export function DocumentSearchList({
 											className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-md)] px-2 hover:bg-[var(--hover)]"
 											style={{ height: "var(--row-height-roomy)" }}
 										>
-											<input
-												type="checkbox"
-												className="accent-[var(--accent)]"
+											<Checkbox
 												checked={checked.includes(record.id)}
 												onChange={() => onPick(record)}
 											/>

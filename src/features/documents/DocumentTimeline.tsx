@@ -30,7 +30,7 @@ function toneClass(kind: DocumentTimelineKind): string {
  */
 export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 	if (entries.length === 0) {
-		return <p className="py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Nothing has happened yet.</p>;
+		return <p className="py-2 text-sm text-[var(--ink-muted)]">Nothing has happened yet.</p>;
 	}
 
 	return (
@@ -38,13 +38,13 @@ export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 			{entries.map((entry, index) => {
 				const body = (
 					<>
-						<span className="block text-[length:var(--text-dense)]">{entry.title}</span>
+						<span className="block text-dense">{entry.title}</span>
 						{entry.detail ? (
-							<span className="block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="block truncate text-sm text-[var(--ink-muted)]">
 								{entry.detail}
 							</span>
 						) : null}
-						<span className="tabular block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="tabular block text-sm text-[var(--ink-muted)]">
 							{formatInstant(entry.at)}
 						</span>
 					</>
@@ -55,7 +55,7 @@ export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 							<span aria-hidden className="absolute left-[11px] top-6 bottom-0 w-px bg-[var(--line)]" />
 						) : null}
 						<span
-							className={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${toneClass(entry.kind)}`}
+							className={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-full)] ${toneClass(entry.kind)}`}
 						>
 							<Icon name={ICONS[entry.kind]} size={12} />
 						</span>

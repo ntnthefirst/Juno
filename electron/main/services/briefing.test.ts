@@ -6,7 +6,7 @@ import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { clients, projects } from "../db/schema";
 import { configureAgentActions, request, resetForTests } from "./agent-actions";
-import { client, month, today } from "./briefing";
+import { client, month, overview, today } from "./briefing";
 import * as calendar from "./calendar";
 import * as reminders from "./reminders";
 
@@ -28,6 +28,23 @@ function section(briefing: Awaited<ReturnType<typeof today>>, key: string) {
 	if (!found) throw new Error(`No section ${key}`);
 	return found;
 }
+
+describe("overview", () => {
+	it("says so when nothing is waiting", async () => {
+		const summary = await overview(db, TODAY);
+		expect(summary).toMatchObject({ clients: 0, projects: 0, documents: 0, unreadMail: 0, overdueReminders: 0, waitingRequests: 0 });
+		expect(summary.headline).toBe("Nothing is waiting for you.");
+	});
+
+	it("counts clients and overdue reminders in one sentence", async () => {
+		db.insert(clients).values({ name: "obet", sortName: "obet" }).run();
+		await reminders.create({ title: "File the VAT return", dueOn: "2026-09-18" }, db, TODAY);
+		const summary = await overview(db, TODAY);
+		expect(summary.clients).toBe(1);
+		expect(summary.overdueReminders).toBe(1);
+		expect(summary.headline).toBe("One reminder is overdue.");
+	});
+});
 
 describe("today", () => {
 	it("says so plainly when there is nothing", async () => {

@@ -100,10 +100,10 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="flex h-[48px] shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-4">
-				<div className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">{caption}</div>
+				<div className="min-w-0 truncate text-sm text-[var(--ink-muted)]">{caption}</div>
 				{opened ? (
 					<div className="flex shrink-0 items-center gap-1">
-						<span className="tabular mr-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="tabular mr-2 text-sm text-[var(--ink-muted)]">
 							Page {current} of {count}
 						</span>
 						<IconAction
@@ -112,7 +112,7 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 							disabled={zoom === 0}
 							onClick={() => setZoom((value) => Math.max(0, value - 1))}
 						/>
-						<span className="tabular w-11 text-center text-[length:var(--text-sm)]">
+						<span className="tabular w-11 text-center text-sm">
 							{Math.round(ZOOMS[zoom]! * 100)}%
 						</span>
 						<IconAction
@@ -131,7 +131,7 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 				) : error ? (
 					<div className="m-6 border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not open this PDF.</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

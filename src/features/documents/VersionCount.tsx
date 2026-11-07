@@ -20,7 +20,7 @@ export function VersionCount({ count, open, onToggle }: VersionCountProps) {
 				event.stopPropagation();
 				onToggle();
 			}}
-			className="inline-flex h-[24px] shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-sm)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+			className="inline-flex h-[24px] shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-sm text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 		>
 			<span className="tabular">
 				{count} {count === 1 ? "version" : "versions"}

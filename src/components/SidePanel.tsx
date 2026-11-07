@@ -112,16 +112,16 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 				ref={panel}
 				tabIndex={-1}
 				aria-label={title}
-				className="animate-slide absolute inset-y-0 right-0 z-30 flex w-[380px] max-w-full flex-col border-l border-[var(--line)] bg-[var(--paper)] focus:outline-none"
+				className="animate-slide absolute inset-y-0 right-0 z-30 flex w-[420px] max-w-full flex-col border-l border-[var(--line)] bg-[var(--surface)] focus:outline-none"
 				style={{ boxShadow: "var(--shadow-panel)" }}
 			>
-				<div className="flex flex-none items-start gap-2 border-b border-[var(--line)] px-4 py-3">
+				<div className="flex flex-none items-start gap-2 border-b border-[var(--line)] py-4 pr-3 pl-6">
 					<div className="min-w-0 flex-1">
-						<h2 className="truncate text-[length:var(--text-base)] font-[var(--weight-semibold)]">
+						<h2 className="truncate text-lg font-[var(--weight-medium)]">
 							{title}
 						</h2>
 						{subtitle ? (
-							<p className="mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-0.5 truncate text-sm text-[var(--ink-muted)]">
 								{subtitle}
 							</p>
 						) : null}
@@ -132,16 +132,16 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 						onClick={onClose}
 						aria-label="Close"
 						title="Close"
-						className="-mr-1 flex h-[32px] w-[32px] flex-none items-center justify-center rounded-[var(--radius-md)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="flex h-[32px] w-[32px] flex-none items-center justify-center rounded-[var(--radius-md)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						<Icon name="close" />
 					</button>
 				</div>
 
-				<div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
+				<div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
 
 				{actions ? (
-					<div className="flex flex-none items-center justify-end gap-2 border-t border-[var(--line)] px-4 py-3">
+					<div className="flex flex-none items-center justify-end gap-2 border-t border-[var(--line)] px-6 py-3">
 						{actions}
 					</div>
 				) : null}

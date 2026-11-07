@@ -76,27 +76,28 @@ export function SignatureSection() {
 
 	return (
 		<Section
-			title="Signature"
+			title="Signing"
 			anchor="signature"
-			description="Stamped onto a PDF when you sign it. Optional."
-			action={
-				<div className="flex gap-1">
-					<Button size="dense" disabled={busy} onClick={() => void choose()}>
-						Choose image
-					</Button>
-					{path === null ? null : (
-						<Button size="dense" variant="danger" disabled={busy} onClick={() => void remove()}>
-							Remove
-						</Button>
-					)}
-				</div>
-			}
+			large
+			description="A signature image with a time stamp and an audit page. This is not a qualified electronic signature under eIDAS."
 		>
+			<div className="flex gap-1">
+				<Button disabled={busy} onClick={() => void choose()}>
+					{path === null ? "Choose signature image" : "Change signature image"}
+				</Button>
+				{path === null ? null : (
+					<Button variant="danger" disabled={busy} onClick={() => void remove()}>
+						Remove
+					</Button>
+				)}
+			</div>
+
+			<div className="mt-4">
 			{load.status === "loading" ? (
 				<p className="text-[var(--ink-muted)]">Loading.</p>
 			) : path === null ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-					No image set. A transparent PNG works best.
+				<p className="text-dense text-[var(--ink-muted)]">
+					No image set. It is stamped onto a PDF when you sign it, and a transparent PNG works best.
 				</p>
 			) : (
 				<div>
@@ -109,12 +110,14 @@ export function SignatureSection() {
 					) : null}
 					<p
 						data-selectable
-						className="mt-2 break-all text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						className="mt-2 break-all text-sm text-[var(--ink-muted)]"
 					>
 						{path}
 					</p>
 				</div>
 			)}
+
+			</div>
 
 			<SectionError message={error} />
 		</Section>

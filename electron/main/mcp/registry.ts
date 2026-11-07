@@ -19,12 +19,20 @@ import { documentTools, templateTools } from "./documents";
 import { geocodingTools } from "./geocoding";
 import { mailActionTools } from "./mail-actions";
 import { mailTools } from "./mail";
+import { mailBlockTools } from "./mail-blocks";
 import { mailOutboxTools } from "./mail-outbox";
+import { mailRuleTools } from "./mail-rules";
+import { noteTools } from "./notes";
+import { pageTools } from "./pages";
 import { projectTools } from "./projects";
 import { referenceTools } from "./reference";
 import { reminderTools } from "./reminders";
+import { recentTools } from "./recent";
 import { searchTools } from "./search";
 import { settingsTools } from "./settings";
+import { suggestionTools } from "./suggestions";
+import { timeTools } from "./time";
+import { desktopTools } from "./desktop";
 import { updateTools } from "./updates";
 import type { ToolDescriptor } from "./types";
 
@@ -37,16 +45,24 @@ const lists: ToolDescriptor[][] = [
 	clientAddressTools,
 	contactTools,
 	projectTools,
+	timeTools,
+	noteTools,
+	pageTools,
 	searchTools,
+	recentTools,
 	referenceTools,
 	settingsTools,
 	updateTools,
+	desktopTools,
 	templateTools,
 	documentTools,
 	reminderTools,
 	mailTools,
+	mailBlockTools,
+	mailRuleTools,
 	mailActionTools,
 	mailOutboxTools,
+	suggestionTools,
 	calendarTools,
 	geocodingTools,
 	agentTools,
@@ -70,7 +86,7 @@ export function toolByName(name: string): ToolDescriptor | null {
 }
 
 /** What the settings screen lists. No handlers cross the bridge. */
-export function toolSummaries(): ToolSummary[] {
+export function toolSummaries(): Omit<ToolSummary, "row" | "calls">[] {
 	return allTools().map((tool) => ({
 		name: tool.name,
 		title: tool.title,

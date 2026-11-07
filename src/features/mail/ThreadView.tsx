@@ -3,7 +3,8 @@ import type { MailFolder, MailMessage, MailReplyMode, MailThread, MailThreadOutg
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon, type IconName } from "../../components/Icon";
-import { MenuButton, type MenuItem } from "../../components/Menu";
+import { ActionMenu } from "../../components/ActionMenu";
+import type { MenuHandlers } from "../../lib/native-menu";
 import { messageOf } from "../../lib/errors";
 import { describeMailFileResult } from "./format";
 import { requestOpen } from "../../lib/open-entity";
@@ -324,71 +325,27 @@ export function ThreadView({
 		}
 	}
 
-	const moreItems: MenuItem[] = [
-		{
-			id: "archive",
-			label: "Archive",
-			icon: "archive",
-			disabled: !openMessage || openMessage.folderUse === "archive",
-			onSelect: () => void fileOpen("archive"),
-		},
-		{
-			id: "mark-unread",
-			label: "Mark unread",
-			icon: "unread",
-			disabled: !openMessage || !openMessage.isSeen,
-			onSelect: () => void markOpen({ seen: false }),
-		},
-		{
-			id: "move",
-			label: "Move to folder",
-			icon: "projects",
-			disabled: !openMessage,
-			onSelect: () => void chooseFolder(),
-		},
-		{
-			id: "junk",
-			label: "Junk",
-			icon: "junk",
-			disabled: !openMessage || openMessage.folderUse === "junk",
-			onSelect: () => void fileOpen("junk"),
-		},
-		{
-			id: "link-client",
-			label: summary.clientName ? "Change client" : "Link to client",
-			icon: "link",
-			separatorBefore: true,
-			onSelect: () => setLinking(true),
-		},
-		...(summary.clientName
-			? [{ id: "unlink-client", label: "Unlink client", icon: "link" as const, onSelect: () => void unlink() }]
-			: []),
-		{
-			id: "file-project",
-			label: summary.projectId ? "Change project" : "File under a project",
-			icon: "projects",
-			onSelect: () => setFiling(true),
-		},
-		...(summary.projectId
-			? [{ id: "unfile-project", label: "Take off the project", icon: "projects" as const, onSelect: () => void unfile() }]
-			: []),
-		{
-			id: "copy-address",
-			label: "Copy sender address",
-			icon: "copy",
-			disabled: !openMessage?.from,
-			separatorBefore: true,
-			onSelect: () => void copyOpenAddress(openMessage?.from?.address ?? ""),
-		},
-	];
+	// The "..." is the platform's menu for this conversation (decision 59). Each
+	// answer is one of the things this view already does to the message in view.
+	const moreHandlers: MenuHandlers = {
+		archive: () => void fileOpen("archive"),
+		"mark-unread": () => void markOpen({ seen: false }),
+		move: () => void chooseFolder(),
+		junk: () => void fileOpen("junk"),
+		link: () => setLinking(true),
+		"unlink-client": () => void unlink(),
+		"file-project": () => setFiling(true),
+		"unfile-project": () => void unfile(),
+		"copy-address": () => void copyOpenAddress(openMessage?.from?.address ?? ""),
+	};
 
 	return (
 		<div className="flex h-full min-h-0 flex-col animate-fade">
-			<div className="shrink-0 border-b border-[var(--line)] px-8 pb-4 pt-6">
+			<div className="shrink-0 px-6 pt-4">
 				<button
 					type="button"
 					onClick={onBack}
-					className="-ml-1.5 inline-flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-sm)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+					className="-ml-1.5 inline-flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 				>
 					<Icon
 						name="chevron-left"
@@ -397,11 +354,11 @@ export function ThreadView({
 					Back
 				</button>
 
-				<div className="mt-2 flex items-start justify-between gap-6">
-					<h2 className="min-w-0 text-[length:var(--text-h3)] font-[var(--weight-semibold)] leading-[var(--leading-tight)] tracking-[-0.01em]">
+				<div className="mt-2 flex min-h-[52px] items-center justify-between gap-6">
+					<h2 className="min-w-0 text-h2">
 						{summary.subject}
 					</h2>
-					<div className="flex shrink-0 items-center gap-1">
+					<div className="flex shrink-0 items-center gap-3">
 						{openMessage ? (
 							<>
 								<ToolbarAction
@@ -430,7 +387,7 @@ export function ThreadView({
 							</>
 						) : null}
 						<ToolbarAction
-							icon="branch"
+							icon="link"
 							label={overviewOpen ? "Hide the conversation" : "Show the conversation"}
 							pressed={overviewOpen}
 							onClick={toggleOverview}
@@ -450,16 +407,17 @@ export function ThreadView({
 								/>
 							</>
 						) : null}
-						<MenuButton
-							items={moreItems}
+						<ActionMenu
+							target={{ kind: "mail", id: summary.id, context: "reader" }}
+							handlers={moreHandlers}
 							ariaLabel="More options"
 						/>
 					</div>
 				</div>
 
-				<div className="mt-2 flex items-center gap-2">
+				<div className="flex items-center gap-2 pb-3">
 					{summary.clientName ? (
-						<span className="rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-1 text-[length:var(--text-sm)] text-[var(--accent)]">
+						<span className="rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-1 text-sm text-[var(--accent)]">
 							{summary.clientName}
 							{summary.linkSource === "auto" ? (
 								<span className="text-[var(--ink-muted)]"> (matched)</span>
@@ -473,13 +431,13 @@ export function ThreadView({
 								requestOpen({ kind: "project", id: summary.projectId!, name: summary.projectName! })
 							}
 							title="Open the project"
-							className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-1 text-[length:var(--text-sm)] text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+							className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 						>
 							<Icon name="projects" size={12} />
 							{summary.projectName}
 						</button>
 					) : null}
-					<p className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="tabular text-base text-[var(--ink-muted)]">
 						{entries.length} {entries.length === 1 ? "message" : "messages"}
 					</p>
 				</div>
@@ -583,7 +541,7 @@ type ToolbarActionProps = {
 	onClick: () => void;
 };
 
-/** A 32px icon button in the reader's toolbar. The label is its only wording. */
+/** A 40px icon button in the reader's toolbar, as the Icon Button in the design. The label is its only wording. */
 function ToolbarAction({ icon, label, danger = false, pressed, onClick }: ToolbarActionProps) {
 	return (
 		<button
@@ -593,7 +551,7 @@ function ToolbarAction({ icon, label, danger = false, pressed, onClick }: Toolba
 			aria-pressed={pressed}
 			onClick={onClick}
 			className={[
-				"inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)]",
+				"inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)]",
 				"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 				danger
 					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
@@ -604,7 +562,7 @@ function ToolbarAction({ icon, label, danger = false, pressed, onClick }: Toolba
 		>
 			<Icon
 				name={icon}
-				size={14}
+				size={18}
 			/>
 		</button>
 	);

@@ -78,7 +78,7 @@ export function ProjectNotes({ projectId, notes }: ProjectNotesProps) {
 			<p
 				role={save.status === "error" ? "alert" : undefined}
 				aria-live="polite"
-				className={`mt-1 h-4 text-[length:var(--text-micro)] ${
+				className={`mt-1 h-4 text-micro ${
 					save.status === "error" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"
 				}`}
 			>

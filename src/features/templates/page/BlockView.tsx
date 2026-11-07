@@ -77,7 +77,7 @@ export function BlockView({ block }: BlockViewProps) {
 					) : (
 						<div
 							style={{ width: `${block.widthMm}mm`, height: `${Math.max(block.widthMm * 0.6, 20)}mm` }}
-							className="inline-flex items-center justify-center border border-dashed border-[var(--canvas-line-strong)] bg-[var(--canvas-paper)] text-[length:var(--text-micro)] text-[var(--canvas-ink-muted)]"
+							className="inline-flex items-center justify-center border border-dashed border-[var(--canvas-line-strong)] bg-[var(--canvas-paper)] text-micro text-[var(--canvas-ink-muted)]"
 						>
 							No image set
 						</div>

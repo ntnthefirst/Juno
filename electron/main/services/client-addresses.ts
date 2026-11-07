@@ -66,10 +66,8 @@ export async function listForClient(
 		.all();
 }
 
-export async function create(
-	input: ClientAddressInput,
-	db: Db = getDb(),
-): Promise<ClientAddress> {
+/** The synchronous body of `create`, so a caller can compose it into one transaction. */
+export function insertAddress(input: ClientAddressInput, db: Db): ClientAddress {
 	const addressLine1 = requireLine1(input.addressLine1);
 
 	return db.transaction((tx) => {
@@ -83,6 +81,13 @@ export async function create(
 		if (makePrimary) clearPrimaryOnSiblings(tx, row.clientId, row.id);
 		return row;
 	});
+}
+
+export async function create(
+	input: ClientAddressInput,
+	db: Db = getDb(),
+): Promise<ClientAddress> {
+	return insertAddress(input, db);
 }
 
 export async function update(

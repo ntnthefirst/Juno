@@ -19,7 +19,7 @@ type EventDetailProps = {
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
 	return (
-		<div className="flex gap-4 py-1.5 text-[length:var(--text-dense)]">
+		<div className="flex gap-4 py-1.5 text-dense">
 			<span className="w-24 shrink-0 text-[var(--ink-muted)]">{label}</span>
 			<span className="min-w-0 flex-1">{children}</span>
 		</div>
@@ -70,7 +70,7 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 					<>
 						<IconButton icon="reminders" label="Snooze" onClick={onSnooze} />
 						<Button variant="primary" onClick={onComplete}>
-							Mark done
+							Complete
 						</Button>
 					</>
 				) : null
@@ -98,7 +98,7 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 									href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(item.location)}`}
 									target="_blank"
 									rel="noopener noreferrer"
-									className="mt-0.5 inline-block text-[length:var(--text-sm)] text-[var(--accent)] hover:text-[var(--accent-hover)]"
+									className="mt-0.5 inline-block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)]"
 								>
 									Open in Maps
 								</a>
@@ -136,7 +136,7 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 							<span className="tabular">{formatDateLong(item.dueOn)}</span>
 						</Row>
 						{item.clientName ? <Row label="Client">{item.clientName}</Row> : null}
-						<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mt-3 text-sm text-[var(--ink-muted)]">
 							This is the project's own due date. Clearing it keeps the project.
 						</p>
 					</>

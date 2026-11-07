@@ -34,13 +34,13 @@ export function Toggle({ checked, onChange, disabled = false, label, description
 			className="group flex w-full min-h-[40px] items-center justify-between gap-6 rounded-[var(--radius-md)] text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--focus)] disabled:opacity-50"
 		>
 			<span className="flex min-w-0 flex-col gap-1">
-				<span id={labelId} className="text-[length:var(--text-base)] text-[var(--ink)]">
+				<span id={labelId} className="text-base text-[var(--ink)]">
 					{label}
 				</span>
 				{description ? (
 					<span
 						id={descriptionId}
-						className="max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						className="max-w-[62ch] text-sm text-[var(--ink-muted)]"
 					>
 						{description}
 					</span>
@@ -49,7 +49,7 @@ export function Toggle({ checked, onChange, disabled = false, label, description
 			<span
 				aria-hidden
 				className={[
-					"relative inline-flex h-[18px] w-[32px] flex-none items-center rounded-full transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+					"relative inline-flex h-[18px] w-[32px] flex-none items-center rounded-[var(--radius-full)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 					checked
 						? "bg-[var(--accent)] group-hover:bg-[var(--accent-hover)]"
 						: "bg-[var(--line-strong)] group-hover:bg-[var(--ink-faint)]",
@@ -57,7 +57,7 @@ export function Toggle({ checked, onChange, disabled = false, label, description
 			>
 				<span
 					className={[
-						"absolute left-[2px] h-[14px] w-[14px] rounded-full transition-transform duration-[var(--duration-fast)] ease-[var(--ease)]",
+						"absolute left-[2px] h-[14px] w-[14px] rounded-[var(--radius-full)] transition-transform duration-[var(--duration-fast)] ease-[var(--ease)]",
 						checked ? "translate-x-[14px] bg-[var(--accent-ink)]" : "translate-x-0 bg-[var(--surface)]",
 					].join(" ")}
 				/>

@@ -207,6 +207,17 @@ function find(db: Db, kind: AgentEntityKind, id: string): Found {
 	}
 }
 
+/** The name of the record a call is about, from its id arguments. Null when it names none, or the record is gone. */
+export function nameOfRecord(toolName: string, args: Record<string, unknown>, db: Db = getDb()): string | null {
+	for (const [key, value] of Object.entries(args)) {
+		const kind = kindOfKey(toolName, key);
+		if (!kind || typeof value !== "string" || value.length === 0) continue;
+		const found = find(db, kind, value);
+		if (found.label) return found.label;
+	}
+	return null;
+}
+
 function refOf(db: Db, kind: AgentEntityKind, id: string): AgentEntityRef {
 	return { role: ROLES[kind], kind, id, ...find(db, kind, id) };
 }

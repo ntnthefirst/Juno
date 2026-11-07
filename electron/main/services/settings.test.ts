@@ -204,3 +204,23 @@ describe("the agent server", () => {
 		expect((await settings.getMcpServer()).enabled).toBe(true);
 	});
 });
+
+describe("the desktop settings", () => {
+	beforeEach(() => {
+		freshStore();
+	});
+
+	it("start with toasts, tray and badge on and the shortcut off", async () => {
+		expect(await settings.getDesktop()).toEqual({
+			toasts: true,
+			tray: true,
+			badge: true,
+			newNoteShortcut: { enabled: false, accelerator: "Ctrl+Alt+N" },
+		});
+	});
+
+	it("fall back to the default for a stored shortcut that is not one", async () => {
+		freshStore({ desktop: { newNoteShortcut: { enabled: true, accelerator: "N" } } });
+		expect((await settings.getDesktop()).newNoteShortcut).toEqual({ enabled: true, accelerator: "Ctrl+Alt+N" });
+	});
+});

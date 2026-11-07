@@ -13,13 +13,38 @@
  * Every method is async because it crosses a process boundary, even where the
  * service behind it is synchronous.
  */
+import type { MenuIconSet, MenuOutcome, MenuRequest } from "./menu";
 import type {
+	DesktopPatch,
+	DesktopView,
+	ShellRequest,
+	ComposeBlock,
+	ComposeBlockContext,
+	ComposeBlockInput,
+	ComposeBlockKind,
+	ComposeBlockPatch,
+	ComposeBlockRendered,
+	ComposeBlockVariable,
+	ComposeBlockResolution,
+	MailRule,
+	MailRuleInput,
+	MailRulePatch,
+	MailRuleRun,
+	MailRuleRunQuery,
 	AgentConnection,
 	AgentTokenCreated,
 	ClaudeDesktopSetup,
 	AgentAction,
 	AgentActionListQuery,
 	AppInfo,
+	Note,
+	NoteHit,
+	NoteInput,
+	NotePatch,
+	NoteQuery,
+	PageDetail,
+	PageInput,
+	PagePatch,
 	AppSettings,
 	AuditEvent,
 	AgentActionView,
@@ -30,6 +55,7 @@ import type {
 	AutomationPatch,
 	AutomationRun,
 	Briefing,
+	OverviewSummary,
 	McpServerStatus,
 	PairingAnswer,
 	PairingRequest,
@@ -48,6 +74,15 @@ import type {
 	DocumentCanvasRender,
 	DocumentTemplate,
 	DocumentTemplateAsset,
+	ComponentUse,
+	DetachInput,
+	DetachResult,
+	DocumentComponent,
+	DocumentComponentAsset,
+	DocumentComponentAssetInput,
+	DocumentComponentInput,
+	DocumentComponentPatch,
+	DocumentComponentRender,
 	DocumentTemplateAssetInput,
 	DocumentTemplateInput,
 	DocumentTemplatePatch,
@@ -73,6 +108,7 @@ import type {
 	SigningCertificateInfo,
 	AddressCandidate,
 	BackupInfo,
+	DocumentsFolder,
 	Client,
 	ClientAddress,
 	ClientAddressInput,
@@ -80,7 +116,6 @@ import type {
 	ClientEmail,
 	ClientEmailInput,
 	ClientEmailPatch,
-	ClientInput,
 	ClientPatch,
 	ClientPhone,
 	ClientPhoneInput,
@@ -154,6 +189,13 @@ import type {
 	ProjectStorageChoice,
 	ProjectStorageInfo,
 	ProjectSummary,
+	ProjectTimelineEntry,
+	ProjectTimelineQuery,
+	RunningTimer,
+	TimeEntry,
+	TimeEntryInput,
+	TimeEntryPatch,
+	TimeTotals,
 	ReferenceItem,
 	ReferenceItemInput,
 	ReferenceItemPatch,
@@ -163,6 +205,8 @@ import type {
 	ResetResult,
 	ResetUserItems,
 	SearchHit,
+	RecentItem,
+	RecentKind,
 	ThemeSetting,
 	OwnerEmailInput,
 	OwnerEmailPatch,
@@ -173,7 +217,19 @@ import type {
 	OnboardingPatch,
 	OnboardingState,
 	SettingsSection,
+	ChildClosedInfo,
+	ClientIntakeInput,
+	NewRecordKind,
+	NewRecordPrefill,
+	MessageSuggestion,
+	SuggestionKind,
+	SuggestionOutcome,
+	SuggestionSources,
 	UpdateStatus,
+	AgentInstructions,
+	AgentInstructionsView,
+	AgentPermissions,
+	AgentPermissionsView,
 } from "./types";
 
 export interface ListClientsQuery {
@@ -229,17 +285,44 @@ export interface JunoApi {
 		 * has a channel back, so this is how a setting changed in one of them, and
 		 * setup finishing, reach the application behind it.
 		 */
-		onChildClosed(listener: () => void): () => void;
+		onChildClosed(listener: (info: ChildClosedInfo) => void): () => void;
+		/**
+		 * What a toast or the tray asked of the main window, held until it can act.
+		 * Null while locked, so nothing asked for runs behind the lock.
+		 */
+		takeShellRequest(): Promise<ShellRequest | null>;
+		/** Fires when the main window is already up and a request arrives. Read it with `takeShellRequest`. */
+		onShellRequest(listener: () => void): () => void;
+		/**
+		 * A small window for making one event, client, project or reminder, over
+		 * the main window (decision 60). `prefill` is what it starts from, which
+		 * is how a client or a project record quick-adds one of its own.
+		 */
+		openNewRecord(kind: NewRecordKind, prefill?: NewRecordPrefill): Promise<void>;
+		/** Called by that window when it is done. `created` says whether anything was saved. */
+		closeNewRecord(created: boolean): Promise<void>;
 		/** The first-run window. It is asked for by the main window, and by settings. */
 		openSetup(): Promise<void>;
 		closeSetup(): Promise<void>;
 		isSetupOpen(): Promise<boolean>;
 	};
 
+	/**
+	 * The right-click menus, drawn by the platform. The renderer names a kind and
+	 * a record and where to open; what the menu offers is decided in the main
+	 * process, and what comes back says what the screen has to do. There is no
+	 * way to hand it a list of items.
+	 */
+	menu: {
+		show(request: MenuRequest): Promise<MenuOutcome>;
+		/** Hands over the pictures the native menus draw beside their labels. */
+		setIcons(icons: MenuIconSet): Promise<void>;
+	};
+
 	clients: {
 		list(query?: ListClientsQuery): Promise<ClientSummary[]>;
 		get(id: string): Promise<Client | null>;
-		create(input: ClientInput): Promise<Client>;
+		create(input: ClientIntakeInput): Promise<Client>;
 		update(id: string, patch: ClientPatch): Promise<Client>;
 		/** Soft delete. Returns the row so the interface can offer an undo. */
 		remove(id: string): Promise<Client>;
@@ -313,6 +396,45 @@ export interface JunoApi {
 		setPrimary(id: string): Promise<ClientAddress>;
 	};
 
+	time: {
+		list(projectId: string): Promise<TimeEntry[]>;
+		total(projectId: string): Promise<TimeTotals>;
+		/** The one timer that is running, or null. */
+		running(): Promise<RunningTimer | null>;
+		/** Throws when another timer is already running. */
+		start(projectId: string, note?: string | null): Promise<TimeEntry>;
+		stop(note?: string | null): Promise<TimeEntry>;
+		create(input: TimeEntryInput): Promise<TimeEntry>;
+		update(id: string, patch: TimeEntryPatch): Promise<TimeEntry>;
+		remove(id: string): Promise<TimeEntry>;
+		/** Fires when a timer starts or stops, from the interface or from an agent. */
+		onRunningChange(listener: (running: RunningTimer | null) => void): () => void;
+	};
+
+	notes: {
+		list(query?: NoteQuery): Promise<Note[]>;
+		get(id: string): Promise<Note | null>;
+		/** Notes holding every word typed, best match first, each with the words around it. */
+		search(term: string, query?: NoteQuery): Promise<NoteHit[]>;
+		create(input?: NoteInput): Promise<Note>;
+		/** Saved as it is typed. `pinned` sets or clears the pin. */
+		update(id: string, patch: NotePatch): Promise<Note>;
+		duplicate(id: string): Promise<Note>;
+		remove(id: string): Promise<Note>;
+		restore(id: string): Promise<Note>;
+	};
+
+	/** A page is a document of kind `page`. Listing and deleting go through `documents`. */
+	pages: {
+		get(id: string): Promise<PageDetail>;
+		create(input?: PageInput): Promise<PageDetail>;
+		update(id: string, patch: PagePatch): Promise<PageDetail>;
+		/** Asks for a picture and keeps it with the page. Null when cancelled. */
+		chooseImage(id: string): Promise<import("./blocks").ImageBlock | null>;
+		/** Opens an https or mail link in the system. Anything else is refused. */
+		openLink(url: string): Promise<void>;
+	};
+
 	projects: {
 		list(query?: {
 			clientId?: string;
@@ -324,6 +446,9 @@ export interface JunoApi {
 		update(id: string, patch: ProjectPatch): Promise<Project>;
 		remove(id: string): Promise<Project>;
 		restore(id: string): Promise<Project>;
+		/** Sets the status to "Archived", adding that status the first time. */
+		archive(id: string): Promise<Project>;
+		timeline(query: ProjectTimelineQuery): Promise<ProjectTimelineEntry[]>;
 
 		/** Which folder this project's own files are in, and how much is in it. */
 		storage(id: string): Promise<ProjectStorageInfo>;
@@ -419,6 +544,12 @@ export interface JunoApi {
 		/** Opens a file picker in the main process and copies the image in. */
 		chooseSignature(): Promise<string | null>;
 		clearSignature(): Promise<void>;
+		/** The folder new documents are written to. */
+		getDocumentsFolder(): Promise<DocumentsFolder>;
+		/** Opens a folder picker in the main process. Null when it is cancelled. */
+		chooseDocumentsFolder(): Promise<DocumentsFolder | null>;
+		/** Back to the folder inside the data folder. Nothing is moved. */
+		resetDocumentsFolder(): Promise<DocumentsFolder>;
 		getTheme(): Promise<ThemeSetting>;
 		/** Also sets nativeTheme.themeSource, or the title bar disagrees with the window. */
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
@@ -454,6 +585,16 @@ export interface JunoApi {
 	 * installs without asking and none that reads the feed URL: the renderer
 	 * says check, install or auto-install, and is told what happened.
 	 */
+	/**
+	 * Toasts, the tray icon, the taskbar badge and the global shortcut (Windows).
+	 * Whether closing the window keeps Juno running is `agent.server`.
+	 */
+	desktop: {
+		get(): Promise<DesktopView>;
+		/** Saves the switches given and brings the tray, badge and shortcut in line. Throws for a shortcut that cannot be one. */
+		update(patch: DesktopPatch): Promise<DesktopView>;
+	};
+
 	updates: {
 		status(): Promise<UpdateStatus>;
 		/**
@@ -500,6 +641,28 @@ export interface JunoApi {
 		query(input: SearchQuery): Promise<SearchHit[]>;
 	};
 
+	suggestions: {
+		/** What can be offered under this message now. Writes nothing. */
+		forMessage(messageId: string): Promise<MessageSuggestion[]>;
+		/** Not now: not offered under this message again. */
+		dismiss(messageId: string, kind: SuggestionKind): Promise<void>;
+		/** Add to calendar. Makes the event and records the answer. */
+		accept(messageId: string, kind: SuggestionKind): Promise<SuggestionOutcome>;
+		/** The switches behind each kind of suggestion, for the settings screen. */
+		sources: {
+			get(): Promise<SuggestionSources>;
+			set(patch: Partial<SuggestionSources>): Promise<SuggestionSources>;
+		};
+	};
+
+	recent: {
+		/** Newest first, at most twenty. A record that no longer exists is left out. */
+		list(): Promise<RecentItem[]>;
+		/** Notes that a record was just opened. */
+		touch(kind: RecentKind, recordId: string): Promise<void>;
+		clear(): Promise<void>;
+	};
+
 	agent: {
 		server: {
 			/** Whether an agent can reach Juno, and at what address. */
@@ -522,6 +685,20 @@ export interface JunoApi {
 		/** Every tool, for the screen that lists the surface. No handlers cross. */
 		tools(): Promise<ToolSummary[]>;
 		/**
+		 * How far an agent may go, per kind of thing. Send, sign, file and delete
+		 * refuse "allow". There is no MCP tool for either call: an agent does not
+		 * widen its own permissions.
+		 */
+		permissions: {
+			get(): Promise<AgentPermissionsView>;
+			set(patch: Partial<AgentPermissions>): Promise<AgentPermissionsView>;
+		};
+		/** What every connected agent is told when it connects. Also owner only. */
+		instructions: {
+			get(): Promise<AgentInstructionsView>;
+			set(instructions: AgentInstructions): Promise<AgentInstructionsView>;
+		};
+		/**
 		 * Who was let in. Letting a client in, and taking it out again, are a
 		 * person's decisions: there is no MCP tool for any of this.
 		 */
@@ -542,6 +719,8 @@ export interface JunoApi {
 		actions: {
 			list(query?: AgentActionListQuery): Promise<AgentAction[]>;
 			get(id: string): Promise<AgentAction | null>;
+			/** The request an agent made to send this draft: pending, or closed once you sent it yourself. */
+			forDraft(draftId: string): Promise<AgentAction | null>;
 			pendingCount(): Promise<number>;
 			/**
 			 * Runs what an agent asked for. There is no MCP equivalent and there
@@ -560,6 +739,8 @@ export interface JunoApi {
 			list(query?: AuditListQuery): Promise<AuditEvent[]>;
 			/** The record each row touched, by name. */
 			describe(ids: string[]): Promise<AgentAuditView[]>;
+			/** Deletes entries past their retention now, and says how many. Never offered to an agent. */
+			purge(): Promise<number>;
 		};
 	};
 
@@ -578,6 +759,8 @@ export interface JunoApi {
 
 	briefing: {
 		today(): Promise<Briefing>;
+		/** The four counts and the sentence the Overview opens with. */
+		overview(): Promise<OverviewSummary>;
 		client(clientId: string): Promise<Briefing>;
 		/** `YYYY-MM`. */
 		month(month: string): Promise<Briefing>;
@@ -617,6 +800,28 @@ export interface JunoApi {
 			/** Stores a picture for the template. The same bytes twice give the same picture. */
 			add(input: DocumentTemplateAssetInput): Promise<DocumentTemplateAsset>;
 			remove(id: string): Promise<DocumentTemplateAsset>;
+		};
+		/**
+		 * Pieces of a page made once and placed in many templates (decision 65).
+		 * Deleting one that a template still places is refused with the names.
+		 */
+		components: {
+			list(): Promise<DocumentComponent[]>;
+			get(id: string): Promise<DocumentComponent | null>;
+			create(input: DocumentComponentInput): Promise<DocumentComponent>;
+			update(id: string, patch: DocumentComponentPatch): Promise<DocumentComponent>;
+			remove(id: string): Promise<DocumentComponent>;
+			/** The templates that place it, directly or through another component. */
+			usedBy(id: string): Promise<ComponentUse[]>;
+			/** Copies a placed component into a draft of a template and drops the link. Stores nothing. */
+			detach(input: DetachInput): Promise<DetachResult>;
+			/** The component alone on a page, printed. Stores nothing. */
+			renderPdf(input: DocumentComponentRender): Promise<DocumentCanvasPdf>;
+			assets: {
+				list(componentId: string): Promise<DocumentComponentAsset[]>;
+				add(input: DocumentComponentAssetInput): Promise<DocumentComponentAsset>;
+				remove(id: string): Promise<DocumentComponentAsset>;
+			};
 		};
 	};
 
@@ -856,6 +1061,42 @@ export interface JunoApi {
 		};
 		/** Opens a link from a message in the real browser, after a protocol check. */
 		openLink(url: string): Promise<void>;
+		/** Intros and outros, the lines added at the start and the end of a message. */
+		blocks: {
+			/** Intros first, then outros, each in the order that decides which wins. */
+			list(kind?: ComposeBlockKind): Promise<ComposeBlock[]>;
+			get(id: string): Promise<ComposeBlock>;
+			create(input: ComposeBlockInput): Promise<ComposeBlock>;
+			update(id: string, patch: ComposeBlockPatch): Promise<ComposeBlock>;
+			remove(id: string): Promise<ComposeBlock>;
+			/** Every block of the kind, once, in the new order. */
+			reorder(kind: ComposeBlockKind, ids: string[]): Promise<ComposeBlock[]>;
+			/** The intro and outro a new message gets, with variables filled in. */
+			resolve(context: ComposeBlockContext): Promise<ComposeBlockResolution>;
+			/** One block filled in for a message, whatever its rule says. */
+			render(id: string, context: ComposeBlockContext): Promise<ComposeBlockRendered>;
+			/** What each variable would be for a message like this, so the composer can flag a chip with nothing to put in. */
+			values(context: ComposeBlockContext): Promise<Record<ComposeBlockVariable, string>>;
+		};
+		/**
+		 * Rules per mailbox, checked top to bottom against new mail in the inbox
+		 * after each sync (decision 64). They file on their own, so only the owner
+		 * writes one here; an agent has to ask through the approval gate.
+		 */
+		rules: {
+			/** The rules of one mailbox, in the order they are checked. */
+			list(accountId: string): Promise<MailRule[]>;
+			get(id: string): Promise<MailRule>;
+			create(input: MailRuleInput): Promise<MailRule>;
+			update(id: string, patch: MailRulePatch): Promise<MailRule>;
+			remove(id: string): Promise<MailRule>;
+			/** Every rule of the mailbox, once, in the new order. */
+			reorder(accountId: string, ids: string[]): Promise<MailRule[]>;
+			/** The rule in plain words, as an approval would show it. */
+			describe(id: string): Promise<string>;
+			/** What rules did to messages, newest first. */
+			runs(query: MailRuleRunQuery): Promise<MailRuleRun[]>;
+		};
 		templates: {
 			/** What a picker offers: hidden templates are left out. */
 			list(): Promise<MailTemplate[]>;

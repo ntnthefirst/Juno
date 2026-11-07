@@ -10,12 +10,12 @@ layout is that a capability is written once and both the UI and an agent get it.
 | Layer | Lives in | Job | Never does |
 | --- | --- | --- | --- |
 | **Renderer** | `src/` | React UI: screens, components, local view state | Talk to SQLite, `fs`, IMAP, `safeStorage`, or any node module |
-| **Preload** | `electron/preload/index.ts` | Expose a narrow, typed `contextBridge` API of named channels | Contain logic, expose `ipcRenderer` itself, or expose a generic `invoke(channel, args)` |
+| **Preload** | `electron/preload.ts` | Expose a narrow, typed `contextBridge` API of named channels | Contain logic, expose `ipcRenderer` itself, or expose a generic `invoke(channel, args)` |
 | **Adapters** | `electron/main/ipc/`, `electron/main/mcp/` | Unwrap arguments, call one service function, return its result | Validate business rules, touch the DB, format for one caller |
 | **Services** | `electron/main/services/` | Every capability in the app, implemented exactly once | Know whether the caller is a window or an agent |
 
 Below the services sit `electron/main/db/` (schema, migrations, the connection)
-and `electron/main/vault/` (`safeStorage` read/write). Services are the only
+and `electron/main/vault.ts` (`safeStorage` read/write). Services are the only
 thing allowed to call them.
 
 This is decision 2 in [../../docs/decisions.md](../../docs/decisions.md), and it
@@ -25,12 +25,13 @@ is the rule the rest of the project is built on.
 
 ```
 electron/
+  main.ts                 entry point: boot order, app lifecycle, protocol registration
   main/
-    index.ts              app lifecycle, window creation, protocol registration
     db/
-      schema.ts           Drizzle table definitions
+      schema/             Drizzle table definitions, one file per domain
       migrations/         generated SQL, committed, run forward on launch
-      client.ts           opens the file, runs pending migrations, exports `db`
+      index.ts            opens the file through the node:sqlite shim, exports `db`
+      migrate.ts          runs pending migrations forward on launch
     services/
       clients.ts          the only place client logic exists
       documents.ts
@@ -43,25 +44,25 @@ electron/
     mcp/
       clients.ts          thin: declares the tools, calls the service
       index.ts            starts the server, registers every tool
-    vault/
-      index.ts            safeStorage get/set/delete, keyed by account id
+    vault.ts              safeStorage get/set/delete, keyed by account id
     windows/
       index.ts            the registry: one main window, one modal settings child
       chrome.ts           CSP, navigation rules, the native title-bar overlay
+      context-menu.ts     the native right-click menu, built from the menu registry
       main-window.ts      the application window
       settings-window.ts  fixed size, modal child of the main window
       setup-window.ts     smaller, the same shape, the first run
+      new-record-window.ts  the small modal for a new event, client, project or reminder
+      update-window.ts    the update dialog
       splash.ts           the window shown while the database opens
-    updates.ts            electron-updater against the public GitHub releases
     dev-data.ts           where a development run keeps its data
-  preload/
-    index.ts              contextBridge only
+  preload.ts              contextBridge only
 src/
   features/
     clients/              screens and feature components for one domain
     mail/
     documents/
-  components/             shared UI primitives: button.tsx, data-table.tsx
+  components/             shared UI primitives: Button.tsx, Dialog.tsx, FormPage.tsx
   lib/                    renderer-only helpers: formatting, query keys, hooks
   styles/tokens.css       copied from brand/tokens.css
 ```
@@ -128,6 +129,13 @@ is only ever **one modal child at a time**: opening either closes the other.
 When one closes, the main process focuses the parent and sends
 `window.childClosed`, which is the only channel back from either.
 
+**The new-record windows are the third kind of modal child** (decision 60,
+`windows/new-record-window.ts`, `#/new/event`, `#/new/client`, `#/new/project`,
+`#/new/reminder`). They share the one-modal-child rule, and what they start from
+rides in the address as a prefill that `shared/new-record.ts` checks. Closing
+one sends `window.childClosed` with `{ created }`, which is what makes the
+screens behind it read again.
+
 Every window draws its own title bar and lets the operating system draw the
 caption buttons on top (`chrome.ts`). Three things have to move together when
 the title bar height changes: `TITLEBAR_HEIGHT`, `--titlebar-height`, and the
@@ -138,8 +146,8 @@ A renderer never asks which window it is over IPC. It reads its own URL.
 
 ## 5. Renderer rules
 
-- **One component per file**, default export, file named `kebab-case.tsx`, the
-  component inside `PascalCase` and matching the file name.
+- **One component per file**, a named export, file named `PascalCase.tsx` after
+  the component it holds.
 - **If a component takes props, it declares a named props type, and that type is
   the first declaration in the file** after the imports:
 
@@ -176,7 +184,7 @@ date is formatted for display. Formatting is not a business rule.
 
 - Don't enable `nodeIntegration` or disable `contextIsolation` to make an import
   work. See [security.md](security.md).
-- Don't import `better-sqlite3`, `imapflow`, `fs` or `path` from anything under
+- Do not import `node:sqlite`, `imapflow`, `fs` or `path` from anything under
   `src/`. It builds in dev and breaks in the packaged app.
 - Don't add a second persistence layer. SQLite is the source of truth, always
   (decision 5).

@@ -220,12 +220,12 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 							onChange={setStepsText}
 							error={stepsError}
 						/>
-						<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mt-1 text-sm text-[var(--ink-muted)]">
 							A list of steps, each with a tool and its arguments. The tool names and what they take are
 							listed in Settings under Connection.
 						</p>
 						{willWait ? (
-							<p className="mt-2 text-[length:var(--text-sm)] text-[var(--warn)]">
+							<p className="mt-2 text-sm text-[var(--warn)]">
 								One of these steps needs your approval. The run will stop there and wait for you, every
 								time, including on a schedule.
 							</p>
@@ -240,7 +240,7 @@ export function AutomationForm({ automation, onClose, onSaved }: AutomationFormP
 						</p>
 						<p
 							data-selectable
-							className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mt-1 text-sm text-[var(--ink-muted)]"
 						>
 							{error}
 						</p>

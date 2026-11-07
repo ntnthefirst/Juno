@@ -8,6 +8,10 @@
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { copyFileSync } from "node:fs";
 import type {
+	ComposeBlockContext,
+	ComposeBlockInput,
+	ComposeBlockKind,
+	ComposeBlockPatch,
 	GoogleFontRequest,
 	MailAccountInput,
 	MailBlockConversion,
@@ -15,6 +19,9 @@ import type {
 	MailDraftInput,
 	MailDraftPatch,
 	MailOutboxListQuery,
+	MailRuleInput,
+	MailRulePatch,
+	MailRuleRunQuery,
 	MailReplyMode,
 	MailTemplateDraft,
 	MailTemplateSendInput,
@@ -25,6 +32,7 @@ import type {
 import * as actions from "../services/mail-actions";
 import * as accounts from "../services/mail-accounts";
 import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
+import * as blocks from "../services/mail-blocks";
 import * as folders from "../services/mail-folders";
 import * as fonts from "../services/mail-fonts";
 import * as pictures from "../services/mail-pictures";
@@ -34,6 +42,8 @@ import * as outboxFiles from "../services/mail-outbox-files";
 import * as outboxPicker from "../services/mail-outbox-picker";
 import * as purgeMail from "../services/mail-purge";
 import * as recipients from "../services/mail-recipients";
+import * as rules from "../services/mail-rules";
+import { isHttpsLink } from "../../shared/mail-link";
 import * as sender from "../services/mail-send";
 import * as sync from "../services/mail-sync";
 import * as templates from "../services/mail-templates";
@@ -165,10 +175,10 @@ export function registerMailIpc(): void {
 	});
 
 	ipcMain.handle("mail.openLink", async (_event, url: string) => {
-		// The same rule as reminders.openAction: only a web address or a mailto
-		// reaches the shell. Anything else from a message is data.
-		if (!/^(https?:\/\/|mailto:)/i.test(url)) {
-			throw new Error("That link is not a web address, so Juno will not open it.");
+		// security.md section 3: a link from a message reaches the shell on https
+		// only, the same check the reader makes before it offers the button.
+		if (!isHttpsLink(url)) {
+			throw new Error("Juno only opens https links from a message. Copy the address to use it elsewhere.");
 		}
 		await shell.openExternal(url);
 	});
@@ -181,6 +191,34 @@ export function registerMailIpc(): void {
 	);
 	ipcMain.handle("mail.templates.listAll", () => templates.listAll());
 	ipcMain.handle("mail.templates.remove", (_event, id: string) => templates.remove(id));
+	ipcMain.handle("mail.blocks.list", (_event, kind?: ComposeBlockKind) => blocks.list(kind));
+	ipcMain.handle("mail.blocks.get", (_event, id: string) => blocks.get(id));
+	ipcMain.handle("mail.blocks.create", (_event, input: ComposeBlockInput) => blocks.create(input));
+	ipcMain.handle("mail.blocks.update", (_event, id: string, patch: ComposeBlockPatch) =>
+		blocks.update(id, patch),
+	);
+	ipcMain.handle("mail.blocks.remove", (_event, id: string) => blocks.remove(id));
+	ipcMain.handle("mail.blocks.reorder", (_event, kind: ComposeBlockKind, ids: string[]) =>
+		blocks.reorder(kind, ids),
+	);
+	// The owner writing a rule is the one way a rule comes to exist; an agent goes
+	// through the tools, which ask first.
+	ipcMain.handle("mail.rules.list", (_event, accountId: string) => rules.list(accountId));
+	ipcMain.handle("mail.rules.get", (_event, id: string) => rules.get(id));
+	ipcMain.handle("mail.rules.create", (_event, input: MailRuleInput) => rules.create(input));
+	ipcMain.handle("mail.rules.update", (_event, id: string, patch: MailRulePatch) => rules.update(id, patch));
+	ipcMain.handle("mail.rules.remove", (_event, id: string) => rules.remove(id));
+	ipcMain.handle("mail.rules.reorder", (_event, accountId: string, ids: string[]) =>
+		rules.reorder(accountId, ids),
+	);
+	ipcMain.handle("mail.rules.describe", (_event, id: string) => rules.explain(id));
+	ipcMain.handle("mail.rules.runs", (_event, query: MailRuleRunQuery) => rules.runs(query));
+
+	ipcMain.handle("mail.blocks.resolve", (_event, context: ComposeBlockContext) => blocks.resolve(context));
+	ipcMain.handle("mail.blocks.values", (_event, context: ComposeBlockContext) => blocks.valuesFor(context));
+	ipcMain.handle("mail.blocks.render", (_event, id: string, context: ComposeBlockContext) =>
+		blocks.render(id, context),
+	);
 	ipcMain.handle("mail.templates.hide", (_event, id: string) => templates.hide(id));
 	ipcMain.handle("mail.templates.unhide", (_event, id: string) => templates.unhide(id));
 	ipcMain.handle("mail.templates.duplicate", (_event, id: string) => templates.duplicate(id));

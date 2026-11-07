@@ -198,12 +198,12 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 	if (record.isSpecimen) {
 		return (
 			<FormPage title="Sign document" onBack={onClose} actions={<Button onClick={onClose}>Close</Button>}>
-				<p className="text-[length:var(--text-base)]">
+				<p className="text-base">
 					This document cannot be signed. It was generated from a template nobody has reviewed, so
 					its text is a specimen and signing it would put a signature on wording that was never
 					checked.
 				</p>
-				<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="mt-3 text-sm text-[var(--ink-muted)]">
 					Review the template under Templates, generate the document again, and sign that one.
 				</p>
 			</FormPage>
@@ -220,7 +220,7 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 			actions={
 				<>
 					{error ? (
-						<p data-selectable className="mr-auto min-w-0 truncate text-[length:var(--text-sm)] text-[var(--risk)]" title={error}>
+						<p data-selectable className="mr-auto min-w-0 truncate text-sm text-[var(--risk)]" title={error}>
 							{error}
 						</p>
 					) : null}
@@ -243,7 +243,7 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 				</>
 			}
 		>
-			<p className="mb-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mb-3 text-sm text-[var(--ink-muted)]">
 				Drag the stamp where it goes and its corner to size it. Double-click the stamp to change the name.
 			</p>
 			<div className="mb-3 max-w-md">
@@ -288,7 +288,7 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 										/>
 									) : null}
 								</PdfPageView>
-								<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+								<span className="tabular text-micro text-[var(--ink-muted)]">
 									Page {number} of {loaded.pdf.numPages}
 								</span>
 							</div>
@@ -305,7 +305,7 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 							void sign(true);
 						}}
 					>
-						<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mt-3 text-sm text-[var(--ink-muted)]">
 							The stamp is added and the file is sealed with the certificate of{" "}
 							{loaded.certificate.subject}, valid until {loaded.certificate.validTo.slice(0, 10)}.
 						</p>
@@ -330,7 +330,7 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 
 			{asking === "certificate" ? (
 				<Dialog title="No certificate yet" width="narrow" onClose={() => setAsking(null)}>
-					<p className="mt-3 text-[length:var(--text-base)]">
+					<p className="mt-3 text-base">
 						A digital signature is made with your own certificate. Import the .p12 or .pfx file under
 						Settings, then sign again.
 					</p>

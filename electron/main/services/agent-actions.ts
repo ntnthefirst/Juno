@@ -355,6 +355,92 @@ export async function reject(id: string, db: Db = getDb()): Promise<AgentAction>
 	return announce(toRecord(updated!));
 }
 
+/**
+ * Closes the request an agent made to send this draft, because a person has
+ * sent it themselves.
+ *
+ * Called inside the transaction that queues the message, so the two happen
+ * together or not at all. It only touches a request that is still pending:
+ * an approved one is the send in progress and must stay what it is, and a
+ * closed one can no longer be approved, which is what keeps the message from
+ * going out twice. Returns the closed requests; the caller announces them
+ * once the transaction has committed.
+ */
+export function closeForSentDraft(draftId: string, db: Db = getDb()): AgentAction[] {
+	const open = db
+		.select()
+		.from(agentActions)
+		.where(
+			and(
+				eq(agentActions.toolName, "mail.send"),
+				eq(agentActions.state, "pending"),
+				isNull(agentActions.deletedAt),
+			),
+		)
+		.all()
+		.filter((row) => parseArgs(row.argsJson).id === draftId);
+
+	const closed: AgentAction[] = [];
+	for (const row of open) {
+		const stamp = now();
+		const [updated] = db
+			.update(agentActions)
+			.set({
+				state: "closed",
+				decidedAt: stamp,
+				executedAt: stamp,
+				resultJson: JSON.stringify({ sentBy: "user" }),
+				updatedAt: stamp,
+			})
+			.where(and(eq(agentActions.id, row.id), eq(agentActions.state, "pending")))
+			.returning()
+			.all();
+		if (!updated) continue;
+		audit.record(
+			{
+				actor: "user",
+				toolName: row.toolName,
+				args: parseArgs(row.argsJson),
+				summary: row.summary,
+				result: "closed",
+				actionId: row.id,
+			},
+			db,
+		);
+		closed.push(toRecord(updated));
+	}
+	return closed;
+}
+
+/** Tells the app about changes made inside a transaction, after it committed. */
+export function announceAll(list: AgentAction[]): void {
+	for (const action of list) announce(action);
+}
+
+/**
+ * The request about a draft: the pending one while it waits, or the one that
+ * was closed when a person sent the draft. The composer shows its banner and
+ * its notice from this.
+ */
+export function requestForDraft(draftId: string, db: Db = getDb()): AgentAction | null {
+	expireStale(db);
+	const rows = db
+		.select()
+		.from(agentActions)
+		.where(
+			and(
+				eq(agentActions.toolName, "mail.send"),
+				inArray(agentActions.state, ["pending", "closed"]),
+				isNull(agentActions.deletedAt),
+			),
+		)
+		.orderBy(desc(agentActions.createdAt), desc(agentActions.id))
+		.all()
+		.filter((row) => parseArgs(row.argsJson).id === draftId);
+	const pending = rows.find((row) => row.state === "pending") ?? rows[0];
+	return pending ? toRecord(pending) : null;
+}
+
 /** Clears an answered action from the list. The audit row stays. */
 export async function remove(id: string, db: Db = getDb()): Promise<AgentAction> {
 	const row = requireRow(id, db);

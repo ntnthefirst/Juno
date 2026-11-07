@@ -15,10 +15,10 @@ const SOURCE_LABEL: Record<LocationSuggestion["source"], string> = {
 };
 
 const CONTROL =
-	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-base)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]";
+	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]";
 
 const OPTION =
-	"flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-[length:var(--text-dense)] hover:bg-[var(--accent-soft)]";
+	"flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-dense hover:bg-[var(--accent-soft)]";
 
 /**
  * The event location. Suggestions come from two places, kept deliberately
@@ -102,7 +102,7 @@ export function LocationField({ value, onChange }: LocationFieldProps) {
 
 	return (
 		<div ref={containerRef} className="relative">
-			<label htmlFor={id} className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<label htmlFor={id} className="mb-1 block text-sm text-[var(--ink-muted)]">
 				Location
 			</label>
 			<input
@@ -132,7 +132,7 @@ export function LocationField({ value, onChange }: LocationFieldProps) {
 								<li key={`local-${index}`}>
 									<button type="button" role="option" onClick={() => choose(suggestion.address)} className={OPTION}>
 										<span className="min-w-0 flex-1 truncate">{suggestion.address}</span>
-										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<span className="shrink-0 text-micro text-[var(--ink-muted)]">
 											{SOURCE_LABEL[suggestion.source]}
 										</span>
 									</button>
@@ -149,7 +149,7 @@ export function LocationField({ value, onChange }: LocationFieldProps) {
 									<li key={`online-${index}`}>
 										<button type="button" role="option" onClick={() => choose(candidate.label)} className={OPTION}>
 											<span className="min-w-0 flex-1 truncate">{candidate.label}</span>
-											<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">Address</span>
+											<span className="shrink-0 text-micro text-[var(--ink-muted)]">Address</span>
 										</button>
 									</li>
 								))}
@@ -158,13 +158,13 @@ export function LocationField({ value, onChange }: LocationFieldProps) {
 					) : null}
 
 					{local.length === 0 && (!online || online.length === 0) && !lookupNotice ? (
-						<p className="px-2 py-1.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="px-2 py-1.5 text-sm text-[var(--ink-muted)]">
 							Nothing on file matches yet. Free text is fine too.
 						</p>
 					) : null}
 
 					{lookupNotice ? (
-						<p className="px-2 py-1.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{lookupNotice}</p>
+						<p className="px-2 py-1.5 text-sm text-[var(--ink-muted)]">{lookupNotice}</p>
 					) : null}
 
 					<div className="border-t border-[var(--line)] p-1">
@@ -172,11 +172,11 @@ export function LocationField({ value, onChange }: LocationFieldProps) {
 							type="button"
 							onClick={() => void lookUpOnline()}
 							disabled={lookingUp}
-							className="w-full rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-[length:var(--text-dense)] text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-60"
+							className="w-full rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-dense text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-60"
 						>
 							{lookingUp ? "Looking up" : `Look up "${query}" online`}
 						</button>
-						<p className="px-2 pb-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+						<p className="px-2 pb-1 text-micro text-[var(--ink-muted)]">
 							Asks OpenStreetMap for this address. The only step here that leaves this machine.
 						</p>
 					</div>

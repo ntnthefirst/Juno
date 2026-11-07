@@ -130,7 +130,7 @@ export function ClientNotePanel({ clientId, note, initialKind, onClose, onSaved 
 				{error ? (
 					<div className="border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not save this note.</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

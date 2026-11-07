@@ -1,3 +1,4 @@
+import { listAllClients } from "../../lib/list-all-clients";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import type {
 	ClientSummary,
@@ -15,17 +16,9 @@ import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { CATEGORIES, PATTERNS, describeRecurrence, takesInterval } from "./format";
 
-/** What a new reminder starts from, when it is made from a day on the calendar or from a client or project. */
-export type ReminderSeed = {
-	dueOn?: string;
-	clientId?: string;
-	projectId?: string;
-};
-
 type ReminderFormProps = {
-	/** Null creates, a reminder edits. */
-	reminder: Reminder | null;
-	seed?: ReminderSeed | null;
+	/** The stored reminder being edited. A new one is made in its own window (decision 60). */
+	reminder: Reminder;
 	/** Where back goes, in words. "Reminders" unless the form was reached from somewhere else. */
 	backLabel?: string;
 	onClose: () => void;
@@ -44,17 +37,17 @@ type Values = {
 	projectId: string;
 };
 
-function toValues(reminder: Reminder | null, seed: ReminderSeed | null): Values {
+function toValues(reminder: Reminder): Values {
 	return {
-		title: reminder?.title ?? "",
-		notes: reminder?.notes ?? "",
-		dueOn: reminder?.dueOn ?? seed?.dueOn ?? "",
-		category: reminder?.category ?? "paperwork",
-		pattern: reminder?.pattern ?? "once",
-		interval: String(reminder?.interval ?? 1),
-		leadDays: String(reminder?.leadDays ?? 0),
-		clientId: reminder?.clientId ?? seed?.clientId ?? "",
-		projectId: reminder?.projectId ?? seed?.projectId ?? "",
+		title: reminder.title,
+		notes: reminder.notes ?? "",
+		dueOn: reminder.dueOn,
+		category: reminder.category,
+		pattern: reminder.pattern,
+		interval: String(reminder.interval),
+		leadDays: String(reminder.leadDays),
+		clientId: reminder.clientId ?? "",
+		projectId: reminder.projectId ?? "",
 	};
 }
 
@@ -64,11 +57,11 @@ function parseCount(raw: string): number | null {
 	return Number.parseInt(trimmed, 10);
 }
 
-export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSaved }: ReminderFormProps) {
+export function ReminderForm({ reminder, backLabel, onClose, onSaved }: ReminderFormProps) {
 	// The submit button lives in the page footer, outside the form element.
 	const formId = useId();
 	const notesId = useId();
-	const [values, setValues] = useState<Values>(() => toValues(reminder, seed));
+	const [values, setValues] = useState<Values>(() => toValues(reminder));
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
 	const [titleError, setTitleError] = useState<string | null>(null);
@@ -80,8 +73,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 
 	useEffect(() => {
 		let cancelled = false;
-		window.juno.clients
-			.list()
+		listAllClients()
 			.then((rows) => {
 				if (!cancelled) setClients(rows);
 			})
@@ -157,8 +149,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 		};
 
 		try {
-			if (reminder) await window.juno.reminders.update(reminder.id, input);
-			else await window.juno.reminders.create(input);
+			await window.juno.reminders.update(reminder.id, input);
 			onSaved();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -171,7 +162,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 
 	return (
 		<FormPage
-			title={reminder ? "Edit reminder" : "New reminder"}
+			title="Edit reminder"
 			onBack={onClose}
 			backLabel={backLabel ?? "Reminders"}
 			actions={
@@ -232,7 +223,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 					)}
 
 					<div className="col-span-2">
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="text-sm text-[var(--ink-muted)]">
 							{describeRecurrence(values.pattern, intervalNumber)}
 						</p>
 					</div>
@@ -271,7 +262,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 					<div className="col-span-2">
 						<label
 							htmlFor={notesId}
-							className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mb-1 block text-sm text-[var(--ink-muted)]"
 						>
 							Notes
 						</label>
@@ -286,7 +277,7 @@ export function ReminderForm({ reminder, seed = null, backLabel, onClose, onSave
 						</p>
 						<p
 							data-selectable
-							className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mt-1 text-sm text-[var(--ink-muted)]"
 						>
 							{error}
 						</p>

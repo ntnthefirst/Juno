@@ -1,32 +1,45 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Reminder } from "@shared/types";
-import { AddButton } from "../../components/AddButton";
-import { Avatar } from "../../components/Avatar";
+import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
-import { useScreenAction } from "../../lib/screen-actions";
+import { blankMenuFor } from "../../lib/blank-menu";
 import { useLoaded } from "../../lib/use-loaded";
-import { BUCKET_LABELS, BUCKET_ORDER, todayIso } from "../reminders/format";
+import { todayIso } from "../reminders/format";
 import { ReminderForm } from "../reminders/ReminderForm";
-import { ReminderRow } from "../reminders/ReminderRow";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
-import { SuggestionList } from "../reminders/SuggestionList";
-import { Card, CardError, CardLink, CardNote, CardSkeleton, GroupLabel } from "./Card";
-import { ClientsCard } from "./ClientsCard";
-import { RecentDocumentsCard } from "./RecentDocumentsCard";
-import { RecentMailCard } from "./RecentMailCard";
-import { StatTiles } from "./StatTiles";
-import { UpNextCard } from "./UpNextCard";
+import { Agenda } from "./Agenda";
+import { CountLinks } from "./CountLinks";
+import { SideLists } from "./SideLists";
+import { StartHere } from "./StartHere";
+import { Suggestions } from "./Suggestions";
 
 type Clock = { today: string; hour: number; dateLabel: string };
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December",
+];
 
 function readClock(): Clock {
 	const now = new Date();
 	return {
 		today: todayIso(),
 		hour: now.getHours(),
-		dateLabel: now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }),
+		// Built from parts, so the separators are the design's whatever the locale does.
+		dateLabel: `${WEEKDAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`,
 	};
 }
 
@@ -40,29 +53,46 @@ function greetingFor(hour: number): string {
 // Reads that take no arguments, kept outside the component so each is one
 // stable function and not a new read on every render.
 const loadClients = () => window.juno.clients.list();
-const loadProjects = () => window.juno.projects.list();
 const loadDocuments = () => window.juno.documents.list();
 const loadStatuses = () => window.juno.reference.getSet("document_status");
 const loadOwner = () => window.juno.settings.getOwner();
-const loadBriefing = () => window.juno.briefing.today();
+const loadSummary = () => window.juno.briefing.overview();
 const loadAccounts = () => window.juno.mail.accounts.list();
 const loadAttention = () => window.juno.reminders.list({ actionableOnly: true });
+const loadRequests = () => window.juno.agent.actions.list({ states: ["pending"] });
 const loadSuggestions = () => window.juno.reminders.suggestions();
 const loadUnread = () =>
 	window.juno.mail.threads.list({ folderSpecialUse: "inbox", unreadOnly: true, limit: 200 });
 
+type HeadingLinkProps = {
+	label: string;
+	onClick: () => void;
+};
+
+function HeadingLink({ label, onClick }: HeadingLinkProps) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			className="inline-flex items-center gap-1 text-dense text-ink-muted transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-accent"
+		>
+			{label}
+			<Icon name="chevron-right" size={12} />
+		</button>
+	);
+}
+
 /**
- * The page Juno opens on. It answers what needs doing, what is coming and what
- * changed last, in that order, and every row on it opens the record it shows.
- * The work itself happens on the other screens: this one reads and points.
+ * The page Juno opens on. A greeting, what is waiting, four counts, what is
+ * coming up, and a quiet column of what changed last. Every row on it opens the
+ * record it shows, and every number comes from the briefing service.
  *
- * Each card reads for itself, so a mail server that is slow or a calendar that
- * fails says so in its own card and the rest of the page is already there.
+ * Each block reads for itself, so a mail server that is slow or a calendar that
+ * fails says so in its own block and the rest of the page is already there.
  */
 export function OverviewScreen() {
 	const [clock, setClock] = useState<Clock | null>(null);
-	const [form, setForm] = useState<{ reminder: Reminder | null } | null>(null);
-	useScreenAction("overview", () => setForm({ reminder: null }));
+	const [form, setForm] = useState<{ reminder: Reminder } | null>(null);
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [deleted, setDeleted] = useState<Reminder | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -79,22 +109,27 @@ export function OverviewScreen() {
 	}, []);
 
 	const owner = useLoaded(loadOwner);
-	const briefing = useLoaded(loadBriefing);
+	const summary = useLoaded(loadSummary);
 	const clients = useLoaded(loadClients);
-	const projects = useLoaded(loadProjects);
 	const documents = useLoaded(loadDocuments);
 	const statuses = useLoaded(loadStatuses);
 	const accounts = useLoaded(loadAccounts);
 	const unread = useLoaded(loadUnread);
 	const attention = useLoaded(loadAttention);
+	const requests = useLoaded(loadRequests);
 	const suggestions = useLoaded(loadSuggestions);
 
 	const reloadAttention = attention.reload;
 	const reloadSuggestions = suggestions.reload;
+	const reloadSummary = summary.reload;
+	const changed = useCallback(() => {
+		reloadAttention();
+		reloadSummary();
+	}, [reloadAttention, reloadSummary]);
 	const accepted = useCallback(() => {
 		reloadSuggestions();
-		reloadAttention();
-	}, [reloadSuggestions, reloadAttention]);
+		changed();
+	}, [reloadSuggestions, changed]);
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 	const dismissNotice = useCallback(() => setNotice(null), []);
@@ -105,7 +140,7 @@ export function OverviewScreen() {
 		setDeleted(null);
 		try {
 			await window.juno.reminders.restore(id);
-			reloadAttention();
+			changed();
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 		}
@@ -118,114 +153,103 @@ export function OverviewScreen() {
 				onClose={() => setForm(null)}
 				onSaved={() => {
 					setForm(null);
-					reloadAttention();
+					changed();
 				}}
 			/>
 		);
 	}
 
 	const first = owner.status === "ready" ? owner.value.firstName.trim() : "";
-	const who =
-		owner.status === "ready"
-			? [owner.value.firstName, owner.value.lastName].join(" ").trim() || owner.value.businessName || "You"
-			: "You";
 	const greeting = clock ? `${greetingFor(clock.hour)}${first ? `, ${first}` : ""}` : "Welcome";
-	const headline = briefing.status === "ready" ? briefing.value.headline : "";
+	const counts = summary.status === "ready" ? summary.value : null;
+	const sentence = counts?.headline ?? "";
 
 	const reminders = attention.status === "ready" ? attention.value : [];
+	const waiting = requests.status === "ready" ? requests.value : [];
 	const suggested = suggestions.status === "ready" ? suggestions.value : [];
 
+	// Nothing in Juno yet: the agenda has nothing to say, so the first steps take its place.
+	const fresh =
+		counts !== null &&
+		attention.status === "ready" &&
+		requests.status === "ready" &&
+		counts.clients + counts.projects + counts.documents === 0 &&
+		reminders.length === 0 &&
+		waiting.length === 0;
+
 	return (
-		<div className="h-full overflow-y-auto">
-			<div className="w-full px-8 pb-12 pt-8">
-				<header className="animate-rise flex items-center gap-4">
-					<Avatar name={who} size={48} />
-					<div className="min-w-0">
-						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] leading-tight tracking-[-0.02em]">
-							{greeting}
-						</h1>
-						<p className="mt-0.5 text-[length:var(--text-base)] text-[var(--ink-muted)]">
+		<div className="h-full overflow-y-auto" onContextMenu={blankMenuFor("overview")}>
+			<div className="flex min-h-full flex-col min-[1000px]:flex-row">
+				<div className="min-w-0 flex-1 p-10">
+					<header className="animate-rise">
+						<h1 className="text-h1">{greeting}</h1>
+						<p className="mt-2 text-lg text-ink-muted">
 							{clock?.dateLabel ?? "Checking the date."}
-							{headline ? ` · ${headline}` : ""}
+							{sentence ? `. ${sentence}` : ""}
 						</p>
-					</div>
-				</header>
+						<div className="mt-4">
+							<CountLinks
+								clients={counts?.clients ?? null}
+								projects={counts?.projects ?? null}
+								documents={counts?.documents ?? null}
+								unread={counts?.unreadMail ?? null}
+							/>
+						</div>
+					</header>
 
-				<div className="mt-6">
-					<StatTiles
-						clients={clients.status === "ready" ? clients.value.length : null}
-						projects={projects.status === "ready" ? projects.value.length : null}
-						documents={documents.status === "ready" ? documents.value.length : null}
-						unread={unread.status === "ready" ? unread.value.length : null}
+					{fresh ? (
+						<div className="animate-rise mt-8 [animation-delay:100ms]">
+							<StartHere />
+						</div>
+					) : (
+						<section className="animate-rise mt-8 [animation-delay:100ms]">
+							<div className="flex h-[33px] items-center gap-5">
+								<h2 className="min-w-0 flex-1 text-h3">Coming up</h2>
+								<HeadingLink
+									label="Reminders"
+									onClick={() => requestOpen({ kind: "screen", screen: "reminders" })}
+								/>
+								<HeadingLink
+									label="Calendar"
+									onClick={() => requestOpen({ kind: "screen", screen: "calendar" })}
+								/>
+							</div>
+							{attention.status === "error" ? (
+								<p data-selectable className="mt-2 border-l-2 border-risk pl-3 text-dense text-risk">
+									Could not load your reminders. {attention.message}
+								</p>
+							) : null}
+							<Agenda
+								today={clock?.today ?? null}
+								reminders={reminders}
+								requests={waiting}
+								loading={attention.status === "loading" || requests.status === "loading"}
+								onChanged={changed}
+								onEdit={(reminder) => setForm({ reminder })}
+								onSnooze={setSnoozing}
+								onDeleted={setDeleted}
+								onError={setNotice}
+							/>
+						</section>
+					)}
+
+					{suggested.length > 0 ? (
+						<div className="animate-rise mt-8 [animation-delay:150ms]">
+							<Suggestions suggestions={suggested} onAccepted={accepted} />
+						</div>
+					) : null}
+				</div>
+
+				<aside className="animate-rise w-full flex-none border-t border-line px-[33px] py-10 [animation-delay:125ms] min-[1000px]:w-[420px] min-[1000px]:border-t-0 min-[1000px]:border-l">
+					<SideLists
+						unread={unread}
+						unreadCount={counts?.unreadMail ?? null}
+						documents={documents}
+						statuses={statuses.status === "ready" && statuses.value ? statuses.value.items : []}
+						clients={clients}
+						hasAccounts={accounts.status === "ready" ? accounts.value.length > 0 : null}
 					/>
-				</div>
-
-				<div className="mt-6 grid gap-6 min-[1000px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-					<div className="flex min-w-0 flex-col gap-6 [&>*]:animate-rise [&>:nth-child(1)]:[animation-delay:150ms] [&>:nth-child(2)]:[animation-delay:200ms] [&>:nth-child(3)]:[animation-delay:250ms]">
-						<Card
-							title="Needs attention"
-							count={reminders.length}
-							action={
-								<>
-									<CardLink
-										label="All reminders"
-										onClick={() => requestOpen({ kind: "screen", screen: "reminders" })}
-									/>
-									<AddButton label="New reminder" onClick={() => setForm({ reminder: null })} />
-								</>
-							}
-						>
-							<CardError what="your reminders" state={attention} />
-							{attention.status === "loading" ? (
-								<CardSkeleton />
-							) : attention.status === "ready" && reminders.length === 0 ? (
-								<CardNote>Nothing is due or overdue.</CardNote>
-							) : (
-								BUCKET_ORDER.map((bucket) => {
-									const group = reminders.filter((row) => row.bucket === bucket);
-									if (group.length === 0) return null;
-									return (
-										<div key={bucket}>
-											<GroupLabel>{BUCKET_LABELS[bucket]}</GroupLabel>
-											{group.map((row) => (
-												<ReminderRow
-													key={row.id}
-													reminder={row}
-													today={clock?.today ?? null}
-													onChanged={reloadAttention}
-													onEdit={(reminder) => setForm({ reminder })}
-													onSnooze={setSnoozing}
-													onDeleted={setDeleted}
-													onError={setNotice}
-												/>
-											))}
-										</div>
-									);
-								})
-							)}
-						</Card>
-
-						{suggested.length > 0 ? (
-							<Card title="Suggestions" count={suggested.length}>
-								<SuggestionList suggestions={suggested} onAccepted={accepted} />
-							</Card>
-						) : null}
-
-						<RecentMailCard
-							state={unread}
-							hasAccounts={accounts.status === "ready" ? accounts.value.length > 0 : null}
-						/>
-					</div>
-
-					<div className="flex min-w-0 flex-col gap-6 [&>*]:animate-rise [&>:nth-child(1)]:[animation-delay:175ms] [&>:nth-child(2)]:[animation-delay:225ms] [&>:nth-child(3)]:[animation-delay:275ms]">
-						<UpNextCard today={clock?.today ?? null} />
-						<RecentDocumentsCard
-							documents={documents}
-							statuses={statuses.status === "ready" && statuses.value ? statuses.value.items : []}
-						/>
-						<ClientsCard clients={clients} />
-					</div>
-				</div>
+				</aside>
 			</div>
 
 			{snoozing ? (
@@ -234,7 +258,7 @@ export function OverviewScreen() {
 					onClose={() => setSnoozing(null)}
 					onSnoozed={() => {
 						setSnoozing(null);
-						reloadAttention();
+						changed();
 					}}
 				/>
 			) : null}

@@ -2,7 +2,7 @@ import { type FormEvent, useId, useState } from "react";
 import type { ProjectCommand, ProjectCommandKind } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
-import { Icon } from "../../components/Icon";
+import { Notice } from "../../components/Notice";
 import { Select } from "../../components/Select";
 import { SidePanel } from "../../components/SidePanel";
 import { messageOf } from "../../lib/errors";
@@ -118,22 +118,17 @@ export function CommandPanel({
 					}
 				/>
 
-				<div className="flex gap-2 rounded-[var(--radius-md)] bg-[var(--warn-soft)] p-3 text-[length:var(--text-sm)] text-[var(--ink)]">
-					<span className="flex-none pt-0.5 text-[var(--warn)]">
-						<Icon name="warning" />
-					</span>
-					<p>
-						This runs in a real shell with your account, exactly as if you had typed it in a
-						terminal. Nothing else in Juno can write or start a command, and no agent can.
-					</p>
-				</div>
+				<Notice layout="inline">
+					This runs in a real shell with your account, exactly as if you had typed it in a
+					terminal. Nothing else in Juno can write or start a command, and no agent can.
+				</Notice>
 
 				{error ? (
 					<div className="border-l-2 border-[var(--risk)] pl-3">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not save this command.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

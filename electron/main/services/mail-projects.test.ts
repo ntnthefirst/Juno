@@ -95,6 +95,23 @@ function received(id: string, input: { clientId?: string | null; attachment?: { 
 	}
 }
 
+describe("paging a thread list", () => {
+	it("reads every conversation of a project across pages, with no repeat and no gap", async () => {
+		const kitchen = await projectsService.create({ name: "Keuken Peeters" }, db);
+		for (const id of ["t1", "t2", "t3", "t4", "t5"]) {
+			received(id);
+			await threads.linkProject(id, kitchen.id, db);
+		}
+		const seen: string[] = [];
+		for (let offset = 0; ; offset += 2) {
+			const page = await threads.listThreads({ projectId: kitchen.id, limit: 2, offset }, db);
+			seen.push(...page.map((t) => t.id));
+			if (page.length < 2) break;
+		}
+		expect([...seen].sort()).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+	});
+});
+
 describe("a conversation filed under a project", () => {
 	it("is listed on the project, named on the thread, and leaves the thread's client alone", async () => {
 		const peeters = await clientsService.create({ name: "Peeters" }, db);

@@ -27,6 +27,8 @@ const ALLOWED_WHILE_LOCKED = new Set([
 	"lock.unlock",
 	"lock.getSettings",
 	"settings.getTheme",
+	// Pictures for the native menus. They carry no data and are sent while Juno is still locked.
+	"menu.setIcons",
 ]);
 
 export class LockedError extends Error {

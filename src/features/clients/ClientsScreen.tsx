@@ -14,15 +14,18 @@ import type {
 } from "@shared/types";
 import type { Crumb } from "../../app/breadcrumb-context";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { useScreenAction } from "../../lib/screen-actions";
-import { AddButton } from "../../components/AddButton";
+import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { Avatar } from "../../components/Avatar";
+import { Icon } from "../../components/Icon";
+import { MenuButton } from "../../components/Menu";
 import { EmptyState } from "../../components/EmptyState";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { clearPendingClient, peekPendingClient } from "../../lib/open-client";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { blankMenuFor } from "../../lib/blank-menu";
+import { contextMenuFor } from "../../lib/native-menu";
+import { ComposePage, type ComposeSeed } from "../mail/ComposePage";
 import { ClientAddressPanel } from "./ClientAddressPanel";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
@@ -52,6 +55,9 @@ import { ClientLinkPanel } from "./ClientLinkPanel";
 import { ClientPhonePanel } from "./ClientPhonePanel";
 import { ContactForm } from "./ContactForm";
 import { ProjectForm } from "../projects/ProjectForm";
+import { useRecentTouch } from "../../lib/use-recent-touch";
+import { listAllClients } from "../../lib/list-all-clients";
+import { useGradualCount } from "../../lib/use-gradual-count";
 
 type Load =
 	| { status: "loading" }
@@ -70,15 +76,15 @@ export function ClientsScreen() {
 	// place the full row comes back from the main process.
 	const [selectedName, setSelectedName] = useState<string | null>(() => peekPendingClient()?.name ?? null);
 	useEffect(() => clearPendingClient, []);
+	useRecentTouch("client", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const bumpDetail = () => setDetailVersion((current) => current + 1);
-	const [form, setForm] = useState<{ client: Client | null } | null>(null);
-	useScreenAction("clients", () => setForm({ client: null }));
+	const [form, setForm] = useState<{ client: Client } | null>(null);
 	// Contacts and projects belong to the open client, and they are filled in on
 	// a page of their own, so the state sits here rather than in the detail pane
 	// that is too narrow to hold one.
 	const [contactForm, setContactForm] = useState<{ contact: Contact | null } | null>(null);
-	const [projectForm, setProjectForm] = useState<{ project: Project | null } | null>(null);
+	const [projectForm, setProjectForm] = useState<{ project: Project } | null>(null);
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
 	// A document from a template is a page too. Coming back from it lands on the
 	// Documents tab, where it was started from.
@@ -104,10 +110,16 @@ export function ClientsScreen() {
 		initialKind?: ClientNoteKind;
 	} | null>(null);
 	const [deleted, setDeleted] = useState<Client | null>(null);
+	const [notice, setNotice] = useState<string | null>(null);
+	const dismissNotice = useCallback(() => setNotice(null), []);
+	// A mail to a client opens the composer here, addressed to their primary address.
+	const [compose, setCompose] = useState<ComposeSeed | null>(null);
 	const [view, setView] = useState<ClientView>(EMPTY_VIEW);
 
+	const filtersOn = JSON.stringify({ ...view, sort: null }) !== JSON.stringify({ ...EMPTY_VIEW, sort: null });
+
 	const fetchRows = useCallback(
-		() => window.juno.clients.list({ search: search.trim() || undefined }),
+		() => listAllClients(search.trim() || undefined),
 		[search],
 	);
 
@@ -134,6 +146,12 @@ export function ClientsScreen() {
 			.then((rows) => setLoad({ status: "ready", rows }))
 			.catch((error: unknown) => setLoad({ status: "error", message: messageOf(error) }));
 	}, [fetchRows]);
+
+	// A new-record window saved something: the list and the open client read again.
+	useRecordsChanged(() => {
+		refreshList();
+		bumpDetail();
+	});
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 
@@ -200,6 +218,20 @@ export function ClientsScreen() {
 		}
 	}
 
+	async function startMail(clientId: string) {
+		try {
+			const emails = await window.juno.clientEmails.listForClient(clientId);
+			const to = emails.find((email) => email.isPrimary) ?? emails[0];
+			if (!to) {
+				setNotice("This client has no email address yet.");
+				return;
+			}
+			setCompose({ clientId, to: [{ name: null, address: to.email }] });
+		} catch (error: unknown) {
+			setNotice(messageOf(error));
+		}
+	}
+
 	async function restore() {
 		if (!deleted) return;
 		const id = deleted.id;
@@ -220,13 +252,11 @@ export function ClientsScreen() {
 
 	let trail: Crumb[] = [];
 	if (form) {
-		trail = form.client
-			? [
-					clientCrumb,
-					{ label: selectedName ?? form.client.name, onSelect: () => setForm(null) },
-					{ label: "Edit client" },
-				]
-			: [clientCrumb, { label: "New client" }];
+		trail = [
+			clientCrumb,
+			{ label: selectedName ?? form.client.name, onSelect: () => setForm(null) },
+			{ label: "Edit client" },
+		];
 	} else if (contactForm && selectedId) {
 		trail = [
 			clientCrumb,
@@ -237,7 +267,7 @@ export function ClientsScreen() {
 		trail = [
 			clientCrumb,
 			{ label: selectedName ?? "Client", onSelect: () => setProjectForm(null) },
-			{ label: projectForm.project ? "Edit project" : "New project" },
+			{ label: "Edit project" },
 		];
 	} else if (scheduleForm && selectedId) {
 		trail = [
@@ -283,6 +313,23 @@ export function ClientsScreen() {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
+
+	if (compose) {
+		return (
+			<ComposePage
+				seed={compose}
+				onClose={() => setCompose(null)}
+				onDeleted={() => {
+					setCompose(null);
+					setNotice("Draft deleted.");
+				}}
+				onDone={(_message, queued) => {
+					setCompose(null);
+					setNotice(queued ? "Message queued. Follow it in the mail outbox." : "Draft saved in the mail outbox.");
+				}}
+			/>
+		);
+	}
 
 	// The form takes the screen rather than covering it. Nothing in the list
 	// behind it is worth reading while a client is being filled in.
@@ -393,6 +440,12 @@ export function ClientsScreen() {
 							clientId={selectedId}
 							onEdit={(client) => setForm({ client })}
 							onDelete={(client) => void remove(client)}
+							onSendMail={(client) => void startMail(client.id)}
+							onChanged={(message) => {
+								if (message) setNotice(message);
+								refreshList();
+								bumpDetail();
+							}}
 							onEditContact={(contact) => setContactForm({ contact })}
 							onEditProject={(project) => setProjectForm({ project })}
 							onSchedule={setScheduleForm}
@@ -475,32 +528,45 @@ export function ClientsScreen() {
 
 	return (
 		<div className="relative flex h-full flex-col p-8">
-			<div className="mb-6 flex w-full items-center justify-between gap-4">
-				<div className="flex items-baseline gap-3">
-					<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-						Clients
-					</h1>
-					{load.status === "ready" ? (
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-							{load.rows.length} {load.rows.length === 1 ? "client" : "clients"}
-						</span>
-					) : null}
-				</div>
-
-				<div className="flex items-center gap-3">
+			<div className="mb-6 flex w-full items-center justify-end gap-4">
+				<div className="relative">
+					<span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)]">
+						<Icon name="search" />
+					</span>
 					<input
-						type="text"
+						type="search"
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 						placeholder="Search clients"
 						aria-label="Search clients"
-						className="w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+						className="h-[36px] w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-9 pr-3 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 					/>
-					<AddButton label="New client" onClick={() => setForm({ client: null })} />
 				</div>
+				<TitleBarSlot side="overflow">
+					<MenuButton
+						ariaLabel="How this list is shown"
+						size="dense"
+						items={[
+							{
+								id: "clear-filters",
+								label: "Clear filters",
+								icon: "close",
+								disabled: !filtersOn,
+								onSelect: () => setView({ ...EMPTY_VIEW, sort: view.sort }),
+							},
+							{
+								id: "reset-sort",
+								label: "Reset sorting",
+								icon: "undo",
+								disabled: view.sort === null,
+								onSelect: () => setView({ ...view, sort: null }),
+							},
+						]}
+					/>
+				</TitleBarSlot>
 			</div>
 
-			<div className="w-full flex-1 overflow-y-auto">
+			<div className="w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("clients")}>
 				{load.status === "loading" ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
 				) : load.status === "error" ? (
@@ -508,7 +574,7 @@ export function ClientsScreen() {
 				) : load.rows.length === 0 ? (
 					<Empty
 						searching={search.trim().length > 0}
-						onAdd={() => setForm({ client: null })}
+						onAdd={() => openNewRecord("client")}
 						onClearSearch={() => setSearch("")}
 					/>
 				) : (
@@ -521,10 +587,18 @@ export function ClientsScreen() {
 						onEdit={(row) => void editRow(row)}
 						onAddNote={(row) => setNotePanel({ clientId: row.id, note: null })}
 						onDelete={(row) => void deleteRow(row)}
+						onNewProject={(row) => openNewRecord("project", { clientId: row.id })}
+						onSendMail={(row) => void startMail(row.id)}
+						onDone={(message) => {
+							if (message) setNotice(message);
+							refreshList();
+						}}
+						onFailed={setNotice}
 					/>
 				)}
 			</div>
 
+			{deleted === null && notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
 			{deleted ? (
 				<Toast
 					message={`${deleted.name} deleted.`}
@@ -558,14 +632,33 @@ type ClientTableProps = {
 	onEdit: (row: ClientSummary) => void;
 	onAddNote: (row: ClientSummary) => void;
 	onDelete: (row: ClientSummary) => void;
+	onNewProject: (row: ClientSummary) => void;
+	onSendMail: (row: ClientSummary) => void;
+	/** The main process did what the menu asked, for example archiving. */
+	onDone: (message: string | undefined) => void;
+	onFailed: (message: string) => void;
 };
 
 /**
  * Rows are the structure. No outer border, no filled header, no card, per
  * brand/BRAND.md section 7.
  */
-function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAddNote, onDelete }: ClientTableProps) {
+function ClientTable({
+	allRows,
+	view,
+	onView,
+	selectedId,
+	onSelect,
+	onEdit,
+	onAddNote,
+	onDelete,
+	onNewProject,
+	onSendMail,
+	onDone,
+	onFailed,
+}: ClientTableProps) {
 	const rows = useMemo(() => applyView(allRows, view), [allRows, view]);
+	const visible = useGradualCount(rows.length);
 	const statusOptions = useMemo(
 		() => [
 			...statusesOf(allRows).map((status) => ({ value: status.id, label: status.label })),
@@ -586,24 +679,20 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 		onSort: (direction: "asc" | "desc" | null) =>
 			onView({ ...view, sort: direction ? { column, direction } : null }),
 	});
-	const { at, open, close } = useContextMenu();
-	const [menuRow, setMenuRow] = useState<ClientSummary | null>(null);
-
-	function itemsFor(row: ClientSummary): MenuItem[] {
-		return [
-			{ id: "open", label: "Open", icon: "chevron-right", onSelect: () => onSelect(row) },
-			{ id: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(row) },
-			{ id: "add-note", label: "Add note", icon: "note", onSelect: () => onAddNote(row) },
+	const menuFor = (row: ClientSummary) =>
+		contextMenuFor(
+			{ kind: "client", id: row.id },
 			{
-				id: "delete",
-				label: "Delete",
-				icon: "remove",
-				danger: true,
-				separatorBefore: true,
-				onSelect: () => onDelete(row),
+				open: () => onSelect(row),
+				edit: () => onEdit(row),
+				"new-note": () => onAddNote(row),
+				"new-project": () => onNewProject(row),
+				"send-mail": () => onSendMail(row),
+				delete: () => onDelete(row),
+				done: onDone,
+				failed: onFailed,
 			},
-		];
-	}
+		);
 
 	return (
 		<>
@@ -665,22 +754,19 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 							</td>
 						</tr>
 					) : null}
-					{rows.map((row) => {
+					{rows.slice(0, visible).map((row) => {
 						const selected = row.id === selectedId;
 						return (
 							<tr
 								key={row.id}
 								onClick={() => onSelect(row)}
-								onContextMenu={(event) => {
-									setMenuRow(row);
-									open(event);
-								}}
+								onContextMenu={menuFor(row)}
 								className={`transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 									selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
 								}`}
 							>
 								<td
-									className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]"
+									className="border-b border-[var(--line)]/60 px-3 text-dense"
 									style={{ height: "var(--row-height-roomy)" }}
 								>
 									<button
@@ -693,13 +779,13 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 										<span className="truncate">{row.name}</span>
 									</button>
 								</td>
-								<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)]">
+								<td className="border-b border-[var(--line)]/60 px-3 text-dense">
 									{row.status ? <StatusBadge label={row.status.label} tone={row.status.tone} /> : null}
 								</td>
-								<td className="border-b border-[var(--line)]/60 px-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<td className="border-b border-[var(--line)]/60 px-3 text-dense text-[var(--ink-muted)]">
 									{row.city ?? ""}
 								</td>
-								<td className="tabular border-b border-[var(--line)]/60 px-3 text-right text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<td className="tabular border-b border-[var(--line)]/60 px-3 text-right text-dense text-[var(--ink-muted)]">
 									{row.openProjectCount} / {row.projectCount}
 								</td>
 							</tr>
@@ -708,9 +794,6 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 				</tbody>
 			</table>
 
-			{at && menuRow ? (
-				<ContextMenu at={at} items={itemsFor(menuRow)} ariaLabel={`${menuRow.name} actions`} onClose={close} />
-			) : null}
 		</>
 	);
 }
@@ -738,14 +821,12 @@ function Empty({
 		<EmptyState
 			icon="clients"
 			title="No clients yet"
-			description="Every business you work with, their contacts, projects and paperwork in one place."
+			description="Add your first client to start a record, a project or a document."
 			action={{
-				label: "New client",
+				label: "Add client",
 				icon: "add",
 				onClick: onAdd,
-				shortcut: ["Ctrl", "N"],
 			}}
-			tip="Client records link contracts, mail threads and dates automatically."
 		/>
 	);
 }
@@ -754,7 +835,7 @@ function ErrorNote({ message }: { message: string }) {
 	return (
 		<div className="border-l-2 border-[var(--risk)] pl-4">
 			<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load clients.</p>
-			<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 				{message}
 			</p>
 		</div>

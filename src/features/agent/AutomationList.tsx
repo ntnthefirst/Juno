@@ -65,7 +65,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the automations.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{load.message}
 				</p>
 			</div>
@@ -89,7 +89,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 	return (
 		<div className="w-full">
 			<div className="flex items-baseline justify-between gap-4 border-b border-[var(--line)] pb-2">
-				<h2 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Automations</h2>
+				<h2 className="text-h3 font-[var(--weight-medium)]">Automations</h2>
 				<AddButton label="New automation" onClick={() => setForm({ automation: null })} />
 			</div>
 
@@ -115,7 +115,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 
 			{runs.length > 0 ? (
 				<section className="mt-10">
-					<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+					<h2 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 						Recent runs
 					</h2>
 					<div className="mt-4">
@@ -123,20 +123,20 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 							<details key={run.id} className="border-b border-[var(--line)] px-2 py-2">
 								<summary className="flex cursor-default items-center gap-3">
 									<span
-										className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${RUN_TONES[run.status]}`}
+										className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-micro font-[var(--weight-medium)] ${RUN_TONES[run.status]}`}
 									>
 										{RUN_LABELS[run.status]}
 									</span>
-									<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
+									<span className="min-w-0 flex-1 truncate text-dense">
 										{run.automationName}
 									</span>
-									<span className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<span className="tabular shrink-0 text-sm text-[var(--ink-muted)]">
 										{formatWhen(run.startedAt)}
 									</span>
 								</summary>
 								<div className="mt-2 pl-2">
 									{run.log.map((entry, index) => (
-										<p key={index} className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p key={index} className="text-sm text-[var(--ink-muted)]">
 											<span className="tabular">{entry.step + 1}.</span>{" "}
 											<span className="font-mono">{entry.tool}</span>
 											{` ${entry.outcome}`}
@@ -144,7 +144,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 										</p>
 									))}
 									{run.error ? (
-										<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">
+										<p data-selectable className="mt-1 text-sm text-[var(--risk)]">
 											{run.error}
 										</p>
 									) : null}
@@ -233,13 +233,13 @@ function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) 
 		<div onContextMenu={menu.open} className="border-b border-[var(--line)] px-2 py-2.5 hover:bg-[var(--hover)]">
 			<div className="flex items-center gap-3">
 				<div className="min-w-0 flex-1">
-					<p className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+					<p className="truncate text-dense font-[var(--weight-medium)]">
 						{automation.name}
 						{automation.enabled ? null : (
 							<span className="ml-2 font-[var(--weight-normal)] text-[var(--ink-muted)]">off</span>
 						)}
 					</p>
-					<p className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="truncate text-sm text-[var(--ink-muted)]">
 						{describeTrigger(automation.trigger)}
 						{` · ${automation.steps.length} step${automation.steps.length === 1 ? "" : "s"}`}
 						{automation.lastRunAt ? ` · last run ${formatWhen(automation.lastRunAt)}` : ""}
@@ -247,7 +247,7 @@ function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) 
 				</div>
 				{automation.lastStatus ? (
 					<span
-						className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${RUN_TONES[automation.lastStatus]}`}
+						className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-micro font-[var(--weight-medium)] ${RUN_TONES[automation.lastStatus]}`}
 					>
 						{RUN_LABELS[automation.lastStatus]}
 					</span>

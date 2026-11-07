@@ -6,8 +6,10 @@
  * 1. refused while Juno is locked, whatever it asks for (decision 15: the
  *    main process owns lock state and every tool checks it);
  * 2. matched to a declared tool, or refused by name;
- * 3. run, if the tool is read-only or a local write that needs no approval;
- * 4. parked in the confirmation gate, if it is anything that a person has to
+ * 3. judged by the permission row it belongs to (services/agent-permissions.ts,
+ *    decision 57): refused when the row is Off, parked when it is Ask first
+ *    or locked or an unattended automation, run when it is Allow;
+ * 4. parked in the confirmation gate, which is anything that a person has to
  *    agree to first (.claude/rules/mcp.md section 4). The caller gets a
  *    pending action back, never a result.
  *
@@ -16,12 +18,16 @@
  * declares how to build that text (`prepare`) and how to check it is still what
  * will run (`verify`), so nothing mail-shaped is special-cased in this file.
  *
- * A write that runs writes an audit row. Reads do not: a log of every list
- * call buries the one line that mattered.
+ * A call that runs writes an audit row, a read as well as a write, so the log
+ * can say what an agent looked at (the design draws it). A read's row carries
+ * no arguments and no result, only the tool and who asked, and the log purges
+ * reads sooner than writes (services/agent-audit.ts).
  */
 import type { AgentAction, AgentActionSource, ToolSummary } from "../../shared/types";
 import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
+import * as permissions from "../services/agent-permissions";
+import { summaryFor } from "../services/agent-summary";
 import { isLocked } from "../services/lock";
 import { allTools, toolByName, toolSummaries } from "./registry";
 import type { ToolDescriptor } from "./types";
@@ -71,7 +77,12 @@ export function listTools(): ToolListing[] {
 }
 
 export function summaries(): ToolSummary[] {
-	return toolSummaries();
+	const calls = audit.callCounts();
+	return toolSummaries().map((tool) => ({
+		...tool,
+		row: permissions.rowOf(tool.name),
+		calls: calls.get(tool.name) ?? 0,
+	}));
 }
 
 export function toolCount(): number {
@@ -86,26 +97,12 @@ export function toolCount(): number {
 function describe(tool: ToolDescriptor): string {
 	if (tool.readOnly) return tool.description;
 	if (!tool.requiresConfirmation) return tool.description;
-	return `${tool.description} Requires approval: this call does not run, it asks. A person approves or rejects it in Juno and the reply says pending.`;
-}
-
-const MAX_SUMMARY_VALUE = 60;
-
-/** A compact, readable argument line. The whole object is shown in the app. */
-function summarise(tool: ToolDescriptor, args: Record<string, unknown>): string {
-	const parts: string[] = [];
-	for (const [key, value] of Object.entries(args)) {
-		if (value === undefined || value === null || value === "") continue;
-		let rendered: string;
-		if (typeof value === "string") rendered = value;
-		else if (typeof value === "number" || typeof value === "boolean") rendered = String(value);
-		else if (Array.isArray(value)) rendered = `${value.length} item${value.length === 1 ? "" : "s"}`;
-		else rendered = "...";
-		if (rendered.length > MAX_SUMMARY_VALUE) rendered = `${rendered.slice(0, MAX_SUMMARY_VALUE - 3)}...`;
-		parts.push(`${key}: ${rendered}`);
-		if (parts.length === 4) break;
-	}
-	return parts.length > 0 ? `${tool.title} (${parts.join(", ")})` : tool.title;
+	const base = `${tool.description} Requires approval: this call does not run, it asks. A person approves or rejects it in Juno and the reply says pending.`;
+	// The owner may let a change or a draft run without asking. Sending, signing,
+	// filing and deleting never run that way, so those do not say it.
+	return permissions.isLockedTool(tool.name)
+		? base
+		: `${base} The owner can set this kind of call to run without asking, and then it returns its result instead.`;
 }
 
 export interface CallOptions {
@@ -135,7 +132,15 @@ export async function callTool(
 
 	const source = options.source ?? "mcp";
 
-	if (!tool.readOnly && tool.requiresConfirmation) {
+	let verdict: permissions.Verdict;
+	try {
+		verdict = await permissions.gate({ name: tool.name, readOnly: tool.readOnly, source });
+	} catch (cause: unknown) {
+		if (cause instanceof permissions.AgentPermissionError) throw new ToolError(cause.code, cause.message);
+		throw cause;
+	}
+
+	if (verdict === "park") {
 		let prepared: Awaited<ReturnType<NonNullable<ToolDescriptor["prepare"]>>> | null = null;
 		if (tool.prepare) {
 			try {
@@ -147,7 +152,7 @@ export async function callTool(
 		const action = await actions.request({
 			toolName: tool.name,
 			args,
-			summary: prepared?.summary ?? summarise(tool, args),
+			summary: prepared?.summary ?? summaryFor(tool.name, tool.title, args),
 			preview: prepared?.preview ?? null,
 			seal: prepared?.seal ?? null,
 			source,
@@ -158,12 +163,14 @@ export async function callTool(
 
 	try {
 		const result = await tool.handler(args);
-		if (!tool.readOnly) {
+		if (tool.readOnly) {
+			audit.recordRead({ actor: source === "automation" ? "automation" : "agent", toolName: tool.name, title: tool.title });
+		} else {
 			audit.record({
 				actor: source === "automation" ? "automation" : "agent",
 				toolName: tool.name,
 				args,
-				summary: summarise(tool, args),
+				summary: summaryFor(tool.name, tool.title, args),
 				result: "ok",
 				...entityOf(result),
 			});
@@ -176,7 +183,7 @@ export async function callTool(
 				actor: source === "automation" ? "automation" : "agent",
 				toolName: tool.name,
 				args,
-				summary: summarise(tool, args),
+				summary: summaryFor(tool.name, tool.title, args),
 				result: "failed",
 				error: message,
 			});

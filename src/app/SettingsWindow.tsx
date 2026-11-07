@@ -5,6 +5,9 @@ import appIcon from "../assets/icon.png";
 import { AccountingSection } from "../features/settings/AccountingSection";
 import { AppearanceSection } from "../features/settings/AppearanceSection";
 import { BackupSection } from "../features/settings/BackupSection";
+import { RecentSection } from "../features/settings/RecentSection";
+import { AgentLogSection } from "../features/settings/AgentLogSection";
+import { DocumentsFolderSection } from "../features/settings/DocumentsFolderSection";
 import { CertificateSection } from "../features/settings/CertificateSection";
 import { LockSection } from "../features/settings/LockSection";
 import { MailSection } from "../features/settings/MailSection";
@@ -19,8 +22,11 @@ import { Section } from "../features/settings/Section";
 import { PAGE_PADDING, SoloSectionContext } from "../features/settings/section-layout";
 import { SettingsNav } from "../features/settings/SettingsNav";
 import { SignatureSection } from "../features/settings/SignatureSection";
+import { DesktopSection } from "../features/settings/DesktopSection";
 import { UpdatesSection } from "../features/settings/UpdatesSection";
 import { ConnectionPanel } from "../features/agent/ConnectionPanel";
+import { InstructionsPanel } from "../features/agent/InstructionsPanel";
+import { PermissionsPanel } from "../features/agent/PermissionsPanel";
 import { PairingDialog } from "../features/agent/PairingDialog";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
@@ -163,7 +169,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 					paddingRight: overlayGutter.right,
 				}}
 			>
-				<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)]">Settings</span>
+				<span className="text-sm font-[var(--weight-semibold)]">Settings</span>
 			</header>
 
 			<div className="flex min-h-0 flex-1">
@@ -198,7 +204,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 					) : (
 						<SoloSectionContext.Provider value={current.solo}>
 							{page === "mail" ? (
-								<MailSection onSaved={setToast} header={<PageHeader page={current} />} />
+								<MailSection onSaved={setToast} page={current} />
 							) : (
 								<div className={PAGE_PADDING}>
 									<PageHeader page={current} />
@@ -241,6 +247,8 @@ function PageBody({ page, theme, onTheme, onNotice }: PageBodyProps): ReactNode 
 			);
 		case "updates":
 			return <UpdatesSection />;
+		case "desktop":
+			return <DesktopSection />;
 		case "about":
 			return (
 				<>
@@ -257,19 +265,34 @@ function PageBody({ page, theme, onTheme, onNotice }: PageBodyProps): ReactNode 
 		case "statuses":
 			return <ReferenceSection />;
 		case "signature":
-			return <SignatureSection />;
+			return (
+				<>
+					<DocumentsFolderSection onDone={onNotice} />
+					<SignatureSection />
+				</>
+			);
 		case "certificate":
 			return <CertificateSection />;
 		case "lock":
 			return <LockSection />;
 		case "backup":
-			return <BackupSection onDone={onNotice} />;
+			return (
+				<>
+					<BackupSection onDone={onNotice} />
+					<AgentLogSection onDone={onNotice} />
+					<RecentSection onDone={onNotice} />
+				</>
+			);
 		case "mcp-server":
 			return <ConnectionPanel part="server" onNotice={onNotice} />;
 		case "mcp-connect":
 			return <ConnectionPanel part="connect" onNotice={onNotice} />;
 		case "mcp-tools":
 			return <ConnectionPanel part="tools" onNotice={onNotice} />;
+		case "mcp-permissions":
+			return <PermissionsPanel onNotice={onNotice} />;
+		case "mcp-instructions":
+			return <InstructionsPanel onNotice={onNotice} />;
 		case "mail":
 			return null;
 	}
@@ -295,7 +318,7 @@ function AboutSection() {
 	}, []);
 
 	return (
-		<Section title="About" anchor="about" description="Where this installation keeps its data.">
+		<Section title="About" anchor="about" large description="Where this installation keeps its data.">
 			{error ? (
 				<p className="text-[var(--risk)]">{error}</p>
 			) : info === null ? (
@@ -310,26 +333,26 @@ function AboutSection() {
 						/>
 						<div className="min-w-0 flex-1">
 							<div className="flex items-baseline gap-2">
-								<h3 className="text-[length:var(--text-lg)] font-[var(--weight-semibold)] text-[var(--ink)]">
+								<h3 className="text-lg font-[var(--weight-semibold)] text-[var(--ink)]">
 									Juno
 								</h3>
-								<span className="font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+								<span className="font-mono text-micro text-[var(--ink-muted)]">
 									v{info.version}
 								</span>
 							</div>
-							<p className="mt-0.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-0.5 text-sm text-[var(--ink-muted)]">
 								A local-first back office for small business owners and freelancers.
 							</p>
 						</div>
 					</div>
 
-					<dl className="flex flex-col gap-2.5 text-[length:var(--text-dense)]">
+					<dl className="flex flex-col gap-2.5 text-dense">
 						<Row label="Platform">
 							{info.platform}
 							{info.isDev ? " (development build)" : ""}
 						</Row>
 						<Row label="Database">
-							<span data-selectable className="break-all font-mono text-[length:var(--text-sm)]">
+							<span data-selectable className="break-all font-mono text-sm">
 								{info.databasePath}
 							</span>
 						</Row>

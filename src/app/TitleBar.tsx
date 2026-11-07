@@ -1,8 +1,13 @@
-import { Icon } from "../components/Icon";
-import { Kbd } from "../components/Kbd";
+import { useLayoutEffect, useRef, useState, type Ref } from "react";
+import { ContextMenu, type MenuItem } from "../components/Menu";
+import { Icon, type IconName } from "../components/Icon";
 import { Tooltip } from "../components/Tooltip";
 import { overlayGutter } from "../lib/platform";
 import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
+import { RecentMenu } from "./RecentMenu";
+import { TimerPill } from "./TimerPill";
+import type { ScreenAction } from "../lib/screen-actions";
+import { NEW_AT_RIGHT, NEW_MENU, NEW_ON, NEW_OWN_ICON, type NewMenuEntry, type ScreenId } from "./screens";
 
 type TitleBarProps = {
 	/**
@@ -10,45 +15,144 @@ type TitleBarProps = {
 	 * and the way there. Null at the top of a screen, where there is nowhere to go.
 	 */
 	back: { label: string; onSelect: () => void } | null;
+	/** The page title, drawn in the middle of the window. */
+	title: string;
+	/** The screen on show, which decides what New offers and where it sits. */
+	screen: ScreenId;
 	onOpenPalette: () => void;
-	lockConfigured: boolean;
-	onLock: () => void;
+	recentOpen: boolean;
+	onRecentOpenChange: (open: boolean) => void;
+	/** The bell. It opens the Reminders screen. */
+	remindersActive: boolean;
+	onOpenReminders: () => void;
+	/** Asks the screen that owns a record to open its new-record form. */
+	onNew: (screen: ScreenId, action?: ScreenAction) => void;
 	/** The agent screen is on show, so its button is lit. */
 	agentActive: boolean;
 	/** Requests waiting for a person. A dot when more than zero. */
 	agentPending: number;
 	onOpenAgent: () => void;
-	/** Where a screen draws its own controls (TitleBarSlot). */
+	/** Where a screen draws its own controls beside the way back (TitleBarSlot). */
 	slotRef: (element: HTMLDivElement | null) => void;
+	/** Where a screen draws its own actions before the agent button (TitleBarSlot side="right"). */
+	rightSlotRef: (element: HTMLDivElement | null) => void;
+	/** Where a record draws its "..." menu, after New (TitleBarSlot side="overflow"). */
+	overflowSlotRef: (element: HTMLDivElement | null) => void;
 };
 
+type TitleButtonProps = {
+	icon: IconName;
+	label: string;
+	keys?: string[];
+	active?: boolean;
+	expanded?: boolean;
+	onClick: () => void;
+	buttonRef?: Ref<HTMLButtonElement>;
+};
+
+function TitleButton({ icon, label, keys, active = false, expanded, onClick, buttonRef }: TitleButtonProps) {
+	return (
+		<Tooltip label={label} keys={keys} side="bottom" className="no-drag flex">
+			<button
+				ref={buttonRef}
+				type="button"
+				onClick={onClick}
+				aria-label={label}
+				aria-haspopup={expanded === undefined ? undefined : "menu"}
+				aria-expanded={expanded}
+				aria-current={active ? "page" : undefined}
+				className={[
+					"flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-90",
+					active || expanded
+						? "text-[var(--accent)]"
+						: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
+				].join(" ")}
+			>
+				<Icon name={icon} size={16} strokeWidth={1.9} />
+			</button>
+		</Tooltip>
+	);
+}
+
+function Divider() {
+	return <span aria-hidden className="mx-1 h-4 w-px flex-none bg-[var(--line)]" />;
+}
+
 /**
- * The window's own title bar, drawn so it is not seen: the same colour as the
- * page, no rule under it, no name and no path. It is still there, because the
- * window has to be dragged by something and the operating system draws the
- * close, minimise and maximise buttons on top of it (main/windows/chrome.ts),
- * so the gutters in `overlayGutter` stay empty for them.
+ * The window's own title bar, in the page colour with no rule under it. It is
+ * the drag region, and the operating system draws the close, minimise and
+ * maximise buttons on top of it (main/windows/chrome.ts), so the gutters in
+ * `overlayGutter` stay empty for them.
  *
- * What it holds is what the whole window needs: a way back out of a record,
- * whatever the screen on show puts in its slot, the search that gets
- * anywhere, and at the right, beside the caption buttons, the agent and the
- * lock. The search sits in the middle of what is left after the caption
- * buttons, so it is not pushed off centre by whichever side has more.
+ * Left to right: Search, Recent, Reminders and New, a divider, the way back and
+ * whatever the screen puts beside it. The page title is in the middle of the
+ * window. At the right are the screen's own actions, a divider and the agent.
+ * The lock has no button here: it is in the palette and has its shortcut.
  *
  * Everything here is inside the drag region except the controls, which opt out
  * with `no-drag`. A button inside a drag region does not receive clicks.
  */
 export function TitleBar({
 	back,
+	title,
+	screen,
 	onOpenPalette,
-	lockConfigured,
-	onLock,
+	recentOpen,
+	onRecentOpenChange,
+	remindersActive,
+	onOpenReminders,
+	onNew,
 	agentActive,
 	agentPending,
 	onOpenAgent,
 	slotRef,
+	rightSlotRef,
+	overflowSlotRef,
 }: TitleBarProps) {
 	const agentName = agentPending > 0 ? `Agent, ${agentPending} waiting for you` : "Agent";
+	const recentButton = useRef<HTMLButtonElement>(null);
+	const newButton = useRef<HTMLButtonElement>(null);
+	const [recentAt, setRecentAt] = useState<{ x: number; y: number } | null>(null);
+	const [newAt, setNewAt] = useState<{ x: number; y: number } | null>(null);
+
+	// Measured when the menu opens, whether the button or the shortcut did it.
+	useLayoutEffect(() => {
+		if (!recentOpen) return;
+		const box = recentButton.current?.getBoundingClientRect();
+		if (box) setRecentAt({ x: box.left, y: box.bottom + 4 });
+	}, [recentOpen]);
+
+	const here = NEW_ON[screen];
+	const newAtRight = NEW_AT_RIGHT.includes(screen) && here !== undefined;
+	// With a document open the text New goes, as the design draws it, and the plus
+	// comes back at the left, which is where a page frame has it.
+	const openDocument = screen === "documents" && back !== null;
+
+	// What Ctrl N makes on the screen in view carries that shortcut. When the design's
+	// list has no entry for it (a message, a document, a reminder) the screen adds
+	// its own at the top, so writing mail is never further than the plus.
+	const own: NewMenuEntry[] =
+		here && !NEW_MENU.some((entry) => entry.label === here.label)
+			? [{ screen: here.screen, label: here.label, icon: NEW_OWN_ICON[here.label] ?? "add" }]
+			: [];
+	const newItems: MenuItem[] = [...own, ...NEW_MENU].map((entry) => ({
+		id: entry.label,
+		label: entry.label,
+		icon: entry.icon,
+		separatorBefore: entry.separatorBefore,
+		hint:
+			entry.action === "new-page"
+				? formatCombo(COMBOS.newPage).join(" ")
+				: entry.screen === here?.screen && entry.label === here.label
+					? formatCombo(COMBOS.newItem).join(" ")
+					: undefined,
+		onSelect: () => onNew(entry.screen, entry.action),
+	}));
+
+	function openNewMenu() {
+		const box = newButton.current?.getBoundingClientRect();
+		if (box) setNewAt({ x: box.left, y: box.bottom + 4 });
+	}
 
 	return (
 		<header
@@ -59,48 +163,71 @@ export function TitleBar({
 				paddingRight: overlayGutter.right,
 			}}
 		>
-			<div className="flex min-w-0 items-center gap-1">
+			<div className="flex min-w-0 items-center gap-0.5">
+				<TitleButton icon="search" label="Search" keys={formatCombo(COMBOS.palette)} onClick={onOpenPalette} />
+				<TitleButton
+					icon="recent"
+					label="Recent"
+					keys={formatCombo(COMBOS.recent)}
+					expanded={recentOpen}
+					buttonRef={recentButton}
+					onClick={() => onRecentOpenChange(!recentOpen)}
+				/>
+				<TitleButton
+					icon="reminders"
+					label="Reminders"
+					keys={formatCombo(COMBOS.reminders)}
+					active={remindersActive}
+					onClick={onOpenReminders}
+				/>
+				{newAtRight && !openDocument ? null : (
+					<TitleButton
+						icon="add"
+						label="New"
+						keys={formatCombo(COMBOS.newItem)}
+						expanded={newAt !== null}
+						buttonRef={newButton}
+						onClick={openNewMenu}
+					/>
+				)}
+
 				{back ? (
-					<Tooltip label="Back" keys={formatCombo(COMBOS.back)} side="bottom" className="no-drag flex min-w-0">
-						<button
-							type="button"
-							onClick={back.onSelect}
-							className="animate-fade inline-flex h-7 min-w-0 items-center gap-1 rounded-[var(--radius-md)] pr-2 pl-1 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] active:scale-[0.97]"
-						>
-							<Icon name="chevron-left" size={16} strokeWidth={2} className="flex-none" />
-							<span className="truncate">{back.label}</span>
-						</button>
-					</Tooltip>
+					<>
+						<Divider />
+						<Tooltip label="Back" keys={formatCombo(COMBOS.back)} side="bottom" className="no-drag flex min-w-0">
+							<button
+								type="button"
+								onClick={back.onSelect}
+								className="animate-fade inline-flex h-7 min-w-0 items-center gap-1 rounded-[var(--radius-md)] pr-2 pl-1 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] active:scale-[0.97]"
+							>
+								<Icon name="chevron-left" size={16} strokeWidth={2} className="flex-none" />
+								<span className="truncate">{back.label}</span>
+							</button>
+						</Tooltip>
+					</>
 				) : null}
 				<div ref={slotRef} className="flex min-w-0 items-center" />
 			</div>
 
-			<button
-				type="button"
-				onClick={onOpenPalette}
-				aria-label="Search and commands"
-				className="no-drag group flex h-7 w-[min(380px,34vw)] items-center gap-2 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] px-2.5 text-left text-[length:var(--text-dense)] text-[var(--ink-muted)] transition-[border-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:border-[var(--line-strong)] active:scale-[0.99]"
-			>
-				<Icon name="search" size={14} strokeWidth={2} className="flex-none" />
-				<span className="min-w-0 flex-1 truncate">Search or jump to</span>
-				<span className="hidden flex-none min-[760px]:inline-flex">
-					<Kbd keys={formatCombo(COMBOS.palette)} />
-				</span>
-			</button>
+			<h1 className="max-w-[40vw] truncate text-center text-dense font-[var(--weight-semibold)] text-[var(--ink)]">
+				{title}
+			</h1>
 
 			<nav aria-label="Window" className="flex min-w-0 items-center justify-end gap-0.5">
-				{lockConfigured ? (
-					<Tooltip label="Lock Juno" keys={formatCombo(COMBOS.lock)} side="bottom" className="no-drag flex">
-						<button
-							type="button"
-							onClick={onLock}
-							aria-label="Lock Juno"
-							className="flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] text-[var(--ink-faint)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--ink)] active:scale-90"
-						>
-							<Icon name="lock" size={16} strokeWidth={1.9} />
-						</button>
-					</Tooltip>
+				<TimerPill />
+				<div ref={rightSlotRef} className="flex min-w-0 items-center" />
+				{newAtRight && here && !openDocument ? (
+					<button
+						type="button"
+						onClick={() => onNew(here.screen)}
+						className="no-drag inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink)] transition-[background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] active:scale-[0.97]"
+					>
+						<Icon name="add" size={14} strokeWidth={2} />
+						New
+					</button>
 				) : null}
+				<div ref={overflowSlotRef} className="flex min-w-0 items-center" />
+				<Divider />
 				<Tooltip label={agentName} keys={SCREEN_COMBOS.agent ? formatCombo(SCREEN_COMBOS.agent) : undefined} side="bottom" className="no-drag flex">
 					<button
 						type="button"
@@ -110,7 +237,7 @@ export function TitleBar({
 						aria-current={agentActive ? "page" : undefined}
 						className={[
 							"relative flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-90",
-							agentActive ? "text-[var(--accent)]" : "text-[var(--ink-faint)] hover:text-[var(--ink)]",
+							agentActive ? "text-[var(--accent)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]",
 						].join(" ")}
 					>
 						<Icon name="agent" size={18} strokeWidth={1.9} />
@@ -123,6 +250,11 @@ export function TitleBar({
 					</button>
 				</Tooltip>
 			</nav>
+
+			{recentOpen && recentAt ? <RecentMenu at={recentAt} onClose={() => onRecentOpenChange(false)} /> : null}
+			{newAt ? (
+				<ContextMenu at={newAt} items={newItems} onClose={() => setNewAt(null)} ariaLabel="New" anchor="top-left" />
+			) : null}
 		</header>
 	);
 }

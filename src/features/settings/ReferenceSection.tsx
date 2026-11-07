@@ -10,6 +10,7 @@ import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
+import { Segmented } from "../../components/Segmented";
 import { StatusBadge } from "../../components/StatusBadge";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
@@ -172,37 +173,29 @@ type SetPickerProps = {
 	onSelect: (key: ReferenceSetKey) => void;
 };
 
-/** The lists as one row of tabs, each with how many values it shows. */
+/** The lists as one row, each with how many values it shows. */
 function SetPicker({ sets, selected, onSelect }: SetPickerProps) {
+	const first = sets[0];
+	if (!first) return null;
 	return (
-		<div
-			role="tablist"
-			aria-label="Which list"
-			className="flex gap-0.5 rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5"
-		>
-			{sets.map((entry) => {
-				const active = entry.set.key === selected;
-				const shown = entry.items.filter((item) => item.hiddenAt === null).length;
-				return (
-					<button
-						key={entry.set.id}
-						type="button"
-						role="tab"
-						aria-selected={active}
-						onClick={() => onSelect(entry.set.key)}
-						className={[
-							"flex h-8 min-w-0 flex-1 items-center justify-center gap-2 rounded-[var(--radius-sm)] px-3 text-[length:var(--text-dense)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]",
-							active
-								? "bg-[var(--surface)] font-[var(--weight-medium)] text-[var(--ink)] shadow-[0_0_0_1px_var(--line)]"
-								: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
-						].join(" ")}
-					>
+		<Segmented
+			size="compact"
+			fill
+			label="Which list"
+			value={selected ?? first.set.key}
+			onChange={onSelect}
+			options={sets.map((entry) => ({
+				id: entry.set.key,
+				label: (
+					<span className="flex items-center gap-2">
 						<span className="truncate">{entry.set.label}</span>
-						<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">{shown}</span>
-					</button>
-				);
-			})}
-		</div>
+						<span className="tabular text-micro text-[var(--ink-muted)]">
+							{entry.items.filter((item) => item.hiddenAt === null).length}
+						</span>
+					</span>
+				),
+			}))}
+		/>
 	);
 }
 
@@ -238,7 +231,7 @@ function SetEditor({
 	return (
 		<div className="mt-5">
 			<div className="flex items-center justify-between gap-4">
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p className="text-sm text-[var(--ink-muted)]">
 					{entry.set.description ?? `${items.length - hiddenCount} shown.`}
 					{hiddenCount > 0 ? ` ${hiddenCount} hidden.` : ""}
 				</p>
@@ -262,19 +255,19 @@ function SetEditor({
 						<li
 							key={item.id}
 							style={{ minHeight: "var(--row-height)" }}
-							className={`flex items-center justify-between gap-3 border-b text-[length:var(--text-dense)] hover:bg-[var(--hover)] ${
+							className={`flex items-center justify-between gap-3 border-b text-dense hover:bg-[var(--hover)] ${
 								hidden ? "border-dashed border-[var(--line)] opacity-70" : "border-[var(--line)]"
 							}`}
 						>
 							<span className="flex min-w-0 items-center gap-2 pl-1">
 								<StatusBadge label={item.label} tone={item.tone} />
 								{hidden ? (
-									<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+									<span className="text-micro text-[var(--ink-muted)]">
 										Hidden. Records that use it still show it.
 									</span>
 								) : null}
 								{item.isSystem ? null : (
-									<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">Yours</span>
+									<span className="text-micro text-[var(--ink-muted)]">Yours</span>
 								)}
 							</span>
 
@@ -320,13 +313,13 @@ function HideDialog({
 	const { item, inUse } = pending;
 	return (
 		<Dialog title={`Remove ${item.label}`} onClose={onClose} width="narrow">
-			<p className="text-[length:var(--text-base)]">
+			<p className="text-base">
 				{inUse > 0
 					? `${inUse} record${inUse === 1 ? "" : "s"} still use this. Those records keep it and
 						carry on showing it. It just stops being offered for new ones.`
 					: "It stops being offered for new records. Nothing else changes."}
 			</p>
-			<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-3 text-sm text-[var(--ink-muted)]">
 				You can bring it back here at any time.
 			</p>
 			<div className="mt-5 flex justify-end gap-2">
@@ -351,13 +344,13 @@ function ResetDialog({
 	const [userItems, setUserItems] = useState<ResetUserItems>("keep");
 	return (
 		<Dialog title={`Reset ${label}`} onClose={onClose} width="narrow">
-			<p className="text-[length:var(--text-base)]">
+			<p className="text-base">
 				Values that ship with Juno go back to their original names and order, and any you
 				removed come back.
 			</p>
 
 			<fieldset className="mt-4">
-				<legend className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<legend className="text-sm text-[var(--ink-muted)]">
 					Values you added yourself
 				</legend>
 				<div className="mt-2 flex flex-col gap-2">
@@ -377,7 +370,7 @@ function ResetDialog({
 							/>
 							<span>
 								<span className="block">{title}</span>
-								<span className="block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="block text-sm text-[var(--ink-muted)]">
 									{hint}
 								</span>
 							</span>

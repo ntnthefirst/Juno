@@ -1,7 +1,7 @@
+import { listAllClients } from "../../lib/list-all-clients";
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type {
 	CalendarEvent,
-	CalendarEventInput,
 	CalendarEventPatch,
 	CalendarOccurrence,
 	CalendarScope,
@@ -19,23 +19,12 @@ import { LocationField } from "./LocationField";
 import { RecurrenceEditor, type RecurrenceValue } from "./RecurrenceEditor";
 import { buildRule, parseRule } from "./recurrence";
 
-export type EventSeed = {
-	startLocal: string;
-	endLocal: string;
-	allDay: boolean;
-	/** Set when the event is made from a client or a project, which is what it belongs to. */
-	clientId?: string;
-	projectId?: string;
-};
-
 type EventFormProps = {
-	/** The stored event when editing, null when creating. */
-	event: CalendarEvent | null;
+	/** The stored event being edited. A new one is made in its own window (decision 60). */
+	event: CalendarEvent;
 	/** The occurrence being edited, for scope this and following. */
 	occurrence?: CalendarOccurrence | null;
 	scope?: CalendarScope;
-	/** Where a click on the grid landed, when creating. */
-	seed?: EventSeed | null;
 	/** Where back goes, in words. "Calendar" unless the form was reached from a client or project. */
 	backLabel?: string;
 	onClose: () => void;
@@ -63,28 +52,28 @@ function recurrenceOf(rrule: string | null, startLocal: string): RecurrenceValue
 	return state ? { mode: "builder", state } : { mode: "custom", rrule };
 }
 
-function toValues(event: CalendarEvent | null, occurrence: CalendarOccurrence | null, scope: CalendarScope, seed: EventSeed | null): Values {
+function toValues(event: CalendarEvent, occurrence: CalendarOccurrence | null, scope: CalendarScope): Values {
 	// For one occurrence, or this and following, the times come from the
 	// occurrence being looked at rather than from the series' first one.
 	const timed = scope !== "all" && occurrence ? occurrence : event;
-	const startLocal = timed?.startLocal ?? seed?.startLocal ?? "";
-	const endLocal = timed?.endLocal ?? seed?.endLocal ?? "";
-	const allDay = timed?.allDay ?? seed?.allDay ?? false;
+	const startLocal = timed.startLocal;
+	const endLocal = timed.endLocal;
+	const allDay = timed.allDay;
 	const source = scope === "this" && occurrence ? occurrence : event;
 	return {
-		title: source?.title ?? "",
+		title: source.title,
 		allDay,
 		startDate: dateOf(startLocal),
 		startTime: allDay ? "09:00" : timeOf(startLocal),
 		// An all-day end is exclusive in storage and inclusive on the form.
 		endDate: allDay && endLocal ? addDays(dateOf(endLocal), -1) : dateOf(endLocal),
 		endTime: allDay ? "10:00" : timeOf(endLocal),
-		timezone: event?.timezone ?? machineTimeZone(),
-		recurrence: recurrenceOf(event?.rrule ?? null, startLocal),
-		location: source?.location ?? "",
-		notes: source?.notes ?? "",
-		clientId: event?.clientId ?? seed?.clientId ?? "",
-		projectId: event?.projectId ?? seed?.projectId ?? "",
+		timezone: event.timezone || machineTimeZone(),
+		recurrence: recurrenceOf(event.rrule, startLocal),
+		location: source.location ?? "",
+		notes: source.notes ?? "",
+		clientId: event.clientId ?? "",
+		projectId: event.projectId ?? "",
 	};
 }
 
@@ -105,8 +94,8 @@ const STEPS: FormStep[] = [
 	{ label: "Who", hint: "Who it is for. Everything here is optional." },
 ];
 
-export function EventForm({ event, occurrence = null, scope = "all", seed = null, backLabel, onClose, onSaved }: EventFormProps) {
-	const [initial] = useState<Values>(() => toValues(event, occurrence, scope, seed));
+export function EventForm({ event, occurrence = null, scope = "all", backLabel, onClose, onSaved }: EventFormProps) {
+	const [initial] = useState<Values>(() => toValues(event, occurrence, scope));
 	const [step, setStep] = useState(0);
 	// The submit button sits in the page footer, outside the form element.
 	const formId = useId();
@@ -120,7 +109,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
-	const singleOccurrence = scope === "this" && event?.rrule !== null && event !== null;
+	const singleOccurrence = scope === "this" && event.rrule !== null;
 
 	const zones = useMemo(() => {
 		const list = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
@@ -130,8 +119,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 
 	useEffect(() => {
 		let cancelled = false;
-		window.juno.clients
-			.list()
+		listAllClients()
 			.then((rows) => {
 				if (!cancelled) setClients(rows);
 			})
@@ -142,27 +130,6 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 			cancelled = true;
 		};
 	}, []);
-
-	/**
-	 * The client, guessed from what was typed in the title.
-	 *
-	 * People write "Jansen kickoff" and then leave the client empty, so the
-	 * event is not on the client's record and nothing finds it later. The guess
-	 * is offered rather than applied: silently attaching an event to a client
-	 * because their name appeared in a word is worse than not guessing.
-	 */
-	const suggestedClient = useMemo(() => {
-		if (event) return null;
-		if (values.clientId.length > 0) return null;
-		const title = values.title.trim().toLowerCase();
-		if (title.length < 3) return null;
-		return (
-			clients.find((candidate) => {
-				const name = candidate.name.trim().toLowerCase();
-				return name.length >= 3 && title.includes(name);
-			}) ?? null
-		);
-	}, [clients, event, values.clientId, values.title]);
 
 	const clientId = values.clientId;
 	useEffect(() => {
@@ -226,21 +193,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 		setBusy(true);
 		try {
 			let saved: CalendarEvent;
-			if (!event) {
-				const input: CalendarEventInput = {
-					title,
-					allDay: values.allDay,
-					startLocal: start,
-					endLocal: end,
-					timezone: values.timezone,
-					rrule,
-					location: values.location.trim() || null,
-					notes: values.notes.trim() || null,
-					clientId: values.clientId || null,
-					projectId: values.projectId || null,
-				};
-				saved = await window.juno.calendar.create(input);
-			} else if (singleOccurrence) {
+			if (singleOccurrence) {
 				const patch: CalendarEventPatch = {
 					title,
 					startLocal: start,
@@ -279,15 +232,13 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 		}
 	}
 
-	const title = !event
-		? "New event"
-		: singleOccurrence
-			? "Edit this occurrence"
-			: scope === "following"
-				? "Edit this and following occurrences"
-				: event.rrule
-					? "Edit all occurrences"
-					: "Edit event";
+	const title = singleOccurrence
+		? "Edit this occurrence"
+		: scope === "following"
+			? "Edit this and following occurrences"
+			: event.rrule
+				? "Edit all occurrences"
+				: "Edit event";
 
 	/** What each step insists on before it will hand over to the next one. */
 	function checkStep(index: number): boolean {
@@ -320,18 +271,13 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 				<>
 					{step > 0 ? <Button onClick={() => setStep(step - 1)}>Previous</Button> : null}
 					{last ? null : (
-						<Button
-							variant={event ? "quiet" : "primary"}
-							onClick={() => checkStep(step) && setStep(step + 1)}
-						>
+						<Button variant="quiet" onClick={() => checkStep(step) && setStep(step + 1)}>
 							Next
 						</Button>
 					)}
-					{last || event ? (
-						<Button type="submit" form={formId} variant="primary" disabled={busy}>
-							{busy ? "Saving" : "Save"}
-						</Button>
-					) : null}
+					<Button type="submit" form={formId} variant="primary" disabled={busy}>
+						{busy ? "Saving" : "Save"}
+					</Button>
 				</>
 			}
 		>
@@ -345,7 +291,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 							<LocationField value={values.location} onChange={(v) => set("location", v)} />
 						</div>
 						<div className="col-span-2">
-							<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
+							<label className="flex cursor-default items-center gap-3 text-base">
 								<input
 									type="checkbox"
 									checked={values.allDay}
@@ -387,7 +333,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 								disabled={singleOccurrence}
 							/>
 							{singleOccurrence ? (
-								<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="mt-2 text-sm text-[var(--ink-muted)]">
 									The repeat rule, zone and client belong to the whole series.
 								</p>
 							) : null}
@@ -395,23 +341,6 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 					</div>
 				) : (
 					<div className="grid grid-cols-2 gap-4">
-						{suggestedClient ? (
-							<div className="col-span-2 flex items-center gap-3 rounded-[var(--radius-md)] bg-[var(--accent-soft)] px-3 py-2">
-								<p className="min-w-0 flex-1 text-[length:var(--text-dense)]">
-									The title mentions {suggestedClient.name}. Put this event on their record?
-								</p>
-								<Button
-									size="dense"
-									onClick={() => {
-										setProjects([]);
-										setValues((current) => ({ ...current, clientId: suggestedClient.id, projectId: "" }));
-									}}
-								>
-									Link
-								</Button>
-							</div>
-						) : null}
-
 						<Select
 							label="Client"
 							value={values.clientId}
@@ -435,12 +364,12 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 						<div className="col-span-2">
 							<label
 								htmlFor={notesId}
-								className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+								className="mb-1 block text-sm text-[var(--ink-muted)]"
 							>
 								Notes
 							</label>
 							<MarkdownEditor id={notesId} value={values.notes} onChange={(v) => set("notes", v)} rows={4} />
-							<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-1 text-sm text-[var(--ink-muted)]">
 								Markdown is supported: **bold**, _italic_, a [link](https://example.com), a list.
 							</p>
 						</div>
@@ -450,7 +379,7 @@ export function EventForm({ event, occurrence = null, scope = "all", seed = null
 				{error ? (
 					<div className="mt-4 border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not save this event.</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{error}
 						</p>
 					</div>

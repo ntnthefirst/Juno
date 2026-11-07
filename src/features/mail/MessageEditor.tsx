@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
+import type { ComposeBlockKind, ComposeBlockVariable } from "@shared/types";
+import { chipHtml, VARIABLE_ATTRIBUTE, VARIABLE_NAMES } from "@shared/mail-variables";
 import { BoldIcon, ItalicIcon, LinkIcon, ListBulletIcon, NumberedListIcon, UnderlineIcon } from "@heroicons/react/24/outline";
 import { Button } from "../../components/Button";
 import { EmojiPicker } from "../../components/EmojiPicker";
@@ -8,11 +10,72 @@ import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { TOOLBAR_BUTTON, TOOLBAR_BUTTON_ACTIVE } from "../../components/toolbar-styles";
 import { escapeAttribute, isDrawable, REMOTE_IMAGE_NOTE } from "../../lib/remote-image";
+import { linesToHtml } from "./blocks/block-text";
+
+/**
+ * What the composer can ask of the body: the intro and the outro sit in marked
+ * elements, so one can be found, replaced or taken out without disturbing the
+ * rest of what was typed.
+ */
+export type MessageEditorHandle = {
+	/** The text of the block in the message as it reads now, variables as {{name}}, or null when there is none. */
+	readBlock: (kind: ComposeBlockKind) => string | null;
+	/**
+	 * Puts the block at the start (intro) or end (outro), replacing the one there.
+	 * The body is the stored text, and each {{name}} in it becomes a chip. Null
+	 * takes the block out.
+	 */
+	setBlock: (kind: ComposeBlockKind, body: string | null) => void;
+	/** Flags the chips that have nothing to put in for this message. */
+	markMissing: (names: ComposeBlockVariable[]) => void;
+};
+
+const BLOCK_ATTRIBUTE = "data-juno-block";
+const MISSING_ATTRIBUTE = "data-missing";
+const TOKEN = new RegExp(String.raw`\{\{(${VARIABLE_NAMES.join("|")})\}\}`, "g");
+
+/** A block body as markup: lines kept, each variable a chip. */
+function bodyToHtml(body: string): string {
+	return linesToHtml(body).replace(TOKEN, (_token, name: string) => chipHtml(name as ComposeBlockVariable));
+}
+
+/**
+ * What an element reads as in the plain text twin: its words as laid out, with
+ * every chip written as its {{name}} token, so the text never carries a label
+ * that looks like a word. innerText needs a rendered element, so a copy is laid
+ * out out of sight for the read.
+ */
+function textOf(element: HTMLElement): string {
+	const probe = element.cloneNode(true) as HTMLElement;
+	probe.querySelectorAll("[" + VARIABLE_ATTRIBUTE + "]").forEach((chip) => {
+		chip.replaceWith(document.createTextNode("{{" + (chip.getAttribute(VARIABLE_ATTRIBUTE) ?? "") + "}}"));
+	});
+	probe.style.cssText = "position:fixed;left:-99999px;top:0;width:" + (element.clientWidth || 600) + "px;white-space:pre-wrap";
+	document.body.appendChild(probe);
+	const text = probe.innerText;
+	probe.remove();
+	return text;
+}
+
+/**
+ * Where an outro goes. At the very end, except in a reply: the quoted original
+ * and the line that introduces it ("On ... wrote") stay last, so the sign-off
+ * sits under what was written and not under somebody else's mail.
+ */
+function outroAnchor(host: HTMLElement): Element | null {
+	const quote = [...host.children].find((child) => child.tagName === "BLOCKQUOTE");
+	if (!quote) return null;
+	const before = quote.previousElementSibling;
+	return before && before.tagName === "P" ? before : quote;
+}
 
 type MessageEditorProps = {
 	text: string;
 	html: string | null;
 	onChange: (text: string, html: string | null) => void;
+	/** Drawn at the start of the toolbar, before the formatting buttons. */
+	toolbarStart?: ReactNode;
+	ref?: Ref<MessageEditorHandle>;
 };
 
 /**
@@ -45,6 +108,10 @@ function forEditor(value: string): string {
 		image.setAttribute(PARKED, src);
 		if (!image.hasAttribute("title")) image.setAttribute("title", REMOTE_IMAGE_NOTE);
 	});
+	// A chip is one unit: it is deleted whole and the caret cannot enter it.
+	document
+		.querySelectorAll("[" + VARIABLE_ATTRIBUTE + "]")
+		.forEach((chip) => chip.setAttribute("contenteditable", "false"));
 	return document.body.innerHTML;
 }
 
@@ -56,6 +123,11 @@ function forMessage(value: string): string {
 		image.removeAttribute(PARKED);
 		if (image.getAttribute("title") === REMOTE_IMAGE_NOTE) image.removeAttribute("title");
 	});
+	// The warning is for the screen only; a draft keeps the chip as it is.
+	document.querySelectorAll("[" + MISSING_ATTRIBUTE + "]").forEach((chip) => {
+		chip.removeAttribute(MISSING_ATTRIBUTE);
+		chip.removeAttribute("title");
+	});
 	return document.body.innerHTML;
 }
 
@@ -66,12 +138,26 @@ function forMessage(value: string): string {
  * around the body itself, so it reads as the page continuing rather than a
  * box sitting on it.
  */
-export default function MessageEditor({ text, html, onChange }: MessageEditorProps) {
+export default function MessageEditor({ text, html, onChange, toolbarStart, ref }: MessageEditorProps) {
 	const hostRef = useRef<HTMLDivElement>(null);
 	const toolbarRef = useRef<HTMLDivElement>(null);
 	const savedRangeRef = useRef<Range | null>(null);
 	const menu = useContextMenu();
 	const [hasSelection, setHasSelection] = useState(false);
+	const missingRef = useRef<ComposeBlockVariable[]>([]);
+
+	const applyMissing = useCallback(() => {
+		hostRef.current?.querySelectorAll("[" + VARIABLE_ATTRIBUTE + "]").forEach((chip) => {
+			const empty = missingRef.current.includes(chip.getAttribute(VARIABLE_ATTRIBUTE) as ComposeBlockVariable);
+			if (empty) {
+				chip.setAttribute(MISSING_ATTRIBUTE, "");
+				chip.setAttribute("title", "Nothing to put here yet. Fill in the recipient, client or project, or remove it.");
+			} else {
+				chip.removeAttribute(MISSING_ATTRIBUTE);
+				chip.removeAttribute("title");
+			}
+		});
+	}, []);
 
 	const [linkOpen, setLinkOpen] = useState(false);
 	const [linkUrl, setLinkUrl] = useState("");
@@ -108,9 +194,17 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 	useEffect(() => {
 		const host = hostRef.current;
 		if (!host) return;
-		const next = html ? forEditor(html) : text.replace(/\n/g, "<br>");
-		if (host.innerHTML !== next) host.innerHTML = next;
-	}, [html, text]);
+		if (html) {
+			// What the editor holds is compared as the message it would save, so the
+			// screen-only warning on a chip is not mistaken for a change.
+			const next = forEditor(html);
+			if (forMessage(host.innerHTML) !== forMessage(next)) host.innerHTML = next;
+		} else {
+			const next = text.replace(/\n/g, "<br>");
+			if (host.innerHTML !== next) host.innerHTML = next;
+		}
+		applyMissing();
+	}, [html, text, applyMissing]);
 
 	// A click into the link field moves focus off the contentEditable host, so
 	// closing the popover on its blur would dismiss it before that click
@@ -130,9 +224,36 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 		const host = hostRef.current;
 		if (!host) return;
 		const nextHtml = forMessage(host.innerHTML);
-		onChange(host.innerText, nextHtml || null);
+		onChange(textOf(host), nextHtml || null);
 		refreshActiveFormats();
 	}
+
+	useImperativeHandle(ref, () => ({
+		readBlock(kind) {
+			const element = hostRef.current?.querySelector<HTMLElement>(`[${BLOCK_ATTRIBUTE}="${kind}"]`);
+			return element ? textOf(element) : null;
+		},
+		markMissing(names) {
+			missingRef.current = names;
+			applyMissing();
+		},
+		setBlock(kind, body) {
+			const host = hostRef.current;
+			if (!host) return;
+			host.querySelector(`[${BLOCK_ATTRIBUTE}="${kind}"]`)?.remove();
+			if (body !== null) {
+				const element = document.createElement("div");
+				element.setAttribute(BLOCK_ATTRIBUTE, kind);
+				// Inline, because the message leaves this window and a stylesheet does not.
+				element.setAttribute("style", kind === "intro" ? "margin:0 0 16px 0;" : "margin:16px 0 0 0;");
+				element.innerHTML = bodyToHtml(body);
+				host.insertBefore(element, kind === "intro" ? host.firstChild : outroAnchor(host));
+			}
+			applyMissing();
+			const nextHtml = forMessage(host.innerHTML);
+			onChange(textOf(host), nextHtml || null);
+		},
+	}));
 
 	function captureSelection() {
 		const host = hostRef.current;
@@ -244,6 +365,12 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 				ref={toolbarRef}
 				className="flex flex-none flex-wrap items-center gap-1 border-b border-[var(--line)] bg-[var(--sunken)] p-1.5"
 			>
+				{toolbarStart ? (
+					<>
+						{toolbarStart}
+						<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line-strong)]" />
+					</>
+				) : null}
 				<button
 					type="button"
 					aria-label="Bold"
@@ -319,7 +446,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 							{linkReady ? (
 								<Field label="Link to" value={linkUrl} onChange={setLinkUrl} placeholder="https://example.com" />
 							) : (
-								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="text-sm text-[var(--ink-muted)]">
 									Select the words that should become the link, then open this again.
 								</p>
 							)}
@@ -361,7 +488,7 @@ export default function MessageEditor({ text, html, onChange }: MessageEditorPro
 				onFocus={refreshActiveFormats}
 				onBlur={refreshActiveFormats}
 				data-placeholder="Write your message"
-				className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-4 text-[length:var(--text-lg)] leading-[var(--leading-relaxed)] text-[var(--ink)] outline-none empty:before:text-[var(--ink-faint)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--accent)] [&_a]:underline [&_img]:max-w-full [&_img]:rounded-[var(--radius-md)] [&_img[data-juno-src]]:inline-block [&_img[data-juno-src]]:min-h-12 [&_img[data-juno-src]]:min-w-32 [&_img[data-juno-src]]:border [&_img[data-juno-src]]:border-dashed [&_img[data-juno-src]]:border-[var(--line-strong)] [&_img[data-juno-src]]:bg-[var(--sunken)] [&_img[data-juno-src]]:p-2 [&_img[data-juno-src]]:text-[length:var(--text-sm)] [&_img[data-juno-src]]:text-[var(--ink-muted)]"
+				className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-4 text-document text-[var(--ink)] outline-none empty:before:text-[var(--ink-faint)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--accent)] [&_a]:underline [&_[data-juno-variable]]:mx-0.5 [&_[data-juno-variable]]:inline-flex [&_[data-juno-variable]]:h-[22px] [&_[data-juno-variable]]:items-center [&_[data-juno-variable]]:rounded-[var(--radius-sm)] [&_[data-juno-variable]]:bg-[var(--accent-soft)] [&_[data-juno-variable]]:px-1.5 [&_[data-juno-variable]]:align-baseline [&_[data-juno-variable]]:text-sm [&_[data-juno-variable]]:font-[var(--weight-medium)] [&_[data-juno-variable]]:text-[var(--accent)] [&_[data-missing]]:bg-[var(--warn-soft)] [&_[data-missing]]:text-[var(--warn)] [&_img]:max-w-full [&_img]:rounded-[var(--radius-md)] [&_img[data-juno-src]]:inline-block [&_img[data-juno-src]]:min-h-12 [&_img[data-juno-src]]:min-w-32 [&_img[data-juno-src]]:border [&_img[data-juno-src]]:border-dashed [&_img[data-juno-src]]:border-[var(--line-strong)] [&_img[data-juno-src]]:bg-[var(--sunken)] [&_img[data-juno-src]]:p-2 [&_img[data-juno-src]]:text-sm [&_img[data-juno-src]]:text-[var(--ink-muted)]"
 			/>
 			{menu.at ? <ContextMenu at={menu.at} items={editItems} onClose={menu.close} ariaLabel="Edit message" /> : null}
 		</div>

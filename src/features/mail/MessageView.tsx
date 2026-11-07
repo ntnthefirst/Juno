@@ -1,21 +1,29 @@
 import { useEffect, useRef, useState, type WheelEvent } from "react";
+import { createPortal } from "react-dom";
 import { isOpenableAttachment } from "@shared/attachment-kind";
+import { isHttpsLink } from "@shared/mail-link";
 import {
 	MAIL_FRAME_ORIGIN,
 	type ClientSummary,
+	type MessageSuggestion,
 	type MailAttachment,
 	type MailMessage,
 	type MailMessageBody,
 	type MailReplyMode,
 } from "@shared/types";
 import { Button } from "../../components/Button";
+import { FindBar } from "../../components/FindBar";
+import { Notice } from "../../components/Notice";
+import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
 import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
 import { ImportFlow } from "../documents/ImportFlow";
 import { AttachmentIcon } from "../../components/AttachmentIcon";
+import { LinkPopover } from "./LinkPopover";
 import { PersonChip } from "./PersonChip";
+import { SuggestionBar } from "./SuggestionBar";
 import { displayName, formatBytes, formatFull, formatWhen, participantsLine } from "./format";
 
 type MessageViewProps = {
@@ -45,6 +53,13 @@ function isPdf(attachment: MailAttachment): boolean {
 const TRUSTED_EMAILS_KEY = "juno.mail.trustedEmails";
 const TRUSTED_SENDERS_KEY = "juno.mail.trustedSenders";
 const BLOCKED_SENDERS_KEY = "juno.mail.blockedSenders";
+
+/** The button on each kind of suggestion, named for what it does. */
+const ACTION_LABELS: Record<MessageSuggestion["kind"], string> = {
+	event: "Add to calendar",
+	project: "Link to project",
+	reminder: "Add reminder",
+};
 
 function readTrust(key: string): string[] {
 	try {
@@ -103,6 +118,13 @@ export function MessageView({
 	const [linksOpen, setLinksOpen] = useState(false);
 	const [mine, setMine] = useState<ReadonlySet<string>>(() => new Set());
 	const [measuredFrame, setMeasuredFrame] = useState<{ messageId: string; height: number } | null>(null);
+	const [hoveredLink, setHoveredLink] = useState<{ messageId: string; href: string; x: number; y: number } | null>(null);
+	const hideTimer = useRef<number | null>(null);	const noticeRef = useRef(onNotice);
+	const [offers, setOffers] = useState<{ messageId: string; list: MessageSuggestion[] } | null>(null);
+	const [offerBusy, setOfferBusy] = useState(false);
+	const [findOpen, setFindOpen] = useState(false);
+	const [findQuery, setFindQuery] = useState("");
+	const [findResult, setFindResult] = useState({ count: 0, current: -1 });
 	const frame = useRef<HTMLIFrameElement>(null);
 	const menu = useContextMenu();
 
@@ -123,18 +145,123 @@ export function MessageView({
 	}, [open, message.id, message.bodyFetched, clientLinked, trusted]);
 
 	useEffect(() => {
+		noticeRef.current = onNotice;
+	});
+
+	function tellFrame(action: "search" | "next" | "previous" | "clear", query = "") {
+		frame.current?.contentWindow?.postMessage({ type: "juno.mail.find", action, query }, "*");
+	}
+
+	function closeFind() {
+		setFindOpen(false);
+		setFindResult({ count: 0, current: -1 });
+		tellFrame("clear");
+	}
+
+	// Ctrl F finds in the message that is open, and nowhere else.
+	useEffect(() => {
+		if (!open) return;
+		function onKey(event: KeyboardEvent) {
+			if (!matchesCombo(event, COMBOS.find)) return;
+			if (document.querySelector("[role='dialog']")) return;
+			event.preventDefault();
+			setFindOpen(true);
+		}
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [open]);
+
+	// The match list is the frame's, so a new query, or a frame that has just
+	// loaded again, asks it to search once more.
+	useEffect(() => {
+		if (!findOpen) return;
+		if (findQuery === "") {
+			frame.current?.contentWindow?.postMessage({ type: "juno.mail.find", action: "clear", query: "" }, "*");
+			return;
+		}
+		frame.current?.contentWindow?.postMessage({ type: "juno.mail.find", action: "search", query: findQuery }, "*");
+	}, [findOpen, findQuery, remoteImages, message.id]);
+
+	useEffect(() => {
+		function cancelHide() {
+			if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+			hideTimer.current = null;
+		}
+
+		function revealInFrame(top: number) {
+			const box = frame.current?.getBoundingClientRect();
+			if (!box) return;
+			// The frame is as tall as its message, so the reader around it is what scrolls.
+			let holder: HTMLElement | null = frame.current?.parentElement ?? null;
+			while (holder && !(holder.scrollHeight > holder.clientHeight && /(auto|scroll)/.test(getComputedStyle(holder).overflowY))) {
+				holder = holder.parentElement;
+			}
+			if (!holder) return;
+			const bounds = holder.getBoundingClientRect();
+			const at = box.top + top;
+			if (at < bounds.top + 80 || at > bounds.bottom - 40) {
+				holder.scrollTo({ top: holder.scrollTop + (at - bounds.top) - bounds.height / 3 });
+			}
+		}
+
 		function receiveHeight(event: MessageEvent<unknown>) {
 			if (event.source !== frame.current?.contentWindow) return;
 			if (!event.data || typeof event.data !== "object") return;
-			const data = event.data as { type?: unknown; height?: unknown };
+			const data = event.data as { type?: unknown; height?: unknown; href?: unknown; rect?: unknown };
+			if (data.type === "juno.mail.link") {
+				const rect = data.rect as { left?: unknown; bottom?: unknown } | undefined;
+				if (typeof data.href === "string" && rect && typeof rect.left === "number" && typeof rect.bottom === "number") {
+					const box = frame.current?.getBoundingClientRect();
+					if (!box) return;
+					cancelHide();
+					setHoveredLink({ messageId: message.id, href: data.href, x: box.left + rect.left, y: box.top + rect.bottom + 2 });
+				} else {
+					// A moment's grace, so the pointer can travel from the link to the popover.
+					cancelHide();
+					hideTimer.current = window.setTimeout(() => setHoveredLink(null), 220);
+				}
+				return;
+			}
+			if (data.type === "juno.mail.findResult") {
+				const found = data as { count?: unknown; current?: unknown; top?: unknown };
+				if (typeof found.count === "number" && typeof found.current === "number") {
+					setFindResult({ count: found.count, current: found.current });
+				}
+				if (typeof found.top === "number") revealInFrame(found.top);
+				return;
+			}
+			if (data.type === "juno.mail.linkClick") {
+				if (typeof data.href === "string" && isHttpsLink(data.href)) window.juno.mail.openLink(data.href).catch((cause: unknown) => noticeRef.current(messageOf(cause)));
+				return;
+			}
 			if (data.type !== "juno.mail.height" || typeof data.height !== "number" || !Number.isFinite(data.height))
 				return;
 			setMeasuredFrame({ messageId: message.id, height: Math.max(1, Math.ceil(data.height)) });
 		}
 
 		window.addEventListener("message", receiveHeight);
-		return () => window.removeEventListener("message", receiveHeight);
+		return () => {
+			window.removeEventListener("message", receiveHeight);
+			cancelHide();
+		};
 	}, [message.id]);
+
+	// Offers under the header, worked out locally when the message is opened.
+	useEffect(() => {
+		if (!open || !message.bodyFetched) return;
+		let cancelled = false;
+		window.juno.suggestions
+			.forMessage(message.id)
+			.then((list) => {
+				if (!cancelled) setOffers({ messageId: message.id, list });
+			})
+			.catch(() => {
+				// No offer is the safe direction: the message reads the same without one.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open, message.id, message.bodyFetched]);
 
 	// The owner's addresses and the accounts', which are not someone to look up.
 	useEffect(() => {
@@ -246,6 +373,63 @@ export function MessageView({
 		}
 	}
 
+	function scheduleHideLink() {
+		if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+		hideTimer.current = window.setTimeout(() => setHoveredLink(null), 220);
+	}
+
+	async function copyLink(href: string) {
+		try {
+			await navigator.clipboard.writeText(href);
+			onNotice("Link copied.");
+		} catch {
+			onNotice("Could not copy the link.");
+		}
+		setHoveredLink(null);
+	}
+
+	function without(suggestion: MessageSuggestion) {
+		setOffers((current) =>
+			current && current.messageId === suggestion.messageId
+				? { ...current, list: current.list.filter((item) => item.kind !== suggestion.kind) }
+				: current,
+		);
+	}
+
+	async function acceptOffer(suggestion: MessageSuggestion) {
+		if (offerBusy) return;
+		setOfferBusy(true);
+		try {
+			const outcome = await window.juno.suggestions.accept(suggestion.messageId, suggestion.kind);
+			without(suggestion);
+			onNotice(
+				outcome.kind === "event"
+					? `Added "${outcome.event.title}" to the calendar.`
+					: outcome.kind === "reminder"
+						? `Added the reminder "${outcome.reminder.title}".`
+						: `Linked this conversation to ${outcome.projectName}.`,
+			);
+			if (outcome.kind === "project") onChanged();
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		} finally {
+			setOfferBusy(false);
+		}
+	}
+
+	async function dismissOffer(suggestion: MessageSuggestion) {
+		if (offerBusy) return;
+		setOfferBusy(true);
+		try {
+			await window.juno.suggestions.dismiss(suggestion.messageId, suggestion.kind);
+			without(suggestion);
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		} finally {
+			setOfferBusy(false);
+		}
+	}
+
 	async function copyAddress() {
 		if (!message.from) return;
 		try {
@@ -279,6 +463,35 @@ export function MessageView({
 		},
 	];
 
+	// What the reader is told about the body comes straight under the header, as
+	// the design draws it, before anything offered about the message.
+	const bodyShown = !(!message.bodyFetched && (clientLinked || trusted)) && !bodyError;
+	const trustNotice = !bodyShown ? null : !clientLinked && !trusted ? (
+		<Notice
+			actions={
+				<>
+					<Button size="dense" onClick={trustEmail}>
+						Trust this email
+					</Button>
+					{trustDecision === "unknown" ? (
+						<Button size="dense" onClick={blockSender}>
+							Don't trust sender
+						</Button>
+					) : null}
+					<Button size="dense" onClick={trustSender} disabled={!senderAddress}>
+						Trust sender
+					</Button>
+				</>
+			}
+		>
+			{trustDecision === "blocked"
+				? "This sender is not trusted. Content stays blocked."
+				: "This email is not trusted. Content and links stay blocked."}
+		</Notice>
+	) : body?.suspicious ? (
+		<Notice role="status">Weird content was removed before this email was shown.</Notice>
+	) : null;
+
 	return (
 		<article
 			className={`border-t border-[var(--line)] first:border-t-0 ${open ? "flex flex-1 flex-col" : ""}`}
@@ -287,12 +500,12 @@ export function MessageView({
 			{open ? (
 				// Not a button while open: the sender is a control of its own, and a
 				// button cannot hold another one.
-				<div className="flex w-full shrink-0 items-start gap-3 bg-[var(--hover)] px-8 py-3">
-					<div className="flex min-w-0 flex-1 items-baseline gap-2">
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">From</span>
+				<div className="flex w-full shrink-0 items-center gap-3 bg-[var(--sunken)] px-6 pt-3 pb-2">
+					<div className="flex min-w-0 flex-1 items-center gap-3">
+						<span className="text-base text-[var(--ink-muted)]">From</span>
 						{message.from ? (
 							<span
-								className={`min-w-0 ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
+								className={`min-w-0 text-lg ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
 							>
 								<PersonChip
 									person={message.from}
@@ -308,16 +521,16 @@ export function MessageView({
 								/>
 							</span>
 						) : (
-							<span className="font-[var(--weight-medium)]">{from}</span>
+							<span className="text-lg font-[var(--weight-medium)]">{from}</span>
 						)}
 						{detailsOpen && message.from ? (
-							<span data-selectable className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span data-selectable className="min-w-0 truncate text-sm text-[var(--ink-muted)]">
 								{"<"}{message.from.address}{">"}
 							</span>
 						) : null}
 					</div>
 					<span
-						className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						className="tabular shrink-0 text-base text-[var(--ink-muted)]"
 						title={formatFull(message.internalDate)}
 					>
 						{detailsOpen
@@ -340,17 +553,17 @@ export function MessageView({
 								{from}
 							</span>
 							{message.from ? (
-								<span className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="min-w-0 truncate text-sm text-[var(--ink-muted)]">
 									{message.from.address}
 								</span>
 							) : null}
 						</div>
-						<span className="mt-0.5 block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="mt-0.5 block truncate text-sm text-[var(--ink-muted)]">
 							{message.snippet}
 						</span>
 					</div>
 					<span
-						className="tabular shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+						className="tabular shrink-0 text-sm text-[var(--ink-muted)]"
 						title={formatFull(message.internalDate)}
 					>
 						{formatWhen(message.sentAt ?? message.internalDate)}
@@ -359,9 +572,9 @@ export function MessageView({
 			)}
 
 			{open ? (
-				<div className="flex flex-1 flex-col px-8">
-					<div className="-mx-8 bg-[var(--hover)] px-8">
-						<div className="flex shrink-0 items-center gap-2 pb-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<div className="flex flex-1 flex-col px-6">
+					<div className="-mx-6 bg-[var(--sunken)] px-6">
+						<div className="flex shrink-0 items-center gap-3 pb-3 text-base text-[var(--ink-muted)]">
 								<span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
 									<span>To</span>
 									{message.to.length === 0 ? <span>(nobody)</span> : null}
@@ -400,9 +613,26 @@ export function MessageView({
 
 					</div>
 
+					{trustNotice ? <div className="-mx-6 shrink-0">{trustNotice}</div> : null}
+
+					{offers && offers.messageId === message.id && offers.list.length > 0 ? (
+						<div className="-mx-2 flex shrink-0 flex-col gap-2 py-3">
+							{offers.list.map((suggestion) => (
+								<SuggestionBar
+									key={suggestion.kind}
+									suggestion={suggestion}
+									actionLabel={ACTION_LABELS[suggestion.kind]}
+									busy={offerBusy}
+									onAccept={() => void acceptOffer(suggestion)}
+									onDismiss={() => void dismissOffer(suggestion)}
+								/>
+							))}
+						</div>
+					) : null}
+
 					{visibleAttachments.length > 0 ? (
 						<div className="shrink-0 border-t border-[var(--line)] py-3">
-							<h3 className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+							<h3 className="text-overline uppercase text-[var(--ink-muted)]">
 								Attachments
 							</h3>
 							<ul
@@ -473,10 +703,10 @@ export function MessageView({
 											>
 												<AttachmentIcon filename={attachment.filename} mimeType={attachment.mimeType} />
 												<span className="flex min-w-0 max-w-[220px] flex-col">
-													<span className="truncate text-[length:var(--text-dense)] leading-tight">
+													<span className="truncate text-dense leading-tight">
 														{attachment.filename}
 													</span>
-													<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+													<span className="tabular text-micro text-[var(--ink-muted)]">
 														{formatBytes(attachment.size)}
 													</span>
 												</span>
@@ -490,7 +720,7 @@ export function MessageView({
 									);
 								})}
 							</ul>
-							<p className="mt-1 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+							<p className="mt-1 text-micro text-[var(--ink-faint)]">
 								{canOpenHere
 									? "Documents, images and media open in your default app. Anything else is shown in its folder."
 									: "Trust the sender to open attachments from here."}
@@ -512,45 +742,11 @@ export function MessageView({
 							{bodyError}
 						</p>
 					) : (
-						<div className="-mx-8 flex flex-1 flex-col">
-							{!clientLinked && !trusted ? (
-								<div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-3 text-[var(--warn)]">
-									<span className="mr-auto text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-										{trustDecision === "blocked"
-											? "This sender is not trusted. Content stays blocked."
-											: "This email is not trusted. Content and links stay blocked."}
-									</span>
-									<Button
-										size="dense"
-										onClick={trustEmail}
-									>
-										Trust this email
-									</Button>
-									{trustDecision === "unknown" ? (
-										<Button
-											size="dense"
-											onClick={blockSender}
-										>
-											Don't trust sender
-										</Button>
-									) : null}
-									<Button
-										size="dense"
-										onClick={trustSender}
-										disabled={!senderAddress}
-									>
-										Trust sender
-									</Button>
-								</div>
-							) : (
+						<div className="-mx-6 flex flex-1 flex-col">
+							{!clientLinked && !trusted ? null : (
 								<>
-									{body?.suspicious ? (
-										<div className="flex shrink-0 items-center gap-2 border-t border-[var(--warn)] bg-[var(--warn-soft)] px-8 py-2 text-[length:var(--text-sm)] text-[var(--warn)]">
-											<span>Weird content was removed before this email was shown.</span>
-										</div>
-									) : null}
 									{body && body.remoteImages > 0 && !remoteImages ? (
-										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-[length:var(--text-sm)]">
+										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-6 py-2 text-sm">
 											<span className="text-[var(--ink-muted)]">
 												{body.remoteImages} remote{" "}
 												{body.remoteImages === 1 ? "image" : "images"} not loaded. Loading them
@@ -570,17 +766,20 @@ export function MessageView({
 										src={frameSrc}
 										sandbox="allow-scripts"
 										referrerPolicy="no-referrer"
-										className="block min-h-full w-full shrink-0 overflow-x-auto overflow-y-hidden border-t border-[var(--line)] bg-[var(--surface)]"
+										onLoad={() => {
+											if (findOpen && findQuery !== "") tellFrame("search", findQuery);
+										}}
+										className="block min-h-full w-full shrink-0 overflow-x-auto overflow-y-hidden bg-[var(--surface)]"
 										style={frameHeight === null ? undefined : { height: frameHeight }}
 									/>
 
 									{body && body.links.length > 0 ? (
-										<div className="shrink-0 border-t border-[var(--line)] px-8 py-3">
+										<div className="shrink-0 border-t border-[var(--line)] px-6 py-3">
 											<button
 												type="button"
 												aria-expanded={linksOpen}
 												onClick={() => setLinksOpen((current) => !current)}
-												className="text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+												className="text-overline uppercase text-[var(--ink-muted)] hover:text-[var(--ink)]"
 											>
 												Links ({body.links.length})
 											</button>
@@ -589,7 +788,7 @@ export function MessageView({
 													{body.links.slice(0, 40).map((link) => (
 														<li
 															key={link.href}
-															className="flex min-w-0 items-baseline gap-2 text-[length:var(--text-sm)]"
+															className="flex min-w-0 items-baseline gap-2 text-sm"
 														>
 															<button
 																type="button"
@@ -600,7 +799,7 @@ export function MessageView({
 															</button>
 															<span
 																data-selectable
-																className="min-w-0 truncate font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]"
+																className="min-w-0 truncate font-mono text-micro text-[var(--ink-muted)]"
 															>
 																{link.href}
 															</span>
@@ -617,6 +816,39 @@ export function MessageView({
 				</div>
 			) : null}
 
+			{open && findOpen
+				? createPortal(
+						<div className="fixed top-[calc(var(--titlebar-height)+8px)] right-6 z-40">
+							<FindBar
+								query={findQuery}
+								onQueryChange={setFindQuery}
+								count={findResult.count}
+								current={findResult.current}
+								onNext={() => tellFrame("next")}
+								onPrevious={() => tellFrame("previous")}
+								onClose={closeFind}
+							/>
+						</div>,
+						document.body,
+					)
+				: null}
+			{open && hoveredLink?.messageId === message.id ? (
+				<LinkPopover
+					href={hoveredLink.href}
+					x={hoveredLink.x}
+					y={hoveredLink.y}
+					onOpen={(href) => {
+						setHoveredLink(null);
+						void openLink(href);
+					}}
+					onCopy={(href) => void copyLink(href)}
+					onEnter={() => {
+						if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+						hideTimer.current = null;
+					}}
+					onLeave={scheduleHideLink}
+				/>
+			) : null}
 			{menu.at ? (
 				<ContextMenu
 					at={menu.at}

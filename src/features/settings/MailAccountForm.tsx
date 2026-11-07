@@ -333,7 +333,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 								placeholder="Defaults to the address"
 							/>
 						</div>
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)] sm:col-span-2">
+						<p className="text-sm text-[var(--ink-muted)] sm:col-span-2">
 							The password goes into the operating system keychain and is never shown again.
 						</p>
 					</div>
@@ -341,7 +341,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 					<>
 						{guessed ? (
 							<div className="border-l-2 border-[var(--accent)] pl-3">
-								<p className="text-[length:var(--text-sm)]">
+								<p className="text-sm">
 									{guessed.source === "known"
 										? `Filled in from the known settings for ${guessed.domain}.`
 										: guessed.source === "mx"
@@ -349,7 +349,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 											: `Nothing on file for ${guessed.domain}, so these follow the usual naming. Test them before you save.`}
 								</p>
 								{guessed.note ? (
-									<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<p className="mt-1 text-sm text-[var(--ink-muted)]">
 										{guessed.note}
 									</p>
 								) : null}
@@ -358,7 +358,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 										<Button size="dense" disabled={lookingUp} onClick={() => void lookUp()}>
 											{lookingUp ? "Looking up" : "Look up the real host"}
 										</Button>
-										<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<span className="text-sm text-[var(--ink-muted)]">
 											Asks DNS who handles mail for {guessed.domain}. The only step that
 											leaves this machine.
 										</span>
@@ -367,7 +367,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 								{lookupNote ? (
 									<p
 										data-selectable
-										className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+										className="mt-2 text-sm text-[var(--ink-muted)]"
 									>
 										{lookupNote}
 									</p>
@@ -376,7 +376,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 						) : null}
 
 						<div>
-							<h3 className="text-[length:var(--text-base)] font-[var(--weight-medium)]">Receiving</h3>
+							<h3 className="text-base font-[var(--weight-medium)]">Receiving</h3>
 							<div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
 								<Field
 									label="IMAP server"
@@ -422,7 +422,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 								<p
 									role="status"
 									data-selectable
-									className={`mt-3 border-l-2 pl-3 text-[length:var(--text-sm)] ${
+									className={`mt-3 border-l-2 pl-3 text-sm ${
 										testResult.ok
 											? "border-[var(--ok)] text-[var(--ok)]"
 											: "border-[var(--risk)] text-[var(--risk)]"
@@ -434,8 +434,8 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 						</div>
 
 						<div className="border-t border-[var(--line)] pt-4">
-							<h3 className="text-[length:var(--text-base)] font-[var(--weight-medium)]">Sending</h3>
-							<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<h3 className="text-base font-[var(--weight-medium)]">Sending</h3>
+							<p className="mt-1 text-sm text-[var(--ink-muted)]">
 								Leave the server empty for an account you only read.
 							</p>
 							<div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -482,7 +482,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 								<p
 									role="status"
 									data-selectable
-									className={`mt-3 border-l-2 pl-3 text-[length:var(--text-sm)] ${
+									className={`mt-3 border-l-2 pl-3 text-sm ${
 										smtpResult.ok
 											? "border-[var(--ok)] text-[var(--ok)]"
 											: "border-[var(--risk)] text-[var(--risk)]"
@@ -529,7 +529,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 								placeholder="Defaults to your name in Settings"
 							/>
 						</div>
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)] sm:col-span-2">
+						<p className="text-sm text-[var(--ink-muted)] sm:col-span-2">
 							How far back the first sync goes. Raise it later for older mail.
 						</p>
 					</div>
@@ -539,7 +539,7 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 					<p
 						role="alert"
 						data-selectable
-						className="border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+						className="border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 					>
 						{error}
 					</p>

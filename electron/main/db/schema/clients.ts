@@ -17,6 +17,8 @@ export const clients = sqliteTable(
 		vatNumber: text("vat_number"),
 		/** Free text, Markdown. Rendered like a calendar event's notes. */
 		notes: text("notes"),
+		/** What a client reads in: nl is Dutch with "u", nl-je Dutch with "je", fr, en. */
+		language: text("language").notNull().default("nl"),
 	},
 	(t) => [
 		index("clients_owner_idx").on(t.ownerId),
@@ -168,6 +170,8 @@ export const projects = sqliteTable(
 		dueOn: text("due_on"),
 		/** Integer cents. Never a float, and never a decimal string. */
 		agreedValueCents: integer("agreed_value_cents"),
+		/** Whole minutes the work is expected to take. Null when nobody estimated it. */
+		estimatedMinutes: integer("estimated_minutes"),
 		notes: text("notes"),
 		/** The checkout on this machine. Read, never written by Juno. */
 		localPath: text("local_path"),

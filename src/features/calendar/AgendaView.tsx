@@ -2,14 +2,11 @@ import {
 	useEffect,
 	useLayoutEffect,
 	useRef,
-	useState,
 	type MouseEvent as ReactMouseEvent,
 } from "react";
 import type { CalendarItem, CalendarReminderItem } from "@shared/types";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
-import { useContextMenu } from "../../lib/use-context-menu";
-import { formatDateLong, formatMinutes } from "./dates";
-import { dotTone, itemMenuItems, itemTitle, KIND_LABELS, type Placed } from "./format";
+import { formatDateAgenda, formatMinutes } from "./dates";
+import { dotTone, openItemMenu as openChipMenu, itemTitle, KIND_LABELS, type Placed } from "./format";
 import { useWheelPaging } from "./use-wheel-paging";
 
 type AgendaViewProps = {
@@ -22,6 +19,7 @@ type AgendaViewProps = {
 	onDelete: (item: CalendarItem) => void;
 	onComplete: (item: CalendarReminderItem) => void;
 	onSnooze: (item: CalendarReminderItem) => void;
+	onChanged: () => void;
 	/** A wheel gesture past the top or bottom of the list: page the range. */
 	onStep: (direction: -1 | 1) => void;
 	/**
@@ -33,14 +31,17 @@ type AgendaViewProps = {
 	direction: -1 | 1;
 };
 
+/** The grey line under a title: what it is and who it is for, joined with a middle dot as the design has it. */
 function subtitle(item: CalendarItem): string {
 	switch (item.kind) {
 		case "event":
-			return [item.clientName, item.projectName, item.location].filter(Boolean).join(" / ");
+			return [item.allDay ? "All day" : null, item.clientName, item.projectName, item.location]
+				.filter(Boolean)
+				.join(" \u00b7 ");
 		case "reminder":
-			return [KIND_LABELS.reminder, item.clientName].filter(Boolean).join(" / ");
+			return [item.clientName, KIND_LABELS.reminder].filter(Boolean).join(" \u00b7 ");
 		case "deadline":
-			return `${KIND_LABELS.deadline} / ${item.clientName}`;
+			return [item.clientName, KIND_LABELS.deadline].filter(Boolean).join(" \u00b7 ");
 	}
 }
 
@@ -54,12 +55,11 @@ export function AgendaView({
 	onDelete,
 	onComplete,
 	onSnooze,
+	onChanged,
 	onStep,
 	direction,
 }: AgendaViewProps) {
 	const scroller = useRef<HTMLDivElement>(null);
-	const menu = useContextMenu();
-	const [menuItem, setMenuItem] = useState<CalendarItem | null>(null);
 	const page = useWheelPaging(onStep);
 	const days = dates.filter((date) => (placed.get(date) ?? []).length > 0);
 	const range = dates[0] ?? "";
@@ -91,11 +91,8 @@ export function AgendaView({
 	}, [page]);
 
 	function openItemMenu(event: ReactMouseEvent<HTMLElement>, item: CalendarItem) {
-		setMenuItem(item);
-		menu.open(event);
+		openChipMenu(event, item, { onOpen, onEdit, onDelete, onComplete, onSnooze, onChanged });
 	}
-
-	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete, onComplete, onSnooze }) : [];
 
 	return (
 		<div ref={scroller} className="h-full overflow-y-auto overscroll-contain">
@@ -107,58 +104,42 @@ export function AgendaView({
 					// class on its own would not: an animation restarts only when the
 					// element is new or the animation name itself changes.
 					key={range}
-					className={`w-full px-8 py-4 ${
+					className={`w-full px-8 pb-4 pt-6 ${
 						direction === 1 ? "animate-page-forward" : "animate-page-back"
 					}`}
 				>
-					{days.map((date) => (
-						<section key={date} className="mb-6">
-							<h2
-								className={`sticky top-0 border-b border-[var(--line)] bg-[var(--paper)] pb-1.5 pt-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] ${
-									date === today ? "text-[var(--accent)]" : ""
-								}`}
-							>
-								{formatDateLong(date)}
-								{date === today ? <span className="ml-2 text-[var(--ink-muted)]">today</span> : null}
-							</h2>
-							{(placed.get(date) ?? []).map((p) => (
-								<button
-									key={p.key}
-									type="button"
-									data-opens-panel
-									onClick={() => onOpen(p.item)}
-									onContextMenu={(event) => openItemMenu(event, p.item)}
-									className="flex w-full items-center gap-3 border-b border-[var(--line)] px-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
-									style={{ height: "var(--row-height)" }}
-								>
-									<span className="tabular w-24 shrink-0 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-										{p.dated
-											? "all day"
-											: `${formatMinutes(p.startMinute)}${p.endMinute > p.startMinute ? ` to ${formatMinutes(Math.min(1440, p.endMinute))}` : ""}`}
-									</span>
-									<span className={`h-2 w-2 shrink-0 rounded-[var(--radius-full)] ${dotTone(p.item)}`} aria-hidden />
-									<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{itemTitle(p.item)}</span>
-									<span className="min-w-0 shrink truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-										{subtitle(p.item)}
-									</span>
-								</button>
-							))}
-						</section>
-					))}
+						{days.map((date) => (
+							<section key={date} className="mb-5 border-b border-[var(--line)] pb-5">
+								<h2 className="mb-3 text-base font-[var(--weight-semibold)] text-[var(--ink)]">
+									{formatDateAgenda(date)}
+									{date === today ? " \u00b7 Today" : ""}
+								</h2>
+								<div className="flex flex-col gap-5">
+									{(placed.get(date) ?? []).map((p) => (
+										<button
+											key={p.key}
+											type="button"
+											data-opens-panel
+											onClick={() => onOpen(p.item)}
+											onContextMenu={(event) => openItemMenu(event, p.item)}
+											className="flex w-full items-stretch gap-3 rounded-[var(--radius-sm)] text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+										>
+											<span className={`w-[3px] shrink-0 rounded-[var(--radius-full)] ${dotTone(p.item)}`} aria-hidden />
+											<span className="min-w-0 flex-1">
+												<span className="block truncate text-base">{itemTitle(p.item)}</span>
+												<span className="block truncate text-sm text-[var(--ink-muted)]">{subtitle(p.item)}</span>
+											</span>
+											{p.dated ? null : (
+												<span className="tabular shrink-0 self-center text-base">{formatMinutes(p.startMinute)}</span>
+											)}
+										</button>
+									))}
+								</div>
+							</section>
+						))}
 				</div>
 			)}
 
-			{menu.at && menuItem ? (
-				<ContextMenu
-					at={menu.at}
-					items={menuItems}
-					ariaLabel="Event"
-					onClose={() => {
-						menu.close();
-						setMenuItem(null);
-					}}
-				/>
-			) : null}
 		</div>
 	);
 }

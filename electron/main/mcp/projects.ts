@@ -16,10 +16,12 @@ import type {
 	ProjectLinkInput,
 	ProjectLinkPatch,
 	ProjectPatch,
+	ProjectTimelineKind,
 } from "../../shared/types";
 import * as assets from "../services/project-assets";
 import * as commands from "../services/project-commands";
 import * as links from "../services/project-links";
+import * as timeline from "../services/project-timeline";
 import * as projects from "../services/projects";
 import type { ToolDescriptor } from "./types";
 
@@ -31,6 +33,7 @@ const FIELDS = {
 	starts_on: "startsOn",
 	due_on: "dueOn",
 	agreed_value_cents: "agreedValueCents",
+	estimated_minutes: "estimatedMinutes",
 	notes: "notes",
 	local_path: "localPath",
 } as const;
@@ -65,6 +68,10 @@ const writableProperties: Record<string, unknown> = {
 	agreed_value_cents: {
 		type: ["integer", "null"],
 		description: "Agreed value in whole euro cents. 1250,00 EUR is 125000.",
+	},
+	estimated_minutes: {
+		type: ["integer", "null"],
+		description: "Whole minutes the work is expected to take. 14 h is 840.",
 	},
 	notes: { type: ["string", "null"], description: "Free text notes about the project." },
 	local_path: {
@@ -187,6 +194,49 @@ export const projectTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: (args) => projects.restore(args.project_id as string),
+	},
+	{
+		name: "projects.timeline",
+		title: "A project's timeline",
+		description:
+			"What has happened on a project, newest first: status changes, linked mail, documents sent and signed, time entries, and when it was created. Read from the records themselves.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				project_id: { type: "string", description: "The id of the project." },
+				kinds: {
+					type: "array",
+					items: { type: "string", enum: ["status", "mail", "quote", "time", "contract", "created", "folder"] },
+					description: "Only these kinds. Left out, all of them.",
+				},
+				limit: { type: "integer", description: "At most this many entries. Default 100, at most 300." },
+			},
+			required: ["project_id"],
+			additionalProperties: false,
+		},
+		handler: (args) =>
+			timeline.timeline({
+				projectId: args.project_id as string,
+				...(Array.isArray(args.kinds) ? { kinds: args.kinds as ProjectTimelineKind[] } : {}),
+				...(typeof args.limit === "number" ? { limit: args.limit } : {}),
+			}),
+	},
+	{
+		name: "projects.archive",
+		title: "Archive a project",
+		description:
+			"Sets the status of the project to Archived, adding that status the first time. The project stays where it is and can be given another status later.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { project_id: { type: "string", description: "The id of the project." } },
+			required: ["project_id"],
+			additionalProperties: false,
+		},
+		handler: (args) => projects.archive(args.project_id as string),
 	},
 	{
 		name: "projects.get_storage",

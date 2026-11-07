@@ -61,7 +61,7 @@ export function SnoozeDialog({ reminder, onClose, onSnoozed }: SnoozeDialogProps
 	return (
 		<Dialog title="Snooze reminder" width="narrow" onClose={onClose}>
 			<form onSubmit={submit} noValidate className="mt-5">
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">{reminder.title}</p>
+				<p className="text-dense text-[var(--ink-muted)]">{reminder.title}</p>
 
 				<div className="mt-4 flex flex-wrap gap-2">
 					{CHOICES.map((choice) => {

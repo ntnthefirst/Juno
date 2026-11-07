@@ -86,7 +86,7 @@ export function AddExistingDialog({ scope, name, onClose, onAdded }: AddExisting
 						: "It is not kept under anything now."}
 				</p>
 				{error ? (
-					<p role="alert" data-selectable className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p role="alert" data-selectable className="mt-3 text-sm text-[var(--risk)]">
 						{error}
 					</p>
 				) : null}
@@ -114,7 +114,7 @@ export function AddExistingDialog({ scope, name, onClose, onAdded }: AddExisting
 				className="mt-4 w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 			/>
 			{error ? (
-				<p role="alert" data-selectable className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p role="alert" data-selectable className="mt-3 text-sm text-[var(--risk)]">
 					{error}
 				</p>
 			) : null}

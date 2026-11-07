@@ -28,8 +28,10 @@ import {
 	projectAssets,
 	projectCommands,
 	projectLinks,
+	projectStatusChanges,
 	projects,
 	referenceItems,
+	referenceSets,
 } from "../db/schema";
 import { requireClient } from "./clients";
 import {
@@ -74,6 +76,13 @@ function checkCents(value: number | null | undefined): void {
 	if (value < 0) throw new Error("agreedValueCents cannot be negative.");
 }
 
+function checkMinutes(value: number | null | undefined): void {
+	if (value === null || value === undefined) return;
+	if (!Number.isInteger(value) || value < 0) {
+		throw new Error("estimatedMinutes is a whole number of minutes. 14 h is 840.");
+	}
+}
+
 function checkStatus(statusId: string | null | undefined, db: Db): void {
 	if (!statusId) return;
 	const found = db
@@ -102,6 +111,7 @@ function checkFields(input: ProjectInput | ProjectPatch, db: Db): void {
 	checkDate(input.startsOn, "startsOn");
 	checkDate(input.dueOn, "dueOn");
 	checkCents(input.agreedValueCents);
+	checkMinutes(input.estimatedMinutes);
 	checkLocalPath(input.localPath);
 	if (input.statusId !== undefined) checkStatus(input.statusId, db);
 	if (input.clientId !== undefined && input.clientId !== null) requireClient(input.clientId, db);
@@ -273,6 +283,16 @@ export async function update(id: string, patch: ProjectPatch, db: Db = getDb()):
 	const values: Partial<typeof projects.$inferInsert> = { ...patch, updatedAt: now() };
 	if (patch.name !== undefined) values.name = requireName(patch.name);
 
+	// A project only holds where it is now, so the move is written down for its timeline.
+	const before =
+		patch.statusId !== undefined
+			? db
+					.select({ statusId: projects.statusId })
+					.from(projects)
+					.where(and(eq(projects.id, id), isNull(projects.deletedAt)))
+					.get()
+			: undefined;
+
 	const row = db
 		.update(projects)
 		.set(values)
@@ -280,6 +300,16 @@ export async function update(id: string, patch: ProjectPatch, db: Db = getDb()):
 		.returning()
 		.get();
 	if (!row) throw new Error(`No project with id "${id}" to update. It may have been deleted.`);
+	if (before && before.statusId !== (patch.statusId ?? null)) {
+		db.insert(projectStatusChanges)
+			.values({
+				projectId: id,
+				fromStatusId: before.statusId,
+				toStatusId: patch.statusId ?? null,
+				changedAt: values.updatedAt as string,
+			})
+			.run();
+	}
 	return row as Project;
 }
 
@@ -399,4 +429,58 @@ export async function setCover(
 		.returning()
 		.get();
 	return row as Project;
+}
+
+/* ------------------------------------------------------------------ archive */
+
+/**
+ * Archiving is a status, not a table or a flag: the project keeps its place in
+ * every list and its history, and "Archived" is one more value in the same set
+ * the owner already edits. The shipped set has no such value, so the first
+ * archive adds one, as an ordinary item of the owner's own. Hidden or renamed
+ * by them later, it is still found by its key.
+ */
+export async function archive(id: string, db: Db = getDb()): Promise<Project> {
+	requireProject(id, db);
+
+	const set = db
+		.select({ id: referenceSets.id })
+		.from(referenceSets)
+		.where(and(eq(referenceSets.key, "project_status"), isNull(referenceSets.deletedAt)))
+		.get();
+	if (!set) throw new Error("The project status list is missing, so there is nothing to archive into.");
+
+	let item = db
+		.select({ id: referenceItems.id })
+		.from(referenceItems)
+		.where(
+			and(
+				eq(referenceItems.setId, set.id),
+				eq(referenceItems.key, "archived"),
+				isNull(referenceItems.deletedAt),
+			),
+		)
+		.get();
+	if (!item) {
+		const highest = db
+			.select({ value: sql<number>`coalesce(max(${referenceItems.sortOrder}), -10)` })
+			.from(referenceItems)
+			.where(eq(referenceItems.setId, set.id))
+			.get();
+		item = db
+			.insert(referenceItems)
+			.values({
+				setId: set.id,
+				key: "archived",
+				label: "Archived",
+				tone: null,
+				seedKey: null,
+				isSystem: false,
+				sortOrder: (highest?.value ?? -10) + 10,
+			})
+			.returning({ id: referenceItems.id })
+			.get();
+	}
+
+	return update(id, { statusId: item.id }, db);
 }

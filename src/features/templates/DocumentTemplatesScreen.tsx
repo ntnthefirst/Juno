@@ -3,7 +3,10 @@ import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import type { DocumentTemplate } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { DOCUMENT_SWITCH } from "../../app/screens";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { Button } from "../../components/Button";
+import { Checkbox } from "../../components/Checkbox";
+import { MenuButton } from "../../components/Menu";
 import { Dialog } from "../../components/Dialog";
 import { IconAction } from "../../components/IconAction";
 import { InlineAdd } from "../../components/InlineAdd";
@@ -17,8 +20,9 @@ import {
 	NO_DOCUMENT_TEMPLATE_FILTERS,
 	type DocumentTemplateFilters,
 } from "./document-template-filters";
-import { DocumentCanvasEditor } from "./CanvasTemplateEditor";
-import { paperLabel } from "@shared/paper";
+import { ComponentCanvasEditor, DocumentCanvasEditor } from "./CanvasTemplateEditor";
+import { ComponentsScreen } from "./ComponentsScreen";
+import { paperLabel, pagesOf } from "@shared/paper";
 import { TemplateEditor } from "./TemplateEditor";
 import { UseCanvasTemplateScreen } from "./UseCanvasTemplateScreen";
 import { UseDocumentTemplateScreen } from "./UseDocumentTemplateScreen";
@@ -33,7 +37,10 @@ type View =
 	| { status: "preview"; id: string }
 	/** `flow` for a template just made from a Word file, which lands on one page. */
 	| { status: "edit"; id: string; flow?: boolean }
-	| { status: "use"; id: string };
+	| { status: "use"; id: string }
+	/** The components for templates, and one of them in the editor. `from` is the template it was opened from. */
+	| { status: "components" }
+	| { status: "component"; id: string; from: string | null };
 
 function matches(template: DocumentTemplate, needle: string): boolean {
 	return `${template.name} ${template.description ?? ""}`.toLowerCase().includes(needle);
@@ -141,18 +148,26 @@ export function DocumentTemplatesScreen() {
 	const allSelected = shown.length > 0 && shown.every((row) => selectedIds.includes(row.id));
 	const someSelected = selectedIds.length > 0 && !allSelected;
 
-	const selected = view.status !== "list" && load.status === "ready"
-		? load.rows.find((row) => row.id === view.id) ?? null
-		: null;
+	const ofTemplate = view.status === "preview" || view.status === "edit" || view.status === "use" ? view : null;
+	const selected = ofTemplate && load.status === "ready" ? load.rows.find((row) => row.id === ofTemplate.id) ?? null : null;
 
 	// A row can disappear out from under an open view (removed elsewhere); the
 	// list is the only place left to be. Derived at render time rather than
 	// reset through an effect, since it is a plain function of state already
 	// in hand and needs no synchronisation with anything external.
-	const effectiveView: View = view.status !== "list" && load.status === "ready" && !selected ? { status: "list" } : view;
+	const effectiveView: View = ofTemplate && load.status === "ready" && !selected ? { status: "list" } : view;
 
+	const editedComponent = effectiveView.status === "component" ? effectiveView : null;
 	usePublishBreadcrumb(
-		!selected
+		effectiveView.status === "components"
+			? [{ label: "Document templates", onSelect: () => setView({ status: "list" }) }, { label: "Components" }]
+			: editedComponent
+				? [
+						{ label: "Document templates", onSelect: () => setView({ status: "list" }) },
+						{ label: "Components", onSelect: () => setView({ status: "components" }) },
+						{ label: "Edit" },
+					]
+				: !selected
 			? []
 			: effectiveView.status === "preview"
 				? [{ label: "Document templates", onSelect: () => setView({ status: "list" }) }, { label: selected.name }]
@@ -184,6 +199,30 @@ export function DocumentTemplatesScreen() {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [effectiveView.status]);
 
+	if (effectiveView.status === "components") {
+		return (
+			<div className="h-full min-h-0">
+				<ComponentsScreen
+					onOpen={(id) => setView({ status: "component", id, from: null })}
+					onBack={() => setView({ status: "list" })}
+				/>
+			</div>
+		);
+	}
+
+	if (editedComponent) {
+		// Back goes where the person came from: the template that placed it, or the list of components.
+		const back = () => {
+			refresh();
+			setView(editedComponent.from ? { status: "edit", id: editedComponent.from } : { status: "components" });
+		};
+		return (
+			<div className="h-full min-h-0">
+				<ComponentCanvasEditor key={editedComponent.id} templateId={editedComponent.id} onSaved={refresh} onBack={back} />
+			</div>
+		);
+	}
+
 	if (effectiveView.status === "edit" && selected && selected.canvas) {
 		return (
 			<div className="h-full min-h-0">
@@ -192,6 +231,7 @@ export function DocumentTemplatesScreen() {
 					templateId={selected.id}
 					flowOnOpen={effectiveView.flow === true}
 					onSaved={refresh}
+					onOpenComponent={(id) => setView({ status: "component", id, from: selected.id })}
 					onBack={() => setView({ status: "preview", id: selected.id })}
 				/>
 			</div>
@@ -262,11 +302,18 @@ export function DocumentTemplatesScreen() {
 				<div className="flex items-center gap-3">
 					<SectionSwitch sections={DOCUMENT_SWITCH} current="document-templates" label="Document views" />
 					{load.status === "ready" ? (
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<span className="text-sm text-[var(--ink-muted)]">
 							{shown.length} {shown.length === 1 ? "template" : "templates"}
 						</span>
 					) : null}
 					<span className="ml-auto" />
+					<TitleBarSlot side="overflow">
+						<MenuButton
+							size="dense"
+							ariaLabel="More template actions"
+							items={[{ id: "components", label: "Components", icon: "templates", onSelect: () => setView({ status: "components" }) }]}
+						/>
+					</TitleBarSlot>
 					<Button size="dense" disabled={importing} onClick={() => void importWord()}>
 						{importing ? "Importing" : "Import Word file"}
 					</Button>
@@ -277,14 +324,11 @@ export function DocumentTemplatesScreen() {
 						onSubmit={(name) => void create(name)}
 					/>
 				</div>
-				<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						The contracts and letters you make again and again, laid out on paper and printed to PDF. Mark one as reviewed once you have read its text.
-					</p>
 				{createError ? (
 					<p
 						role="alert"
 						data-selectable
-						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 					>
 						{createError}
 					</p>
@@ -293,7 +337,7 @@ export function DocumentTemplatesScreen() {
 					<p
 						role="alert"
 						data-selectable
-						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+						className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 					>
 						{removeError}
 					</p>
@@ -309,7 +353,7 @@ export function DocumentTemplatesScreen() {
 							onClearSelection={() => setSelectedIds([])}
 						/>
 						{selectedIds.length > 0 ? (
-							<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
+							<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
 								{selectedIds.length} selected
 							</span>
 						) : null}
@@ -355,7 +399,7 @@ export function DocumentTemplatesScreen() {
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not load your document templates.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{load.message}
 						</p>
 					</div>
@@ -364,7 +408,7 @@ export function DocumentTemplatesScreen() {
 				) : shown.length === 0 ? (
 					<p className="text-[var(--ink-muted)]">Nothing matches.</p>
 				) : (
-					<ul>
+					<ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6 pt-6">
 						{shown.map((row) => (
 							<DocumentTemplateRow
 								key={row.id}
@@ -385,7 +429,7 @@ export function DocumentTemplatesScreen() {
 
 			{confirmRemove ? (
 				<Dialog title="Delete document templates" onClose={() => setConfirmRemove(null)} width="narrow">
-					<p className="text-[length:var(--text-dense)]">
+					<p className="text-dense">
 						{confirmRemove.length === 1
 							? "1 document template will be deleted. This cannot be undone."
 							: `${confirmRemove.length} document templates will be deleted. This cannot be undone.`}
@@ -418,56 +462,66 @@ type DocumentTemplateRowProps = {
 	onSelect: (id: string) => void;
 };
 
+/** The sheet a card shows. A stand-in drawn from the paper's shape, not a render, so a list of them costs nothing. */
+function PaperThumb({ landscape }: { landscape: boolean }) {
+	return (
+		<span
+			aria-hidden
+			className={`flex flex-col gap-[6px] rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] p-3 ${
+				landscape ? "h-[110px] w-[150px]" : "h-[148px] w-[110px]"
+			}`}
+		>
+			<span className="h-1.5 w-1/2 rounded-full bg-[var(--accent-soft)]" />
+			<span className="h-1.5 w-full rounded-full bg-[var(--accent-soft)]" />
+			<span className="h-1.5 w-5/6 rounded-full bg-[var(--accent-soft)]" />
+			<span className="h-1.5 w-full rounded-full bg-[var(--accent-soft)]" />
+			<span className="h-1.5 w-2/3 rounded-full bg-[var(--accent-soft)]" />
+		</span>
+	);
+}
+
 function DocumentTemplateRow({ template, checked, hasSelection, onToggle, onSelect }: DocumentTemplateRowProps) {
-	const count = template.placeholders.length;
 	const reviewed = template.reviewedAt !== null;
+	const pages = template.canvas ? pagesOf(template.canvas.layout).length : 1;
+	const inputs = template.canvas ? template.inputs.length : template.placeholders.length;
+	const meta = [
+		template.canvas ? paperLabel(template.canvas.paper).split(" ")[0] : "HTML",
+		`${pages} ${pages === 1 ? "page" : "pages"}`,
+		`${inputs} ${inputs === 1 ? "input" : "inputs"}`,
+	].join(" · ");
 
 	return (
-		<li className="border-b border-[var(--line)]">
-			<div
-				className={`group flex items-center gap-2 rounded-[var(--radius-md)] px-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-					checked ? "bg-[var(--sunken)]" : "hover:bg-[var(--hover)]"
+		<li className="group relative">
+			<button
+				type="button"
+				onClick={() => (hasSelection ? onToggle(template.id) : onSelect(template.id))}
+				className={`block w-full overflow-hidden rounded-[var(--radius-lg)] border text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
+					checked ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)] bg-[var(--surface)] hover:border-[var(--line-strong)]"
 				}`}
-				style={{ minHeight: "var(--row-height)" }}
 			>
-				<input
-					type="checkbox"
-					checked={checked}
-					onChange={() => onToggle(template.id)}
-					aria-label={`Select ${template.name}`}
-					className={`h-4 w-4 flex-none accent-[var(--accent)] ${
-						hasSelection ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-					}`}
-				/>
-				<button
-					type="button"
-					onClick={() => (hasSelection ? onToggle(template.id) : onSelect(template.id))}
-					className="min-w-0 flex-1 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-				>
+				<span className="flex h-[180px] items-center justify-center bg-[var(--sunken)]">
+					<PaperThumb landscape={template.canvas?.paper.orientation === "landscape"} />
+				</span>
+				<span className="block px-4 py-3">
 					<span className="flex items-center gap-2">
-						<span className="truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
-							{template.name}
-						</span>
+						<span className="truncate text-base">{template.name}</span>
 						{reviewed ? null : (
-							<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--risk)]">
+							<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--risk)]">
 								Not reviewed
 							</span>
 						)}
 					</span>
-					{template.description ? (
-						<span className="mt-0.5 block truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-							{template.description}
-						</span>
-					) : null}
-					<span className="tabular mt-0.5 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-						Version {template.version}
-						{"  ·  "}
-						{template.canvas
-							? `${paperLabel(template.canvas.paper).split(",")[0]}, ${template.inputs.length} ${template.inputs.length === 1 ? "input" : "inputs"}`
-							: `${count} ${count === 1 ? "placeholder" : "placeholders"}`}
-					</span>
-				</button>
-			</div>
+					<span className="tabular block text-sm text-[var(--ink-muted)]">{meta}</span>
+				</span>
+			</button>
+			<span className="absolute top-3 left-3">
+				<Checkbox
+					checked={checked}
+					onChange={() => onToggle(template.id)}
+					aria-label={`Select ${template.name}`}
+					className={`bg-[var(--surface)] ${hasSelection ? "" : "opacity-0 group-hover:opacity-100 has-[:focus-visible]:opacity-100"}`}
+				/>
+			</span>
 		</li>
 	);
 }
@@ -546,7 +600,7 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 					<button
 						type="button"
 						onClick={onBack}
-						className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						<ArrowLeftIcon width={16} height={16} strokeWidth={1.8} aria-hidden />
 						Back
@@ -554,11 +608,11 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 					<span aria-hidden className="text-[var(--ink-faint)]">
 						/
 					</span>
-					<h1 className="min-w-0 truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+					<h1 className="min-w-0 truncate text-h3">
 						{template.name}
 					</h1>
 					{template.reviewedAt === null ? (
-						<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] text-[var(--risk)]">
+						<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--risk)]">
 							Not reviewed
 						</span>
 					) : null}
@@ -574,21 +628,21 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
 				<div className="w-full">
 					{template.description ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">{template.description}</p>
+						<p className="text-sm text-[var(--ink-muted)]">{template.description}</p>
 					) : null}
 
 					<section className="mt-6">
-						<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+						<h2 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 							Asks for
 						</h2>
 						{template.inputs.length === 0 ? (
-							<p className="mt-3 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+							<p className="mt-3 text-dense text-[var(--ink-muted)]">
 								{template.canvas ? "Nothing. It prints as it is." : "Nothing beyond a client and a project."}
 							</p>
 						) : (
 							<ul className="mt-3 flex flex-col gap-1">
 								{template.inputs.map((input) => (
-									<li key={input.key} className="text-[length:var(--text-dense)] text-[var(--ink)]">
+									<li key={input.key} className="text-dense text-[var(--ink)]">
 										{input.label || input.key}
 										{input.required ? <span className="text-[var(--ink-muted)]"> (required)</span> : null}
 									</li>
@@ -598,12 +652,12 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 					</section>
 
 					<section className="mt-8">
-						<h2 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+						<h2 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 							Preview
 						</h2>
 
 						{template.reviewedAt === null ? (
-							<p className="mt-3 max-w-[62ch] border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+							<p className="mt-3 max-w-[62ch] border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 								Nobody has checked this text. A document generated from it is marked as a specimen and
 								cannot be signed.
 							</p>
@@ -615,7 +669,7 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 									fileKey={printed ? String(printed.stamp) : null}
 									read={readPrinted}
 									caption={
-										<span className="truncate text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<span className="truncate text-micro text-[var(--ink-muted)]">
 											{paperLabel(template.canvas.paper)}
 											{printed && printed.missing.length > 0 ? `. No value for: ${printed.missing.join(", ")}` : ""}
 										</span>
@@ -628,18 +682,18 @@ function TemplatePreview({ template, onBack, onEdit, onUse }: TemplatePreviewPro
 								/>
 							</div>
 						) : preview.status === "loading" ? (
-							<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">Rendering.</p>
+							<p className="mt-4 text-dense text-[var(--ink-muted)]">Rendering.</p>
 						) : preview.status === "error" ? (
 							<p
 								data-selectable
-								className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+								className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 							>
 								{preview.message}
 							</p>
 						) : (
 							<>
 								{preview.missing.length > 0 ? (
-									<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<p className="mt-3 text-sm text-[var(--ink-muted)]">
 										Missing here: {preview.missing.join(", ")}
 									</p>
 								) : null}

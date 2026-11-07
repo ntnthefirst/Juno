@@ -146,12 +146,12 @@ export function ImportFlow({ items, clientId, projectId, onDone }: ImportFlowPro
 
 	return (
 		<Dialog title={heading} onClose={cancelAll}>
-			<p data-selectable className="mt-2 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p data-selectable className="mt-2 truncate text-sm text-[var(--ink-muted)]">
 				{analysis.fileName}
 			</p>
 
 			{analysis.matches.length > 0 ? (
-				<p className="mt-4 text-[length:var(--text-base)]">
+				<p className="mt-4 text-base">
 					This file looks like a document you already have. Add it as a new version, or keep it as a
 					document of its own.
 				</p>
@@ -176,7 +176,7 @@ export function ImportFlow({ items, clientId, projectId, onDone }: ImportFlowPro
 						/>
 						<span className="min-w-0">
 							<span className="block truncate">New version of {match.title}</span>
-							<span className="block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="block text-sm text-[var(--ink-muted)]">
 								{match.clientName ?? "Not linked to a client"}. {reasonOf(match)}
 							</span>
 						</span>
@@ -203,7 +203,7 @@ export function ImportFlow({ items, clientId, projectId, onDone }: ImportFlowPro
 
 			{error ? (
 				<div className="mt-4 border-l-2 border-[var(--risk)] pl-4">
-					<p data-selectable className="text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p data-selectable className="text-sm text-[var(--risk)]">
 						{error}
 					</p>
 				</div>

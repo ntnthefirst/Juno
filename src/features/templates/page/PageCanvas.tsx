@@ -205,11 +205,11 @@ function PageView({
 			</div>
 
 			{overrun ? (
-				<p role="alert" className="max-w-[210mm] text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p role="alert" className="max-w-[210mm] text-sm text-[var(--risk)]">
 					Page {pageNumber} overruns. Content past the bottom of the page will not be printed.
 				</p>
 			) : (
-				<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Page {pageNumber}</p>
+				<p className="text-sm text-[var(--ink-muted)]">Page {pageNumber}</p>
 			)}
 		</div>
 	);

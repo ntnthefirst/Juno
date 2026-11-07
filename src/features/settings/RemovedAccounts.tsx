@@ -104,7 +104,7 @@ export function RemovedAccounts({ refreshKey, onDone }: RemovedAccountsProps) {
 						>
 							<div className="min-w-0 flex-1">
 								<div className="truncate font-[var(--weight-medium)]">{account.email}</div>
-								<div className="tabular mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<div className="tabular mt-0.5 truncate text-sm text-[var(--ink-muted)]">
 									{contents(account)}
 									{account.attachmentBytes > 0 ? ` (${formatBytes(account.attachmentBytes)} of files)` : ""}
 								</div>

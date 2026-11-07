@@ -28,6 +28,7 @@ import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { automationRuns, automations } from "../db/schema";
 import * as actions from "./agent-actions";
+import { isForbiddenInAutomation } from "./agent-permissions";
 import { todayIsoDate } from "./document-context";
 
 type Row = typeof automations.$inferSelect;
@@ -177,6 +178,9 @@ function checkSteps(steps: AutomationStep[]): AutomationStep[] {
 		const tool = String(step.tool ?? "").trim();
 		if (!tool) throw new Error(`Step ${index + 1} has no tool.`);
 		if (!known.hasTool(tool)) throw new Error(`Step ${index + 1} names "${tool}", which is not a tool.`);
+		if (isForbiddenInAutomation(tool)) {
+			throw new Error(`Step ${index + 1} names "${tool}". An automation cannot add, change or remove a mailbox rule.`);
+		}
 		const args = step.args ?? {};
 		if (typeof args !== "object" || Array.isArray(args)) {
 			throw new Error(`Step ${index + 1} needs its arguments as an object.`);

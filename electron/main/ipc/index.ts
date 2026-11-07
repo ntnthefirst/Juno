@@ -16,18 +16,24 @@ import { registerClientEmailsIpc } from "./client-emails";
 import { registerClientLinksIpc } from "./client-links";
 import { registerClientPhonesIpc } from "./client-phones";
 import { registerClientsIpc } from "./clients";
+import { registerDesktopIpc } from "./desktop";
 import { registerDocumentsIpc } from "./documents";
 import { registerContactsIpc } from "./contacts";
 import { registerGeocodingIpc } from "./geocoding";
 import { registerLockIpc } from "./lock";
 import { registerMailIpc } from "./mail";
+import { registerMenuIpc } from "./menu";
+import { registerNotesIpc } from "./notes";
 import { registerProjectsIpc } from "./projects";
 import { registerReferenceIpc } from "./reference";
 import { registerRemindersIpc } from "./reminders";
 import { registerSigningCertificateIpc } from "./signing-certificate";
+import { registerRecentIpc } from "./recent";
 import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
+import { registerSuggestionsIpc } from "./suggestions";
 import { registerTemplatesIpc } from "./templates";
+import { registerTimeIpc } from "./time";
 import { registerUpdatesIpc } from "./updates";
 import { registerWindowIpc } from "./window";
 
@@ -39,6 +45,7 @@ export function registerAllIpc(): void {
 	registerLockIpc();
 	registerSettingsIpc();
 	registerUpdatesIpc();
+	registerDesktopIpc();
 
 	registerClientsIpc();
 	registerClientEmailsIpc();
@@ -47,7 +54,10 @@ export function registerAllIpc(): void {
 	registerClientAddressesIpc();
 	registerContactsIpc();
 	registerProjectsIpc();
+	registerTimeIpc();
+	registerNotesIpc();
 	registerSearchIpc();
+	registerRecentIpc();
 	registerReferenceIpc();
 	registerBackupIpc();
 	registerTemplatesIpc();
@@ -55,6 +65,8 @@ export function registerAllIpc(): void {
 	registerSigningCertificateIpc();
 	registerRemindersIpc();
 	registerMailIpc();
+	registerMenuIpc();
+	registerSuggestionsIpc();
 	registerCalendarIpc();
 	registerGeocodingIpc();
 	registerAgentIpc();

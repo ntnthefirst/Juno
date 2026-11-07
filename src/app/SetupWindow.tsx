@@ -27,7 +27,7 @@ export function SetupWindow() {
 					paddingRight: overlayGutter.right,
 				}}
 			>
-				<span className="text-[length:var(--text-sm)] font-[var(--weight-semibold)]">Set up Juno</span>
+				<span className="text-sm font-[var(--weight-semibold)]">Set up Juno</span>
 			</header>
 
 			<div className="min-h-0 flex-1">

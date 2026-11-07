@@ -19,14 +19,20 @@ const OPTIONS: Option[] = [
 type AppearanceSectionProps = {
 	theme: ThemeSetting;
 	onChange: (next: ThemeSetting) => void;
+	/** The line under the title. Setup says one more sentence than the settings page does. */
+	description?: string;
 };
 
-export function AppearanceSection({ theme, onChange }: AppearanceSectionProps) {
+export function AppearanceSection({
+	theme,
+	onChange,
+	description = "System follows your operating system.",
+}: AppearanceSectionProps) {
 	return (
 		<Section
 			title="Appearance"
 			anchor="appearance"
-			description="System follows your operating system."
+			description={description}
 		>
 			<div role="radiogroup" aria-label="Theme" className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-5 p-0.5">
 				{OPTIONS.map((option) => (
@@ -76,10 +82,10 @@ function ThemeCard({ option, selected, onSelect }: ThemeCardProps) {
 				) : null}
 				<span
 					className={[
-						"text-[length:var(--text-dense)]",
+						"text-dense",
 						selected
 							? "font-[var(--weight-medium)] text-[var(--accent)]"
-							: "text-[var(--ink-muted)]",
+							: "text-[var(--ink)]",
 					].join(" ")}
 				>
 					{option.label}
@@ -104,7 +110,7 @@ function Preview({ variant }: { variant: ThemeSetting }) {
 		// Split down the middle, which is the only honest picture of "whichever
 		// the machine is using". Each half is the full window, clipped.
 		return (
-			<span className="relative block aspect-[164/104] w-full">
+			<span className="relative block aspect-[180/113] w-full">
 				<span className="absolute inset-0">
 					<Window tone="light" />
 				</span>
@@ -118,7 +124,7 @@ function Preview({ variant }: { variant: ThemeSetting }) {
 		);
 	}
 	return (
-		<span className="block aspect-[164/104] w-full">
+		<span className="block aspect-[180/113] w-full">
 			<Window tone={variant === "dark" ? "dark" : "light"} />
 		</span>
 	);
@@ -126,52 +132,38 @@ function Preview({ variant }: { variant: ThemeSetting }) {
 
 type Tone = "light" | "dark";
 
-const TONES: Record<Tone, { paper: string; surface: string; line: string; mark: string }> = {
+const TONES: Record<Tone, { paper: string; surface: string; line: string; mark: string; border: string }> = {
 	light: {
 		paper: "bg-[var(--swatch-light-paper)]",
 		surface: "bg-[var(--swatch-light-surface)]",
 		line: "bg-[var(--swatch-light-line)]",
 		mark: "bg-[var(--swatch-light-mark)]",
+		border: "border-[var(--swatch-light-line)]",
 	},
 	dark: {
 		paper: "bg-[var(--swatch-dark-paper)]",
 		surface: "bg-[var(--swatch-dark-surface)]",
 		line: "bg-[var(--swatch-dark-line)]",
 		mark: "bg-[var(--swatch-dark-mark)]",
+		border: "border-[var(--swatch-dark-line)]",
 	},
 };
 
 function Window({ tone }: { tone: Tone }) {
 	const c = TONES[tone];
 	return (
-		<span className={`flex h-full w-full flex-col ${c.paper}`}>
-			<span className={`flex h-[14px] flex-none items-center gap-1 px-2 ${c.surface}`}>
-				<Bar className={c.mark} width={26} />
-			</span>
-			<span className={`h-px flex-none ${c.line}`} />
-			<span className="flex min-h-0 flex-1">
-				<span className={`flex w-[42px] flex-none flex-col gap-[5px] p-2 ${c.paper}`}>
-					<Bar className={c.mark} width={20} />
-					<Bar className={c.line} width={26} />
-					<Bar className={c.line} width={22} />
-					<Bar className={c.line} width={26} />
-				</span>
-				<span className={`flex min-w-0 flex-1 flex-col gap-[5px] p-2 ${c.paper}`}>
-					{[0, 1, 2, 3].map((row) => (
-						<span
-							key={row}
-							className={`flex h-[13px] flex-none items-center gap-1.5 rounded-[2px] px-1.5 ${c.surface}`}
-						>
-							<span className={`h-[5px] w-[5px] flex-none rounded-full ${c.mark}`} />
-							<Bar className={c.line} width={row === 3 ? 34 : 52} />
-						</span>
-					))}
-				</span>
-			</span>
+		<span className={`flex h-full w-full flex-col gap-[7px] p-[10px] ${c.paper}`}>
+			<Bar className={c.line} width={26} />
+			{[0, 1, 2, 3].map((row) => (
+				<span
+					key={row}
+					className={`block h-[13px] flex-none rounded-[var(--radius-full)] border ${c.surface} ${c.border}`}
+				/>
+			))}
 		</span>
 	);
 }
 
 function Bar({ className, width }: { className: string; width: number }): ReactNode {
-	return <span className={`block h-[3px] rounded-full ${className}`} style={{ width }} />;
+	return <span className={`block h-[3px] rounded-[var(--radius-full)] ${className}`} style={{ width }} />;
 }

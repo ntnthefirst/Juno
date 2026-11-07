@@ -4,7 +4,35 @@
  */
 import { describe, expect, it } from "vitest";
 import { normaliseSubject, safeFilename, snippetOf } from "./mail-parse";
-import { extractStyles, sanitiseHtml, textDocument } from "./mail-sanitise";
+import { extractStyles, frameCsp, sanitiseHtml, textDocument } from "./mail-sanitise";
+
+describe("link reporting from the frame", () => {
+	it("posts the kept address to the window and gives the frame no new permission", () => {
+		const { document } = sanitiseHtml('<a href="https://obet.be/x">Bekijk</a>');
+		expect(document).toContain("juno.mail.link");
+		expect(document).toContain("juno.mail.linkClick");
+		expect(textDocument("hallo")).toContain("juno.mail.link");
+		// The only script allowed is the nonced one, and the policy is unchanged.
+		const policy = frameCsp(false, "abc");
+		expect(policy).toContain("default-src 'none'");
+		expect(policy).toContain("script-src 'nonce-abc'");
+		expect(policy).toContain("form-action 'none'");
+		expect(policy).not.toContain("connect-src");
+		expect(policy).not.toContain("unsafe-eval");
+		// The script never navigates: no location, window.open or href writes.
+		expect(document).not.toMatch(/window.open|locations*=|location.hrefs*=/);
+	});
+});
+
+describe("find inside the frame", () => {
+	it("listens to its parent only and highlights with mark elements", () => {
+		const { document } = sanitiseHtml("<p>Nieuw dit najaar</p>");
+		expect(document).toContain("juno.mail.find");
+		expect(document).toContain("event.source !== parent");
+		expect(document).toContain("mark.juno-find");
+		expect(textDocument("najaar")).toContain("juno.mail.findResult");
+	});
+});
 
 describe("sanitiseHtml", () => {
 	it("drops scripts, frames, forms and event handlers", () => {

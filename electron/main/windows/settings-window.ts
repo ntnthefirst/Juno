@@ -15,8 +15,8 @@ import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
  * column of fields beside a navigation column, so there is nothing a wider
  * window would show. It is as tall as a small laptop screen allows.
  */
-const WIDTH = 980;
-const HEIGHT = 700;
+const WIDTH = 888;
+const HEIGHT = 664;
 
 export function createSettingsWindow(
 	parent: BrowserWindow,
@@ -34,7 +34,7 @@ export function createSettingsWindow(
 		fullscreenable: false,
 		show: false,
 		icon: windowIcon(),
-		backgroundColor: "#f6f6fa",
+		backgroundColor: "#f5f5f7",
 		...titleBarOptions(),
 		webPreferences: {
 			// dist-electron/main/windows -> dist-electron/preload.js

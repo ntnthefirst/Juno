@@ -83,7 +83,7 @@ export function LinkProjectDialog({ thread, onClose, onLinked }: LinkProjectDial
 				className="mt-4 w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 			/>
 			{error ? (
-				<p role="alert" data-selectable className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p role="alert" data-selectable className="mt-3 text-sm text-[var(--risk)]">
 					{error}
 				</p>
 			) : null}
@@ -112,7 +112,7 @@ export function LinkProjectDialog({ thread, onClose, onLinked }: LinkProjectDial
 								].join(" ")}
 							>
 								<span className="truncate">{project.name}</span>
-								<span className="shrink-0 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="shrink-0 text-sm text-[var(--ink-muted)]">
 									{project.clientName ?? "Your own"}
 								</span>
 							</button>

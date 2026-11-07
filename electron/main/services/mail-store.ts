@@ -17,6 +17,7 @@ import {
 	clientEmails,
 	clients,
 	contacts,
+	mailAccounts,
 	mailAttachments,
 	mailFolders,
 	mailMessages,
@@ -662,4 +663,26 @@ export function countPendingBodies(db: Db, folderId: string): number {
 		)
 		.get();
 	return row?.n ?? 0;
+}
+
+/**
+ * The moment the mailbox rules started to apply to an account, set the first
+ * time it is asked for. The first sync asks before it pulls anything, so every
+ * message already in the mailbox is older than this and is history: a rule runs
+ * on mail that arrives after the account was connected, not on the years that
+ * were already there. The migration sets it for accounts that existed already.
+ */
+export function ensureRulesSince(db: Db, accountId: string): string {
+	const row = db
+		.select({ rulesSince: mailAccounts.rulesSince })
+		.from(mailAccounts)
+		.where(eq(mailAccounts.id, accountId))
+		.get();
+	if (row?.rulesSince) return row.rulesSince;
+	const stamp = now();
+	db.update(mailAccounts)
+		.set({ rulesSince: stamp })
+		.where(and(eq(mailAccounts.id, accountId), isNull(mailAccounts.rulesSince)))
+		.run();
+	return stamp;
 }

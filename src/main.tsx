@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { EditMenu } from "./components/EditMenu";
 import { SettingsWindow } from "./app/SettingsWindow";
+import { NewRecordWindow } from "./app/NewRecordWindow";
 import { SetupWindow } from "./app/SetupWindow";
 import { viewFromHash } from "./lib/window-view";
 import "./styles/global.css";
@@ -11,7 +12,7 @@ const root = document.getElementById("root");
 if (!root) throw new Error("index.html is missing #root");
 
 /**
- * Three windows, one bundle, one entry.
+ * Four windows, one bundle, one entry.
  *
  * The window says which shell it wants in its own URL, which the main process
  * set when it created the window. Reading it here rather than asking over IPC
@@ -29,6 +30,8 @@ createRoot(root).render(
 			<SettingsWindow initialSection={view.section} />
 		) : view.kind === "setup" ? (
 			<SetupWindow />
+		) : view.kind === "new" ? (
+			<NewRecordWindow record={view.record} prefill={view.prefill} />
 		) : (
 			<App />
 		)}

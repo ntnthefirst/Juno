@@ -4,6 +4,8 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
 import { Select } from "../../components/Select";
+import { Toggle } from "../../components/Toggle";
+import { isMac } from "../../lib/platform";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
 
@@ -16,7 +18,8 @@ const IDLE_OPTIONS = [
 	{ value: "60", label: "After 1 hour" },
 ];
 
-type Mode = "setup" | "change" | "disable";
+export type LockMode = "setup" | "change" | "disable";
+type Mode = LockMode;
 
 export function LockSection() {
 	const [state, setState] = useState<LockState | null>(null);
@@ -65,43 +68,45 @@ export function LockSection() {
 	}
 
 	const configured = state?.configured ?? false;
+	const account = isMac ? "Mac user account" : "Windows account";
 
 	return (
 		<Section
 			title="Lock"
 			anchor="lock"
-			action={
-				configured ? (
-					<div className="flex gap-1">
-						<Button size="dense" onClick={() => setMode("change")}>
-							Change
-						</Button>
-						<Button size="dense" variant="danger" onClick={() => setMode("disable")}>
-							Turn off
-						</Button>
-					</div>
-				) : (
-					<Button size="dense" variant="primary" onClick={() => setMode("setup")}>
-						Set up a lock
-					</Button>
-				)
-			}
-			description="The lock screen does not protect the database file on disk."
+			lead
+			description={`Three layers: your ${account}, the lock screen and, later, database encryption.`}
 		>
-			<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-				{configured
-					? `A ${state?.method === "pin" ? "PIN" : "passphrase"} is set.`
-					: "No lock is set. Juno opens straight to your records."}
-			</p>
+			{/*
+				The sentence .claude/rules/security.md section 8 asks for: the lock screen
+				protects against someone at the keyboard and says nothing about the file.
+			*/}
+			<Toggle
+				label="Lock screen"
+				description="The lock screen stops someone at your keyboard. It does not protect the file on disk."
+				checked={configured}
+				disabled={state === null}
+				onChange={(next) => setMode(next ? "setup" : "disable")}
+			/>
 
 			{configured && settings ? (
-				<div className="mt-5 flex max-w-[420px] flex-col gap-4">
-					<Select
-						label="Lock when idle"
-						value={String(settings.idleMinutes)}
-						onChange={(value) => void patchSettings({ idleMinutes: Number(value) })}
-						options={IDLE_OPTIONS}
-					/>
+				<div className="mt-5 flex flex-col gap-4">
+					<div className="flex items-center justify-between gap-4">
+						<p className="text-dense text-[var(--ink-muted)]">
+							{`A ${state?.method === "pin" ? "PIN" : "passphrase"} is set.`}
+						</p>
+						<Button size="dense" onClick={() => setMode("change")}>
+							Change {state?.method === "pin" ? "PIN" : "passphrase"}
+						</Button>
+					</div>
+					<div className="max-w-[420px]">
+						<Select
+							label="Lock when idle"
+							value={String(settings.idleMinutes)}
+							onChange={(value) => void patchSettings({ idleMinutes: Number(value) })}
+							options={IDLE_OPTIONS}
+						/>
+					</div>
 					<Toggle
 						label="Lock when the computer sleeps or the screen locks"
 						checked={settings.lockOnSleep}
@@ -132,41 +137,22 @@ export function LockSection() {
 	);
 }
 
-function Toggle({
-	label,
-	checked,
-	onChange,
-}: {
-	label: string;
-	checked: boolean;
-	onChange: (checked: boolean) => void;
-}) {
-	return (
-		<label className="flex cursor-default items-center gap-3 text-[length:var(--text-base)]">
-			<input
-				type="checkbox"
-				checked={checked}
-				onChange={(event) => onChange(event.target.checked)}
-				className="h-4 w-4 accent-[var(--accent)]"
-			/>
-			{label}
-		</label>
-	);
-}
-
-function LockDialog({
+export function LockDialog({
 	mode,
 	method,
+	initialKind,
 	onClose,
 	onDone,
 }: {
 	mode: Mode;
 	method: LockState["method"];
+	/** What a new lock starts as, for a caller that has already asked. */
+	initialKind?: "passphrase" | "pin";
 	onClose: () => void;
 	onDone: () => void;
 }) {
 	const [kind, setKind] = useState<"passphrase" | "pin">(
-		method === "pin" ? "pin" : "passphrase",
+		initialKind ?? (method === "pin" ? "pin" : "passphrase"),
 	);
 	const [current, setCurrent] = useState("");
 	const [next, setNext] = useState("");
@@ -215,7 +201,7 @@ function LockDialog({
 		<Dialog title={title} onClose={onClose} width="narrow">
 			<form onSubmit={submit} className="flex flex-col gap-4">
 				{mode === "disable" ? (
-					<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="text-sm text-[var(--ink-muted)]">
 						Juno will open straight to your records after this.
 					</p>
 				) : null}
@@ -262,13 +248,13 @@ function LockDialog({
 				) : null}
 
 				{error ? (
-					<p role="alert" className="text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p role="alert" className="text-sm text-[var(--risk)]">
 						{error}
 					</p>
 				) : null}
 
 				{needsNew ? (
-					<p className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+					<p className="text-micro text-[var(--ink-muted)]">
 						Juno stores a one-way check of this, never the value itself. There is no way to
 						recover it, and no way to reset it from inside the app.
 					</p>

@@ -5,7 +5,7 @@ import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { approve, configureAgentActions, request, resetForTests } from "./agent-actions";
-import { list, purgeOldEvents, record, type RecordInput } from "./agent-audit";
+import { callCounts, list, purgeOldEvents, record, recordRead, type RecordInput } from "./agent-audit";
 
 const migrations = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 
@@ -100,5 +100,47 @@ describe("the audit log purge", () => {
 
 		expect(purgeOldEvents(db, NOW)).toBe(2);
 		expect(await list({}, db)).toHaveLength(0);
+	});
+});
+
+describe("logging reads", () => {
+	it("keeps the tool and the caller and nothing the call saw", async () => {
+		const row = recordRead({ actor: "agent", toolName: "mail.messages.body", title: "Read a message" }, db, NOW);
+		expect(row).toMatchObject({ result: "read", summary: "Read a message", entityId: null, error: null });
+		expect((await list({}, db)).map((event) => event.result)).toEqual(["read"]);
+	});
+
+	it("records a repeat within half a minute once, and one after it again", () => {
+		const input = { actor: "agent" as const, toolName: "clients.list", title: "List clients" };
+		expect(recordRead(input, db, new Date())).not.toBeNull();
+		expect(recordRead(input, db, new Date())).toBeNull();
+		expect(recordRead(input, db, new Date(Date.now() + 31_000))).not.toBeNull();
+	});
+
+	it("does not log the calls an agent uses to follow its own requests", () => {
+		expect(recordRead({ actor: "agent", toolName: "agent.get_action", title: "Get a request" }, db, NOW)).toBeNull();
+	});
+
+	it("purges reads after a month while a write of the same age stays", async () => {
+		writeRowAt(new Date("2026-08-01T09:00:00.000Z"), { result: "read", args: {} });
+		writeRowAt(new Date("2026-08-01T09:00:00.000Z"));
+		writeRowAt(new Date("2026-09-20T09:00:00.000Z"), { result: "read", args: {} });
+		expect(purgeOldEvents(db, NOW)).toBe(1);
+		const left = await list({}, db);
+		expect(left.map((event) => event.result).sort()).toEqual(["ok", "read"]);
+	});
+});
+
+describe("counting calls per tool", () => {
+	it("counts what an agent or an automation ran, and nothing a person did or is still waiting on", () => {
+		writeRowAt(NOW, { actor: "agent", toolName: "clients.update", result: "ok" });
+		writeRowAt(NOW, { actor: "agent", toolName: "clients.update", result: "failed" });
+		writeRowAt(NOW, { actor: "automation", toolName: "clients.update", result: "ok" });
+		writeRowAt(NOW, { actor: "agent", toolName: "mail.send", result: "pending" });
+		writeRowAt(NOW, { actor: "user", toolName: "clients.update", result: "ok" });
+
+		const counts = callCounts(db);
+		expect(counts.get("clients.update")).toBe(3);
+		expect(counts.has("mail.send")).toBe(false);
 	});
 });

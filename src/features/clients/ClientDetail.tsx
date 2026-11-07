@@ -1,4 +1,5 @@
 import { IconButton } from "../../components/IconButton";
+import { Tabs, type TabItem } from "../../components/Tabs";
 import { ScheduleSection } from "../calendar/ScheduleSection";
 import type { ScheduleForm } from "../calendar/schedule-form";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +19,12 @@ import type {
 	ProjectSummary,
 	ReferenceItem,
 } from "@shared/types";
+import { TitleBarSlot } from "../../app/TitleBarSlot";
+import { ActionMenu } from "../../components/ActionMenu";
+import { Avatar } from "../../components/Avatar";
+import { ClientMail } from "./ClientMail";
+import { isOpenProjectStatus } from "@shared/project-status";
+import { clientLanguageLabel } from "@shared/client-language";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
@@ -26,6 +33,7 @@ import { MarkdownNotes } from "../../components/MarkdownNotes";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
+import { openNewRecord } from "../../lib/new-record";
 import { requestOpen } from "../../lib/open-entity";
 import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
@@ -94,22 +102,6 @@ function monthLabelOf(key: string): string {
 	return `${MONTHS[index] ?? month} ${year}`;
 }
 
-/** The glyph for one line of the timeline. A note's own kind picks the glyph
- *  among note, call and meeting; every other source has one glyph. */
-function iconForEntry(entry: ClientTimelineEntry): IconName {
-	if (entry.kind === "note") {
-		if (entry.variant === "call") return "phone";
-		if (entry.variant === "meeting") return "calendar";
-		return "note";
-	}
-	if (entry.kind === "mail") return "mail";
-	if (entry.kind === "document") return "documents";
-	if (entry.kind === "event") return "calendar";
-	if (entry.kind === "reminder") return "reminders";
-	if (entry.kind === "status") return "move-right";
-	return "projects";
-}
-
 type StatusNameProps = {
 	name: { label: string; tone: string | null } | null;
 };
@@ -118,14 +110,6 @@ type StatusNameProps = {
  *  tag, no box, no background. "No status" reads in the muted ink. */
 function StatusName({ name }: StatusNameProps) {
 	return <span className={statusTextClass(name?.tone ?? null)}>{name?.label ?? "No status"}</span>;
-}
-
-/** First and last initial, for the card's monogram. Never a photo. */
-function initialsOf(name: string): string {
-	const words = name.trim().split(/\s+/).filter(Boolean);
-	if (words.length === 0) return "?";
-	if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-	return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
 }
 
 /** A website is shown as typed but only ever opened over https, per the app's
@@ -181,13 +165,17 @@ type ClientDetailProps = {
 	clientId: string;
 	onEdit: (client: Client) => void;
 	onDelete: (client: Client) => void;
+	/** Opens the composer addressed to this client. */
+	onSendMail: (client: Client) => void;
+	/** The main process changed the client (archived it), so what is on screen is stale. */
+	onChanged: (message: string | undefined) => void;
 	/**
 	 * Contacts and projects are filled in on a page of their own, which needs
 	 * the whole screen rather than this pane, so the screen owns that state and
 	 * this only asks for it. Null means a new one.
 	 */
 	onEditContact: (contact: Contact | null) => void;
-	onEditProject: (project: Project | null) => void;
+	onEditProject: (project: Project) => void;
 	/** A date or a reminder is a page of its own, so the screen owns it. */
 	onSchedule: (form: ScheduleForm) => void;
 	/**
@@ -214,6 +202,8 @@ export function ClientDetail({
 	clientId,
 	onEdit,
 	onDelete,
+	onSendMail,
+	onChanged,
 	onEditContact,
 	onEditProject,
 	onSchedule,
@@ -418,7 +408,7 @@ export function ClientDetail({
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load this client.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{load.message}
 				</p>
 			</div>
@@ -444,10 +434,15 @@ export function ClientDetail({
 	const primaryPhone = phones.find((phone) => phone.isPrimary) ?? phones[0] ?? null;
 	const primaryAddress = addresses.find((address) => address.isPrimary) ?? null;
 
-	const totalEntries = Object.values(entryCounts).reduce((sum, count) => sum + count, 0);
-	const mailEntries = entries.filter((entry) => entry.kind === "mail");
+	const openProjects = projects.filter((project) => isOpenProjectStatus(project.status?.key));
+	const changeTab = (id: TabId) => {
+		setTab(id);
+		onTabChange?.(id);
+	};
 
-	const tabs: { id: TabId; label: string; count: number | null }[] = [
+	const totalEntries = Object.values(entryCounts).reduce((sum, count) => sum + count, 0);
+
+	const tabs: TabItem<TabId>[] = [
 		{ id: "overview", label: "Overview", count: null },
 		{ id: "timeline", label: "Timeline", count: totalEntries },
 		{ id: "projects", label: "Projects", count: entryCounts.project },
@@ -455,35 +450,18 @@ export function ClientDetail({
 		{ id: "mail", label: "Mail", count: entryCounts.mail },
 	];
 
-	const cardMenuItems: MenuItem[] = [
-		{ id: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(client) },
-		{
-			id: "delete",
-			label: "Delete",
-			icon: "remove",
-			danger: true,
-			separatorBefore: true,
-			onSelect: () => onDelete(client),
-		},
-	];
-
 	return (
 		<div>
-			<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
-				<div className="flex items-start gap-3">
-					<span
-						aria-hidden
-						className="flex h-10 w-10 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent-soft)] text-[length:var(--text-base)] font-[var(--weight-semibold)] text-[var(--accent)]"
-					>
-						{initialsOf(client.name)}
-					</span>
+			<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-6">
+				<div className="flex items-start gap-4">
+					<Avatar name={client.name} size={59} />
 
 					<div className="min-w-0 flex-1">
 						<div className="flex items-start justify-between gap-3">
 							<div className="flex min-w-0 items-center gap-2">
 								<h2
 									data-selectable
-									className="truncate text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.01em]"
+									className="truncate text-h2"
 								>
 									{client.name}
 								</h2>
@@ -494,10 +472,24 @@ export function ClientDetail({
 									onChange={(statusId) => void changeStatus(statusId)}
 								/>
 							</div>
-							<MenuButton ariaLabel={`${client.name} actions`} items={cardMenuItems} />
+							<TitleBarSlot side="overflow">
+								<ActionMenu
+									target={{ kind: "client", id: client.id, context: "detail" }}
+									ariaLabel={`${client.name} actions`}
+									size="dense"
+									handlers={{
+										edit: () => onEdit(client),
+										"new-project": () => openNewRecord("project", { clientId: client.id }),
+										"new-note": () => onEditNote(null),
+										"send-mail": () => onSendMail(client),
+										delete: () => onDelete(client),
+										done: onChanged,
+									}}
+								/>
+							</TitleBarSlot>
 						</div>
 
-						<div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-[length:var(--text-dense)] sm:grid-cols-2">
+						<div className="mt-3 flex flex-wrap items-center gap-x-12 gap-y-1.5 text-base">
 							{primaryEmail ? (
 								<div className="flex min-w-0 items-center gap-2">
 									<Icon name="mail" className="shrink-0 text-[var(--ink-muted)]" />
@@ -512,14 +504,6 @@ export function ClientDetail({
 									</a>
 								</div>
 							) : null}
-							{primaryPhone ? (
-								<div className="flex min-w-0 items-center gap-2">
-									<Icon name="phone" className="shrink-0 text-[var(--ink-muted)]" />
-									<span data-selectable className="tabular min-w-0 truncate">
-										{primaryPhone.phone}
-									</span>
-								</div>
-							) : null}
 							{primaryAddress?.city ? (
 								<div className="flex min-w-0 items-center gap-2">
 									<Icon name="address" className="shrink-0 text-[var(--ink-muted)]" />
@@ -528,68 +512,127 @@ export function ClientDetail({
 									</span>
 								</div>
 							) : null}
-							{client.website ? (
-								<div className="flex min-w-0 items-center gap-2">
-									<Icon name="external" className="shrink-0 text-[var(--ink-muted)]" />
-									<a
-										data-selectable
-										href={websiteHref(client.website)}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="min-w-0 truncate text-[var(--accent)] hover:text-[var(--accent-hover)]"
-									>
-										{client.website}
-									</a>
-								</div>
-							) : null}
-							{client.vatNumber ? (
-								<div className="flex min-w-0 items-center gap-2">
-									<span className="shrink-0 text-[var(--ink-faint)]">VAT</span>
-									<span data-selectable className="tabular min-w-0 truncate">
-										{client.vatNumber}
-									</span>
-								</div>
-							) : null}
 						</div>
 					</div>
 				</div>
 			</div>
 
-			<div role="tablist" aria-label="Client" className="mt-8 flex items-center gap-px border-b border-[var(--line)]">
-				{tabs.map((entry) => (
-					<button
-						key={entry.id}
-						type="button"
-						role="tab"
-						aria-selected={tab === entry.id}
-						onClick={() => {
-							setTab(entry.id);
-							onTabChange?.(entry.id);
-						}}
-						className={`-mb-px flex h-[36px] items-center gap-2 border-b-2 px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-							tab === entry.id
-								? "border-[var(--accent)] text-[var(--accent)]"
-								: "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
-						}`}
-					>
-						{entry.label}
-						{entry.count !== null ? (
-							<span className="tabular rounded-[var(--radius-full)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
-								{entry.count}
-							</span>
-						) : null}
-					</button>
-				))}
+			<div className="mt-6">
+				<Tabs
+					label="Client"
+					tabs={tabs}
+					value={tab}
+					onChange={(id) => {
+						setTab(id);
+						onTabChange?.(id);
+					}}
+				/>
 			</div>
 
 			<div className="mt-6">
 				{tab === "overview" ? (
 					<div className="flex flex-col gap-10">
-						{client.notes && client.notes.trim().length > 0 ? (
-							<div className="text-[length:var(--text-dense)]">
-								<MarkdownNotes text={client.notes} />
+						<div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_420px]">
+							<section>
+								<h3 className="mb-2 text-h3">Details</h3>
+								<dl>
+									{[
+										{ label: "Email", value: primaryEmail?.email ?? null },
+										{ label: "Phone", value: primaryPhone?.phone ?? null },
+										{
+											label: "Address",
+											value: primaryAddress
+												? [primaryAddress.addressLine1, [primaryAddress.postalCode, primaryAddress.city].filter(Boolean).join(" ")]
+														.filter(Boolean)
+														.join(", ")
+												: null,
+										},
+										{ label: "Website", value: client.website, href: client.website ? websiteHref(client.website) : undefined },
+										{ label: "VAT number", value: client.vatNumber },
+										{ label: "Language", value: clientLanguageLabel(client.language) },
+									].map((row) => (
+										<div key={row.label} className="flex min-h-14 items-center gap-6 border-b border-[var(--line)]">
+											<dt className="w-32 flex-none text-base text-[var(--ink-muted)]">{row.label}</dt>
+											<dd data-selectable className="tabular min-w-0 flex-1 truncate text-base">
+												{row.value && row.value.length > 0 ? (
+													"href" in row && row.href ? (
+														<a
+															href={row.href}
+															target="_blank"
+															rel="noopener noreferrer"
+															className="text-[var(--accent)] hover:text-[var(--accent-hover)]"
+														>
+															{row.value}
+														</a>
+													) : (
+														row.value
+													)
+												) : (
+													"Not set"
+												)}
+											</dd>
+										</div>
+									))}
+								</dl>
+							</section>
+							<div className="flex flex-col gap-8">
+								<section>
+									<div className="mb-4 flex items-center justify-between gap-4">
+										<h3 className="text-h3">Open work</h3>
+										<button
+											type="button"
+											onClick={() => changeTab("projects")}
+											className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+										>
+											Projects
+										</button>
+									</div>
+									{openProjects.length === 0 ? (
+										<p className="text-base text-[var(--ink-muted)]">Nothing open for this client.</p>
+									) : (
+										<ul className="flex flex-col gap-3">
+											{openProjects.map((project) => (
+												<li key={project.id} className="flex items-center gap-3">
+													<Avatar name={project.name} size={24} shape="square" />
+													<button
+														type="button"
+														onClick={() => requestOpen({ kind: "project", id: project.id, name: project.name })}
+														className="min-w-0 flex-1 text-left"
+													>
+														<span className="block truncate text-base font-[var(--weight-medium)]">{project.name}</span>
+														{project.dueOn ? (
+															<span className="tabular block text-sm text-[var(--ink-muted)]">Due {formatDate(project.dueOn)}</span>
+														) : null}
+													</button>
+													{project.status ? <StatusBadge label={project.status.label} tone={project.status.tone} /> : null}
+												</li>
+											))}
+										</ul>
+									)}
+								</section>
+								<section>
+									<div className="mb-4 flex items-center justify-between gap-4">
+										<h3 className="text-h3">Notes</h3>
+										<span data-opens-panel>
+											<button
+												type="button"
+												onClick={() => onEditNote(null)}
+												className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+											>
+												New note
+											</button>
+										</span>
+									</div>
+									{client.notes && client.notes.trim().length > 0 ? (
+										<div className="text-document">
+											<MarkdownNotes text={client.notes} />
+										</div>
+									) : (
+										<p className="text-base text-[var(--ink-muted)]">No notes yet.</p>
+									)}
+								</section>
 							</div>
-						) : null}
+						</div>
 
 						<ScheduleSection clientId={clientId} showProject onOpenForm={onSchedule} />
 
@@ -646,7 +689,7 @@ export function ClientDetail({
 				) : tab === "projects" ? (
 					<ProjectsSection
 						projects={projects}
-						onAdd={() => onEditProject(null)}
+						onAdd={() => openNewRecord("project", { clientId })}
 						onEdit={(id) => void editProject(id)}
 						onRemove={(project) => setPending({ kind: "project", id: project.id, name: project.name })}
 					/>
@@ -659,7 +702,10 @@ export function ClientDetail({
 						onChanged={refresh}
 					/>
 				) : (
-					<EntryList title="Mail" entries={mailEntries} emptyText="No mail linked to this client yet." />
+					<ClientMail
+						clientId={clientId}
+						onNewMessage={() => onSendMail(client)}
+					/>
 				)}
 			</div>
 
@@ -741,7 +787,7 @@ function StatusMenuButton({ clientName, status, options, onChange }: StatusMenuB
 				{status ? (
 					<StatusBadge label={status.label} tone={status.tone} />
 				) : (
-					<span className="inline-block text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+					<span className="inline-block text-sm text-[var(--ink-muted)]">
 						No status
 					</span>
 				)}
@@ -770,14 +816,14 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Emails</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Emails</h3>
 				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add email
 				</Button>
 			</div>
 
 			{emails.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No email addresses for this client yet.
 				</p>
 			) : (
@@ -785,7 +831,7 @@ function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: Email
 					{emails.map((email) => (
 						<li
 							key={email.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<div className="min-w-0">
 								<div className="flex items-center gap-2">
@@ -827,14 +873,14 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Phone numbers</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Phone numbers</h3>
 				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add phone number
 				</Button>
 			</div>
 
 			{phones.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No phone numbers for this client yet.
 				</p>
 			) : (
@@ -842,7 +888,7 @@ function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: Phone
 					{phones.map((phone) => (
 						<li
 							key={phone.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<div className="min-w-0">
 								<div className="flex items-center gap-2">
@@ -903,14 +949,14 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Links</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Links</h3>
 				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add link
 				</Button>
 			</div>
 
 			{links.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No website or profiles for this client yet.
 				</p>
 			) : (
@@ -918,7 +964,7 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 					{links.map((link) => (
 						<li
 							key={link.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							<div className="flex min-w-0 items-start gap-3">
 								<Icon
@@ -929,7 +975,7 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 									<div className="flex items-center gap-2">
 										<span className="truncate font-[var(--weight-medium)]">{linkTitle(link)}</span>
 										{link.label && isClientLinkKind(link.kind) ? (
-											<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="text-sm text-[var(--ink-muted)]">
 												{CLIENT_LINK_KIND_LABELS[link.kind]}
 											</span>
 										) : null}
@@ -951,7 +997,7 @@ function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
 				</ul>
 			)}
 			{problem ? (
-				<p role="alert" data-selectable className="mt-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p role="alert" data-selectable className="mt-2 text-sm text-[var(--risk)]">
 					{problem}
 				</p>
 			) : null}
@@ -971,14 +1017,14 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Addresses</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Addresses</h3>
 				<Button size="dense" data-opens-panel onClick={onAdd}>
 					Add address
 				</Button>
 			</div>
 
 			{addresses.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No addresses for this client yet.
 				</p>
 			) : (
@@ -990,7 +1036,7 @@ function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }:
 						return (
 							<li
 								key={address.id}
-								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 							>
 								<div className="min-w-0">
 									<div className="flex items-center gap-2">
@@ -1035,14 +1081,14 @@ function ContactsSection({ contacts, onAdd, onEdit, onMakePrimary, onRemove }: C
 	return (
 		<section>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Contacts</h3>
+				<h3 className="text-h3 font-[var(--weight-medium)]">Contacts</h3>
 				<Button size="dense" onClick={onAdd}>
 					Add contact
 				</Button>
 			</div>
 
 			{contacts.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No contacts for this client yet.
 				</p>
 			) : (
@@ -1050,7 +1096,7 @@ function ContactsSection({ contacts, onAdd, onEdit, onMakePrimary, onRemove }: C
 					{contacts.map((contact) => (
 						<li
 							key={contact.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							{/* Two lines rather than columns. Fixed-width columns reserved space
 							    for fields most contacts do not have, which squeezed the name to
@@ -1095,15 +1141,19 @@ type ProjectsSectionProps = {
 function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionProps) {
 	return (
 		<section>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Projects</h3>
-				<Button size="dense" onClick={onAdd}>
-					Add project
-				</Button>
+			<div className="mt-6 mb-4 flex items-center justify-between gap-4">
+				<h3 className="text-h3">Projects</h3>
+				<button
+					type="button"
+					onClick={onAdd}
+					className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				>
+					New project
+				</button>
 			</div>
 
 			{projects.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					No projects for this client yet.
 				</p>
 			) : (
@@ -1111,7 +1161,7 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 					{projects.map((project) => (
 						<li
 							key={project.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
+							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
 						>
 							{/* The project's own page, the same way the palette opens it. */}
 							<button
@@ -1120,10 +1170,11 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 								title={`Open ${project.name}`}
 								className="-mx-2 min-w-0 flex-1 rounded-[var(--radius-md)] px-2 py-1 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-visible:bg-[var(--accent-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 							>
-								<div className="flex items-center gap-2">
-									<span className="truncate font-[var(--weight-medium)]">
-										{project.name}
-									</span>
+								<div className="flex items-center gap-3">
+									<Avatar name={project.name} size={24} shape="square" />
+									<div className="min-w-0 flex-1">
+										<span className="block truncate font-[var(--weight-medium)]">{project.name}</span>
+									</div>
 									{project.status ? (
 										<StatusBadge label={project.status.label} tone={project.status.tone} />
 									) : null}
@@ -1150,6 +1201,19 @@ function ProjectsSection({ projects, onAdd, onEdit, onRemove }: ProjectsSectionP
 		</section>
 	);
 }
+
+type TimelineRow = { type: "month"; key: string } | { type: "entry"; entry: ClientTimelineEntry };
+
+/** The node on the line: iris for work, brass for what was due or signed, green for mail. */
+const DOT_TONE: Record<ClientTimelineKind, string> = {
+	project: "bg-[var(--accent)]",
+	event: "bg-[var(--accent)]",
+	reminder: "bg-[var(--seal)]",
+	document: "bg-[var(--seal)]",
+	mail: "bg-[var(--ok)]",
+	status: "bg-[var(--ink-faint)]",
+	note: "bg-[var(--ink-faint)]",
+};
 
 type TimelineTabProps = {
 	entries: ClientTimelineEntry[];
@@ -1195,10 +1259,19 @@ function TimelineTab({
 		];
 	}
 
+	// Month headings and entries in one run, so the line can be drawn through both.
+	const rows: TimelineRow[] = [];
+	entries.forEach((entry, index) => {
+		const month = monthKeyOf(entry);
+		const previous = index > 0 ? entries[index - 1] : null;
+		if (!previous || monthKeyOf(previous) !== month) rows.push({ type: "month", key: month });
+		rows.push({ type: "entry", entry });
+	});
+
 	return (
 		<div>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Timeline</h3>
+			<div className="mt-6 mb-6 flex items-center justify-between gap-4">
+				<h3 className="text-h3">Timeline</h3>
 				<span data-opens-panel className="flex gap-2">
 					<Button size="dense" onClick={onLogCall}>
 						Log a call
@@ -1208,74 +1281,81 @@ function TimelineTab({
 			</div>
 
 			{entries.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+				<p className="text-dense text-[var(--ink-muted)]">
 					Nothing recorded for this client yet.
 				</p>
 			) : (
 				<ul>
-					{entries.map((entry, index) => {
-						const month = monthKeyOf(entry);
-						const previous = index > 0 ? entries[index - 1] : null;
-						const showHeading = !previous || monthKeyOf(previous) !== month;
-						return (
-							<li key={entry.id}>
-								{showHeading ? (
-									<div className="sticky top-0 z-10 -mx-1 bg-[var(--paper)] px-1 py-1.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
-										{monthLabelOf(month)}
+					{rows.map((row, index) => {
+						const first = index === 0;
+						const last = index === rows.length - 1;
+						// The line runs through every row, starting level with the first
+						// node and stopping at the last one (Timeline graph, 83:7194).
+						const line = (
+							<span
+								aria-hidden
+								className={`absolute left-[11px] w-[2px] bg-[var(--line-strong)] ${first ? "top-5" : "top-0"} ${last ? "h-5" : "bottom-0"}`}
+							/>
+						);
+						if (row.type === "month") {
+							return (
+								<li key={`month-${row.key}`} className="flex items-start gap-4">
+									<div className="relative w-6 flex-none self-stretch">
+										{line}
+										<span
+											aria-hidden
+											className="absolute top-[13px] left-[5px] h-3.5 w-3.5 rounded-[var(--radius-full)] border-2 border-[var(--line-strong)] bg-[var(--surface)]"
+										/>
 									</div>
-								) : null}
-								<div
-									className="flex items-start gap-3 border-b border-[var(--line)] py-3"
-									onContextMenu={
-										entry.kind === "note"
-											? (event) => {
-													setMenuEntry(entry);
-													open(event);
-												}
-											: undefined
-									}
-								>
+									<p className="min-w-0 flex-1 pt-2.5 pb-1.5 text-overline uppercase text-[var(--ink-muted)]">
+										{monthLabelOf(row.key)}
+									</p>
+								</li>
+							);
+						}
+						const entry = row.entry;
+						return (
+							<li
+								key={entry.id}
+								className="flex items-start gap-4"
+								onContextMenu={
+									entry.kind === "note"
+										? (event) => {
+												setMenuEntry(entry);
+												open(event);
+											}
+										: undefined
+								}
+							>
+								<div className="relative w-6 flex-none self-stretch">
+									{line}
 									<span
 										aria-hidden
-										className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--sunken)] text-[var(--ink-muted)]"
-									>
-										<Icon name={iconForEntry(entry)} size={14} />
+										className={`absolute top-3.5 left-1.5 h-3 w-3 rounded-[var(--radius-full)] ${DOT_TONE[entry.kind]}`}
+									/>
+								</div>
+								<div className="min-w-0 flex-1 pt-2 pb-4">
+									<span data-selectable className="block truncate text-lg">
+										{entry.kind === "status" ? (
+											<>
+												Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
+												<StatusName name={entry.statusChange?.to ?? null} />
+											</>
+										) : (
+											entry.title
+										)}
 									</span>
-									<div className="min-w-0 flex-1">
-										<div className="flex items-start justify-between gap-2">
-											<div className="min-w-0">
-												<span
-													data-selectable
-													className="block truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]"
-												>
-													{entry.kind === "status" ? (
-														<>
-															Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
-															<StatusName name={entry.statusChange?.to ?? null} />
-														</>
-													) : (
-														entry.title
-													)}
-												</span>
-												{entry.detail ? (
-													<span
-														data-selectable
-														className="mt-0.5 block truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]"
-													>
-														{entry.detail}
-													</span>
-												) : null}
-											</div>
-											<div className="flex flex-none items-center gap-1">
-												<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-faint)]">
-													{dateLabelOf(entry)}
-												</span>
-												{entry.kind === "note" ? (
-													<MenuButton ariaLabel={`${entry.title} actions`} items={itemsFor(entry)} />
-												) : null}
-											</div>
-										</div>
-									</div>
+									{entry.detail ? (
+										<span data-selectable className="mt-0.5 block truncate text-base text-[var(--ink-muted)]">
+											{entry.detail}
+										</span>
+									) : null}
+								</div>
+								<div className="flex flex-none items-start gap-1 pt-1.5">
+									<span className="tabular text-base text-[var(--ink-muted)]">{dateLabelOf(entry)}</span>
+									{entry.kind === "note" ? (
+										<MenuButton ariaLabel={`${entry.title} actions`} items={itemsFor(entry)} />
+									) : null}
 								</div>
 							</li>
 						);
@@ -1295,55 +1375,5 @@ function TimelineTab({
 				<ContextMenu at={at} items={itemsFor(menuEntry)} ariaLabel={`${menuEntry.title} actions`} onClose={close} />
 			) : null}
 		</div>
-	);
-}
-
-type EntryListProps = {
-	title: string;
-	entries: ClientTimelineEntry[];
-	emptyText: string;
-};
-
-/** A read-only view of one kind of timeline entry. Documents and mail are
- *  changed on their own screens; this is where they show up for this client. */
-function EntryList({ title, entries, emptyText }: EntryListProps) {
-	return (
-		<section>
-			<h3 className="mb-4 text-[length:var(--text-h3)] font-[var(--weight-medium)]">{title}</h3>
-			{entries.length === 0 ? (
-				<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">{emptyText}</p>
-			) : (
-				<ul>
-					{entries.map((entry) => (
-						<li
-							key={entry.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]"
-						>
-							<div className="flex min-w-0 items-start gap-3">
-								<span
-									aria-hidden
-									className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--sunken)] text-[var(--ink-muted)]"
-								>
-									<Icon name={iconForEntry(entry)} size={14} />
-								</span>
-								<div className="min-w-0">
-									<span data-selectable className="block truncate font-[var(--weight-medium)]">
-										{entry.title}
-									</span>
-									{entry.detail ? (
-										<span data-selectable className="mt-0.5 block truncate text-[var(--ink-muted)]">
-											{entry.detail}
-										</span>
-									) : null}
-								</div>
-							</div>
-							<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
-								{dateLabelOf(entry)}
-							</span>
-						</li>
-					))}
-				</ul>
-			)}
-		</section>
 	);
 }

@@ -110,6 +110,7 @@ export function buildContext(sources: ContextSources): Record<string, unknown> {
 			phone: sources.primaryPhone?.phone ?? "",
 			website: sources.client.website ?? "",
 			vatNumber: sources.client.vatNumber ?? "",
+			language: sources.client.language,
 			addressLine1: sources.primaryAddress?.addressLine1 ?? "",
 			addressLine2: sources.primaryAddress?.addressLine2 ?? "",
 			postalCode: sources.primaryAddress?.postalCode ?? "",

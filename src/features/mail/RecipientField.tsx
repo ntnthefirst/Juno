@@ -143,7 +143,7 @@ export function RecipientField({
 			<div className="mb-1 flex items-baseline justify-between gap-2">
 				<label
 					htmlFor={id}
-					className="text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+					className="text-sm text-[var(--ink-muted)]"
 				>
 					{label}
 					{required ? <span className="text-[var(--risk)]"> *</span> : null}
@@ -160,7 +160,7 @@ export function RecipientField({
 					{value.map((address, index) => (
 						<span
 							key={`${address.address}-${index}`}
-							className="group animate-pop inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] py-0.5 pr-1 pl-2 text-[length:var(--text-dense)] text-[var(--ink)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--accent-soft)]"
+							className="group animate-pop inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] py-0.5 pr-1 pl-2 text-dense text-[var(--ink)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--accent-soft)]"
 							title={address.address}
 						>
 							<span className="max-w-[24ch] truncate group-hover:hidden">
@@ -205,7 +205,7 @@ export function RecipientField({
 							if (typed) add(typed);
 						}}
 						placeholder={value.length === 0 ? "Name or email address" : ""}
-						className="min-w-[16ch] flex-1 bg-transparent px-1 py-1 text-[length:var(--text-base)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+						className="min-w-[16ch] flex-1 bg-transparent px-1 py-1 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
 					/>
 				</div>
 
@@ -238,15 +238,15 @@ export function RecipientField({
 										size={14}
 									/>
 									<span className="min-w-0 flex-1">
-										<span className="block truncate text-[length:var(--text-dense)]">
+										<span className="block truncate text-dense">
 											{suggestion.clients[0]?.name ?? suggestion.name ?? suggestion.address}
 										</span>
-										<span className="block truncate text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<span className="block truncate text-micro text-[var(--ink-muted)]">
 											{suggestion.address}
 										</span>
 									</span>
 									{suggestion.clients.length > 0 ? (
-										<span className="shrink-0 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<span className="shrink-0 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-micro text-[var(--ink-muted)]">
 											{suggestion.clients.map((client) => client.name).join(", ")}
 										</span>
 									) : null}
@@ -256,7 +256,7 @@ export function RecipientField({
 					</ul>
 				) : null}
 			</div>
-			{help ? <p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">{help}</p> : null}
+			{help ? <p className="mt-1 text-sm text-[var(--ink-muted)]">{help}</p> : null}
 		</div>
 	);
 }

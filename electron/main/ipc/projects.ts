@@ -8,12 +8,14 @@ import type {
 	ProjectLinkPatch,
 	ProjectPatch,
 	ProjectStorageChoice,
+	ProjectTimelineQuery,
 } from "../../shared/types";
 import * as actions from "../services/project-actions";
 import * as assets from "../services/project-assets";
 import * as commands from "../services/project-commands";
 import * as links from "../services/project-links";
 import * as runner from "../services/project-runner";
+import * as timeline from "../services/project-timeline";
 import * as projects from "../services/projects";
 import type { ListProjectsQuery } from "../services/projects";
 
@@ -26,6 +28,10 @@ export function registerProjectsIpc(): void {
 	);
 	ipcMain.handle("projects.remove", (_event, id: string) => projects.remove(id));
 	ipcMain.handle("projects.restore", (_event, id: string) => projects.restore(id));
+	ipcMain.handle("projects.archive", (_event, id: string) => projects.archive(id));
+	ipcMain.handle("projects.timeline", (_event, query: ProjectTimelineQuery) =>
+		timeline.timeline(query),
+	);
 
 	ipcMain.handle("projects.storage", (_event, id: string) => projects.storage(id));
 	ipcMain.handle("projects.setStorage", (_event, id: string, choice: ProjectStorageChoice) =>

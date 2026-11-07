@@ -58,7 +58,7 @@ export function MoveToFolderDialog({ folders, count, kind = "thread", busy, onCl
 					onChange={(event) => setTerm(event.target.value)}
 					placeholder="Find a folder"
 					aria-label="Find a folder"
-					className="mt-3 w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+					className="mt-3 w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-dense text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 				/>
 			) : null}
 			<ul className="mt-3 max-h-[320px] overflow-y-auto">
@@ -74,7 +74,7 @@ export function MoveToFolderDialog({ folders, count, kind = "thread", busy, onCl
 								disabled={busy}
 								onClick={() => onMove(row.folder.id)}
 								style={{ height: "var(--row-height)", paddingLeft: `calc(var(--space-3) + var(--space-3) * ${row.depth})` }}
-								className="flex w-full items-center gap-2 rounded-[var(--radius-md)] pr-3 text-left text-[length:var(--text-dense)] hover:bg-[var(--hover)] disabled:pointer-events-none disabled:opacity-50"
+								className="flex w-full items-center gap-2 rounded-[var(--radius-md)] pr-3 text-left text-dense hover:bg-[var(--hover)] disabled:pointer-events-none disabled:opacity-50"
 								title={row.folder.path}
 							>
 								<Icon name={row.icon} size={14} />

@@ -243,7 +243,7 @@ export function VisualEditor({ value, onChange, active, disabled = false, placeh
 							{linkReady ? (
 								<Field label="Link to" value={linkUrl} onChange={setLinkUrl} placeholder="https://example.com" />
 							) : (
-								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="text-sm text-[var(--ink-muted)]">
 									Select the words that should become the link, then open this again.
 								</p>
 							)}
@@ -277,13 +277,13 @@ export function VisualEditor({ value, onChange, active, disabled = false, placeh
 							style={{ boxShadow: "var(--shadow-popover)" }}
 						>
 							{placeholderGroups.length === 0 ? (
-								<p className="px-2 py-1.5 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="px-2 py-1.5 text-sm text-[var(--ink-muted)]">
 									Nothing to insert yet. Add an input under What this template asks for, and it is offered here.
 								</p>
 							) : null}
 							{placeholderGroups.map((group) => (
 								<div key={group.label} className="mb-2 last:mb-0">
-									<p className="px-2 py-1 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-wide text-[var(--ink-faint)]">
+									<p className="px-2 py-1 text-overline uppercase text-[var(--ink-faint)]">
 										{group.label}
 									</p>
 									{group.items.map((item) => (
@@ -294,8 +294,8 @@ export function VisualEditor({ value, onChange, active, disabled = false, placeh
 											onClick={() => insertPlaceholder(item.path)}
 											className="flex w-full items-baseline justify-between gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left hover:bg-[var(--hover)]"
 										>
-											<span className="font-mono text-[length:var(--text-sm)] text-[var(--accent)]">{`{{${item.path}}}`}</span>
-											<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">{item.description}</span>
+											<span className="font-mono text-sm text-[var(--accent)]">{`{{${item.path}}}`}</span>
+											<span className="shrink-0 text-micro text-[var(--ink-muted)]">{item.description}</span>
 										</button>
 									))}
 								</div>
@@ -321,7 +321,7 @@ export function VisualEditor({ value, onChange, active, disabled = false, placeh
 				// collapse into one dense block here. The values mirror what mailShell
 				// (electron/main/services/mail-html.ts) actually sends: 12px between
 				// paragraphs, the same as textToHtml's own paragraph margin.
-				className={`min-h-[320px] max-h-[480px] overflow-y-auto bg-[var(--surface)] px-4 py-3 text-[length:var(--text-base)] leading-[var(--leading-relaxed)] text-[var(--ink)] focus:outline-none [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h2]:mt-4 [&_h2]:mb-2 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mb-1${
+				className={`min-h-[320px] max-h-[480px] overflow-y-auto bg-[var(--surface)] px-4 py-3 text-base leading-[var(--leading-relaxed)] text-[var(--ink)] focus:outline-none [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h2]:mt-4 [&_h2]:mb-2 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mb-1${
 					disabled ? " opacity-60" : ""
 				}`}
 			/>

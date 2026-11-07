@@ -1,10 +1,10 @@
 import { useState } from "react";
 import type { Reminder } from "@shared/types";
-import { Icon } from "../../components/Icon";
-import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { Checkbox } from "../../components/Checkbox";
+import { ActionMenu } from "../../components/ActionMenu";
 import { messageOf } from "../../lib/errors";
 import { prefersReducedMotion } from "../../lib/motion";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor, type MenuHandlers } from "../../lib/native-menu";
 import { describeDue, formatDate } from "./format";
 
 type ReminderRowProps = {
@@ -18,6 +18,13 @@ type ReminderRowProps = {
 	/** The screen owns the undo toast, because this row unmounts on the re-read. */
 	onDeleted: (reminder: Reminder) => void;
 	onError: (message: string) => void;
+	/**
+	 * "agenda" is the Overview's row (Agenda Row in the design): a ruled line,
+	 * a 24px lead and a trailing label the caller words, with no hover tile.
+	 */
+	variant?: "agenda";
+	/** The trailing label in the agenda variant. The list variant words the due date itself. */
+	trailing?: string;
 };
 
 /**
@@ -38,11 +45,12 @@ export function ReminderRow({
 	onSnooze,
 	onDeleted,
 	onError,
+	variant,
+	trailing,
 }: ReminderRowProps) {
 	const [busy, setBusy] = useState(false);
 	// Set the moment a reminder is ticked, so the row folds away while the write happens.
 	const [leaving, setLeaving] = useState(false);
-	const menu = useContextMenu();
 
 	async function run(work: () => Promise<unknown>) {
 		if (busy) return;
@@ -85,61 +93,22 @@ export function ReminderRow({
 	}
 	const toggle = () => (done ? void run(() => window.juno.reminders.reopen(reminder.id)) : void complete());
 
-	const items: MenuItem[] = [
-		done
-			? {
-					id: "reopen",
-					label: "Reopen",
-					icon: "reminders",
-					disabled: busy,
-					onSelect: toggle,
-				}
-			: {
-					id: "complete",
-					label: "Mark done",
-					icon: "check",
-					disabled: busy,
-					onSelect: toggle,
-				},
-		...(done
-			? []
-			: [
-					{
-						id: "snooze",
-						label: "Snooze",
-						icon: "today" as const,
-						disabled: busy,
-						onSelect: () => onSnooze(reminder),
-					},
-				]),
-		...(reminder.actionUrl && reminder.actionLabel
-			? [
-					{
-						id: "action",
-						label: reminder.actionLabel,
-						icon: "external" as const,
-						disabled: busy,
-						onSelect: () => void run(() => window.juno.reminders.openAction(reminder.id)),
-					},
-				]
-			: []),
-		{
-			id: "edit",
-			label: "Edit",
-			icon: "edit",
-			disabled: busy,
-			onSelect: () => onEdit(reminder),
-		},
-		{
-			id: "delete",
-			label: "Delete",
-			icon: "remove",
-			danger: true,
-			separatorBefore: true,
-			disabled: busy,
-			onSelect: () => void remove(),
-		},
-	];
+	// The items are chosen in the main process from the reminder (decision 59).
+	// This says what each one does here.
+	const handlers: MenuHandlers = {
+		complete: toggle,
+		reopen: toggle,
+		snooze: () => onSnooze(reminder),
+		"open-link": () => void run(() => window.juno.reminders.openAction(reminder.id)),
+		edit: () => onEdit(reminder),
+		// The client is one of the fields of the edit form.
+		"move-to-client": () => onEdit(reminder),
+		delete: () => void remove(),
+		done: () => onChanged(),
+		failed: onError,
+	};
+	const target = { kind: "reminder", id: reminder.id } as const;
+	const agenda = variant === "agenda";
 
 	return (
 		<div
@@ -148,56 +117,51 @@ export function ReminderRow({
 		>
 			<div className={leaving ? "min-h-0 overflow-hidden" : "min-h-0"}>
 				<div
-					onContextMenu={menu.open}
-					className="group flex items-center gap-1 rounded-[var(--radius-lg)] px-1 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+					onContextMenu={contextMenuFor(target, handlers)}
+					className={
+						agenda
+							? "group relative flex min-h-14 items-center gap-4 border-b border-line py-3"
+							: "group flex items-center gap-1 rounded-[var(--radius-lg)] px-1 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
+					}
 				>
-					<button
-						type="button"
-						onClick={toggle}
-						disabled={busy}
-						aria-label={done ? `Reopen ${reminder.title}` : `Mark ${reminder.title} done`}
-						className="flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-full)] disabled:pointer-events-none"
-					>
-						<span
-							aria-hidden
-							className={[
-								"flex h-[18px] w-[18px] items-center justify-center rounded-[var(--radius-full)] border-[1.5px] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-								done || leaving
-									? "border-[var(--ok)] bg-[var(--ok)] text-[var(--paper)]"
-									: "border-[var(--line-strong)] text-transparent group-hover:border-[var(--accent)] hover:text-[var(--accent)]",
-							].join(" ")}
-						>
-							<Icon name="check" size={11} strokeWidth={3} />
-						</span>
-					</button>
+					<span className={agenda ? "flex h-8 w-6 flex-none items-center justify-center" : "flex h-8 w-8 flex-none items-center justify-center"}>
+						<Checkbox
+							shape="round"
+							checked={done || leaving}
+							onChange={toggle}
+							disabled={busy}
+							aria-label={done ? `Reopen ${reminder.title}` : `Mark ${reminder.title} done`}
+						/>
+					</span>
 
-					<div className="min-w-0 flex-1 py-2 pl-1">
+					<div className={agenda ? "min-w-0 flex-1" : "min-w-0 flex-1 py-2 pl-1"}>
 						<p
-							className={`truncate text-[length:var(--text-base)] ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
+							className={`truncate text-base ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
 						>
 							{reminder.title}
 						</p>
 						{meta ? (
-							<p className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">{meta}</p>
+							<p className="truncate text-sm text-[var(--ink-muted)]">{meta}</p>
 						) : null}
 					</div>
 
 					<span
 						className={[
-							"tabular shrink-0 whitespace-nowrap pl-2 text-[length:var(--text-dense)]",
+							agenda ? "tabular-nums shrink-0 whitespace-nowrap text-base" : "tabular shrink-0 whitespace-nowrap pl-2 text-dense",
 							overdue ? "font-[var(--weight-medium)] text-[var(--risk)]" : "text-[var(--ink-muted)]",
 						].join(" ")}
 					>
-						{today ? describeDue(reminder.dueOn, today) : formatDate(reminder.dueOn)}
+						{agenda && trailing !== undefined
+							? trailing
+							: today
+								? describeDue(reminder.dueOn, today)
+								: formatDate(reminder.dueOn)}
 					</span>
 
-					<span className="flex-none opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100">
-						<MenuButton items={items} ariaLabel={`More for ${reminder.title}`} disabled={busy} />
+					<span className={`${agenda ? "absolute right-0 top-1/2 -translate-y-1/2 bg-surface" : ""} flex-none opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100`}>
+						<ActionMenu target={target} handlers={handlers} ariaLabel={`More for ${reminder.title}`} size="dense" />
 					</span>
 
-					{menu.at ? (
-						<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={reminder.title} />
-					) : null}
 				</div>
 			</div>
 		</div>

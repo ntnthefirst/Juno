@@ -152,8 +152,8 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 	if (created) {
 		return (
 			<FormPage title={`Use: ${template.name}`} onBack={onDone} backLabel="Done" width="form">
-				<p className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">Document created</p>
-				<p className="mt-3 text-[length:var(--text-base)]">
+				<p className="text-h3">Document created</p>
+				<p className="mt-3 text-base">
 					{created.pdfError === null
 						? created.where === "Not linked"
 							? `${created.title} is kept in Juno as a PDF, under no client or project.`
@@ -162,7 +162,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 					{created.isSpecimen ? " It is marked as a specimen, because the template has not been reviewed." : ""}
 				</p>
 				{created.pdfError !== null ? (
-					<p className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p className="mt-3 text-sm text-[var(--risk)]">
 						{created.pdfError} The document is in the list, so create its PDF from there.
 					</p>
 				) : null}
@@ -212,7 +212,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 				<p
 					role="alert"
 					data-selectable
-					className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 				>
 					{error}
 				</p>
@@ -235,11 +235,11 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 						read={read}
 						caption={
 							printed && printed.missing.length > 0 ? (
-								<span className="truncate text-[length:var(--text-micro)] text-[var(--risk)]">
+								<span className="truncate text-micro text-[var(--risk)]">
 									No value for: {printed.missing.join(", ")}
 								</span>
 							) : savedTo ? (
-								<span className="truncate text-[length:var(--text-micro)] text-[var(--ok)]">Saved to {savedTo}</span>
+								<span className="truncate text-micro text-[var(--ok)]">Saved to {savedTo}</span>
 							) : null
 						}
 						empty={
@@ -253,7 +253,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 				<div className="flex flex-col gap-4">
 					<DocumentOwnerFields value={owner} onChange={setOwner} disabled={busy} />
 					<Field label="Title" value={title} onChange={setTitle} help="How the document is listed." />
-					<p className="max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="max-w-[62ch] text-sm text-[var(--ink-muted)]">
 						The PDF is the one you saw. Nothing from a client or project is written into it. A document from a template
 						nobody has reviewed is marked as a specimen and cannot be signed.
 					</p>
@@ -262,7 +262,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 
 			{asking && printed ? (
 				<Dialog title="Keep this document" onClose={() => setAsking(false)} width="narrow">
-					<p className="text-[length:var(--text-dense)]">
+					<p className="text-dense">
 						The PDF is made. Keep it in Juno, under a client, a project or neither?
 					</p>
 					<div className="mt-6 flex justify-end gap-2">

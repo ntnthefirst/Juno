@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayHeading, parseMailPreview, timeAgo, timeLeft } from "./format";
+import { logOutcome, logWho, parseMailPreview, timeAgo, timeLeft } from "./format";
 import { toolVisual } from "./tool-visual";
 
 const NOW = new Date("2026-10-02T12:00:00").getTime();
@@ -16,14 +16,6 @@ describe("timeAgo and timeLeft", () => {
 		expect(timeLeft(new Date(NOW + 23 * 3_600_000 + 10_000).toISOString(), NOW)).toBe("23 h left");
 		expect(timeLeft(new Date(NOW + 40 * 60_000).toISOString(), NOW)).toBe("40 min left");
 		expect(timeLeft(new Date(NOW - 1).toISOString(), NOW)).toBe("expired");
-	});
-});
-
-describe("dayHeading", () => {
-	it("names today and yesterday, and dates the rest", () => {
-		expect(dayHeading("2026-10-02T09:00:00", NOW)).toBe("Today");
-		expect(dayHeading("2026-10-01T23:00:00", NOW)).toBe("Yesterday");
-		expect(dayHeading("2026-09-20T09:00:00", NOW)).toBe("20/09/2026");
 	});
 });
 
@@ -58,5 +50,34 @@ describe("toolVisual", () => {
 		expect(toolVisual("reminders.restore")).toEqual({ domain: "reminders", verb: "restore" });
 		expect(toolVisual("calendar.update_event")).toEqual({ domain: "calendar", verb: "change" });
 		expect(toolVisual("unknown.thing")).toEqual({ domain: "agent", verb: "change" });
+	});
+});
+
+describe("the log's outcome and who", () => {
+	const row = (overrides: Partial<Parameters<typeof logOutcome>[0]>) => ({
+		actor: "agent" as const,
+		toolName: "clients.update",
+		result: "ok" as const,
+		actionId: null,
+		...overrides,
+	});
+
+	it("uses the design's words", () => {
+		expect(logOutcome(row({ result: "closed", toolName: "mail.send", actionId: "a" })).label).toBe(
+			"Sent by you, request closed",
+		);
+		expect(logOutcome(row({ toolName: "mail.draft" })).label).toBe("Draft created");
+		expect(logOutcome(row({ result: "read", toolName: "clients.list" })).label).toBe("Read");
+		expect(logOutcome(row({ actionId: "a" })).label).toBe("Approved");
+		expect(logOutcome(row({})).label).toBe("Allowed");
+		expect(logOutcome(row({ result: "rejected", actionId: "a" })).label).toBe("Rejected");
+	});
+
+	it("says a decision was yours and a closed request was the agent's", () => {
+		expect(logWho(row({ actionId: "a" }))).toBe("You");
+		expect(logWho(row({ result: "rejected", toolName: "mail.send", actionId: "a" }))).toBe("You");
+		expect(logWho(row({ result: "closed", actor: "user", toolName: "mail.send", actionId: "a" }))).toBe("Agent");
+		expect(logWho(row({ toolName: "mail.draft" }))).toBe("Agent");
+		expect(logWho(row({ actor: "automation" }))).toBe("Automation");
 	});
 });

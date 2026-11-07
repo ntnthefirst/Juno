@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { messageOf } from "./errors";
+import { useRecordsChanged } from "./new-record";
 
 export type Loaded<T> =
 	| { status: "loading" }
@@ -34,5 +35,7 @@ export function useLoaded<T>(load: () => Promise<T>): Loaded<T> & { reload: () =
 	}, [load, version]);
 
 	const reload = useCallback(() => setVersion((current) => current + 1), []);
+	// A new-record window saved something, so what this read may be stale.
+	useRecordsChanged(reload);
 	return { ...state, reload };
 }

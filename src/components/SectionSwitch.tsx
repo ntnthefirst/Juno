@@ -45,11 +45,11 @@ export function SectionSwitch({ sections, current, label }: SectionSwitchProps) 
 		<nav
 			aria-label={label}
 			data-section-switch
-			className="relative inline-grid flex-none grid-cols-2 rounded-[var(--radius-lg)] bg-[var(--sunken)] p-0.5"
+			className="relative inline-grid flex-none grid-cols-2 rounded-[var(--radius-lg)] bg-[var(--sunken)] p-1"
 		>
 			<span
 				aria-hidden
-				className="absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-[calc(var(--radius-lg)-2px)] border border-[var(--line)] bg-[var(--surface)] transition-transform duration-[var(--duration-slow)] ease-[var(--ease-smooth)]"
+				className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-[var(--radius-md)] bg-[var(--surface)] transition-transform duration-[var(--duration-slow)] ease-[var(--ease-smooth)]"
 				style={{ transform: onRight ? "translateX(100%)" : "translateX(0)" }}
 			/>
 			{[sections.left, sections.right].map((side) => {
@@ -63,7 +63,7 @@ export function SectionSwitch({ sections, current, label }: SectionSwitchProps) 
 							if (!active) requestOpen({ kind: "screen", screen: side.id });
 						}}
 						className={[
-							"relative z-10 h-8 whitespace-nowrap px-4 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-base)] ease-[var(--ease)]",
+							"relative z-10 whitespace-nowrap px-4 py-2 text-base font-[var(--weight-medium)] transition-colors duration-[var(--duration-base)] ease-[var(--ease)]",
 							active ? "text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]",
 						].join(" ")}
 					>

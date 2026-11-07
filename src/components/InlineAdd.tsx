@@ -89,7 +89,7 @@ export function InlineAdd({
 						onBlur={() => {
 							if (!name.trim()) close();
 						}}
-						className="min-w-0 flex-1 bg-transparent text-[length:var(--text-dense)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+						className="min-w-0 flex-1 bg-transparent text-dense text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
 					/>
 					<button
 						type="button"

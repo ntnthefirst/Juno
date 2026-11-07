@@ -4,6 +4,7 @@ import type { ClientSummary, DocumentLayout, DocumentTemplate, LayoutBlock, Layo
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
+import { Segmented } from "../../components/Segmented";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import {
@@ -26,6 +27,7 @@ import { Inspector, type InspectorTarget } from "./page/Inspector";
 import { InsertToolbar, type PlacementMode } from "./page/InsertToolbar";
 import { PageCanvas, type CanvasSelection } from "./page/PageCanvas";
 import { TemplateInputsEditor } from "./mail/TemplateInputsEditor";
+import { listAllClients } from "../../lib/list-all-clients";
 
 type Loaded = {
 	template: DocumentTemplate;
@@ -92,7 +94,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 	const fetchAll = useCallback(async (): Promise<Loaded | null> => {
 		const [template, clients] = await Promise.all([
 			window.juno.templates.get(templateId),
-			window.juno.clients.list(),
+			listAllClients(),
 		]);
 		return template ? { template, clients } : null;
 	}, [templateId]);
@@ -326,7 +328,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 		return (
 			<div className="border-l-2 border-[var(--risk)] p-8 pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load this template.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{load.message}
 				</p>
 			</div>
@@ -352,9 +354,9 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 	const saveActions = (
 		<>
 			{dirty ? (
-				<span className="text-[length:var(--text-sm)] text-[var(--warn)]">Unsaved changes</span>
+				<span className="text-sm text-[var(--warn)]">Unsaved changes</span>
 			) : (
-				<span className="text-[length:var(--text-sm)] text-[var(--ok)]">Saved</span>
+				<span className="text-sm text-[var(--ok)]">Saved</span>
 			)}
 			<Button disabled={busy} onClick={() => void toggleReviewed()}>
 				{reviewed ? "Mark as not reviewed" : "Mark as reviewed"}
@@ -369,7 +371,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 		<>
 			{confirmingEdit ? (
 				<Dialog title="Save this edit" width="narrow" onClose={() => setConfirmingEdit(false)}>
-					<p className="mt-3 text-[length:var(--text-base)]">
+					<p className="mt-3 text-base">
 						Saving this change clears the reviewed mark and moves this template to version{" "}
 						{current.version + 1}. Documents generated after that are marked as specimens until you review
 						it again.
@@ -385,7 +387,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 
 			{confirmingBack ? (
 				<Dialog title="Leave without saving" width="narrow" onClose={() => setConfirmingBack(false)}>
-					<p className="mt-3 text-[length:var(--text-base)]">
+					<p className="mt-3 text-base">
 						What you changed here is not saved. Leaving now discards it.
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
@@ -405,7 +407,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 
 			{confirmingStart ? (
 				<Dialog title="Start a page layout" width="narrow" onClose={() => setConfirmingStart(false)}>
-					<p className="mt-3 text-[length:var(--text-base)]">
+					<p className="mt-3 text-base">
 						This replaces the current text with a single empty page. What is written here by hand is not
 						carried over, and there is no way back to it from inside this editor once you continue.
 					</p>
@@ -428,7 +430,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 						<button
 							type="button"
 							onClick={requestBack}
-							className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+							className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 						>
 							<ArrowLeftIcon width={16} height={16} strokeWidth={1.8} aria-hidden />
 							Back
@@ -436,7 +438,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 						<span aria-hidden className="text-[var(--ink-faint)]">
 							/
 						</span>
-						<h1 className="min-w-0 truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+						<h1 className="min-w-0 truncate text-h3">
 							{name || "Untitled template"}
 						</h1>
 					</div>
@@ -446,7 +448,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 				<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
 					<div className="w-full">
 						{reviewed ? null : (
-							<p className="max-w-[62ch] border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+							<p className="max-w-[62ch] border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 								Nobody has checked this text. Every document generated from it is marked as a specimen
 								and cannot be signed.
 							</p>
@@ -456,7 +458,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 							<p
 								role="alert"
 								data-selectable
-								className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+								className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 							>
 								{error}
 							</p>
@@ -468,7 +470,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 						</div>
 
 						<section className="mt-10">
-							<label htmlFor={bodyId} className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<label htmlFor={bodyId} className="mb-1 block text-sm text-[var(--ink-muted)]">
 								Body
 							</label>
 							<textarea
@@ -476,14 +478,14 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 								value={htmlDraft}
 								onChange={(event) => setHtmlDraft(event.target.value)}
 								spellCheck={false}
-								className="h-[420px] w-full resize-y rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] p-3 text-[length:var(--text-dense)] leading-[var(--leading-relaxed)] text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+								className="h-[420px] w-full resize-y rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] p-3 text-dense leading-[var(--leading-relaxed)] text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 								style={{ fontFamily: "var(--font-mono)" }}
 							/>
 						</section>
 
 						<section className="mt-10 border-t border-[var(--line)] pt-6">
-							<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Page layout</h3>
-							<p className="mt-2 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<h3 className="text-h3 font-[var(--weight-medium)]">Page layout</h3>
+							<p className="mt-2 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 								This template is still plain HTML. A page layout gives you pages, a margin and blocks
 								you place rather than markup you write. Starting one replaces the text above with an
 								empty page; nothing written here comes with it.
@@ -494,10 +496,10 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 						</section>
 
 						<section className="mt-10">
-							<h3 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+							<h3 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 								Inputs
 							</h3>
-							<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-3 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 								What this template asks for beyond a client and a project.
 							</p>
 							<div className="mt-4">
@@ -506,11 +508,11 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 						</section>
 
 						<section className="mt-10">
-							<h3 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+							<h3 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 								Placeholders
 							</h3>
 							{current.placeholders.length === 0 ? (
-								<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<p className="mt-4 text-dense text-[var(--ink-muted)]">
 									This template refers to no values.
 								</p>
 							) : (
@@ -519,7 +521,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 										<li
 											key={path}
 											data-selectable
-											className="text-[length:var(--text-dense)] text-[var(--ink-muted)]"
+											className="text-dense text-[var(--ink-muted)]"
 											style={{ fontFamily: "var(--font-mono)" }}
 										>
 											{path}
@@ -531,7 +533,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 
 						<section className="mt-10">
 							<div className="flex items-end justify-between gap-4 border-b border-[var(--line)] pb-2">
-								<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Preview</h3>
+								<h3 className="text-h3 font-[var(--weight-medium)]">Preview</h3>
 								<div className="flex items-end gap-2">
 									<div className="w-[220px]">
 										<Select
@@ -549,22 +551,22 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 							</div>
 
 							{preview.status === "idle" ? (
-								<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<p className="mt-4 text-dense text-[var(--ink-muted)]">
 									Refresh the preview to render the body as it stands.
 								</p>
 							) : preview.status === "running" ? (
-								<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">Rendering.</p>
+								<p className="mt-4 text-dense text-[var(--ink-muted)]">Rendering.</p>
 							) : preview.status === "error" ? (
 								<p
 									data-selectable
-									className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+									className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 								>
 									{preview.message}
 								</p>
 							) : (
 								<>
 									{preview.missing.length > 0 ? (
-										<p className="mt-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p className="mt-4 text-sm text-[var(--ink-muted)]">
 											Missing here: {preview.missing.join(", ")}
 										</p>
 									) : null}
@@ -593,7 +595,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 					<button
 						type="button"
 						onClick={requestBack}
-						className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
 						<ArrowLeftIcon width={16} height={16} strokeWidth={1.8} aria-hidden />
 						Back
@@ -601,37 +603,27 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 					<span aria-hidden className="text-[var(--ink-faint)]">
 						/
 					</span>
-					<h1 className="min-w-0 truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+					<h1 className="min-w-0 truncate text-h3">
 						{name || "Untitled template"}
 					</h1>
-					<div className="ml-2 flex rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5" role="group" aria-label="View">
-						<button
-							type="button"
-							aria-pressed={tab === "layout"}
-							onClick={() => setTab("layout")}
-							className={`h-[28px] rounded-[var(--radius-sm)] px-3 text-[length:var(--text-sm)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								tab === "layout" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
-							}`}
-						>
-							Layout
-						</button>
-						<button
-							type="button"
-							aria-pressed={tab === "details"}
-							onClick={() => setTab("details")}
-							className={`h-[28px] rounded-[var(--radius-sm)] px-3 text-[length:var(--text-sm)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								tab === "details" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
-							}`}
-						>
-							Details
-						</button>
-					</div>
+					<span className="ml-2">
+						<Segmented
+							size="compact"
+							label="View"
+							value={tab}
+							onChange={setTab}
+							options={[
+								{ id: "layout", label: "Layout" },
+								{ id: "details", label: "Details" },
+							]}
+						/>
+					</span>
 				</div>
 				<div className="flex items-center gap-2">{saveActions}</div>
 			</div>
 
 			{reviewed ? null : (
-				<p className="flex-none border-b border-[var(--line)] px-6 py-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p className="flex-none border-b border-[var(--line)] px-6 py-2 text-sm text-[var(--risk)]">
 					Nobody has checked this text. Every document generated from it is marked as a specimen and cannot
 					be signed.
 				</p>
@@ -641,7 +633,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 				<p
 					role="alert"
 					data-selectable
-					className="flex-none border-b border-[var(--line)] px-6 py-2 text-[length:var(--text-sm)] text-[var(--risk)]"
+					className="flex-none border-b border-[var(--line)] px-6 py-2 text-sm text-[var(--risk)]"
 				>
 					{error}
 				</p>
@@ -672,7 +664,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 									options={ZOOM_OPTIONS}
 								/>
 							</div>
-							<span className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="tabular text-sm text-[var(--ink-muted)]">
 								{layoutDraft.pages.length} {layoutDraft.pages.length === 1 ? "page" : "pages"}
 							</span>
 						</div>
@@ -708,10 +700,10 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 						</div>
 
 						<section className="mt-10">
-							<h3 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+							<h3 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 								Inputs
 							</h3>
-							<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-3 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 								What this template asks for beyond a client and a project.
 							</p>
 							<div className="mt-4">
@@ -720,14 +712,14 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 						</section>
 
 						<section className="mt-10">
-							<h3 className="border-b border-[var(--line)] pb-2 text-[length:var(--text-h3)] font-[var(--weight-medium)]">
+							<h3 className="border-b border-[var(--line)] pb-2 text-h3 font-[var(--weight-medium)]">
 								Placeholders
 							</h3>
-							<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="mt-3 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 								As of the last save.
 							</p>
 							{current.placeholders.length === 0 ? (
-								<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<p className="mt-4 text-dense text-[var(--ink-muted)]">
 									This template refers to no values.
 								</p>
 							) : (
@@ -736,7 +728,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 										<li
 											key={path}
 											data-selectable
-											className="text-[length:var(--text-dense)] text-[var(--ink-muted)]"
+											className="text-dense text-[var(--ink-muted)]"
 											style={{ fontFamily: "var(--font-mono)" }}
 										>
 											{path}
@@ -748,7 +740,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 
 						<section className="mt-10">
 							<div className="flex items-end justify-between gap-4 border-b border-[var(--line)] pb-2">
-								<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Preview</h3>
+								<h3 className="text-h3 font-[var(--weight-medium)]">Preview</h3>
 								<div className="flex items-end gap-2">
 									<div className="w-[220px]">
 										<Select
@@ -766,28 +758,28 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 							</div>
 
 							{dirty ? (
-								<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="mt-2 text-sm text-[var(--ink-muted)]">
 									Save your changes to preview them. The preview shows what was last saved.
 								</p>
 							) : null}
 
 							{preview.status === "idle" ? (
-								<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+								<p className="mt-4 text-dense text-[var(--ink-muted)]">
 									Refresh the preview to render the last saved layout.
 								</p>
 							) : preview.status === "running" ? (
-								<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">Rendering.</p>
+								<p className="mt-4 text-dense text-[var(--ink-muted)]">Rendering.</p>
 							) : preview.status === "error" ? (
 								<p
 									data-selectable
-									className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+									className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 								>
 									{preview.message}
 								</p>
 							) : (
 								<>
 									{preview.missing.length > 0 ? (
-										<p className="mt-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p className="mt-4 text-sm text-[var(--ink-muted)]">
 											Missing here: {preview.missing.join(", ")}
 										</p>
 									) : null}

@@ -17,10 +17,12 @@ import type { JunoApi } from "./shared/api";
 import type {
 	AgentAction,
 	AutomationRun,
+	ChildClosedInfo,
 	LockState,
 	MailOutboxMessage,
 	MailSyncStatus,
 	ProjectRun,
+	RunningTimer,
 	SettingsSection,
 	ThemeSetting,
 	UpdateStatus,
@@ -41,6 +43,10 @@ const api: JunoApi = {
 		},
 	},
 
+	menu: {
+		show: (request) => call("menu.show", request),
+		setIcons: (icons) => call("menu.setIcons", icons),
+	},
 	window: {
 		openSettings: (section) => call("window.openSettings", section),
 		closeSettings: () => call("window.closeSettings"),
@@ -54,12 +60,23 @@ const api: JunoApi = {
 			};
 		},
 		onChildClosed: (listener) => {
-			const handler = () => listener();
+			const handler = (_event: Electron.IpcRendererEvent, info?: ChildClosedInfo) =>
+				listener(info ?? { created: null });
 			ipcRenderer.on("window.childClosed", handler);
 			return () => {
 				ipcRenderer.off("window.childClosed", handler);
 			};
 		},
+		takeShellRequest: () => call("window.takeShellRequest"),
+		onShellRequest: (listener) => {
+			const handler = () => listener();
+			ipcRenderer.on("window.shellRequest", handler);
+			return () => {
+				ipcRenderer.off("window.shellRequest", handler);
+			};
+		},
+		openNewRecord: (kind, prefill) => call("window.openNewRecord", kind, prefill),
+		closeNewRecord: (created) => call("window.closeNewRecord", created),
 		openSetup: () => call("window.openSetup"),
 		closeSetup: () => call("window.closeSetup"),
 		isSetupOpen: () => call("window.isSetupOpen"),
@@ -129,6 +146,44 @@ const api: JunoApi = {
 		setPrimary: (id) => call("clientAddresses.setPrimary", id),
 	},
 
+	time: {
+		list: (projectId) => call("time.list", projectId),
+		total: (projectId) => call("time.total", projectId),
+		running: () => call("time.running"),
+		start: (projectId, note) => call("time.start", projectId, note),
+		stop: (note) => call("time.stop", note),
+		create: (input) => call("time.create", input),
+		update: (id, patch) => call("time.update", id, patch),
+		remove: (id) => call("time.remove", id),
+		onRunningChange: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, running: RunningTimer | null) =>
+				listener(running);
+			ipcRenderer.on("time.runningChanged", handler);
+			return () => {
+				ipcRenderer.off("time.runningChanged", handler);
+			};
+		},
+	},
+
+	notes: {
+		list: (query) => call("notes.list", query),
+		get: (id) => call("notes.get", id),
+		search: (term, query) => call("notes.search", term, query),
+		create: (input) => call("notes.create", input),
+		update: (id, patch) => call("notes.update", id, patch),
+		duplicate: (id) => call("notes.duplicate", id),
+		remove: (id) => call("notes.remove", id),
+		restore: (id) => call("notes.restore", id),
+	},
+
+	pages: {
+		get: (id) => call("pages.get", id),
+		create: (input) => call("pages.create", input),
+		update: (id, patch) => call("pages.update", id, patch),
+		chooseImage: (id) => call("pages.chooseImage", id),
+		openLink: (url) => call("pages.openLink", url),
+	},
+
 	projects: {
 		list: (query) => call("projects.list", query),
 		get: (id) => call("projects.get", id),
@@ -136,6 +191,8 @@ const api: JunoApi = {
 		update: (id, patch) => call("projects.update", id, patch),
 		remove: (id) => call("projects.remove", id),
 		restore: (id) => call("projects.restore", id),
+		archive: (id) => call("projects.archive", id),
+		timeline: (query) => call("projects.timeline", query),
 		storage: (id) => call("projects.storage", id),
 		setStorage: (id, choice) => call("projects.setStorage", id, choice),
 		chooseStorageFolder: (id, move) => call("projects.chooseStorageFolder", id, move),
@@ -209,6 +266,9 @@ const api: JunoApi = {
 		getSignatureImage: () => call("settings.getSignatureImage"),
 		chooseSignature: () => call("settings.chooseSignature"),
 		clearSignature: () => call("settings.clearSignature"),
+		getDocumentsFolder: () => call("settings.getDocumentsFolder"),
+		chooseDocumentsFolder: () => call("settings.chooseDocumentsFolder"),
+		resetDocumentsFolder: () => call("settings.resetDocumentsFolder"),
 		getTheme: () => call("settings.getTheme"),
 		getProjectsView: () => call("settings.getProjectsView"),
 		setProjectsView: (patch) => call("settings.setProjectsView", patch),
@@ -235,6 +295,10 @@ const api: JunoApi = {
 		needsOnboarding: () => call("settings.needsOnboarding"),
 	},
 
+	desktop: {
+		get: () => call("desktop.get"),
+		update: (patch) => call("desktop.update", patch),
+	},
 	updates: {
 		status: () => call("updates.status"),
 		check: () => call("updates.check"),
@@ -278,6 +342,21 @@ const api: JunoApi = {
 		query: (input) => call("search.query", input),
 	},
 
+	suggestions: {
+		forMessage: (messageId) => call("suggestions.forMessage", messageId),
+		dismiss: (messageId, kind) => call("suggestions.dismiss", messageId, kind),
+		accept: (messageId, kind) => call("suggestions.accept", messageId, kind),
+		sources: {
+			get: () => call("suggestions.sources.get"),
+			set: (patch) => call("suggestions.sources.set", patch),
+		},
+	},
+	recent: {
+		list: () => call("recent.list"),
+		touch: (kind, recordId) => call("recent.touch", kind, recordId),
+		clear: () => call("recent.clear"),
+	},
+
 	agent: {
 		server: {
 			status: () => call("agent.server.status"),
@@ -289,6 +368,14 @@ const api: JunoApi = {
 			connect: () => call("agent.claudeDesktop.connect"),
 		},
 		tools: () => call("agent.tools"),
+		permissions: {
+			get: () => call("agent.permissions.get"),
+			set: (patch) => call("agent.permissions.set", patch),
+		},
+		instructions: {
+			get: () => call("agent.instructions.get"),
+			set: (instructions) => call("agent.instructions.set", instructions),
+		},
 		connections: {
 			list: () => call("agent.connections.list"),
 			revoke: (id) => call("agent.connections.revoke", id),
@@ -309,6 +396,7 @@ const api: JunoApi = {
 		actions: {
 			list: (query) => call("agent.actions.list", query),
 			get: (id) => call("agent.actions.get", id),
+			forDraft: (draftId) => call("agent.actions.forDraft", draftId),
 			pendingCount: () => call("agent.actions.pendingCount"),
 			approve: (id) => call("agent.actions.approve", id),
 			reject: (id) => call("agent.actions.reject", id),
@@ -325,6 +413,7 @@ const api: JunoApi = {
 		audit: {
 			list: (query) => call("agent.audit.list", query),
 			describe: (ids) => call("agent.audit.describe", ids),
+			purge: () => call("agent.audit.purge"),
 		},
 	},
 
@@ -348,6 +437,7 @@ const api: JunoApi = {
 
 	briefing: {
 		today: () => call("briefing.today"),
+		overview: () => call("briefing.overview"),
 		client: (clientId) => call("briefing.client", clientId),
 		month: (month) => call("briefing.month", month),
 	},
@@ -368,6 +458,21 @@ const api: JunoApi = {
 			list: (templateId) => call("templates.assets.list", templateId),
 			add: (input) => call("templates.assets.add", input),
 			remove: (id) => call("templates.assets.remove", id),
+		},
+		components: {
+			list: () => call("templates.components.list"),
+			get: (id) => call("templates.components.get", id),
+			create: (input) => call("templates.components.create", input),
+			update: (id, patch) => call("templates.components.update", id, patch),
+			remove: (id) => call("templates.components.remove", id),
+			usedBy: (id) => call("templates.components.usedBy", id),
+			detach: (input) => call("templates.components.detach", input),
+			renderPdf: (input) => call("templates.components.renderPdf", input),
+			assets: {
+				list: (componentId) => call("templates.components.assets.list", componentId),
+				add: (input) => call("templates.components.assets.add", input),
+				remove: (id) => call("templates.components.assets.remove", id),
+			},
 		},
 	},
 
@@ -511,6 +616,27 @@ const api: JunoApi = {
 			save: (id) => call("mail.attachments.save", id),
 		},
 		openLink: (url) => call("mail.openLink", url),
+		blocks: {
+			list: (kind) => call("mail.blocks.list", kind),
+			get: (id) => call("mail.blocks.get", id),
+			create: (input) => call("mail.blocks.create", input),
+			update: (id, patch) => call("mail.blocks.update", id, patch),
+			remove: (id) => call("mail.blocks.remove", id),
+			reorder: (kind, ids) => call("mail.blocks.reorder", kind, ids),
+			resolve: (context) => call("mail.blocks.resolve", context),
+			render: (id, context) => call("mail.blocks.render", id, context),
+			values: (context) => call("mail.blocks.values", context),
+		},
+		rules: {
+			list: (accountId) => call("mail.rules.list", accountId),
+			get: (id) => call("mail.rules.get", id),
+			create: (input) => call("mail.rules.create", input),
+			update: (id, patch) => call("mail.rules.update", id, patch),
+			remove: (id) => call("mail.rules.remove", id),
+			reorder: (accountId, ids) => call("mail.rules.reorder", accountId, ids),
+			describe: (id) => call("mail.rules.describe", id),
+			runs: (query) => call("mail.rules.runs", query),
+		},
 		templates: {
 			list: () => call("mail.templates.list"),
 			listAll: () => call("mail.templates.listAll"),

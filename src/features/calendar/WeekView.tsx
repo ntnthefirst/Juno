@@ -6,10 +6,8 @@ import {
 	type PointerEvent,
 } from "react";
 import type { CalendarItem, CalendarOccurrence, CalendarReminderItem } from "@shared/types";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
-import { useContextMenu } from "../../lib/use-context-menu";
 import { formatMinutes, snap, weekdayShort } from "./dates";
-import { chipTone, itemMenuItems, itemTitle, laneLayout, type Placed } from "./format";
+import { chipTone, dotTone, openItemMenu as openChipMenu, itemTitle, laneLayout, type Placed } from "./format";
 import { useWheelPaging } from "./use-wheel-paging";
 
 type WeekViewProps = {
@@ -29,11 +27,13 @@ type WeekViewProps = {
 	onDelete: (item: CalendarItem) => void;
 	onComplete: (item: CalendarReminderItem) => void;
 	onSnooze: (item: CalendarReminderItem) => void;
+	onChanged: () => void;
 	/** A wheel gesture over the header, the all-day row or an edge: page a week. */
 	onStep: (direction: -1 | 1) => void;
 };
 
-const HOUR_PX = 48;
+/** An hour is 56px tall, as the Week frame draws it (26:1026). */
+const HOUR_PX = 56;
 const SNAP = 15;
 const MIN_PX = 20;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -67,14 +67,13 @@ export function WeekView({
 	onDelete,
 	onComplete,
 	onSnooze,
+	onChanged,
 	onStep,
 }: WeekViewProps) {
 	const root = useRef<HTMLDivElement>(null);
 	const scroller = useRef<HTMLDivElement>(null);
 	const grid = useRef<HTMLDivElement>(null);
 	const [drag, setDrag] = useState<Drag | null>(null);
-	const menu = useContextMenu();
-	const [menuItem, setMenuItem] = useState<CalendarItem | null>(null);
 	const page = useWheelPaging(onStep);
 
 	// Open on the working day, not on midnight.
@@ -113,8 +112,7 @@ export function WeekView({
 	}, [page]);
 
 	function openItemMenu(event: MouseEvent<HTMLElement>, item: CalendarItem) {
-		setMenuItem(item);
-		menu.open(event);
+		openChipMenu(event, item, { onOpen, onEdit, onDelete, onComplete, onSnooze, onChanged });
 	}
 
 	function columnWidth(): number {
@@ -162,38 +160,33 @@ export function WeekView({
 		onCreateAt(date, Math.min(23 * 60 + 30, Math.max(0, minute)));
 	}
 
-	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete, onComplete, onSnooze }) : [];
-
 	return (
 		<div ref={root} className="flex h-full min-h-0 flex-col">
 			<div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] overflow-y-auto border-b border-[var(--line)] [scrollbar-gutter:stable]">
 				<div />
 				{dates.map((date) => (
-					<div key={date} className="flex items-baseline gap-1.5 px-2 py-1.5">
-						<span className="text-[length:var(--text-micro)] uppercase tracking-[0.08em] text-[var(--ink-muted)]">
-							{weekdayShort(date)}
-						</span>
+					<div key={date} className="flex h-[42px] items-center gap-2 px-3">
 						<span
-							className={`tabular text-[length:var(--text-dense)] ${
-								date === today
-									? "rounded-[var(--radius-full)] bg-[var(--accent)] px-1.5 font-[var(--weight-medium)] text-[var(--accent-ink)]"
-									: ""
+							className={`tabular inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-[var(--radius-full)] text-base ${
+								date === today ? "bg-[var(--accent)] text-[var(--accent-ink)]" : ""
 							}`}
 						>
 							{Number(date.slice(8, 10))}
 						</span>
+						<span className="text-overline uppercase text-[var(--ink-muted)]">{weekdayShort(date)}</span>
 					</div>
 				))}
 			</div>
 
 			<div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] overflow-y-auto border-b border-[var(--line)] [scrollbar-gutter:stable]">
-				<div className="px-2 py-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">all day</div>
-				{dates.map((date, index) => {
+				<div className="flex min-h-8 items-center whitespace-nowrap pl-3 text-sm text-[var(--ink-muted)]">All day</div>
+				{dates.map((date) => {
 					const dated = (placed.get(date) ?? []).filter((p) => p.dated);
 					return (
+						// One cell high, 32px, until a day has more than one all-day item.
 						<div
 							key={date}
-							className={`flex min-h-7 flex-col gap-px px-1 py-1 ${index !== 0 ? "border-l border-[var(--line)]" : ""}`}
+							className="flex min-h-8 flex-col gap-1 p-1"
 							onDoubleClick={(event) => {
 								if (event.target === event.currentTarget) onCreateAt(date, null);
 							}}
@@ -207,7 +200,7 @@ export function WeekView({
 									onContextMenu={(event) => openItemMenu(event, p.item)}
 									title={itemTitle(p.item)}
 									className={[
-										"h-5 truncate rounded-[var(--radius-sm)] px-1.5 text-left text-[length:var(--text-micro)] font-[var(--weight-medium)] leading-none",
+										"h-6 shrink-0 truncate rounded-[var(--radius-sm)] px-2 text-left text-dense",
 										chipTone(p.item),
 										p.continued ? "rounded-l-none" : "",
 										p.continues ? "rounded-r-none" : "",
@@ -230,7 +223,7 @@ export function WeekView({
 						{HOURS.map((hour) => (
 							<div
 								key={hour}
-								className="tabular absolute right-2 -translate-y-1/2 text-[length:var(--text-micro)] text-[var(--ink-muted)]"
+								className="tabular absolute right-2 font-mono text-micro text-[var(--ink-muted)]"
 								style={{ top: hour * HOUR_PX }}
 							>
 								{hour === 0 ? "" : formatMinutes(hour * 60)}
@@ -244,7 +237,7 @@ export function WeekView({
 							return (
 								<div
 									key={date}
-									className={`relative ${index !== 0 ? "border-l border-[var(--line)]" : ""}`}
+									className={`relative ${index !== 0 ? "border-l border-[var(--line)]" : ""} ${index >= 5 ? "bg-[var(--sunken)]" : ""}`}
 									onClick={(event) => slotClick(event, date)}
 								>
 									{HOURS.map((hour) => (
@@ -267,8 +260,9 @@ export function WeekView({
 										const dayShift = active?.mode === "move" ? active.dayDelta : 0;
 										const startMinute = p.startMinute + (active?.mode === "move" ? active.minuteDelta : 0);
 										const endMinute = p.endMinute + (active ? active.minuteDelta : 0);
-										const top = (startMinute / 60) * HOUR_PX;
-										const height = Math.max(MIN_PX, ((Math.max(endMinute, startMinute) - startMinute) / 60) * HOUR_PX);
+										// Inset 2px above and below, so two blocks that meet do not touch.
+										const top = (startMinute / 60) * HOUR_PX + 2;
+										const height = Math.max(MIN_PX, ((Math.max(endMinute, startMinute) - startMinute) / 60) * HOUR_PX - 4);
 										const lane = lanes.get(p.key) ?? { lane: 0, lanes: 1 };
 										const item = p.item;
 										const label = item.kind === "event" ? item.title : itemTitle(item);
@@ -290,25 +284,28 @@ export function WeekView({
 												}}
 												onContextMenu={(event) => openItemMenu(event, item)}
 												className={[
-													"absolute z-[1] flex cursor-grab select-none flex-col overflow-hidden rounded-[var(--radius-sm)] border border-[var(--surface)] px-1.5 py-0.5 text-[length:var(--text-micro)] leading-tight",
+													"absolute z-[1] flex cursor-grab select-none gap-2 overflow-hidden rounded-[var(--radius-sm)] pr-2",
 													chipTone(item),
 													active ? "opacity-80 shadow-[var(--shadow-popover)]" : "",
 												].join(" ")}
 												style={{
 													top,
 													height,
-													left: `calc(${(lane.lane / lane.lanes) * 100}% + ${dayShift * 100}%)`,
-													width: `${(1 / lane.lanes) * 100}%`,
+													left: `calc(${(lane.lane / lane.lanes) * 100}% + ${dayShift * 100}% + 4px)`,
+													width: `calc(${(1 / lane.lanes) * 100}% - 8px)`,
 												}}
 											>
-												<span className="truncate font-[var(--weight-medium)]">{label}</span>
-												{height >= 34 ? (
-													<span className="tabular truncate opacity-80">
-														{formatMinutes(Math.max(0, startMinute))}
-														{" to "}
-														{formatMinutes(Math.min(1440, endMinute))}
-													</span>
-												) : null}
+												<span aria-hidden className={`w-[3px] shrink-0 ${dotTone(item)}`} />
+												<span className="flex min-w-0 flex-1 flex-col justify-center">
+													<span className="truncate text-dense font-[var(--weight-medium)]">{label}</span>
+													{height >= 44 ? (
+														<span className="tabular truncate text-sm">
+															{formatMinutes(Math.max(0, startMinute))}
+															{" to "}
+															{formatMinutes(Math.min(1440, endMinute))}
+														</span>
+													) : null}
+												</span>
 												{item.kind === "event" && !p.continues ? (
 													<span
 														aria-hidden
@@ -328,17 +325,6 @@ export function WeekView({
 				</div>
 			</div>
 
-			{menu.at && menuItem ? (
-				<ContextMenu
-					at={menu.at}
-					items={menuItems}
-					ariaLabel="Event"
-					onClose={() => {
-						menu.close();
-						setMenuItem(null);
-					}}
-				/>
-			) : null}
 		</div>
 	);
 }

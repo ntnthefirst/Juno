@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+	ComposeBlock,
+	ComposeBlockContext,
+	ComposeBlockKind,
 	DocumentRecord,
 	MailAccount,
 	MailAddress,
@@ -10,15 +13,20 @@ import type {
 import { mimeTypeOf } from "@shared/mime";
 import { AttachmentIcon } from "../../components/AttachmentIcon";
 import { Button } from "../../components/Button";
+import { Checkbox } from "../../components/Checkbox";
 import { DocumentSearchList } from "../../components/DocumentSearchList";
 import { Field } from "../../components/Field";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
+import { Notice } from "../../components/Notice";
+import { requestOpen } from "../../lib/open-entity";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { BlockMenu, type ManageTarget } from "./blocks/BlockMenu";
+import { squash } from "./blocks/block-text";
+import MessageEditor, { type MessageEditorHandle } from "./MessageEditor";
 import { useFileDrop } from "../../lib/use-file-drop";
 import { formatBytes } from "./format";
-import MessageEditor from "./MessageEditor";
 import { RecipientField } from "./RecipientField";
 
 export type ComposeSeed = {
@@ -40,8 +48,17 @@ type ComposePageProps = {
 	seed: ComposeSeed;
 	onClose: () => void;
 	onDeleted: () => void;
-	onDone: (message: MailOutboxMessage, queued: boolean) => void;
+	/** `closedRequest` is the title of the agent request that sending this draft closed, if there was one. */
+	onDone: (message: MailOutboxMessage, queued: boolean, closedRequest?: string | null) => void;
+	/**
+	 * Opens the manage screen for intros and outros. The draft is saved first and
+	 * handed over, so coming back reopens the message as it was left. Left out
+	 * where the composer has no screen to go back to, and the menus then only pick.
+	 */
+	onManage?: (draft: MailOutboxMessage | null, target: ManageTarget) => void;
 };
+
+type BlockState = Record<ComposeBlockKind, string | null>;
 
 type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
 
@@ -51,7 +68,7 @@ type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
  * form; this reads as a blank message the way a mail client's own compose
  * window does, on any size of screen.
  */
-export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePageProps) {
+export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: ComposePageProps) {
 	const [accounts, setAccounts] = useState<MailAccount[]>([]);
 	const [templates, setTemplates] = useState<MailTemplate[]>([]);
 	const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);
@@ -83,8 +100,46 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 	const [templateApplied, setTemplateApplied] = useState(Boolean(seed.draft?.templateId));
 	const [savedMessage, setSavedMessage] = useState<MailOutboxMessage | null>(seed.draft ?? null);
 	const [saveState, setSaveState] = useState<SaveState>("idle");
+	// Set when an agent asked to send this draft and nobody has answered yet.
+	const [agentRequestId, setAgentRequestId] = useState<string | null>(null);
+
+	const draftId = seed.draft?.id ?? null;
+	useEffect(() => {
+		if (!draftId) return;
+		let cancelled = false;
+		window.juno.agent.actions
+			.forDraft(draftId)
+			.then((action) => {
+				if (!cancelled) setAgentRequestId(action?.state === "pending" ? action.id : null);
+			})
+			.catch(() => {
+				// No banner is the safe direction: sending still goes through the same gate.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [draftId]);
 
 	const attachmentsRef = useRef<HTMLDivElement>(null);
+	const editorRef = useRef<MessageEditorHandle>(null);
+
+	// Intros and outros. A kind is "auto" until the person takes it over, which is
+	// choosing a block, choosing none, or editing the line: after any of those the
+	// rules never touch it again. A reopened draft already has what it was given.
+	const [blocks, setBlocks] = useState<ComposeBlock[] | null>(null);
+	const [activeBlocks, setActiveBlocks] = useState<BlockState>({ intro: null, outro: null });
+	const [insertedBlocks, setInsertedBlocks] = useState<BlockState>({ intro: null, outro: null });
+	const insertedRef = useRef<BlockState>({ intro: null, outro: null });
+	const blockMode = useRef<Record<ComposeBlockKind, "auto" | "manual" | "off">>({
+		intro: seed.draft ? "manual" : "auto",
+		outro: seed.draft ? "manual" : "auto",
+	});
+
+	const recordBlock = useCallback((kind: ComposeBlockKind, blockId: string | null, text: string | null) => {
+		insertedRef.current = { ...insertedRef.current, [kind]: text };
+		setInsertedBlocks(insertedRef.current);
+		setActiveBlocks((current) => ({ ...current, [kind]: blockId }));
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -105,6 +160,103 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 			cancelled = true;
 		};
 	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		window.juno.mail.blocks
+			.list()
+			.then((rows) => {
+				if (!cancelled) setBlocks(rows);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setError(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const replying = Boolean(seed.draft?.replyToMessageId ?? seed.replyToMessageId);
+	const blockContext = useMemo<ComposeBlockContext>(
+		() => ({ reply: replying, to, clientId: clientId || null, projectId }),
+		[replying, to, clientId, projectId],
+	);
+
+	// Once when the composer opens and again when the recipient becomes known,
+	// for as long as the line is still the one that was put there.
+	useEffect(() => {
+		if (blocks === null) return;
+		if (blockMode.current.intro !== "auto" && blockMode.current.outro !== "auto") return;
+		let cancelled = false;
+		window.juno.mail.blocks
+			.resolve(blockContext)
+			.then((found) => {
+				const editor = editorRef.current;
+				if (cancelled || !editor) return;
+				for (const kind of ["intro", "outro"] as const) {
+					if (blockMode.current[kind] !== "auto") continue;
+					const put = insertedRef.current[kind];
+					const inMessage = editor.readBlock(kind);
+					if (inMessage !== null && (put === null || squash(inMessage) !== squash(put))) {
+						blockMode.current[kind] = "manual";
+						continue;
+					}
+					const next = found[kind];
+					const body = next?.block.body ?? null;
+					if (body === put) continue;
+					editor.setBlock(kind, body);
+					recordBlock(kind, next?.block.id ?? null, body);
+				}
+			})
+			.catch(() => {
+				// A line added for you is a convenience. If it cannot be worked out the
+				// message starts as it would have, and there is nothing to report.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [blocks, blockContext, recordBlock]);
+
+	// A chip with nothing to put in is flagged in the message, so it is seen
+	// before Send refuses it. Asked again whenever the recipient, the client or
+	// the project changes, and for a draft that was saved and reopened.
+	useEffect(() => {
+		let cancelled = false;
+		window.juno.mail.blocks
+			.values(blockContext)
+			.then((values) => {
+				if (cancelled) return;
+				const empty = (Object.keys(values) as (keyof typeof values)[]).filter((name) => !values[name]?.trim());
+				editorRef.current?.markMissing(empty);
+			})
+			.catch(() => {
+				// The flag is a courtesy. Sending checks the same thing and says so.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [blockContext, bodyHtml]);
+
+	async function pickBlock(kind: ComposeBlockKind, blockId: string | null) {
+		const editor = editorRef.current;
+		if (!editor) return;
+		if (blockId === null) {
+			editor.setBlock(kind, null);
+			blockMode.current[kind] = "off";
+			recordBlock(kind, null, null);
+			return;
+		}
+		try {
+			const rendered = await window.juno.mail.blocks.render(blockId, blockContext);
+			// The stored body goes in, so its variables are chips. They take their
+			// values when the message is sent.
+			editor.setBlock(kind, rendered.block.body);
+			blockMode.current[kind] = "manual";
+			recordBlock(kind, blockId, rendered.block.body);
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		}
+	}
 
 	const addressKey = [...to, ...cc, ...bcc].map((address) => address.address).join(",");
 	useEffect(() => {
@@ -218,13 +370,14 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 	// Files from this computer live on the saved draft, so they are read from it.
 	const files = savedMessage?.files ?? [];
 
+	// A message holding only the lines the rules added is still an empty message,
+	// so opening the composer does not leave a draft behind.
+	const typedText = [insertedBlocks.intro, insertedBlocks.outro].reduce<string>(
+		(rest, line) => (line ? rest.replace(line, "") : rest),
+		bodyText,
+	);
 	const isEmpty =
-		to.length === 0 &&
-		cc.length === 0 &&
-		bcc.length === 0 &&
-		!subject.trim() &&
-		!bodyText.trim() &&
-		documentIds.length === 0 &&
+		to.length === 0 && cc.length === 0 && bcc.length === 0 && !subject.trim() && !typedText.trim() && documentIds.length === 0 &&
 		files.length === 0;
 
 	// Read through a ref rather than depended on directly: persist's own
@@ -418,7 +571,23 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 				return;
 			}
 			const sent = await window.juno.mail.outbox.send(message.id);
-			onDone(sent, true);
+			let closedTitle: string | null = null;
+			if (agentRequestId) {
+				// The service closed the request in the same step as the send. Ask what
+				// it says rather than assuming, so the notice only appears when true.
+				try {
+					const [action, tools] = await Promise.all([
+						window.juno.agent.actions.forDraft(sent.id),
+						window.juno.agent.tools(),
+					]);
+					if (action?.state === "closed") {
+						closedTitle = tools.find((tool) => tool.name === action.toolName)?.title ?? "Send a draft";
+					}
+				} catch {
+					// The message has gone out; a missing notice is not worth an error.
+				}
+			}
+			onDone(sent, true, closedTitle);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 			setBusy(null);
@@ -441,6 +610,12 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 			setError(messageOf(cause));
 			setBusy(null);
 		}
+	}
+
+	async function manageBlocks(target: ManageTarget) {
+		if (busy) return;
+		const saved = await persist(false);
+		onManage?.(saved, target);
 	}
 
 	const handleClose = useCallback(async () => {
@@ -504,6 +679,27 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 			) : null}
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				<div className="flex min-h-full flex-col gap-3 px-6 pt-4 pb-6">
+					{agentRequestId ? (
+						<Notice
+							tone="info"
+							layout="inline"
+							icon="agent"
+							role="status"
+							actions={
+								<button
+									type="button"
+									onClick={() => {
+										void handleClose().then(() => requestOpen({ kind: "screen", screen: "agent" }));
+									}}
+									className="text-dense font-[var(--weight-medium)] text-[var(--accent)] hover:underline"
+								>
+									View request
+								</button>
+							}
+						>
+							This draft answers an agent request. Send it here yourself and the request closes by itself.
+						</Notice>
+					) : null}
 					{accounts.length > 1 ? (
 						<div className="max-w-[420px]">
 							<Select
@@ -532,7 +728,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 										<button
 											type="button"
 											onClick={() => setShowCopies(true)}
-											className="shrink-0 text-[length:var(--text-sm)] text-[var(--accent)] hover:underline"
+											className="shrink-0 text-sm text-[var(--accent)] hover:underline"
 										>
 											Add Cc or Bcc
 										</button>
@@ -544,7 +740,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 							<div className="mb-1 flex items-baseline justify-end">
 								<span
 									aria-live="polite"
-									className={`text-[length:var(--text-sm)] ${saveState === "error" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
+									className={`text-sm ${saveState === "error" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
 								>
 									{statusLabel}
 								</span>
@@ -601,7 +797,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 							>
 								<Icon name="attachment" size={18} />
 								{attachmentCount > 0 ? (
-									<span className="tabular absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[length:var(--text-micro)] text-[var(--accent-ink)]">
+									<span className="tabular absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent)] px-1 text-micro text-[var(--accent-ink)]">
 										{attachmentCount}
 									</span>
 								) : null}
@@ -643,7 +839,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 										/>
 										{projectFiles && projectFiles.assets.length > 0 ? (
 											<div>
-												<p className="px-2 pt-2 pb-1 text-[length:var(--text-micro)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+												<p className="px-2 pt-2 pb-1 text-overline uppercase text-[var(--ink-muted)]">
 													Files of {projectFiles.name}
 												</p>
 												<ul>
@@ -659,9 +855,9 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 																	style={{ height: "var(--row-height)" }}
 																>
 																	<AttachmentIcon filename={asset.fileName} mimeType={asset.mimeType ?? mimeTypeOf(asset.fileName)} />
-																	<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{asset.fileName}</span>
+																	<span className="min-w-0 flex-1 truncate text-dense">{asset.fileName}</span>
 																	{attached ? (
-																		<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">Attached</span>
+																		<span className="shrink-0 text-micro text-[var(--ink-muted)]">Attached</span>
 																	) : null}
 																</button>
 															</li>
@@ -676,13 +872,13 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 											type="button"
 											onClick={() => void attachFromComputer()}
 											disabled={attaching}
-											className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 text-left text-[length:var(--text-dense)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-60"
+											className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 text-left text-dense hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-60"
 											style={{ height: "var(--row-height)" }}
 										>
 											<Icon name="folder-open" size={16} />
 											<span className="flex-1">From this computer</span>
 										</button>
-										<p className="px-2 pt-1 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<p className="px-2 pt-1 text-micro text-[var(--ink-muted)]">
 											Sent and not kept. You can also drop files on the message.
 										</p>
 									</div>
@@ -700,11 +896,11 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 									style={{ height: "var(--row-height)" }}
 								>
 									<AttachmentIcon filename={attached.name} mimeType={mimeTypeOf(attached.name)} />
-									<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{attached.name}</span>
+									<span className="min-w-0 flex-1 truncate text-dense">{attached.name}</span>
 									{attached.isSpecimen ? (
-										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--risk)]">specimen</span>
+										<span className="shrink-0 text-micro text-[var(--risk)]">specimen</span>
 									) : null}
-									<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">From documents</span>
+									<span className="shrink-0 text-micro text-[var(--ink-muted)]">From documents</span>
 									<IconAction
 										icon="close"
 										label={`Remove ${attached.name}`}
@@ -719,17 +915,15 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 									style={{ height: "var(--row-height)" }}
 								>
 									<AttachmentIcon filename={file.fileName} mimeType={file.mimeType} />
-									<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">{file.fileName}</span>
-									<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+									<span className="min-w-0 flex-1 truncate text-dense">{file.fileName}</span>
+									<span className="tabular shrink-0 text-micro text-[var(--ink-muted)]">
 										{formatBytes(file.byteSize)}
 									</span>
 									{file.sourceAssetId ? (
-										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">From project files</span>
+										<span className="shrink-0 text-micro text-[var(--ink-muted)]">From project files</span>
 									) : file.keepsAs ? (
-										<label className="flex shrink-0 cursor-pointer items-center gap-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-											<input
-												type="checkbox"
-												className="accent-[var(--accent)]"
+										<label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-[var(--ink-muted)]">
+											<Checkbox
 												checked={file.keep}
 												onChange={(event) =>
 													void fileAction(() =>
@@ -740,7 +934,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 											{file.keepsAs === "document" ? "Add to documents when sent" : "Add to project files when sent"}
 										</label>
 									) : (
-										<span className="shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">Sent only</span>
+										<span className="shrink-0 text-micro text-[var(--ink-muted)]">Sent only</span>
 									)}
 									<IconAction
 										icon="close"
@@ -752,7 +946,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 						</ul>
 					) : null}
 					{attaching ? (
-						<p role="status" className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p role="status" className="text-sm text-[var(--ink-muted)]">
 							Attaching.
 						</p>
 					) : null}
@@ -780,7 +974,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 						</div>
 					) : null}
 					{missing.length > 0 ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--risk)]">
+						<p className="text-sm text-[var(--risk)]">
 							No value for: {missing.join(", ")}. Fill the field above and it fills in again.
 						</p>
 					) : null}
@@ -789,22 +983,37 @@ export function ComposePage({ seed, onClose, onDeleted, onDone }: ComposePagePro
 						<p
 							role="alert"
 							data-selectable
-							className="border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+							className="border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 						>
 							{error}
 						</p>
 					) : null}
 					{!canSend && account ? (
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="text-sm text-[var(--ink-muted)]">
 							{account.email} has no outgoing server, so this can be saved but not sent. Add one under Settings.
 						</p>
 					) : null}
 
 					<div className="min-h-[240px] flex-1">
 						<MessageEditor
+							ref={editorRef}
 							text={bodyText}
 							html={bodyHtml}
 							onChange={editBody}
+							toolbarStart={
+								<>
+									{(["intro", "outro"] as const).map((kind) => (
+										<BlockMenu
+											key={kind}
+											kind={kind}
+											blocks={(blocks ?? []).filter((block) => block.kind === kind)}
+											activeId={activeBlocks[kind]}
+											onPick={(blockId) => void pickBlock(kind, blockId)}
+											onManage={onManage ? (target) => void manageBlocks(target) : undefined}
+										/>
+									))}
+								</>
+							}
 						/>
 					</div>
 				</div>

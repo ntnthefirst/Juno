@@ -3,12 +3,11 @@ import type { MailTemplate } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { LoadPicturesNotice } from "../../components/LoadPicturesNotice";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { framed } from "../../lib/framed-preview";
 import { requestOpen } from "../../lib/open-entity";
 import { useRemotePictures } from "../../lib/remote-pictures";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { useCanvasFonts } from "../templates/mail/canvas/use-canvas-fonts";
 import { UseMailTemplateScreen } from "../templates/UseMailTemplateScreen";
 
@@ -43,8 +42,6 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 	const [usingId, setUsingId] = useState<string | null>(null);
 	const [wide, setWide] = useState(false);
 	const [rendered, setRendered] = useState<Rendered | null>(null);
-	const [menuTarget, setMenuTarget] = useState<MailTemplate | null>(null);
-	const menu = useContextMenu();
 	const rows = useRef(new Map<string, HTMLButtonElement>());
 
 	useEffect(() => {
@@ -127,38 +124,27 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 		}
 	}
 
-	function menuItems(template: MailTemplate): MenuItem[] {
-		return [
-			{ id: "use", label: "Use", icon: "mail", hint: "Double click", onSelect: () => setUsingId(template.id) },
+	// The platform's menu for a template (decision 59). It says "Show narrow"
+	// while this one is the template shown at full size.
+	function menuFor(template: MailTemplate) {
+		return contextMenuFor(
+			{ kind: "template", id: template.id, ...(wide && selectedId === template.id ? { context: "detail" as const } : {}) },
 			{
-				id: "show",
-				label: wide && selectedId === template.id ? "Show narrow" : "Show full size",
-				icon: wide && selectedId === template.id ? "collapse" : "expand",
-				onSelect: () => {
+				"use-template": () => setUsingId(template.id),
+				"show-wide": () => {
 					setSelectedId(template.id);
 					setWide((value) => !(value && selectedId === template.id));
 				},
+				"open-template": () => requestOpen({ kind: "mail-template", id: template.id, mode: "view" }),
+				edit: () => requestOpen({ kind: "mail-template", id: template.id, mode: "edit" }),
 			},
-			{
-				id: "open",
-				label: "Open in Styled mail",
-				icon: "external",
-				separatorBefore: true,
-				onSelect: () => requestOpen({ kind: "mail-template", id: template.id, mode: "view" }),
-			},
-			{
-				id: "edit",
-				label: "Edit",
-				icon: "edit",
-				onSelect: () => requestOpen({ kind: "mail-template", id: template.id, mode: "edit" }),
-			},
-		];
+		);
 	}
 
 	return (
 		<aside
 			aria-label="Styled mail"
-			className="animate-slide flex h-full min-h-0 flex-none flex-col border-l border-[var(--line)] bg-[var(--paper)] transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth)]"
+			className="animate-slide flex h-full min-h-0 flex-none flex-col border-l border-[var(--line)] bg-[var(--surface)] transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth)]"
 			style={{ width: wide ? "min(760px, 62%)" : "360px" }}
 		>
 			{using ? (
@@ -175,7 +161,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 			) : (
 				<>
 					<div className="flex flex-none items-center gap-1 px-4 pt-3 pb-2">
-						<h2 className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-[var(--weight-semibold)]">
+						<h2 className="min-w-0 flex-1 truncate text-base font-[var(--weight-semibold)]">
 							Styled mail
 						</h2>
 						<button
@@ -202,7 +188,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 								onChange={(event) => setSearch(event.target.value)}
 								placeholder="Find a template"
 								aria-label="Find a template"
-								className="min-w-0 flex-1 bg-transparent text-[length:var(--text-dense)] text-[var(--ink)] outline-none placeholder:text-[var(--ink-muted)]"
+								className="min-w-0 flex-1 bg-transparent text-dense text-[var(--ink)] outline-none placeholder:text-[var(--ink-muted)]"
 							/>
 						</label>
 					</div>
@@ -213,13 +199,13 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 						className="max-h-[38%] flex-none overflow-y-auto border-b border-[var(--line)] px-2 pb-2"
 					>
 						{loadError ? (
-							<li role="alert" data-selectable className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+							<li role="alert" data-selectable className="px-2 py-2 text-sm text-[var(--risk)]">
 								{loadError}
 							</li>
 						) : templates === null ? (
-							<li className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Loading.</li>
+							<li className="px-2 py-2 text-sm text-[var(--ink-muted)]">Loading.</li>
 						) : shown.length === 0 ? (
-							<li className="px-2 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<li className="px-2 py-2 text-sm text-[var(--ink-muted)]">
 								{needle ? "Nothing matches." : "No styled mail yet. Make one in Styled mail."}
 							</li>
 						) : (
@@ -235,10 +221,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 											}}
 											onClick={() => setSelectedId(template.id)}
 											onDoubleClick={() => setUsingId(template.id)}
-											onContextMenu={(event) => {
-												setMenuTarget(template);
-												menu.open(event);
-											}}
+											onContextMenu={menuFor(template)}
 											aria-current={active ? "true" : undefined}
 											title="Double click to use"
 											className={[
@@ -247,11 +230,11 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 											].join(" ")}
 										>
 											<span
-												className={`truncate text-[length:var(--text-dense)] font-[var(--weight-medium)] ${active ? "text-[var(--accent)]" : "text-[var(--ink)]"}`}
+												className={`truncate text-dense font-[var(--weight-medium)] ${active ? "text-[var(--accent)]" : "text-[var(--ink)]"}`}
 											>
 												{template.name}
 											</span>
-											<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+											<span className="truncate text-sm text-[var(--ink-muted)]">
 												{template.description || template.subject}
 											</span>
 										</button>
@@ -266,8 +249,8 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 							<>
 								<div className="flex flex-none items-start gap-2">
 									<div className="min-w-0 flex-1">
-										<p className="truncate text-[length:var(--text-dense)] font-[var(--weight-semibold)]">{selected.name}</p>
-										<p className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+										<p className="truncate text-dense font-[var(--weight-semibold)]">{selected.name}</p>
+										<p className="truncate text-sm text-[var(--ink-muted)]">
 											{current && "subject" in current ? current.subject : selected.subject}
 										</p>
 									</div>
@@ -279,7 +262,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 									<LoadPicturesNotice pending={remote.pending} onConfirm={remote.confirm} />
 								</div>
 								{current && "error" in current ? (
-									<p role="alert" data-selectable className="mt-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+									<p role="alert" data-selectable className="mt-2 text-sm text-[var(--risk)]">
 										{current.error}
 									</p>
 								) : current ? (
@@ -293,16 +276,16 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 										/>
 									</div>
 								) : (
-									<p className="mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">Rendering.</p>
+									<p className="mt-2 text-sm text-[var(--ink-muted)]">Rendering.</p>
 								)}
 							</>
 						) : (
-							<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Pick a template to see it here.</p>
+							<p className="text-sm text-[var(--ink-muted)]">Pick a template to see it here.</p>
 						)}
 					</div>
 
 					<div className="flex flex-none items-center justify-between gap-2 border-t border-[var(--line)] px-4 py-2">
-						<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">Double click a template to use it.</span>
+						<span className="text-micro text-[var(--ink-muted)]">Double click a template to use it.</span>
 						<Button size="dense" onClick={() => requestOpen({ kind: "screen", screen: "mail-templates" })}>
 							Manage
 						</Button>
@@ -310,9 +293,6 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 				</>
 			)}
 
-			{menu.at && menuTarget ? (
-				<ContextMenu at={menu.at} items={menuItems(menuTarget)} onClose={menu.close} ariaLabel={`Actions for ${menuTarget.name}`} />
-			) : null}
 		</aside>
 	);
 }

@@ -1,12 +1,15 @@
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef } from "react";
 import type { MailOutboxMessage, MailThreadSummary } from "@shared/types";
 import { Avatar } from "../../components/Avatar";
+import { Checkbox } from "../../components/Checkbox";
+import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { GroupHeader } from "../../components/GroupHeader";
+import { UnreadDot } from "../../components/UnreadDot";
 import { groupByDay } from "../../lib/day-groups";
 import { stagger } from "../../lib/motion";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { startThreadDrag } from "./drag";
 import { formatWhen, leadParticipant, participantsLine } from "./format";
 import { OutboxRow } from "./OutboxRow";
@@ -21,6 +24,8 @@ export type ThreadAction =
 	| "junk"
 	| "move"
 	| "link"
+	| "reply"
+	| "forward"
 	| "trash"
 	| "deleteForever";
 
@@ -104,8 +109,6 @@ export function ThreadList({
 	onToggleSelect,
 	onAction,
 }: ThreadListProps) {
-	const menu = useContextMenu();
-	const [target, setTarget] = useState<MailThreadSummary | null>(null);
 	// The row buttons, so the arrow keys can move focus between them. A list you
 	// cannot walk with the keyboard is a list you have to aim at.
 	const rows = useRef(new Map<string, HTMLButtonElement>());
@@ -127,7 +130,7 @@ export function ThreadList({
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load mail.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{error}
 				</p>
 			</div>
@@ -135,6 +138,17 @@ export function ThreadList({
 	}
 	if (threads === null || (outbox && outbox.messages === null)) {
 		return <p className="px-4 text-[var(--ink-muted)]">Loading.</p>;
+	}
+	if (merged.length === 0) {
+		return searching ? (
+			<EmptyState
+				icon="search"
+				title="Nothing found"
+				description="No mail matches that search. Try another word or clear the filters."
+			/>
+		) : (
+			<EmptyState icon="mail" title="No messages here" description="This folder has no mail yet." />
+		);
 	}
 	const entries = merged;
 	if (entries.length === 0) {
@@ -148,65 +162,28 @@ export function ThreadList({
 	const hasSelection = selectedIds.length > 0;
 	const removeAction: ThreadAction = inTrash ? "deleteForever" : "trash";
 
-	function menuItems(thread: MailThreadSummary): MenuItem[] {
-		const unread = thread.unreadCount > 0;
-		return [
-			{ id: "open", label: "Open", icon: "mail", onSelect: () => onAction("open", [thread.id]) },
-			unread
-				? {
-						id: "read",
-						label: "Mark read",
-						icon: "read",
-						separatorBefore: true,
-						onSelect: () => onAction("markRead", [thread.id]),
-					}
-				: {
-						id: "unread",
-						label: "Mark unread",
-						icon: "unread",
-						separatorBefore: true,
-						onSelect: () => onAction("markUnread", [thread.id]),
-					},
+	// The items are chosen in the main process from the conversation (decision
+	// 59). This says which row action each one is.
+	function menuFor(thread: MailThreadSummary) {
+		const ids = [thread.id];
+		return contextMenuFor(
+			{ kind: "mail", id: thread.id, ...(inTrash ? { context: "trash" as const } : {}) },
 			{
-				id: "flag",
-				label: thread.isFlagged ? "Clear flag" : "Flag",
-				icon: "flag",
-				onSelect: () => onAction(thread.isFlagged ? "unflag" : "flag", [thread.id]),
+				open: () => onAction("open", ids),
+				"mark-read": () => onAction("markRead", ids),
+				"mark-unread": () => onAction("markUnread", ids),
+				flag: () => onAction("flag", ids),
+				unflag: () => onAction("unflag", ids),
+				archive: () => onAction("archive", ids),
+				move: () => onAction("move", ids),
+				junk: () => onAction("junk", ids),
+				link: () => onAction("link", ids),
+				reply: () => onAction("reply", ids),
+				forward: () => onAction("forward", ids),
+				delete: () => onAction("trash", ids),
+				"delete-forever": () => onAction("deleteForever", ids),
 			},
-			{
-				id: "archive",
-				label: "Archive",
-				icon: "archive",
-				separatorBefore: true,
-				onSelect: () => onAction("archive", [thread.id]),
-			},
-			{ id: "move", label: "Move to folder", icon: "projects", onSelect: () => onAction("move", [thread.id]) },
-			{ id: "junk", label: "Junk", icon: "junk", onSelect: () => onAction("junk", [thread.id]) },
-			{
-				id: "link",
-				label: thread.clientId ? "Change client link" : "Link to client",
-				icon: "link",
-				separatorBefore: true,
-				onSelect: () => onAction("link", [thread.id]),
-			},
-			inTrash
-				? {
-						id: "delete",
-						label: "Delete forever",
-						icon: "remove",
-						danger: true,
-						separatorBefore: true,
-						onSelect: () => onAction("deleteForever", [thread.id]),
-					}
-				: {
-						id: "trash",
-						label: "Move to trash",
-						icon: "remove",
-						danger: true,
-						separatorBefore: true,
-						onSelect: () => onAction("trash", [thread.id]),
-					},
-		];
+		);
 	}
 
 	/**
@@ -267,11 +244,8 @@ export function ThreadList({
 				{sections.map((section) => (
 					<Fragment key={section.key}>
 						{section.label ? (
-							<li
-								aria-hidden
-								className="px-3 pt-4 pb-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)] first:pt-2"
-							>
-								{section.label}
+							<li aria-hidden className="px-1 pt-2 first:pt-0">
+								<GroupHeader label={section.label} />
 							</li>
 						) : null}
 						{section.items.map((entry) => {
@@ -308,40 +282,31 @@ export function ThreadList({
 									onDragStart={(event) => startThreadDrag(event, dragIds, thread.subject || "1 thread")}
 									className="animate-rise group relative"
 									style={stagger(entries.indexOf(entry))}
-									onContextMenu={(event) => {
-										setTarget(thread);
-										menu.open(event);
-									}}
+									onContextMenu={menuFor(thread)}
 								>
 									<div
 										className={[
-											"flex items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+											"flex min-h-16 items-center gap-3 rounded-[var(--radius-md)] py-2 pr-4 pl-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 											active || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
 										].join(" ")}
 									>
-										{/* An unread row has a dot in the margin, so the avatar can stay a picture. */}
-										{unread ? (
-											<span
-												aria-hidden
-												className="absolute top-1/2 left-0.5 h-1.5 w-1.5 -translate-y-1/2 rounded-[var(--radius-full)] bg-[var(--accent)]"
-											/>
-										) : null}
+										{/* An unread row starts with the dot, then the avatar, as the design draws it. */}
+										{unread ? <UnreadDot /> : null}
 										{/*
 											The avatar doubles as the row's selector: hovering it, focusing
 											it with the keyboard, or selecting anything else in the list turns
 											it into a checkbox, so the list stays free of checkboxes until
 											somebody wants them.
 										*/}
-										<span className="relative flex h-8 w-8 flex-none items-center justify-center">
+										<span className="relative flex h-[34px] w-[34px] flex-none items-center justify-center">
 											<span
 												className={
 													hasSelection ? "invisible" : "group-hover:invisible group-focus-within:invisible"
 												}
 											>
-												<Avatar name={lead} size={32} />
+												<Avatar name={lead} size={34} />
 											</span>
-											<input
-												type="checkbox"
+											<Checkbox
 												checked={checked}
 												onChange={(event) =>
 													onToggleSelect(thread.id, (event.nativeEvent as MouseEvent).shiftKey)
@@ -349,10 +314,10 @@ export function ThreadList({
 												onClick={(event) => event.stopPropagation()}
 												aria-label={`Select ${participantsLine(thread.participants, "Me")}`}
 												className={[
-													"absolute h-4 w-4 rounded-[3px] border-[var(--line-strong)] accent-[var(--accent)]",
+													"absolute",
 													hasSelection
 														? "opacity-100"
-														: "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100",
+														: "opacity-0 has-[:focus-visible]:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100",
 												].join(" ")}
 											/>
 										</span>
@@ -372,8 +337,8 @@ export function ThreadList({
 										>
 											<div className="flex items-baseline gap-2">
 												<span
-													className={`min-w-0 flex-1 truncate text-[length:var(--text-base)] ${
-														unread ? "font-[var(--weight-semibold)] text-[var(--ink)]" : "text-[var(--ink)]"
+													className={`min-w-0 flex-1 truncate text-base ${
+														unread ? "font-[var(--weight-semibold)] text-[var(--ink)]" : "font-[var(--weight-medium)] text-[var(--ink)]"
 													}`}
 												>
 													{participantsLine(thread.participants, "Me")}
@@ -389,7 +354,7 @@ export function ThreadList({
 													}`}
 												>
 													{thread.messageCount > 1 ? (
-														<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+														<span className="tabular text-micro text-[var(--ink-muted)]">
 															{thread.messageCount}
 														</span>
 													) : null}
@@ -403,26 +368,24 @@ export function ThreadList({
 															<Icon name="attachment" size={12} />
 														</span>
 													) : null}
-													<span className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+													<span className="tabular text-dense text-[var(--ink-muted)]">
 														{formatWhen(thread.lastMessageAt)}
 													</span>
 												</span>
 											</div>
 											<div className="mt-0.5 flex items-baseline gap-2">
-												<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-													<span className={unread ? "font-[var(--weight-medium)] text-[var(--ink)]" : "text-[var(--ink)]"}>
-														{thread.subject}
-													</span>
+												<span className="min-w-0 flex-1 truncate text-base text-[var(--ink-muted)]">
+													<span className={unread ? "text-[var(--ink)]" : ""}>{thread.subject}</span>
 													{thread.snippet ? ` ${thread.snippet}` : ""}
 												</span>
 												{/* Beside Juno's own unsent messages, the server's are told apart. */}
 												{outbox ? (
-													<span className={`shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
+													<span className={`shrink-0 text-micro text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
 														On the server
 													</span>
 												) : null}
 												{thread.clientName ? (
-													<span className={`shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
+													<span className={`shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-micro text-[var(--ink-muted)] ${hasSelection ? "" : "group-focus-within:hidden group-hover:hidden"}`}>
 														{thread.clientName}
 													</span>
 												) : null}
@@ -471,14 +434,6 @@ export function ThreadList({
 				))}
 			</ul>
 
-			{menu.at && target ? (
-				<ContextMenu
-					at={menu.at}
-					items={menuItems(target)}
-					onClose={menu.close}
-					ariaLabel={`Actions for ${participantsLine(target.participants, "Me")}`}
-				/>
-			) : null}
 		</div>
 	);
 }

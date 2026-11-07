@@ -137,7 +137,7 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 				<button
 					type="button"
 					onClick={onBack}
-					className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+					className="-ml-2 inline-flex h-[32px] shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 				>
 					<ArrowLeftIcon width={16} height={16} strokeWidth={1.8} aria-hidden />
 					Mail templates
@@ -145,7 +145,7 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 				<span className="flex-none text-[var(--ink-faint)]" aria-hidden>
 					/
 				</span>
-				<h1 className="min-w-0 flex-1 truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+				<h1 className="min-w-0 flex-1 truncate text-h3">
 					{template.name}
 				</h1>
 				<Button onClick={onEdit}>
@@ -160,13 +160,13 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
 				<div className="animate-rise w-full">
 					{unreviewed ? (
-						<p className="mb-4 max-w-[62ch] border-l-2 border-[var(--warn)] pl-3 text-[length:var(--text-sm)] text-[var(--warn)]">
+						<p className="mb-4 max-w-[62ch] border-l-2 border-[var(--warn)] pl-3 text-sm text-[var(--warn)]">
 							This text shipped with Juno and has not been edited yet. Read it before it is used.
 						</p>
 					) : null}
 
 					{template.hiddenAt ? (
-						<p className="mb-4 max-w-[62ch] border-l-2 border-[var(--line-strong)] pl-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mb-4 max-w-[62ch] border-l-2 border-[var(--line-strong)] pl-3 text-sm text-[var(--ink-muted)]">
 							This template is not offered when composing. Anything already using it still renders.
 						</p>
 					) : null}
@@ -176,14 +176,14 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 					) : null}
 
 					<dl className="mb-5 grid grid-cols-[auto_1fr] items-baseline gap-x-6 gap-y-3">
-						<dt className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Subject</dt>
+						<dt className="text-sm text-[var(--ink-muted)]">Subject</dt>
 						<dd className="font-[var(--weight-medium)]">
 							{rendered ? rendered.subject : template.subject}
 						</dd>
-						<dt className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">Asks for</dt>
+						<dt className="text-sm text-[var(--ink-muted)]">Asks for</dt>
 						<dd>
 							{template.inputs.length === 0 ? (
-								<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<span className="text-sm text-[var(--ink-muted)]">
 									Nothing. It is sent as it is written.
 								</span>
 							) : (
@@ -191,11 +191,11 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 									{template.inputs.map((input) => (
 										<li
 											key={input.key}
-											className="flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-[length:var(--text-sm)]"
+											className="flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-sm"
 										>
 											{input.label || input.key}
 											{input.required ? <span aria-label="required">*</span> : null}
-											<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+											<span className="text-micro text-[var(--ink-muted)]">
 												{kindLabel(input.kind)}
 											</span>
 										</li>
@@ -209,7 +209,7 @@ export function MailTemplatePage({ template, onBack, onEdit, onUse }: MailTempla
 						<p
 							role="alert"
 							data-selectable
-							className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+							className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 						>
 							{error}
 						</p>

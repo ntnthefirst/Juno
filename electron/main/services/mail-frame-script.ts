@@ -140,3 +140,136 @@ export const QUOTE_SCRIPT = String.raw`(() => {
     // A message that confuses the tidying is shown as it came.
   }
 })();`;
+
+/**
+ * Tells the window about a link under the pointer, so the window can draw the
+ * popover with the real address. The frame draws nothing and follows nothing:
+ * it posts the address and where the link is, and the window decides.
+ *
+ * It uses what the frame already has, which is running its own nonced script
+ * and posting to its parent. The sandbox gains nothing. The address is the
+ * data-href the sanitiser kept, the place a person would be sent, never the
+ * words on the link.
+ */
+export const LINK_SCRIPT = String.raw`(() => {
+  let current = null;
+
+  function anchorOf(target) {
+    return target && target.closest ? target.closest('a[data-href]') : null;
+  }
+
+  function report(anchor) {
+    if (anchor === current) return;
+    current = anchor;
+    if (!anchor) {
+      parent.postMessage({ type: 'juno.mail.link', href: null }, '*');
+      return;
+    }
+    const box = anchor.getBoundingClientRect();
+    parent.postMessage(
+      {
+        type: 'juno.mail.link',
+        href: anchor.getAttribute('data-href'),
+        rect: { left: box.left, top: box.top, right: box.right, bottom: box.bottom },
+      },
+      '*',
+    );
+  }
+
+  document.addEventListener('mouseover', (event) => report(anchorOf(event.target)));
+  document.documentElement.addEventListener('mouseleave', () => report(null));
+  document.addEventListener('click', (event) => {
+    const anchor = anchorOf(event.target);
+    if (!anchor) return;
+    event.preventDefault();
+    parent.postMessage({ type: 'juno.mail.linkClick', href: anchor.getAttribute('data-href') }, '*');
+  });
+})();`;
+
+/**
+ * Find in this message. The window owns the bar and the query; the frame owns
+ * the text, so it does the searching and the highlighting and reports back how
+ * many matches there are and where the current one is.
+ *
+ * It only wraps matched text in mark elements and unwraps them again, which is
+ * a change the sanitiser would have allowed. It accepts messages from its
+ * parent only, reads nothing outside the frame and gains no permission.
+ */
+export const FIND_SCRIPT = String.raw`(() => {
+  let marks = [];
+  let current = -1;
+
+  function clear() {
+    marks.forEach((mark) => {
+      const holder = mark.parentNode;
+      if (!holder) return;
+      holder.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+      holder.normalize();
+    });
+    marks = [];
+    current = -1;
+  }
+
+  function search(query) {
+    clear();
+    const needle = query.toLowerCase();
+    if (!needle) return;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) nodes.push(node);
+    nodes.forEach((node) => {
+      const tag = node.parentElement ? node.parentElement.tagName : '';
+      if (tag === 'SCRIPT' || tag === 'STYLE') return;
+      const text = node.nodeValue || '';
+      const lower = text.toLowerCase();
+      // A letter whose lower case is longer would shift every offset below.
+      if (lower.length !== text.length) return;
+      const spans = [];
+      for (let at = lower.indexOf(needle); at !== -1; at = lower.indexOf(needle, at + needle.length)) {
+        spans.push([at, at + needle.length]);
+      }
+      if (!spans.length || !node.parentNode) return;
+      const fragment = document.createDocumentFragment();
+      let last = 0;
+      spans.forEach((span) => {
+        if (span[0] > last) fragment.appendChild(document.createTextNode(text.slice(last, span[0])));
+        const mark = document.createElement('mark');
+        mark.className = 'juno-find';
+        mark.textContent = text.slice(span[0], span[1]);
+        fragment.appendChild(mark);
+        marks.push(mark);
+        last = span[1];
+      });
+      if (last < text.length) fragment.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(fragment, node);
+    });
+  }
+
+  function show(index) {
+    marks.forEach((mark) => mark.classList.remove('juno-find-current'));
+    current = marks.length ? ((index % marks.length) + marks.length) % marks.length : -1;
+    let top = null;
+    if (current >= 0) {
+      marks[current].classList.add('juno-find-current');
+      top = marks[current].getBoundingClientRect().top;
+    }
+    parent.postMessage({ type: 'juno.mail.findResult', count: marks.length, current, top }, '*');
+  }
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== parent) return;
+    const data = event.data;
+    if (!data || data.type !== 'juno.mail.find') return;
+    if (data.action === 'clear') {
+      clear();
+      parent.postMessage({ type: 'juno.mail.findResult', count: 0, current: -1, top: null }, '*');
+    } else if (data.action === 'search') {
+      search(String(data.query || ''));
+      show(0);
+    } else if (data.action === 'next') {
+      show(current + 1);
+    } else if (data.action === 'previous') {
+      show(current - 1);
+    }
+  });
+})();`;

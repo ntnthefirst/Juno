@@ -5,24 +5,24 @@
  * The login item starts the installed Juno with `--background`, which brings
  * up the database and the agent server and opens no window. The tray icon is
  * the only sign it is there: it opens the window or quits. Closing the window
- * does not quit while this is on, which is the point of it.
+ * does not quit while this is on, which is the point of it. The icon itself
+ * is drawn by tray.ts, which also keeps it when the tray setting asks for it.
  */
-import { join } from "node:path";
-import { app, Menu, nativeImage, Tray } from "electron";
+import { app } from "electron";
 import * as settings from "./services/settings";
 import { shouldRunInBackground, startsWithoutWindow } from "./services/background";
+import { destroyTray, isWindows, syncTray } from "./tray";
 
-let tray: Tray | null = null;
 let running = false;
-let openWindow: () => void = () => undefined;
+let devRun = false;
 
 /** Read by `window-all-closed`, which cannot wait for the settings file. */
 export function runsInBackground(): boolean {
 	return running;
 }
 
-export function configureBackground(open: () => void): void {
-	openWindow = open;
+export function configureBackground(isDev: boolean): void {
+	devRun = isDev;
 }
 
 async function decide(): Promise<boolean> {
@@ -45,24 +45,11 @@ export async function syncBackground(): Promise<void> {
 		app.setLoginItemSettings({ openAtLogin: running, openAsHidden: true, args: ["--background"] });
 	}
 
-	if (!running) {
-		tray?.destroy();
-		tray = null;
-		return;
-	}
-	if (tray) return;
-
-	const image = nativeImage.createFromPath(join(app.getAppPath(), "build", "icon.png")).resize({ width: 16, height: 16 });
-	tray = new Tray(image);
-	tray.setToolTip("Juno");
-	tray.setContextMenu(
-		Menu.buildFromTemplate([
-			{ label: "Open Juno", click: () => openWindow() },
-			{ type: "separator" },
-			{ label: "Quit Juno", click: () => app.quit() },
-		]),
-	);
-	tray.on("click", () => openWindow());
+	// The icon stays while Juno runs without a window, whatever the tray setting
+	// says: a process nobody can see or quit would be a bug, not a preference.
+	const wanted = running || (isWindows && (await settings.getDesktop()).tray);
+	if (wanted) syncTray(true, devRun);
+	else destroyTray();
 }
 
 /** The decision for a launch, taken before any window exists. */

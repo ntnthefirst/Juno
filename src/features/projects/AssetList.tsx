@@ -93,7 +93,7 @@ export function AssetList({
 									/>
 								</button>
 								<div className="flex items-center gap-1 px-2 py-1.5">
-									<span className="min-w-0 flex-1 truncate text-[length:var(--text-micro)]">
+									<span className="min-w-0 flex-1 truncate text-micro">
 										{asset.fileName}
 									</span>
 									{isCover ? (
@@ -128,24 +128,24 @@ export function AssetList({
 								<button
 									type="button"
 									onClick={() => onOpen(asset)}
-									className="min-w-0 flex-1 truncate text-left text-[length:var(--text-dense)]"
+									className="min-w-0 flex-1 truncate text-left text-dense"
 								>
 									{asset.fileName}
 								</button>
 								{asset.storage === "linked" ? (
 									<span
-										className="hidden flex-none truncate text-[length:var(--text-micro)] text-[var(--ink-muted)] sm:block"
+										className="hidden flex-none truncate text-micro text-[var(--ink-muted)] sm:block"
 										title={asset.absolutePath}
 									>
 										{pathTail(asset.absolutePath)}
 									</span>
 								) : null}
 								{!asset.exists ? (
-									<span className="flex-none text-[length:var(--text-micro)] text-[var(--risk)]">
+									<span className="flex-none text-micro text-[var(--risk)]">
 										Missing
 									</span>
 								) : null}
-								<span className="tabular flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+								<span className="tabular flex-none text-micro text-[var(--ink-muted)]">
 									{formatBytes(asset.byteSize)}
 								</span>
 								<MenuButton

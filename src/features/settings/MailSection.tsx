@@ -1,28 +1,32 @@
-import { IconButton } from "../../components/IconButton";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import type { MailAccount, MailFolder } from "@shared/types";
-import { AddButton } from "../../components/AddButton";
+import { useCallback, useEffect, useState } from "react";
+import type { MailAccount } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { Icon } from "../../components/Icon";
+import { isMac } from "../../lib/platform";
+import { PageHeader } from "./PageHeader";
+import type { SettingsPage } from "./pages";
+import { StatusBadge } from "../../components/StatusBadge";
 import { messageOf } from "../../lib/errors";
-import { formatWhen } from "../mail/format";
 import { MailAccountForm } from "./MailAccountForm";
+import { MailAccountPage } from "./mail-account/MailAccountPage";
 import { RemovedAccounts } from "./RemovedAccounts";
 import { Section, SectionError } from "./Section";
 import { PAGE_PADDING } from "./section-layout";
 
 type MailSectionProps = {
 	onSaved: (message: string) => void;
-	/** The page title. It is drawn here, because the account form replaces the whole page, header included. */
-	header: ReactNode;
+	/** The page whose title is drawn here, because the account form replaces the whole page, header included. */
+	page: SettingsPage;
 };
 
-export function MailSection({ onSaved, header }: MailSectionProps) {
+export function MailSection({ onSaved, page }: MailSectionProps) {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [form, setForm] = useState<{ account: MailAccount | null } | null>(null);
 	const [removing, setRemoving] = useState<MailAccount | null>(null);
-	const [foldersFor, setFoldersFor] = useState<string | null>(null);
+	// The account whose page is open: details, rules, history and folders.
+	const [opened, setOpened] = useState<string | null>(null);
 	// Bumped when an account is removed, so the removed list fetches again.
 	const [removedVersion, setRemovedVersion] = useState(0);
 
@@ -71,6 +75,18 @@ export function MailSection({ onSaved, header }: MailSectionProps) {
 		}
 	}
 
+	const openedAccount = opened ? accounts?.find((account) => account.id === opened) : undefined;
+	if (openedAccount && !form) {
+		return (
+			<MailAccountPage
+				account={openedAccount}
+				onBack={() => setOpened(null)}
+				onEdit={() => setForm({ account: openedAccount })}
+				onSaved={onSaved}
+			/>
+		);
+	}
+
 	// Adding an account is a sequence now, so it takes the settings pane rather
 	// than stacking a dialog inside a window that is already a fixed size.
 	if (form) {
@@ -90,70 +106,72 @@ export function MailSection({ onSaved, header }: MailSectionProps) {
 	// The list keeps its own padding, because the form above reaches the edges.
 	return (
 		<div className={PAGE_PADDING}>
-			{header}
+			<PageHeader
+				page={page}
+				action={
+					<Button variant="primary" size="dense" onClick={() => setForm({ account: null })}>
+						<Icon name="add" size={14} />
+						Add account
+					</Button>
+				}
+			/>
 			{/* Wrapped, so the first section is the first child and drops its rule. */}
 			<div>
 				<Section
 					title="Accounts"
 					anchor="mail-accounts"
-					description="Passwords are kept in the operating system keychain."
-					action={
-						<AddButton label="Add account" onClick={() => setForm({ account: null })} />
-					}
+					lead
+					description={`Passwords are stored by ${isMac ? "macOS" : "Windows"} and never shown again. Open an account for its folders, its rules and what they did.`}
 				>
 					{accounts === null ? (
 						<p className="text-[var(--ink-muted)]">Loading.</p>
 					) : accounts.length === 0 ? (
 						<p className="text-[var(--ink-muted)]">No accounts yet.</p>
 					) : (
-						<ul className="flex flex-col">
-							{accounts.map((account) => (
-								<li
-									key={account.id}
-									className="flex items-center gap-4 border-b border-[var(--line)]/60 py-2 last:border-b-0"
-								>
-									<div className="min-w-0 flex-1">
-										<div className="flex items-baseline gap-2">
-											<span className="truncate font-[var(--weight-medium)]">{account.label}</span>
-											{account.label !== account.email ? (
-												<span className="truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-													{account.email}
+						<ul className="flex flex-col gap-3">
+							{accounts.map((account) => {
+								const status = accountStatus(account);
+								return (
+									<li
+										key={account.id}
+										className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] px-5 py-3.5"
+									>
+										<button
+											type="button"
+											aria-label={`Open ${account.label}`}
+											data-account={account.id}
+											onClick={() => setOpened(account.id)}
+											className="min-w-0 flex-1 rounded-[var(--radius-md)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+										>
+											<span className="block truncate text-base font-[var(--weight-medium)]">
+												{account.email}
+											</span>
+											<span className="mt-0.5 block truncate font-mono text-sm text-[var(--ink-muted)]">
+												{account.imapHost}:{account.imapPort}
+												{account.smtpHost ? ` · ${account.smtpHost}:${account.smtpPort}` : " · read only"}
+											</span>
+											{account.lastSyncError ? (
+												<span className="mt-0.5 block truncate text-sm text-[var(--risk)]">
+													{account.lastSyncError}
 												</span>
 											) : null}
-										</div>
-										<div className="mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-											{account.imapHost}:{account.imapPort} {account.imapSecurity.toUpperCase()}
-											{", "}
-											{account.hasCredential ? "password set" : "no password"}
-											{", "}
-											{account.smtpHost ? `sends via ${account.smtpHost}:${account.smtpPort}` : "read only"}
-											{", "}
-											{account.syncEnabled
-												? `every ${account.syncIntervalMinutes} min, ${account.horizonDays} days back`
-												: "sync off"}
-											{account.lastSyncAt ? `, last synced ${formatWhen(account.lastSyncAt)}` : ""}
-										</div>
-										{account.lastSyncError ? (
-											<p data-selectable className="mt-0.5 text-[length:var(--text-sm)] text-[var(--risk)]">
-												{account.lastSyncError}
-											</p>
-										) : null}
-									</div>
-									<Button size="dense" onClick={() => setFoldersFor(account.id)}>
-										Folders
-									</Button>
-									<Button size="dense" onClick={() => void toggleSync(account)}>
-										{account.syncEnabled ? "Pause" : "Resume"}
-									</Button>
-									<IconButton icon="edit" label="Edit" onClick={() => setForm({ account })} />
-									<IconButton icon="remove" label="Remove" danger onClick={() => setRemoving(account)} />
-								</li>
-							))}
+										</button>
+										<StatusBadge label={status.label} tone={status.tone} />
+										<Button size="dense" onClick={() => void toggleSync(account)}>
+											{account.syncEnabled ? "Pause" : "Resume"}
+										</Button>
+										<Button size="dense" onClick={() => setForm({ account })}>
+											Edit
+										</Button>
+										<Button size="dense" variant="danger" onClick={() => setRemoving(account)}>
+											Remove
+										</Button>
+									</li>
+								);
+							})}
 						</ul>
 					)}
 					<SectionError message={error} />
-
-					{foldersFor ? <FoldersDialog accountId={foldersFor} onClose={() => setFoldersFor(null)} /> : null}
 
 					{removing ? (
 						<Dialog title="Remove account" onClose={() => setRemoving(null)} width="narrow">
@@ -176,75 +194,19 @@ export function MailSection({ onSaved, header }: MailSectionProps) {
 	);
 }
 
-/** Which folders the sync pulls. The list comes from the last sync. */
-function FoldersDialog({ accountId, onClose }: { accountId: string; onClose: () => void }) {
-	const [folders, setFolders] = useState<MailFolder[] | null>(null);
-	const [error, setError] = useState<string | null>(null);
-
-	useEffect(() => {
-		let cancelled = false;
-		window.juno.mail.folders
-			.list(accountId)
-			.then((rows) => {
-				if (!cancelled) setFolders(rows);
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setError(messageOf(cause));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [accountId]);
-
-	async function toggle(folder: MailFolder) {
-		try {
-			const updated = await window.juno.mail.folders.setSyncEnabled(folder.id, !folder.syncEnabled);
-			setFolders((current) => current?.map((f) => (f.id === updated.id ? updated : f)) ?? null);
-		} catch (cause: unknown) {
-			setError(messageOf(cause));
-		}
+/** What the badge on an account row says, from what the last sync left behind. */
+function accountStatus(account: MailAccount): { label: string; tone: string } {
+	if (account.lastSyncError) {
+		return /password|auth|credential|login/i.test(account.lastSyncError)
+			? { label: "Password rejected", tone: "risk" }
+			: { label: "Sync failed", tone: "risk" };
 	}
+	if (!account.hasCredential) return { label: "No password", tone: "warn" };
+	if (!account.syncEnabled) return { label: "Paused", tone: "neutral" };
+	if (account.lastSyncAt) return { label: `Synced ${formatClock(account.lastSyncAt)}`, tone: "ok" };
+	return { label: "Not synced yet", tone: "neutral" };
+}
 
-	return (
-		<Dialog title="Folders" onClose={onClose} width="narrow">
-			<p className="mt-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-				Ticked folders are pulled on every sync. The inbox is on by default.
-			</p>
-			{folders === null ? (
-				<p className="mt-4 text-[var(--ink-muted)]">Loading.</p>
-			) : folders.length === 0 ? (
-				<p className="mt-4 text-[var(--ink-muted)]">No folders listed yet. Sync the account first.</p>
-			) : (
-				<ul className="mt-3 max-h-[360px] overflow-y-auto">
-					{folders.map((folder) => (
-						<li key={folder.id}>
-							<label
-								className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-md)] px-2 hover:bg-[var(--hover)]"
-								style={{ height: "var(--row-height)" }}
-							>
-								<input
-									type="checkbox"
-									checked={folder.syncEnabled}
-									onChange={() => void toggle(folder)}
-									className="accent-[var(--accent)]"
-								/>
-								<span className="min-w-0 flex-1 truncate">{folder.path}</span>
-								<span className="tabular text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-									{folder.messageCount > 0 ? folder.messageCount : ""}
-								</span>
-							</label>
-						</li>
-					))}
-				</ul>
-			)}
-			{error ? (
-				<p role="alert" className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
-					{error}
-				</p>
-			) : null}
-			<div className="mt-4 flex justify-end">
-				<Button onClick={onClose}>Done</Button>
-			</div>
-		</Dialog>
-	);
+function formatClock(iso: string): string {
+	return new Intl.DateTimeFormat("nl-BE", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }

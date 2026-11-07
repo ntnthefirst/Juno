@@ -11,12 +11,15 @@
 import { BrowserWindow, ipcMain } from "electron";
 import type {
 	AgentActionListQuery,
+	AgentInstructions,
+	AgentPermissions,
 	AuditListQuery,
 	AutomationInput,
 	AutomationPatch,
 } from "../../shared/types";
 import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
+import * as permissions from "../services/agent-permissions";
 import * as describe from "../services/agent-describe";
 import * as connections from "../services/agent-connections";
 import * as automations from "../services/automations";
@@ -46,6 +49,16 @@ export function registerAgentIpc(): void {
 	ipcMain.handle("agent.server.setPort", (_event, port: number | null) => setServerPort(port));
 	ipcMain.handle("agent.tools", () => summaries());
 
+	// Widening an agent's reach is the owner's decision, so these have no tool.
+	ipcMain.handle("agent.permissions.get", () => permissions.permissionsView());
+	ipcMain.handle("agent.permissions.set", (_event, patch: Partial<AgentPermissions>) =>
+		permissions.setPermissionsView(patch),
+	);
+	ipcMain.handle("agent.instructions.get", () => permissions.instructionsView());
+	ipcMain.handle("agent.instructions.set", (_event, instructions: AgentInstructions) =>
+		permissions.setInstructionsView(instructions),
+	);
+
 	// Letting a client in is a person's decision. These have no tool, and there
 	// will not be one: the thing being gated is what would call it.
 	ipcMain.handle("agent.connections.list", () => connections.list());
@@ -71,6 +84,7 @@ export function registerAgentIpc(): void {
 		actions.list(query ?? {}),
 	);
 	ipcMain.handle("agent.actions.get", (_event, id: string) => actions.get(id));
+	ipcMain.handle("agent.actions.forDraft", (_event, draftId: string) => actions.requestForDraft(draftId));
 	ipcMain.handle("agent.actions.pendingCount", () => actions.pendingCount());
 	// A person's press. There is no tool for this, and there will not be one.
 	ipcMain.handle("agent.actions.approve", (_event, id: string) => actions.approve(id));
@@ -78,6 +92,8 @@ export function registerAgentIpc(): void {
 	ipcMain.handle("agent.actions.remove", (_event, id: string) => actions.remove(id));
 
 	ipcMain.handle("agent.audit.list", (_event, query?: AuditListQuery) => audit.list(query ?? {}));
+	// Owner only, and deliberately not a tool: an agent must not be able to erase its own trail.
+	ipcMain.handle("agent.audit.purge", () => audit.purgeOldEvents());
 
 	// What a request or a log row is, in words: the records it names instead of
 	// their ids. Reads only.
@@ -120,6 +136,7 @@ export function registerAgentIpc(): void {
 	});
 
 	ipcMain.handle("briefing.today", () => briefing.today());
+	ipcMain.handle("briefing.overview", () => briefing.overview());
 	ipcMain.handle("briefing.client", (_event, clientId: string) => briefing.client(clientId));
 	ipcMain.handle("briefing.month", (_event, month: string) => briefing.month(month));
 }

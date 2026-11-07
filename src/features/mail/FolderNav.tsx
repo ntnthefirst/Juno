@@ -54,7 +54,7 @@ function draggedThreads(event: React.DragEvent): string[] | null {
 }
 
 const HEADER_TEXT =
-	"min-w-0 truncate text-[length:var(--text-sm)] font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]";
+	"min-w-0 truncate text-overline uppercase text-[var(--ink-muted)]";
 
 /**
  * Where mail is: every account, with the six folders it has and the tree of
@@ -331,24 +331,23 @@ export function FolderNav({
 					// the way a tree does everywhere else.
 					onDoubleClick={options.expandable ? options.onToggleExpand : undefined}
 					aria-current={active ? "true" : undefined}
-					style={{ height: "var(--row-height)" }}
 					className={[
-						"flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] pr-2 pl-5 text-left text-[length:var(--text-dense)]",
+						`flex h-10 min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] pr-4 text-left text-base ${options.expandable ? "pl-5" : "pl-4"}`,
 						"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 						isDropTarget
 							? "bg-[var(--accent-soft)] ring-2 ring-[var(--accent)] ring-inset"
 							: active
-								? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
+								? "bg-[var(--accent-soft)] text-[var(--accent)]"
 								: folder && !folder.syncEnabled
 									? "text-[var(--ink-muted)] hover:bg-[var(--hover)]"
 									: "text-[var(--ink)] hover:bg-[var(--hover)]",
 					].join(" ")}
 					title={folder ? (folder.syncEnabled ? folder.path : `${folder.path} (not synced)`) : label}
 				>
-					<Icon name={icon} size={14} />
+					<Icon name={icon} size={16} />
 					<span className="min-w-0 flex-1 truncate">{label}</span>
 					{badge && badge > 0 ? (
-						<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">{badge}</span>
+						<span className={`tabular shrink-0 text-dense ${active ? "text-[var(--accent)]" : "text-[var(--ink-muted)]"}`}>{badge}</span>
 					) : null}
 				</button>
 			</div>
@@ -483,7 +482,7 @@ export function FolderNav({
 								disabled={syncing}
 								title={failed ? line : `${line}. Sync this account now`}
 								className={[
-									"flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[length:var(--text-micro)]",
+									"flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-micro",
 									"hover:bg-[var(--hover)] disabled:hover:bg-transparent",
 									failed ? "text-[var(--risk)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]",
 								].join(" ")}
@@ -494,7 +493,7 @@ export function FolderNav({
 						</div>
 
 						{!open ? null : list.length === 0 ? (
-							<p className="px-3 py-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p className="px-3 py-2 text-sm text-[var(--ink-muted)]">
 								No folders yet. Sync to list them.
 							</p>
 						) : (
@@ -522,7 +521,7 @@ export function FolderNav({
 								onClick={() => onNewFolder(account.id)}
 								onContextMenu={(event) => openMenu({ kind: "account", account }, event)}
 								style={{ height: "var(--row-height)" }}
-								className="mt-px flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 text-left text-[length:var(--text-dense)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+								className="mt-px flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 text-left text-dense text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 							>
 								<Icon name="add" size={14} />
 								<span>New folder</span>

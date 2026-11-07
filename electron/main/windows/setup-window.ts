@@ -16,8 +16,8 @@ import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
  * Smaller than settings on purpose. Nothing here is a table or a list; it is
  * one question at a time with at most three fields under it.
  */
-const WIDTH = 760;
-const HEIGHT = 620;
+const WIDTH = 800;
+const HEIGHT = 664;
 
 export function createSetupWindow(parent: BrowserWindow, isDev: boolean): BrowserWindow {
 	const window = new BrowserWindow({
@@ -31,7 +31,7 @@ export function createSetupWindow(parent: BrowserWindow, isDev: boolean): Browse
 		fullscreenable: false,
 		show: false,
 		icon: windowIcon(),
-		backgroundColor: "#f6f6fa",
+		backgroundColor: "#f5f5f7",
 		...titleBarOptions(),
 		webPreferences: {
 			// dist-electron/main/windows -> dist-electron/preload.js

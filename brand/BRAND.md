@@ -111,9 +111,10 @@ offline-first application cannot depend on a font CDN.
 
 - Default interface text is **14px**. This is a dense data application, not a
   marketing page. Table rows drop to 13px, badges to 11px.
-- One `--text-h1` per screen at most. Most screens need none.
-- `--leading-relaxed` is for long-form reading only: a document preview or the
-  body of an email. Interface text uses `--leading-normal`.
+- One `text-h1` per screen at most. Most screens need none.
+- The type scale is the design's text styles, each with its own pixel line
+  height (`text-h1` to `text-overline`, and `text-document` at 16/26 for the
+  body of a document or an email). Letter spacing is 0 except on the overline.
 - **Every column of numbers gets `tabular-nums`.** Amounts, dates and counts that
   do not line up are unreadable at a glance, which is the only way anyone reads
   a table.
@@ -146,8 +147,8 @@ What this rules out, all of which are easy to write by accident:
 
 ### Shape and depth
 
-- **Radius is small and rare.** 4px on controls, 6px on buttons and selectable
-  rows, 8px on the few real surfaces, 12px on modals. `--radius-full` is for
+- **Radius is small and rare.** 6px on controls, 8px on buttons and selectable
+  rows, 12px on the few real surfaces, 16px on modals. `--radius-full` is for
   avatars and nothing else. If there is no fill and no border, there is nothing
   to round.
 - **Depth is binary.** Either something is on the page, with no shadow, or it

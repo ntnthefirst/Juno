@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
+import type { NewRecordKind } from "@shared/types";
 import type { ScreenId } from "../app/screens";
+import { openNewRecord } from "./new-record";
 
-/** What can be asked of a screen from outside it. One thing so far: start a new one. */
-export type ScreenAction = "new";
+/** What can be asked of a screen from outside it. Start a new record, or on Documents a new page or an import. */
+export type ScreenAction = "new" | "new-page" | "import";
 
 const EVENT = "juno:screen-action";
 
@@ -13,8 +15,30 @@ type Request = { screen: ScreenId; action: ScreenAction };
 // mounts afterwards still has to find it.
 let pending: Request | null = null;
 
-/** Asks the shell to bring that screen up and have it do the thing: open its new-record form. */
+/**
+ * The screens whose "new" makes one of the four records that have a window of
+ * their own (decision 60). Those do not bring the screen up: the window opens
+ * over whatever is showing, and the screen refreshes when it saves.
+ */
+const WINDOWED: Partial<Record<ScreenId, NewRecordKind>> = {
+	overview: "reminder",
+	reminders: "reminder",
+	calendar: "event",
+	clients: "client",
+	projects: "project",
+};
+
+/**
+ * Asks for a new record on that screen. For an event, a client, a project or a
+ * reminder that opens its window; for the rest it asks the shell to bring the
+ * screen up and have it open its own form.
+ */
 export function requestScreenAction(screen: ScreenId, action: ScreenAction): void {
+	const windowed = WINDOWED[screen];
+	if (windowed) {
+		openNewRecord(windowed);
+		return;
+	}
 	pending = { screen, action };
 	window.dispatchEvent(new CustomEvent(EVENT));
 }

@@ -47,8 +47,8 @@ should appear about twice on a screen.
   add to `brand/tokens.css` and to the `@theme inline` block, not an arbitrary
   value at the call site. Say so in one line before adding it.
 - Spacing uses the 4px scale (`--space-1` through `--space-16`). Radius uses
-  `--radius-sm` for inputs and badges, `--radius-md` for buttons and rows,
-  `--radius-lg` for cards, `--radius-xl` for modals. `--radius-full` is avatars
+  `--radius-sm` (6px) for inputs and badges, `--radius-md` (8px) for buttons and
+  rows, `--radius-lg` (12px) for cards, `--radius-xl` (16px) for modals. `--radius-full` is avatars
   and nothing else.
 - Motion has its own section, 5e. In short: transform, opacity and colour only,
   never a layout property, and every curve and duration is a token.
@@ -75,17 +75,27 @@ same edit. All four or none.
 Juno is a back office, not a marketing page. The type scale in the tokens is
 already dense; don't reach past it.
 
-- **Default UI text is `--text-base` (14px).** Table cells and list rows are
-  `--text-dense` (13px). Secondary labels `--text-sm` (12px), badges and table
-  meta `--text-micro` (11px).
+- **Default UI text is `text-base` (14/21).** Table cells and list rows are
+  `text-dense` (13/20). Secondary labels `text-sm` (12/18), badges and table
+  meta `text-micro` (11/16, medium).
 - **Rows are `--row-height` (36px).** Not 48, not 56. A screen shows twenty clients
   without scrolling or it is the wrong screen.
-- `--text-h1` (32px) appears at most once per screen, and most screens don't need
-  it at all. A section heading is `--text-h3`.
-- `--leading-tight` for headings and table rows, `--leading-normal` for UI text,
-  `--leading-relaxed` only for long-form: document body and email text.
-- The sidebar is `--sidebar-rail-width` (48px, a code editor's activity bar)
-  and never wider, and the titlebar is `--titlebar-height`. Both are tokens because other things are measured
+- `text-h1` (32/40) appears at most once per screen, and most screens don't need
+  it at all. A section heading is `text-h3` (20/25). `text-h2` is 24/30.
+- **The text styles are the Figma styles (decision 53), one utility each.** Each
+  carries its pixel line height, so never pair one with a `leading-*` to get the
+  design's value. `text-h1`, `-h2` and `-h3` are semibold and `text-micro` is
+  medium, built in. `text-lg` is 16/24 for large body, `text-document` is 16/26
+  for the body of a document or an email, and `text-overline` is 11/16
+  semibold with 6% tracking, used with `uppercase`. Weights the design draws in
+  several (base, dense, small, large body) are set on the element.
+- **Never `text-[length:var(--text-x)]`.** It sets a size and leaves the line
+  height at the inherited 1.5, which is not the design's. Letter spacing is 0, so
+  no negative `tracking-*` on a heading. The only tracking is the overline's.
+  `leading-none` and `leading-tight` stay for badges and dense blocks of fixed
+  height, where the line box is the point.
+- The sidebar is `--sidebar-rail-width` (56px, holding 40 by 36px entries,
+  as the screen frames draw it) and never wider, and the titlebar is `--titlebar-height`. Both are tokens because other things are measured
   against them, and because the title bar height is also the height of the
   native caption-button overlay ([architecture.md](architecture.md) section 4b).
 - A row that carries an avatar is `--row-height-roomy` (44px). A row with no
@@ -125,11 +135,32 @@ not resolving the OS preference yourself.
 
 ## 5a. The title bar is there and not seen
 
-The main window draws its own title bar in the page colour with no rule under
-it, so the window reads as one surface. It still exists: it is the drag region
+The main window draws its own title bar and rail in the page colour (`--paper`)
+with no rule under or beside them. The content is one `--surface` sheet with a
+`--radius-lg` corner, a hairline `--line` border and an 8px margin at the right
+and bottom (frames `25:16` and `29:1229`); the sheet is `main` in `App.tsx`.
+A screen never paints its own `--paper` background or its own left border at its
+edge: sticky headers and side columns inside the sheet use `--surface`. It still exists: it is the drag region
 and the caption buttons sit on it. A screen may put its own controls in it
-with `app/TitleBarSlot.tsx`, beside the way back (Mail puts New message and
-the styled mail pane there, and only while Mail is open).
+with `app/TitleBarSlot.tsx`: `side="left"` is beside the way back (Mail puts
+the styled mail pane button there, and only while Mail is open) and
+`side="right"` is before New (a switch, Show completed), and `side="overflow"` is the "..." after
+New, where a record keeps its menu (a client, a project, a page, a document). The one running time entry is drawn
+there too, from any screen, by `app/TimerPill.tsx` (decision 56): a clock, the
+project name and a stop button, and nothing while no timer runs.
+
+Calendar is the one screen that fills the left slot with its own toolbar: the month heading, previous, Today, next and the view switch, with the page title left empty, as the month, week and agenda frames draw it. Overview leaves the title empty too.
+
+What the bar holds, from the Title Bar component (`14:221`) and its variants:
+Search, Recent, Reminders and New (a plus) at the left, then a divider and the
+way back when a record is open. The page title is centred on the window, and is
+the record's name while one is open. At the right are the screen's own actions,
+a divider and the agent. On Calendar, Clients, Projects, Documents, Templates
+and Reminders New is a text button at the right instead of the plus
+(`NEW_AT_RIGHT` in `app/screens.ts`). Recent lists the last 20 records opened
+(`services/recent.ts`), the bell opens the Reminders screen, and New offers
+what `NEW_MENU` lists (note, page, event, client, project, then Import a file). **The lock has no button**: no frame draws one, so it is
+the palette command and Ctrl or Cmd Shift L.
 
 ## 5b. The sidebar is a rail, and it never opens
 
@@ -138,17 +169,18 @@ no expanded state, no toggle, no drawer and no setting for any of them: the
 name of an entry is in its tooltip (`components/Tooltip.tsx`, drawn by the
 application, not the native `title`) and in its `aria-label`.
 
-- **Six places on top, Settings at the bottom.** Overview, Calendar, Clients,
-  Projects, Mail, Documents; then Settings. `app/screens.ts` lists them. A
-  seventh place is a decision, not an edit. The agent is in the title bar, at
+- **Seven places on top, Settings at the bottom.** Overview, Calendar, Clients,
+  Projects, Mail, Notes, Documents; then Settings. `app/screens.ts` lists them.
+  Notes is the seventh (decision 61); an eighth place is a decision, not an edit. The agent is in the title bar, at
   the right beside the window's own buttons, with the same three colours.
-- **An entry has three colours and nothing else.** Soft (`--ink-faint`) at rest,
-  firm (`--ink`) under the pointer, iris (`--accent`) when it is the page. No
-  fill, no outline, no indicator bar. The one ring is the global
-  `:focus-visible` one, which only a keyboard triggers, and it stays.
-- **Entries are 48px square and icons 24px with a 1.7 stroke,** the dimensions
-  of a code editor's activity bar. Heroicons draw at 1.5, which is a hairline
-  next to the soft colour.
+- **An entry has three states.** Soft (`--ink-faint`) at rest, firm (`--ink`)
+  under the pointer, and when it is the page a `--hover` tile with an iris
+  (`--accent`) icon, as the Sidebar frame (`70:1584`) draws it. No outline, no
+  indicator bar. The one ring is the global `:focus-visible` one, which only a
+  keyboard triggers, and it stays.
+- **Entries are 40 by 36px inside the 56px strip** (8px padding, 2px between
+  entries), **icons 18px with a 1.75 stroke.** The older Rail frame (`14:550`)
+  draws 48px entries and 24px icons; the screens use the Sidebar, which wins.
 - **A badge is a dot,** and the count goes in the tooltip and the accessible name.
 - **Screens without an entry** light the entry they belong to
   (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail,
@@ -211,6 +243,20 @@ of taste.
   opens or swaps the panel's own content (a row, an "Add" or "Edit" button
   marked `data-opens-panel`) or lands inside a menu, a dialog or another
   popover the screen or the panel opened on top of everything.
+- **A record's right-click menu is the platform's**, not drawn (decision 59), and it
+  carries the glyph the frame draws beside each item (`MenuEntry.icon`, a name in
+  `MENU_ICONS`). A new item names its icon in the registry or it has none.
+  A record's right-click menu is the platform's, not drawn (decision 59). A
+  row calls `contextMenuFor(target, handlers)` and a "..." button is an
+  `ActionMenu`; neither holds a list of items, because the main process builds the
+  menu from the kind and the record. The drawn `ContextMenu` is for menus that are
+  not a record's.
+- **One exception, from the design (decision 60): a new event, client, project
+  or reminder is a small modal window**, not a page (`features/new-record/`,
+  entered by `#/new/<kind>`). It is 720 by 640, follows the one-modal-child
+  rule and tells the screen behind it to refresh when it saves. It does not
+  spread: a fifth record, or any form with steps or a table, is a page, and
+  editing one of the four is a page too.
 - The settings **window** is still modal, for the reason in decision 26. Reading
   a row changes nothing; changing a setting changes what every screen shows.
 
@@ -298,6 +344,23 @@ read the same strings, so they cannot disagree.
   the palette can do is a feature with one way in.
 - A new shortcut goes in `SHORTCUT_GROUPS` in the same commit, or the sheet is
   wrong.
+
+## 5g. Layout faults the design file learned, checked in every screen
+
+- **A row that holds an input sizes to its content.** No fixed height on a row
+  with a field in it, and an action beside an input aligns to the bottom of the
+  box (`items-end`), not to the label.
+- **A grid that should fill the window is told to fill it.** Parent and rows
+  fill (`min-h-0 flex-1`), never a fixed height.
+- **An empty cell has a height.** An empty cell takes the row height, or the row
+  collapses around it.
+- **No empty header block.** When a title has moved to the title bar, remove the
+  block it sat in rather than hiding its text.
+- **A clip hides a mistake.** `overflow-hidden` on something smaller than its
+  content looks fine and is wrong. A page longer than its window scrolls.
+- **A label that wraps pushes its neighbour.** Shorten the copy or let the row
+  grow, and keep button labels `whitespace-nowrap`.
+- **Icons scale.** An SVG has a `viewBox` and a size, never a fixed pixel drawing.
 
 ## 6. Numbers line up
 

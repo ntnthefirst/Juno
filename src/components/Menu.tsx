@@ -174,7 +174,7 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 				ref={surface}
 				role="menu"
 				aria-label={ariaLabel}
-				className="animate-scale fixed z-[61] flex flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] py-1"
+				className="animate-scale fixed z-[61] flex flex-col gap-0.5 overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-2"
 				style={{
 					left: position?.left ?? 0,
 					top: position?.top ?? 0,
@@ -200,9 +200,8 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 								onClose();
 								item.onSelect();
 							}}
-							style={{ height: "var(--row-height)" }}
 							className={[
-								"flex w-full shrink-0 items-center gap-2.5 px-3 text-left text-[length:var(--text-dense)]",
+								"flex h-8 w-full shrink-0 items-center gap-2 rounded-[var(--radius-sm)] px-2 text-left text-base",
 								"focus:outline-none disabled:pointer-events-none disabled:opacity-40",
 								item.danger
 									? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
@@ -215,13 +214,13 @@ function MenuSurface({ at, items, onClose, ariaLabel, anchor = "top-left", minWi
 							].join(" ")}
 						>
 							{item.icon ? (
-								<Icon name={item.icon} className={item.danger ? "" : "text-[var(--ink-muted)]"} />
+								<Icon name={item.icon} />
 							) : (
 								<span className="w-4 shrink-0" aria-hidden />
 							)}
 							<span className="min-w-0 flex-1 truncate">{item.label}</span>
 							{item.hint ? (
-								<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+								<span className="shrink-0 font-mono text-micro font-[var(--weight-medium)] text-[var(--ink-faint)]">
 									{item.hint}
 								</span>
 							) : null}
@@ -280,10 +279,10 @@ export function MenuButton({
 	const metrics =
 		size === "dense"
 			? label
-				? "h-[32px] px-2 text-[length:var(--text-dense)]"
+				? "h-[32px] px-2 text-dense"
 				: "h-[32px] w-[32px]"
 			: label
-				? "h-[40px] px-4 text-[length:var(--text-base)]"
+				? "h-[40px] px-4 text-base"
 				: "h-[40px] w-[40px]";
 
 	return (

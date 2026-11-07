@@ -18,7 +18,7 @@ export function ShortcutsDialog({ onClose }: ShortcutsDialogProps) {
 			<div className="mt-5 flex flex-col gap-6">
 				{SHORTCUT_GROUPS.map((group) => (
 					<section key={group.title}>
-						<h3 className="mb-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]">
+						<h3 className="mb-1 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]">
 							{group.title}
 						</h3>
 						<ul>
@@ -27,12 +27,12 @@ export function ShortcutsDialog({ onClose }: ShortcutsDialogProps) {
 									key={row.label}
 									className="flex min-h-[36px] items-center justify-between gap-6 border-b border-[var(--line)]/60 last:border-b-0"
 								>
-									<span className="text-[length:var(--text-base)]">{row.label}</span>
+									<span className="text-base">{row.label}</span>
 									<span className="flex items-center gap-2">
 										{row.combos.map((combo, index) => (
 											<span key={combo} className="flex items-center gap-2">
 												{index > 0 ? (
-													<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">or</span>
+													<span className="text-sm text-[var(--ink-muted)]">or</span>
 												) : null}
 												<Kbd keys={formatCombo(combo)} />
 											</span>

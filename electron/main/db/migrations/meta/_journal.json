@@ -162,6 +162,48 @@
       "when": 1792494677085,
       "tag": "0022_link_mail_to_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1794007766946,
+      "tag": "0023_recent_items_mail_blocks_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1794008814318,
+      "tag": "0024_time_entries_and_project_estimate",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1794021177135,
+      "tag": "0025_notes_and_pages",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1794027577207,
+      "tag": "0026_mail_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1794030137281,
+      "tag": "0027_document_components",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1794037717247,
+      "tag": "0028_client_language",
+      "breakpoints": true
     }
   ]
 }

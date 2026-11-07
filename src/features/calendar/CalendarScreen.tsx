@@ -1,3 +1,5 @@
+import { TitleBarSlot } from "../../app/TitleBarSlot";
+import { Segmented } from "../../components/Segmented";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
 	CalendarEvent,
@@ -5,17 +7,19 @@ import type {
 	CalendarOccurrence,
 	CalendarReminderItem,
 	CalendarScope,
+	NewRecordPrefill,
 	Project,
 	Reminder,
 } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { IconButton } from "../../components/IconButton";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
-import { useScreenAction } from "../../lib/screen-actions";
+import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { ProjectForm } from "../projects/ProjectForm";
-import { ReminderForm, type ReminderSeed } from "../reminders/ReminderForm";
+import { ReminderForm } from "../reminders/ReminderForm";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
 import { AgendaView } from "./AgendaView";
 import {
@@ -36,7 +40,7 @@ import {
 	type ViewKind,
 } from "./dates";
 import { EventDetail } from "./EventDetail";
-import { EventForm, type EventSeed } from "./EventForm";
+import { EventForm } from "./EventForm";
 import { placeItems } from "./format";
 import { MonthView } from "./MonthView";
 import { ScopeDialog } from "./ScopeDialog";
@@ -48,10 +52,9 @@ type Load =
 	| { status: "error"; message: string };
 
 type FormState = {
-	event: CalendarEvent | null;
+	event: CalendarEvent;
 	occurrence: CalendarOccurrence | null;
 	scope: CalendarScope;
-	seed: EventSeed | null;
 };
 
 /** What the Undo toast does. Deleting an event, a reminder or a deadline each undo differently. */
@@ -65,10 +68,10 @@ type ScopeQuestion = {
 
 const AGENDA_DAYS = 30;
 
-const VIEW_OPTIONS: { kind: ViewKind; label: string; short: string }[] = [
-	{ kind: "month", label: "Month", short: "M" },
-	{ kind: "week", label: "Week", short: "W" },
-	{ kind: "agenda", label: "Agenda", short: "A" },
+const VIEW_OPTIONS: { kind: ViewKind; label: string }[] = [
+	{ kind: "month", label: "Month" },
+	{ kind: "week", label: "Week" },
+	{ kind: "agenda", label: "Agenda" },
 ];
 
 /** The current minute, for the week view's line. Impure, so read in an effect. */
@@ -87,12 +90,10 @@ export function CalendarScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [version, setVersion] = useState(0);
 	const [form, setForm] = useState<FormState | null>(null);
-	// Asked for from outside: an hour from now, for an hour, today.
-	useScreenAction("calendar", () => createAt(todayIso(), Math.min(23, new Date().getHours() + 1) * 60));
 	const [detail, setDetail] = useState<CalendarItem | null>(null);
 	const [question, setQuestion] = useState<ScopeQuestion | null>(null);
 	const [undo, setUndo] = useState<Undo | null>(null);
-	const [reminderForm, setReminderForm] = useState<{ reminder: Reminder | null; seed: ReminderSeed | null } | null>(null);
+	const [reminderForm, setReminderForm] = useState<{ reminder: Reminder } | null>(null);
 	const [projectForm, setProjectForm] = useState<Project | null>(null);
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [warnings, setWarnings] = useState<string[] | null>(null);
@@ -154,6 +155,8 @@ export function CalendarScreen() {
 	}, [fetchItems, from, version]);
 
 	const refresh = useCallback(() => setVersion((v) => v + 1), []);
+	// A new-record window saved something, so the grid reads again.
+	useRecordsChanged(refresh);
 
 	const placed = useMemo(
 		() => (load.status === "ready" && from && to ? placeItems(load.items, from, to) : new Map()),
@@ -188,15 +191,14 @@ export function CalendarScreen() {
 	}
 
 	function createAt(date: string, minute: number | null) {
-		const seed: EventSeed =
+		const prefill: NewRecordPrefill =
 			minute === null
 				? { startLocal: date, endLocal: addDays(date, 1), allDay: true }
 				: {
 						startLocal: joinLocal(date, formatMinutes(minute)),
 						endLocal: addLocalMinutes(joinLocal(date, formatMinutes(minute)), 60),
-						allDay: false,
 					};
-		setForm({ event: null, occurrence: null, scope: "all", seed });
+		openNewRecord("event", prefill);
 	}
 
 	async function editEvent(item: CalendarOccurrence) {
@@ -215,7 +217,7 @@ export function CalendarScreen() {
 		}
 		withScope(item, "edit", (scope) => {
 			setQuestion(null);
-			setForm({ event, occurrence: item, scope, seed: null });
+			setForm({ event, occurrence: item, scope });
 		});
 	}
 
@@ -247,7 +249,7 @@ export function CalendarScreen() {
 			if (item.kind === "reminder") {
 				const reminder = await window.juno.reminders.get(item.reminderId);
 				if (!reminder) throw new Error("That reminder no longer exists.");
-				setReminderForm({ reminder, seed: null });
+				setReminderForm({ reminder });
 			} else {
 				const project = await window.juno.projects.get(item.projectId);
 				if (!project) throw new Error("That project no longer exists.");
@@ -316,7 +318,7 @@ export function CalendarScreen() {
 	}
 
 	function createReminderAt(date: string) {
-		setReminderForm({ reminder: null, seed: { dueOn: date } });
+		openNewRecord("reminder", { date });
 	}
 
 	/** A drag, turned into a wall-clock edit on the event's own zone. */
@@ -422,7 +424,6 @@ export function CalendarScreen() {
 		return (
 			<ReminderForm
 				reminder={reminderForm.reminder}
-				seed={reminderForm.seed}
 				backLabel="Calendar"
 				onClose={() => setReminderForm(null)}
 				onSaved={() => {
@@ -456,7 +457,6 @@ export function CalendarScreen() {
 				event={form.event}
 				occurrence={form.occurrence}
 				scope={form.scope}
-				seed={form.seed}
 				onClose={() => setForm(null)}
 				onSaved={() => {
 					setForm(null);
@@ -467,7 +467,13 @@ export function CalendarScreen() {
 	}
 
 	const overflowItems: MenuItem[] = [
-		{ id: "import", label: "Import", icon: "import", onSelect: () => void importIcs() },
+		{
+			id: "new-reminder",
+			label: "New reminder",
+			icon: "reminders",
+			onSelect: () => anchor && createReminderAt(view === "month" ? (today ?? anchor) : anchor),
+		},
+		{ id: "import", label: "Import", icon: "import", separatorBefore: true, onSelect: () => void importIcs() },
 		{
 			id: "export",
 			label: "Export",
@@ -494,90 +500,43 @@ export function CalendarScreen() {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex flex-none min-w-0 items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:gap-3 sm:px-6">
-				<h1 className="min-w-0 shrink truncate text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+			<TitleBarSlot side="left">
+				<span aria-hidden className="mx-1 h-4 w-px flex-none bg-[var(--line)]" />
+				<h1 className="mx-2 min-w-0 shrink-0 whitespace-nowrap text-dense font-[var(--weight-semibold)] text-[var(--ink)]">
 					{heading}
 				</h1>
-				<div className="flex shrink-0 items-center gap-1">
-					<Button size="dense" onClick={() => step(-1)} aria-label="Previous">
-						{"<"}
-					</Button>
-					<Button
-						size="dense"
-						onClick={() => {
-							if (!today) return;
-							if (anchor) setDirection(today >= anchor ? 1 : -1);
-							setAnchor(today);
-						}}
-					>
-						Today
-					</Button>
-					<Button size="dense" onClick={() => step(1)} aria-label="Next">
-						{">"}
-					</Button>
-				</div>
-
-				<div
-					className="flex shrink-0 items-center gap-px rounded-[var(--radius-md)] bg-[var(--sunken)] p-px"
-					role="group"
-					aria-label="View"
+				<IconButton icon="chevron-left" label="Previous" onClick={() => step(-1)} />
+				<button
+					type="button"
+					onClick={() => {
+						if (!today) return;
+						if (anchor) setDirection(today >= anchor ? 1 : -1);
+						setAnchor(today);
+					}}
+					className="inline-flex h-7 items-center rounded-[var(--radius-md)] px-2.5 text-dense font-[var(--weight-medium)] text-[var(--ink)] transition-[background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] active:scale-[0.97]"
 				>
-					{VIEW_OPTIONS.map((option) => (
-						<button
-							key={option.kind}
-							type="button"
-							aria-pressed={view === option.kind}
-							// Both labels are in the DOM and CSS picks one, so the button
-							// needs a name of its own: without it a screen reader reads the
-							// long one and the short one together, as "Week W".
-							aria-label={option.label}
-							title={option.label}
-							onClick={() => setView(option.kind)}
-							className={`h-[30px] rounded-[var(--radius-md)] px-3 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								view === option.kind ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-							}`}
-						>
-							<span aria-hidden className="hidden sm:inline">
-								{option.label}
-							</span>
-							<span aria-hidden className="sm:hidden">
-								{option.short}
-							</span>
-						</button>
-					))}
-				</div>
-
-				<div className="ml-auto flex shrink-0 items-center gap-1">
-					<MenuButton
-						items={[
-							{
-								id: "new-event",
-								label: "New event",
-								icon: "calendar",
-								onSelect: () => anchor && createAt(view === "month" ? (today ?? anchor) : anchor, 9 * 60),
-							},
-							{
-								id: "new-reminder",
-								label: "New reminder",
-								icon: "reminders",
-								onSelect: () => anchor && createReminderAt(view === "month" ? (today ?? anchor) : anchor),
-							},
-						]}
-						ariaLabel="New"
-						label="New"
-						icon="add"
-						size="dense"
-					/>
-					<MenuButton items={overflowItems} ariaLabel="More" icon="more" />
-				</div>
-			</div>
+					Today
+				</button>
+				<IconButton icon="chevron-right" label="Next" onClick={() => step(1)} />
+				<span className="ml-2" />
+				<Segmented
+					size="compact"
+					label="View"
+					value={view}
+					onChange={setView}
+					options={VIEW_OPTIONS.map((option) => ({ id: option.kind, label: option.label, name: option.label }))}
+				/>
+			</TitleBarSlot>
+			<TitleBarSlot side="overflow">
+				<MenuButton items={overflowItems} ariaLabel="More" icon="more" />
+			</TitleBarSlot>
 
 			<div className="relative flex min-h-0 flex-1">
 				<div className="min-w-0 flex-1 overflow-hidden">
 				{load.status === "error" ? (
 					<div className="m-8 border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the calendar.</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{load.message}
 						</p>
 					</div>
@@ -599,6 +558,7 @@ export function CalendarScreen() {
 						onDelete={(item) => remove(item)}
 						onComplete={complete}
 						onSnooze={(item) => void snooze(item)}
+						onChanged={refresh}
 						onStep={step}
 					/>
 				) : view === "week" ? (
@@ -615,6 +575,7 @@ export function CalendarScreen() {
 						onDelete={(item) => remove(item)}
 						onComplete={complete}
 						onSnooze={(item) => void snooze(item)}
+						onChanged={refresh}
 						onStep={step}
 					/>
 				) : (
@@ -628,6 +589,7 @@ export function CalendarScreen() {
 						onDelete={(item) => remove(item)}
 						onComplete={complete}
 						onSnooze={(item) => void snooze(item)}
+						onChanged={refresh}
 						onStep={step}
 					/>
 				)}
@@ -655,7 +617,7 @@ export function CalendarScreen() {
 
 			{warnings ? (
 				<Dialog title="Imported with warnings" onClose={() => setWarnings(null)}>
-					<ul className="mt-4 flex flex-col gap-2 text-[length:var(--text-dense)]">
+					<ul className="mt-4 flex flex-col gap-2 text-dense">
 						{warnings.map((warning, index) => (
 							<li key={index} className="border-l-2 border-[var(--warn)] pl-3">
 								{warning}

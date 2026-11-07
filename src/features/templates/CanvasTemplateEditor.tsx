@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+	ComponentPlacement,
+	DocumentComponent,
 	DocumentPaper,
-	DocumentTemplateAsset,
 	MailBlock,
 	MailContainer,
 	MailLayout,
@@ -9,7 +10,8 @@ import type {
 	MailTextStyle,
 	TemplateInput,
 } from "@shared/types";
-import { assetKeyOf, newPage, normaliseCanvas, pagesOf, paperPx } from "@shared/paper";
+import type { ComponentLookup } from "@shared/components";
+import { assetKeyOf, DEFAULT_PAPER, newPage, normaliseCanvas, pagesOf, paperPx } from "@shared/paper";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { PdfViewer } from "../../components/PdfViewer";
@@ -23,6 +25,7 @@ import {
 	firstChildOf,
 	insertNode,
 	insertTarget,
+	newContainer,
 	moveNode,
 	moveWithinParent,
 	parentOf,
@@ -82,6 +85,9 @@ export type CanvasPreview =
 	| { kind: "html"; subject: string; html: string; missing: string[] }
 	| { kind: "pdf"; pdf: Uint8Array; missing: string[] };
 
+/** What the editor needs of a stored picture: the token a block names it with and where it is drawn from. */
+type PictureRow = { token: string; url: string };
+
 /**
  * Where a template comes from and goes to. The editor is the same for a
  * message and for a document; this is the part that is not.
@@ -91,6 +97,16 @@ export type CanvasSource = {
 	load: (id: string) => Promise<{ draft: CanvasDraft; unreviewed: boolean } | null>;
 	save: (id: string, draft: CanvasDraft) => Promise<void>;
 	preview: (id: string, draft: CanvasDraft) => Promise<CanvasPreview>;
+	/**
+	 * Where the pictures it keeps are stored, when that is not the document
+	 * template's own. A component keeps its own (decision 65).
+	 */
+	assets?: {
+		list: (id: string) => Promise<PictureRow[]>;
+		add: (id: string, file: { fileName: string; data: Uint8Array }) => Promise<PictureRow>;
+	};
+	/** One sheet and no more: a component is one piece of a page, so there is no adding a page. */
+	singlePage?: boolean;
 };
 
 type CanvasTemplateEditorProps = {
@@ -98,6 +114,8 @@ type CanvasTemplateEditorProps = {
 	source: CanvasSource;
 	onBack: () => void;
 	onSaved: () => void;
+	/** Opens a component to edit it, from a placement in the template. The draft is saved first. */
+	onOpenComponent?: (componentId: string) => void;
 	/**
 	 * Flows what runs past the bottom of a page onto the pages after it as soon
 	 * as the canvas has been drawn, for a document that has just been imported
@@ -244,7 +262,7 @@ function shapeOf(layout: MailLayout): string {
  * from it. A template without one is what everything written before the canvas
  * is, and it keeps the visual and code editors it has always had.
  */
-export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flowOnOpen = false }: CanvasTemplateEditorProps) {
+export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOpenComponent, flowOnOpen = false }: CanvasTemplateEditorProps) {
 	const [unreviewed, setUnreviewed] = useState(false);
 	const [loaded, setLoaded] = useState(false);
 	const [draft, setDraft] = useState<Draft | null>(null);
@@ -321,14 +339,50 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 	const [pictures, setPictures] = useState<Record<string, string>>({});
 	const refreshPictures = useCallback(() => {
 		if (source.kind !== "document") return;
-		window.juno.templates.assets
-			.list(templateId)
-			.then((rows: DocumentTemplateAsset[]) =>
+		(source.assets?.list ?? window.juno.templates.assets.list)(templateId)
+			.then((rows: PictureRow[]) =>
 				setPictures(Object.fromEntries(rows.map((row) => [assetKeyOf(row.token) ?? "", row.url]))),
 			)
 			.catch((cause: unknown) => setError(messageOf(cause)));
-	}, [source.kind, templateId]);
+	}, [source.kind, source.assets, templateId]);
 	useEffect(() => refreshPictures(), [refreshPictures]);
+
+	// The components a document may place, and their pictures, which belong to
+	// them and are drawn from their own files. A component can place other
+	// components, so the list is loaded for it too.
+	const [componentList, setComponentList] = useState<DocumentComponent[]>([]);
+	const [componentPictures, setComponentPictures] = useState<Record<string, string>>({});
+	useEffect(() => {
+		if (source.kind !== "document") return;
+		let cancelled = false;
+		window.juno.templates.components
+			.list()
+			.then(async (rows) => {
+				const found: Record<string, string> = {};
+				for (const row of rows) {
+					for (const asset of await window.juno.templates.components.assets.list(row.id)) {
+						found[assetKeyOf(asset.token) ?? ""] = asset.url;
+					}
+				}
+				if (cancelled) return;
+				setComponentList(rows.filter((row) => row.id !== templateId));
+				setComponentPictures(found);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setError(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [source.kind, templateId]);
+	const componentLookup = useCallback<ComponentLookup>(
+		(id) => {
+			const found = componentList.find((row) => row.id === id);
+			return found ? { id: found.id, name: found.name, root: found.root, fonts: found.fonts, inputs: found.inputs } : null;
+		},
+		[componentList],
+	);
+	const everyPicture = useMemo(() => ({ ...componentPictures, ...pictures }), [componentPictures, pictures]);
 
 	const draftKey = draft ? JSON.stringify(draft) : "";
 	const dirty = Boolean(draft) && draftKey !== savedKey;
@@ -515,6 +569,47 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 		setSelection({ id: shaped.id });
 	}
 
+	/**
+	 * Places a component: a container that holds a reference and the values it
+	 * was given, and none of the component's content. It lands where a new
+	 * element does, after what is selected or at the end of the last page.
+	 */
+	function placeComponent(componentId: string): void {
+		if (!layout) return;
+		const component = componentList.find((row) => row.id === componentId);
+		if (!component) return;
+		const placement: ComponentPlacement = { componentId, values: {} };
+		const node: MailContainer = { ...newContainer(layout, "div"), name: component.name, component: placement };
+		const at = landing(false);
+		if (!at) return;
+		onLayout(insertNode(layout, at.parentId, node, at.afterId));
+		setSelection({ id: node.id });
+	}
+
+	/**
+	 * Copies a placed component into the draft and drops the link. The service
+	 * does it against the draft, so pictures and inputs come along, and what
+	 * comes back is one more edit that can be undone and saved.
+	 */
+	async function detachComponent(nodeId: string): Promise<void> {
+		if (!layout || !draft?.paper || source.kind !== "document") return;
+		setError(null);
+		try {
+			const result = await window.juno.templates.components.detach({
+				templateId,
+				nodeId,
+				canvas: { version: 1, paper: draft.paper, layout },
+				inputs: draft.inputs,
+			});
+			onLayout(result.canvas.layout);
+			patch({ inputs: result.inputs });
+			refreshPictures();
+			setSelection({ id: nodeId });
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		}
+	}
+
 	/** A different paper: every page is resized to it, and what is on them stays. */
 	function changePaper(paper: DocumentPaper): void {
 		if (!draft?.layout) return;
@@ -541,11 +636,10 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 		if (!target) return;
 		setError(null);
 		try {
-			const asset = await window.juno.templates.assets.add({
-				templateId,
-				fileName: file.name,
-				data: new Uint8Array(await file.arrayBuffer()),
-			});
+			const data = new Uint8Array(await file.arrayBuffer());
+			const asset = source.assets
+				? await source.assets.add(templateId, { fileName: file.name, data })
+				: await window.juno.templates.assets.add({ templateId, fileName: file.name, data });
 			refreshPictures();
 			const current = draftRef.current?.layout;
 			if (!current) return;
@@ -918,7 +1012,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 						onName={(name) => patch({ name })}
 						onDescription={(description) => patch({ description })}
 						onSubject={(subject) => patch({ subject })}
-						onAddPage={paper && layout ? addPage : null}
+						onAddPage={paper && layout && !source.singlePage ? addPage : null}
 						layout={shown}
 						selection={live}
 						onSelect={setSelection}
@@ -947,7 +1041,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 					/>
 				) : (
 					<div className="absolute top-2 left-2 z-10 flex h-[34px] max-w-[240px] items-center gap-1 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] pr-1 pl-3 shadow-[var(--shadow-popover)]">
-						<span className="truncate text-[length:var(--text-sm)] font-[var(--weight-semibold)]">
+						<span className="truncate text-sm font-[var(--weight-semibold)]">
 							{draft.name || "Untitled template"}
 						</span>
 						<button
@@ -967,7 +1061,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 						<p
 							role="alert"
 							data-selectable
-							className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-[length:var(--text-dense)] text-[var(--risk)]"
+							className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-dense text-[var(--risk)]"
 						>
 							{error}
 						</p>
@@ -976,7 +1070,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 					{onCanvas && paper && overflow.length > 0 ? (
 						<div
 							role="status"
-							className="flex flex-none items-center gap-3 border-b border-[var(--line)] bg-[var(--warn-soft)] px-4 py-1.5 text-[length:var(--text-dense)] text-[var(--warn)]"
+							className="flex flex-none items-center gap-3 border-b border-[var(--line)] bg-[var(--warn-soft)] px-4 py-1.5 text-dense text-[var(--warn)]"
 						>
 							<span className="min-w-0 flex-1">
 								{overflow.length === 1 ? `Page ${overflow[0]} runs` : `Pages ${overflow.join(", ")} run`} past the bottom
@@ -991,7 +1085,8 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 					{onCanvas && layout && shown ? (
 						<CanvasStage
 							paper={paper}
-							pictures={pictures}
+							pictures={everyPicture}
+							components={componentLookup}
 							layout={shown}
 							label={active ? (layout.breakpoints.find((entry) => entry.id === active)?.name ?? "") : "Default"}
 							inputs={draft.inputs}
@@ -1028,7 +1123,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 								<p
 									role="alert"
 									data-selectable
-									className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-[length:var(--text-dense)] text-[var(--risk)]"
+									className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-dense text-[var(--risk)]"
 								>
 									{previewError}
 								</p>
@@ -1038,11 +1133,11 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 								read={readPreview}
 								caption={
 									preview && preview.missing.length > 0 ? (
-										<span className="truncate text-[length:var(--text-micro)] text-[var(--risk)]">
+										<span className="truncate text-micro text-[var(--risk)]">
 											No value for: {preview.missing.join(", ")}
 										</span>
 									) : (
-										<span className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+										<span className="text-micro text-[var(--ink-muted)]">
 											Printed with the starting value of each input.
 										</span>
 									)
@@ -1078,7 +1173,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 												type="button"
 												aria-pressed={active === entry.id}
 												onClick={() => setBreakpoint(entry.id)}
-												className={`h-[26px] rounded-[var(--radius-sm)] px-2 text-[length:var(--text-sm)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
+												className={`h-[26px] rounded-[var(--radius-sm)] px-2 text-sm transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
 													active === entry.id
 														? "bg-[var(--accent-soft)] text-[var(--accent)]"
 														: "text-[var(--ink-muted)] hover:text-[var(--ink)]"
@@ -1086,7 +1181,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 											>
 												{entry.name}
 												{entry.width !== null ? (
-													<span className="tabular text-[length:var(--text-micro)]"> {entry.width}</span>
+													<span className="tabular text-micro"> {entry.width}</span>
 												) : null}
 											</button>
 										))}
@@ -1100,17 +1195,17 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 									<p
 										role="alert"
 										data-selectable
-										className="mx-auto max-w-[620px] border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+										className="mx-auto max-w-[620px] border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 									>
 										{previewError}
 									</p>
 								) : preview?.kind === "html" ? (
 									<div className="mx-auto" style={{ width: shown ? shown.width : PREVIEW_WIDTHS[previewWidth] }}>
-										<p className="truncate pb-2 text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+										<p className="truncate pb-2 text-dense font-[var(--weight-medium)]">
 											{preview.subject || "No subject yet"}
 										</p>
 										{preview.missing.length > 0 ? (
-											<p className="pb-2 text-[length:var(--text-micro)] text-[var(--risk)]">
+											<p className="pb-2 text-micro text-[var(--risk)]">
 												No value for: {preview.missing.join(", ")}
 											</p>
 										) : null}
@@ -1172,7 +1267,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 									>
 										Apply to canvas
 									</Button>
-									<p className="text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+									<p className="text-micro text-[var(--ink-muted)]">
 										Markup the canvas knows comes back as the block it was. Anything else comes back as
 										a code block where you wrote it, so nothing is lost. The structure is kept, the
 										exact spacing is not.
@@ -1185,18 +1280,18 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 					{mode === "inputs" ? (
 						<div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-24">
 							<div className="w-full">
-								<h2 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">
+								<h2 className="text-h3">
 									What this asks for
 								</h2>
 								{paper ? (
-									<p className="mt-1 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 										Everything that changes each time this document is made. Nothing is filled in from a
 										client or from your details: each input is typed by hand, or by an agent, when the
 										template is used. Write one as {"{{document.<key>}}"} in a text, or place it as an
 										input block. An image input is a picture chosen when the template is used.
 									</p>
 								) : (
-									<p className="mt-1 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+									<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 										Everything that changes each time this message is sent. Nothing is filled in from a
 										client, a project or your details: each input is typed by hand, or by an agent, after
 										the recipient is chosen. Write one as {"{{document.<key>}}"} in a text, or place it as
@@ -1260,7 +1355,20 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, flow
 							onSelect={setSelection}
 							paper={paper}
 							onPaper={changePaper}
-							pictures={pictures}
+							pictures={everyPicture}
+							components={source.kind === "document" ? componentList : undefined}
+							onPlaceComponent={source.kind === "document" ? placeComponent : undefined}
+							onDetachComponent={source.kind === "document" && !source.singlePage ? (id) => void detachComponent(id) : undefined}
+							onOpenComponent={
+								onOpenComponent
+									? (id) => {
+											void (async () => {
+												if (dirty) await save();
+												onOpenComponent(id);
+											})();
+										}
+									: undefined
+							}
 							onPicture={(blockId) => choosePicture({ blockId })}
 						/>
 					</aside>
@@ -1375,6 +1483,8 @@ type TemplateEditorEntryProps = {
 	templateId: string;
 	onBack: () => void;
 	onSaved: () => void;
+	/** Opens a placed component to edit it. */
+	onOpenComponent?: (componentId: string) => void;
 };
 
 export function MailTemplateEditor(props: TemplateEditorEntryProps) {
@@ -1388,4 +1498,84 @@ type DocumentCanvasEditorProps = TemplateEditorEntryProps & {
 
 export function DocumentCanvasEditor(props: DocumentCanvasEditorProps) {
 	return <CanvasTemplateEditor {...props} source={DOCUMENT_SOURCE} />;
+}
+
+/** The component alone on a sheet of A4, which is where it is drawn while it is edited. */
+function sheetOf(root: MailContainer, fonts: MailLayout["fonts"]): MailLayout {
+	const layout: MailLayout = {
+		version: 2,
+		width: 0,
+		widthMode: "fixed",
+		minHeight: 0,
+		fill: null,
+		fonts,
+		customCss: null,
+		children: [{ ...newPage(DEFAULT_PAPER, "Page 1"), children: [root] }],
+		breakpoints: [],
+	};
+	return normaliseCanvas({ version: 1, paper: DEFAULT_PAPER, layout }).layout;
+}
+
+/**
+ * What the sheet holds, as the component's content: the container on it, or
+ * everything on it in a container of its own when it is no longer exactly one.
+ */
+function rootOf(layout: MailLayout): MailContainer {
+	const page = pagesOf(layout)[0];
+	const only = page?.children.length === 1 ? page.children[0] : undefined;
+	if (only && only.kind === "container") return only;
+	return { ...newContainer(layout, "div"), name: "Content", children: page?.children ?? [] };
+}
+
+/**
+ * Reads a component into the editor and writes it back. It is edited on a
+ * sheet like a page, which shows how wide it will be when it is placed, and
+ * saved as the container on it. Its preview is the PDF of that sheet.
+ */
+const COMPONENT_SOURCE: CanvasSource = {
+	kind: "document",
+	singlePage: true,
+	assets: {
+		list: (id) => window.juno.templates.components.assets.list(id),
+		add: (id, file) => window.juno.templates.components.assets.add({ componentId: id, ...file }),
+	},
+	async load(id) {
+		const row = await window.juno.templates.components.get(id);
+		if (!row) return null;
+		return {
+			unreviewed: false,
+			draft: {
+				name: row.name,
+				description: row.description ?? "",
+				subject: null,
+				bodyHtml: "",
+				inputs: row.inputs,
+				layout: sheetOf(row.root, row.fonts),
+				paper: DEFAULT_PAPER,
+			},
+		};
+	},
+	async save(id, draft) {
+		if (!draft.layout) return;
+		await window.juno.templates.components.update(id, {
+			name: draft.name,
+			description: draft.description.trim() || null,
+			inputs: draft.inputs,
+			root: rootOf(draft.layout),
+			fonts: draft.layout.fonts,
+		});
+	},
+	async preview(id, draft) {
+		const result = await window.juno.templates.components.renderPdf({
+			componentId: id,
+			...(draft.layout && draft.paper ? { canvas: { version: 1, paper: draft.paper, layout: draft.layout } } : {}),
+			inputs: draft.inputs,
+			values: startingValues(draft.inputs),
+		});
+		return { kind: "pdf", pdf: result.pdf, missing: result.missing };
+	},
+};
+
+export function ComponentCanvasEditor(props: TemplateEditorEntryProps) {
+	return <CanvasTemplateEditor {...props} source={COMPONENT_SOURCE} />;
 }

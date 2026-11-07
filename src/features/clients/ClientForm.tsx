@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useId, useState } from "react";
 import type { Client, ClientPatch, ReferenceItem } from "@shared/types";
+import { CLIENT_LANGUAGES } from "@shared/client-language";
 import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
@@ -8,8 +9,8 @@ import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 
 type ClientFormProps = {
-	/** Null creates, a client edits. */
-	client: Client | null;
+	/** The stored client being edited. A new one is made in its own window (decision 60). */
+	client: Client;
 	onClose: () => void;
 	onSaved: (client: Client) => void;
 };
@@ -19,16 +20,18 @@ type Values = {
 	statusId: string;
 	vatNumber: string;
 	website: string;
+	language: string;
 	notes: string;
 };
 
-function toValues(client: Client | null): Values {
+function toValues(client: Client): Values {
 	return {
-		name: client?.name ?? "",
-		statusId: client?.statusId ?? "",
-		vatNumber: client?.vatNumber ?? "",
-		website: client?.website ?? "",
-		notes: client?.notes ?? "",
+		name: client.name,
+		statusId: client.statusId ?? "",
+		vatNumber: client.vatNumber ?? "",
+		website: client.website ?? "",
+		language: client.language,
+		notes: client.notes ?? "",
 	};
 }
 
@@ -44,7 +47,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 	const [values, setValues] = useState<Values>(() => toValues(client));
 	// Notes stay out of the way until there is something in them, or the user
 	// asks for the field. Filling in a client should not open on a blank essay.
-	const [notesOpen, setNotesOpen] = useState(() => (client?.notes ?? "").trim().length > 0);
+	const [notesOpen, setNotesOpen] = useState(() => (client.notes ?? "").trim().length > 0);
 	const [statuses, setStatuses] = useState<ReferenceItem[]>([]);
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -89,13 +92,12 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 			statusId: values.statusId.length > 0 ? values.statusId : null,
 			vatNumber: textOrNull(values.vatNumber),
 			website: textOrNull(values.website),
+			language: values.language,
 			notes: notesOpen ? textOrNull(values.notes) : null,
 		};
 
 		try {
-			const saved = client
-				? await window.juno.clients.update(client.id, patch)
-				: await window.juno.clients.create({ ...patch, name });
+			const saved = await window.juno.clients.update(client.id, patch);
 			onSaved(saved);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -105,12 +107,9 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 
 	return (
 		<FormPage
-			title={client ? "Edit client" : "New client"}
+			title="Edit client"
 			onBack={onClose}
 			backLabel="Clients"
-			description={
-				client ? undefined : "Just the basics for now. Add emails, phone numbers, addresses and contacts once the client is saved."
-			}
 			actions={
 				<>
 					<Button onClick={onClose}>Cancel</Button>
@@ -145,14 +144,18 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						onChange={(value) => set("vatNumber", value)}
 					/>
 
-					<div className="col-span-2">
-						<Field
-							label="Website"
-							type="url"
-							value={values.website}
-							onChange={(value) => set("website", value)}
-						/>
-					</div>
+					<Field
+						label="Website"
+						type="url"
+						value={values.website}
+						onChange={(value) => set("website", value)}
+					/>
+					<Select
+						label="Language"
+						value={values.language}
+						onChange={(value) => set("language", value)}
+						options={CLIENT_LANGUAGES.map((item) => ({ value: item.value, label: item.label }))}
+					/>
 				</div>
 
 				<div className="mt-6 border-t border-[var(--line)] pt-6">
@@ -160,7 +163,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						<div>
 							<label
 								htmlFor={notesId}
-								className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+								className="mb-1 block text-sm text-[var(--ink-muted)]"
 							>
 								Notes
 							</label>
@@ -170,7 +173,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						<Button onClick={() => setNotesOpen(true)}>Add notes</Button>
 					)}
 					{notesOpen ? (
-						<p className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mt-1 text-sm text-[var(--ink-muted)]">
 							Markdown is supported: **bold**, _italic_, a [link](https://example.com), a list.
 						</p>
 					) : null}
@@ -183,7 +186,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 						</p>
 						<p
 							data-selectable
-							className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+							className="mt-1 text-sm text-[var(--ink-muted)]"
 						>
 							{error}
 						</p>

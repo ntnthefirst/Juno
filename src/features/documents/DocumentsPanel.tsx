@@ -123,7 +123,7 @@ export function DocumentsPanel({
 			}`}
 		>
 			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-[length:var(--text-h3)] font-[var(--weight-medium)]">Documents</h3>
+				<h3 className="text-h3">Documents</h3>
 				<MenuButton
 					ariaLabel="Add a document"
 					items={[
@@ -139,6 +139,7 @@ export function DocumentsPanel({
 							},
 						},
 					]}
+					label="New"
 					icon="add"
 				/>
 			</div>
@@ -148,35 +149,41 @@ export function DocumentsPanel({
 			) : load.status === "error" ? (
 				<div className="border-l-2 border-[var(--risk)] pl-4">
 					<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the documents.</p>
-					<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 						{load.message}
 					</p>
 				</div>
 			) : records.length === 0 ? (
 				<div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--line-strong)] px-6 py-10 text-center">
 					<p className="font-[var(--weight-medium)]">No documents yet</p>
-					<p className="mx-auto mt-1 max-w-[46ch] text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+					<p className="mx-auto mt-1 max-w-[46ch] text-dense text-[var(--ink-muted)]">
 						Drop PDF files here, or use the plus to start one from a template, import one, or add a document Juno already has. A file that is an existing document again is offered as a new version.
 					</p>
 				</div>
 			) : (
 				<ul>
 					{records.map((record) => (
-						<li key={record.id} className="border-b border-[var(--line)] py-2 text-[length:var(--text-dense)]">
+						<li key={record.id} className="border-b border-[var(--line)] py-3 text-base">
 							<div className="flex items-center justify-between gap-4">
 							<div className="flex min-w-0 items-center gap-3">
 								<span
 									aria-hidden
-									className="flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] bg-[var(--sunken)] text-[var(--ink-muted)]"
+									className={`flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] ${
+										record.sourceKind === "page"
+											? "bg-[var(--accent-soft)] text-[var(--accent)]"
+											: record.sourceKind === "imported"
+												? "bg-[var(--risk-soft)] text-[var(--risk)]"
+												: "bg-[var(--sunken)] text-[var(--ink-muted)]"
+									}`}
 								>
-									<Icon name="documents" size={14} />
+									<Icon name={record.sourceKind === "page" ? "edit" : "documents"} size={16} />
 								</span>
 								<div className="min-w-0">
-									<span data-selectable className="block truncate font-[var(--weight-medium)]">
+									<span data-selectable className="block truncate text-base font-[var(--weight-medium)]">
 										{record.title}
 									</span>
 									<span className="flex items-center gap-2 text-[var(--ink-muted)]">
-										{record.sourceKind === "imported" ? "Imported PDF" : "From a template"}
+										{record.sourceKind === "imported" ? "Imported PDF" : record.sourceKind === "page" ? "Page" : "From a template"}
 										{record.versionCount > 0 ? (
 											<VersionCount
 												count={record.versionCount}
@@ -188,7 +195,7 @@ export function DocumentsPanel({
 								</div>
 							</div>
 							<div className="flex shrink-0 items-center gap-3">
-								<span className="tabular text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+								<span className="tabular text-micro text-[var(--ink-faint)]">
 									{formatDate(record.issuedOn)}
 								</span>
 								<Button
@@ -219,13 +226,13 @@ export function DocumentsPanel({
 			) : null}
 
 			{notice ? (
-				<p role="status" className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p role="status" className="mt-3 text-sm text-[var(--ink-muted)]">
 					{notice}
 				</p>
 			) : null}
 			{problems.length > 0 ? (
 				<div className="mt-3 border-l-2 border-[var(--risk)] pl-4">
-					<ul className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<ul className="text-sm text-[var(--ink-muted)]">
 						{problems.map((message, index) => (
 							<li key={`${index}:${message}`} data-selectable>
 								{message}

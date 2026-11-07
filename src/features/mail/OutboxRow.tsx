@@ -1,6 +1,5 @@
 import type { MailOutboxMessage } from "@shared/types";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { formatWhen } from "./format";
 import { STATE_LABELS, STATE_TONES } from "./outbox-format";
 
@@ -22,34 +21,18 @@ type OutboxRowProps = {
  * send all live in the same place.
  */
 export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onCancel }: OutboxRowProps) {
-	const menu = useContextMenu();
-	const items: MenuItem[] = [
+	// The platform's menu for an unsent message (decision 59).
+	const onContextMenu = contextMenuFor(
+		{ kind: "outbox", id: message.id },
 		{
-			id: "open",
-			label: message.state === "draft" || message.state === "pending" ? "Edit" : "Open",
-			icon: message.state === "draft" || message.state === "pending" ? "edit" : "mail",
-			onSelect: () => onSelect(message.id),
+			open: () => onSelect(message.id),
+			retry: () => onRetry?.(message.id),
+			"cancel-send": () => onCancel?.(message.id),
 		},
-		{
-			id: "retry",
-			label: "Try again",
-			icon: "sync",
-			separatorBefore: true,
-			disabled: message.state !== "failed" || !onRetry,
-			onSelect: () => onRetry?.(message.id),
-		},
-		{
-			id: "cancel",
-			label: "Cancel sending",
-			icon: "close",
-			danger: true,
-			disabled: !(message.state === "queued" || message.state === "pending") || !onCancel,
-			onSelect: () => onCancel?.(message.id),
-		},
-	];
+	);
 
 	return (
-		<li data-draft-kind="outbox" className="border-b border-[var(--line)]/60" onContextMenu={menu.open}>
+		<li data-draft-kind="outbox" className="border-b border-[var(--line)]/60" onContextMenu={onContextMenu}>
 			<button
 				type="button"
 				ref={buttonRef}
@@ -61,29 +44,26 @@ export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onCan
 				<span aria-hidden className="h-4 w-4 shrink-0" />
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
-						<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
+						<span className="min-w-0 flex-1 truncate text-dense">
 							{message.to.map((a) => a.name || a.address).join(", ") || "(nobody yet)"}
 						</span>
-						<span className="tabular shrink-0 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+						<span className="tabular shrink-0 text-micro text-[var(--ink-muted)]">
 							{formatWhen(message.sentAt ?? message.updatedAt)}
 						</span>
 					</div>
 					<div className="mt-0.5 flex items-baseline gap-2">
-						<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)] font-[var(--weight-medium)]">
+						<span className="min-w-0 flex-1 truncate text-dense font-[var(--weight-medium)]">
 							{message.subject || "(no subject)"}
 						</span>
-						<span className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] ${STATE_TONES[message.state]}`}>
+						<span className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-micro ${STATE_TONES[message.state]}`}>
 							{STATE_LABELS[message.state]}
 						</span>
 					</div>
 					{message.lastError ? (
-						<div className="mt-0.5 truncate text-[length:var(--text-sm)] text-[var(--risk)]">{message.lastError}</div>
+						<div className="mt-0.5 truncate text-sm text-[var(--risk)]">{message.lastError}</div>
 					) : null}
 				</div>
 			</button>
-			{menu.at ? (
-				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={`Actions for ${message.subject || "this message"}`} />
-			) : null}
 		</li>
 	);
 }

@@ -4,6 +4,10 @@ type IconButtonProps = {
 	icon: IconName;
 	/** Its whole wording: spoken name and tooltip. There is no text beside it. */
 	label: string;
+	/** Base is 40px with a 20px glyph, dense is 32px with a 16px one. Dense sits in a row. */
+	size?: "base" | "dense";
+	/** The control is on: an iris tint, as the design draws the selected style. */
+	selected?: boolean;
 	danger?: boolean;
 	/** The one action a surface exists for, drawn in the accent. */
 	primary?: boolean;
@@ -22,6 +26,8 @@ type IconButtonProps = {
 export function IconButton({
 	icon,
 	label,
+	size = "dense",
+	selected = false,
 	danger = false,
 	primary = false,
 	disabled = false,
@@ -37,17 +43,20 @@ export function IconButton({
 			data-opens-panel={opensPanel ? "" : undefined}
 			onClick={onClick}
 			className={[
-				"flex h-[32px] w-[32px] flex-none items-center justify-center rounded-[var(--radius-md)]",
+				size === "base" ? "h-[40px] w-[40px]" : "h-[32px] w-[32px]",
+				"flex flex-none items-center justify-center rounded-[var(--radius-md)]",
 				"transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-90 disabled:pointer-events-none disabled:opacity-50",
 				"focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
 				danger
 					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
-					: primary
+					: selected
+						? "bg-[var(--accent-soft)] text-[var(--accent)]"
+						: primary
 						? "text-[var(--accent)] hover:bg-[var(--accent-soft)]"
 						: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 			].join(" ")}
 		>
-			<Icon name={icon} size={16} />
+			<Icon name={icon} size={size === "base" ? 20 : 16} />
 		</button>
 	);
 }

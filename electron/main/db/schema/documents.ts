@@ -87,6 +87,56 @@ export const documentTemplateAssets = sqliteTable(
 );
 
 /**
+ * A component: a piece of a page made once and placed in many document
+ * templates (decision 65). Its content is a container, serialised the way a
+ * template's canvas is, and it declares inputs of its own. Placing it stores a
+ * reference in the template's canvas, so editing a row here changes every
+ * template that places it.
+ */
+export const documentComponents = sqliteTable(
+	"document_components",
+	{
+		...standardColumns,
+		name: text("name").notNull(),
+		description: text("description"),
+		/** The container, as JSON. Read back through the layout parser, never trusted as stored. */
+		rootJson: text("root_json").notNull(),
+		/** The linked fonts the content uses, as JSON. */
+		fontsJson: text("fonts_json"),
+		/** What the component asks for when it is placed. JSON array of input declarations. */
+		inputsJson: text("inputs_json"),
+	},
+	(t) => [
+		index("document_components_owner_idx").on(t.ownerId),
+		index("document_components_deleted_idx").on(t.deletedAt),
+		index("document_components_name_idx").on(t.name),
+	],
+);
+
+/** The pictures a component keeps. Same shape as a template's, owned by the component. */
+export const documentComponentAssets = sqliteTable(
+	"document_component_assets",
+	{
+		...standardColumns,
+		componentId: text("component_id")
+			.notNull()
+			.references(() => documentComponents.id),
+		fileName: text("file_name").notNull(),
+		mimeType: text("mime_type").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		fileHash: text("file_hash").notNull(),
+		/** Relative to the assets folder, built by the service from the id. */
+		relativePath: text("relative_path").notNull(),
+	},
+	(t) => [
+		index("document_component_assets_component_idx").on(t.componentId),
+		index("document_component_assets_hash_idx").on(t.fileHash),
+		index("document_component_assets_owner_idx").on(t.ownerId),
+		index("document_component_assets_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
  * A document is one generated instance. It keeps its own copy of the rendered
  * body, because a contract has to still read the way it read when it was sent,
  * even after the template it came from is edited.
@@ -121,11 +171,16 @@ export const documents = sqliteTable(
 		 */
 		isSpecimen: integer("is_specimen", { mode: "boolean" }).notNull().default(true),
 		/**
-		 * `generated` came from a template, `imported` was a PDF that already
+		 * `generated` came from a template, `page` was written in the page editor, `imported` was a PDF that already
 		 * existed. An imported document has no body to render and no template
 		 * version, so anything that re-renders has to check this first.
 		 */
 		sourceKind: text("source_kind").notNull().default("generated"),
+		/**
+		 * The blocks of a `page`, as JSON. Null for every other kind. `bodyHtml` is
+		 * compiled from this on every save, so anything that reads a body still works.
+		 */
+		blocksJson: text("blocks_json"),
 	},
 	(t) => [
 		index("documents_client_idx").on(t.clientId),

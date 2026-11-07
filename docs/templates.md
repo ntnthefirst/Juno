@@ -15,12 +15,15 @@ as reviewed. An install that still has the five older invented templates
 
 ## What ships
 
-One example on a first install, and nothing else. It is laid out on two pages
-with a heading, a list, a table, the client's address pinned to the paper and two
-signature blocks. It uses a value, a condition and its negation, and asks for
-three values when it is used (what is being done, how it is paid, and the payment
-term in days). It is written in Dutch with "u", it is an ordinary template you can
-edit or delete, and it starts unreviewed like every template.
+One example on a first install, and nothing else. It is laid out on the canvas
+on two pages of A4 with a heading, a list, a table and a place for two
+signatures, and it asks for fifteen values when it is used: the date and place,
+who the two parties are, what is being done and for what, the dates, the fee and
+how it is paid. A canvas template reads nothing from the records, so every name
+and address a contract would take from a client is one of those inputs. It is
+written in Dutch with "u", it is an example and not legal advice, it is an
+ordinary template you can edit or delete, and it starts unreviewed like every
+template.
 
 An install that has the five older templates keeps them exactly as they are, and
 a new one never gets them. Nothing may look a template up by key, because most
@@ -53,6 +56,25 @@ checks the values against a canvas without storing anything,
 `templates.import_docx` reads a Word file, and `documents.generate` makes the
 document for a client from `extras`. Everything that writes parks for a person
 to approve.
+
+## Components
+
+A piece you use in several templates, a letterhead or a signature block, is made
+once as a **component** (Templates, then Components) and placed in each template
+from the design panel with nothing selected (decision 65). It is a container
+made in the same editor, and it declares inputs of its own, which it writes as
+`{{document.<key>}}` like a template does.
+
+Placing it asks for a value for each input, and each is either text typed at the
+placement or one of the template's own inputs passed through, so a letterhead can
+ask for a reference number without every template declaring it. A placed
+component is not a copy: change it and every template that places it changes, and
+each of them has to be reviewed again. A document you already made keeps the
+component as it was. Detach copies its content into one template and cuts the
+link, and the component cannot be deleted while a template still places it. An
+agent has `templates.components.list`, `get`, `create`, `update`, `delete`,
+`detach`, `add_image` and `list_images`; a component placed in a template is a
+container with `component: { componentId, values }` on a page.
 
 ## Syntax
 
@@ -100,7 +122,7 @@ addressing a person stays grammatical.
 
 ### `client.*`
 
-`name`, `email`, `phone`, `website`, `vatNumber`, `addressLine1`,
+`name`, `email`, `phone`, `website`, `vatNumber`, `language` (`nl`, `nl-je`, `fr` or `en`), `addressLine1`,
 `addressLine2`, `postalCode`, `city`, `country`
 
 Plus, from the client's **primary** contact: `contactName`, `contactRole`,

@@ -66,7 +66,7 @@ function StatusLine({ font, status, onRetry }: StatusLineProps) {
 		case "failed":
 			return (
 				<div className="flex items-start gap-2">
-					<p className="flex-1 border-l-2 border-[var(--risk)] pl-2 text-[length:var(--text-micro)] leading-[var(--leading-normal)] text-[var(--risk)]">
+					<p className="flex-1 border-l-2 border-[var(--risk)] pl-2 text-micro text-[var(--risk)]">
 						{status.message}
 					</p>
 					<Button size="dense" onClick={onRetry}>
@@ -198,12 +198,12 @@ export function FontsSection({ fonts, onChange, status, onRetry, printed = false
 								className="flex h-[28px] min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
 							>
 								<span
-									className="truncate text-[length:var(--text-sm)] text-[var(--ink)]"
+									className="truncate text-sm text-[var(--ink)]"
 									style={fontStatus.state === "ready" ? { fontFamily: `'${font.family}'` } : undefined}
 								>
 									{font.family}
 								</span>
-								<span className="flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+								<span className="flex-none text-micro text-[var(--ink-muted)]">
 									{font.source === "google" ? "Google" : "Link"}
 								</span>
 							</button>
@@ -238,7 +238,7 @@ export function FontsSection({ fonts, onChange, status, onRetry, printed = false
 																	: [...font.weights, weight].sort((a, b) => a - b),
 															})
 														}
-														className={`tabular h-[26px] min-w-[36px] rounded-[var(--radius-sm)] px-1 text-[length:var(--text-micro)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:opacity-60 ${
+														className={`tabular h-[26px] min-w-[36px] rounded-[var(--radius-sm)] px-1 text-micro transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:opacity-60 ${
 															on
 																? "bg-[var(--accent-soft)] text-[var(--accent)]"
 																: "bg-[var(--sunken)] text-[var(--ink-muted)] hover:text-[var(--ink)]"

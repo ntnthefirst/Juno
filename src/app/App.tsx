@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
+import { installMenuIcons } from "../lib/menu-icons";
 import { LockScreen } from "../components/LockScreen";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { AgentNotices } from "../features/agent/AgentNotices";
@@ -8,6 +9,7 @@ import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
+import { NotesScreen } from "../features/notes/NotesScreen";
 import { Walkthrough } from "../features/onboarding/Walkthrough";
 import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
@@ -16,8 +18,9 @@ import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { OverviewScreen } from "../features/overview/OverviewScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
-import { currentRequest, onOpenRequest } from "../lib/open-entity";
-import { currentScreenAction, onScreenActionRequest, requestScreenAction } from "../lib/screen-actions";
+import { currentRequest, onOpenRequest, requestOpen } from "../lib/open-entity";
+import { announceRecordsChanged } from "../lib/new-record";
+import { currentScreenAction, onScreenActionRequest, requestScreenAction, type ScreenAction } from "../lib/screen-actions";
 import { useTheme } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
 import { DocumentDropLayer } from "./DocumentDropLayer";
@@ -57,6 +60,9 @@ function Shell() {
 	// closing it causes, which is a window with no way out.
 	const setupOfferedRef = useRef(false);
 
+	// The right-click menus are the platform's own and take bitmaps for their icons.
+	useEffect(() => installMenuIcons(), []);
+
 	useEffect(() => {
 		void window.juno.lock.state().then(setLock);
 		// The main process locks on idle, sleep and minimise without being asked,
@@ -88,7 +94,11 @@ function Shell() {
 		}
 
 		void check();
-		const stop = window.juno.window.onChildClosed(() => void check());
+		const stop = window.juno.window.onChildClosed((info) => {
+			void check();
+			// A new-record window that saved something: the screen behind it re-reads.
+			if (info.created) announceRecordsChanged();
+		});
 		return () => {
 			cancelled = true;
 			stop();
@@ -134,6 +144,9 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	// The element in the title bar a screen may draw into, held in state so a
 	// screen that mounts before the bar has painted still finds it.
 	const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+	const [rightSlot, setRightSlot] = useState<HTMLDivElement | null>(null);
+	const [overflowSlot, setOverflowSlot] = useState<HTMLDivElement | null>(null);
+	const [recentOpen, setRecentOpen] = useState(false);
 	const [agentPending, setAgentPending] = useState(0);
 
 	useEffect(() => {
@@ -160,7 +173,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	// "New" starts the record that belongs to the screen on show, by asking the
 	// screen that owns it to open its form. The screen is brought up fresh first,
 	// and opens the form once it has mounted.
-	const startNew = (target: ScreenId) => requestScreenAction(target, "new");
+	const startNew = (target: ScreenId, action: ScreenAction = "new") => requestScreenAction(target, action);
 	const newHere = () => {
 		const target = NEW_ON[screen];
 		if (target) startNew(target.screen);
@@ -168,8 +181,11 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 	useShortcuts({
 		palette: () => setPaletteOpen((open) => !open),
+		recent: () => setRecentOpen((open) => !open),
+		reminders: () => navigate("reminders"),
 		goTo: navigate,
 		newItem: newHere,
+		newPage: () => startNew("documents", "new-page"),
 		settings: () => void window.juno.window.openSettings(),
 		back: () => back?.onSelect(),
 		lock: lock.configured ? () => void window.juno.lock.lock() : null,
@@ -213,6 +229,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 						? "projects"
 						: target.kind === "document"
 							? "documents"
+							: target.kind === "note"
+								? "notes"
 							: target.kind === "thread"
 								? "mail"
 								: target.kind === "mail-template"
@@ -223,6 +241,30 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			}),
 		[],
 	);
+
+	// A toast or the tray asked for something. The main process only holds a
+	// request while Juno is unlocked, so what arrives here was asked for by a
+	// person at an unlocked machine. Reading it also covers a window that was
+	// opened for the purpose and had not mounted when the request was made.
+	useEffect(() => {
+		let cancelled = false;
+		const take = () => {
+			void window.juno.window
+				.takeShellRequest()
+				.then((request) => {
+					if (cancelled || !request) return;
+					if (request.kind === "agent") requestOpen({ kind: "screen", screen: "agent" });
+					else requestScreenAction("notes", "new");
+				})
+				.catch(() => undefined);
+		};
+		take();
+		const stop = window.juno.window.onShellRequest(take);
+		return () => {
+			cancelled = true;
+			stop();
+		};
+	}, []);
 
 	// An agent wrote a draft. It opens in the editor on the mail screen, the way
 	// one a person started would, and it is the person who sends it.
@@ -236,17 +278,24 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	);
 
 	return (
-		<TitleBarSlotContext.Provider value={slot}>
+		<TitleBarSlotContext.Provider value={{ left: slot, right: rightSlot, overflow: overflowSlot }}>
 			<div className="flex h-full flex-col bg-[var(--paper)]">
 				<TitleBar
 					back={back}
+					title={trail[trail.length - 1]?.label ?? (screen === "calendar" || screen === "overview" ? "" : SCREEN_LABELS[screen])}
+					screen={screen}
 					onOpenPalette={() => setPaletteOpen(true)}
-					lockConfigured={lock.configured}
-					onLock={() => void window.juno.lock.lock()}
+					recentOpen={recentOpen}
+					onRecentOpenChange={setRecentOpen}
+					remindersActive={screen === "reminders"}
+					onOpenReminders={() => navigate("reminders")}
+					onNew={startNew}
 					agentActive={screen === "agent"}
 					agentPending={agentPending}
 					onOpenAgent={() => navigate("agent")}
 					slotRef={setSlot}
+					rightSlotRef={setRightSlot}
+					overflowSlotRef={setOverflowSlot}
 				/>
 				<div className="relative flex min-h-0 flex-1">
 					<Sidebar
@@ -255,7 +304,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 						onOpenSettings={() => void window.juno.window.openSettings()}
 					/>
 
-					<main key={`${screen}:${visit}`} className="animate-screen min-w-0 flex-1 overflow-hidden">
+					<main key={`${screen}:${visit}`} className="animate-screen mr-2 mb-2 min-w-0 flex-1 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
 						{screen === "overview" ? (
 							<OverviewScreen />
 						) : screen === "clients" ? (
@@ -268,6 +317,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 							<DocumentsScreen />
 						) : screen === "mail" ? (
 							<MailScreen />
+						) : screen === "notes" ? (
+							<NotesScreen />
 						) : screen === "calendar" ? (
 							<CalendarScreen />
 						) : screen === "mail-templates" ? (
@@ -306,7 +357,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 function Placeholder({ title }: { title: string }) {
 	return (
 		<div className="p-8">
-			<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">{title}</h1>
+			<h1 className="text-h1">{title}</h1>
 			<p className="mt-3 max-w-[60ch] text-[var(--ink-muted)]">
 				Not built yet.
 			</p>

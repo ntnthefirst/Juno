@@ -395,6 +395,11 @@ export const mailTools: ToolDescriptor[] = [
 					type: "string",
 					description: "The last_message_at of the last row seen, for the next page.",
 				},
+				offset: {
+					type: "integer",
+					minimum: 0,
+					description: "Rows to skip, for the next page of a list without a search.",
+				},
 			},
 			additionalProperties: false,
 		},
@@ -412,6 +417,7 @@ export const mailTools: ToolDescriptor[] = [
 				...(args.until !== undefined ? { until: String(args.until) } : {}),
 				...(args.limit !== undefined ? { limit: Number(args.limit) } : {}),
 				...(args.before !== undefined ? { before: String(args.before) } : {}),
+				...(args.offset !== undefined ? { offset: Number(args.offset) } : {}),
 			};
 			return threads.listThreads(query);
 		},

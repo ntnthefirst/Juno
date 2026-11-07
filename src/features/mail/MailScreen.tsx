@@ -13,13 +13,16 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
-import { Tooltip } from "../../components/Tooltip";
 import { Toast } from "../../components/Toast";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
+import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { SPECIAL_LABELS } from "./folder-tree";
 import { messageOf } from "../../lib/errors";
+import { useRecentTouch } from "../../lib/use-recent-touch";
 import { useScreenAction } from "../../lib/screen-actions";
-import { useContextMenu } from "../../lib/use-context-menu";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { blankMenuFor } from "../../lib/blank-menu";
+import { BlocksPage } from "./blocks/BlocksPage";
+import type { ManageTarget } from "./blocks/BlockMenu";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
 import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
@@ -122,6 +125,8 @@ export function MailScreen() {
 	const [online, setOnline] = useState(() => navigator.onLine);
 	const [outboxCounts, setOutboxCounts] = useState<MailOutboxCounts | null>(null);
 	const [compose, setCompose] = useState<ComposeSeed | null>(null);
+	// The page for intros and outros, and what to reopen when it is left.
+	const [blocksPage, setBlocksPage] = useState<{ target: ManageTarget; returnTo: ComposeSeed | null } | null>(null);
 	useScreenAction("mail", () => setCompose({}));
 	const [accountsVersion, setAccountsVersion] = useState(0);
 	const [outboxVersion, setOutboxVersion] = useState(0);
@@ -135,7 +140,6 @@ export function MailScreen() {
 	const [folderEmpty, setFolderEmpty] = useState<MailFolder | null>(null);
 	const [folderBusy, setFolderBusy] = useState(false);
 	// A right click on the list where there is no row: what the list as a whole can do.
-	const listMenu = useContextMenu();
 	// The styled mail column on the right. Remembered for the session, so coming
 	// back to Mail finds it the way it was left.
 	const [stylesOpen, setStylesOpen] = useState(() => {
@@ -287,11 +291,25 @@ export function MailScreen() {
 	// the account it belongs to. A sent message drops out of the outbox rows on
 	// its own and shows up in Sent instead.
 	const showingDrafts = selection?.view === "drafts";
+	// The page title is the folder in view, and nothing while a message is being
+	// written, as the design draws it. A page of its own publishes its own trail.
+	const titleFolder = selection?.folderId
+		? (folders[selection.accountId ?? ""]?.find((folder) => folder.id === selection.folderId) ?? null)
+		: null;
+	const folderTitle = showingDrafts
+		? SPECIAL_LABELS.drafts
+		: titleFolder
+			? titleFolder.specialUse
+				? SPECIAL_LABELS[titleFolder.specialUse]
+				: titleFolder.name
+			: "Mail";
+	usePublishBreadcrumb(blocksPage ? [] : [{ label: compose ? "" : folderTitle }]);
 	const inTrash = selection?.view === "trash";
 	// The list there is the folder as it is, so neither a search nor a filter
 	// reaches it: a search would leave the folder for the whole account.
 	const term = showingDrafts ? "" : search.trim();
 	const selectedThreadId = opened?.kind === "thread" ? opened.id : null;
+	useRecentTouch("thread", selectedThreadId);
 	const selectedOutboxId = opened?.kind === "outbox" ? opened.id : null;
 
 	function openThread(id: string | null) {
@@ -683,6 +701,12 @@ export function MailScreen() {
 				}
 				break;
 			}
+			case "reply":
+			case "forward": {
+				const thread = threadById(ids[0] ?? "");
+				if (thread) void reply(thread.messageId, action);
+				break;
+			}
 			case "deleteForever":
 				setDeleteConfirm(ids);
 				break;
@@ -788,7 +812,7 @@ export function MailScreen() {
 	if (accounts.length === 0) {
 		return (
 			<div className="p-8">
-				<h1 className="text-[length:var(--text-h1)] font-[var(--weight-semibold)] tracking-[-0.02em]">Mail</h1>
+				<h1 className="text-h1">Mail</h1>
 				<EmptyState
 					icon="mail"
 					title="No mail accounts yet"
@@ -798,7 +822,6 @@ export function MailScreen() {
 						icon: "add",
 						onClick: () => void window.juno.window.openSettings("mail"),
 					}}
-					tip="Credentials are stored securely in your operating system keychain."
 				/>
 			</div>
 		);
@@ -806,25 +829,13 @@ export function MailScreen() {
 
 	// A form takes the screen. Both of these have fields in them, and neither
 	// belongs over the top of the list it came from.
-	if (compose) {
+	if (blocksPage) {
 		return (
-			<ComposePage
-				seed={compose}
-				onClose={() => setCompose(null)}
-				onDeleted={() => {
-					setCompose(null);
-					setNotice("Draft deleted.");
-					setOutboxVersion((v) => v + 1);
-					setOpened(null);
-				}}
-				onDone={(message, queued) => {
-					setCompose(null);
-					setNotice(queued ? "Message queued." : "Draft saved.");
-					setOutboxVersion((v) => v + 1);
-					const draftsFolderId =
-						folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
-					setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
-					setOpened({ kind: "outbox", id: message.id });
+			<BlocksPage
+				target={blocksPage.target}
+				onBack={() => {
+					setCompose(blocksPage.returnTo);
+					setBlocksPage(null);
 				}}
 			/>
 		);
@@ -851,73 +862,35 @@ export function MailScreen() {
 		: null;
 	const moveAccountId = moveTarget ? (threadById(moveTarget[0] ?? "")?.accountId ?? null) : null;
 
-	function listItems(): MenuItem[] {
-		const visible = (threads ?? []).map((thread) => thread.id);
-		return [
-			{
-				id: "new",
-				label: "New message",
-				icon: "add",
-				onSelect: () => setCompose({ accountId: selection?.accountId ?? accounts?.[0]?.id }),
+	const listMenu = blankMenuFor(
+		"mail",
+		{
+			"new-message": () => setCompose({ accountId: selection?.accountId ?? accounts?.[0]?.id }),
+			sync: () => void syncNow(selection?.accountId ?? undefined),
+			"select-all": selectEveryThread,
+			"mark-all-read": () => {
+				if (selectedFolder) handleFolderAction("markAllRead", selectedFolder);
 			},
-			{
-				id: "sync",
-				label: "Sync now",
-				icon: "sync",
-				onSelect: () => void syncNow(selection?.accountId ?? undefined),
-			},
-			{
-				id: "select-all",
-				label: "Select all",
-				icon: "check",
-				separatorBefore: true,
-				disabled: visible.length === 0,
-				onSelect: selectEveryThread,
-			},
-			{
-				id: "read-all",
-				label: "Mark all read",
-				icon: "read",
-				disabled: !selectedFolder || selectedFolder.unreadCount === 0,
-				onSelect: () => {
-					if (selectedFolder) handleFolderAction("markAllRead", selectedFolder);
-				},
-			},
-			{
-				id: "styled",
-				label: stylesOpen ? "Hide styled mail" : "Show styled mail",
-				icon: "templates",
-				separatorBefore: true,
-				onSelect: () => setStylesOpen((open) => !open),
-			},
-		];
-	}
+			"toggle-styled-mail": () => setStylesOpen((open) => !open),
+		},
+		selectedFolder && selectedFolder.unreadCount > 0 ? "unread" : undefined,
+	);
 	const pending = Object.values(sync).reduce((total, status) => total + status.pending, 0);
 
 	return (
 		<div className="flex h-full min-h-0">
 			{/*
-				Writing a message and the styled mail column are about the whole
-				screen rather than one pane, so they sit in the title bar while Mail
-				is open and leave with it.
+				The styled mail column is about the whole screen rather than one pane,
+				so its button sits in the title bar while Mail is open and leaves with it.
+				Writing a message is in the New menu there.
 			*/}
 			<TitleBarSlot>
-				<Tooltip label="New message" side="bottom" className="flex">
-					<button
-						type="button"
-						onClick={() => setCompose({ accountId: selection?.accountId ?? accounts[0]?.id })}
-						aria-label="New message"
-						className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-md)] text-[var(--accent)] transition-[background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] active:scale-90"
-					>
-						<Icon name="add" size={16} strokeWidth={2} />
-					</button>
-				</Tooltip>
 				<button
 					type="button"
 					onClick={() => setStylesOpen((open) => !open)}
 					aria-pressed={stylesOpen}
 					className={[
-						"inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-[0.97]",
+						"inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-[0.97]",
 						stylesOpen ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 					].join(" ")}
 				>
@@ -927,7 +900,7 @@ export function MailScreen() {
 			</TitleBarSlot>
 			<div
 				className={[
-					"w-[264px] shrink-0 flex-col border-r border-[var(--line)]",
+					"w-[288px] shrink-0 flex-col border-r border-[var(--line)]",
 					readerOpen ? "hidden min-[1100px]:flex" : "flex",
 				].join(" ")}
 			>
@@ -972,7 +945,37 @@ export function MailScreen() {
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
-				{selectedThreadId && readerOpen ? (
+				{compose ? (
+					<ComposePage
+						seed={compose}
+						onManage={(draft, target) => {
+							setBlocksPage({ target, returnTo: draft ? { draft } : compose });
+							setCompose(null);
+						}}
+						onClose={() => setCompose(null)}
+						onDeleted={() => {
+							setCompose(null);
+							setNotice("Draft deleted.");
+							setOutboxVersion((v) => v + 1);
+							setOpened(null);
+						}}
+						onDone={(message, queued, closedRequest) => {
+							setCompose(null);
+							setNotice(
+								closedRequest
+									? `Sent. The request "${closedRequest}" is closed.`
+									: queued
+										? "Message queued."
+										: "Draft saved.",
+							);
+							setOutboxVersion((v) => v + 1);
+							const draftsFolderId =
+								folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
+							setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
+							setOpened({ kind: "outbox", id: message.id });
+						}}
+					/>
+				) : selectedThreadId && readerOpen ? (
 					<ThreadView
 						key={`${selectedThreadId}:${opened?.kind === "thread" ? opened.opens : 0}`}
 						threadId={selectedThreadId}
@@ -1017,7 +1020,7 @@ export function MailScreen() {
 
 						{selectedFolder && !selectedFolder.syncEnabled ? (
 							<div className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2">
-								<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+								<p className="text-sm text-[var(--ink-muted)]">
 									This folder is not synced, so nothing here reflects the server yet.
 								</p>
 								<Button
@@ -1029,7 +1032,7 @@ export function MailScreen() {
 							</div>
 						) : null}
 
-						<div className="min-h-0 flex-1 overflow-y-auto" onContextMenu={listMenu.open}>
+						<div className="min-h-0 flex-1 overflow-y-auto" onContextMenu={listMenu}>
 							<ThreadList
 								threads={threads}
 								{...(showingDrafts
@@ -1084,15 +1087,6 @@ export function MailScreen() {
 					</div>
 				)}
 			</div>
-
-			{listMenu.at ? (
-				<ContextMenu
-					at={listMenu.at}
-					items={listItems()}
-					onClose={listMenu.close}
-					ariaLabel="Actions for this list"
-				/>
-			) : null}
 
 			{stylesOpen ? (
 				<StyledMailPane
@@ -1253,7 +1247,7 @@ function HorizonNote({ accounts, pending, onPullEverything }: HorizonNoteProps) 
 	const bounded = accounts.filter((account) => account.horizonDays < EVERYTHING_DAYS);
 	if (bounded.length === 0) {
 		return pending > 0 ? (
-			<p className="px-4 py-4 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="px-4 py-4 text-sm text-[var(--ink-muted)]">
 				<span className="tabular">{pending}</span> more messages are still coming in.
 			</p>
 		) : null;
@@ -1262,7 +1256,7 @@ function HorizonNote({ accounts, pending, onPullEverything }: HorizonNoteProps) 
 
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-			<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="text-sm text-[var(--ink-muted)]">
 				Juno pulled the last <span className="tabular">{days}</span> days. Anything older is still on the server
 				and is not on this machine yet.
 				{pending > 0 ? (

@@ -19,13 +19,19 @@
  */
 import { app, BrowserWindow } from "electron";
 import * as lock from "../services/lock";
+import type { NewRecordKind, NewRecordPrefill, ShellRequest } from "../../shared/types";
 import { createMainWindow } from "./main-window";
+import { createNewRecordWindow } from "./new-record-window";
 import { createSettingsWindow } from "./settings-window";
 import { createSetupWindow } from "./setup-window";
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let setupWindow: BrowserWindow | null = null;
+let newRecordWindow: BrowserWindow | null = null;
+/** Which record the open new-record window has saved, read when it closes. */
+let newRecordKind: NewRecordKind | null = null;
+let newRecordCreated = false;
 let devMode = false;
 
 /**
@@ -38,6 +44,13 @@ let devMode = false;
 let setupCloseAllowed = false;
 let quitting = false;
 let quitHookInstalled = false;
+
+const createdListeners = new Set<(window: BrowserWindow) => void>();
+
+/** For things that draw on the main window, such as the taskbar badge, and must redo it for a new one. */
+export function onMainWindowCreated(listener: (window: BrowserWindow) => void): void {
+	createdListeners.add(listener);
+}
 
 export function openMainWindow(isDev: boolean): BrowserWindow {
 	devMode = isDev;
@@ -57,6 +70,8 @@ export function openMainWindow(isDev: boolean): BrowserWindow {
 	}
 
 	mainWindow = createMainWindow(isDev);
+	const created = mainWindow;
+	for (const listener of createdListeners) listener(created);
 	mainWindow.on("closed", () => {
 		mainWindow = null;
 	});
@@ -68,9 +83,39 @@ export function openMainWindow(isDev: boolean): BrowserWindow {
 		// painted over a locked application would defeat the lock (decision 15).
 		closeSettingsWindow();
 		closeSetupWindow();
+		closeNewRecordWindow(false);
 	});
 
 	return mainWindow;
+}
+
+/**
+ * Something the main process wants the main window to do: show the Agent
+ * screen, or start a note. Held until the renderer takes it, because a window
+ * opened for the purpose has not mounted yet when the request is made.
+ */
+let pendingShell: ShellRequest | null = null;
+
+/**
+ * The window comes up either way. Locked, it shows the lock screen and the
+ * request is dropped, so nothing a toast or the tray asked for runs behind it.
+ */
+export function requestShell(request: ShellRequest): void {
+	const window = getMainWindow() ?? openMainWindow(devMode);
+	focusMainWindow();
+	if (lock.isLocked()) {
+		pendingShell = null;
+		return;
+	}
+	pendingShell = request;
+	if (!window.webContents.isLoading()) window.webContents.send("window.shellRequest");
+}
+
+/** The renderer asks once it can act. Taking it clears it, so it runs once. */
+export function takeShellRequest(): ShellRequest | null {
+	const request = lock.isLocked() ? null : pendingShell;
+	pendingShell = null;
+	return request;
 }
 
 export function getMainWindow(): BrowserWindow | null {
@@ -86,7 +131,7 @@ export function focusMainWindow(): void {
 
 	// A modal child keeps the parent disabled, so focusing the parent alone
 	// looks like a frozen application. Bring the thing actually taking input.
-	const child = getSetupWindow() ?? getSettingsWindow();
+	const child = getSetupWindow() ?? getNewRecordWindow() ?? getSettingsWindow();
 	if (child) child.focus();
 }
 
@@ -99,13 +144,13 @@ export function focusMainWindow(): void {
  * how a setting changed in one of them, and setup finishing, reach the
  * application behind it (src/app/App.tsx).
  */
-function childClosed(): void {
+function childClosed(created: NewRecordKind | null = null): void {
 	const main = getMainWindow();
 	// The children close with the main window when the app quits or an update
 	// installs, so by then there is nothing left to tell.
 	if (!main || main.webContents.isDestroyed()) return;
 	main.focus();
-	main.webContents.send("window.childClosed");
+	main.webContents.send("window.childClosed", { created });
 }
 
 export function getSettingsWindow(): BrowserWindow | null {
@@ -132,6 +177,7 @@ export function openSettingsWindow(section?: string): void {
 	// Setup reaches settings for one thing, adding a mail account, and hands
 	// over rather than stacking: one modal child of one parent at a time.
 	closeSetupWindow();
+	closeNewRecordWindow(false);
 
 	settingsWindow = createSettingsWindow(parent, devMode, section);
 	settingsWindow.on("closed", () => {
@@ -168,6 +214,7 @@ export function openSetupWindow(): void {
 	if (!parent) return;
 
 	closeSettingsWindow();
+	closeNewRecordWindow(false);
 
 	setupCloseAllowed = false;
 	setupWindow = createSetupWindow(parent, devMode);
@@ -192,6 +239,46 @@ export function openSetupWindow(): void {
 export function closeSetupWindow(): void {
 	setupCloseAllowed = true;
 	getSetupWindow()?.close();
+}
+
+export function getNewRecordWindow(): BrowserWindow | null {
+	return newRecordWindow && !newRecordWindow.isDestroyed() ? newRecordWindow : null;
+}
+
+/**
+ * A small window for making one event, client, project or reminder (decision
+ * 60). Asking again while one is open replaces it: two modal children of one
+ * parent fight over focus, and the newest request is the one meant.
+ */
+export function openNewRecordWindow(kind: NewRecordKind, prefill: NewRecordPrefill): void {
+	const parent = getMainWindow();
+	if (!parent) return;
+
+	closeSettingsWindow();
+	closeNewRecordWindow(false);
+
+	newRecordKind = kind;
+	newRecordCreated = false;
+	const window = createNewRecordWindow(parent, devMode, kind, prefill);
+	newRecordWindow = window;
+	window.on("closed", () => {
+		// A window replaced by a newer one must not tell the application it saved
+		// something, and must not clear the state the newer one is using.
+		if (newRecordWindow !== window) return;
+		const created = newRecordCreated ? newRecordKind : null;
+		newRecordWindow = null;
+		newRecordKind = null;
+		newRecordCreated = false;
+		childClosed(created);
+	});
+}
+
+/** The form calls this when it is done. `created` is true after a save. */
+export function closeNewRecordWindow(created: boolean): void {
+	const window = getNewRecordWindow();
+	if (!window) return;
+	if (created) newRecordCreated = true;
+	window.close();
 }
 
 /** Which window a renderer call came from, so it can draw the right shell. */

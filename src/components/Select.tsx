@@ -39,7 +39,7 @@ export function Select({
 		<div>
 			<label
 				htmlFor={id}
-				className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]"
+				className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]"
 			>
 				{label}
 				{required ? <span aria-hidden> *</span> : null}
@@ -53,8 +53,8 @@ export function Select({
 				aria-invalid={error ? true : undefined}
 				aria-describedby={describedBy || undefined}
 				onChange={(event) => onChange(event.target.value)}
-				className={`w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[length:var(--text-base)] text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60${
-					error ? " border-[var(--risk)]" : ""
+				className={`h-10 w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 text-base text-[var(--ink)] focus:border-[var(--focus)] focus:shadow-[inset_0_0_0_1px_var(--focus)] disabled:opacity-50${
+					error ? " !border-[var(--risk)]" : ""
 				}`}
 			>
 				{placeholder !== undefined ? <option value="">{placeholder}</option> : null}
@@ -66,13 +66,13 @@ export function Select({
 			</select>
 
 			{help ? (
-				<p id={helpId} className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p id={helpId} className="mt-1 text-sm text-[var(--ink-muted)]">
 					{help}
 				</p>
 			) : null}
 
 			{error ? (
-				<p id={errorId} className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p id={errorId} className="mt-1 text-sm text-[var(--risk)]">
 					{error}
 				</p>
 			) : null}

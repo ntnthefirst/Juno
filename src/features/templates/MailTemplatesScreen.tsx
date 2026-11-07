@@ -247,16 +247,16 @@ export function MailTemplatesScreen() {
 						<button
 							type="button"
 							onClick={() => requestOpen({ kind: "screen", screen: "mail" })}
-							className="inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-dense)] font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+							className="inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 						>
 							<Icon name="mail" size={14} />
 							Mailbox
 						</button>
 					</TitleBarSlot>
 					<div className="flex items-center gap-3">
-						<h1 className="text-[length:var(--text-h3)] font-[var(--weight-semibold)] tracking-[-0.01em]">Styled mail</h1>
+						<h1 className="text-h3">Styled mail</h1>
 						{load.status === "ready" ? (
-							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<span className="text-sm text-[var(--ink-muted)]">
 								{shown.length} {shown.length === 1 ? "template" : "templates"}
 							</span>
 						) : null}
@@ -268,7 +268,7 @@ export function MailTemplatesScreen() {
 							onSubmit={(name) => void create(name)}
 						/>
 					</div>
-					<p className="mt-3 max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-3 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 						The emails you send again and again. Mark one as reviewed once you have read its text.
 					</p>
 
@@ -281,7 +281,7 @@ export function MailTemplatesScreen() {
 							onClearSelection={() => setSelectedIds([])}
 						/>
 						{selectedIds.length > 0 ? (
-							<span className="tabular shrink-0 text-[length:var(--text-sm)] font-[var(--weight-medium)]">
+							<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
 								{selectedIds.length} selected
 							</span>
 						) : null}
@@ -345,7 +345,7 @@ export function MailTemplatesScreen() {
 						<p
 							role="alert"
 							data-selectable
-							className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+							className="mt-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 						>
 							{error}
 						</p>
@@ -362,7 +362,7 @@ export function MailTemplatesScreen() {
 							<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 								Could not load your mail templates.
 							</p>
-							<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 								{load.message}
 							</p>
 						</div>
@@ -385,13 +385,13 @@ export function MailTemplatesScreen() {
 
 			{confirm ? (
 				<Dialog title="Delete templates" onClose={() => setConfirm(null)} width="narrow">
-					<p className="text-[length:var(--text-dense)]">
+					<p className="text-dense">
 						{confirm.deleting.length > 0
 							? `${confirm.deleting.length} ${confirm.deleting.length === 1 ? "template" : "templates"} will be deleted.`
 							: null}
 					</p>
 					{confirm.hiding.length > 0 ? (
-						<p className="mt-2 text-[length:var(--text-dense)] text-[var(--ink-muted)]">
+						<p className="mt-2 text-dense text-[var(--ink-muted)]">
 							{confirm.hiding.length} shipped {confirm.hiding.length === 1 ? "template" : "templates"} will
 							be hidden instead of deleted. Drafts already using {confirm.hiding.length === 1 ? "it" : "them"}{" "}
 							keep working.

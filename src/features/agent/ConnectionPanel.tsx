@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import type { McpServerStatus, ToolSummary } from "@shared/types";
+import type { AgentPermissionKind, McpServerStatus, ToolSummary } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
+import { Notice } from "../../components/Notice";
+import { StatusBadge } from "../../components/StatusBadge";
 import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { Section } from "../settings/Section";
@@ -77,7 +79,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not read the server state.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{error}
 				</p>
 			</div>
@@ -120,7 +122,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 								className={`inline-block h-2 w-2 rounded-[var(--radius-full)] ${status.running ? "bg-[var(--ok)]" : status.enabled ? "bg-[var(--risk)]" : "bg-[var(--ink-faint)]"}`}
 								aria-hidden
 							/>
-							<p className="text-[length:var(--text-dense)]">
+							<p className="text-dense">
 								{status.running
 									? `Listening, ${status.toolCount} tools.`
 									: status.enabled
@@ -129,7 +131,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 							</p>
 						</div>
 						{status.error ? (
-							<p data-selectable role="alert" className="mt-1 text-[length:var(--text-sm)] text-[var(--risk)]">
+							<p data-selectable role="alert" className="mt-1 text-sm text-[var(--risk)]">
 								{status.error}
 							</p>
 						) : null}
@@ -137,7 +139,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 						<div className="mt-4 flex items-center gap-2">
 							<p
 								data-selectable
-								className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-[length:var(--text-dense)] text-[var(--ink)]"
+								className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-dense text-[var(--ink)]"
 							>
 								{status.url}
 							</p>
@@ -146,7 +148,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 								Copy URL
 							</Button>
 						</div>
-						<p className="mt-2 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="mt-2 max-w-[68ch] text-sm text-[var(--ink-muted)]">
 							Paste this into any client that takes an MCP server URL. Juno has to be running and unlocked.
 						</p>
 
@@ -165,21 +167,18 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 
 			{showConnect ? (
 				<Section title="Connect a client" anchor="mcp-connect">
-					<div className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)] px-3 py-2.5">
-						<Icon name="info" className="mt-0.5 flex-none text-[var(--ink-muted)]" />
-						<p className="text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-							Add the server URL as a new MCP server in your client. The first time it connects it opens a
-							page with a code. Type that code into the prompt Juno shows. Claude Desktop cannot reach an
-							address on this machine, so it gets an extension and a token instead.
-						</p>
-					</div>
+					<Notice tone="info" layout="inline">
+						Add the server URL as a new MCP server in your client. The first time it connects it opens a
+						page with a code. Type that code into the prompt Juno shows. Claude Desktop cannot reach an
+						address on this machine, so it gets an extension and a token instead.
+					</Notice>
 
 					{/* The agent screen shows the server above this, URL and all. */}
 					{part === "connect" ? (
 						<div className="mt-4 flex items-center gap-2">
 							<p
 								data-selectable
-								className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-[length:var(--text-dense)] text-[var(--ink)]"
+								className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] bg-[var(--sunken)] px-3 py-2 font-mono text-dense text-[var(--ink)]"
 							>
 								{status.url}
 							</p>
@@ -200,50 +199,58 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 				<Section
 					title="What an agent can do"
 					anchor="mcp-tools"
-					action={
-						<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					description="Tools an agent can call. Anything that sends, signs, files or deletes waits for your approval."
+				>
+					<div className="flex items-center gap-3">
+						<input
+							type="search"
+							value={filter}
+							onChange={(event) => setFilter(event.target.value)}
+							placeholder="Filter tools"
+							aria-label="Filter tools"
+							className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+						/>
+						<span className="flex-none text-sm text-[var(--ink-muted)]">
 							{readOnly} read, {tools.length - readOnly} that change something
 						</span>
-					}
-				>
-					<input
-						type="search"
-						value={filter}
-						onChange={(event) => setFilter(event.target.value)}
-						placeholder="Filter tools"
-						aria-label="Filter tools"
-						className="w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-					/>
+					</div>
 
-					<div className="mt-3">
-						{shown.map((tool) => (
-							<div
-								key={tool.name}
-								className="flex items-center gap-3 border-b border-[var(--line)] px-2 py-1.5 hover:bg-[var(--hover)]"
-							>
-								<span className="w-[220px] shrink-0 truncate font-mono text-[length:var(--text-sm)]">
-									{tool.name}
-								</span>
-								<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)] text-[var(--ink-muted)]">
-									{tool.title}
-								</span>
-								<span
-									className={`shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--text-micro)] font-[var(--weight-medium)] ${
-										tool.readOnly
-											? "bg-[var(--sunken)] text-[var(--ink-muted)]"
-											: tool.requiresConfirmation
-												? "bg-[var(--warn-soft)] text-[var(--warn)]"
-												: "bg-[var(--accent-soft)] text-[var(--accent)]"
-									}`}
+					<div role="table" aria-label="Tools" className="mt-3">
+						<div
+							role="row"
+							className="flex items-center gap-3 border-b border-[var(--line)] px-2 py-2 text-base text-[var(--ink-muted)]"
+						>
+							<span role="columnheader" className="min-w-0 flex-1">
+								Tool
+							</span>
+							<span role="columnheader" className="w-[170px] flex-none">
+								Kind
+							</span>
+							<span role="columnheader" className="w-[48px] flex-none text-right">
+								Calls
+							</span>
+						</div>
+						{shown.map((tool) => {
+							const kind = TOOL_KINDS[tool.row];
+							return (
+								<div
+									key={tool.name}
+									role="row"
+									title={tool.title}
+									className="flex min-h-[44px] items-center gap-3 border-b border-[var(--line)] px-2 py-1.5 hover:bg-[var(--hover)]"
 								>
-									{tool.readOnly
-										? "reads"
-										: tool.requiresConfirmation
-											? "you approve"
-											: "runs"}
-								</span>
-							</div>
-						))}
+									<span role="cell" className="min-w-0 flex-1 truncate font-mono text-dense">
+										{tool.name}
+									</span>
+									<span role="cell" className="w-[170px] flex-none">
+										<StatusBadge label={kind.label} tone={kind.tone} />
+									</span>
+									<span role="cell" className="tabular w-[48px] flex-none text-right text-base">
+										{tool.calls}
+									</span>
+								</div>
+							);
+						})}
 						{shown.length === 0 ? (
 							<p className="mt-3 text-[var(--ink-muted)]">Nothing matches that.</p>
 						) : null}
@@ -253,6 +260,15 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 		</div>
 	);
 }
+
+/** What the Kind column says, by the permission row a tool sits in. The row is also what decides whether it can run unattended. */
+const TOOL_KINDS: Record<AgentPermissionKind, { label: string; tone: string | null }> = {
+	read: { label: "Read", tone: null },
+	change: { label: "Changes a record", tone: "warn" },
+	drafts: { label: "Writes a draft", tone: "warn" },
+	send: { label: "Sends, signs or files", tone: "risk" },
+	delete: { label: "Deletes", tone: "risk" },
+};
 
 type PortRowProps = {
 	status: McpServerStatus;
@@ -278,7 +294,7 @@ function PortRow({ status, busy, onChange }: PortRowProps) {
 		<div className="mt-5">
 			<div className="flex flex-wrap items-end gap-2">
 				<label className="block">
-					<span className="mb-1 block text-[length:var(--text-sm)] text-[var(--ink-muted)]">Port</span>
+					<span className="mb-1 block text-sm text-[var(--ink-muted)]">Port</span>
 					<input
 						type="number"
 						inputMode="numeric"
@@ -305,7 +321,7 @@ function PortRow({ status, busy, onChange }: PortRowProps) {
 					</Button>
 				) : null}
 			</div>
-			<p className="mt-2 max-w-[68ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+			<p className="mt-2 max-w-[68ch] text-sm text-[var(--ink-muted)]">
 				{draft !== "" && !valid
 					? "Pick a port from 1024 to 32767. Higher ones are handed out to other programs at random."
 					: "Changing the port changes the URL, so clients have to be pointed at it again."}

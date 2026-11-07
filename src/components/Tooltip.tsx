@@ -87,7 +87,7 @@ export function Tooltip({ label, keys, side = "right", className = "flex", child
 							aria-hidden
 							style={{ left: spot.x, top: spot.y }}
 							className={[
-								"animate-pop pointer-events-none fixed z-[70] inline-flex items-center gap-2 whitespace-nowrap rounded-[var(--radius-md)] bg-[var(--ink)] px-2 py-1 text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--paper)] shadow-[var(--shadow-popover)]",
+								"animate-pop pointer-events-none fixed z-[70] inline-flex items-center gap-2 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--ink)] px-2 py-1 text-sm text-[var(--surface)] shadow-[var(--shadow-popover)]",
 								side === "right" ? "-translate-y-1/2" : "-translate-x-1/2",
 							].join(" ")}
 						>

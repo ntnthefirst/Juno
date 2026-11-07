@@ -94,7 +94,7 @@ export function EditorSidebar({
 						value={name}
 						onChange={(event) => onName(event.target.value)}
 						placeholder="Untitled template"
-						className={`${QUIET_FIELD} truncate text-[length:var(--text-dense)] font-[var(--weight-semibold)]`}
+						className={`${QUIET_FIELD} truncate text-dense font-[var(--weight-semibold)]`}
 					/>
 				</div>
 				<button
@@ -118,13 +118,13 @@ export function EditorSidebar({
 					value={description}
 					onChange={(event) => onDescription(event.target.value)}
 					placeholder="What this one is for"
-					className={`${QUIET_FIELD} resize-none text-[length:var(--text-sm)] leading-[var(--leading-normal)] text-[var(--ink-muted)]`}
+					className={`${QUIET_FIELD} resize-none text-sm text-[var(--ink-muted)]`}
 				/>
 			</div>
 
 			{subject !== null ? (
 			<div className="flex-none border-t border-[var(--line)] px-1.5 py-1.5">
-				<label htmlFor={subjectId} className="block px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+				<label htmlFor={subjectId} className="block px-1.5 text-micro text-[var(--ink-muted)]">
 					Subject
 				</label>
 				{/* Edited where it is written, like the name, rather than in a box.
@@ -142,10 +142,10 @@ export function EditorSidebar({
 						}
 					}}
 					placeholder="Onderwerp"
-					className={`${QUIET_FIELD} field-sizing-content resize-none text-[length:var(--text-sm)] leading-[var(--leading-normal)]`}
+					className={`${QUIET_FIELD} field-sizing-content resize-none text-sm`}
 				/>
 				{unreviewed ? (
-					<p className="mt-1.5 border-l-2 border-[var(--warn)] pl-2 text-[length:var(--text-micro)] leading-[var(--leading-normal)] text-[var(--warn)]">
+					<p className="mt-1.5 border-l-2 border-[var(--warn)] pl-2 text-micro text-[var(--warn)]">
 						This text shipped with Juno and has not been edited yet. Read it before it is used.
 					</p>
 				) : null}
@@ -154,7 +154,7 @@ export function EditorSidebar({
 
 			<div className="flex min-h-0 flex-1 flex-col border-t border-[var(--line)]">
 				<div className="flex h-[28px] flex-none items-center px-3">
-					<h2 className="text-[length:var(--text-micro)] font-[var(--weight-semibold)] tracking-[0.04em] text-[var(--ink-muted)] uppercase">
+					<h2 className="text-overline text-[var(--ink-muted)] uppercase">
 						Layers
 					</h2>
 					{onAddPage ? (
@@ -162,7 +162,7 @@ export function EditorSidebar({
 							type="button"
 							onClick={onAddPage}
 							title="Add a page at the end"
-							className="ml-auto flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
+							className="ml-auto flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-micro text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
 						>
 							<Icon name="add" size={12} /> Add page
 						</button>
@@ -179,7 +179,7 @@ export function EditorSidebar({
 							onStep={onStep}
 						/>
 					) : (
-						<p className="px-1.5 text-[length:var(--text-micro)] leading-[var(--leading-normal)] text-[var(--ink-muted)]">
+						<p className="px-1.5 text-micro text-[var(--ink-muted)]">
 							This template is hand-written HTML, so it has no layers.
 						</p>
 					)}
@@ -189,7 +189,7 @@ export function EditorSidebar({
 					<button
 						type="button"
 						onClick={onConvert}
-						className="w-full rounded-[var(--radius-sm)] px-1.5 py-1 text-left text-[length:var(--text-micro)] text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
+						className="w-full rounded-[var(--radius-sm)] px-1.5 py-1 text-left text-micro text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
 					>
 						{layout ? "Turn the whole template into hand-written HTML" : "Lay this out on a canvas"}
 					</button>
@@ -198,7 +198,7 @@ export function EditorSidebar({
 			</div>
 
 			<div className="flex flex-none items-center gap-2 border-t border-[var(--line)] px-3 py-1.5">
-				<label className="flex items-center gap-1.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">
+				<label className="flex items-center gap-1.5 text-micro text-[var(--ink-muted)]">
 					<input
 						type="checkbox"
 						checked={autosave}
@@ -209,7 +209,7 @@ export function EditorSidebar({
 				</label>
 				{status ? (
 					<span
-						className={`truncate text-[length:var(--text-micro)] ${dirty ? "text-[var(--ink-muted)]" : "text-[var(--ok)]"}`}
+						className={`truncate text-micro ${dirty ? "text-[var(--ink-muted)]" : "text-[var(--ok)]"}`}
 					>
 						{status}
 					</span>

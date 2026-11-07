@@ -47,7 +47,8 @@ export function OnboardingSection({ onNotice }: OnboardingSectionProps) {
 		<Section
 			title="Getting started"
 			anchor="onboarding"
-			description="Starts when you close this window."
+			lead
+			description="Replay the walkthrough or the first-run questions. Either starts when you close this window."
 		>
 			<div className="flex flex-col gap-5">
 				<Row
@@ -78,7 +79,7 @@ type RowProps = {
 function Row({ description, button, disabled, onClick }: RowProps) {
 	return (
 		<div className="flex items-center justify-between gap-4">
-			<p className="max-w-[46ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">{description}</p>
+			<p className="max-w-[46ch] text-sm text-[var(--ink-muted)]">{description}</p>
 			<Button disabled={disabled} onClick={onClick}>
 				{button}
 			</Button>

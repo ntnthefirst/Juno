@@ -170,7 +170,7 @@ export function StampBox({
 					}}
 					onBlur={() => finishEditing(true)}
 					style={{ top: metrics.padding + (image ? metrics.imageHeight + metrics.gap : 0) - 4 }}
-					className="absolute left-0 z-10 w-[max(100%,220px)] rounded-[var(--radius-sm)] border border-[var(--accent)] bg-[var(--surface)] px-2 py-1 text-[length:var(--text-base)] text-[var(--ink)] shadow-[var(--shadow-popover)]"
+					className="absolute left-0 z-10 w-[max(100%,220px)] rounded-[var(--radius-sm)] border border-[var(--accent)] bg-[var(--surface)] px-2 py-1 text-base text-[var(--ink)] shadow-[var(--shadow-popover)]"
 				/>
 			) : null}
 			<span

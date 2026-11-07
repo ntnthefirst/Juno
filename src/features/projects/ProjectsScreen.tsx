@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Project, ProjectSummary, ProjectsView, ReferenceItem } from "@shared/types";
+import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { useScreenAction } from "../../lib/screen-actions";
-import { AddButton } from "../../components/AddButton";
+import { blankMenuFor } from "../../lib/blank-menu";
+import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
+import { useRecentTouch } from "../../lib/use-recent-touch";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
 import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
 import { GenerateDialog } from "../documents/GenerateDialog";
-import { ProjectDetail } from "./ProjectDetail";
+import { ProjectDetail, type ProjectTab } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 import { ProjectGrid } from "./ProjectGrid";
 import { ProjectTable } from "./ProjectTable";
+import { TimeEntryFormPage } from "./TimeEntryFormPage";
 import { ViewControls } from "./ViewControls";
 
 type Rows = { projects: ProjectSummary[]; statuses: ReferenceItem[] };
@@ -70,10 +72,13 @@ export function ProjectsScreen() {
 	// current by ProjectDetail once the real record has loaded.
 	const [selectedName, setSelectedName] = useState<string | null>(() => peekPending("project")?.name ?? null);
 	useEffect(() => clearPending, []);
+	useRecentTouch("project", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
-	const [editing, setEditing] = useState<Project | null | "new">(null);
-	useScreenAction("projects", () => setEditing("new"));
+	const [editing, setEditing] = useState<Project | null>(null);
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
+	// A time entry is a form too: null is closed, an entry of null is a new one.
+	const [timeForm, setTimeForm] = useState<{ entry: TimeEntry | null } | null>(null);
+	const [tab, setTab] = useState<ProjectTab>("notes");
 	// A document from a template is a page of its own, the same as on a client.
 	const [generating, setGenerating] = useState(false);
 	const [deleted, setDeleted] = useState<ProjectSummary | null>(null);
@@ -109,9 +114,16 @@ export function ProjectsScreen() {
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, [fetchRows]);
 
+	// A new-record window saved something: the list and the open project read again.
+	useRecordsChanged(() => {
+		refreshList();
+		setDetailVersion((version) => version + 1);
+	});
+
 	const clearSelection = useCallback(() => {
 		setSelectedId(null);
 		setSelectedName(null);
+		setTab("notes");
 	}, []);
 
 	// The view is written through so it survives a restart, and applied
@@ -125,6 +137,7 @@ export function ProjectsScreen() {
 	}
 
 	function open(project: ProjectSummary) {
+		setTab("notes");
 		setSelectedId(project.id);
 		setSelectedName(project.name);
 	}
@@ -152,14 +165,6 @@ export function ProjectsScreen() {
 		}
 	}
 
-	async function openFolder(project: ProjectSummary) {
-		try {
-			await window.juno.projects.openLocalFolder(project.id);
-		} catch (cause: unknown) {
-			setNotice(messageOf(cause));
-		}
-	}
-
 	function saved(project: Project) {
 		setEditing(null);
 		setSelectedId(project.id);
@@ -172,7 +177,7 @@ export function ProjectsScreen() {
 	// nothing floats above it: a dialog on top handles Escape itself, and
 	// without this guard both would fire.
 	useEffect(() => {
-		if (selectedId === null || editing !== null || scheduleForm !== null || generating) return;
+		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || generating) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape") return;
 			if (document.querySelector("[role='dialog']")) return;
@@ -180,7 +185,7 @@ export function ProjectsScreen() {
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, editing, scheduleForm, generating, clearSelection]);
+	}, [selectedId, editing, scheduleForm, timeForm, generating, clearSelection]);
 
 	const rows = load.status === "ready" ? load.rows : null;
 	const needle = term.trim().toLowerCase();
@@ -198,13 +203,19 @@ export function ProjectsScreen() {
 		editing !== null
 			? [
 					{ label: "Projects", onSelect: () => setEditing(null) },
-					{ label: editing === "new" ? "New project" : "Edit project" },
+					{ label: "Edit project" },
 				]
 			: selectedId !== null && generating
 				? [
 						{ label: "Projects", onSelect: clearSelection },
 						{ label: selectedName ?? "Project", onSelect: () => setGenerating(false) },
 						{ label: "New document" },
+					]
+				: selectedId !== null && timeForm !== null
+				? [
+						{ label: "Projects", onSelect: clearSelection },
+						{ label: selectedName ?? "Project", onSelect: () => setTimeForm(null) },
+						{ label: timeForm.entry ? "Edit time entry" : "Add time entry" },
 					]
 				: selectedId !== null && scheduleForm !== null
 				? [
@@ -220,7 +231,7 @@ export function ProjectsScreen() {
 	if (editing !== null) {
 		return (
 			<ProjectForm
-				project={editing === "new" ? null : editing}
+				project={editing}
 				onClose={() => setEditing(null)}
 				onSaved={saved}
 			/>
@@ -241,6 +252,22 @@ export function ProjectsScreen() {
 		);
 	}
 
+	if (selectedId !== null && timeForm !== null) {
+		return (
+			<TimeEntryFormPage
+				projectId={selectedId}
+				entry={timeForm.entry}
+				backLabel="Project"
+				onClose={() => setTimeForm(null)}
+				onSaved={() => {
+					setTimeForm(null);
+					setTab("time");
+					setDetailVersion((version) => version + 1);
+				}}
+			/>
+		);
+	}
+
 	if (selectedId !== null && scheduleForm !== null) {
 		return (
 			<ScheduleFormPage
@@ -249,6 +276,7 @@ export function ProjectsScreen() {
 				onClose={() => setScheduleForm(null)}
 				onSaved={() => {
 					setScheduleForm(null);
+					setTab("calendar");
 					setDetailVersion((version) => version + 1);
 				}}
 			/>
@@ -260,11 +288,14 @@ export function ProjectsScreen() {
 			<ProjectDetail
 				key={`${selectedId}:${detailVersion}`}
 				projectId={selectedId}
+				tab={tab}
+				onTabChange={setTab}
 				onBack={clearSelection}
 				onChanged={refreshList}
 				onEdit={(project) => setEditing(project)}
 				onSchedule={setScheduleForm}
 				onGenerateDocument={() => setGenerating(true)}
+				onTimeForm={(entry) => setTimeForm({ entry })}
 				onNameChange={setSelectedName}
 				onDeleted={(project) => {
 					clearSelection();
@@ -278,23 +309,7 @@ export function ProjectsScreen() {
 	return (
 		<div className="flex h-full flex-col px-6 py-8 lg:px-8 xl:px-10">
 			<div className="mb-6 flex w-full flex-col gap-4">
-				<div className="flex items-center justify-between gap-4">
-					<div className="flex items-baseline gap-3">
-						<h1 className="text-[length:var(--text-h2)] font-[var(--weight-semibold)] tracking-[-0.02em]">
-							Projects
-						</h1>
-						{rows ? (
-							<span className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
-								{shown.length} {shown.length === 1 ? "project" : "projects"}
-							</span>
-						) : null}
-					</div>
-
-					<div className="flex items-center gap-2">
-						{view ? <ViewControls view={view} onChange={changeView} /> : null}
-						<AddButton label="New project" onClick={() => setEditing("new")} />
-					</div>
-				</div>
+				{view ? <ViewControls view={view} onChange={changeView} /> : null}
 
 				{rows && rows.projects.length > 0 ? (
 					<div className="flex items-center gap-2">
@@ -308,7 +323,7 @@ export function ProjectsScreen() {
 								onChange={(event) => setTerm(event.target.value)}
 								aria-label="Search projects"
 								placeholder="Search by name, client, description or folder"
-								className="h-[36px] w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-9 pr-3 text-[length:var(--text-base)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+								className="h-[36px] w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-9 pr-3 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 							/>
 						</div>
 
@@ -316,7 +331,7 @@ export function ProjectsScreen() {
 							value={statusFilter}
 							onChange={(event) => setStatusFilter(event.target.value)}
 							aria-label="Filter by status"
-							className="h-[36px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 text-[length:var(--text-dense)] text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+							className="h-[36px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 text-dense text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 						>
 							<option value="">Every status</option>
 							{rows.statuses
@@ -331,7 +346,7 @@ export function ProjectsScreen() {
 				) : null}
 			</div>
 
-			<div className="min-h-0 w-full flex-1 overflow-y-auto">
+			<div className="min-h-0 w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("projects")}>
 				{load.status === "loading" || !view ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
 				) : load.status === "error" ? (
@@ -339,7 +354,7 @@ export function ProjectsScreen() {
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 							Could not load your projects.
 						</p>
-						<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 							{load.message}
 						</p>
 					</div>
@@ -349,12 +364,10 @@ export function ProjectsScreen() {
 						title="No projects yet"
 						description="A piece of work with its files, its links, its notes and the command that starts it in one place."
 						action={{
-							label: "New project",
+							label: "Add project",
 							icon: "add",
-							onClick: () => setEditing("new"),
-							shortcut: ["Ctrl", "N"],
+							onClick: () => openNewRecord("project"),
 						}}
-						tip="A project can belong to a client, or stand on its own."
 					/>
 				) : shown.length === 0 ? (
 					<EmptyState
@@ -375,7 +388,7 @@ export function ProjectsScreen() {
 						previews={view.previews}
 						onOpen={open}
 						onRemove={(project) => void remove(project)}
-						onOpenFolder={(project) => void openFolder(project)}
+						onFailed={setNotice}
 					/>
 				) : (
 					<ProjectTable
@@ -383,7 +396,7 @@ export function ProjectsScreen() {
 						dense={view.layout === "list" || !view.previews}
 						onOpen={open}
 						onRemove={(project) => void remove(project)}
-						onOpenFolder={(project) => void openFolder(project)}
+						onFailed={setNotice}
 					/>
 				)}
 			</div>

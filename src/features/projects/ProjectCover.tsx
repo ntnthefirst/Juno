@@ -42,8 +42,8 @@ export function ProjectCover({ assetId, name, className, compact = false }: Proj
 			<div className={`${box} ${toneClassOf(name)}`} aria-hidden>
 				<span
 					className={[
-						"font-[var(--weight-semibold)] tracking-[0.04em]",
-						compact ? "text-[length:var(--text-sm)]" : "text-[length:var(--text-h3)]",
+						"font-[var(--weight-semibold)]",
+						compact ? "text-sm" : "text-h3",
 					].join(" ")}
 				>
 					{initials(name)}

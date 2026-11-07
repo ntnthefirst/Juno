@@ -33,6 +33,8 @@ shape. Fix the service, don't special-case the adapter.
 
 ## 3. SQLite via better-sqlite3, typed with Drizzle
 
+**Amended by decision 18**, which swapped the driver for `node:sqlite` behind a shim and kept Drizzle.
+
 Local file, synchronous API, no server, no daemon. Drizzle gives a typed schema
 and generated migrations, which matters because the schema is large and most of
 the code is written against it.
@@ -544,6 +546,8 @@ already running, over a local transport that is not stdio. Then the bridge
 disappears and `socket.ts` becomes the server itself. Nothing else about the
 shape would change, which is why the bridge holds no logic.
 
+**Amended by decision 57.** Read, change and draft tools may be set to run without parking. Send, sign, file and delete never are, and an automation never writes unattended.
+
 **Reversed by decision 42.** That condition was met: MCP clients connect to a
 server by URL. The bridge, the pipe and `mcp.json` are gone, and the rest of
 this decision (the gate, the audit table, automations) stands.
@@ -574,6 +578,8 @@ status colour that a selected row is never mistaken for a successful one.
 only reason to pay the cost of moving `userData` a second time.
 
 ## 26. Settings is a modal window, not a screen
+
+**Amended by decision 69**, which changes the window size. The reason stands.
 
 Settings edits the things every other screen is made of: mail accounts,
 reference data, the owner profile, the lock. A settings *screen* lets someone
@@ -708,6 +714,8 @@ than none.
 flash, which would make it noise rather than an answer.
 
 ## 30. A form is a page, a question is a modal, a row is a side panel
+
+**Amended by decision 60**, which makes a new event, client, project or reminder a small modal window.
 
 Three shapes, and picking the wrong one is the bug this decision prevents.
 
@@ -849,6 +857,8 @@ valid: a suggestion is offered, never required, and nothing here validates
 what gets saved.
 
 ## 34. The first run is a window, and the profile it fills is two lists
+
+**Amended by decision 69**, which changes the window size and the steps it asks.
 
 Setup used to replace the shell: the whole window, six steps, one of them
 eleven fields long. On any monitor wider than a laptop that read as an
@@ -1227,9 +1237,9 @@ Templates without a canvas, the page model and hand-written HTML, keep working
 exactly as before, record values included. The PDF takes its paper from the
 document's own `@page` rule, so they still print on A4.
 
-Revisit if: components (a block made once and placed in several templates, with
-inputs of its own) are built, which is in TODO.md; or a document needs a value
-from a record again, which would need the client chosen before the PDF.
+Revisit if: a document needs a value from a record again, which would need the
+client chosen before the PDF. Components, which this note once named, are
+decision 65.
 
 ## 42. The agent server is a URL on this machine, and a client is let in with a code
 
@@ -1402,7 +1412,7 @@ as a form, not a tool. What replaced it is deliberately less.
   top of their page, called Styled mail and Templates, so the rail stays at the
   places the work happens. An entry is a colour and nothing else.
 - **The title bar has no name and no path.** It holds a way back out of a record,
-  the search, and the lock. The path was the only way back from a client, and is
+  the search, and (until decision 54) the lock. The path was the only way back from a client, and is
   replaced by a back button that appears only while a record is open, not by
   nothing.
 - **One search gets anywhere and starts anything**, and the keyboard reaches
@@ -1520,33 +1530,6 @@ project of the owner's own has no client, and neither does its document.
 Revisit if: a document ever needs more than one project. That is a join table,
 and the single column would have to move into it with its data.
 
-## 48. Juno runs in the background, so an agent can always reach it
-
-The agent server lives in the Juno process (decision 42), and the Claude Desktop
-extension is only a bridge to it (decision 46). With Juno closed the bridge has
-nothing to forward to and Claude says "Juno is not running". Rather than a second
-program, Juno itself stays up with no window.
-
-**It is on by default**, and Settings > MCP has a switch. While it is on, and the
-agent server is on, and setup has been finished, in an installed copy:
-
-- Juno starts with the computer (the operating system's login item, started with
-  `--background`) and opens no window and no splash. The window comes up when the
-  person opens Juno, or from the tray icon.
-- Closing the window does not quit. The tray icon says Juno is there and offers
-  Open and Quit.
-- **Closing the window locks Juno**, so opening it again asks for the PIN the same
-  as a walk-up (decision 15). The agent server keeps checking the lock on every
-  call, so with a lock set up an agent gets "locked" until a person unlocks.
-
-Nothing new listens and nothing new is reachable: the same server, on the same
-loopback address, behind the same code and tokens. What changes is only that the
-process is there. Mail sync, the daily summary and automations keep running while
-it is, which is what they do with the window open.
-
-**What would reverse this:** a client that can start Juno itself on demand, which
-would make an always-running process unnecessary.
-
 ## 49. A mail carries any file, and Documents keeps the PDF paperwork
 
 Documents is the paperwork with a life of its own: made from a template or
@@ -1645,3 +1628,729 @@ reach an address on this machine, so it gets the extension and a token.
 **What would reverse this:** a client people use that cannot add a server by
 URL and has no extension format. Then it gets what Claude Desktop got, a bridge
 of its own, not a file written into its settings.
+
+## 52. Juno runs in the background, so an agent can always reach it
+
+The agent server lives in the Juno process (decision 42), and the Claude Desktop
+extension is only a bridge to it (decision 46). With Juno closed the bridge has
+nothing to forward to and Claude says "Juno is not running". Rather than a second
+program, Juno itself stays up with no window.
+
+**It is on by default**, and Settings > MCP has a switch. While it is on, and the
+agent server is on, and setup has been finished, in an installed copy:
+
+- Juno starts with the computer (the operating system's login item, started with
+  `--background`) and opens no window and no splash. The window comes up when the
+  person opens Juno, or from the tray icon.
+- Closing the window does not quit. The tray icon says Juno is there and offers
+  Open and Quit.
+- **Closing the window locks Juno**, so opening it again asks for the PIN the same
+  as a walk-up (decision 15). The agent server keeps checking the lock on every
+  call, so with a lock set up an agent gets "locked" until a person unlocks.
+
+Nothing new listens and nothing new is reachable: the same server, on the same
+loopback address, behind the same code and tokens. What changes is only that the
+process is there. Mail sync, the daily summary and automations keep running while
+it is, which is what they do with the window open.
+
+**What would reverse this:** a client that can start Juno itself on demand, which
+would make an always-running process unnecessary.
+
+## 53. The Figma file is the reference for visual values and text styles
+
+The design file now draws every screen and component, and the text in it is set
+in named text styles. Rather than keep two sets of numbers and a rule for which
+one wins per value, the file is the reference: where `brand/tokens.css` and the
+file disagree, the file is right and the tokens move.
+
+This supersedes the earlier token values. `--line` in light is `#ececf1`, and
+`--radius-sm`, `-md`, `-lg` and `-xl` are 6, 8, 12 and 16. The icon rail is the
+56px strip the frames draw (48px entries inside it), and the title bar is 40px.
+
+**The text styles are the type scale.** Each is one Tailwind utility that carries
+its own pixel line height, so no component pairs a size with a `leading-*` to get
+the design's value: `text-h1` 32/40, `text-h2` 24/30 and `text-h3` 20/25 (all
+semibold), `text-lg` 16/24, `text-base` 14/21, `text-dense` 13/20, `text-sm`
+12/18, `text-micro` 11/16 (medium), `text-document` 16/26, and `text-overline`
+11/16 (semibold, 6% tracking, used with `uppercase`). Letter spacing is 0
+everywhere else, so headings carry no negative tracking. A weight a style does
+not fix (base, dense, small and large body are drawn in several) is set on the
+element.
+
+The tokens file is still the one place values live in code, and the rule against
+a raw value in a component stands. What changed is only which side is the source
+when they differ.
+
+**What would reverse this:** the design file ceasing to be maintained alongside
+the app, at which point the tokens go back to being the reference.
+
+## 54. The title bar holds Search, Recent, Reminders and New, and the lock moves to the palette
+
+The Title Bar component and its frames draw four icon buttons at the left, the
+page title in the middle and the agent at the right, and no lock. The design is
+the reference (decision 53), so the lock button is gone from the bar.
+
+- **Search, Recent, Reminders, New.** Search opens the palette. Recent lists the
+  last 20 records opened, newest first (`recent_items`, kept by
+  `services/recent.ts`, written when a record opens, cleared from Settings >
+  Security and data). The bell opens the Reminders screen and nothing more. New
+  opens a menu of what can be made, led by what the screen in view makes.
+- **The lock stays reachable** through the palette command and Ctrl or Cmd Shift
+  L. It is still configured and still locked from the main process, so nothing
+  about the lock itself changes (decision 15).
+- **Recent is opened by name, not by a path**, and a record that was deleted
+  since is left out when the list is read, not when it is written.
+
+**What would reverse this:** a frame that draws the lock in the bar, or a
+reminders count that has to be seen at all times, which would make the bell
+more than a link.
+
+## 55. Intros and outros follow the design, and the block higher in the list wins
+
+The mail composer adds a line at the start and a line at the end of a message
+from blocks the owner keeps (`mail_blocks`, `services/mail-blocks.ts`). The model
+is the one the design draws: a block is an **intro** or an **outro**, has a name,
+a Dutch text that may carry variables, and **one** rule for when it is added on
+its own. The rules are manual, a client, someone who is not a client yet, a
+reply, and a mail linked to a project.
+
+This replaces the earlier plan for greetings and sign-offs, which had static
+text with no variables and rules made of several conditions. That plan was only
+ever an unfinished branch (`wip/mail-phrases`), and the design was chosen after
+it was written. The branch stays where it is as a reference and is not merged:
+its model differs from the one built.
+
+- **Variables are tokens.** A text stores `{{client_name}}`, `{{first_name}}`,
+  `{{project}}`, `{{date}}` and `{{my_name}}`, and every screen draws them as
+  chips. A variable with no value for the message makes the rule not match, so a
+  block is never added with a hole in it. Picked by hand, it is added with the
+  value empty.
+- **When two blocks of one kind match, the one higher in the list wins.** The
+  design gives each block one rule and says nothing about two blocks sharing it.
+  The list is the owner's, reordered by dragging, so the answer is visible and
+  can be changed. Intros and outros are ordered separately.
+- **A block is ordinary text once it is in a message** (its variables stay chips until the message goes, decision 66). It is inserted once, when
+  the composer opens or the recipient becomes known, and never again after the
+  owner has chosen "No intro" or edited the line. A block never sends anything
+  by itself.
+- **The examples are ordinary rows.** A first install gets five (Formal,
+  Friendly, Short, Kind regards, Best wishes), written once in Dutch (Belgium)
+  and never restored. They are not system rows (decision 16 does not apply), and
+  no code may look one up by name.
+- **The agent can read and change them.** `mail.blocks.*` tools list, create,
+  change, delete and reorder. These are local writes, so they wait for approval
+  like any side-effectful call (decision 24) until that decision is amended.
+
+**What would reverse this:** a need for rules with more than one condition, which
+would take the static-text model back off the branch, or a person asking for a
+block to be added to a message that was already started.
+
+---
+
+## 56. Time is logged per project, one timer runs, and a project's timeline is read back
+
+A one-person business sells hours and needs to know where they went. A project
+keeps time entries (`time_entries`): a start, an end and a duration in whole
+minutes, with the client copied from the project so a report by client needs no
+join. A project may carry an estimate, `projects.estimated_minutes`.
+
+- **One timer runs at a time, in the whole app.** A running timer is a row with
+  no end. The service refuses a second and names the project it is running on,
+  and a partial unique index on the owner refuses it again underneath, so two
+  windows racing cannot both start one. It is shown in the title bar from any
+  screen and stopped there.
+- **The summed figure is the stored whole minutes**, not the difference of two
+  timestamps. A person who types "1 h 30" means ninety. A finished timer rounds
+  to the nearest minute and never to zero.
+- **The tools are local writes**, so they carry the side-effectful flag, are
+  never scheduled, and wait for approval like every other write until decision
+  24 is amended. There is no tool that deletes an entry.
+- **A project's timeline is read from the records**, as a client's is. The one
+  thing with no other trace is a status change, so `project_status_changes`
+  holds one row per change. A mail thread and a document have no "linked on" or
+  "sent on" instant of their own, so they sit at their last message and their
+  last edit, and the interface does not claim more.
+- **Archive is a status.** The shipped set has none, so the first archive adds
+  "Archived" to the project statuses as an ordinary item of the owner's own, and
+  it is found by its key afterwards.
+- **The "..." and Add menus are drawn by the application for now**, behind one
+  component (`components/ActionMenu.tsx`), so making them native later is a
+  swap in one place.
+
+**What would reverse this:** a need to time several things at once, which would
+move the unique index from the owner to the owner and the project.
+
+---
+
+## 57. An agent may be allowed to read, change records and write drafts
+
+Amends decision 24, which parked every side-effectful call. The design draws a
+permissions page with five rows, each Off, Ask first or Allow, and that is now
+how the gate decides.
+
+| Row | Default | May be Allow |
+| --- | --- | --- |
+| Read everything | Allow | yes |
+| Change records and notes | Ask first | yes |
+| Write mail drafts | Allow | yes |
+| Send mail, sign and file | Ask first | **no** |
+| Delete | Ask first | **no** |
+
+- **Every tool is in exactly one row**, in one table
+  (`services/agent-permissions.ts`). `mcp/host.test.ts` fails when a tool is not
+  in it, and `rowOf` throws for one that is not, so a new tool cannot run
+  unclassified. Filing is every move of mail on the server, so `mail.file.*`
+  sits under send. Soft deletes count as delete.
+- **The decision is made in the service**, not in an adapter. Off refuses with
+  "turned off under Settings > MCP > Permissions", Ask first parks as before,
+  Allow runs the tool and writes the audit row.
+- **Send, sign, file and delete cannot reach Allow by any route.** The service
+  refuses to store it, the settings store clamps it on write, and reading the
+  file turns a hand-written "allow" back into "ask". The gate parks those rows
+  whatever level it reads, and tests hold that through the service, the IPC
+  channel and the MCP host.
+- **An automation never writes unattended.** A scheduled or replayed step that
+  is not a plain read parks whatever the level says, because Allow was chosen
+  for a person asking, not for a timer. The rule of decision 24 that a step
+  which parks stops the run is unchanged.
+- **Levels and instructions live in `settings.json`**, not in the database.
+  Setting either is IPC only. There is no tool that changes a level or the
+  instructions: an agent does not widen its own reach.
+- **The instructions** (for everyone, for mail, and one per area the owner
+  adds) are handed to every client as the server's instructions text when it
+  connects.
+- The suggestion source switches sit on the same page, under Suggestions.
+
+**What would reverse this:** a loss that came from a change an agent made
+without asking, which would take Change records back to Ask first for good.
+
+## 58. Automations are a tab of the Agent screen
+
+The design's Agent screen draws Requests and Log and no home for automations,
+so they stay where they are, as a third tab beside those two
+(`features/agent/AutomationList.tsx`). The Connection tab is gone from that
+screen, because the design does not draw it and Settings > MCP holds the same
+panels as pages (Server, Connect a client, What an agent can do).
+
+Nothing about how they run changes. An automation is a recorded list of tool
+calls replayed through the same host, with no second engine, and a step that
+parks stops the run. Decision 57 adds one thing to say aloud: a level of Allow
+does not make a scheduled step run.
+
+**What would reverse this:** a screen drawn for automations of their own, with
+a trigger editor too large for a tab.
+
+---
+
+## 59. Right-click menus are the platform's, built in the main process from a registry
+
+The design draws ten menus (Reminder, Event, Client, Note, File, Mail, Blank,
+Project, Add, Block) and says they are drawings of the menus Windows shows. So
+they are Electron `Menu.popup` menus, and the drawn `ContextMenu` stays only
+where the menu is not a record's: the title bar's New, a filter, a view switch,
+the edit fallback for text.
+
+- **The renderer sends a kind and an id, never a list.** `menu.show` takes
+  `{ kind, id, context, x, y }`, checked in `shared/menu.ts`. What is offered is
+  decided in `services/menu-registry.ts` from the record, so a script in the page
+  cannot invent an item and an item that does not apply (Reopen on an open
+  reminder, Archive on an archived project) is left out rather than greyed.
+  `context` is a closed vocabulary (`deadline`, `trash`, `detail`, `unread`) for
+  the few places one kind shows a variant, not free text.
+- **What comes back is typed.** `windows/context-menu.ts` turns the choice into
+  an outcome: nothing, done (the main process did it, through a service), failed
+  (with words), or a named action for the screen. Opening a form, going to a
+  record and asking first are the screen's, because only the window can. A
+  delete still asks first and still has its undo, because it runs the screen's
+  own flow. The main process performs only snoozing until tomorrow, opening a
+  file or folder and copying a folder path, none of which sends, signs, files or
+  deletes.
+- **Accelerators are printed only where the key works.** The mail list's U, S,
+  E, M and Delete and a project page's Ctrl O and Delete are, so those show. The
+  frame's Space, Enter, Ctrl E and Ctrl D on reminders and events are not
+  bound, and a hint on a menu that does nothing is worse than none.
+- **Interface only.** There is no MCP tool: an agent reaches the same actions
+  through their own tools and their own gate. The menu opens only while the
+  app is unlocked, checked in the IPC guard and again where it is drawn.
+- **The menu key works** because it fires the same event with no coordinates,
+  and the menu then hangs off the focused element.
+- **The "..." and Add buttons** (`components/ActionMenu.tsx`) take a target and
+  what the screen does with each answer, and open the same native menus. This
+  closes the "for now" of decision 56.
+- **Left out because the app cannot do them yet:** Duplicate and Send an invite
+  on an event, Send a mail and Archive on a client, Rename, Download and Send by
+  mail on a file, Reply and Forward from the mail list, Paste on a blank area,
+  and the Note menu until notes exist (TODO package 4).
+
+**What would reverse this:** native menus that cannot carry what a screen needs
+(an icon on every row, a submenu with a preview), which would move the drawn
+menu back in under the same registry.
+
+**Amended after the design pass.** Windows draws an icon beside a menu item when
+the item carries a bitmap, so the menus now show the glyphs the frames draw.
+The renderer draws the glyphs it already has (`lib/menu-icons.tsx`, the set
+named in `MENU_ICONS`) to small PNGs in the ink colour of the current theme and
+hands them over with `menu.setIcons`, again when the theme changes; the main
+process keeps them as `nativeImage`s and attaches one to each entry the
+registry names an icon for. The channel takes a closed list of names and small
+PNG data URLs, answers while locked because it carries no data, and is not an
+MCP tool. A menu with no picture yet is still a menu.
+
+The list left out above is smaller now. Added: Duplicate on an event and Archive
+on a client (both through their services, the second by setting the Archived
+status), Send a mail on a client and Send by mail on a file (each opens the
+composer addressed or attached, and nothing is sent), New project on a client,
+Download on a file, and Reply and Forward from the mail list. Still left out,
+each for a reason: Send an invite (an event keeps no attendees, so there is
+nobody to invite), Rename on a file (no service renames a document; a page is
+renamed by its title), Open in a new window on a note (there is one main window,
+the one-main-window rule), and Paste on a blank area (nothing says what a
+paste would make outside an editor).
+
+The mail reader's "..." (`reader` context), an unsent message in the list
+(`outbox`) and a template in the Styled mail column (`template`) are native
+too. The drawn `ContextMenu` stays for menus that are not one record's: the New
+menu, filters, view options and overflow lists, a folder or account in the mail
+tree (they depend on expand and sync state only the tree holds), a timeline
+entry or attachment, an automation or request row, the template list (it acts on
+a selection, with counts in the labels) and the text edit fallback.
+
+## 60. Making an event, client, project or reminder happens in a small window
+
+Amends decision 30. The design draws New event, New client, New project and New
+reminder as small windows (frames `58:4449`, `90:9301`, `90:9368`, `90:9426`),
+and the Figma file wins over an older rule.
+
+- **Four records, and only these four.** Each is a modal child of the main
+  window, 720 by 640 and fixed, with the title bar, the fields and a footer of
+  Cancel and the save button. They replace the create pages. Editing a record
+  that exists still opens its page (`ClientForm`, `ProjectForm`, `EventForm`,
+  `ReminderForm`), because the page is where the whole record is, and a form
+  with a sequence of steps does not fit in a window of this size.
+- **The one-modal-child rule holds** (decision 34). `windows/new-record-window.ts`
+  sits beside `setup-window.ts`, and opening one closes settings or setup, or
+  replaces another new-record window. It is entered by `#/new/<kind>` and
+  closed with `window.closeNewRecord`. When it closes, the main process focuses
+  the parent and sends `window.childClosed` with `{ created: kind | null }`, so
+  the screens behind it read again (`useRecordsChanged`) without a remount that
+  would drop the record that was open.
+- **Every path that creates one opens the window:** the New menu, the palette,
+  Ctrl N, the blank-area menu, a click on the calendar grid, and the quick adds
+  on a client or project record. Those pass a prefill (`clientId`, `projectId`,
+  a date or a start and end) in the window's address. The address can be edited
+  by a script in the page that opened it, so `shared/new-record.ts` checks the
+  shape of every field on both sides and drops what does not match.
+- **Saving goes through the existing services.** The client window sends the
+  contact details typed in it with the client, and `services/client-intake.ts`
+  makes the client and its primary email, phone and address in one transaction,
+  so the agent's `clients.create` takes the same fields. Dates and zones keep
+  the rules in `STRUCTURE.md` sections 4 and 5: a date is a plain
+  `YYYY-MM-DD`, an event is wall-clock with its own zone.
+- **Left out of the windows:** the client's language (a client has none yet, and
+  the status stands in its place), an event's location and project picker, and
+  a reminder's category, interval and lead days. They are on the edit page.
+
+**What would reverse this:** a fifth record whose form needs steps or a table,
+which is a page; or a platform where a modal child cannot be told apart from the
+window behind it.
+
+## 61. Notes are a place of their own, the seventh on the rail
+
+The design's rail has Notes between Mail and Documents (frames `73:4831` and
+`70:1584`), and `.claude/rules/styling.md` section 5b said a seventh place was a
+decision and not an edit. It is taken.
+
+- **The rail is seven places and Settings.** Overview, Calendar, Clients,
+  Projects, Mail, Notes, Documents. The digits follow it from the top, so
+  Notes is Ctrl or Cmd 6, Documents 7 and the Agent 8. `NEW_MENU` offers New
+  note and New page, New page is Ctrl or Cmd Shift N, and the palette has a
+  Notes tab and the same two commands. Recent takes a `note` kind.
+- **A note is not a client note.** `client_notes` are entries on a client's
+  timeline with a moment they happened at, and cannot exist without a client.
+  A note has a title of its own, a Markdown body saved as it is typed, may
+  belong to a client, a project or nothing, and can be pinned. It is its own
+  table (`notes`, migration 0025) with an FTS5 table kept in step by triggers,
+  because one store would have meant a client on every note or a nullable
+  timeline.
+- **The agent has `notes.list`, `get`, `search`, `create`, `update`,
+  `duplicate`, `delete` and `restore`.** Reading is in the Read row, writing in
+  Change records, and `notes.delete` in Delete, so it parks like any other
+  delete. There is no archive: a deleted note is soft deleted and comes back
+  with an undo.
+- **The Note right-click menu is native** (decision 59): Pin to the top,
+  Duplicate, Move to a project, Delete. The design's Open in a new window is
+  left out, because Juno has one main window and that is not something a menu
+  item should break (decision 34 and the window rules).
+
+**What would reverse this:** a rail that has to carry a ninth place, which is a
+screen switch instead, as Documents and Templates are.
+
+## 62. A page is a kind of document
+
+A page in the design sits in the Documents list, belongs to a client or a
+project and reads like a document (frame `73:5038`). That is what a document is
+(decision 48), so a page is one: `documents.source_kind = 'page'`.
+
+- **What a page adds is one column.** `documents.blocks_json` holds the blocks
+  (text, heading, bullet, checklist, table) and `body_html` is compiled from
+  them on every save, so anything that reads a document's body still works. A
+  page has no PDF, no versions to show and no signature. Its owner, its listing,
+  its timeline, its delete and its undo are the document's own.
+- **Blocks are one model for notes and pages.** `shared/blocks.ts` reads and
+  writes them. A note stores them as Markdown, a page as JSON, and both are
+  edited by `components/BlockEditor.tsx`. Text inside a block is a small subset
+  of HTML (bold, italic, underline), cleaned in the service and again when it is
+  read, so a script in a pasted page never reaches the editor.
+- **The service is `services/pages.ts`** (`get`, `create`, `update`), the tools
+  are `pages.get`, `pages.create` and `pages.update` (Read and Change records),
+  and deleting a page is `documents.remove`, which already parks.
+- **Where it is not a PDF:** the Documents list marks a page with a Page badge,
+  the file menu leaves out Open in the default app, and the viewer is
+  `features/documents/PageView.tsx` in place of the PDF viewer.
+
+**What would reverse this:** pages that need to be signed or sent as a file. That
+is a render to PDF, which `documents.render_pdf` already does from the body, and
+not a different table.
+
+## 63. Toasts, the tray, the badge and one shortcut are Windows only, and go through the same gates
+
+Juno reaches the desktop in four places: Windows notifications with buttons, the
+tray icon, a count on the taskbar button and a shortcut for a new note. All of it
+is Windows only, behind one platform check, with nothing stubbed for another
+system. Nothing in it sends anything off the machine.
+
+- **A button is a click.** A due reminder offers Complete and Snooze when it is
+  the only one due, because a button on a summary of five would have to guess.
+  An agent request offers Review. Complete and Snooze call the reminders
+  service. Review brings the Agent screen up and nothing else: **a toast never
+  approves** (decision 24). The set of actions is closed (`ToastAction`), and
+  the toast carries an index into it, not a callback.
+- **Locked, a toast is generic.** It names no client, mail or record, and it has
+  no buttons. A button on a toast made before the lock came on is held until a
+  person has unlocked, runs once, and is dropped after ten minutes. The tray's
+  New note and the shortcut ask the lock first and only show the lock screen.
+  The main process holds a request for the window only while unlocked.
+- **The badge is a taskbar overlay with the number of agent requests waiting.**
+  It is drawn from the change event of the requests, never from a timer, and
+  clears when the last one is answered or expires.
+- **The tray icon is there when the setting says so, and always while Juno runs
+  without a window** (decision 52). Its menu is Open Juno, New note and Quit
+  Juno. Quit really quits, past the keep-running setting, and the icon and the
+  shortcut are released first.
+- **The global shortcut is off until a person turns it on in Settings.** It needs
+  a modifier and one key, it is released when turned off and on quit, and a
+  combination another program holds is said so on the page. An agent can read
+  the settings and change toasts, tray and badge (`desktop.get`,
+  `desktop.update`). It cannot change the shortcut, because that takes a key
+  away from every other program.
+- **Running in the background** stays one setting, `mcpServer.background`, shown
+  on the Notifications and tray page as well as under MCP.
+
+**What would reverse this:** a second platform. Then the tray and the badge get
+their own adapter for it, and the services, which hold the rules, stay as they
+are.
+
+## 64. A mailbox rule the owner wrote may file mail on its own
+
+Amends the rule in `.claude/rules/mcp.md` section 4 and decision 44, which say
+that nothing files, signs, sends or deletes without a person pressing a button.
+Each mailbox now has an ordered list of rules (Settings > Mail accounts > the
+account), and a rule the owner wrote and switched on moves, trashes, archives,
+flags, marks read and links mail without asking each time. That is a standing
+instruction, which is different from a decision made per message, and it is the
+only exception.
+
+- **What a rule is.** A name, a switch, conditions, actions and a choice of
+  whether a match stops the rules below. The conditions are tests on the sender
+  address, the recipient addresses, the subject, whether the sender is a client
+  and whether there are attachments, joined by all or any. The actions are move
+  to a folder, trash, archive, mark read, flag and link the conversation to the
+  sender's client, with at most one of the three that move. Rules are checked top
+  to bottom, reordered by dragging.
+- **When they run.** After the inbox of an account has been pulled by a sync,
+  on messages that arrived since the account was connected and that no rule has
+  looked at. Not on sent mail, not on other folders, not on mail that was already
+  there.
+- **A message is looked at once, ever.** `mail_rule_seen` holds the Message-ID
+  (or a hash of the headers for a message without one), per account. It is in the
+  database, so a restart forgets nothing, and it is keyed by the Message-ID
+  rather than the local id or the UID, so a UIDVALIDITY change, which throws the
+  local rows away and reads the same mail back, and a message moved back into
+  the inbox are not new messages. Every message a pass reaches is marked before
+  anything is done to any of them, whether or not a rule matched, so a failure, a
+  crash or the lock cannot make one come round again, and a rule written today
+  does not reach back to what arrived yesterday.
+- **Years of mail are history.** `mail_accounts.rules_since` is set when the
+  account is first synced, before anything is pulled (the migration sets it for
+  accounts that exist). A message older than that is never a candidate, however
+  it comes to be read. The first sync of an account with ten years of mail files
+  none of it, and a test holds that with a rule already written.
+- **Filing is the filing service.** Every action calls `mail-actions.ts`, which
+  changes the server first and the local rows second, so the two cannot
+  disagree. Actions of one kind go as one call per folder, because a call is a
+  connection. Mark read and flag happen before the move, because a moved message
+  is no longer where they would find it, and a message a rule has moved is not
+  offered to the rules below it.
+- **A failed action does not stop the sync and is not tried again.** The batch
+  is retried message by message, gives up on the rest after three failures in a
+  row so a server that is down is not asked a hundred times, and every
+  message that did not get its action has a history row saying why. The sync
+  still finishes with its own result.
+- **Every action writes a history row** (`mail_rule_runs`) naming the rule, the
+  message, the action, the folder it went to and the result: done, skipped or
+  failed with the error. The rule's name, the subject and the sender are copies,
+  cut short, so a removed rule or a purged message still reads. The account page
+  lists them, newest first, which is the answer to "why did this message move".
+- **Conditions are data, never code.** A value is compared with `includes`,
+  `startsWith`, `endsWith` or equality, after both sides are put in one form
+  (composed, lower case, without zero-width characters) and cut to a fixed length.
+  Nothing a person or a sender wrote is turned into a pattern or evaluated. A
+  sender is matched on the address only, because a display name can say
+  anything. Tests hold a pattern in a rule and a hundred-kilobyte subject.
+- **An agent may ask, and the owner decides.** `mail.rules.create`, `update` and
+  `reorder` are in the Send and file row and `delete` in the Delete row, so
+  they park whatever the levels say and can never be Allow. A parked request
+  shows the whole rule in plain words (and for a change, the rule as it is and as
+  it would become), says that it is a standing instruction, and is sealed: if the
+  rule changes between the request and the approval, the approval fails. A rule
+  that could never be stored is refused at once instead of parked.
+- **An automation may not touch a rule.** The gate refuses `mail.rules.*` writes
+  from an automation outright, not by parking them, and an automation cannot be
+  saved with one as a step. Reading rules is allowed. There is no tool that runs
+  a rule: they run when a mailbox syncs, however the sync was started, because
+  what matters is when the mail arrived and not who asked for the sync.
+- **Rules do not run while Juno is locked.** The sync does not start, and a pass
+  that is running when the lock comes on records what it had not reached as
+  skipped.
+- The folders dialog of the mail settings moved onto the account page, with the
+  same ticks, and the dialog is gone.
+
+**What would reverse this:** a rule that filed something the owner did not
+mean to file, which would take it back to suggestions the owner approves. The
+history and the plain-words reading exist so that this is seen early.
+
+## 65. A component is a piece of a page made once and placed by reference
+
+A component is a letterhead, a signature block or a price table: a container
+and what is in it, made in the same canvas editor as a template and stored in
+its own table (`document_components`, with its pictures in
+`document_component_assets`, both with the five standard columns). It declares
+inputs of its own, written `{{document.<key>}}` inside it. The rules are in
+`services/document-components.ts`, the expansion is in `shared/components.ts`,
+and the agent has `templates.components.*`.
+
+**Placed, not pasted.** A template holds a container with a `component` on it,
+the component's id and a value for each of its inputs, and none of its content.
+When the template is drawn, compiled or printed, that container is replaced by a
+copy of the component's content, so editing the component changes every
+template that places it. A value is either text typed at the placement, or
+exactly `{{document.<key>}}`, which passes one of the template's own inputs
+through. Typed text never goes into the markup: its input is renamed to a key of
+its own and the text becomes that key's value, so it is escaped like anything a
+person typed and the template's list of inputs does not grow. A value left out
+falls back to the starting value of the component's input, and with none it is a
+marked gap, reported as missing in the same way a template's own unfilled input
+is. A component can place other components, one that contains itself directly or
+through another is refused when it is saved (and expanding one throws), and the
+template service refuses to save a canvas that places one that no longer exists.
+
+**Editing a component clears the review of every template that uses it.** Their
+text is what the component renders to, so it has changed under whoever read it.
+Each of those templates, including ones that use it through another component,
+is compiled again, its version moves on and its review is cleared, which is what
+an edit to the template itself does. Renaming a component or describing it
+changes no text and clears nothing.
+
+**A document already generated keeps the component as it was.** The body is
+frozen at generation, like every other part of it, and a component edited later
+changes the next document and none already made.
+
+**Deleting is refused while anything places it.** A template that points at a
+gone component cannot be printed, which is the case data.md section 9 describes
+for any row that is referenced, so the service says which templates or
+components place it and asks for them to be taken off those pages or detached
+first. Once nothing does, it is a soft delete. The agent's `templates.components.delete`
+is in the Delete row, so it parks whatever the levels say; `create`, `update`,
+`add_image` and `detach` are in Change records, like `templates.create`.
+
+**Detach copies the nodes in and drops the link.** It works on a draft, like
+the editor's other edits, so it can be undone. Text a placement was given becomes
+an input of the template with that text as its starting value, a value passed
+through stays the template's own input, and the component's pictures are copied
+into the template's own, which is what keeps them working after the component is
+deleted. A component placed inside the detached one stays placed.
+
+**Pictures belong to the component.** Every template that places it draws the
+same files, and none holds a copy until it detaches.
+
+**Where it is reached.** From the Templates screen, a Components button beside
+Import Word file opens the list, and a row opens the component in the template
+editor on a sheet of A4 with one page, which shows how wide it will be once
+placed. In a template, the design panel with nothing selected lists what can be
+placed, and a placed component has its own panel with its values, Edit the
+component and Detach. No frame draws any of this, so it follows the canvas
+editor and the Templates frame (`32:3699`).
+
+**What would reverse this:** a component edited by mistake that sent a hundred
+templates back to unreviewed would ask for a way to see what an edit changes
+before it is saved, not for copies. Copies are what detach is for.
+
+## 66. A variable in a message is a chip until the message goes
+
+Decision 55 said a block inserted into a message is ordinary text, with the value
+already in it. That is changed: in the composer an intro or an outro keeps its
+variables as **chips**, never as curly braces and never as resolved text, and
+they take their values when the message is sent or its preview is drawn.
+
+- **A draft stores the chip.** In the HTML it is a span marked
+  `data-juno-variable="first_name"`, and in the text twin it is the token
+  `{{first_name}}`, so a draft that is saved and reopened shows the chip again and
+  still follows the recipient, the client and the project if they change.
+- **The service puts the values in** (`shared/mail-variables.ts`,
+  `mail-outbox.requestSend` and `reviewForSend`). What is queued, and so what
+  every later step reads, has the value in both parts, escaped, and nothing of a
+  chip or a brace. The values are the ones `mail-blocks` works out for a block.
+- **A variable with no value stops the send.** A message is never sent with an
+  empty hole where a name should be. The service refuses, naming the variable and
+  what it comes from, and leaves the draft as it was. In the composer a chip that
+  has nothing to put in is drawn in the warning colours with a tooltip, before
+  Send is pressed.
+- **Choosing a block still checks nothing for you.** A rule skips a block whose
+  variable has no value, as before. Picked by hand, the block goes in and its chip
+  is flagged.
+- **An outro in a reply stays above the quoted original.** The design draws the
+  composer without a reply, so it neither agrees nor disagrees, and a mail
+  reader expects the sign-off under what was written, not under somebody else's
+  words.
+
+**What would reverse this:** a client who needed to see the resolved line while
+writing, rather than a flagged chip, would ask for a live preview beside the
+composer, not for the value in the text.
+
+## 67. A client has a language, and it is the client's, not the template's
+
+The new-client window draws a Language beside the VAT number, where the app had a
+Status. A client now carries `language`, one of `nl` (Dutch, "u"), `nl-je` (Dutch,
+"je"), `fr` and `en`, defaulting to `nl` (`shared/client-language.ts`, migration
+`0028_client_language`).
+
+- **It is a column on `clients`, validated in the service.** An unknown value is
+  refused there, so the window, an agent's `clients.create` and `clients.update`
+  and an import all get the same answer.
+- **The window asks for it and the status moves.** A status is set on the record,
+  beside the name, as the record frame draws it. The edit page offers both.
+- **A template can read it** as `{{ client.language }}`. Choosing the register
+  stays the template's job (writing.md section 1); the field only says which one
+  this client expects, so a person or an agent picking a template has something
+  to check against.
+
+**What would reverse this:** a second language of output actually shipping, with
+French templates, would make the field drive which template is offered instead of
+informing the choice.
+
+## 68. The agent log records reads, a page holds links and pictures, one switch for mail suggestions
+
+The Agent frames draw a Log with a "Read" outcome, so the log now records what an
+agent looked at as well as what it changed (it replaces the rule in the host that
+said reads are left out).
+
+- **A read row names the tool and who asked, and nothing else.** No argument, no
+  result, no search text, no id and no message body reaches the row
+  (`recordRead` in `services/agent-audit.ts`). It carries the result `read`, which
+  the Log draws as a "Read" badge and a muted tool name, so a look and a change
+  are told apart at a glance. The two tools an agent uses to follow its own
+  requests are not logged, since they are polled.
+- **Reads do not grow the log without limit.** A repeat of the same tool by the
+  same caller inside thirty seconds is one row, reads are purged after thirty days
+  where writes keep six months, and no more than the newest 2000 reads are kept,
+  all in the launch purge.
+- **A request is put into one sentence in the service**, per tool, the same for
+  every caller (`services/agent-summary.ts`): "Change the client Obet", not
+  "Update a client (id: ..., notes: ...)". It names the record when it can, falls
+  back to the tool's title, and never carries a secret, an id or a body. The
+  request's preview and fields still hold everything a person needs to decide.
+- **A page can hold a link and a picture.** A link is an `<a>` whose address passes
+  `safeLinkHref` (https or mailto, a bare domain gets https) when it is saved and
+  again when it is opened (`pages.openLink`). A picture is a file in the page's own
+  folder under the documents folder, stored by `services/page-images.ts` from bytes
+  the person chose in a dialog, read as PNG, JPEG, GIF or WebP from its first bytes
+  and capped at 10 MB. The block keeps the relative path `pages/<page id>/<file>`
+  and is served over `app://asset/page/...`. Only a person adds a picture; an
+  agent keeps the blocks it was given. A deleted page keeps its pictures, like any
+  document file, so the delete can be undone.
+- **Mail suggestions have one switch.** The Permissions page draws "From mail", and
+  it sets every source (calendar, project and, since decision 70, reminder).
+  Switching one source off and the others on is no longer offered in the window;
+  an install that had one off shows the switch off, and turning it on brings
+  them all back.
+
+**What would reverse this:** a client that polls reads so often that thirty days of
+them is still too many would want a count instead of rows. A need to see one
+source without the other would bring the second switch back.
+
+## 69. The settings, setup, splash and lock windows follow the frames
+
+The Settings, Setup, Splash and Lock frames draw sizes and content the app had
+not, and where the file and an older note disagree the file wins.
+
+- **Sizes.** Settings is 888 by 664 (it was 980 by 700), setup is 800 by 664 (it
+  was 760 by 620) and the splash is 420 by 300. Decisions 26 and 34 name the
+  older sizes; the reasons they give still stand.
+- **Setup asks what the frames draw.** About you (name, one email, one phone),
+  Your business (name, address, VAT number), Appearance, Lock as two switches,
+  Mail and Ready, each with Back. The first email and phone are the first entry
+  of the lists kept under Emails and phones. The establishment number is no
+  longer asked here and stays in settings. "Open Juno" starts the walkthrough,
+  which has its own way to close.
+- **The lock is one switch in settings.** Turning it on asks for a passphrase or
+  a PIN in the same dialog as before, and the sentence that the lock screen does
+  not protect the file on disk sits under the switch. The lock screen itself is
+  a centred icon, a title, one field and Unlock, with no card.
+- **Security and data is two pages.** Lock, and Backup, which now also holds the
+  agent log purge and the Recent list. Recent is no longer a page of its own.
+- **A documents folder.** New documents are written to a folder the owner picks
+  in a dialog in the main process, or to the one inside the data folder. Nothing
+  already filed moves, because every file keeps its absolute path. Page pictures
+  are stored relative to a folder, so they stay under the default one. There is
+  no tool for it, for the reason no tool takes a path (`security.md` section 2).
+- **"Keep every version" is not a setting.** A version is never replaced or
+  edited (`services/document-versions.ts`), so a switch that could turn it off
+  would be a switch that deletes history. The page says it is kept and offers no
+  control.
+- **The agent log can be purged now, by the owner only.** The button runs the
+  same retention as the launch purge. There is no tool, because an agent must not
+  be able to erase its own trail.
+- **What an agent can do shows a Kind and a Calls column.** Kind is the
+  permission row the tool belongs to; Calls is how often an agent or an
+  automation ran it, from the log.
+
+**What would reverse this:** a second place that needs a documents folder per
+client would turn the one setting into a rule. A real need to keep fewer
+versions would bring the switch back, with its own confirmation.
+
+## 70. A mail that asks for something by a day offers a reminder
+
+The Suggestion Bar frame (`84:2156`) draws a third kind, Add reminder, next to
+Add to calendar and Link to project.
+
+- **Two things are detected** (`services/suggestions-detect.ts`, `detectReminder`),
+  in Dutch and English: a request by a day, where a cue sits right in front of
+  the day ("tegen vrijdag", "graag voor 15 maart", "by Friday", "no later than
+  next Monday"), and a promise to come back ("ik laat iets weten", "I'll get back
+  to you"). The request is due that day. The promise is due on the day it names, or
+  a week after the message was written.
+- **It errs towards saying nothing.** A bare date is not a deadline. A sentence
+  with a clock time is an appointment and is left to the calendar suggestion. A
+  number that is a quantity or a price ("3-4 uur", "15%", "10.12 euro") is not a
+  day. A day that has passed, or a year-less day more than 180 days ahead (which
+  is a past day rolled into next year), is not offered. Quoted history and mail the
+  owner wrote are skipped.
+- **Accepting is the owner pressing a button**, so it creates the reminder through
+  `reminders.create` and nothing else, like the calendar suggestion does. It is
+  not an agent tool, so no permission row applies. The kind is `reminder` in
+  `mail_suggestion_states`, and Not now hides it for that message for good.
+- **The same switch.** `SuggestionSources` gains `reminders`, on by default, and
+  the one "From mail" toggle sets all three.
+
+**What would reverse this:** if the bar teaches people to ignore it, the cues are
+too wide and the list shrinks to the strongest ones.

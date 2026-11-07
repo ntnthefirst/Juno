@@ -82,7 +82,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 		return (
 			<div className="border-l-2 border-[var(--risk)] p-8 pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not open this template.</p>
-				<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{load.message}
 				</p>
 			</div>
@@ -165,20 +165,20 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 	if (created) {
 		return (
 			<FormPage title={`Use: ${template.name}`} onBack={onDone} backLabel="Done" width="form">
-				<p className="text-[length:var(--text-h3)] font-[var(--weight-semibold)]">Document created</p>
-				<p className="mt-3 text-[length:var(--text-base)]">
+				<p className="text-h3">Document created</p>
+				<p className="mt-3 text-base">
 					{created.pdfError === null
 						? `${created.title} was written to disk as a PDF.`
 						: `${created.title} was saved, but its PDF was not written.`}
 					{created.isSpecimen ? " It is marked as a specimen, because the template has not been reviewed." : ""}
 				</p>
 				{created.pdfError !== null ? (
-					<p className="mt-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+					<p className="mt-3 text-sm text-[var(--risk)]">
 						{created.pdfError} The document is in the list, so create its PDF from there.
 					</p>
 				) : null}
 				{created.missing.length > 0 ? (
-					<p className="mt-3 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="mt-3 text-sm text-[var(--ink-muted)]">
 						No value for: {created.missing.join(", ")}. The document shows a marked gap for each.
 					</p>
 				) : null}
@@ -219,7 +219,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 				<p
 					role="alert"
 					data-selectable
-					className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+					className="mb-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 				>
 					{error}
 				</p>
@@ -238,24 +238,24 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 
 			{step === "review" ? (
 				<div>
-					<p className="max-w-[62ch] text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="max-w-[62ch] text-sm text-[var(--ink-muted)]">
 						Creating writes a PDF to disk right away. A document from a template nobody has reviewed is
 						marked as a specimen and cannot be signed.
 					</p>
 
 					{preview.status === "idle" || preview.status === "running" ? (
-						<p className="mt-4 text-[length:var(--text-dense)] text-[var(--ink-muted)]">Rendering the preview.</p>
+						<p className="mt-4 text-dense text-[var(--ink-muted)]">Rendering the preview.</p>
 					) : preview.status === "error" ? (
 						<p
 							data-selectable
-							className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]"
+							className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
 						>
 							{preview.message}
 						</p>
 					) : (
 						<>
 							{preview.missing.length > 0 ? (
-								<p className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-[length:var(--text-sm)] text-[var(--risk)]">
+								<p className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 									No value for: {preview.missing.join(", ")}. Go back to fill these in, or continue and the
 									document will show a marked gap for each.
 								</p>

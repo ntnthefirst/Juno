@@ -9,19 +9,24 @@ import { BrowserWindow, dialog, shell } from "electron";
 import { copyFileSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { eq } from "drizzle-orm";
+import { expandCanvas } from "../../shared/components";
 import type {
 	DocumentCanvas,
 	DocumentCanvasPdf,
 	DocumentCanvasRender,
+	DocumentComponentRender,
 	DocumentSignature,
 	PickedPdf,
 	SignDocumentInput,
 	StampPlacement,
+	TemplateInput,
 	VersionUse,
 } from "../../shared/types";
 import { STAMP_MAX_WIDTH, STAMP_MIN_WIDTH } from "../../shared/stamp";
 import { getDb, type Db } from "../db";
 import { documentSignatures } from "../db/schema";
+import * as components from "./document-components";
+import { lookupFor } from "./document-component-lookup";
 import * as pdf from "./document-pdf";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import * as versions from "./document-versions";
@@ -123,7 +128,7 @@ export async function generate(
 	db: Db = getDb(),
 ): Promise<documents.GenerateResult & { pdfError: string | null }> {
 	const template = await templates.get(input.templateId, db);
-	const fontCss = template?.canvas ? await canvasFontCss(template.canvas) : "";
+	const fontCss = template?.canvas ? await canvasFontCss(template.canvas, template.inputs, db) : "";
 	const result = await documents.generate(input, db, { fontCss });
 
 	try {
@@ -145,9 +150,11 @@ export async function generate(
  * canvas already shows for it; a font from anywhere else is never fetched
  * (mail-fonts.ts says why).
  */
-async function canvasFontCss(canvas: DocumentCanvas): Promise<string> {
+async function canvasFontCss(canvas: DocumentCanvas, inputs: TemplateInput[], db: Db): Promise<string> {
 	const rules: string[] = [];
-	for (const font of canvas.layout.fonts) {
+	// A placed component brings the fonts it uses, so the PDF carries them too.
+	const fonts = expandCanvas(canvas, inputs, lookupFor(db)).canvas.layout.fonts;
+	for (const font of fonts) {
 		if (font.source !== "google") continue;
 		try {
 			const loaded = await loadGoogleFont({ family: font.family, weights: font.weights, italic: font.italic });
@@ -172,7 +179,7 @@ export async function renderCanvasPdf(input: DocumentCanvasRender, db: Db = getD
 	if (!canvas) throw new Error("This template is not laid out on paper. Open it in the editor to print it.");
 	const inputs = input.inputs ?? template.inputs;
 	const rendered = templates.renderCanvas(
-		{ templateId: template.id, canvas, inputs, values: input.values ?? {}, fontCss: await canvasFontCss(canvas) },
+		{ templateId: template.id, canvas, inputs, values: input.values ?? {}, fontCss: await canvasFontCss(canvas, inputs, db) },
 		db,
 	);
 	const bytes = await pdf.printPdf({
@@ -181,6 +188,22 @@ export async function renderCanvasPdf(input: DocumentCanvasRender, db: Db = getD
 		isSpecimen: template.reviewedAt === null,
 		language: template.language,
 	});
+	return { pdf: new Uint8Array(bytes), missing: rendered.missing };
+}
+
+/**
+ * A component printed on its own page with its inputs at the values given, for
+ * the editor's preview. Nothing is stored and no banner is added: it is a piece
+ * of a document and says nothing about review.
+ */
+export async function renderComponentPdf(input: DocumentComponentRender, db: Db = getDb()): Promise<DocumentCanvasPdf> {
+	const component = await components.get(input.componentId, db);
+	if (!component) throw new Error("That component no longer exists.");
+	const canvas = input.canvas ?? components.componentCanvas(component.root, component.fonts);
+	const inputs = input.inputs ?? component.inputs;
+	const fontCss = await canvasFontCss(canvas, inputs, db);
+	const rendered = components.renderAlone({ ...input, canvas, inputs, fontCss }, db);
+	const bytes = await pdf.printPdf({ title: component.name, bodyHtml: rendered.html, isSpecimen: false, language: "nl-BE" });
 	return { pdf: new Uint8Array(bytes), missing: rendered.missing };
 }
 
@@ -471,6 +494,13 @@ export async function downloadVersion(versionId: string, db: Db = getDb()): Prom
 	if (result.canceled || !result.filePath) return null;
 	copyFileSync(source, result.filePath);
 	return result.filePath;
+}
+
+/** Saves a copy of the newest version, which is what a list row stands for. */
+export async function downloadLatest(id: string, db: Db = getDb()): Promise<string | null> {
+	const latest = versions.list(id, db).find((version) => version.isLatest);
+	if (!latest) throw new Error("This document has no file yet.");
+	return downloadVersion(latest.id, db);
 }
 
 /**

@@ -6,6 +6,8 @@
  * these functions and contain nothing else. See .claude/rules/architecture.md.
  */
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { CLOSED_PROJECT_STATUS_KEYS } from "../../shared/project-status";
+import { isClientLanguage } from "../../shared/client-language";
 import { alias, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { ListClientsQuery } from "../../shared/api";
 import type { Client, ClientInput, ClientPatch, ClientSummary } from "../../shared/types";
@@ -30,19 +32,6 @@ const DEFAULT_LIMIT = 200;
 const STATUS_CHANGE_FOLD_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LIMIT = 1000;
 
-/**
- * A project counts as open unless its status says the work has ended. Matching on
- * the reference item's stable key rather than its label, because the label is the
- * user's to rename.
- */
-const CLOSED_PROJECT_STATUS_KEYS = [
-	"done",
-	"completed",
-	"delivered",
-	"cancelled",
-	"archived",
-	"lost",
-];
 
 export function sortNameFor(name: string): string {
 	return name.toLowerCase();
@@ -60,6 +49,13 @@ function escapeLike(value: string): string {
 
 function contains(column: AnySQLiteColumn, term: string): SQL {
 	return sql`lower(${column}) like ${`%${escapeLike(term)}%`} escape '\\'`;
+}
+
+function checkLanguage(language: unknown): void {
+	if (language === undefined) return;
+	if (!isClientLanguage(language)) {
+		throw new Error(`"${String(language)}" is not a client language. Use nl, nl-je, fr or en.`);
+	}
 }
 
 function checkStatus(statusId: string | null | undefined, db: Db): void {
@@ -227,15 +223,21 @@ export async function get(id: string, db: Db = getDb()): Promise<Client | null> 
 	return row ?? null;
 }
 
-export async function create(input: ClientInput, db: Db = getDb()): Promise<Client> {
+/** The synchronous body of `create`, so a caller can compose it into one transaction. */
+export function insertClient(input: ClientInput, db: Db): Client {
 	const name = requireName(input.name);
 	checkStatus(input.statusId, db);
+	checkLanguage(input.language);
 
 	return db
 		.insert(clients)
 		.values({ ...input, name, sortName: sortNameFor(name) })
 		.returning()
 		.get();
+}
+
+export async function create(input: ClientInput, db: Db = getDb()): Promise<Client> {
+	return insertClient(input, db);
 }
 
 /**
@@ -292,6 +294,7 @@ export async function update(
 	db: Db = getDb(),
 ): Promise<Client> {
 	if (patch.statusId !== undefined) checkStatus(patch.statusId, db);
+	checkLanguage(patch.language);
 
 	return db.transaction((tx) => {
 		const existing =

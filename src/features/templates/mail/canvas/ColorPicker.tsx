@@ -78,7 +78,7 @@ export function PickerPopover({ anchor, title, onClose, children }: PickerPopove
 			className="fixed z-50 flex max-h-[calc(100vh-16px)] flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-modal)]"
 		>
 			<div className="flex h-[36px] flex-none items-center border-b border-[var(--line)] pr-1 pl-3">
-				<span className="flex-1 truncate text-[length:var(--text-sm)] font-[var(--weight-semibold)]">{title}</span>
+				<span className="flex-1 truncate text-sm font-[var(--weight-semibold)]">{title}</span>
 				<button
 					type="button"
 					aria-label="Close"
@@ -119,7 +119,7 @@ function step(event: KeyboardEvent): number {
 }
 
 const THUMB =
-	"pointer-events-none absolute h-[14px] w-[14px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] shadow-[var(--shadow-popover)]";
+	"pointer-events-none absolute h-[14px] w-[14px] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-full)] border-2 border-[var(--surface)] shadow-[var(--shadow-popover)]";
 
 const CHECKERS = "repeating-conic-gradient(var(--line) 0 25%, var(--surface) 0 50%) 0 0 / 8px 8px";
 
@@ -208,7 +208,7 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 				aria-valuemax={360}
 				aria-valuenow={Math.round(hue)}
 				style={{ background: HUE_SPECTRUM }}
-				className="relative h-[12px] cursor-pointer touch-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				className="relative h-[12px] cursor-pointer touch-none rounded-[var(--radius-full)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 				{...drag((event) => setHsv({ h: fraction(event).x * 360 }))}
 				onKeyDown={(event) => {
 					const by = step(event) * 360;
@@ -229,7 +229,7 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 				aria-valuemax={100}
 				aria-valuenow={opacityPercent(value)}
 				style={{ background: `${opacityBackground(value)}, ${CHECKERS}` }}
-				className="relative h-[12px] cursor-pointer touch-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				className="relative h-[12px] cursor-pointer touch-none rounded-[var(--radius-full)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 				{...drag((event) => onChange(toHex({ ...parsed, a: fraction(event).x })))}
 				onKeyDown={(event) => {
 					const by = step(event);
@@ -243,7 +243,7 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 			</div>
 
 			<div className="flex h-[28px] items-center rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]">
-				<span className="pl-2 text-[length:var(--text-micro)] text-[var(--ink-muted)]">Hex</span>
+				<span className="pl-2 text-micro text-[var(--ink-muted)]">Hex</span>
 				<input
 					value={hex}
 					spellCheck={false}
@@ -253,7 +253,7 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 					onKeyDown={(event) => {
 						if (event.key === "Enter") commitHex();
 					}}
-					className="tabular min-w-0 flex-1 bg-transparent px-2 font-mono text-[length:var(--text-micro)] text-[var(--ink)] uppercase focus:outline-none"
+					className="tabular min-w-0 flex-1 bg-transparent px-2 font-mono text-micro text-[var(--ink)] uppercase focus:outline-none"
 				/>
 				<span aria-hidden className="h-[16px] w-px bg-[var(--line)]" />
 				<input
@@ -265,9 +265,9 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 					onKeyDown={(event) => {
 						if (event.key === "Enter") commitPercent();
 					}}
-					className="tabular w-[36px] bg-transparent pl-2 text-right text-[length:var(--text-sm)] text-[var(--ink)] focus:outline-none"
+					className="tabular w-[36px] bg-transparent pl-2 text-right text-sm text-[var(--ink)] focus:outline-none"
 				/>
-				<span className="pr-2 pl-0.5 text-[length:var(--text-micro)] text-[var(--ink-muted)]">%</span>
+				<span className="pr-2 pl-0.5 text-micro text-[var(--ink-muted)]">%</span>
 			</div>
 		</div>
 	);

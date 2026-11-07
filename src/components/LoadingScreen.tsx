@@ -24,7 +24,7 @@ export function LoadingScreen({ message }: LoadingScreenProps) {
 					className="h-16 w-16 object-contain transition-transform duration-[var(--duration-slow)] ease-[var(--ease)] [animation:juno-breathe_2.4s_ease-in-out_infinite] filter drop-shadow-[0_4px_20px_rgba(91,79,225,0.28)]"
 				/>
 				{message ? (
-					<p className="text-[length:var(--text-sm)] font-[var(--weight-medium)] text-[var(--ink-muted)]">
+					<p className="text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]">
 						{message}
 					</p>
 				) : null}

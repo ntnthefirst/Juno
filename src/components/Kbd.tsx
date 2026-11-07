@@ -20,7 +20,7 @@ export function Kbd({ keys, tone = "muted" }: KbdProps) {
 			{keys.map((key, index) => (
 				<kbd
 					key={`${index}:${key}`}
-					className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[var(--radius-sm)] border px-1 font-[var(--font-ui)] text-[length:var(--text-micro)] font-[var(--weight-medium)] leading-none ${chip}`}
+					className={`inline-flex items-center justify-center rounded-[var(--radius-sm)] border px-1.5 py-0.5 font-mono text-micro font-[var(--weight-medium)] ${chip}`}
 				>
 					{key}
 				</kbd>

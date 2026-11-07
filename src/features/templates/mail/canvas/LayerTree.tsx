@@ -171,14 +171,14 @@ function Row({ id, kind, depth, icon, label, tag, count, linked, selected, over,
 					event.preventDefault();
 					onStep(event.key === "ArrowUp" ? -1 : 1);
 				}}
-				className={`flex h-[28px] min-w-0 flex-1 items-center gap-1.5 pr-1 text-left text-[length:var(--text-sm)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
+				className={`flex h-[28px] min-w-0 flex-1 items-center gap-1.5 pr-1 text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus ${
 					expanded ? "font-[var(--weight-medium)]" : ""
 				} ${selected ? "text-[var(--accent)]" : expanded ? "text-[var(--ink)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
 			>
 				<Icon name={icon} size={12} className="flex-none" />
 				<span className="truncate">{label}</span>
 				{tag ? (
-					<span className="flex-none font-mono text-[length:var(--text-micro)] text-[var(--ink-muted)]">{tag}</span>
+					<span className="flex-none font-mono text-micro text-[var(--ink-muted)]">{tag}</span>
 				) : null}
 				{linked ? (
 					<span data-layer-linked title="Has an on-click action" className="flex-none text-[var(--ink-muted)]">
@@ -186,7 +186,7 @@ function Row({ id, kind, depth, icon, label, tag, count, linked, selected, over,
 					</span>
 				) : null}
 				{count !== undefined ? (
-					<span className="tabular ml-auto flex-none text-[length:var(--text-micro)] text-[var(--ink-muted)]">{count}</span>
+					<span className="tabular ml-auto flex-none text-micro text-[var(--ink-muted)]">{count}</span>
 				) : null}
 			</button>
 			{hidden ? <Eye name={label} hidden={hidden.value} onToggle={hidden.onChange} /> : null}

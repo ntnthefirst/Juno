@@ -76,3 +76,17 @@ export async function openEntity(entity: AgentEntityRef): Promise<void> {
 		}
 	}
 }
+
+/**
+ * Where a draft that has gone out can be read: its conversation when it has
+ * one, otherwise the mailbox. A draft that has not been sent belongs in the
+ * editor, which openEntity handles.
+ */
+export async function viewSentMail(entity: AgentEntityRef): Promise<void> {
+	const draft = await window.juno.mail.outbox.get(entity.id);
+	if (draft?.threadId) {
+		requestOpen({ kind: "thread", id: draft.threadId, messageId: null });
+		return;
+	}
+	requestOpen({ kind: "screen", screen: "mail" });
+}

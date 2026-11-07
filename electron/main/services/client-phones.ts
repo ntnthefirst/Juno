@@ -61,7 +61,8 @@ export async function listForClient(clientId: string, db: Db = getDb()): Promise
 		.all();
 }
 
-export async function create(input: ClientPhoneInput, db: Db = getDb()): Promise<ClientPhone> {
+/** The synchronous body of `create`, so a caller can compose it into one transaction. */
+export function insertPhone(input: ClientPhoneInput, db: Db): ClientPhone {
 	const phone = requirePhone(input.phone);
 
 	return db.transaction((tx) => {
@@ -75,6 +76,10 @@ export async function create(input: ClientPhoneInput, db: Db = getDb()): Promise
 		if (makePrimary) clearPrimaryOnSiblings(tx, row.clientId, row.id);
 		return row;
 	});
+}
+
+export async function create(input: ClientPhoneInput, db: Db = getDb()): Promise<ClientPhone> {
+	return insertPhone(input, db);
 }
 
 export async function update(

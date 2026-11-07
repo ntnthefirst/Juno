@@ -8,6 +8,7 @@
  * outbox can be driven end to end as well. Never loaded outside the smoke run.
  */
 import type { MailboxSource, RemoteHeader } from "./services/mail-source";
+import type { MailboxWriter } from "./services/mail-writer";
 import type { MailTransport, SentAppender } from "./services/mail-transport";
 
 interface Sample {
@@ -120,11 +121,49 @@ const SAMPLES: Sample[] = [
 				'<body><div class="hero"><h1 style="font-size: 20px">Nieuw dit najaar</h1>',
 				'<img src="https://hyge.example/track.gif" width="1" height="1">',
 				'<p>Bekijk het <a href="https://hyge.example/aanbod">volledige aanbod</a>.</p>',
+				'<p>De showroom is vrijdag om 10:00 open voor leveringen.</p>',
 				'<p onclick="alert(1)"><script>alert(1)</script>Tot binnenkort.</p></div></body></html>',
 			],
 		),
 	},
 ];
+
+/**
+ * A fourth message that is not in the mailbox until the run asks for it, so a
+ * mailbox rule has new mail to act on: everything above is older than the
+ * moment the account was connected and is history to a rule.
+ */
+let late: Sample | null = null;
+/** Messages the in-memory writer has moved out of the inbox. */
+const moved = new Set<number>();
+
+export function arriveSmokeMessage(): void {
+	const date = new Date().toISOString();
+	late = {
+		uid: 4,
+		from: { name: "Hyge nieuwsbrief", address: "news@hyge.be" },
+		subject: "Winteraanbod",
+		messageId: "<news-4@hyge.be>",
+		inReplyTo: null,
+		date,
+		flags: [],
+		hasAttachments: false,
+		source: rfc822(
+			[
+				"From: Hyge nieuwsbrief <news@hyge.be>",
+				"To: hallo@juno.test",
+				"Subject: Winteraanbod",
+				"Message-ID: <news-4@hyge.be>",
+				`Date: ${new Date(date).toUTCString()}`,
+			],
+			['Content-Type: text/plain; charset="utf-8"', "", "De winterprijzen staan online."],
+		),
+	};
+}
+
+function everything(): Sample[] {
+	return late ? [...SAMPLES, late] : SAMPLES;
+}
 
 function header(sample: Sample): RemoteHeader {
 	return {
@@ -148,6 +187,7 @@ function header(sample: Sample): RemoteHeader {
 }
 
 export async function openSmokeMailbox(): Promise<MailboxSource> {
+	let current = "INBOX";
 	return {
 		async listFolders() {
 			return [
@@ -160,20 +200,24 @@ export async function openSmokeMailbox(): Promise<MailboxSource> {
 				{ path: "Offertes", name: "Offertes", delimiter: "/", specialUse: null },
 			];
 		},
-		async openFolder() {
-			return { uidValidity: "1", uidNext: 4, exists: SAMPLES.length };
+		async openFolder(path) {
+			current = path;
+			return { uidValidity: "1", uidNext: late ? 5 : 4, exists: everything().length };
 		},
 		async searchUids() {
-			return SAMPLES.map((s) => s.uid);
+			// Only the inbox ever sees the late message, and loses what a rule moved.
+			return current === "INBOX"
+				? everything().filter((s) => !moved.has(s.uid)).map((s) => s.uid)
+				: SAMPLES.map((s) => s.uid);
 		},
 		async fetchHeaders(uids) {
-			return SAMPLES.filter((s) => uids.includes(s.uid)).map(header);
+			return everything().filter((s) => uids.includes(s.uid)).map(header);
 		},
 		async fetchFlags(uids) {
-			return SAMPLES.filter((s) => uids.includes(s.uid)).map((s) => ({ uid: s.uid, flags: s.flags }));
+			return everything().filter((s) => uids.includes(s.uid)).map((s) => ({ uid: s.uid, flags: s.flags }));
 		},
 		async fetchSource(uid) {
-			const sample = SAMPLES.find((s) => s.uid === uid);
+			const sample = everything().find((s) => s.uid === uid);
 			return sample ? Buffer.from(sample.source) : null;
 		},
 		async close() {
@@ -199,3 +243,45 @@ export const smokeTransport: MailTransport = {
 export const smokeAppender: SentAppender = async () => {
 	return;
 };
+
+/**
+ * A writer over the same in-memory mailbox, for the one smoke step that files
+ * mail through a rule. It does what a server without UIDPLUS does: a move says
+ * nothing about where the message landed.
+ */
+export async function openSmokeWriter(): Promise<MailboxWriter> {
+	let open = "INBOX";
+	return {
+		async openFolder(path) {
+			open = path;
+			return { uidValidity: "1" };
+		},
+		async createFolder() {
+			return;
+		},
+		async renameFolder() {
+			return;
+		},
+		async deleteFolder() {
+			return;
+		},
+		async setFlags(uids, add, remove) {
+			for (const sample of everything().filter((entry) => uids.includes(entry.uid))) {
+				const flags = new Set(sample.flags);
+				for (const flag of add) flags.add(flag);
+				for (const flag of remove) flags.delete(flag);
+				sample.flags = [...flags];
+			}
+		},
+		async move(uids) {
+			if (open === "INBOX") for (const uid of uids) moved.add(uid);
+			return new Map();
+		},
+		async expunge() {
+			return;
+		},
+		async close() {
+			return;
+		},
+	};
+}

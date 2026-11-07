@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, nativeTheme, shell } from "electron";
+import { app, globalShortcut, Menu, nativeTheme, shell } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -32,6 +32,8 @@ import { configureBackups, setCloseHook } from "./main/services/backup";
 import { configureDocuments } from "./main/services/document-pdf";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
+import { apply as applyDocumentsFolder, configureDocumentsFolder } from "./main/services/documents-folder";
+import { configurePageImages } from "./main/services/page-images";
 import { configureOutboxFiles, prune as pruneOutboxFiles } from "./main/services/mail-outbox-files";
 import { configureTemplateAssets } from "./main/services/document-template-assets";
 import { configureProjectStorage } from "./main/services/project-storage";
@@ -47,14 +49,19 @@ import { configureMailboxSource } from "./main/services/mail-source";
 import { configureMailboxWriter } from "./main/services/mail-writer";
 import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
+import * as mailRules from "./main/services/mail-rules";
 import * as mailSync from "./main/services/mail-sync";
+import { ensureMailBlocksSeeded } from "./main/services/mail-blocks";
 import { adoptRecordValues, ensureMailTemplatesSeeded } from "./main/services/mail-templates";
 import { configureMailTransport } from "./main/services/mail-transport";
 import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
 import { configureBackground, launchedHidden, runsInBackground, syncBackground } from "./main/background";
-import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
+import { installNotifications } from "./main/notifications";
+import * as desktop from "./main/services/desktop";
+import { badgeCount, desktopPorts, isWindows, releaseDesktop, startBadge, syncBadge, trayExists } from "./main/tray";
+import { focusMainWindow, getMainWindow, onMainWindowCreated, openMainWindow } from "./main/windows";
 import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
 import { installOnQuit, startUpdates } from "./main/services/updates";
@@ -65,6 +72,15 @@ const isDev = Boolean(process.env.JUNO_DEV);
 // A development run never touches installed data. Set before anything reads a
 // path, because app.getPath("userData") is resolved on first use and cached.
 if (isDev) app.setPath("userData", devDataDir());
+
+// Windows names a toast after this identity and sends a press on one of its
+// buttons back through it. It has to match the id the installer gives the Start
+// menu shortcut, or a toast is labelled with the raw id and its buttons have
+// nowhere to arrive. A development run keeps to itself so the two never mix.
+if (process.platform === "win32") {
+	app.setAppUserModelId(isDev ? process.execPath : "be.digistra.juno");
+	app.setToastActivatorCLSID("{45d8f049-2782-4b30-8e40-adbb6dca64f3}");
+}
 
 registerAppSchemePrivileges();
 
@@ -91,15 +107,30 @@ if (!app.requestSingleInstanceLock()) {
 		const hidden = await launchedHidden();
 		if (!process.env.JUNO_SMOKE && !hidden) showSplash();
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });
-		configureDocuments(documentsDir());
-		configureDocumentStorage(documentsDir());
+		// The folder new documents go to is the owner's to choose, and an unusable
+		// one falls back to the default. Page pictures stay under the default.
+		configurePageImages(documentsDir());
+		configureDocumentsFolder({
+			defaultDirectory: documentsDir(),
+			apply: (directory) => {
+				configureDocuments(directory);
+				configureDocumentStorage(directory);
+			},
+		});
+		await applyDocumentsFolder();
 		configureTemplateAssets(templateAssetsDir());
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
 		configureOutboxFiles(outboxFilesDir());
 		// Sync never starts while locked and stops at the next step when the lock
 		// comes on, per decision 15.
-		mailSync.configureMailSync({ mailDir: mailDir(), isPaused: () => lock.isLocked() });
+		// The mailbox rules run on the mail a sync has just pulled into the inbox,
+		// and only while unlocked (decision 64).
+		mailSync.configureMailSync({
+			mailDir: mailDir(),
+			isPaused: () => lock.isLocked(),
+			afterInbox: (accountId, db) => mailRules.runForAccount(accountId, db, { isPaused: () => lock.isLocked() }),
+		});
 		configureMailboxSource(openImapSource);
 		configureMailboxWriter(openImapWriter);
 		configureMailTransport(smtpTransport, imapSentAppender);
@@ -150,6 +181,9 @@ if (!app.requestSingleInstanceLock()) {
 		// before any window, so nothing renders a template still reading records.
 		const adopted = await adoptRecordValues(db);
 		if (adopted.converted) console.log(`Mail templates: ${adopted.converted} given inputs for record values`);
+
+		const blockSeed = await ensureMailBlocksSeeded(db);
+		if (blockSeed.created) console.log(`Intros and outros: ${blockSeed.created} created`);
 
 		const reminderSeed = await ensureRemindersSeeded(db);
 		if (reminderSeed.created) {
@@ -212,8 +246,20 @@ if (!app.requestSingleInstanceLock()) {
 			ephemeralPort: Boolean(process.env.JUNO_SMOKE),
 			onBackgroundChange: () => syncBackground(),
 		});
-		configureBackground(() => openMainWindow(isDev));
+		configureBackground(isDev);
+		// The tray, the taskbar badge and the global shortcut are Windows only, and
+		// the ports say so rather than each caller checking.
+		desktop.configure(
+			desktopPorts(isDev, async () => {
+				await syncBackground();
+				await syncBadge();
+			}),
+		);
 		await syncBackground();
+		installNotifications(isDev);
+		startBadge();
+		onMainWindowCreated((created) => created.once("ready-to-show", () => void syncBadge()));
+		await desktop.applyShortcut();
 
 		// In development only the mail host is served; the window comes from Vite.
 		registerAppScheme(isDev ? null : join(app.getAppPath(), "dist"));
@@ -296,6 +342,67 @@ if (!app.requestSingleInstanceLock()) {
 							configureMailboxSource(openSmokeMailbox);
 							configureMailTransport(smokeTransport, smokeAppender);
 
+							// A first run with no data is the first thing a new owner sees, so each
+							// screen that has an empty state is looked at before anything is seeded:
+							// Overview with "Start here" (frame 25:358), Clients (29:1426), and the
+							// others against Empty State (21:572).
+							if (process.env.JUNO_SMOKE_SHOT) {
+								const { mkdirSync, writeFileSync } = await import("node:fs");
+								const { join: joinPath } = await import("node:path");
+								mkdirSync(process.env.JUNO_SMOKE_SHOT, { recursive: true });
+								const emptyChecks: { name: string; nav: string | null; text: string[] }[] = [
+									{ name: "overview", nav: "overview", text: ["Start here", "Add your first client", "Add a reminder", "Connect a mail account"] },
+									{ name: "clients", nav: "clients", text: ["No clients yet", "Add client"] },
+									{ name: "projects", nav: "projects", text: ["No projects yet"] },
+									{ name: "reminders", nav: null, text: [] },
+									{ name: "notes", nav: "notes", text: ["No notes yet"] },
+									{ name: "documents", nav: "documents", text: ["No documents yet"] },
+									{ name: "mail", nav: "mail", text: ["No mail accounts yet"] },
+								];
+								for (const step of emptyChecks) {
+									const reached = await window.webContents.executeJavaScript(
+										`(async () => {
+											const target = ${JSON.stringify(step.nav)} === null
+												? document.querySelector("header button[aria-label=Reminders]")
+												: document.querySelector("nav button[data-nav=" + JSON.stringify(${JSON.stringify(step.nav)}) + "]");
+											if (!target) return false;
+											target.click();
+											await new Promise((r) => setTimeout(r, 900));
+											return true;
+										})()`,
+									);
+									if (!reached) throw new Error(`Smoke: no way to reach the empty ${step.name} screen`);
+									const shown = (await window.webContents.executeJavaScript(
+										`document.querySelector("main")?.textContent ?? ""`,
+									)) as string;
+									for (const text of step.text) {
+										if (!shown.includes(text)) throw new Error(`Smoke: the empty ${step.name} screen does not say "${text}"`);
+									}
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await window.webContents.executeJavaScript(
+											`Promise.race([
+												new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))),
+												new Promise((r) => setTimeout(() => r(null), 500)),
+											])`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										writeFileSync(
+											joinPath(process.env.JUNO_SMOKE_SHOT, `empty-${step.name}-${theme}.png`),
+											(await window.webContents.capturePage()).toPNG(),
+										);
+									}
+								}
+								nativeTheme.themeSource = "system";
+								await window.webContents.executeJavaScript(
+									`document.documentElement.removeAttribute("data-theme"); document.querySelector("nav button[data-nav=overview]")?.click()`,
+								);
+								console.log("SMOKE_DEMO empty states=ok");
+							}
+
 							const created = (await window.webContents.executeJavaScript(`(async () => {
 								const b = window.juno;
 								const statuses = await b.reference.getSet("client_status");
@@ -318,6 +425,17 @@ if (!app.requestSingleInstanceLock()) {
 								const running = ps.items.find((i) => i.key === "active") ?? ps.items[0];
 								await b.projects.create({ clientId: made[0].id, name: "Ontwikkelovereenkomst site", statusId: running.id, dueOn: "2026-11-14", agreedValueCents: 210000 });
 								await b.projects.create({ clientId: made[1].id, name: "Project scope", statusId: running.id, dueOn: "2026-10-03", agreedValueCents: 125000 });
+								await b.notes.create({ title: "Delivery planning", body: "Oak for the Peeters table arrives on Friday morning." });
+								await b.notes.create({ title: "Prices for the autumn", body: "Hourly rate, materials and the new delivery costs." });
+								await b.notes.create({ title: "Ideas for the stand at the fair", body: "A small stool in ash, a tray, the cutting boards." });
+								await b.notes.create({ title: "Workshop checklist", body: ["- [x] Sharpen the chisels", "- [x] Check the dust extractor", "- [ ] Order screws and glue", "- [ ] Call De Smet about the delivery", "- [ ] Clean the bench", "Remember: the oak for the Peeters table arrives on Friday. Leave space in the workshop for the planks to settle."].join("\\n") });
+								const quotePage = await b.pages.create({ title: "Oak dining table, quote", clientId: made[0].id, blocks: [
+									{ type: "heading", text: "The job" },
+									{ type: "text", text: "A solid oak dining table for six, 200 by 90 cm, with a hardwax oil finish. Delivery and fitting in the dining room are included. See the <a href='https://www.example.com/oak'>oak supplier</a>." },
+									{ type: "heading", text: "Materials and price" },
+									{ type: "table", header: ["Item", "Quantity", "Price"], rows: [["Oak planks, 38 mm", "6", "€ 540,00"], ["Hardwax oil", "2", "€ 64,00"], ["Labour", "24 h", "€ 960,00"], ["Total", "", "€ 1 564,00"]] },
+									{ type: "text", text: "" },
+								] });
 								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", addressLine1: "Kerkstraat 1", postalCode: "9000", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
 								// Phase 1: generate a document through the same bridge the
 								// interface uses, so the smoke run covers it too.
@@ -327,8 +445,8 @@ if (!app.requestSingleInstanceLock()) {
 								const seededTemplates = await b.templates.list();
 								if (seededTemplates.length !== 1) throw new Error("Smoke: a first install should hold exactly one document template, found " + seededTemplates.length);
 								const tpl = seededTemplates[0];
-								if (tpl.isSystem || tpl.reviewedAt !== null || !tpl.layout || tpl.layout.pages.length < 2 || tpl.inputs.length === 0) {
-									throw new Error("Smoke: the example is not an unreviewed, paged template that asks for inputs: " + JSON.stringify({ isSystem: tpl.isSystem, reviewedAt: tpl.reviewedAt, pages: tpl.layout?.pages.length, inputs: tpl.inputs.length }));
+								if (tpl.isSystem || tpl.reviewedAt !== null || !tpl.canvas || tpl.canvas.layout.children.length < 2 || tpl.inputs.length === 0) {
+									throw new Error("Smoke: the example is not an unreviewed template on the canvas that asks for inputs: " + JSON.stringify({ isSystem: tpl.isSystem, reviewedAt: tpl.reviewedAt, pages: tpl.canvas?.layout.children.length, inputs: tpl.inputs.length }));
 								}
 								const exampleValues = Object.fromEntries(tpl.inputs.map((input) => [input.key, input.defaultValue ?? "het ontwerp en de bouw van een website"]));
 								const gen = await b.documents.generate({
@@ -380,6 +498,47 @@ if (!app.requestSingleInstanceLock()) {
 								await b.templates.update(longTemplate.id, {
 									canvas: { ...longTemplate.canvas, layout: { ...longTemplate.canvas.layout, children: [{ ...longPage, children: [logoBlock, ...paragraphs] }] } },
 								});
+								// A component placed in a template (decision 65): a letterhead that
+								// asks for a reference, with a picture it keeps, placed with a value.
+								// Its text has to reach the template's PDF and its generated document.
+								const letterhead = await b.templates.components.create({
+									name: "Briefhoofd",
+									inputs: [{ key: "reference", label: "Referentie", kind: "text", required: true }],
+									root: {
+										id: "smoke-letterhead", kind: "container", tag: "div", hidden: false, name: "Briefhoofd", alignSelf: "auto", grow: 0,
+										layout: { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 4, wrap: false },
+										box: { ...scopeText.box }, actions: [],
+										children: [{ ...scopeText, id: "smoke-letterhead-text", html: "<strong>Juno</strong><br>Onze referentie: {{document.reference}}" }],
+									},
+								});
+								const letterheadLogo = await b.templates.components.assets.add({ componentId: letterhead.id, fileName: "logo.png", data: pixel });
+								await b.templates.components.update(letterhead.id, {
+									root: { ...letterhead.root, children: [{ ...letterhead.root.children[0], id: "smoke-letterhead-text" }, { ...logoBlock, id: "smoke-letterhead-logo", src: letterheadLogo.token }] },
+								});
+								const placedTemplate = await b.templates.create({ name: "Offerte met briefhoofd" });
+								const placedPage = placedTemplate.canvas.layout.children[0];
+								await b.templates.update(placedTemplate.id, {
+									canvas: {
+										...placedTemplate.canvas,
+										layout: {
+											...placedTemplate.canvas.layout,
+											children: [{
+												...placedPage,
+												children: [
+													{ ...letterhead.root, id: "smoke-placement", name: "Briefhoofd", children: [], component: { componentId: letterhead.id, values: { reference: "OFF-2026-14" } } },
+													{ ...scopeText, id: "smoke-placed-text", html: "Omvang: {{document.omvang}}" },
+												],
+											}],
+										},
+									},
+									inputs: [{ key: "omvang", label: "Omvang", kind: "textarea", required: true }],
+								});
+								const placedPdf = await b.templates.renderPdf({ templateId: placedTemplate.id, values: { omvang: "Een website" } });
+								if (placedPdf.missing.length !== 0) throw new Error("Smoke: a template with a component left gaps: " + placedPdf.missing.join(", "));
+								const placedDocument = await b.documents.generate({ clientId: made[0].id, templateId: placedTemplate.id, extras: { omvang: "Een website" } });
+								if (placedDocument.pdfError !== null || !placedDocument.document.bodyHtml.includes("Onze referentie: OFF-2026-14") || !placedDocument.document.bodyHtml.includes("data:image/png;base64,")) {
+									throw new Error("Smoke: the component did not reach the generated document: " + placedDocument.pdfError);
+								}
 								const paperDocument = await b.documents.generate({ clientId: made[0].id, templateId: paperTemplate.id, extras: { omvang: "Een website" } });
 								if (paperDocument.pdfError !== null || !paperDocument.document.bodyHtml.includes("Omvang: Een website")) {
 									throw new Error("Smoke: a canvas template did not generate its document: " + paperDocument.pdfError);
@@ -504,9 +663,63 @@ if (!app.requestSingleInstanceLock()) {
 								await b.projects.commands.create({ projectId: own.id, label: "Dev server", command: "npm run dev" });
 								await b.projects.commands.create({ projectId: own.id, label: "Database", command: "docker compose up -d", kind: "docker" });
 
-								return { clients: (await b.clients.list()).length, projectId: own.id };
-							})()`)) as { clients: number; projectId: string };
+								return { clients: (await b.clients.list()).length, projectId: own.id, quotePageId: quotePage.document.id };
+							})()`)) as { clients: number; projectId: string; quotePageId: string };
 							console.log(`SMOKE_DEMO clients=${created.clients}`);
+
+						{
+							// A picture is a file the page keeps, stored the way the picker
+							// stores it, and a block names it by a relative path.
+							const { deflateSync } = await import("node:zlib");
+							const crcTable = Array.from({ length: 256 }, (_, n) => {
+								let c = n;
+								for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+								return c >>> 0;
+							});
+							const crc = (bytes: Buffer) => {
+								let c = 0xffffffff;
+								for (const byte of bytes) c = crcTable[(c ^ byte) & 0xff]! ^ (c >>> 8);
+								return (c ^ 0xffffffff) >>> 0;
+							};
+							const chunk = (type: string, data: Buffer) => {
+								const head = Buffer.alloc(8);
+								head.writeUInt32BE(data.length, 0);
+								head.write(type, 4, "ascii");
+								const tail = Buffer.alloc(4);
+								tail.writeUInt32BE(crc(Buffer.concat([head.subarray(4), data])), 0);
+								return Buffer.concat([head, data, tail]);
+							};
+							const width = 360;
+							const height = 120;
+							const rows = Buffer.alloc((width * 3 + 1) * height);
+							for (let y = 0; y < height; y += 1) {
+								for (let x = 0; x < width; x += 1) {
+									const at = y * (width * 3 + 1) + 1 + x * 3;
+									rows[at] = 150 + Math.round((x / width) * 60);
+									rows[at + 1] = 110 + Math.round((y / height) * 50);
+									rows[at + 2] = 70;
+								}
+							}
+							const header = Buffer.alloc(13);
+							header.writeUInt32BE(width, 0);
+							header.writeUInt32BE(height, 4);
+							header[8] = 8;
+							header[9] = 2;
+							const png = Buffer.concat([
+								Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+								chunk("IHDR", header),
+								chunk("IDAT", deflateSync(rows)),
+								chunk("IEND", Buffer.alloc(0)),
+							]);
+							const pageImages = await import("./main/services/page-images");
+							const pageService = await import("./main/services/pages");
+							const picture = pageImages.store(created.quotePageId, { fileName: "Oak table.png", data: new Uint8Array(png) });
+							const current = await pageService.get(created.quotePageId);
+							const at = current.blocks.findIndex((block) => block.type === "table");
+							await pageService.update(created.quotePageId, {
+								blocks: [...current.blocks.slice(0, at), picture, ...current.blocks.slice(at)],
+							});
+						}
 
 							// Two files on the project, added through the service rather than
 							// the bridge: the bridge's only way in is a file picker, on purpose
@@ -604,6 +817,15 @@ if (!app.requestSingleInstanceLock()) {
 										bodyText: "Hallo.",
 									});
 									await callTool("mail.outbox.cancel", { id: spare.id }, { source: "mcp" });
+									// One sent by hand while the request waited (it closes on its own),
+									// one rejected, and two reads, so the answered cards and the log show
+									// every kind of row.
+									await callTool("mail.send", { id: spare.id }, { source: "mcp" });
+									agentActions.closeForSentDraft(spare.id);
+									const declined = (await callTool("clients.update", { id: target.id, notes: "Call back on Monday." }, { source: "mcp" })) as { actionId: string };
+									await agentActions.reject(declined.actionId);
+									await callTool("clients.list", {}, { source: "mcp" });
+									await callTool("reminders.list", {}, { source: "mcp" });
 									console.log("SMOKE_DEMO agent requests with records and a mail preview");
 								}
 							}
@@ -679,11 +901,10 @@ if (!app.requestSingleInstanceLock()) {
 							{
 								const { statSync, readFileSync: readPdfBytes } = await import("node:fs");
 								const generatedRows = await (await import("./main/services/documents")).list({});
-								// The example is the one laid out as pages; the one on paper is
-								// checked on its own below.
-								const generated = generatedRows.find(
-									(row) => row.sourceKind === "generated" && row.pdfPath !== null && !row.bodyHtml.includes("juno-sheets"),
-								);
+								// Both generated documents are laid out on paper now: the example,
+								// which is two pages, and the small one the walk made itself, which
+								// is one.
+								const generated = generatedRows.find((row) => row.sourceKind === "generated" && row.pdfPath !== null);
 								if (!generated?.pdfPath) throw new Error("Smoke: no generated document has a PDF");
 								const size = statSync(generated.pdfPath).size;
 								if (size < 2000) {
@@ -693,22 +914,25 @@ if (!app.requestSingleInstanceLock()) {
 								if (head !== "%PDF-") {
 									throw new Error(`Smoke: the generated file starts with ${head}, not a PDF header`);
 								}
-								// The example is two pages, and the specimen banner sits above them. A
-								// page that spills onto a third sheet is a layout fault the bytes above
-								// would never show.
-								const { PDFDocument } = await import("pdf-lib");
-								const sheets = (await PDFDocument.load(readPdfBytes(generated.pdfPath))).getPageCount();
-								if (sheets !== 2) throw new Error(`Smoke: the example printed on ${sheets} sheets, not its two pages`);
-								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheets}`);
 								// A template on paper prints one sheet per page, at the paper's
-								// size, whatever A4 the printer was told to default to.
-								const onPaper = generatedRows.find((row) => row.pdfPath !== null && row.bodyHtml.includes("juno-sheets"));
-								if (!onPaper?.pdfPath) throw new Error("Smoke: the document on paper has no PDF");
-								const paperPdf = await PDFDocument.load(readPdfBytes(onPaper.pdfPath));
-								const { width: sheetWidth, height: sheetHeight } = paperPdf.getPage(0).getSize();
-								if (paperPdf.getPageCount() !== 1 || Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842) {
-									throw new Error(`Smoke: the document on paper printed ${paperPdf.getPageCount()} sheets of ${sheetWidth} x ${sheetHeight}, not one A4`);
+								// size, whatever A4 the printer was told to default to. The example
+								// is two pages, and one that ran onto a third sheet is a layout
+								// fault the bytes above would never show.
+								const { PDFDocument } = await import("pdf-lib");
+								const onPaper = generatedRows.filter((row) => row.pdfPath !== null && row.bodyHtml.includes("juno-sheets"));
+								const sheetCounts: number[] = [];
+								for (const row of onPaper) {
+									const paperPdf = await PDFDocument.load(readPdfBytes(row.pdfPath!));
+									const { width: sheetWidth, height: sheetHeight } = paperPdf.getPage(0).getSize();
+									if (Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842) {
+										throw new Error(`Smoke: a document on paper printed sheets of ${sheetWidth} x ${sheetHeight}, not A4`);
+									}
+									sheetCounts.push(paperPdf.getPageCount());
 								}
+								if (sheetCounts.sort().join() !== "1,1,2") {
+									throw new Error(`Smoke: the example, the small document and the one with a component should print on 2, 1 and 1 sheets, got ${sheetCounts.join(", ")}`);
+								}
+								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheetCounts.join("+")}`);
 							}
 							window.webContents.reload();
 							await new Promise((r) => {
@@ -755,6 +979,32 @@ if (!app.requestSingleInstanceLock()) {
 							 * The smoke script counts identical images afterwards and says so.
 							 * Read that line before using any of these as evidence.
 							 */
+							/**
+							 * The new-record windows (decision 60) open over the page this script
+							 * drives, so a step that presses New or Add cannot see them from inside
+							 * the page. The addresses they loaded are kept here, and a step asks for
+							 * the one it expects and closes it.
+							 */
+							const newRecordUrls: string[] = [];
+							app.on("browser-window-created", (_event, created) => {
+								created.webContents.on("did-finish-load", () => {
+									const url = created.webContents.getURL();
+									if (url.includes("#/new/")) newRecordUrls.push(url);
+								});
+							});
+							const expectNewRecordWindow = async (kind: string, what: string, fragment = "") => {
+								for (let waited = 0; waited < 5000; waited += 250) {
+									if (newRecordUrls.some((url) => url.includes(`#/new/${kind}`) && url.includes(fragment))) break;
+									await new Promise((resolve) => setTimeout(resolve, 250));
+								}
+								if (!newRecordUrls.some((url) => url.includes(`#/new/${kind}`) && url.includes(fragment))) {
+									throw new Error(`Smoke: ${what} did not open the new ${kind} window`);
+								}
+								newRecordUrls.length = 0;
+								(await import("./main/windows")).closeNewRecordWindow(false);
+								await new Promise((resolve) => setTimeout(resolve, 400));
+							};
+
 							const capture = async (contents: Electron.WebContents) => {
 								await contents.executeJavaScript(
 									`Promise.race([
@@ -831,7 +1081,7 @@ if (!app.requestSingleInstanceLock()) {
 								// Walks the steps rather than skipping them, so each one is
 								// photographed and each one's own controls are proven to advance.
 								const steps = [
-									{ id: "you", label: "Your name" },
+									{ id: "you", label: "About you" },
 									{ id: "business", label: "Your business" },
 									{ id: "appearance", label: "Appearance" },
 									{ id: "lock", label: "Lock" },
@@ -889,7 +1139,7 @@ if (!app.requestSingleInstanceLock()) {
 								// offers itself on a first run or an unseen upgrade.
 								const startedTour = (await flow.executeJavaScript(
 									`(() => {
-										const tour = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Take the walkthrough");
+										const tour = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Open Juno");
 										if (!tour) return false;
 										tour.click();
 										return true;
@@ -979,9 +1229,11 @@ if (!app.requestSingleInstanceLock()) {
 										"Event form",
 										"Mail",
 										"Drafts",
+										"Notes",
 										"Documents",
+										"Page",
 										"Agent",
-										"Connection",
+										"Agent log",
 										"Mail templates",
 										"Document templates",
 									]
@@ -998,6 +1250,8 @@ if (!app.requestSingleInstanceLock()) {
 								const sidebarEntry =
 									screen === "Client record"
 										? "Clients"
+										: screen === "Page"
+											? "Documents"
 										: screen === "Project record" || screen === "Projects as a list"
 											? "Projects"
 											: screen === "Drafts" || screen === "Mail templates"
@@ -1008,7 +1262,7 @@ if (!app.requestSingleInstanceLock()) {
 														? "Overview"
 														: screen === "Week" || screen === "Event form"
 															? "Calendar"
-															: screen === "Connection"
+															: screen === "Agent log"
 																? "Agent"
 																: screen;
 								// Matched on data-nav, never on the label: the rail renders icons only.
@@ -1035,7 +1289,7 @@ if (!app.requestSingleInstanceLock()) {
 								if (!clicked) throw new Error(`Smoke: no sidebar entry for ${screen}`);
 								await new Promise((r) => setTimeout(r, 800));
 								const inPage: Record<string, string> = {
-									"Reminders": "All reminders",
+									"Reminders": "Reminders",
 									"Document templates": "Templates",
 								};
 								const route = inPage[screen];
@@ -1060,6 +1314,71 @@ if (!app.requestSingleInstanceLock()) {
 									writeFileSync(joinPath(shotDir, `mail-styled-pane.png`), (await capture(window.webContents)).toPNG());
 									if (!(await pressText("Manage"))) throw new Error("Smoke: no Manage in the styled mail column");
 								}
+								if (screen === "Notes") {
+									// The first note opens beside the list, and ticking a line saves it.
+									const shown = (await window.webContents.executeJavaScript(
+										`(async () => {
+											await new Promise((r) => setTimeout(r, 500));
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Workshop checklist")) return "the note is not listed";
+											if (!main.querySelector("input[aria-label=Title]")) return "no note is open";
+											const boxes = main.querySelectorAll("section[aria-label=Note] input[type=checkbox]");
+											if (boxes.length < 5) return "the checklist has " + boxes.length + " boxes";
+											const search = main.querySelector("input[aria-label='Search notes']");
+											if (!search) return "no search field";
+											return "ok";
+										})()`,
+									)) as string;
+									if (shown !== "ok") throw new Error(`Smoke: notes ${shown}`);
+								}
+								if (screen === "Page") {
+									// A page opens from the Documents list, with its table, and a slash
+									// on the empty last line draws the block menu.
+									const opened = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											await wait(500);
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Oak dining table, quote"));
+											if (!row) return "the page is not in the list";
+											if (!row.closest("li").textContent.includes("Page")) return "the row does not say it is a page";
+											row.click();
+											await wait(900);
+											const main = document.querySelector("main");
+											if (!main.querySelector("[role=toolbar][aria-label=Format]")) return "no format toolbar";
+											if (!main.querySelector("table")) return "the table is not drawn";
+											// The toolbar draws a link and a picture button, a link in the text is a link,
+											// and the picture is the file the page keeps.
+											if (!main.querySelector("[role=toolbar] button[aria-label=Link]")) return "no link button";
+											if (!main.querySelector("[role=toolbar] button[aria-label=Picture]")) return "no picture button";
+											if (!main.querySelector("a[href='https://www.example.com/oak']")) return "the link in the text is gone";
+											const picture = main.querySelector("figure img");
+											if (!picture || !picture.src.startsWith("app://asset/page/")) return "the picture is not drawn from the page's folder";
+											await new Promise((r) => (picture.complete ? r() : picture.addEventListener("load", r, { once: true })));
+											if (picture.naturalWidth !== 360) return "the picture did not load";
+											// Find reaches a table cell, which is an input and not text.
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+											await wait(300);
+											const findInput = document.querySelector("input[aria-label='Find']") ?? [...document.querySelectorAll("main input")].find((el) => /find/i.test(el.getAttribute("aria-label") ?? "") || /find/i.test(el.placeholder ?? ""));
+											if (!findInput) return "the find bar did not open";
+											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+											setValue.call(findInput, "hardwax");
+											findInput.dispatchEvent(new Event("input", { bubbles: true }));
+											await wait(500);
+											if (!main.querySelector("input[data-find]")) return "find did not reach the table cell";
+											document.querySelector("button[aria-label='Close find']")?.click();
+											await wait(300);
+											const lines = [...main.querySelectorAll("[data-block-text]")];
+											const last = lines[lines.length - 1];
+											last.focus();
+											document.execCommand("insertText", false, "/");
+											await wait(400);
+											if (!main.querySelector("[role=listbox][aria-label='Add a block']")) return "the slash menu did not open";
+											return "ok";
+										})()`,
+									)) as string;
+									if (opened !== "ok") throw new Error(`Smoke: page ${opened}`);
+								}
 								if (screen === "Agent") {
 									// The requests tab is the default, and the pending request from
 									// the agent call above has to be on it with its arguments.
@@ -1072,6 +1391,13 @@ if (!app.requestSingleInstanceLock()) {
 											// the records it names as buttons that open them, not ids.
 											if (!text.includes("Offerte website") || !text.includes("Beste Laura")) return "the mail to send is not shown";
 											if (!document.querySelector("main button[title^='Open ']")) return "no record is named as a link";
+											// What has been answered stays in the list, with the sentence for each and, for a
+											// mail the person sent, a way to read it.
+											if (!text.includes("Answered")) return "no answered section";
+											if (!text.includes("You rejected it at")) return "the rejected request is not answered";
+											if (!text.includes("the request closed on its own")) return "the closed request is not answered";
+											if (![...document.querySelectorAll("main button")].some((el) => el.textContent.trim() === "View mail")) return "no View mail on the closed request";
+											if (text.includes("(id:") || /[0-9a-f]{8}-[0-9a-f]{4}-/.test(text.split("Technical details")[0])) return "a raw id is on a request";
 											const approve = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Approve");
 											return approve ? "ok" : "no approve button";
 										})()`,
@@ -1087,7 +1413,7 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											await new Promise((r) => setTimeout(r, 400));
 											const main = document.querySelector("main");
-											if (!main.querySelector("[role=group][aria-label=Layout]")) return "no layout switcher";
+											if (!document.querySelector("[role=group][aria-label=Layout]")) return "no layout switcher";
 											const cards = main.querySelectorAll("ul > li > button");
 											if (cards.length < 3) return "only " + cards.length + " cards";
 											const image = main.querySelector("ul img");
@@ -1108,7 +1434,7 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const main = document.querySelector("main");
-											const group = main.querySelector("[role=group][aria-label=Layout]");
+											const group = document.querySelector("[role=group][aria-label=Layout]");
 											if (!group) return "no layout switcher";
 											const button = (label) => [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === label);
 											if (!button("List")) return "no list layout";
@@ -1133,10 +1459,18 @@ if (!app.requestSingleInstanceLock()) {
 									const [filedThread] = await smokeThreads.listThreads({ limit: 1 });
 									if (!ownProject || !filedThread) throw new Error("Smoke: no project or thread to file together");
 									await smokeThreads.linkProject(filedThread.id, ownProject.id);
+									const smokeTime = await import("./main/services/time-entries");
+									for (const [day, minutes, note] of [
+										["2026-09-12", 60, "Contract and measurements"],
+										["2026-09-24", 240, "Assembly"],
+										["2026-10-02", 180, "Delivery and fitting"],
+									] as const) {
+										await smokeTime.create({ projectId: ownProject.id, startedAt: `${day}T09:00:00.000Z`, durationMinutes: minutes, note });
+									}
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const group = document.querySelector("main [role=group][aria-label=Layout]");
+											const group = document.querySelector("[role=group][aria-label=Layout]");
 											const cards = group ? [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Cards") : null;
 											if (cards) { cards.click(); await wait(400); }
 											const own = [...document.querySelectorAll("main ul > li > button")].find((el) => el.textContent.includes("Juno"));
@@ -1146,31 +1480,66 @@ if (!app.requestSingleInstanceLock()) {
 											const main = document.querySelector("main");
 											if (!main.textContent.includes("Repository")) return "the links are not shown";
 											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
-											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the project";
+											const tab = (name) => [...main.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === name);
+											for (const name of ["Notes", "Mail", "Timeline", "Time", "Calendar"]) {
+												if (!tab(name)) return "no " + name + " tab";
+											}
+											if (!main.querySelector("button[aria-label='Add to this project']")) return "no Add menu";
 											const notes = main.querySelector("[aria-label='Project notes']");
 											if (!notes) return "no notes editor on the project";
 											if (!notes.textContent.includes("Release notes")) return "the notes editor does not show the stored notes";
+											if (!main.textContent.includes("Details")) return "no details column";
 											if (!main.querySelector("button[aria-label='Add a document']")) return "no documents section on the project";
-											const mailRow = [...main.querySelectorAll("section h2")].find((el) => el.textContent.trim() === "Mail");
-											if (!mailRow) return "no mail section on the project";
-											if (!mailRow.closest("section").textContent.includes(${JSON.stringify(filedThread.subject)})) return "the filed conversation is not listed on the project";
-											const addDate = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add date");
-											if (!addDate) return "no add date button on the project";
-											addDate.click();
-											await wait(600);
-											if (!document.querySelector("main").textContent.includes("New event")) return "the date form did not open from the project";
-											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											if (!main.textContent.includes("Repository")) return "the links are not shown";
+											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
+											if (main.textContent.includes("Dates and reminders")) return "the old dates section is still on the first tab";
+
+											// The Mail tab lists the filed conversation.
+											tab("Mail").click();
 											await wait(700);
-											if (!document.querySelector("main").textContent.includes("Dates and reminders")) return "back did not return to the project";
-											const start = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start");
-											if (!start) return "no start button";
-											const files = main.textContent.includes("Files");
-											if (!files) return "no files section";
-											// The three dots say where the files are kept, which is the
-											// one answer this screen exists to give.
-											const more = main.querySelector("button[aria-label='More project actions']");
-											if (!more) return "no actions menu";
-											more.click();
+											if (!main.textContent.includes("Linked mail")) return "no linked mail card";
+											if (!main.textContent.includes(${JSON.stringify(filedThread.subject)})) return "the filed conversation is not listed on the project";
+											if (!main.textContent.includes("Mail stays in your mailbox")) return "no mailbox line on the mail tab";
+
+											// The Time tab: the entries the smoke wrote, and the timer.
+											tab("Time").click();
+											await wait(700);
+											if (!main.textContent.includes("Time entries")) return "no time entries card";
+											if (!main.textContent.includes("Delivery and fitting")) return "the time entries are not listed";
+											if (![...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start timer")) return "no start timer button";
+
+											// The Timeline tab reads the records back.
+											tab("Timeline").click();
+											await wait(700);
+											if (!main.textContent.includes("Project created")) return "no created line on the timeline";
+											if (!main.textContent.includes("Time entry:")) return "no time entry on the timeline";
+
+											// The Calendar tab: adding an event opens a page, and back returns to the tab.
+											tab("Calendar").click();
+											await wait(700);
+											const addEvent = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add event");
+											if (!addEvent) return "no add event button on the project";
+											// Adding an event opens the new event window (decision 60), which
+											// the main process checks after this step. The tab stays put.
+											addEvent.click();
+											await wait(900);
+											// The window is modal and takes focus, which closes any menu the
+											// page opens next, so it is closed here once it has been seen.
+											await window.juno.window.closeNewRecord(false);
+											await wait(400);
+											if (!document.querySelector("main").textContent.includes("Events and reminders linked to this project")) return "the calendar tab did not stay after adding an event";
+											document.querySelector("main [role=tab]").click();
+											await wait(500);
+
+											// The "..." and Add menus are the platform's now (decision 59), drawn by
+											// the main process, so the page can only prove the two buttons are there.
+											if (!document.querySelector("header button[aria-label='More project actions']")) return "no actions menu";
+											if (!main.querySelector("button[aria-label='Add to this project']")) return "no add menu";
+
+											// Where the files are kept is one answer this screen still gives, from the files section.
+											const otherWays = main.querySelector("button[aria-label='Other ways to add a file']");
+											if (!otherWays) return "no other ways to add a file";
+											otherWays.click();
 											await wait(300);
 											const where = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Where the files are kept");
 											if (!where) return "the menu does not say where the files are";
@@ -1183,26 +1552,40 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: project record ${opened}`);
-									// The conversations filed under the project, in both themes, with
-									// the storage dialog closed and the section scrolled into view.
+									await expectNewRecordWindow("event", "Add event on a project", "projectId=");
+									// Every tab and both menus, in both themes, with the storage dialog
+									// closed first. The timer runs for the Time tab shots, so the title bar
+									// pill is in them, and it is stopped again afterwards.
 									await window.webContents.executeJavaScript(
 										`(async () => {
 											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await new Promise((r) => setTimeout(r, 500));
-											const heading = [...document.querySelectorAll("main section h2")].find((el) => el.textContent.trim() === "Mail");
-											heading?.scrollIntoView({ block: "start" });
-											await new Promise((r) => setTimeout(r, 400));
 										})()`,
 									);
+									const timeService = await import("./main/services/time-entries");
 									if (shotDir) {
-										for (const theme of ["light", "dark"] as const) {
-											nativeTheme.themeSource = theme;
-											await window.webContents.executeJavaScript(
-												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
-											);
-											await new Promise((r) => setTimeout(r, 400));
-											writeFileSync(joinPath(shotDir, `project-mail-${theme}.png`), (await capture(window.webContents)).toPNG());
-										}
+										const shoot = async (name: string, before: string, after = "") => {
+											for (const theme of ["light", "dark"] as const) {
+												nativeTheme.themeSource = theme;
+												await window.webContents.executeJavaScript(
+													`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+												);
+												await window.webContents.executeJavaScript(`(async () => { ${before} })()`);
+												await new Promise((r) => setTimeout(r, 450));
+												writeFileSync(joinPath(shotDir, `project-${name}-${theme}.png`), (await capture(window.webContents)).toPNG());
+												if (after) await window.webContents.executeJavaScript(`(async () => { ${after} })()`);
+											}
+										};
+										const clickTab = (label: string) =>
+											`const t = [...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === ${JSON.stringify(label)}); t.click(); await new Promise((r) => setTimeout(r, 500));`;
+										await shoot("notes", clickTab("Notes"));
+										await shoot("mail", clickTab("Mail"));
+										await shoot("timeline", clickTab("Timeline"));
+										await shoot("calendar", clickTab("Calendar"));
+										await timeService.start(ownProject.id, "Smoke timer");
+										await shoot("time", clickTab("Time"));
+										await timeService.stop();
+										// The "..." and Add menus are native (decision 59), so they are not photographed.
 									}
 								}
 								if (screen === "Client record") {
@@ -1226,12 +1609,13 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the client";
 											const addReminder = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add reminder");
 											if (!addReminder) return "no add reminder button on the client";
+											// Adding a reminder opens the new reminder window, prefilled with
+											// the client, and the client stays where it is.
 											addReminder.click();
-											await new Promise((r) => setTimeout(r, 600));
-											if (!document.querySelector("main").textContent.includes("New reminder")) return "the reminder form did not open from the client";
-											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await new Promise((r) => setTimeout(r, 700));
-											if (!document.querySelector("main [role=tablist]")) return "back did not return to the client";
+											await new Promise((r) => setTimeout(r, 900));
+											await window.juno.window.closeNewRecord(false);
+											await new Promise((r) => setTimeout(r, 400));
+											if (!document.querySelector("main [role=tablist]")) return "the client did not stay after adding a reminder";
 											const timeline = [...main.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().startsWith("Timeline"));
 											if (!timeline) return "no timeline tab";
 											timeline.click();
@@ -1257,28 +1641,48 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: client record ${opened}`);
+									await expectNewRecordWindow("reminder", "Add reminder on a client", "clientId=");
+									// The other four tabs of the record (frames 90:8345, 90:8591, 90:8822
+									// and 90:9064), then back to the timeline, which the shot below shows.
+									for (const tab of ["Overview", "Projects", "Documents", "Mail", "Timeline"]) {
+										const switched = await window.webContents.executeJavaScript(
+											`(async () => {
+												const el = [...document.querySelectorAll("main [role=tab]")].find((t) => t.textContent.trim().startsWith(${JSON.stringify(tab)}));
+												if (!el) return false;
+												el.click();
+												await new Promise((r) => setTimeout(r, 800));
+												return true;
+											})()`,
+										);
+										if (!switched) throw new Error(`Smoke: client record has no ${tab} tab`);
+										if (tab === "Timeline") break;
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											const image = await capture(window.webContents);
+											writeFileSync(joinPath(shotDir, `client-tab-${tab.toLowerCase()}-${theme}.png`), image.toPNG());
+										}
+									}
 								}
-								if (screen === "Connection") {
+								if (screen === "Agent log") {
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											const tab = [...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim() === "Connection");
-											if (!tab) return "no connection tab";
-											tab.click();
+											const tabs = [...document.querySelectorAll("[role=tab]")].map((el) => el.textContent.trim().replace(/\\d+$/, ""));
+											if (tabs.join(",") !== "Requests,Log,Automations") return "the tabs are " + tabs.join(",");
+											[...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().startsWith("Log")).click();
 											await new Promise((r) => setTimeout(r, 700));
 											const main = document.querySelector("main");
-											if (!main.textContent.includes("Listening")) return "not listening";
-											if (!main.textContent.includes("http://127.0.0.1:")) return "no server address";
-											const power = main.querySelector("button[role=switch]");
-											if (!power || power.getAttribute("aria-checked") !== "true") return "the server switch is not on";
-											// A client is given the URL and nothing else, so the page says to
-											// add it, and Claude Desktop, which cannot take one, has its own row.
-											if (!main.textContent.includes("Add the server URL")) return "no instruction to add the URL";
-											if (!main.textContent.includes("Claude Desktop")) return "no Claude Desktop row";
-											if (main.querySelector("button[role=radio]")) return "a route switch is still there";
+											if (!main.textContent.includes("kept for six months")) return "no log intro";
+											const badges = [...main.querySelectorAll("tbody span")].map((el) => el.textContent.trim());
+											if (!badges.includes("Read")) return "the log does not show a read";
+											if (!badges.includes("Rejected")) return "the log does not show the rejected request";
 											return "ok";
 										})()`,
 									);
-									if (opened !== "ok") throw new Error(`Smoke: agent connection ${opened}`);
+									if (opened !== "ok") throw new Error(`Smoke: agent log ${opened}`);
 
 										// The prompt a client's first connection raises, answered the
 										// way a person answers it: the code is typed, not clicked. The
@@ -1343,17 +1747,39 @@ if (!app.requestSingleInstanceLock()) {
 									// A notes field is CodeMirror now, not a textarea, and the only
 									// way to know typing into one still reaches the document is to
 									// type into one. The client form is the simplest place that has it.
-									const noted = (await window.webContents.executeJavaScript(
+									// The client's "..." is the platform's menu (decision 59), which a page
+									// cannot click, so Menu.popup is stood in for and chooses Edit.
+									const realClientPopup = Menu.prototype.popup;
+									Menu.prototype.popup = function (this: Menu, options) {
+										this.items.find((item) => item.label === "Edit")?.click();
+										options?.callback?.();
+									};
+									let noted: string;
+									try {
+									noted = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const newClient = document.querySelector("button[aria-label='New client']");
-											if (!newClient) return "no new client action";
-											newClient.click();
-											await wait(500);
+											// New client is a window now (decision 60), so the field is
+											// reached through the edit page of a client that exists.
+											// A client of its own, so a bare install has one to open and a
+											// demo run keeps its seeded four. It is removed again below.
+											const made = await window.juno.clients.create({ name: "Notes smoke" });
+											window.__notesSmokeClient = made.id;
+											document.querySelector("nav button[data-nav=clients]").click();
+											await wait(900);
+											const row = [...document.querySelectorAll("main table tbody tr button")].find((el) => el.textContent.includes("Notes smoke"));
+											if (!row) return "no client row";
+											row.click();
+											await wait(700);
+											const actions = document.querySelector("button[aria-label$=' actions']");
+											if (!actions) return "no client actions menu";
+											actions.click();
+											await wait(900);
 											const addNotes = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add notes");
-											if (!addNotes) return "no add notes action";
-											addNotes.click();
-											await wait(300);
+											if (addNotes) {
+												addNotes.click();
+												await wait(300);
+											}
 											const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Notes");
 											if (!label) return "no notes label";
 											const content = document.getElementById(label.htmlFor);
@@ -1383,17 +1809,32 @@ if (!app.requestSingleInstanceLock()) {
 											return "ok";
 										})()`,
 									)) as string;
+									} finally {
+										Menu.prototype.popup = realClientPopup;
+									}
 									if (noted !== "ok") throw new Error(`Smoke: notes editor ${noted}`);
 
 									const notesImage = await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, `notes-editor.png`), notesImage.toPNG());
 
 									// Leaves without saving: the client list this screen is about to
-									// be photographed against has to stay exactly the seeded four.
+									// be photographed against has to stay exactly the seeded four. The
+									// rail entry brings the list back from the client that was open.
 									await window.webContents.executeJavaScript(
-										`(() => { const cancel = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel"); if (cancel) cancel.click(); })()`,
+										`(() => {
+											const cancel = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel");
+											if (cancel) cancel.click();
+											document.querySelector("nav button[data-nav=clients]").click();
+										})()`,
 									);
-									await new Promise((r) => setTimeout(r, 400));
+									await new Promise((r) => setTimeout(r, 600));
+									await window.webContents.executeJavaScript(
+										`window.juno.clients.remove(window.__notesSmokeClient)`,
+									);
+									await window.webContents.executeJavaScript(
+										`document.querySelector("nav button[data-nav=clients]").click()`,
+									);
+									await new Promise((r) => setTimeout(r, 600));
 								}
 								if (screen === "Documents") {
 									// The search bar and the selection above the table: typed text
@@ -1434,7 +1875,7 @@ if (!app.requestSingleInstanceLock()) {
 									const viewed = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = document.querySelector("tbody tr button[type='button']");
+											const row = [...document.querySelectorAll("main ul li button[type='button']")].find((el) => !el.closest("li").textContent.includes("Page ·"));
 											if (!row) return "no document row to open";
 											row.click();
 											await wait(2000);
@@ -1473,19 +1914,17 @@ if (!app.requestSingleInstanceLock()) {
 									await new Promise((r) => setTimeout(r, 400));
 								}
 								if (screen === "Document templates") {
-									// The example first. It is the one template every first install has and
-									// the only one laid out on more than one page, so its preview and its
-									// editor are the first things a new owner opens.
+									// The example first. It is the one template every first install has,
+									// laid out on the canvas on two pages, so its preview and its editor
+									// are the first things a new owner opens.
 									const inspected = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
 											if (!row) return "no row for the example";
 											row.click();
-											await wait(900);
-											const frame = document.querySelector("main iframe");
-											if (!frame) return "the example has no preview";
-											return "ok";
+											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
+											return document.querySelector("main canvas") ? "ok" : "the example has no preview";
 										})()`,
 									) as string;
 									if (inspected !== "ok") throw new Error(`Smoke: the example document template ${inspected}`);
@@ -1495,16 +1934,19 @@ if (!app.requestSingleInstanceLock()) {
 										await new Promise((r) => setTimeout(r, 400));
 										writeFileSync(joinPath(shotDir, `document-template-example-${theme}.png`), (await capture(window.webContents)).toPNG());
 									}
-									// Into the page editor, where both pages have to be there to click on.
+									// Into the editor, where both pages have to be on the canvas.
 									const laidOut = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
 											if (!edit) return "no edit action";
 											edit.click();
-											await wait(800);
-											if (!document.querySelector("button[aria-label^='Page 1']")) return "no first page on the canvas";
-											if (!document.querySelector("button[aria-label^='Page 2']")) return "no second page on the canvas";
+											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
+											const content = document.querySelector("[data-canvas-content]");
+											if (!content) return "no canvas";
+											if (!content.textContent.includes("Voorbeeldovereenkomst")) return "the first page does not show its title";
+											if (!content.textContent.includes("Voor akkoord")) return "the second page does not show its signature block";
+											if (!document.body.textContent.includes("A4 portrait")) return "the sheet does not say its paper";
 											return "ok";
 										})()`,
 									) as string;
@@ -1521,8 +1963,8 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											if (!back()) return "no back action from the editor";
-											back().click();
+											// The canvas editor has no back button of its own: Escape leaves it.
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(400);
 											const dialog = document.querySelector("[role=dialog]");
 											if (dialog) {
@@ -1930,6 +2372,114 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(500);
 											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
 											if (back) back.click();
+											await wait(500);
+										})()`,
+									);
+								}
+								if (screen === "Document templates") {
+									// Components: placed in a template, listed on their own, and edited in
+									// the same canvas as a template. The list is reached from the button
+									// beside Import Word file.
+									const placed = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const find = () => [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Offerte met briefhoofd"));
+											for (let tries = 0; tries < 3 && !find(); tries++) {
+												window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(500);
+												[...(document.querySelector("[role=dialog]")?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
+												await wait(300);
+												[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back")?.click();
+												await wait(500);
+											}
+											const row = find();
+											if (!row) return "no row for the template with a component";
+											row.click();
+											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
+											if (!document.querySelector("main canvas")) return "the preview drew no PDF";
+											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
+											if (!edit) return "no edit action";
+											edit.click();
+											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
+											const content = document.querySelector("[data-canvas-content]");
+											if (!content) return "no canvas";
+											if (!content.textContent.includes("Onze referentie")) return "the placed component's text is not drawn on the page";
+											const logo = content.querySelector("img");
+											if (!logo) return "the component's picture is not drawn";
+											for (let tries = 0; tries < 20 && !logo.complete; tries++) await wait(100);
+											if (!logo.src.startsWith("app://asset/component/") || logo.naturalWidth !== 1) return "the component's picture did not load: " + logo.src;
+											return "ok";
+										})()`,
+									)) as string;
+									if (placed !== "ok") throw new Error(`Smoke: a template with a component ${placed}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-template-component-placed-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									const listed = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(500);
+											const dialog = document.querySelector("[role=dialog]");
+											const discard = dialog && [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
+											discard?.click();
+											await wait(500);
+											back()?.click();
+											await wait(500);
+											// Components is in the title bar's more menu, where the design leaves room for it.
+											document.querySelector("button[aria-label='More template actions']")?.click();
+											await wait(300);
+											const open = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Components");
+											if (!open) return "no components action on the templates list";
+											open.click();
+											await wait(700);
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Briefhoofd"));
+											if (!row) return "the components list has no row for the letterhead";
+											if (!row.textContent.includes("Placed in 1 template")) return "the row does not say where it is placed: " + row.textContent;
+											return "ok";
+										})()`,
+									)) as string;
+									if (listed !== "ok") throw new Error(`Smoke: the components list ${listed}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-components-list-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									const editedComponent = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Briefhoofd"));
+											row.click();
+											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
+											const content = document.querySelector("[data-canvas-content]");
+											if (!content) return "no canvas for the component";
+											if (!content.textContent.includes("referentie")) return "the component does not show its text";
+											return "ok";
+										})()`,
+									)) as string;
+									if (editedComponent !== "ok") throw new Error(`Smoke: the component editor ${editedComponent}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+										await new Promise((r) => setTimeout(r, 400));
+										writeFileSync(joinPath(shotDir, `document-component-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									// Out to the list of templates again, so the steps after this start where they always did.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(500);
+											const dialog = document.querySelector("[role=dialog]");
+											[...(dialog?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
+											await wait(500);
+											[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Templates")?.click();
 											await wait(500);
 										})()`,
 									);
@@ -3256,7 +3806,8 @@ if (!app.requestSingleInstanceLock()) {
 											use.click();
 											await wait(600);
 											const rail = [...document.querySelectorAll("main ol li")].map((el) => el.textContent.trim());
-											if (rail.join(",") !== "1Link,2Fill,3Review") return "the steps are not Link, Fill, Review: " + rail.join(",");
+											// The rail draws the current step and the ones already passed, so it grows by one on each Next.
+											if (rail.join(",") !== "1Link") return "the first step is not Link: " + rail.join(",");
 											for (let step = 0; step < 2; step++) {
 												const next = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
 												if (!next) return "no next action";
@@ -3623,42 +4174,41 @@ if (!app.requestSingleInstanceLock()) {
 									if (walked !== "ok") throw new Error(`Smoke: calendar ${walked}`);
 								}
 								if (screen === "Event form") {
-									// Opens the form from a day cell, then switches it to weekly so
-									// the recurrence editor is in the picture.
+									// A new event is a window now (decision 60), so the page with the
+									// recurrence editor is the one for an existing series: the weekly
+									// call, edited as a whole, switched to the weekday picker.
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											// By accessible name, like the week switch above: the view
-											// buttons carry a long label and a short one at once.
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const month = document.querySelector("button[aria-label='Month']");
 											if (month) month.click();
-											await new Promise((r) => setTimeout(r, 400));
-											const add = document.querySelector("button[aria-label^='New event on']");
-											if (!add) return "no add button";
-											add.click();
-											await new Promise((r) => setTimeout(r, 600));
-											// A form is a page, not a modal (decision 30), so it lives
-											// in main rather than behind a dialog role.
+											await wait(400);
+											const chip = [...document.querySelectorAll("button[draggable=true]")].find((el) => el.textContent.includes("Weekly call"));
+											if (!chip) return "no recurring chip";
+											chip.click();
+											await wait(400);
+											const detail = document.querySelector("aside[aria-label]");
+											const edit = detail && [...detail.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Edit");
+											if (!edit) return "no edit on the side panel";
+											edit.click();
+											await wait(500);
+											const ask = document.querySelector("[role=dialog]");
+											if (!ask) return "no scope question";
+											[...ask.querySelectorAll("button")].find((el) => el.textContent.trim() === "All occurrences").click();
+											await wait(600);
 											const form = document.querySelector("main");
-											if (!form || !form.textContent.includes("New event")) return "no event form";
-											// The form is a sequence, and repetition is on the second
-											// step ("When"), so the title has to be filled in before
-											// the step rail will hand over to it.
-											const title = form.querySelector("input[type=text]");
-											if (!title) return "no title field";
-											const input = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											input.call(title, "Smoke run");
-											title.dispatchEvent(new Event("input", { bubbles: true }));
-											await new Promise((r) => setTimeout(r, 200));
+											if (!form || !form.textContent.includes("Edit all occurrences")) return "no series form";
+											// The form is a sequence, and repetition is on the second step.
 											const next = [...form.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
 											if (!next) return "no next";
 											next.click();
-											await new Promise((r) => setTimeout(r, 500));
+											await wait(500);
 											const repeats = [...form.querySelectorAll("select")].find((el) => [...el.options].some((o) => o.value === "WEEKLY"));
 											if (!repeats) return "no repeat select";
 											const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
 											setter.call(repeats, "WEEKLY");
 											repeats.dispatchEvent(new Event("change", { bubbles: true }));
-											await new Promise((r) => setTimeout(r, 400));
+											await wait(400);
 											return form.querySelector("[role=group][aria-label=Weekdays]") ? "ok" : "no weekday picker";
 										})()`,
 									);
@@ -3677,7 +4227,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!chip()) return "no reminder chip";
 											chip().click();
 											await wait(500);
-											for (const need of ["Mark done", "Snooze", "Edit", "Delete"]) {
+											for (const need of ["Complete", "Snooze", "Edit", "Delete"]) {
 												if (!named(need)) return "the reminder panel has no " + need;
 											}
 											return "panel";
@@ -3685,7 +4235,7 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (acted !== "panel") throw new Error(`Smoke: calendar reminder actions ${acted}`);
 									// The panel as it is: Edit and Delete beside the close cross, and
-									// Snooze beside Mark done at the bottom.
+									// Snooze beside Complete at the bottom.
 									await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, "calendar-panel.png"), (await capture(window.webContents)).toPNG());
 									const deleted = await window.webContents.executeJavaScript(
@@ -3705,6 +4255,28 @@ if (!app.requestSingleInstanceLock()) {
 									if (deleted !== "ok") throw new Error(`Smoke: calendar reminder actions ${deleted}`);
 								}
 								if (screen === "Week") {
+									// The timer pill is in the title bar on every screen, and its stop
+									// button is the same call as the Time tab's. It is started through the
+									// service, found here on the calendar, and stopped by pressing it.
+									{
+										const timers = await import("./main/services/time-entries");
+										const [anyProject] = await window.webContents.executeJavaScript(`window.juno.projects.list()`);
+										if (!anyProject) throw new Error("Smoke: no project to run a timer on");
+										await timers.start(anyProject.id, "Smoke pill");
+										await new Promise((r) => setTimeout(r, 600));
+										const stopped = await window.webContents.executeJavaScript(
+											`(async () => {
+												const stop = document.querySelector("header button[aria-label='Stop timer']");
+												if (!stop) return "no pill on the calendar while a timer runs";
+												stop.click();
+												await new Promise((r) => setTimeout(r, 600));
+												if (document.querySelector("header button[aria-label='Stop timer']")) return "the pill stayed after stopping";
+												return "ok";
+											})()`,
+										);
+										if (stopped !== "ok") throw new Error(`Smoke: timer pill ${stopped}`);
+										if (timers.running()) throw new Error("Smoke: the timer still runs after the pill stopped it");
+									}
 									const switched = await window.webContents.executeJavaScript(
 										`(async () => {
 											// By accessible name, not by text: the view switch carries a
@@ -3718,6 +4290,31 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (switched !== "ok") throw new Error(`Smoke: calendar week view ${switched}`);
+									// The agenda (frame 26:1292) is photographed from here, then the view
+									// goes back to the week the shot below expects.
+									const agenda = await window.webContents.executeJavaScript(
+										`(async () => {
+											const b = document.querySelector("button[aria-label='Agenda']");
+											if (!b) return "no agenda button";
+											b.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return "ok";
+										})()`,
+									);
+									if (agenda !== "ok") throw new Error(`Smoke: calendar agenda view ${agenda}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 400));
+										const image = await capture(window.webContents);
+										writeFileSync(joinPath(shotDir, `calendar-agenda-${theme}.png`), image.toPNG());
+									}
+									await window.webContents.executeJavaScript(
+										`document.querySelector("button[aria-label='Week']")?.click()`,
+									);
+									await new Promise((r) => setTimeout(r, 600));
 								}
 								if (screen === "Drafts") {
 									// A draft with a picture at a web address opens in the composer,
@@ -3935,10 +4532,14 @@ if (!app.requestSingleInstanceLock()) {
 
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {
-											// Matched on the label: writing is a plus on the title line
-											// now, so there is no text to find it by.
-											const open = document.querySelector("button[aria-label='New message']");
-											if (!open) return "no new message button";
+											// Writing is an item in the New menu, which is the plus at
+											// the left of the title bar.
+											const plus = document.querySelector("button[aria-label='New']");
+											if (!plus) return "no new button";
+											plus.click();
+											await new Promise((r) => setTimeout(r, 300));
+											const open = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim().startsWith("New message"));
+											if (!open) return "no new message item";
 											open.click();
 											await new Promise((r) => setTimeout(r, 700));
 											return document.querySelector("input[role=combobox]") ? "ok" : "no composer";
@@ -3946,6 +4547,99 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (composed !== "ok") throw new Error(`Smoke: compose ${composed}`);
 									await shoot("mail-compose");
+									// The two buttons that start the toolbar: the intro menu lists what
+									// a first install is given, and a right click reaches the manage
+									// page, which comes back to the composer.
+									const blockMenu = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const intro = document.querySelector("button[aria-label='Intro']");
+											if (!intro || !document.querySelector("button[aria-label='Outro']")) return "no intro and outro buttons";
+											intro.click();
+											await wait(300);
+											const menu = document.querySelector("[role=menu][aria-label='Intro']");
+											if (!menu) return "no intro menu";
+											const rows = [...menu.querySelectorAll("[role=menuitem]")].map((el) => el.textContent.trim());
+											if (rows.length < 4 || !rows.some((row) => row.startsWith("Formal")) || !rows.some((row) => row.startsWith("No intro"))) return "unexpected rows " + rows.join(" | ");
+											[...menu.querySelectorAll("[role=menuitem]")][1].dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+											await wait(200);
+											return "ok";
+										})()`,
+									);
+									if (blockMenu !== "ok") throw new Error(`Smoke: intro menu ${blockMenu}`);
+									await shoot("mail-compose-intro");
+									// Choosing an intro and an outro puts their variables in as chips, never
+									// as braces. With nobody in To the first name has no value, so that chip
+									// is flagged, and the text twin of the message carries tokens, not labels.
+									const chipsIn = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const choose = async (label, name) => {
+												let menu = document.querySelector("[role=menu][aria-label='" + label + "']");
+												if (!menu) {
+													document.querySelector("button[aria-label='" + label + "']").click();
+													await wait(300);
+													menu = document.querySelector("[role=menu][aria-label='" + label + "']");
+												}
+												const item = menu && [...menu.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim().startsWith(name));
+												if (!item) return false;
+												item.click();
+												await wait(500);
+												return true;
+											};
+											if (!(await choose("Intro", "Friendly"))) return "no Friendly intro";
+											if (!(await choose("Outro", "Kind regards"))) return "no Kind regards outro";
+											const editor = document.querySelector("[role=textbox][aria-label='Message']");
+											const chips = [...editor.querySelectorAll("[data-juno-variable]")].map((el) => el.getAttribute("data-juno-variable"));
+											if (!chips.includes("first_name") || !chips.includes("my_name")) return "chips: " + chips.join(",");
+											if (editor.textContent.includes("{{")) return "braces in the message";
+											if (!editor.querySelector("[data-juno-variable='first_name'][data-missing]")) return "the first name chip is not flagged";
+											return "ok";
+										})()`,
+									);
+									if (chipsIn !== "ok") throw new Error(`Smoke: composer chips ${chipsIn}`);
+									await shoot("mail-compose-chips");
+									// The right click is the platform's menu (decision 59), which a page
+									// cannot click. Menu.popup is stood in for while the button is right
+									// clicked: it records what the main process offered and chooses
+									// "Manage intros and outros" the way a person would.
+									const realPopup = Menu.prototype.popup;
+									let offered: string[] = [];
+									Menu.prototype.popup = function (this: Menu, options) {
+										offered = this.items.map((item) => item.label);
+										this.items.find((item) => item.label === "Manage intros and outros")?.click();
+										options?.callback?.();
+									};
+									let blocksPage: string;
+									try {
+										blocksPage = (await window.webContents.executeJavaScript(
+											`(async () => {
+												const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+												// The pick above closed its menu, so nothing is open to dismiss.
+												const intro = document.querySelector("button[aria-label='Intro']");
+												intro.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
+												await wait(700);
+												if (![...document.querySelectorAll("h1")].some((el) => el.textContent.includes("Intros and outros"))) return "no manage page";
+												if (!document.querySelector("[role=textbox][aria-label='Text']")) return "no text field";
+												return "ok";
+											})()`,
+										)) as string;
+									} finally {
+										Menu.prototype.popup = realPopup;
+									}
+									if (!offered.includes("Manage intros and outros")) throw new Error(`Smoke: the intro menu offered ${offered.join(" | ") || "nothing"}`);
+									if (blocksPage !== "ok") throw new Error(`Smoke: manage page ${blocksPage}`);
+									await shoot("mail-blocks");
+									const backToCompose = await window.webContents.executeJavaScript(
+										`(async () => {
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Mail");
+											if (!back) return "no back link";
+											back.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return document.querySelector("input[role=combobox]") ? "ok" : "the composer did not come back";
+										})()`,
+									);
+									if (backToCompose !== "ok") throw new Error(`Smoke: back to the composer ${backToCompose}`);
 
 									// Attaching: every document, searchable, and this computer. The
 									// list opens over the message and closes on a second press.
@@ -4104,6 +4798,38 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (measured !== "ok") throw new Error(`Smoke: mail reader height ${measured}`);
+									// A link in the message is clickable and hovering it shows the real
+									// address with a way to open or copy it. The frame reports the hover to
+									// the window, which draws the popover; the shell opens https and nothing
+									// else, however the address got here.
+									const hovered = await mailFrame.executeJavaScript(
+										`(() => {
+											const a = document.querySelector("a[data-href]");
+											if (!a) return "no link in the message";
+											a.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+											return "ok";
+										})()`,
+									);
+									if (hovered !== "ok") throw new Error(`Smoke: link hover ${hovered}`);
+									await new Promise((r) => setTimeout(r, 500));
+									const popover = await window.webContents.executeJavaScript(
+										`(() => {
+											const box = document.querySelector("[role=group][aria-label='Link address']");
+											if (!box) return "no popover";
+											if (!box.textContent.includes("https://hyge.example/aanbod")) return "wrong address " + box.textContent;
+											return [...box.querySelectorAll("button")].map((b) => b.textContent.trim()).join("|");
+										})()`,
+									);
+									if (popover !== "Open in browser|Copy link") throw new Error(`Smoke: link popover ${popover}`);
+									await shoot("mail-link-hover");
+									for (const bad of ["http://example.com", "javascript:alert(1)", "mailto:a@b.be", "file:///c:/windows/system32/calc.exe"]) {
+										const refused = await window.webContents.executeJavaScript(
+											`window.juno.mail.openLink(${JSON.stringify(bad)}).then(() => "opened", () => "refused")`,
+										);
+										if (refused !== "refused") throw new Error(`Smoke: a link ${bad} reached the shell`);
+									}
+									await mailFrame.executeJavaScript(`document.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))`);
+									await new Promise((r) => setTimeout(r, 500));
 								}
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;
@@ -4117,6 +4843,154 @@ if (!app.requestSingleInstanceLock()) {
 										image.toPNG(),
 									);
 								}
+							}
+
+							// The four new-record windows (decision 60): each one is opened the
+							// way the application opens it, photographed in both themes, filled
+							// in through its own page and saved, and what it saved is read back
+							// through the main window, which also has to have been told.
+							if (process.env.JUNO_SMOKE_DEMO) {
+								const { getNewRecordWindow } = await import("./main/windows");
+								const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+								const inMain = (code: string) => window.webContents.executeJavaScript(code);
+								await inMain(
+									`window.__recordsChanged = 0; window.addEventListener("juno:records-changed", () => { window.__recordsChanged += 1; })`,
+								);
+								const fillHelpers = `
+									const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+									const control = (label) => {
+										const el = [...document.querySelectorAll("label")].find((l) => l.textContent.replace(/ \\*$/, "").trim() === label);
+										return el ? document.getElementById(el.htmlFor) : null;
+									};
+									const put = (label, value) => {
+										const el = control(label);
+										if (!el) throw new Error("no field " + label);
+										const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype
+											: el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+										Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
+										el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+									};
+									const press = (text) => {
+										const b = [...document.querySelectorAll("footer button")].find((x) => x.textContent.trim() === text);
+										if (!b) throw new Error("no button " + text);
+										b.click();
+									};
+								`;
+								type Walk = { kind: string; prefill: string; fill: string; save: string; check: string };
+								const clientId = (await inMain(`window.juno.clients.list().then((rows) => rows[0].id)`)) as string;
+								const walks: Walk[] = [
+									{
+										kind: "event",
+										prefill: `{ clientId: ${JSON.stringify(clientId)} }`,
+										fill: `put("Title", "Smoke workshop"); put("Repeats", "WEEKLY"); put("Notes", "Bring the quote.");`,
+										save: "Save event",
+										check: `(async () => {
+											const today = new Date();
+											const day = (n) => new Date(today.getTime() + n * 86400000).toISOString().slice(0, 10);
+											const items = await window.juno.calendar.list({ from: day(-2), to: day(10), includeReminders: false, includeDeadlines: false });
+											const hit = items.find((item) => item.title === "Smoke workshop");
+											if (!hit) return "the event was not saved";
+											const event = await window.juno.calendar.get(hit.eventId);
+											if (!event || !event.rrule || !event.rrule.includes("WEEKLY")) return "the repeat was not kept";
+											if (event.clientId !== ${JSON.stringify(clientId)}) return "the client prefill was not kept";
+											return "ok";
+										})()`,
+									},
+									{
+										kind: "client",
+										prefill: `{}`,
+										fill: `put("Name", "Smoke client"); put("Email", "smoke@client.test"); put("Phone", "+32 470 98 76 54"); put("Address", "Kerkstraat 1, 9000 Gent"); put("VAT number", "BE0123456789"); put("Notes", "Prefers email.");`,
+										save: "Save client",
+										check: `(async () => {
+											const rows = await window.juno.clients.list({ search: "Smoke client" });
+											const hit = rows.find((row) => row.name === "Smoke client");
+											if (!hit) return "the client was not saved";
+											if (hit.email !== "smoke@client.test") return "the email was not kept as the primary one";
+											const phones = await window.juno.clientPhones.listForClient(hit.id);
+											if (phones.length !== 1) return "the phone was not kept";
+											const addresses = await window.juno.clientAddresses.listForClient(hit.id);
+											if (addresses.length !== 1) return "the address was not kept";
+											return "ok";
+										})()`,
+									},
+									{
+										kind: "project",
+										prefill: `{ clientId: ${JSON.stringify(clientId)} }`,
+										fill: `put("Name", "Smoke table"); put("Due date", "2026-11-14"); put("Description", "A solid oak table.");`,
+										save: "Save project",
+										check: `(async () => {
+											const rows = await window.juno.projects.list();
+											const hit = rows.find((row) => row.name === "Smoke table");
+											if (!hit) return "the project was not saved";
+											if (hit.clientId !== ${JSON.stringify(clientId)}) return "the client prefill was not kept";
+											if (hit.dueOn !== "2026-11-14") return "the due date was not kept";
+											return "ok";
+										})()`,
+									},
+									{
+										kind: "reminder",
+										prefill: `{ date: "2026-10-19" }`,
+										fill: `put("What", "Smoke order planks"); put("Repeats", "months"); put("Notes", "Kiln dried.");`,
+										save: "Save reminder",
+										check: `(async () => {
+											const rows = await window.juno.reminders.list({});
+											const hit = rows.find((row) => row.title === "Smoke order planks");
+											if (!hit) return "the reminder was not saved";
+											if (hit.dueOn !== "2026-10-19") return "the date was not kept as a plain date";
+											if (hit.pattern !== "months") return "the repeat was not kept";
+											return "ok";
+										})()`,
+									},
+								];
+
+								for (const walk of walks) {
+									const before = (await inMain(`window.__recordsChanged`)) as number;
+									await inMain(`window.juno.window.openNewRecord(${JSON.stringify(walk.kind)}, ${walk.prefill})`);
+									let child = getNewRecordWindow();
+									for (let waited = 0; waited < 5000 && !child; waited += 250) {
+										await pause(250);
+										child = getNewRecordWindow();
+									}
+									if (!child) throw new Error(`Smoke: the new ${walk.kind} window did not open`);
+									const contents = child.webContents;
+									contents.on("console-message", (event) => {
+										if (event.level === "warning" || event.level === "error") {
+											console.error(`renderer: ${event.message}`);
+										}
+									});
+									if (contents.isLoading()) {
+										await new Promise<void>((resolve) => contents.once("did-finish-load", () => resolve()));
+									}
+									await pause(900);
+									front(child);
+
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await contents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await pause(350);
+										const image = await capture(contents);
+										writeFileSync(joinPath(shotDir, `new-${walk.kind}-${theme}.png`), image.toPNG());
+									}
+
+									// An empty form refuses to save and says why, in the window.
+									await contents.executeJavaScript(`(() => { ${fillHelpers} press(${JSON.stringify(walk.save)}); })()`);
+									await pause(500);
+									if (!getNewRecordWindow()) throw new Error(`Smoke: an empty new ${walk.kind} window saved and closed`);
+
+									await contents.executeJavaScript(`(async () => { ${fillHelpers} ${walk.fill} await wait(200); press(${JSON.stringify(walk.save)}); })()`);
+									for (let waited = 0; waited < 6000 && getNewRecordWindow(); waited += 250) await pause(250);
+									if (getNewRecordWindow()) throw new Error(`Smoke: the new ${walk.kind} window did not close after saving`);
+									await pause(300);
+
+									const checked = (await inMain(walk.check)) as string;
+									if (checked !== "ok") throw new Error(`Smoke: new ${walk.kind} window ${checked}`);
+									const after = (await inMain(`window.__recordsChanged`)) as number;
+									if (after <= before) throw new Error(`Smoke: saving a new ${walk.kind} did not tell the screen behind it`);
+									console.log(`SMOKE_DEMO new-${walk.kind}=ok`);
+								}
+								nativeTheme.themeSource = "system";
 							}
 
 							// Settings is a window of its own, so it is photographed as one.
@@ -4136,6 +5010,43 @@ if (!app.requestSingleInstanceLock()) {
 									await b.mail.accounts.remove(old.id);
 									return old.id;
 								})()`)) as string;
+
+								// Mailbox rules (decision 64). A message arrives after the account was
+								// connected, two rules are written the way the owner would write them, and
+								// a sync runs them against an in-memory writer. What they did is the
+								// history the account page lists. The real writer comes back afterwards.
+								{
+									const smokeBox = await import("./main/smoke-mailbox");
+									configureMailboxWriter(smokeBox.openSmokeWriter);
+									smokeBox.arriveSmokeMessage();
+									const done = (await window.webContents.executeJavaScript(`(async () => {
+										const b = window.juno;
+										const [account] = await b.mail.accounts.list();
+										const folders = await b.mail.folders.list(account.id);
+										const offers = folders.find((f) => f.path === "Offertes");
+										if (!offers) throw new Error("Smoke: no Offertes folder to move to");
+										await b.mail.rules.create({
+											accountId: account.id, name: "Newsletters",
+											conditions: [{ kind: "text", field: "sender", test: "ends_with", value: "@hyge.be" }],
+											actions: [{ kind: "mark_read" }, { kind: "move", folderId: offers.id }],
+										});
+										await b.mail.rules.create({
+											accountId: account.id, name: "Clients with files", match: "all",
+											conditions: [{ kind: "sender_is_client", value: true }, { kind: "has_attachments", value: true }],
+											actions: [{ kind: "flag" }, { kind: "link_client" }],
+										});
+										const runs = await b.mail.sync.run(account.id);
+										if (runs.some((r) => r.phase !== "done")) throw new Error("Smoke: the sync that runs the rules did not finish: " + JSON.stringify(runs));
+										const history = await b.mail.rules.runs({ accountId: account.id });
+										return history.map((h) => h.ruleName + ":" + h.action + ":" + h.result + ":" + (h.detail ?? "")).sort();
+									})()`)) as string[];
+									configureMailboxWriter(openImapWriter);
+									const wanted = ["Newsletters:mark_read:done:", "Newsletters:move:done:Offertes"];
+									if (JSON.stringify(done) !== JSON.stringify(wanted)) {
+										throw new Error("Smoke: the rules did " + JSON.stringify(done) + " and not " + JSON.stringify(wanted));
+									}
+									console.log("SMOKE_DEMO mailbox rules ran " + done.length + " actions");
+								}
 
 								openSettingsWindow();
 								const settingsWindow = getSettingsWindow();
@@ -4229,13 +5140,13 @@ if (!app.requestSingleInstanceLock()) {
 									await openPage("statuses", "documents");
 									const picked = (await inSettings(
 										`(async () => {
-											const tabs = [...document.querySelectorAll("[role=tablist][aria-label='Which list'] [role=tab]")];
+											const tabs = [...document.querySelectorAll("[role=group][aria-label='Which list'] button")];
 											if (tabs.length < 4) return "only " + tabs.length + " lists";
 											const before = document.querySelector("main").textContent;
 											tabs[1].click();
 											await new Promise((r) => setTimeout(r, 250));
 											if (document.querySelector("main").textContent === before) return "the list did not change";
-											if (tabs[1].getAttribute("aria-selected") !== "true") return "the tab did not select";
+											if (tabs[1].getAttribute("aria-pressed") !== "true") return "the tab did not select";
 											return "ok";
 										})()`,
 									)) as string;
@@ -4315,6 +5226,115 @@ if (!app.requestSingleInstanceLock()) {
 									if (settingsWindow.isDestroyed()) throw new Error("Smoke: Escape in the search closed the window");
 								}
 
+								// The account page (decision 64): its details, the rules the step above
+								// wrote and what they did, its folders, and a rule written through the form
+								// the way a person writes one. The page has to fit the fixed window.
+								{
+									const fits = `(() => {
+										const main = document.querySelector("main");
+										const edge = main.getBoundingClientRect().right;
+										const wide = [];
+										for (const el of main.querySelectorAll("*")) {
+											const box = el.getBoundingClientRect();
+											if (box.width > 0 && box.right > edge + 1) wide.push(el.tagName + "." + String(el.className).slice(0, 40));
+										}
+										return { overflowX: main.scrollWidth - main.clientWidth, wide: wide.slice(0, 5) };
+									})()`;
+									const mustFit = async (where: string) => {
+										const fit = (await inSettings(fits)) as { overflowX: number; wide: string[] };
+										if (fit.overflowX > 1 || fit.wide.length > 0) {
+											throw new Error("Smoke: " + where + " does not fit the settings window: " + JSON.stringify(fit));
+										}
+									};
+
+									await openPage("mail", "mail");
+									await pause(400);
+									const hasFoldersButton = (await inSettings(
+										`[...document.querySelectorAll("main button")].some((b) => b.textContent.trim() === "Folders")`,
+									)) as boolean;
+									if (hasFoldersButton) throw new Error("Smoke: the account list still has a Folders button");
+									const opened = (await inSettings(
+										`(() => { const b = document.querySelector("main [data-account]"); if (!b) return false; b.click(); return true; })()`,
+									)) as boolean;
+									if (!opened) throw new Error("Smoke: no account to open on the mail page");
+									await pause(600);
+									const page = (await inSettings(`document.querySelector("main").textContent`)) as string;
+									for (const wanted of ["Details", "Rules", "History", "Folders", "Newsletters", "Marked read", "Moved to Offertes", "INBOX"]) {
+										if (!page.includes(wanted)) throw new Error("Smoke: the account page has no " + JSON.stringify(wanted));
+									}
+									await mustFit("the account page");
+									await photograph("mail-account");
+
+									const clicked = (name: string) =>
+										inSettings(
+											`(() => { const b = [...document.querySelectorAll("main button")].find((el) => el.getAttribute("aria-label") === ` + JSON.stringify(name) + ` || el.textContent.trim() === ` + JSON.stringify(name) + `); if (!b) return false; b.click(); return true; })()`,
+										) as Promise<boolean>;
+									if (!(await clicked("New rule"))) throw new Error("Smoke: the account page has no New rule button");
+									await pause(500);
+									const filled = (await inSettings(`(async () => {
+										const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+										const set = (el, value) => {
+											const select = el instanceof HTMLSelectElement;
+											Object.getOwnPropertyDescriptor(select ? HTMLSelectElement.prototype : HTMLInputElement.prototype, "value").set.call(el, value);
+											el.dispatchEvent(new Event(select ? "change" : "input", { bubbles: true }));
+										};
+										const form = document.querySelector("main form");
+										set(form.querySelector("input"), "Offers from Hyge");
+										set(form.querySelector("[aria-label='Condition 1: what to look at']"), "subject");
+										await wait(80);
+										set(form.querySelector("[aria-label='Condition 1: the text']"), "offerte");
+										[...document.querySelectorAll("main button")].find((b) => b.textContent.trim() === "Add condition").click();
+										await wait(80);
+										set(form.querySelector("[aria-label='Condition 2: what to look at']"), "attachments");
+										await wait(80);
+										[...form.querySelectorAll("label")].find((l) => l.textContent.includes("Mark it read")).querySelector("input").click();
+										[...document.querySelectorAll("main button")].find((b) => b.textContent.trim() === "Move to a folder").click();
+										await wait(120);
+										const folder = form.querySelector("[aria-label='Folder to move to']");
+										const option = [...folder.options].find((o) => o.textContent.includes("Offertes"));
+										if (!option) return "no Offertes option";
+										set(folder, option.value);
+										await wait(150);
+										return [...form.querySelectorAll("[data-selectable]")].map((el) => el.textContent).join(" | ");
+									})()`)) as string;
+									if (!filled.includes('Rule "Offers from Hyge" for hallo@juno.test') || !filled.includes("move it to Offertes") || !filled.includes("it has attachments")) {
+										throw new Error("Smoke: the rule form read the rule back as " + JSON.stringify(filled));
+									}
+									await mustFit("the rule form");
+									await photograph("mail-rule-form");
+									if (!(await clicked("Save rule"))) throw new Error("Smoke: the rule form has no Save rule button");
+									await pause(700);
+									const saved = (await inSettings(`document.body.textContent`)) as string;
+									if (!saved.includes("Offers from Hyge saved.") || !saved.includes("Offers from Hyge")) {
+										throw new Error("Smoke: saving the rule did not return to the account page with it listed");
+									}
+									const stored = (await window.webContents.executeJavaScript(
+										`(async () => { const [account] = await window.juno.mail.accounts.list(); return (await window.juno.mail.rules.list(account.id)).map((r) => r.name + ":" + r.enabled + ":" + r.sortOrder); })()`,
+									)) as string[];
+									if (JSON.stringify(stored) !== JSON.stringify(["Newsletters:true:0", "Clients with files:true:1", "Offers from Hyge:true:2"])) {
+										throw new Error("Smoke: the rules are " + JSON.stringify(stored));
+									}
+
+									// A rule's switch applies at once.
+									const flipped = (await inSettings(
+										`(() => { const b = [...document.querySelectorAll("main [role=switch]")].find((el) => el.textContent.includes("Offers from Hyge")); if (!b) return false; b.click(); return true; })()`,
+									)) as boolean;
+									if (!flipped) throw new Error("Smoke: the new rule has no switch");
+									await pause(500);
+									const off = (await window.webContents.executeJavaScript(
+										`(async () => { const [account] = await window.juno.mail.accounts.list(); return (await window.juno.mail.rules.list(account.id)).find((r) => r.name === "Offers from Hyge").enabled; })()`,
+									)) as boolean;
+									if (off) throw new Error("Smoke: switching the rule off did not reach the database");
+									await mustFit("the account page with three rules");
+									await photograph("mail-account-rules");
+
+									if (!(await clicked("Mail accounts"))) throw new Error("Smoke: the account page has no way back");
+									await pause(500);
+									const back = (await inSettings(`document.querySelector("main [data-account]") !== null`)) as boolean;
+									if (!back) throw new Error("Smoke: going back did not show the list of accounts");
+									console.log("SMOKE_DEMO mail account page and rule form");
+								}
+
 								// The removed account's mail is deleted the way a person does it: the
 								// button, the dialog, the confirm. The tab loop above photographed the
 								// section with the account still in it.
@@ -4363,7 +5383,7 @@ if (!app.requestSingleInstanceLock()) {
 								console.log(`SMOKE_DEMO settings pages=${pages.length}`);
 								closeSettingsWindow();
 
-								// The sidebar is a rail of icons and never opens. Seven entries (six
+								// The sidebar is a rail of icons and never opens. Eight entries (seven
 								// places and settings; the agent is in the title bar), no text of its
 								// own, and a label in a tooltip that appears when the pointer rests on one.
 								await new Promise((r) => setTimeout(r, 400));
@@ -4372,7 +5392,7 @@ if (!app.requestSingleInstanceLock()) {
 										const nav = document.querySelector("nav[data-sidebar]");
 										if (!nav) return "no sidebar";
 										const entries = nav.querySelectorAll("button[data-nav]").length;
-										if (entries !== 7) return "the sidebar has " + entries + " entries, not 7";
+										if (entries !== 8) return "the sidebar has " + entries + " entries, not 8";
 										if (!document.querySelector("header button[data-nav=agent]")) return "the agent is not in the title bar";
 										if (nav.textContent.trim() !== "") return "the sidebar draws text: " + nav.textContent.trim();
 										const width = Math.round(nav.getBoundingClientRect().width);
@@ -4396,6 +5416,60 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								console.log("SMOKE_DEMO sidebar rail=ok");
 
+								// JUNO_SMOKE_MANY=1: 500 clients through the same service the form
+								// uses, then how long the list takes to show them and how a scroll
+								// holds up. They are removed again so the screens that follow are
+								// photographed against the seeded four.
+								if (process.env.JUNO_SMOKE_MANY) {
+									const many = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const ids = [];
+											for (let i = 0; i < 500; i++) {
+												const made = await window.juno.clients.create({ name: "Bulk client " + String(i).padStart(3, "0") });
+												ids.push(made.id);
+											}
+											document.querySelector("nav button[data-nav=overview]").click();
+											await wait(600);
+											const fetched = performance.now();
+											const fetchedRows = (await window.juno.clients.list({ limit: 1000 })).length;
+											const fetchMs = Math.round(performance.now() - fetched);
+											const start = performance.now();
+											document.querySelector("nav button[data-nav=clients]").click();
+											let rows = 0;
+											let firstMs = -1;
+											while (performance.now() - start < 10000) {
+												rows = document.querySelectorAll("main tbody tr").length;
+												if (rows > 0 && firstMs < 0) firstMs = Math.round(performance.now() - start);
+												if (rows >= 500) break;
+												await new Promise((r) => requestAnimationFrame(r));
+											}
+											await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+											const toRows = Math.round(performance.now() - start);
+											const scroller = [...document.querySelectorAll("main *")].find((el) => el.scrollHeight > el.clientHeight + 200 && getComputedStyle(el).overflowY !== "visible");
+											const frames = [];
+											if (scroller) {
+												let last = performance.now();
+												for (let step = 0; step < 60; step++) {
+													scroller.scrollTop += 400;
+													await new Promise((r) => requestAnimationFrame(r));
+													const now = performance.now();
+													frames.push(now - last);
+													last = now;
+												}
+											}
+											const worst = frames.length ? Math.round(Math.max(...frames)) : -1;
+											const mean = frames.length ? Math.round(frames.reduce((a, b) => a + b, 0) / frames.length) : -1;
+											const rowHeight = document.querySelector("main tbody tr td")?.getBoundingClientRect().height ?? 0;
+											for (const id of ids) await window.juno.clients.remove(id);
+											document.querySelector("nav button[data-nav=overview]").click();
+											await wait(600);
+											return { rows, firstMs, toRows, worst, mean, rowHeight, fetchMs, fetchedRows };
+										})()`,
+									)) as { rows: number; firstMs: number; toRows: number; worst: number; mean: number; rowHeight: number; fetchMs: number; fetchedRows: number };
+									console.log(`SMOKE_DEMO many rows=${many.rows} ms_to_first_row=${many.firstMs} ms_to_rows=${many.toRows} frame_mean=${many.mean} frame_worst=${many.worst} row_px=${many.rowHeight} list_call_ms=${many.fetchMs} list_call_rows=${many.fetchedRows}`);
+								}
+
 								// The keyboard. The title bar carries no name and a search, the palette
 								// opens on the shortcut and finds a client by name, a digit goes to a
 								// screen, "new" opens that screen's form, and the slash shows the
@@ -4415,10 +5489,30 @@ if (!app.requestSingleInstanceLock()) {
 										const header = document.querySelector("header");
 										if (!header) return "no title bar";
 										if (header.textContent.includes("Juno")) return "the title bar still carries the name";
-										if (!header.querySelector("button[aria-label='Search and commands']")) return "no search in the title bar";
+										if (!header.querySelector("button[aria-label='Search']")) return "no search in the title bar";
+										for (const name of ["Recent", "Reminders"]) {
+											if (!header.querySelector("button[aria-label='" + name + "']")) return "no " + name + " in the title bar";
+										}
+										if (header.querySelector("button[aria-label='Lock Juno']")) return "the lock is back in the title bar";
 										press({ mod: true, key: "k", code: "KeyK" });
 										await wait(500);
 										if (!document.querySelector("[data-palette]")) return "the shortcut did not open the palette";
+										return "ok";
+									})()`,
+								)) as string;
+								if (opened !== "ok") throw new Error(`Smoke: palette ${opened}`);
+								// The empty state, as frame 32:3943 draws it, in both themes.
+								for (const theme of ["light", "dark"] as const) {
+									nativeTheme.themeSource = theme;
+									await window.webContents.executeJavaScript(
+										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+									);
+									await new Promise((r) => setTimeout(r, 300));
+									writeFileSync(joinPath(shotDir, `palette-empty-${theme}.png`), (await capture(window.webContents)).toPNG());
+								}
+								const typed = (await window.webContents.executeJavaScript(
+									`(async () => {
+										${helpers}
 										const input = document.querySelector("[data-palette] input");
 										const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
 										set.call(input, "bodhi");
@@ -4429,9 +5523,17 @@ if (!app.requestSingleInstanceLock()) {
 										return "ok";
 									})()`,
 								)) as string;
-								if (opened !== "ok") throw new Error(`Smoke: palette ${opened}`);
-								const paletteImage = await capture(window.webContents);
-								writeFileSync(joinPath(shotDir, `palette.png`), paletteImage.toPNG());
+								if (typed !== "ok") throw new Error(`Smoke: palette ${typed}`);
+								for (const theme of ["light", "dark"] as const) {
+									nativeTheme.themeSource = theme;
+									await window.webContents.executeJavaScript(
+										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+									);
+									await new Promise((r) => setTimeout(r, 300));
+									writeFileSync(joinPath(shotDir, `palette-${theme}.png`), (await capture(window.webContents)).toPNG());
+								}
+								nativeTheme.themeSource = "light";
+								await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", "light")`);
 
 								const keyed = (await window.webContents.executeJavaScript(
 									`(async () => {
@@ -4441,6 +5543,13 @@ if (!app.requestSingleInstanceLock()) {
 										await wait(400);
 										if (document.querySelector("[data-palette]")) return "escape did not close the palette";
 
+										press({ mod: true, key: "e", code: "KeyE" });
+										await wait(500);
+										if (!document.querySelector("[role=menu][aria-label=Recent]")) return "the shortcut did not open Recent";
+										document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										await wait(400);
+										if (document.querySelector("[role=menu][aria-label=Recent]")) return "escape did not close Recent";
+
 										press({ mod: true, key: "3", code: "Digit3" });
 										await wait(700);
 										const lit = document.querySelector("nav[data-sidebar] button[data-nav=clients]");
@@ -4448,9 +5557,6 @@ if (!app.requestSingleInstanceLock()) {
 
 										press({ mod: true, key: "n", code: "KeyN" });
 										await wait(900);
-										if (!document.querySelector("main").textContent.includes("New client")) return "new did not open the client form";
-										document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-										await wait(500);
 
 										press({ mod: true, key: "/", code: "Slash" });
 										await wait(500);
@@ -4464,8 +5570,88 @@ if (!app.requestSingleInstanceLock()) {
 									})()`,
 								)) as string;
 								if (keyed !== "ok") throw new Error(`Smoke: shortcuts ${keyed}`);
+								await expectNewRecordWindow("client", "Ctrl N on Clients");
 								console.log("SMOKE_DEMO shortcuts=ok");
 							}
+							// The lock screen, photographed in both themes the way a person meets it:
+							// a PIN is set, Juno locks, and the right PIN opens it again. The values
+							// are throwaway ones in this run's own data folder, never a real secret.
+							{
+								const mainWindow = getMainWindow();
+								if (!mainWindow) throw new Error("Smoke: no main window to lock");
+								lock.configure({ method: "pin", secret: "4831" });
+								lock.lock();
+								await new Promise((r) => setTimeout(r, 700));
+								for (const theme of ["light", "dark"] as const) {
+									nativeTheme.themeSource = theme;
+									await mainWindow.webContents.executeJavaScript(
+										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+									);
+									await new Promise((r) => setTimeout(r, 400));
+									const locked = await mainWindow.webContents.executeJavaScript(
+										`document.body.textContent.includes("Juno is locked")`,
+									);
+									if (!locked) throw new Error("Smoke: the lock screen did not cover the window");
+									writeFileSync(joinPath(shotDir, `lock-screen-${theme}.png`), (await capture(mainWindow.webContents)).toPNG());
+								}
+								const opened = lock.unlock("4831");
+								if (!opened.ok) throw new Error("Smoke: the lock screen would not open with its own PIN");
+								lock.disable("4831");
+								console.log("SMOKE_DEMO lock screen ok");
+							}
+
+							// The splash is a window of its own that a smoke run never shows, so it is
+							// opened here once per theme and photographed where it stands.
+							for (const theme of ["light", "dark"] as const) {
+								nativeTheme.themeSource = theme;
+								const splash = showSplash();
+								await new Promise((r) => setTimeout(r, 1400));
+								writeFileSync(joinPath(shotDir, `splash-${theme}.png`), (await capture(splash.webContents)).toPNG());
+								closeSplash();
+							}
+							nativeTheme.themeSource = "light";
+						}
+						if (isWindows) {
+							// What can be seen without a person at a real toast: the tray icon, the
+							// badge following the requests, the shortcut and what a refusal says.
+							// The buttons on a real toast are not reachable from here.
+							await desktop.update({ tray: true });
+							if (!trayExists()) throw new Error("Smoke: the tray icon did not appear");
+							await desktop.update({ tray: false });
+							if (trayExists()) throw new Error("Smoke: the tray icon stayed after it was turned off");
+
+							const agentActions = await import("./main/services/agent-actions");
+							// The demo business already has requests waiting, so count from there.
+							await syncBadge();
+							const before = badgeCount();
+							const waiting = await agentActions.request({
+								toolName: "mail.send",
+								args: { id: "smoke" },
+								summary: "Smoke request",
+								source: "mcp",
+							});
+							await new Promise((resolve) => setTimeout(resolve, 300));
+							if (badgeCount() !== before + 1) throw new Error(`Smoke: the badge said ${badgeCount()} with one more request waiting than ${before}`);
+							await agentActions.reject(waiting.id);
+							await new Promise((resolve) => setTimeout(resolve, 300));
+							if (badgeCount() !== before) throw new Error(`Smoke: the badge said ${badgeCount()} after the request was answered, not ${before}`);
+
+							const turnedOn = await desktop.update({ newNoteShortcut: { enabled: true } });
+							if (!turnedOn.shortcut.registered || !globalShortcut.isRegistered("Ctrl+Alt+N")) {
+								throw new Error(`Smoke: the shortcut was not taken: ${turnedOn.shortcut.problem}`);
+							}
+							const occupied = "Ctrl+Shift+F9";
+							globalShortcut.register(occupied, () => undefined);
+							const refused = await desktop.update({ newNoteShortcut: { accelerator: occupied } });
+							globalShortcut.unregister(occupied);
+							if (refused.shortcut.registered || !refused.shortcut.problem) {
+								throw new Error("Smoke: a combination already taken did not say so");
+							}
+							await desktop.update({ newNoteShortcut: { enabled: false, accelerator: "Ctrl+Alt+N" } });
+							if (globalShortcut.isRegistered("Ctrl+Alt+N") || globalShortcut.isRegistered(occupied)) {
+								throw new Error("Smoke: the shortcut was still held after it was turned off");
+							}
+							console.log("SMOKE_DEMO desktop tray=ok badge=ok shortcut=ok");
 						}
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);
 						app.quit();
@@ -4492,6 +5678,9 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	app.on("before-quit", (event) => {
+		// The tray icon and the shortcut go first, so a quit that is held up for an
+		// update does not leave an icon in the notification area that does nothing.
+		releaseDesktop();
 		// A downloaded update is installed here, with a window saying so. That
 		// pass quits again and lands below on its second visit.
 		if (installOnQuit(event)) return;

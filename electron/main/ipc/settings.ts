@@ -17,6 +17,8 @@ import type {
 	ProjectsView,
 	ThemeSetting,
 } from "../../shared/types";
+import * as documentsFolder from "../services/documents-folder";
+import * as documentsFolderPicker from "../services/documents-folder-picker";
 import * as settings from "../services/settings";
 import * as signature from "../services/signature";
 import { refreshOverlayTheme } from "../windows/chrome";
@@ -52,6 +54,9 @@ export function registerSettingsIpc(): void {
 	ipcMain.handle("settings.getSignatureImage", () => signature.getDataUrl());
 	ipcMain.handle("settings.chooseSignature", () => signature.choose());
 	ipcMain.handle("settings.clearSignature", () => signature.clear());
+	ipcMain.handle("settings.getDocumentsFolder", () => documentsFolder.current());
+	ipcMain.handle("settings.chooseDocumentsFolder", () => documentsFolderPicker.choose());
+	ipcMain.handle("settings.resetDocumentsFolder", () => documentsFolder.reset());
 
 	ipcMain.handle("settings.get", () => settings.get());
 	ipcMain.handle("settings.getTheme", () => settings.getTheme());

@@ -44,11 +44,11 @@ export function RunConsole({ run, onStop, onClear }: RunConsoleProps) {
 				<span className={`flex-none ${STATE_CLASSES[run.state]}`}>
 					<Icon name={run.state === "running" ? "play" : run.state === "failed" ? "warning" : "stop"} />
 				</span>
-				<span className="min-w-0 flex-1 truncate text-[length:var(--text-dense)]">
+				<span className="min-w-0 flex-1 truncate text-dense">
 					<span className="font-[var(--weight-medium)]">{run.label}</span>
 					<span className="ml-2 text-[var(--ink-muted)]">{run.command}</span>
 				</span>
-				<span className={`tabular flex-none text-[length:var(--text-micro)] ${STATE_CLASSES[run.state]}`}>
+				<span className={`tabular flex-none text-micro ${STATE_CLASSES[run.state]}`}>
 					{STATE_WORDS[run.state]}
 					{run.exitCode !== null && run.state !== "running" ? ` (${run.exitCode})` : ""}
 				</span>
@@ -65,7 +65,7 @@ export function RunConsole({ run, onStop, onClear }: RunConsoleProps) {
 			</header>
 
 			{run.error ? (
-				<p data-selectable className="border-b border-[var(--line)] px-3 py-2 text-[length:var(--text-sm)] text-[var(--risk)]">
+				<p data-selectable className="border-b border-[var(--line)] px-3 py-2 text-sm text-[var(--risk)]">
 					{run.error}
 				</p>
 			) : null}
@@ -82,13 +82,13 @@ export function RunConsole({ run, onStop, onClear }: RunConsoleProps) {
 			>
 				<pre
 					data-selectable
-					className="whitespace-pre-wrap break-words font-mono text-[length:var(--text-micro)] leading-[var(--leading-normal)] text-[var(--ink-muted)]"
+					className="whitespace-pre-wrap break-words font-mono text-micro text-[var(--ink-muted)]"
 				>
 					{run.output.length > 0 ? run.output.join("\n") : "No output yet."}
 				</pre>
 			</div>
 
-			<p className="tabular border-t border-[var(--line)] px-3 py-1.5 text-[length:var(--text-micro)] text-[var(--ink-faint)]">
+			<p className="tabular border-t border-[var(--line)] px-3 py-1.5 text-micro text-[var(--ink-faint)]">
 				{run.workingDir}
 			</p>
 		</section>

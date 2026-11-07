@@ -17,21 +17,23 @@ import { windowIcon } from "./chrome";
 
 let splash: BrowserWindow | null = null;
 
-const WIDTH = 380;
-const HEIGHT = 260;
+const WIDTH = 420;
+const HEIGHT = 300;
 
 function document_(dark: boolean): string {
-	const paper = dark ? "#111117" : "#f6f6fa";
-	const ink = dark ? "#eeeef5" : "#16161d";
-	const muted = dark ? "#757589" : "#8b8b9c";
+	// The values of --paper, --ink, --ink-muted, --accent and --line in brand/tokens.css:
+	// this document cannot load the stylesheet, so it carries them.
+	const paper = dark ? "#101013" : "#f5f5f7";
+	const ink = dark ? "#f0f0f4" : "#17171c";
+	const muted = dark ? "#a2a3ae" : "#5b5c66";
 	const accent = dark ? "#a79df0" : "#4a3fa0";
-	const line = dark ? "#2a2a35" : "#e3e2ec";
+	const line = dark ? "#27272d" : "#ececf1";
 
 	return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <style>
   @media (prefers-reduced-motion: reduce) {
-    .mark, .sweep { animation: none !important; }
+    .mark, .mark path { animation: none !important; stroke-dashoffset: 0 !important; }
   }
   html, body {
     margin: 0; height: 100%;
@@ -41,7 +43,7 @@ function document_(dark: boolean): string {
   }
   body {
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 18px;
+    align-items: center; justify-content: center; gap: 16px;
     border: 1px solid ${line}; border-radius: 14px; box-sizing: border-box;
   }
   /* The crescent draws itself in, then settles. One gesture, about a second,
@@ -51,23 +53,20 @@ function document_(dark: boolean): string {
   .mark path.base { animation-delay: 260ms; }
   @keyframes rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
   @keyframes draw { to { stroke-dashoffset: 0 } }
-  .name { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
-  .step { font-size: 12px; color: ${muted}; min-height: 16px; }
-  .track { width: 168px; height: 2px; border-radius: 2px; background: ${line}; overflow: hidden; }
-  /* Indeterminate: the work behind it has no percentage to report, and a fake
-     one that jumps to 90 and waits is worse than none. */
-  .sweep { width: 40%; height: 100%; border-radius: 2px; background: ${accent}; animation: sweep 1.4s ease-in-out infinite; }
-  @keyframes sweep { 0% { transform: translateX(-110%) } 100% { transform: translateX(320%) } }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .name { font-size: 32px; line-height: 40px; font-weight: 600; }
+  .step { font-size: 14px; line-height: 21px; color: ${muted}; min-height: 21px; }
 </style></head>
 <body>
-  <svg class="mark" viewBox="0 0 32 32" width="46" height="46" fill="none"
-       stroke="${accent}" stroke-width="3" style="--in: 420ms">
-    <path d="M22.4 6.2a9.2 9.2 0 1 0 3.4 15.8A10.8 10.8 0 0 1 22.4 6.2Z" stroke-linejoin="round"/>
-    <path class="base" d="M5.5 27.2h21" stroke-linecap="round"/>
-  </svg>
-  <div class="name">Juno</div>
-  <div class="track"><div class="sweep"></div></div>
-  <div class="step" id="step">Starting</div>
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 32 32" width="40" height="40" fill="none"
+         stroke="${accent}" stroke-width="3" style="--in: 420ms">
+      <path d="M22.4 6.2a9.2 9.2 0 1 0 3.4 15.8A10.8 10.8 0 0 1 22.4 6.2Z" stroke-linejoin="round"/>
+      <path class="base" d="M5.5 27.2h21" stroke-linecap="round"/>
+    </svg>
+    <div class="name">Juno</div>
+  </div>
+  <div class="step" id="step">Opening your data</div>
 </body></html>`;
 }
 
@@ -85,7 +84,7 @@ export function showSplash(): BrowserWindow {
 		alwaysOnTop: true,
 		show: false,
 		icon: windowIcon(),
-		backgroundColor: nativeTheme.shouldUseDarkColors ? "#111117" : "#f6f6fa",
+		backgroundColor: nativeTheme.shouldUseDarkColors ? "#101013" : "#f5f5f7",
 		webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
 	});
 

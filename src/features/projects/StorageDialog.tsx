@@ -69,25 +69,25 @@ export function StorageDialog({ projectId, onClose, onMoved }: StorageDialogProp
 			) : (
 				<div className="flex flex-col gap-5">
 					<div>
-						<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="text-sm text-[var(--ink-muted)]">
 							{info.mode === "app"
 								? "In Juno's own folder, which is backed up with your database."
 								: "In a folder you chose. It is not part of a Juno backup."}
 						</p>
 						<p
 							data-selectable
-							className="mt-2 break-all rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-[length:var(--text-sm)]"
+							className="mt-2 break-all rounded-[var(--radius-sm)] bg-[var(--sunken)] p-3 font-mono text-sm"
 						>
 							{info.path}
 						</p>
-						<p className="tabular mt-2 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+						<p className="tabular mt-2 text-sm text-[var(--ink-muted)]">
 							{info.exists
 								? `${info.fileCount} ${info.fileCount === 1 ? "file" : "files"}, ${formatBytes(info.byteSize)}`
 								: "The folder is not there yet. It is made when the first file is added."}
 						</p>
 					</div>
 
-					<label className="flex items-start gap-2 text-[length:var(--text-sm)]">
+					<label className="flex items-start gap-2 text-sm">
 						<input
 							type="checkbox"
 							checked={move}
@@ -131,7 +131,7 @@ export function StorageDialog({ projectId, onClose, onMoved }: StorageDialogProp
 						</Button>
 					</div>
 
-					<p className="text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+					<p className="text-sm text-[var(--ink-muted)]">
 						Files you added as links are not in here. They stay where they already were, and
 						moving this folder does not touch them.
 					</p>
@@ -141,7 +141,7 @@ export function StorageDialog({ projectId, onClose, onMoved }: StorageDialogProp
 							<p className="font-[var(--weight-medium)] text-[var(--risk)]">
 								Could not change where the files are kept.
 							</p>
-							<p data-selectable className="mt-1 text-[length:var(--text-sm)] text-[var(--ink-muted)]">
+							<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 								{error}
 							</p>
 						</div>

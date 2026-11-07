@@ -1,5 +1,7 @@
 import type { ListClientsQuery } from "../../shared/api";
-import type { ClientInput, ClientPatch } from "../../shared/types";
+import type { ClientIntakeInput, ClientPatch } from "../../shared/types";
+import { CLIENT_LANGUAGES } from "../../shared/client-language";
+import * as intake from "../services/client-intake";
 import * as clients from "../services/clients";
 import type { ToolDescriptor } from "./types";
 
@@ -9,6 +11,7 @@ const FIELDS = {
 	website: "website",
 	vat_number: "vatNumber",
 	notes: "notes",
+	language: "language",
 } as const;
 
 function fields(args: Record<string, unknown>): Record<string, unknown> {
@@ -30,6 +33,12 @@ const writableProperties: Record<string, unknown> = {
 	notes: {
 		type: ["string", "null"],
 		description: "Free text notes about the client, rendered as Markdown.",
+	},
+	language: {
+		type: "string",
+		enum: CLIENT_LANGUAGES.map((language) => language.value),
+		description:
+			"What the client is written to in: nl is Dutch with u, nl-je is Dutch with je, fr or en. Defaults to nl.",
 	},
 };
 
@@ -88,7 +97,7 @@ export const clientTools: ToolDescriptor[] = [
 		name: "clients.create",
 		title: "Create a client",
 		description:
-			"Create a client. Only the name is required; everything else can be filled in later. Add an email, phone number or address with client_emails.create, client_phones.create or client_addresses.create once the client exists.",
+			"Create a client. Only the name is required; everything else can be filled in later. An email, phone and one-line address given here become the client's primary ones; add more later with the client_emails, client_phones and client_addresses tools.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -96,11 +105,20 @@ export const clientTools: ToolDescriptor[] = [
 			properties: {
 				name: { type: "string", description: "The client's name as it should be displayed." },
 				...writableProperties,
+				email: { type: ["string", "null"], description: "Primary email address." },
+				phone: { type: ["string", "null"], description: "Primary phone number." },
+				address: { type: ["string", "null"], description: "Primary address on one line, for example 'Kerkstraat 1, 9000 Gent'." },
 			},
 			required: ["name"],
 			additionalProperties: false,
 		},
-		handler: (args) => clients.create(fields(args) as ClientInput),
+		handler: (args) =>
+			intake.createWithContact({
+				...fields(args),
+				email: args.email,
+				phone: args.phone,
+				address: args.address,
+			} as ClientIntakeInput),
 	},
 	{
 		name: "clients.update",

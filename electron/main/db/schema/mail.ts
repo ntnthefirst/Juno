@@ -46,6 +46,13 @@ export const mailAccounts = sqliteTable(
 		lastSyncAt: text("last_sync_at"),
 		/** The last failure, in words a person can act on. Cleared by a clean sync. */
 		lastSyncError: text("last_sync_error"),
+		/**
+		 * The moment the mailbox rules started to apply. Mail older than this is
+		 * history and is never run through a rule, which is what keeps the first sync
+		 * of an account with years of mail from filing all of it. Set by the first
+		 * sync (or by the migration for an account that already existed).
+		 */
+		rulesSince: text("rules_since"),
 	},
 	(t) => [
 		index("mail_accounts_owner_idx").on(t.ownerId),

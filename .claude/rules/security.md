@@ -10,7 +10,7 @@ one machine. These rules are strict because the blast radius is the whole compan
 Decision 6 in [../../docs/decisions.md](../../docs/decisions.md).
 
 - Mail passwords, app passwords and OAuth tokens go through
-  `electron/main/vault/`, which wraps Electron `safeStorage` (Windows DPAPI, macOS
+  `electron/main/vault.ts`, which wraps Electron `safeStorage` (Windows DPAPI, macOS
   Keychain), keyed by account id.
 - **The database stores a reference, never a secret.** `mail_accounts` has a
   `credential_key`, not a password column. If a secret can appear in a `SELECT`,
@@ -28,7 +28,7 @@ Decision 6 in [../../docs/decisions.md](../../docs/decisions.md).
 
 ## 2. The preload bridge is a fixed list of channels
 
-`electron/preload/index.ts` exposes one frozen object through `contextBridge`, and
+`electron/preload.ts` exposes one frozen object through `contextBridge`, and
 that object is the entire surface the renderer has.
 
 May expose: named, typed functions that map to one IPC channel each
@@ -43,6 +43,10 @@ May not expose, ever:
   node object.
 - A function that takes a SQL string, a file path chosen by the renderer, or a URL
   the main process will fetch. Pass an id and let the service resolve it.
+  `pages.openLink` takes an address from a page the person wrote and opens it only
+  after `safeLinkHref` (https or mailto), the same check the page was saved with.
+  `pages.chooseImage` takes no path at all: the file is picked in a dialog in the main
+  process and copied into the page's own folder (decision 68). Neither is an MCP tool.
   The one exception is `mail.templates.loadPicture`, reached only after the person
   confirms a source in a dialog (`services/mail-pictures.ts`): https only, a public
   host on every redirect, a size cap, and raster formats only. It is not an MCP tool.

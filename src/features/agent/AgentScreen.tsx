@@ -5,26 +5,21 @@ import { Tabs } from "../../components/Tabs";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { AutomationList } from "./AutomationList";
-import { ConnectionPanel } from "./ConnectionPanel";
 import { EntityChip } from "./EntityChip";
-import { formatWhen, RESULT_TONES } from "./format";
+import { formatLogWhen, logOutcome, logWho } from "./format";
 import { RequestList } from "./RequestList";
-import { ToolTile } from "./ToolTile";
 
-type Tab = "requests" | "automations" | "log" | "connection";
+type Tab = "requests" | "log" | "automations";
 
 /**
- * Connection is on this screen and not only in settings, which is where it
- * ended up for a while. Settings is a modal window somebody opens to change
- * how Juno behaves; connecting an agent is a job with steps, done once, with
- * the tool list and the pending requests beside it as the thing being
- * connected to.
+ * Requests and Log are the two the design draws. Automations is the third,
+ * beside them (decision 58), and connecting a client lives in Settings > MCP
+ * with the rest of how Juno behaves toward an agent.
  */
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
 	{ id: "requests", label: "Requests", icon: "inbox" },
-	{ id: "automations", label: "Automations", icon: "play" },
 	{ id: "log", label: "Log", icon: "list" },
-	{ id: "connection", label: "Connection", icon: "link" },
+	{ id: "automations", label: "Automations", icon: "play" },
 ];
 
 /**
@@ -104,15 +99,10 @@ export function AgentScreen() {
 							onChanged={refresh}
 							onNotice={setNotice}
 						/>
-					) : tab === "automations" ? (
-						<AutomationList
-							onNotice={setNotice}
-							onChanged={refresh}
-						/>
 					) : tab === "log" ? (
 						<AuditLog onNotice={setNotice} />
 					) : (
-						<ConnectionPanel onNotice={setNotice} />
+						<AutomationList onNotice={setNotice} onChanged={refresh} />
 					)}
 				</div>
 			</div>
@@ -126,12 +116,6 @@ export function AgentScreen() {
 		</div>
 	);
 }
-
-const ACTOR_LABELS: Record<AuditEvent["actor"], string> = {
-	user: "You",
-	agent: "Agent",
-	automation: "Automation",
-};
 
 /** Everything that changed a record, whoever changed it. */
 function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
@@ -165,73 +149,67 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
 				<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the log.</p>
-				<p
-					data-selectable
-					className="mt-1 text-sm text-[var(--ink-muted)]"
-				>
+				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 					{error}
 				</p>
 			</div>
 		);
 	}
 	if (rows === null) return <p className="text-[var(--ink-muted)]">Loading.</p>;
-	if (rows.length === 0) {
-		return (
-			<p className="max-w-[68ch] text-[var(--ink-muted)]">
-				Nothing yet. Every call that changes a record is logged here, with who made it and how it ended. The
-				arguments are not kept; a digest of them is, so two identical calls can be told apart.
-			</p>
-		);
-	}
 
 	return (
-		<div className="w-full rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
-			{rows.map((row) => {
-				const view = views.get(row.id) ?? null;
-				return (
-					<div
-						key={row.id}
-						className="flex items-center gap-3 border-b border-[var(--line)] px-3 py-2.5 last:border-b-0 hover:bg-[var(--hover)]"
-					>
-						<ToolTile toolName={row.toolName} size="small" />
-						<div className="min-w-0 flex-1">
-							<p className="truncate text-dense font-[var(--weight-medium)]">
-								{view?.title ?? row.summary}
-							</p>
-							{view?.entity ? (
-								<div className="mt-1">
-									<EntityChip entity={view.entity} compact onNotice={onNotice} />
-								</div>
-							) : null}
-							{row.error ? (
-								<p data-selectable className="mt-1 truncate text-sm text-[var(--risk)]">
-									{row.error}
-								</p>
-							) : null}
-						</div>
-						<span className="w-[78px] shrink-0 text-sm text-[var(--ink-muted)]">
-							{ACTOR_LABELS[row.actor]}
-						</span>
-						<span
-							className={`min-w-[64px] shrink-0 text-right text-sm font-[var(--weight-medium)] ${RESULT_TONES[row.result]}`}
-						>
-							{RESULT_LABELS[row.result]}
-						</span>
-						<span className="tabular w-[92px] shrink-0 text-right text-sm text-[var(--ink-muted)]">
-							{formatWhen(row.createdAt)}
-						</span>
-					</div>
-				);
-			})}
+		<div>
+			<p className="text-dense text-[var(--ink-muted)]">
+				Everything the agent did, and everything you decided. Entries are kept for six months.
+			</p>
+			{rows.length === 0 ? (
+				<p className="mt-6 max-w-[68ch] text-[var(--ink-muted)]">
+					Nothing yet. Every call that changes a record is logged here, with who made it and how it ended.
+				</p>
+			) : (
+				<table className="mt-6 w-full border-collapse text-left">
+					<thead>
+						<tr className="border-b border-[var(--line)] text-dense text-[var(--ink-muted)]">
+							<th scope="col" className="w-[190px] py-3 pr-4 font-normal">When</th>
+							<th scope="col" className="py-3 pr-4 font-normal">Tool</th>
+							<th scope="col" className="w-[260px] py-3 pr-4 font-normal">Outcome</th>
+							<th scope="col" className="w-[120px] py-3 font-normal">Who</th>
+						</tr>
+					</thead>
+					<tbody>
+						{rows.map((row) => {
+							const view = views.get(row.id) ?? null;
+							const outcome = logOutcome(row);
+							return (
+								<tr key={row.id} className="h-[52px] border-b border-[var(--line)] align-middle hover:bg-[var(--hover)]">
+									<td className="tabular py-2 pr-4 text-dense text-[var(--ink-muted)]">{formatLogWhen(row.createdAt)}</td>
+									<td className="py-2 pr-4">
+										<span className="font-mono text-sm">{row.toolName}</span>
+										{view?.entity ? (
+											<div className="mt-1">
+												<EntityChip entity={view.entity} compact onNotice={onNotice} />
+											</div>
+										) : null}
+										{row.error ? (
+											<p data-selectable className="mt-1 truncate text-sm text-[var(--risk)]">
+												{row.error}
+											</p>
+										) : null}
+									</td>
+									<td className="py-2 pr-4">
+										<span
+											className={`inline-block rounded-[var(--radius-sm)] px-2 py-0.5 text-micro ${outcome.tone}`}
+										>
+											{outcome.label}
+										</span>
+									</td>
+									<td className="py-2 text-dense">{logWho(row)}</td>
+								</tr>
+							);
+						})}
+					</tbody>
+				</table>
+			)}
 		</div>
 	);
 }
-
-const RESULT_LABELS: Record<AuditEvent["result"], string> = {
-	ok: "Done",
-	failed: "Failed",
-	pending: "Waiting",
-	rejected: "Rejected",
-	expired: "Expired",
-	closed: "Sent by you, request closed",
-};

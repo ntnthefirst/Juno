@@ -1815,3 +1815,19 @@ how the gate decides.
 
 **What would reverse this:** a loss that came from a change an agent made
 without asking, which would take Change records back to Ask first for good.
+
+## 58. Automations are a tab of the Agent screen
+
+The design's Agent screen draws Requests and Log and no home for automations,
+so they stay where they are, as a third tab beside those two
+(`features/agent/AutomationList.tsx`). The Connection tab is gone from that
+screen, because the design does not draw it and Settings > MCP holds the same
+panels as pages (Server, Connect a client, What an agent can do).
+
+Nothing about how they run changes. An automation is a recorded list of tool
+calls replayed through the same host, with no second engine, and a step that
+parks stops the run. Decision 57 adds one thing to say aloud: a level of Allow
+does not make a scheduled step run.
+
+**What would reverse this:** a screen drawn for automations of their own, with
+a trigger editor too large for a tab.

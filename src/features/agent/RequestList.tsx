@@ -361,6 +361,11 @@ function AnsweredRow({ action, view, onChanged, onNotice }: CardProps) {
 				<p className="truncate text-dense font-[var(--weight-medium)]">
 					{view?.title ?? action.summary}
 				</p>
+				{action.state === "closed" ? (
+					<p className="text-sm text-[var(--ink-muted)]">
+						You sent it yourself at {formatWhen(action.decidedAt ?? action.createdAt).slice(-5)} · the request closed on its own
+					</p>
+				) : null}
 				{shown.length > 0 ? (
 					<div className="mt-1 flex flex-wrap gap-1.5">
 						{shown.map((entity) => (

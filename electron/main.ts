@@ -985,7 +985,7 @@ if (!app.requestSingleInstanceLock()) {
 										"Drafts",
 										"Documents",
 										"Agent",
-										"Connection",
+										"Agent log",
 										"Mail templates",
 										"Document templates",
 									]
@@ -1012,7 +1012,7 @@ if (!app.requestSingleInstanceLock()) {
 														? "Overview"
 														: screen === "Week" || screen === "Event form"
 															? "Calendar"
-															: screen === "Connection"
+															: screen === "Agent log"
 																? "Agent"
 																: screen;
 								// Matched on data-nav, never on the label: the rail renders icons only.
@@ -1334,27 +1334,19 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (opened !== "ok") throw new Error(`Smoke: client record ${opened}`);
 								}
-								if (screen === "Connection") {
+								if (screen === "Agent log") {
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											const tab = [...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim() === "Connection");
-											if (!tab) return "no connection tab";
-											tab.click();
+											const tabs = [...document.querySelectorAll("[role=tab]")].map((el) => el.textContent.trim().replace(/\\d+$/, ""));
+											if (tabs.join(",") !== "Requests,Log,Automations") return "the tabs are " + tabs.join(",");
+											[...document.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().startsWith("Log")).click();
 											await new Promise((r) => setTimeout(r, 700));
 											const main = document.querySelector("main");
-											if (!main.textContent.includes("Listening")) return "not listening";
-											if (!main.textContent.includes("http://127.0.0.1:")) return "no server address";
-											const power = main.querySelector("button[role=switch]");
-											if (!power || power.getAttribute("aria-checked") !== "true") return "the server switch is not on";
-											// A client is given the URL and nothing else, so the page says to
-											// add it, and Claude Desktop, which cannot take one, has its own row.
-											if (!main.textContent.includes("Add the server URL")) return "no instruction to add the URL";
-											if (!main.textContent.includes("Claude Desktop")) return "no Claude Desktop row";
-											if (main.querySelector("button[role=radio]")) return "a route switch is still there";
+											if (!main.textContent.includes("kept for six months")) return "no log intro";
 											return "ok";
 										})()`,
 									);
-									if (opened !== "ok") throw new Error(`Smoke: agent connection ${opened}`);
+									if (opened !== "ok") throw new Error(`Smoke: agent log ${opened}`);
 
 										// The prompt a client's first connection raises, answered the
 										// way a person answers it: the code is typed, not clicked. The

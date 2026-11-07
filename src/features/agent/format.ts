@@ -1,5 +1,6 @@
 import type {
 	AgentActionState,
+	AuditEvent,
 	AuditResult,
 	AutomationRunStatus,
 	AutomationTrigger,
@@ -12,7 +13,7 @@ export const ACTION_LABELS: Record<AgentActionState, string> = {
 	expired: "Expired",
 	executed: "Done",
 	failed: "Failed",
-	closed: "Sent by you",
+	closed: "Answered",
 };
 
 /** Tone is a token name, never a hex. See brand/BRAND.md section 5. */
@@ -142,4 +143,53 @@ export function parseMailPreview(text: string): MailPreview | null {
 	}
 	if (lines[index] === "") index += 1;
 	return { headers, body: lines.slice(index).join("\n").trim() };
+}
+
+/** An instant as dd/mm/yyyy hh:mm, for the Log's When column. */
+export function formatLogWhen(iso: string): string {
+	const at = new Date(iso);
+	if (Number.isNaN(at.getTime())) return iso;
+	const pad = (value: number) => String(value).padStart(2, "0");
+	return `${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
+type LogRow = Pick<AuditEvent, "actor" | "toolName" | "result" | "actionId">;
+
+/** What a log row says happened, in the design's words. */
+export function logOutcome(row: LogRow): { label: string; tone: string } {
+	switch (row.result) {
+		case "closed":
+			return { label: "Sent by you, request closed", tone: "bg-[var(--sunken)] text-[var(--ink-muted)]" };
+		case "rejected":
+			return { label: "Rejected", tone: "bg-[var(--risk-soft)] text-[var(--risk)]" };
+		case "expired":
+			return { label: "Expired", tone: "bg-[var(--sunken)] text-[var(--ink-muted)]" };
+		case "pending":
+			return { label: "Waiting", tone: "bg-[var(--warn-soft)] text-[var(--warn)]" };
+		case "failed":
+			return { label: "Failed", tone: "bg-[var(--risk-soft)] text-[var(--risk)]" };
+		default:
+			if (row.toolName === "mail.draft" || row.toolName === "mail.reply") {
+				return { label: "Draft created", tone: "bg-[var(--sunken)] text-[var(--ink-muted)]" };
+			}
+			// A row with a request behind it was approved by a person. One without
+			// ran straight away because its permission is set to Allow.
+			return row.actionId
+				? { label: "Approved", tone: "bg-[var(--ok-soft)] text-[var(--ok)]" }
+				: { label: "Allowed", tone: "bg-[var(--sunken)] text-[var(--ink-muted)]" };
+	}
+}
+
+/**
+ * Who the row belongs to. A decision is yours: approving a request or
+ * rejecting it. What the agent or an automation did on its own is theirs, and
+ * so is a request that closed itself because you sent the draft by hand.
+ */
+export function logWho(row: LogRow): string {
+	if (row.result === "closed") return "Agent";
+	if (row.actionId && (row.result === "rejected" || row.result === "ok" || row.result === "failed")) {
+		return row.toolName === "mail.draft" || row.toolName === "mail.reply" ? "Agent" : "You";
+	}
+	if (row.actor === "user") return "You";
+	return row.actor === "automation" ? "Automation" : "Agent";
 }

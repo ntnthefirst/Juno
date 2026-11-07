@@ -9,8 +9,10 @@ import { rank } from "../lib/palette-search";
 import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
 import { useLoaded } from "../lib/use-loaded";
 import { leadParticipant } from "../features/mail/format";
+import type { ScreenAction } from "../lib/screen-actions";
 import type { ScreenId } from "./screens";
 import { belongsTo } from "../features/documents/belongs-to";
+import { noteTitleFallback } from "../features/notes/note-format";
 
 type PaletteItem = {
 	id: string;
@@ -28,13 +30,14 @@ type PaletteItem = {
 type Section = { title: string; items: PaletteItem[] };
 
 /** Where a search looks. Tab moves along these, the way the tabs under the box do. */
-type Scope = "all" | "client" | "project" | "mail" | "document";
+type Scope = "all" | "client" | "project" | "mail" | "note" | "document";
 
 const SCOPES: { id: Scope; label: string }[] = [
 	{ id: "all", label: "All" },
 	{ id: "client", label: "Clients" },
 	{ id: "project", label: "Projects" },
 	{ id: "mail", label: "Mail" },
+	{ id: "note", label: "Notes" },
 	{ id: "document", label: "Documents" },
 ];
 
@@ -42,7 +45,7 @@ type CommandPaletteProps = {
 	onClose: () => void;
 	onNavigate: (id: ScreenId) => void;
 	/** Asks the shell to bring that screen up with its new-record form open. */
-	onNew: (screen: ScreenId) => void;
+	onNew: (screen: ScreenId, action?: ScreenAction) => void;
 	onSettings: () => void;
 	/** Null when no lock is set up, which takes the command away. */
 	onLock: (() => void) | null;
@@ -53,12 +56,14 @@ const RECORD_LABEL: Record<string, string> = {
 	clients: "Clients",
 	projects: "Projects",
 	mail: "Mail",
+	note: "Notes",
 	documents: "Documents",
 };
 
 const loadClients = () => window.juno.clients.list();
 const loadProjects = () => window.juno.projects.list();
 const loadDocuments = () => window.juno.documents.list();
+const loadNotes = () => window.juno.notes.list();
 
 /** How many of each kind of record are offered under All. More is scrolling, not finding. */
 const PER_KIND = 4;
@@ -89,6 +94,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 	const clients = useLoaded(loadClients);
 	const projects = useLoaded(loadProjects);
 	const documents = useLoaded(loadDocuments);
+	const notes = useLoaded(loadNotes);
 
 	// What had focus before, so closing hands it back instead of dropping it on the page.
 	useEffect(() => {
@@ -136,6 +142,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 			{ id: "go-projects", label: "Projects", icon: "projects", keys: comboKeys("projects"), keywords: "work jobs", run: go("projects") },
 			{ id: "go-mail", label: "Mail", icon: "mail", keys: comboKeys("mail"), keywords: "inbox email messages", run: go("mail") },
 			{ id: "go-styled-mail", label: "Styled mail", icon: "templates", keywords: "mail templates email layouts", run: go("mail-templates") },
+			{ id: "go-notes", label: "Notes", icon: "note", keys: comboKeys("notes"), keywords: "jottings checklist write", run: go("notes") },
 			{ id: "go-documents", label: "Documents", icon: "documents", keys: comboKeys("documents"), keywords: "contracts pdf files", run: go("documents") },
 			{ id: "go-templates", label: "Templates", icon: "templates", keywords: "document templates contracts letters", run: go("document-templates") },
 			{ id: "go-reminders", label: "Reminders", icon: "reminders", keys: formatCombo(COMBOS.reminders), keywords: "tasks due todo", run: go("reminders") },
@@ -144,6 +151,8 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 		];
 
 		const create: PaletteItem[] = [
+			{ id: "new-note", label: "New note", icon: "add", keywords: "write jot checklist", run: () => onNew("notes") },
+			{ id: "new-page", label: "New page", icon: "add", keywords: "write document quote", keys: formatCombo(COMBOS.newPage), run: () => onNew("documents", "new-page") },
 			{ id: "new-reminder", label: "New reminder", icon: "add", keywords: "task due", run: () => onNew("overview") },
 			{ id: "new-event", label: "New event", icon: "add", keywords: "appointment calendar", run: () => onNew("calendar") },
 			{ id: "new-client", label: "New client", icon: "add", keywords: "customer company", run: () => onNew("clients") },
@@ -220,6 +229,22 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 				: [];
 		if (documentRows.length > 0) result.push({ title: "Documents", items: documentRows });
 
+		const noteRows =
+			(scope === "all" || scope === "note") && notes.status === "ready"
+				? rank(
+						notes.value.map((note): PaletteItem => ({
+							id: `note-${note.id}`,
+							label: note.title || noteTitleFallback(note.body),
+							detail: note.clientName ?? note.projectName ?? "",
+							record: "note",
+							keywords: note.body.slice(0, 400),
+							run: () => requestOpen({ kind: "note", id: note.id }),
+						})),
+						term,
+					).slice(0, cap)
+				: [];
+		if (noteRows.length > 0) result.push({ title: "Notes", items: noteRows });
+
 		// Only the answer to what is typed now: the one for the word before it is stale.
 		const mailRows =
 			(scope === "all" || scope === "mail") && mail && mail.query === term
@@ -237,7 +262,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 		if (mailRows.length > 0) result.push({ title: "Mail", items: mailRows });
 
 		return result;
-	}, [term, scope, clients, projects, documents, mail, onNavigate, onNew, onSettings, onLock, onHelp]);
+	}, [term, scope, clients, projects, documents, notes, mail, onNavigate, onNew, onSettings, onLock, onHelp]);
 
 	const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
 	const index = Math.min(active, Math.max(0, flat.length - 1));

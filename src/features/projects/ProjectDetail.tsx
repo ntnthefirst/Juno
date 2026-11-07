@@ -28,6 +28,7 @@ import { openNewRecord } from "../../lib/new-record";
 import type { ScheduleForm } from "../calendar/schedule-form";
 import { scheduleRows, type ScheduleRow } from "../calendar/schedule-rows";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
+import { LinkedNotes } from "../notes/LinkedNotes";
 import { AssetList } from "./AssetList";
 import { CommandPanel } from "./CommandPanel";
 import { formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
@@ -474,6 +475,8 @@ export function ProjectDetail({
 								onChanged={() => undefined}
 							/>
 						</div>
+
+						<LinkedNotes projectId={current.id} />
 
 				<section>
 					<SectionHeading

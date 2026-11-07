@@ -25,6 +25,8 @@ export function blankMenuFor(
 			"new-client": () => requestScreenAction("clients", "new"),
 			"new-project": () => requestScreenAction("projects", "new"),
 			"new-document": () => requestScreenAction("documents", "new"),
+			"new-note": () => requestScreenAction("notes", "new"),
+			"new-page": () => requestScreenAction("documents", "new-page"),
 			"new-message": () => requestScreenAction("mail", "new"),
 			...own,
 		},

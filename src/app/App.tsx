@@ -8,6 +8,7 @@ import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
 import { DocumentsScreen } from "../features/documents/DocumentsScreen";
 import { MailScreen } from "../features/mail/MailScreen";
+import { NotesScreen } from "../features/notes/NotesScreen";
 import { Walkthrough } from "../features/onboarding/Walkthrough";
 import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
@@ -18,7 +19,7 @@ import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
 import { currentRequest, onOpenRequest } from "../lib/open-entity";
 import { announceRecordsChanged } from "../lib/new-record";
-import { currentScreenAction, onScreenActionRequest, requestScreenAction } from "../lib/screen-actions";
+import { currentScreenAction, onScreenActionRequest, requestScreenAction, type ScreenAction } from "../lib/screen-actions";
 import { useTheme } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
 import { DocumentDropLayer } from "./DocumentDropLayer";
@@ -167,7 +168,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	// "New" starts the record that belongs to the screen on show, by asking the
 	// screen that owns it to open its form. The screen is brought up fresh first,
 	// and opens the form once it has mounted.
-	const startNew = (target: ScreenId) => requestScreenAction(target, "new");
+	const startNew = (target: ScreenId, action: ScreenAction = "new") => requestScreenAction(target, action);
 	const newHere = () => {
 		const target = NEW_ON[screen];
 		if (target) startNew(target.screen);
@@ -179,6 +180,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 		reminders: () => navigate("reminders"),
 		goTo: navigate,
 		newItem: newHere,
+		newPage: () => startNew("documents", "new-page"),
 		settings: () => void window.juno.window.openSettings(),
 		back: () => back?.onSelect(),
 		lock: lock.configured ? () => void window.juno.lock.lock() : null,
@@ -222,6 +224,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 						? "projects"
 						: target.kind === "document"
 							? "documents"
+							: target.kind === "note"
+								? "notes"
 							: target.kind === "thread"
 								? "mail"
 								: target.kind === "mail-template"
@@ -283,6 +287,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 							<DocumentsScreen />
 						) : screen === "mail" ? (
 							<MailScreen />
+						) : screen === "notes" ? (
+							<NotesScreen />
 						) : screen === "calendar" ? (
 							<CalendarScreen />
 						) : screen === "mail-templates" ? (

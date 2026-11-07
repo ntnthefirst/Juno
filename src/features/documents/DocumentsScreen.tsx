@@ -22,6 +22,7 @@ import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { activeDocumentFilterCount, NO_DOCUMENT_FILTERS, type DocumentFilters } from "./document-filters";
 import { DocumentDetail, SpecimenMark } from "./DocumentDetail";
+import { PageView } from "./PageView";
 import { GenerateDialog } from "./GenerateDialog";
 import { describeOutcome, itemsFromPicked, onDocumentsChanged, type ImportItem } from "../../lib/pdf-drop";
 import { ImportFlow } from "./ImportFlow";
@@ -70,7 +71,10 @@ export function DocumentsScreen() {
 	useRecentTouch("document", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [generating, setGenerating] = useState(false);
-	useScreenAction("documents", () => setGenerating(true));
+	useScreenAction("documents", (action) => {
+		if (action === "new-page") void newPage();
+		else setGenerating(true);
+	});
 	const [importItems, setImportItems] = useState<ImportItem[] | null>(null);
 	const [signingRecord, setSigningRecord] = useState<DocumentRecord | null>(null);
 	const [deleted, setDeleted] = useState<DocumentRecord[] | null>(null);
@@ -123,6 +127,17 @@ export function DocumentsScreen() {
 	function selectDocument(id: string, title: string) {
 		setSelectedId(id);
 		setSelectedTitle(title);
+	}
+
+	/** A page is a document with no template and no PDF, so it is made empty and opened to write in. */
+	async function newPage() {
+		try {
+			const page = await window.juno.pages.create({});
+			refreshList();
+			selectDocument(page.document.id, page.document.title);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
 	}
 
 	function generated(result: GenerateDocumentResult) {
@@ -220,6 +235,7 @@ export function DocumentsScreen() {
 	// lands, not on every keystroke in search.
 	const records = useMemo(() => (load.status === "ready" ? load.rows.records : []), [load]);
 	const statuses = useMemo(() => (load.status === "ready" ? load.rows.statuses : []), [load]);
+	const selectedKind = records.find((record) => record.id === selectedId)?.sourceKind ?? null;
 	const statusLabels = new Map(statuses.map((item) => [item.id, item.label]));
 	// Only the statuses and clients a document actually carries, not the whole
 	// reference set or client list: a filter offering a status nothing uses
@@ -276,14 +292,26 @@ export function DocumentsScreen() {
 		<div className={selectedId !== null ? "flex h-full flex-col" : "flex h-full flex-col p-8"}>
 			{selectedId !== null ? (
 				<div className="min-h-0 w-full flex-1">
-					<DocumentDetail
-						key={`${selectedId}:${detailVersion}`}
-						documentId={selectedId}
-						onDeleted={(record) => removed([record])}
-						onChanged={refreshList}
-						onSign={setSigningRecord}
-						onTitleChange={setSelectedTitle}
-					/>
+					{load.status !== "ready" ? (
+						<p className="p-8 text-[var(--ink-muted)]">Loading.</p>
+					) : selectedKind === "page" ? (
+						<PageView
+							key={selectedId}
+							pageId={selectedId}
+							onDeleted={(record) => removed([record])}
+							onChanged={refreshList}
+							onTitleChange={setSelectedTitle}
+						/>
+					) : (
+						<DocumentDetail
+							key={`${selectedId}:${detailVersion}`}
+							documentId={selectedId}
+							onDeleted={(record) => removed([record])}
+							onChanged={refreshList}
+							onSign={setSigningRecord}
+							onTitleChange={setSelectedTitle}
+						/>
+					)}
 				</div>
 			) : (
 				<>
@@ -302,6 +330,7 @@ export function DocumentsScreen() {
 								size="base"
 								ariaLabel="More document actions"
 								items={[
+									{ id: "new-page", label: "New page", icon: "documents", onSelect: () => void newPage() },
 									{
 										id: "import",
 										label: "Import a PDF",
@@ -588,6 +617,11 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 									>
 										<span className="truncate">{row.title}</span>
 										{row.isSpecimen ? <SpecimenMark /> : null}
+										{row.sourceKind === "page" ? (
+											<span className="flex-none rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--accent)]">
+												Page
+											</span>
+										) : null}
 									</button>
 									{row.versionCount > 0 ? (
 										<VersionCount

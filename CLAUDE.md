@@ -137,6 +137,13 @@ gets one example of each that is an ordinary template. No code may look either
 kind of template up by key.
 [.claude/rules/data.md](.claude/rules/data.md).
 
+## The rail
+
+Seven places and Settings: Overview, Calendar, Clients, Projects, Mail, Notes,
+Documents (decision 61). A note is its own record, and **a page is a kind of
+document** (decision 62), so pages are listed, owned and deleted as documents
+are. An eighth place is a decision, not an edit.
+
 ## Windows
 
 One main window, ever. `electron/main/windows/index.ts` is the only file that

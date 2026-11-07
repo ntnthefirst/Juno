@@ -3,8 +3,8 @@ import type { NewRecordKind } from "@shared/types";
 import type { ScreenId } from "../app/screens";
 import { openNewRecord } from "./new-record";
 
-/** What can be asked of a screen from outside it. One thing so far: start a new one. */
-export type ScreenAction = "new";
+/** What can be asked of a screen from outside it. Start a new record, or on Documents a new page. */
+export type ScreenAction = "new" | "new-page";
 
 const EVENT = "juno:screen-action";
 

@@ -176,7 +176,7 @@ export function DocumentsPanel({
 										{record.title}
 									</span>
 									<span className="flex items-center gap-2 text-[var(--ink-muted)]">
-										{record.sourceKind === "imported" ? "Imported PDF" : "From a template"}
+										{record.sourceKind === "imported" ? "Imported PDF" : record.sourceKind === "page" ? "Page" : "From a template"}
 										{record.versionCount > 0 ? (
 											<VersionCount
 												count={record.versionCount}

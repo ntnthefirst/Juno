@@ -80,8 +80,9 @@ export const SCREEN_COMBOS: Partial<Record<ScreenId, string>> = {
 	clients: "mod+3",
 	projects: "mod+4",
 	mail: "mod+5",
-	documents: "mod+6",
-	agent: "mod+7",
+	notes: "mod+6",
+	documents: "mod+7",
+	agent: "mod+8",
 };
 
 export const COMBOS = {
@@ -89,6 +90,7 @@ export const COMBOS = {
 	recent: "mod+e",
 	reminders: "mod+shift+r",
 	newItem: "mod+n",
+	newPage: "mod+shift+n",
 	settings: "mod+,",
 	back: "alt+arrowleft",
 	lock: "mod+shift+l",
@@ -114,6 +116,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: [COMBOS.recent], label: "Recent records" },
 			{ combos: [COMBOS.reminders], label: "Reminders" },
 			{ combos: [COMBOS.newItem], label: "New, on this screen" },
+			{ combos: [COMBOS.newPage], label: "New page" },
 			{ combos: [COMBOS.back], label: "Back, out of a record" },
 			{ combos: [COMBOS.settings], label: "Settings" },
 			{ combos: [COMBOS.lock], label: "Lock Juno" },
@@ -128,8 +131,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: ["mod+3"], label: "Clients" },
 			{ combos: ["mod+4"], label: "Projects" },
 			{ combos: ["mod+5"], label: "Mail" },
-			{ combos: ["mod+6"], label: "Documents" },
-			{ combos: ["mod+7"], label: "Agent" },
+			{ combos: ["mod+6"], label: "Notes" },
+			{ combos: ["mod+7"], label: "Documents" },
+			{ combos: ["mod+8"], label: "Agent" },
 		],
 	},
 	{

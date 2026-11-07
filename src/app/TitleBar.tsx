@@ -6,6 +6,7 @@ import { overlayGutter } from "../lib/platform";
 import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
 import { RecentMenu } from "./RecentMenu";
 import { TimerPill } from "./TimerPill";
+import type { ScreenAction } from "../lib/screen-actions";
 import { NEW_AT_RIGHT, NEW_MENU, NEW_ON, type ScreenId } from "./screens";
 
 type TitleBarProps = {
@@ -25,7 +26,7 @@ type TitleBarProps = {
 	remindersActive: boolean;
 	onOpenReminders: () => void;
 	/** Asks the screen that owns a record to open its new-record form. */
-	onNew: (screen: ScreenId) => void;
+	onNew: (screen: ScreenId, action?: ScreenAction) => void;
 	/** The agent screen is on show, so its button is lit. */
 	agentActive: boolean;
 	/** Requests waiting for a person. A dot when more than zero. */
@@ -123,13 +124,18 @@ export function TitleBar({
 
 	// The screen in view comes first and carries the shortcut for it.
 	const newItems: MenuItem[] = [...NEW_MENU]
-		.sort((a, b) => Number(b.screen === here?.screen) - Number(a.screen === here?.screen))
+		.sort((a, b) => Number(b.label === here?.label) - Number(a.label === here?.label))
 		.map((entry) => ({
-			id: entry.screen,
+			id: entry.label,
 			label: entry.label,
 			icon: entry.icon,
-			hint: entry.screen === here?.screen ? formatCombo(COMBOS.newItem).join(" ") : undefined,
-			onSelect: () => onNew(entry.screen),
+			hint:
+				entry.action === "new-page"
+					? formatCombo(COMBOS.newPage).join(" ")
+					: entry.screen === here?.screen && entry.label === here.label
+						? formatCombo(COMBOS.newItem).join(" ")
+						: undefined,
+			onSelect: () => onNew(entry.screen, entry.action),
 		}));
 
 	function openNewMenu() {

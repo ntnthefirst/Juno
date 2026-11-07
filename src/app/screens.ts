@@ -1,10 +1,12 @@
 import type { IconName } from "../components/Icon";
+import type { ScreenAction } from "../lib/screen-actions";
 
 export type ScreenId =
 	| "overview"
 	| "calendar"
 	| "mail"
 	| "mail-templates"
+	| "notes"
 	| "documents"
 	| "document-templates"
 	| "clients"
@@ -30,6 +32,7 @@ export const SIDEBAR_TOP: ScreenItem[] = [
 	{ id: "clients", label: "Clients", icon: "clients" },
 	{ id: "projects", label: "Projects", icon: "projects" },
 	{ id: "mail", label: "Mail", icon: "mail" },
+	{ id: "notes", label: "Notes", icon: "note" },
 	{ id: "documents", label: "Documents", icon: "documents" },
 ];
 
@@ -38,6 +41,7 @@ export const SCREEN_LABELS: Record<ScreenId, string> = {
 	calendar: "Calendar",
 	mail: "Mail",
 	"mail-templates": "Styled mail",
+	notes: "Notes",
 	documents: "Documents",
 	"document-templates": "Templates",
 	clients: "Clients",
@@ -52,6 +56,7 @@ export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
 	calendar: "calendar",
 	mail: "mail",
 	"mail-templates": "mail",
+	notes: "notes",
 	documents: "documents",
 	"document-templates": "documents",
 	clients: "clients",
@@ -84,6 +89,7 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
 	projects: { screen: "projects", label: "New project" },
 	mail: { screen: "mail", label: "New message" },
 	"mail-templates": { screen: "mail", label: "New message" },
+	notes: { screen: "notes", label: "New note" },
 	documents: { screen: "documents", label: "New document" },
 	"document-templates": { screen: "documents", label: "New document" },
 };
@@ -93,7 +99,9 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
  * Each item does what the same entry in `NEW_ON` does: it asks the screen that
  * owns the record to open its form.
  */
-export const NEW_MENU: { screen: ScreenId; label: string; icon: IconName }[] = [
+export const NEW_MENU: { screen: ScreenId; action?: ScreenAction; label: string; icon: IconName }[] = [
+	{ screen: "notes", label: "New note", icon: "note" },
+	{ screen: "documents", action: "new-page", label: "New page", icon: "documents" },
 	{ screen: "overview", label: "New reminder", icon: "reminders" },
 	{ screen: "calendar", label: "New event", icon: "calendar" },
 	{ screen: "clients", label: "New client", icon: "clients" },
@@ -107,4 +115,4 @@ export const NEW_MENU: { screen: ScreenId; label: string; icon: IconName }[] = [
  * beside the screen's own actions. On every other screen it is the plus at the
  * left, beside Search, Recent and Reminders.
  */
-export const NEW_AT_RIGHT: ScreenId[] = ["calendar", "clients", "projects", "documents", "document-templates", "reminders"];
+export const NEW_AT_RIGHT: ScreenId[] = ["notes", "calendar", "clients", "projects", "documents", "document-templates", "reminders"];

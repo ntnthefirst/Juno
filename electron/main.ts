@@ -322,6 +322,17 @@ if (!app.requestSingleInstanceLock()) {
 								const running = ps.items.find((i) => i.key === "active") ?? ps.items[0];
 								await b.projects.create({ clientId: made[0].id, name: "Ontwikkelovereenkomst site", statusId: running.id, dueOn: "2026-11-14", agreedValueCents: 210000 });
 								await b.projects.create({ clientId: made[1].id, name: "Project scope", statusId: running.id, dueOn: "2026-10-03", agreedValueCents: 125000 });
+								await b.notes.create({ title: "Delivery planning", body: "Oak for the Peeters table arrives on Friday morning." });
+								await b.notes.create({ title: "Prices for the autumn", body: "Hourly rate, materials and the new delivery costs." });
+								await b.notes.create({ title: "Ideas for the stand at the fair", body: "A small stool in ash, a tray, the cutting boards." });
+								await b.notes.create({ title: "Workshop checklist", body: ["- [x] Sharpen the chisels", "- [x] Check the dust extractor", "- [ ] Order screws and glue", "- [ ] Call De Smet about the delivery", "- [ ] Clean the bench", "Remember: the oak for the Peeters table arrives on Friday. Leave space in the workshop for the planks to settle."].join("\\n") });
+								await b.pages.create({ title: "Oak dining table, quote", clientId: made[0].id, blocks: [
+									{ type: "heading", text: "The job" },
+									{ type: "text", text: "A solid oak dining table for six, 200 by 90 cm, with a hardwax oil finish. Delivery and fitting in the dining room are included." },
+									{ type: "heading", text: "Materials and price" },
+									{ type: "table", header: ["Item", "Quantity", "Price"], rows: [["Oak planks, 38 mm", "6", "€ 540,00"], ["Hardwax oil", "2", "€ 64,00"], ["Labour", "24 h", "€ 960,00"], ["Total", "", "€ 1 564,00"]] },
+									{ type: "text", text: "" },
+								] });
 								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", addressLine1: "Kerkstraat 1", postalCode: "9000", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
 								// Phase 1: generate a document through the same bridge the
 								// interface uses, so the smoke run covers it too.
@@ -1009,7 +1020,9 @@ if (!app.requestSingleInstanceLock()) {
 										"Event form",
 										"Mail",
 										"Drafts",
+										"Notes",
 										"Documents",
+										"Page",
 										"Agent",
 										"Agent log",
 										"Mail templates",
@@ -1028,6 +1041,8 @@ if (!app.requestSingleInstanceLock()) {
 								const sidebarEntry =
 									screen === "Client record"
 										? "Clients"
+										: screen === "Page"
+											? "Documents"
 										: screen === "Project record" || screen === "Projects as a list"
 											? "Projects"
 											: screen === "Drafts" || screen === "Mail templates"
@@ -1089,6 +1104,49 @@ if (!app.requestSingleInstanceLock()) {
 									if (pane !== "ok") throw new Error(`Smoke: styled mail column ${pane}`);
 									writeFileSync(joinPath(shotDir, `mail-styled-pane.png`), (await capture(window.webContents)).toPNG());
 									if (!(await pressText("Manage"))) throw new Error("Smoke: no Manage in the styled mail column");
+								}
+								if (screen === "Notes") {
+									// The first note opens beside the list, and ticking a line saves it.
+									const shown = (await window.webContents.executeJavaScript(
+										`(async () => {
+											await new Promise((r) => setTimeout(r, 500));
+											const main = document.querySelector("main");
+											if (!main.textContent.includes("Workshop checklist")) return "the note is not listed";
+											if (!main.querySelector("input[aria-label=Title]")) return "no note is open";
+											const boxes = main.querySelectorAll("section[aria-label=Note] input[type=checkbox]");
+											if (boxes.length < 5) return "the checklist has " + boxes.length + " boxes";
+											const search = main.querySelector("input[aria-label='Search notes']");
+											if (!search) return "no search field";
+											return "ok";
+										})()`,
+									)) as string;
+									if (shown !== "ok") throw new Error(`Smoke: notes ${shown}`);
+								}
+								if (screen === "Page") {
+									// A page opens from the Documents list, with its table, and a slash
+									// on the empty last line draws the block menu.
+									const opened = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											await wait(500);
+											const row = [...document.querySelectorAll("main table button")].find((el) => el.textContent.includes("Oak dining table, quote"));
+											if (!row) return "the page is not in the list";
+											if (!row.textContent.includes("Page")) return "the row does not say it is a page";
+											row.click();
+											await wait(900);
+											const main = document.querySelector("main");
+											if (!main.querySelector("[role=toolbar][aria-label=Format]")) return "no format toolbar";
+											if (!main.querySelector("table")) return "the table is not drawn";
+											const lines = [...main.querySelectorAll("[data-block-text]")];
+											const last = lines[lines.length - 1];
+											last.focus();
+											document.execCommand("insertText", false, "/");
+											await wait(400);
+											if (!main.querySelector("[role=listbox][aria-label='Add a block']")) return "the slash menu did not open";
+											return "ok";
+										})()`,
+									)) as string;
+									if (opened !== "ok") throw new Error(`Smoke: page ${opened}`);
 								}
 								if (screen === "Agent") {
 									// The requests tab is the default, and the pending request from
@@ -4688,7 +4746,7 @@ if (!app.requestSingleInstanceLock()) {
 								console.log(`SMOKE_DEMO settings pages=${pages.length}`);
 								closeSettingsWindow();
 
-								// The sidebar is a rail of icons and never opens. Seven entries (six
+								// The sidebar is a rail of icons and never opens. Eight entries (seven
 								// places and settings; the agent is in the title bar), no text of its
 								// own, and a label in a tooltip that appears when the pointer rests on one.
 								await new Promise((r) => setTimeout(r, 400));
@@ -4697,7 +4755,7 @@ if (!app.requestSingleInstanceLock()) {
 										const nav = document.querySelector("nav[data-sidebar]");
 										if (!nav) return "no sidebar";
 										const entries = nav.querySelectorAll("button[data-nav]").length;
-										if (entries !== 7) return "the sidebar has " + entries + " entries, not 7";
+										if (entries !== 8) return "the sidebar has " + entries + " entries, not 8";
 										if (!document.querySelector("header button[data-nav=agent]")) return "the agent is not in the title bar";
 										if (nav.textContent.trim() !== "") return "the sidebar draws text: " + nav.textContent.trim();
 										const width = Math.round(nav.getBoundingClientRect().width);

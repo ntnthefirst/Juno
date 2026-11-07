@@ -8,6 +8,7 @@ type ShortcutHandlers = {
 	reminders: () => void;
 	goTo: (screen: ScreenId) => void;
 	newItem: () => void;
+	newPage: () => void;
 	settings: () => void;
 	back: () => void;
 	/** Null when no lock is set up, which leaves the shortcut unbound. */
@@ -60,6 +61,7 @@ export function useShortcuts(handlers: ShortcutHandlers): void {
 			}
 			if (matchesCombo(event, COMBOS.recent)) return act(h.recent);
 			if (matchesCombo(event, COMBOS.reminders)) return act(h.reminders);
+			if (matchesCombo(event, COMBOS.newPage)) return act(h.newPage);
 			if (matchesCombo(event, COMBOS.newItem)) return act(h.newItem);
 			if (matchesCombo(event, COMBOS.settings)) return act(h.settings);
 			if (matchesCombo(event, COMBOS.back)) return act(h.back);

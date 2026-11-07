@@ -166,9 +166,9 @@ no expanded state, no toggle, no drawer and no setting for any of them: the
 name of an entry is in its tooltip (`components/Tooltip.tsx`, drawn by the
 application, not the native `title`) and in its `aria-label`.
 
-- **Six places on top, Settings at the bottom.** Overview, Calendar, Clients,
-  Projects, Mail, Documents; then Settings. `app/screens.ts` lists them. A
-  seventh place is a decision, not an edit. The agent is in the title bar, at
+- **Seven places on top, Settings at the bottom.** Overview, Calendar, Clients,
+  Projects, Mail, Notes, Documents; then Settings. `app/screens.ts` lists them.
+  Notes is the seventh (decision 61); an eighth place is a decision, not an edit. The agent is in the title bar, at
   the right beside the window's own buttons, with the same three colours.
 - **An entry has three states.** Soft (`--ink-faint`) at rest, firm (`--ink`)
   under the pointer, and when it is the page a `--hover` tile with an iris

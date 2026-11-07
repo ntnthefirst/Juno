@@ -126,3 +126,13 @@
 		-webkit-app-region: no-drag;
 	}
 }
+
+/* The page editor's Find paints matches with the CSS Custom Highlight API, which has no utility class. */
+::highlight(find) {
+	background-color: var(--warn-soft);
+}
+
+::highlight(find-current) {
+	background-color: var(--accent);
+	color: var(--accent-ink);
+}

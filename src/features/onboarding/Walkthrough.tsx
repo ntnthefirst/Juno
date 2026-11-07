@@ -68,6 +68,13 @@ const STOPS: WalkthroughStop[] = [
 		target: "[data-section-switch]",
 	},
 	{
+		id: "notes",
+		title: "Notes",
+		body: "Short notes and longer pages, kept on your own machine. Pin one, or tie it to a client or a project.",
+		screen: "notes",
+		target: '[data-nav="notes"]',
+	},
+	{
 		id: "documents",
 		title: "Documents",
 		body: "What you have generated or imported for a client, and whether it is signed.",

@@ -6,8 +6,10 @@
  * 1. refused while Juno is locked, whatever it asks for (decision 15: the
  *    main process owns lock state and every tool checks it);
  * 2. matched to a declared tool, or refused by name;
- * 3. run, if the tool is read-only or a local write that needs no approval;
- * 4. parked in the confirmation gate, if it is anything that a person has to
+ * 3. judged by the permission row it belongs to (services/agent-permissions.ts,
+ *    decision 57): refused when the row is Off, parked when it is Ask first
+ *    or locked or an unattended automation, run when it is Allow;
+ * 4. parked in the confirmation gate, which is anything that a person has to
  *    agree to first (.claude/rules/mcp.md section 4). The caller gets a
  *    pending action back, never a result.
  *
@@ -22,6 +24,7 @@
 import type { AgentAction, AgentActionSource, ToolSummary } from "../../shared/types";
 import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
+import * as permissions from "../services/agent-permissions";
 import { isLocked } from "../services/lock";
 import { allTools, toolByName, toolSummaries } from "./registry";
 import type { ToolDescriptor } from "./types";
@@ -86,7 +89,12 @@ export function toolCount(): number {
 function describe(tool: ToolDescriptor): string {
 	if (tool.readOnly) return tool.description;
 	if (!tool.requiresConfirmation) return tool.description;
-	return `${tool.description} Requires approval: this call does not run, it asks. A person approves or rejects it in Juno and the reply says pending.`;
+	const base = `${tool.description} Requires approval: this call does not run, it asks. A person approves or rejects it in Juno and the reply says pending.`;
+	// The owner may let a change or a draft run without asking. Sending, signing,
+	// filing and deleting never run that way, so those do not say it.
+	return permissions.isLockedTool(tool.name)
+		? base
+		: `${base} The owner can set this kind of call to run without asking, and then it returns its result instead.`;
 }
 
 const MAX_SUMMARY_VALUE = 60;
@@ -135,7 +143,15 @@ export async function callTool(
 
 	const source = options.source ?? "mcp";
 
-	if (!tool.readOnly && tool.requiresConfirmation) {
+	let verdict: permissions.Verdict;
+	try {
+		verdict = await permissions.gate({ name: tool.name, readOnly: tool.readOnly, source });
+	} catch (cause: unknown) {
+		if (cause instanceof permissions.AgentPermissionError) throw new ToolError(cause.code, cause.message);
+		throw cause;
+	}
+
+	if (verdict === "park") {
 		let prepared: Awaited<ReturnType<NonNullable<ToolDescriptor["prepare"]>>> | null = null;
 		if (tool.prepare) {
 			try {

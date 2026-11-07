@@ -14,8 +14,10 @@
  */
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { instructionsText } from "../../shared/agent-permissions";
 import type { AgentActionSource, McpServerStatus } from "../../shared/types";
 import * as actions from "../services/agent-actions";
+import * as permissions from "../services/agent-permissions";
 import * as connections from "../services/agent-connections";
 import * as automations from "../services/automations";
 import { isLocked } from "../services/lock";
@@ -111,6 +113,7 @@ function applyServer(): Promise<McpServerStatus> {
 				callTool: (name, args) => callTool(name, args, { source: "mcp" }),
 				isLocked,
 				version: config.version,
+				instructions: async () => instructionsText(await permissions.getInstructions()),
 			});
 		}
 		return serverStatus();

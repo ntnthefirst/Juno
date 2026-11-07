@@ -11,12 +11,15 @@
 import { BrowserWindow, ipcMain } from "electron";
 import type {
 	AgentActionListQuery,
+	AgentInstructions,
+	AgentPermissions,
 	AuditListQuery,
 	AutomationInput,
 	AutomationPatch,
 } from "../../shared/types";
 import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
+import * as permissions from "../services/agent-permissions";
 import * as describe from "../services/agent-describe";
 import * as connections from "../services/agent-connections";
 import * as automations from "../services/automations";
@@ -45,6 +48,16 @@ export function registerAgentIpc(): void {
 	ipcMain.handle("agent.server.setBackground", (_event, background: boolean) => setServerBackground(background === true));
 	ipcMain.handle("agent.server.setPort", (_event, port: number | null) => setServerPort(port));
 	ipcMain.handle("agent.tools", () => summaries());
+
+	// Widening an agent's reach is the owner's decision, so these have no tool.
+	ipcMain.handle("agent.permissions.get", () => permissions.permissionsView());
+	ipcMain.handle("agent.permissions.set", (_event, patch: Partial<AgentPermissions>) =>
+		permissions.setPermissionsView(patch),
+	);
+	ipcMain.handle("agent.instructions.get", () => permissions.instructionsView());
+	ipcMain.handle("agent.instructions.set", (_event, instructions: AgentInstructions) =>
+		permissions.setInstructionsView(instructions),
+	);
 
 	// Letting a client in is a person's decision. These have no tool, and there
 	// will not be one: the thing being gated is what would call it.

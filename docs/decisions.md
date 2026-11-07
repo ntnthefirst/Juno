@@ -544,6 +544,8 @@ already running, over a local transport that is not stdio. Then the bridge
 disappears and `socket.ts` becomes the server itself. Nothing else about the
 shape would change, which is why the bridge holds no logic.
 
+**Amended by decision 57.** Read, change and draft tools may be set to run without parking. Send, sign, file and delete never are, and an automation never writes unattended.
+
 **Reversed by decision 42.** That condition was met: MCP clients connect to a
 server by URL. The bridge, the pipe and `mcp.json` are gone, and the rest of
 this decision (the gate, the audit table, automations) stands.
@@ -1769,3 +1771,47 @@ join. A project may carry an estimate, `projects.estimated_minutes`.
 
 **What would reverse this:** a need to time several things at once, which would
 move the unique index from the owner to the owner and the project.
+
+---
+
+## 57. An agent may be allowed to read, change records and write drafts
+
+Amends decision 24, which parked every side-effectful call. The design draws a
+permissions page with five rows, each Off, Ask first or Allow, and that is now
+how the gate decides.
+
+| Row | Default | May be Allow |
+| --- | --- | --- |
+| Read everything | Allow | yes |
+| Change records and notes | Ask first | yes |
+| Write mail drafts | Allow | yes |
+| Send mail, sign and file | Ask first | **no** |
+| Delete | Ask first | **no** |
+
+- **Every tool is in exactly one row**, in one table
+  (`services/agent-permissions.ts`). `mcp/host.test.ts` fails when a tool is not
+  in it, and `rowOf` throws for one that is not, so a new tool cannot run
+  unclassified. Filing is every move of mail on the server, so `mail.file.*`
+  sits under send. Soft deletes count as delete.
+- **The decision is made in the service**, not in an adapter. Off refuses with
+  "turned off under Settings > MCP > Permissions", Ask first parks as before,
+  Allow runs the tool and writes the audit row.
+- **Send, sign, file and delete cannot reach Allow by any route.** The service
+  refuses to store it, the settings store clamps it on write, and reading the
+  file turns a hand-written "allow" back into "ask". The gate parks those rows
+  whatever level it reads, and tests hold that through the service, the IPC
+  channel and the MCP host.
+- **An automation never writes unattended.** A scheduled or replayed step that
+  is not a plain read parks whatever the level says, because Allow was chosen
+  for a person asking, not for a timer. The rule of decision 24 that a step
+  which parks stops the run is unchanged.
+- **Levels and instructions live in `settings.json`**, not in the database.
+  Setting either is IPC only. There is no tool that changes a level or the
+  instructions: an agent does not widen its own reach.
+- **The instructions** (for everyone, for mail, and one per area the owner
+  adds) are handed to every client as the server's instructions text when it
+  connects.
+- The suggestion source switches sit on the same page, under Suggestions.
+
+**What would reverse this:** a loss that came from a change an agent made
+without asking, which would take Change records back to Ask first for good.

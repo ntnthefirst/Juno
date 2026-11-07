@@ -326,6 +326,14 @@ const api: JunoApi = {
 			connect: () => call("agent.claudeDesktop.connect"),
 		},
 		tools: () => call("agent.tools"),
+		permissions: {
+			get: () => call("agent.permissions.get"),
+			set: (patch) => call("agent.permissions.set", patch),
+		},
+		instructions: {
+			get: () => call("agent.instructions.get"),
+			set: (instructions) => call("agent.instructions.set", instructions),
+		},
 		connections: {
 			list: () => call("agent.connections.list"),
 			revoke: (id) => call("agent.connections.revoke", id),

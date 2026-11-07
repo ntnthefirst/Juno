@@ -18,10 +18,12 @@ let dir: string;
 let base: string;
 let locked = false;
 let calls: { name: string; args: Record<string, unknown> }[];
+let instructions = "";
 
 const deps: HttpServerDeps = {
 	version: "9.9.9",
 	isLocked: () => locked,
+	instructions: async () => instructions,
 	listTools: () => [
 		{
 			name: "demo.echo",
@@ -54,6 +56,7 @@ beforeEach(() => {
 	connections.configureAgentConnections(dir);
 	locked = false;
 	calls = [];
+	instructions = "";
 });
 
 afterEach(() => {
@@ -82,6 +85,7 @@ function raw(path: string, headers: Record<string, string>, method = "GET"): Pro
 
 type RpcResult = {
 	serverInfo?: { name: string; version: string };
+	instructions?: string;
 	tools?: { name: string; annotations?: Record<string, unknown> }[];
 	structuredContent?: unknown;
 	isError?: boolean;
@@ -307,6 +311,24 @@ describe("registering and authorising", () => {
 		});
 		expect(response.status).toBe(400);
 		expect(((await response.json()) as { error: string }).error).toBe("invalid_grant");
+	});
+});
+
+describe("the instructions", () => {
+	it("hands the owner's text to a client when it connects, and nothing when there is none", async () => {
+		const token = await handshake();
+		const init = (id: number) =>
+			rpc(token, {
+				jsonrpc: "2.0",
+				id,
+				method: "initialize",
+				params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } },
+			});
+
+		expect((await init(1)).json?.result?.instructions).toBeUndefined();
+
+		instructions = "For every task: write in Dutch.";
+		expect((await init(2)).json?.result?.instructions).toBe("For every task: write in Dutch.");
 	});
 });
 

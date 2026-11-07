@@ -670,6 +670,10 @@ export interface AppSettings {
 	mcpServer: McpServerSettings;
 	/** Which kinds of suggestion the reader may make under a message. */
 	suggestions: SuggestionSources;
+	/** How far an agent may go on its own, per kind of thing it can do. */
+	agentPermissions: AgentPermissions;
+	/** The owner's standing instructions for every connected agent. */
+	agentInstructions: AgentInstructions;
 }
 
 export type SuggestionKind = "event" | "project";
@@ -699,6 +703,52 @@ export interface SuggestionSources {
 	calendar: boolean;
 	/** A project's name in a message, offered as a link to that project. */
 	projects: boolean;
+}
+
+/**
+ * The five rows of the permissions page. Every tool belongs to exactly one
+ * (services/agent-permissions.ts), and the level of that row decides whether
+ * a call is refused, parked for a person, or run.
+ */
+export type AgentPermissionKind = "read" | "change" | "drafts" | "send" | "delete";
+
+export type AgentLevel = "off" | "ask" | "allow";
+
+export type AgentPermissions = Record<AgentPermissionKind, AgentLevel>;
+
+/** What one row of the permissions page says about itself, so the page and the service cannot drift. */
+export interface AgentPermissionRow {
+	kind: AgentPermissionKind;
+	label: string;
+	description: string;
+	/** Send, sign, file and delete: "Allow" is never available. */
+	locked: boolean;
+}
+
+/** The permissions page: the rows as they are drawn, and where each is set. */
+export interface AgentPermissionsView {
+	rows: AgentPermissionRow[];
+	levels: AgentPermissions;
+}
+
+/** The instructions page: what is written, and the areas that can be added. */
+export interface AgentInstructionsView {
+	instructions: AgentInstructions;
+	areas: { id: string; label: string }[];
+	maxLength: number;
+}
+
+/** Text for the agent about one area of the business, such as clients or documents. */
+export interface AgentInstructionArea {
+	area: string;
+	text: string;
+}
+
+/** What the owner wants every connected agent to read before it starts. */
+export interface AgentInstructions {
+	everyone: string;
+	mail: string;
+	areas: AgentInstructionArea[];
 }
 
 export interface McpServerSettings {

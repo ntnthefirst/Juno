@@ -39,6 +39,8 @@ export interface HttpServerDeps {
 	isLocked: () => boolean;
 	/** Reported to the client as the server's own version. */
 	version: string;
+	/** The owner's standing instructions, handed to a client when it connects. Optional so a bare server still starts. */
+	instructions?: () => Promise<string>;
 }
 
 export interface HttpServerStatus {
@@ -304,7 +306,7 @@ async function handleMcp(request: IncomingMessage, response: ServerResponse, met
 		return;
 	}
 
-	const mcp = buildMcpServer(deps);
+	const mcp = await buildMcpServer(deps);
 	const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
 	response.on("close", () => {
 		void transport.close();
@@ -322,8 +324,12 @@ function wrap(result: unknown): Record<string, unknown> {
 	return { result };
 }
 
-function buildMcpServer(current: HttpServerDeps): Server {
-	const mcp = new Server({ name: "juno", version: current.version }, { capabilities: { tools: {} } });
+async function buildMcpServer(current: HttpServerDeps): Promise<Server> {
+	const instructions = (await current.instructions?.().catch(() => "")) || undefined;
+	const mcp = new Server(
+		{ name: "juno", version: current.version },
+		{ capabilities: { tools: {} }, ...(instructions ? { instructions } : {}) },
+	);
 
 	mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
 		tools: current.listTools().map((tool) => ({

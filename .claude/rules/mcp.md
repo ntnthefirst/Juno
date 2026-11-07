@@ -102,9 +102,18 @@ In practice:
 - Bulk operations are one pending action listing every affected row, not N
   approvals and not one blanket yes.
 
-Writes that only touch local records (`clients.update`, `reminders.complete`)
-execute directly, but are still marked side-effectful so they are excluded from
-anything that runs on a schedule without a person watching.
+Writes that only touch local records (`clients.update`, `reminders.complete`,
+`time.*`, `mail.blocks.*`) and mail drafts are the rows the owner may set to Allow
+under Settings > MCP > Permissions (decision 57). At Allow they execute directly;
+at Ask first they park; at Off they are refused with a sentence naming the
+setting. They are still marked side-effectful so they are excluded from anything
+that runs on a schedule without a person watching.
+
+**Every tool belongs to exactly one permission row**, in `TOOL_ROWS` in
+`services/agent-permissions.ts`, and `host.test.ts` fails for a tool that has no
+row. Send, sign, file and delete are the rows that can never be Allow: the
+service refuses to store it, the settings file is clamped when read, and the gate
+parks them whatever it reads. A new tool picks its row in the same commit.
 
 ## 5. Automations are recorded sequences of tool calls
 
@@ -118,6 +127,9 @@ calls with their arguments, replayed in order.
   same reason an agent cannot.
 - A step that hits a pending action stops the run and waits. It does not skip and
   it does not continue past it.
+- **A level of Allow does not apply to a step.** An automation is unattended, so
+  any step that is not a plain read parks, whatever the permission says
+  (decision 57).
 - Every run writes a log row: which steps ran, what they returned, where it
   stopped. An automation nobody can audit is an automation nobody should trust.
 

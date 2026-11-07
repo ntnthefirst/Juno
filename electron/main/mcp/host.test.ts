@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,11 +20,24 @@ const actions = await import("../services/agent-actions");
 const audit = await import("../services/agent-audit");
 const { executeApproved } = await import("./host");
 const { toolByName } = await import("./registry");
+const permissions = await import("../services/agent-permissions");
+const settings = await import("../services/settings");
+const { PERMISSION_KINDS, isLocked } = await import("../../shared/agent-permissions");
+
+let settingsDir = "";
+
+/** Writes the file by hand, which is what a bug or an editor could do to it. */
+function forceSettings(agentPermissions: Record<string, string>): void {
+	writeFileSync(join(settingsDir, "settings.json"), JSON.stringify({ agentPermissions }), "utf8");
+	settings.configureSettings(settingsDir);
+}
 
 const migrations = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 
 beforeEach(() => {
 	locked = false;
+	settingsDir = mkdtempSync(join(tmpdir(), "juno-host-"));
+	settings.configureSettings(settingsDir);
 	closeDb();
 	openDb(":memory:");
 	runMigrations(getConnection(), migrations);
@@ -115,6 +130,135 @@ describe("calling a tool", () => {
 		await expect(callTool("clients.get", { id: "" })).rejects.toThrow();
 		// A read failing is still not logged: only writes are.
 		expect(await audit.list({})).toHaveLength(0);
+	});
+});
+
+describe("the permission table", () => {
+	it("puts every tool in exactly one row, and no row names a tool that is gone", () => {
+		const declared = listTools().map((tool) => tool.name).sort();
+		const classified = permissions.classifiedTools().sort();
+		expect(classified).toEqual(declared);
+		for (const name of declared) expect(PERMISSION_KINDS).toContain(permissions.rowOf(name));
+	});
+
+	it("refuses a tool nobody classified", () => {
+		expect(() => permissions.rowOf("clients.invented")).toThrow(/no permission row/);
+	});
+
+	it("declares every send, sign, file and delete tool as a confirmed write", () => {
+		for (const tool of listTools().map((entry) => toolByName(entry.name)!)) {
+			if (!isLocked(permissions.rowOf(tool.name))) continue;
+			expect(tool.readOnly, tool.name).toBe(false);
+			expect(tool.requiresConfirmation, tool.name).toBe(true);
+		}
+	});
+
+	it("keeps writes out of the read row, apart from the two that only fetch", () => {
+		const writes = listTools()
+			.map((entry) => toolByName(entry.name)!)
+			.filter((tool) => permissions.rowOf(tool.name) === "read" && !tool.readOnly)
+			.map((tool) => tool.name);
+		expect(writes.sort()).toEqual(["mail.sync", "updates.check"]);
+	});
+
+	it("files mail moves and deletes where the owner expects them", () => {
+		expect(permissions.rowOf("mail.file.archive")).toBe("send");
+		expect(permissions.rowOf("mail.file.delete")).toBe("delete");
+		expect(permissions.rowOf("clients.delete")).toBe("delete");
+		expect(permissions.rowOf("mail.draft")).toBe("drafts");
+		expect(permissions.rowOf("mail.reply")).toBe("drafts");
+		expect(permissions.rowOf("time.start")).toBe("change");
+		expect(permissions.rowOf("mail.blocks.create")).toBe("change");
+	});
+});
+
+describe("permission levels", () => {
+	it("starts with read and drafts allowed, and everything else asking", async () => {
+		expect(await permissions.getPermissions()).toEqual({
+			read: "allow",
+			change: "ask",
+			drafts: "allow",
+			send: "ask",
+			delete: "ask",
+		});
+	});
+
+	it("refuses a call whose row is off, and names the setting", async () => {
+		await permissions.setPermissions({ read: "off" });
+		await expect(callTool("clients.list", {})).rejects.toThrow("Settings > MCP > Permissions");
+		// An agent can still see what became of what it asked.
+		await expect(callTool("agent.list_actions", {})).resolves.toBeDefined();
+	});
+
+	it("runs a change straight away at allow, and logs it", async () => {
+		await permissions.setPermissions({ change: "allow" });
+		const result = (await callTool("clients.create", { name: "obet" })) as { name: string };
+		expect(result.name).toBe("obet");
+		expect(await actions.list({})).toHaveLength(0);
+		expect(await audit.list({ toolName: "clients.create" })).toHaveLength(1);
+	});
+
+	it("parks a draft once drafts are set to ask first", async () => {
+		await permissions.setPermissions({ drafts: "ask" });
+		const draft = (await callTool("mail.draft", { to: ["a@example.com"], subject: "x", body: "y" })) as {
+			status: string;
+		};
+		expect(draft.status).toBe("pending");
+	});
+
+	it("refuses a filing tool when its row is off", async () => {
+		await permissions.setPermissions({ send: "off" });
+		await expect(callTool("mail.file.archive", { thread_ids: ["x"] })).rejects.toThrow(/turned off/);
+	});
+
+	it("refuses to store allow for send, sign, file and delete", async () => {
+		await expect(permissions.setPermissions({ send: "allow" })).rejects.toThrow(/cannot be set to Allow/);
+		await expect(permissions.setPermissions({ delete: "allow" })).rejects.toThrow(/cannot be set to Allow/);
+		await expect(settings.getAgentPermissions()).resolves.toMatchObject({ send: "ask", delete: "ask" });
+		// Even the settings store clamps it, for a caller that skipped the service.
+		await settings.setAgentPermissions({ send: "allow", delete: "allow" });
+		await expect(settings.getAgentPermissions()).resolves.toMatchObject({ send: "ask", delete: "ask" });
+	});
+
+	it("parks every send, sign, file and delete tool through MCP even when the file says allow", async () => {
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "allow", delete: "allow" });
+		const lockedTools = listTools()
+			.map((entry) => toolByName(entry.name)!)
+			.filter((tool) => isLocked(permissions.rowOf(tool.name)) && !tool.prepare);
+		expect(lockedTools.length).toBeGreaterThan(20);
+		for (const tool of lockedTools) {
+			const result = (await callTool(tool.name, {})) as { status?: string };
+			expect(result.status, tool.name).toBe("pending");
+		}
+		expect(await actions.list({ states: ["executed"] })).toHaveLength(0);
+	});
+
+	it("treats both ways of sending as locked", () => {
+		expect(permissions.isLockedTool("mail.send")).toBe(true);
+		expect(permissions.isLockedTool("mail.send_from_template")).toBe(true);
+		expect(permissions.isLockedTool("mail.draft")).toBe(false);
+	});
+
+	it("never lets an automation write, whatever the levels say", async () => {
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "ask", delete: "ask" });
+		const change = (await callTool(
+			"clients.create",
+			{ name: "obet" },
+			{ source: "automation", automationRunId: "r" },
+		)) as { status: string };
+		expect(change.status).toBe("pending");
+		const draft = (await callTool(
+			"mail.draft",
+			{ to: ["a@example.com"], subject: "x", body: "y" },
+			{ source: "automation", automationRunId: "r" },
+		)) as { status: string };
+		expect(draft.status).toBe("pending");
+		// The same call from an agent in the room runs.
+		const direct = (await callTool("clients.create", { name: "direct" })) as { name: string };
+		expect(direct.name).toBe("direct");
+		// And reading is not writing.
+		expect(await callTool("clients.list", {}, { source: "automation", automationRunId: "r" })).toBeDefined();
+		expect(await actions.list({ states: ["pending"] })).toHaveLength(2);
 	});
 });
 

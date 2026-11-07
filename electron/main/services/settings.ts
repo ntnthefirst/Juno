@@ -22,8 +22,16 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import {
+	DEFAULT_INSTRUCTIONS,
+	DEFAULT_PERMISSIONS,
+	normaliseInstructions,
+	normalisePermissions,
+} from "../../shared/agent-permissions";
 import type {
 	AccountingTool,
+	AgentInstructions,
+	AgentPermissions,
 	AppSettings,
 	LockSettings,
 	McpServerSettings,
@@ -146,6 +154,8 @@ const DEFAULTS: AppSettings = {
 	updates: DEFAULT_UPDATES,
 	mcpServer: DEFAULT_MCP_SERVER,
 	suggestions: DEFAULT_SUGGESTIONS,
+	agentPermissions: DEFAULT_PERMISSIONS,
+	agentInstructions: DEFAULT_INSTRUCTIONS,
 };
 
 const THEMES: ThemeSetting[] = ["system", "light", "dark"];
@@ -263,6 +273,8 @@ function normalise(raw: unknown): AppSettings {
 			updates: { ...DEFAULT_UPDATES },
 			mcpServer: { ...DEFAULT_MCP_SERVER },
 			suggestions: { ...DEFAULT_SUGGESTIONS },
+			agentPermissions: { ...DEFAULT_PERMISSIONS },
+			agentInstructions: { ...DEFAULT_INSTRUCTIONS, areas: [] },
 		};
 	}
 
@@ -335,6 +347,8 @@ function normalise(raw: unknown): AppSettings {
 		updates: normaliseUpdates(raw.updates),
 		mcpServer: normaliseMcpServer(raw.mcpServer),
 		suggestions: normaliseSuggestions(raw.suggestions),
+		agentPermissions: normalisePermissions(raw.agentPermissions),
+		agentInstructions: normaliseInstructions(raw.agentInstructions),
 	};
 }
 
@@ -418,6 +432,8 @@ export async function get(): Promise<AppSettings> {
 		updates: { ...current.updates },
 		mcpServer: { ...current.mcpServer },
 		suggestions: { ...current.suggestions },
+		agentPermissions: { ...current.agentPermissions },
+		agentInstructions: normaliseInstructions(current.agentInstructions),
 	};
 }
 
@@ -480,6 +496,30 @@ export async function setSuggestionSources(patch: Partial<SuggestionSources>): P
 	const current = read();
 	const next = normaliseSuggestions({ ...current.suggestions, ...patch });
 	return { ...write({ ...current, suggestions: next }).suggestions };
+}
+
+export async function getAgentPermissions(): Promise<AgentPermissions> {
+	return normalisePermissions(read().agentPermissions);
+}
+
+/**
+ * Stores whatever it is given, clamped: a locked row cannot be written as
+ * "allow" even by a caller that skipped the service's own check.
+ */
+export async function setAgentPermissions(patch: Partial<AgentPermissions>): Promise<AgentPermissions> {
+	const current = read();
+	const next = normalisePermissions({ ...current.agentPermissions, ...patch });
+	return { ...write({ ...current, agentPermissions: next }).agentPermissions };
+}
+
+export async function getAgentInstructions(): Promise<AgentInstructions> {
+	return normaliseInstructions(read().agentInstructions);
+}
+
+export async function setAgentInstructions(instructions: AgentInstructions): Promise<AgentInstructions> {
+	const current = read();
+	const next = normaliseInstructions(instructions);
+	return normaliseInstructions(write({ ...current, agentInstructions: next }).agentInstructions);
 }
 
 export async function getTheme(): Promise<ThemeSetting> {

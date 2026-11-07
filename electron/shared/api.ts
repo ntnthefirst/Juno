@@ -194,6 +194,10 @@ import type {
 	SuggestionOutcome,
 	SuggestionSources,
 	UpdateStatus,
+	AgentInstructions,
+	AgentInstructionsView,
+	AgentPermissions,
+	AgentPermissionsView,
 } from "./types";
 
 export interface ListClientsQuery {
@@ -581,6 +585,20 @@ export interface JunoApi {
 		};
 		/** Every tool, for the screen that lists the surface. No handlers cross. */
 		tools(): Promise<ToolSummary[]>;
+		/**
+		 * How far an agent may go, per kind of thing. Send, sign, file and delete
+		 * refuse "allow". There is no MCP tool for either call: an agent does not
+		 * widen its own permissions.
+		 */
+		permissions: {
+			get(): Promise<AgentPermissionsView>;
+			set(patch: Partial<AgentPermissions>): Promise<AgentPermissionsView>;
+		};
+		/** What every connected agent is told when it connects. Also owner only. */
+		instructions: {
+			get(): Promise<AgentInstructionsView>;
+			set(instructions: AgentInstructions): Promise<AgentInstructionsView>;
+		};
 		/**
 		 * Who was let in. Letting a client in, and taking it out again, are a
 		 * person's decisions: there is no MCP tool for any of this.

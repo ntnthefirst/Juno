@@ -37,6 +37,9 @@ const DEFAULT_LIMIT = 50;
  */
 const MAX_LIMIT = 500;
 
+/** Bound values per statement, well under SQLite's limit. */
+const ID_CHUNK = 500;
+
 /** Inline images larger than this are not embedded. A logo is kilobytes. */
 const MAX_INLINE_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -299,11 +302,40 @@ function summarise(
 	});
 }
 
-export async function listThreads(query: MailThreadListQuery = {}, db: Db = getDb()): Promise<MailThreadSummary[]> {
-	const limit = Math.min(Math.max(query.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-	const term = query.search?.trim() ?? "";
-	const scope = scopeOf(db, query);
+/**
+ * The best-ranked message per thread for a search, best first. bm25 and snippet
+ * only work in the query that runs the MATCH, and the planner flattens a plain
+ * subquery into the join, which breaks that. A materialized CTE keeps the
+ * ranking inside the full-text scan. SQLite fills the bare snippet column from
+ * the row that produced min(rank).
+ */
+function searchHits(
+	db: Db,
+	match: string,
+	scope: Set<string> | null,
+	cap: number,
+): { thread_id: string; message_id: string; snippet: string; rank: number }[] {
+	return db.all<{ thread_id: string; message_id: string; snippet: string; rank: number }>(sql`
+		with f as materialized (
+			select message_id,
+				snippet(mail_messages_fts, 2, '', '', '...', 12) as snippet,
+				bm25(mail_messages_fts, 0.0, 4.0, 1.0, 2.0, 2.0) as rank
+			from mail_messages_fts
+			where mail_messages_fts match ${match}
+		)
+		select m.thread_id as thread_id, m.id as message_id, f.snippet as snippet, min(f.rank) as rank
+		from f
+		join mail_messages m on m.id = f.message_id
+		where m.deleted_at is null
+		${scope ? sql`and m.folder_id in (${sql.join([...scope].map((id) => sql`${id}`), sql`, `)})` : sql``}
+		group by m.thread_id
+		order by rank
+		limit ${cap}
+	`);
+}
 
+/** The conditions every thread list shares, search aside. */
+function threadConditions(query: MailThreadListQuery) {
 	const conditions = [isNull(mailThreads.deletedAt)];
 	if (query.accountId) conditions.push(eq(mailThreads.accountId, query.accountId));
 	if (query.clientId) conditions.push(eq(mailThreads.clientId, query.clientId));
@@ -348,6 +380,15 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 	// A day bound is a date with no time, so the range runs to the end of it.
 	if (query.since) conditions.push(sql`${mailThreads.lastMessageAt} >= ${`${query.since}T00:00:00.000Z`}`);
 	if (query.until) conditions.push(sql`${mailThreads.lastMessageAt} <= ${`${query.until}T23:59:59.999Z`}`);
+	return conditions;
+}
+
+export async function listThreads(query: MailThreadListQuery = {}, db: Db = getDb()): Promise<MailThreadSummary[]> {
+	const limit = Math.min(Math.max(query.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+	const term = query.search?.trim() ?? "";
+	const scope = scopeOf(db, query);
+
+	const conditions = threadConditions(query);
 
 	if (term) {
 		const match = ftsQuery(term);
@@ -358,23 +399,7 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 		// planner flattens a plain subquery into the join, which breaks that. A
 		// materialized CTE keeps the ranking inside the full-text scan. SQLite
 		// fills the bare snippet column from the row that produced min(rank).
-		const hits = db.all<{ thread_id: string; message_id: string; snippet: string; rank: number }>(sql`
-			with f as materialized (
-				select message_id,
-					snippet(mail_messages_fts, 2, '', '', '...', 12) as snippet,
-					bm25(mail_messages_fts, 0.0, 4.0, 1.0, 2.0, 2.0) as rank
-				from mail_messages_fts
-				where mail_messages_fts match ${match}
-			)
-			select m.thread_id as thread_id, m.id as message_id, f.snippet as snippet, min(f.rank) as rank
-			from f
-			join mail_messages m on m.id = f.message_id
-			where m.deleted_at is null
-			${scope ? sql`and m.folder_id in (${sql.join([...scope].map((id) => sql`${id}`), sql`, `)})` : sql``}
-			group by m.thread_id
-			order by rank
-			limit ${limit * 4}
-		`);
+		const hits = searchHits(db, match, scope, limit * 4);
 		if (hits.length === 0) return [];
 		const rows = db
 			.select({ thread: mailThreads, clientName: clients.name })
@@ -414,6 +439,55 @@ export async function listThreads(query: MailThreadListQuery = {}, db: Db = getD
 		.offset(Math.max(Math.trunc(query.offset ?? 0), 0))
 		.all();
 	return summarise(db, rows, scope);
+}
+
+/**
+ * The most ids one "select all" will name. Past it the list is trimmed to the
+ * newest, and the caller is told by getting exactly this many back.
+ */
+export const MAX_SELECT_ALL = 20_000;
+
+/**
+ * The id of every thread a list would show, with no row built. This is what
+ * select all means: the whole filtered set, not the page that is on screen.
+ * Same filters and same order as listThreads, capped at MAX_SELECT_ALL.
+ */
+export async function listThreadIds(
+	query: Omit<MailThreadListQuery, "limit" | "offset" | "before"> = {},
+	db: Db = getDb(),
+): Promise<string[]> {
+	const term = query.search?.trim() ?? "";
+	const scope = scopeOf(db, query);
+	const conditions = threadConditions(query);
+
+	if (term) {
+		const match = ftsQuery(term);
+		if (!match) return [];
+		if (scope && scope.size === 0) return [];
+		const hits = searchHits(db, match, scope, MAX_SELECT_ALL);
+		const alive = new Set<string>();
+		// Chunked, because a statement can only carry so many bound values.
+		for (let i = 0; i < hits.length; i += ID_CHUNK) {
+			const part = hits.slice(i, i + ID_CHUNK).map((h) => h.thread_id);
+			for (const row of db
+				.select({ id: mailThreads.id })
+				.from(mailThreads)
+				.where(and(...conditions, inArray(mailThreads.id, part)))
+				.all()) {
+				alive.add(row.id);
+			}
+		}
+		return hits.map((h) => h.thread_id).filter((id) => alive.has(id));
+	}
+
+	return db
+		.select({ id: mailThreads.id })
+		.from(mailThreads)
+		.where(and(...conditions))
+		.orderBy(desc(mailThreads.lastMessageAt), desc(mailThreads.id))
+		.limit(MAX_SELECT_ALL)
+		.all()
+		.map((row) => row.id);
 }
 
 function attachmentsFor(db: Db, messageIds: string[]): Map<string, MailAttachment[]> {

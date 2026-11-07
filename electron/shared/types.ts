@@ -2642,6 +2642,9 @@ export interface MailThreadListQuery {
 	offset?: number;
 }
 
+/** A thread list's filters with no paging: select all names every match. */
+export type MailThreadIdsQuery = Omit<MailThreadListQuery, "limit" | "offset" | "before">;
+
 /**
  * What a move actually did.
  *

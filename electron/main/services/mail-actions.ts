@@ -45,6 +45,9 @@ const FLAG_FLAGGED = "\\Flagged";
  */
 const UID_CHUNK = 500;
 
+/** Bound values per statement, well under SQLite's limit. */
+const ID_CHUNK = 500;
+
 function chunked(uids: number[]): number[][] {
 	const out: number[][] = [];
 	for (let i = 0; i < uids.length; i += UID_CHUNK) out.push(uids.slice(i, i + UID_CHUNK));
@@ -59,24 +62,35 @@ function messagesWithFolders(
 	db: Db,
 	messageIds: string[],
 ): { message: MessageRow; folder: FolderRow }[] {
-	if (messageIds.length === 0) return [];
-	return db
-		.select({ message: mailMessages, folder: mailFolders })
-		.from(mailMessages)
-		.innerJoin(mailFolders, eq(mailFolders.id, mailMessages.folderId))
-		.where(and(inArray(mailMessages.id, messageIds), isNull(mailMessages.deletedAt)))
-		.all();
+	const out: { message: MessageRow; folder: FolderRow }[] = [];
+	for (let i = 0; i < messageIds.length; i += ID_CHUNK) {
+		out.push(
+			...db
+				.select({ message: mailMessages, folder: mailFolders })
+				.from(mailMessages)
+				.innerJoin(mailFolders, eq(mailFolders.id, mailMessages.folderId))
+				.where(and(inArray(mailMessages.id, messageIds.slice(i, i + ID_CHUNK)), isNull(mailMessages.deletedAt)))
+				.all(),
+		);
+	}
+	return out;
 }
 
 /** Every live message in the named threads. */
 function messageIdsOfThreads(db: Db, threadIds: string[]): string[] {
-	if (threadIds.length === 0) return [];
-	return db
-		.select({ id: mailMessages.id })
-		.from(mailMessages)
-		.where(and(inArray(mailMessages.threadId, threadIds), isNull(mailMessages.deletedAt)))
-		.all()
-		.map((row) => row.id);
+	const out: string[] = [];
+	// A select-all can name thousands of threads, and a statement only carries
+	// so many bound values, so the ids go in chunks.
+	for (let i = 0; i < threadIds.length; i += ID_CHUNK) {
+		for (const row of db
+			.select({ id: mailMessages.id })
+			.from(mailMessages)
+			.where(and(inArray(mailMessages.threadId, threadIds.slice(i, i + ID_CHUNK)), isNull(mailMessages.deletedAt)))
+			.all()) {
+			out.push(row.id);
+		}
+	}
+	return out;
 }
 
 function folderBySpecialUse(db: Db, accountId: string, use: MailSpecialUse): FolderRow | null {

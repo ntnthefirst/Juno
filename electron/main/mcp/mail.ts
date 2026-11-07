@@ -423,6 +423,44 @@ export const mailTools: ToolDescriptor[] = [
 		},
 	},
 	{
+		name: "mail.threads.list_ids",
+		title: "List thread ids",
+		description:
+			"The id of every thread the same filters as mail.threads.list match, newest first (ranked with " +
+			"search), with no paging and no rows. Use it to gather ids for a bulk action. Stops at 20000.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				account_id: { type: "string" },
+				folder_id: { type: "string" },
+				client_id: { type: "string" },
+				search: { type: "string", description: "Words to find. The last one matches as a prefix." },
+				unread_only: { type: "boolean" },
+				flagged_only: { type: "boolean" },
+				with_attachments: { type: "boolean" },
+				from_address: { type: "string", description: "One address. Matches a thread that address wrote to or was written to." },
+				since: { type: "string", description: "Last message on or after this date, YYYY-MM-DD." },
+				until: { type: "string", description: "Last message on or before this date, YYYY-MM-DD." },
+			},
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			threads.listThreadIds({
+				...(args.account_id !== undefined ? { accountId: String(args.account_id) } : {}),
+				...(args.folder_id !== undefined ? { folderId: String(args.folder_id) } : {}),
+				...(args.client_id !== undefined ? { clientId: String(args.client_id) } : {}),
+				...(args.search !== undefined ? { search: String(args.search) } : {}),
+				...(args.unread_only !== undefined ? { unreadOnly: Boolean(args.unread_only) } : {}),
+				...(args.flagged_only !== undefined ? { flaggedOnly: Boolean(args.flagged_only) } : {}),
+				...(args.with_attachments !== undefined ? { withAttachments: Boolean(args.with_attachments) } : {}),
+				...(args.from_address !== undefined ? { fromAddress: String(args.from_address) } : {}),
+				...(args.since !== undefined ? { since: String(args.since) } : {}),
+				...(args.until !== undefined ? { until: String(args.until) } : {}),
+			}),
+	},
+	{
 		name: "mail.threads.get",
 		title: "Read a thread",
 		description:

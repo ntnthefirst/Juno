@@ -27,6 +27,7 @@ import type {
 	MailTemplateSendInput,
 	MailTemplateInput,
 	MailTemplatePatch,
+	MailThreadIdsQuery,
 	MailThreadListQuery,
 } from "../../shared/types";
 import * as actions from "../services/mail-actions";
@@ -94,6 +95,9 @@ export function registerMailIpc(): void {
 
 	ipcMain.handle("mail.threads.list", (_event, query?: MailThreadListQuery) =>
 		threads.listThreads(query ?? {}),
+	);
+	ipcMain.handle("mail.threads.listIds", (_event, query?: MailThreadIdsQuery) =>
+		threads.listThreadIds(query ?? {}),
 	);
 	ipcMain.handle("mail.threads.get", (_event, id: string) => threads.getThread(id));
 	ipcMain.handle("mail.threads.linkClient", (_event, id: string, clientId: string) =>

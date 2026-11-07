@@ -168,6 +168,7 @@ import type {
 	MailTemplatePatch,
 	MailTemplateRender,
 	MailThread,
+	MailThreadIdsQuery,
 	MailThreadListQuery,
 	MailTemplateSendInput,
 	MailThreadSummary,
@@ -1019,6 +1020,8 @@ export interface JunoApi {
 		};
 		threads: {
 			list(query?: MailThreadListQuery): Promise<MailThreadSummary[]>;
+			/** The id of every thread the same filters match, in list order, with no rows built. */
+			listIds(query?: MailThreadIdsQuery): Promise<string[]>;
 			get(id: string): Promise<MailThread | null>;
 			linkClient(id: string, clientId: string): Promise<MailThreadSummary>;
 			unlinkClient(id: string): Promise<MailThreadSummary>;

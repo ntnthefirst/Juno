@@ -584,6 +584,7 @@ const api: JunoApi = {
 		},
 		threads: {
 			list: (query) => call("mail.threads.list", query),
+			listIds: (query) => call("mail.threads.listIds", query),
 			get: (id) => call("mail.threads.get", id),
 			linkClient: (id, clientId) => call("mail.threads.linkClient", id, clientId),
 			unlinkClient: (id) => call("mail.threads.unlinkClient", id),

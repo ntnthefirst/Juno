@@ -144,7 +144,8 @@ edge: sticky headers and side columns inside the sheet use `--surface`. It still
 and the caption buttons sit on it. A screen may put its own controls in it
 with `app/TitleBarSlot.tsx`: `side="left"` is beside the way back (Mail puts
 the styled mail pane button there, and only while Mail is open) and
-`side="right"` is before the agent button. The one running time entry is drawn
+`side="right"` is before New (a switch, Show completed), and `side="overflow"` is the "..." after
+New, where a record keeps its menu (a client, a project, a page, a document). The one running time entry is drawn
 there too, from any screen, by `app/TimerPill.tsx` (decision 56): a clock, the
 project name and a stop button, and nothing while no timer runs.
 
@@ -156,7 +157,7 @@ a divider and the agent. On Calendar, Clients, Projects, Documents, Templates
 and Reminders New is a text button at the right instead of the plus
 (`NEW_AT_RIGHT` in `app/screens.ts`). Recent lists the last 20 records opened
 (`services/recent.ts`), the bell opens the Reminders screen, and New offers
-what `NEW_MENU` lists. **The lock has no button**: no frame draws one, so it is
+what `NEW_MENU` lists (note, page, event, client, project, then Import a file). **The lock has no button**: no frame draws one, so it is
 the palette command and Ctrl or Cmd Shift L.
 
 ## 5b. The sidebar is a rail, and it never opens
@@ -240,7 +241,10 @@ of taste.
   opens or swaps the panel's own content (a row, an "Add" or "Edit" button
   marked `data-opens-panel`) or lands inside a menu, a dialog or another
   popover the screen or the panel opened on top of everything.
-- **A record's right-click menu is the platform's**, not drawn (decision 59). A
+- **A record's right-click menu is the platform's**, not drawn (decision 59), and it
+  carries the glyph the frame draws beside each item (`MenuEntry.icon`, a name in
+  `MENU_ICONS`). A new item names its icon in the registry or it has none.
+  A record's right-click menu is the platform's, not drawn (decision 59). A
   row calls `contextMenuFor(target, handlers)` and a "..." button is an
   `ActionMenu`; neither holds a list of items, because the main process builds the
   menu from the kind and the record. The drawn `ContextMenu` is for menus that are
@@ -338,6 +342,23 @@ read the same strings, so they cannot disagree.
   the palette can do is a feature with one way in.
 - A new shortcut goes in `SHORTCUT_GROUPS` in the same commit, or the sheet is
   wrong.
+
+## 5g. Layout faults the design file learned, checked in every screen
+
+- **A row that holds an input sizes to its content.** No fixed height on a row
+  with a field in it, and an action beside an input aligns to the bottom of the
+  box (`items-end`), not to the label.
+- **A grid that should fill the window is told to fill it.** Parent and rows
+  fill (`min-h-0 flex-1`), never a fixed height.
+- **An empty cell has a height.** An empty cell takes the row height, or the row
+  collapses around it.
+- **No empty header block.** When a title has moved to the title bar, remove the
+  block it sat in rather than hiding its text.
+- **A clip hides a mistake.** `overflow-hidden` on something smaller than its
+  content looks fine and is wrong. A page longer than its window scrolls.
+- **A label that wraps pushes its neighbour.** Shorten the copy or let the row
+  grow, and keep button labels `whitespace-nowrap`.
+- **Icons scale.** An SVG has a `viewBox` and a size, never a fixed pixel drawing.
 
 ## 6. Numbers line up
 

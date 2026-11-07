@@ -232,30 +232,6 @@ the SVGs, animation only for loading and only with `prefers-reduced-motion` hono
 reads at 16px in both themes, and `SOURCES.md` names a licence that allows this
 use for every file.
 
-### 8.3 Layout rules the design learned the hard way
-
-These are faults found in the Figma file and fixed. The same faults are easy to
-build into the app, so check for them in every screen.
-
-- **A row that holds an input sizes to its content.** The mail form's To and
-  Subject rows were fixed at 60px while the field is 64px, so the box was cut
-  off. Rows hug, and an action beside an input aligns to the bottom of the box,
-  not to the label.
-- **A grid that should fill the window is told to fill it.** The month view
-  stopped short and left blank white. Parent and rows fill, not a fixed height.
-- **An empty cell has a height.** An empty all-day cell hugged to a default 100px
-  and made the row 102px tall. Give empty cells the row height.
-- **No empty header block.** Three screens kept a 100px header whose title had
-  moved to the title bar. Remove the block, do not hide its text.
-- **A clip hides a mistake.** Anything with `overflow: hidden` that is smaller
-  than its content looks fine and is wrong. Settings pages that are longer than
-  the window scroll and show a scroll thumb. Nothing else is cut.
-- **A label that wraps pushes its neighbour.** Event titles in a one-hour block,
-  a button label in a 56px row. Shorten the copy or let the row grow.
-- **Icons scale with their size.** An icon drawn on a 24 grid must scale when
-  used at 14, 16 or 18, so use an SVG with a `viewBox` and a size, never a fixed
-  pixel drawing.
-
 ### 8.5 Open design work in Figma
 
 Not code, but the packages above wait on some of it.

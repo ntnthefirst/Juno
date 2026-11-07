@@ -364,12 +364,10 @@ export function ProjectsScreen() {
 						title="No projects yet"
 						description="A piece of work with its files, its links, its notes and the command that starts it in one place."
 						action={{
-							label: "New project",
+							label: "Add project",
 							icon: "add",
 							onClick: () => openNewRecord("project"),
-							shortcut: ["Ctrl", "N"],
 						}}
-						tip="A project can belong to a client, or stand on its own."
 					/>
 				) : shown.length === 0 ? (
 					<EmptyState

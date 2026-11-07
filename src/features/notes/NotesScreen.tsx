@@ -222,7 +222,7 @@ export function NotesScreen() {
 						icon="note"
 						title="No notes yet"
 						description="Write down a checklist, a price list or an idea. Notes stay on this computer."
-						action={{ label: "New note", icon: "add", onClick: () => void create(), shortcut: ["Ctrl", "N"] }}
+						action={{ label: "New note", icon: "add", onClick: () => void create() }}
 					/>
 				) : selected ? (
 					<NoteEditor

@@ -822,7 +822,6 @@ export function MailScreen() {
 						icon: "add",
 						onClick: () => void window.juno.window.openSettings("mail"),
 					}}
-					tip="Credentials are stored securely in your operating system keychain."
 				/>
 			</div>
 		);

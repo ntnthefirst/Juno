@@ -34,22 +34,22 @@ export function StartHere() {
 	return (
 		<section>
 			<h2 className="text-h3">Start here</h2>
-			<ul className="mt-4">
+			<ul className="mt-3">
 				{STEPS.map((step) => (
 					<li key={step.title}>
 						<button
 							type="button"
 							onClick={step.onClick}
-							className="flex w-full items-center gap-3 border-b border-line py-3 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-hover"
+							className="flex w-full items-center gap-3 border-b border-line py-4 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-hover"
 						>
-							<span className="flex h-7 w-7 flex-none items-center justify-center rounded-[var(--radius-md)] bg-sunken text-ink-muted">
-								<Icon name={step.icon} size={14} />
+							<span className="flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] bg-hover text-ink-muted">
+								<Icon name={step.icon} size={16} />
 							</span>
 							<span className="min-w-0 flex-1">
 								<span className="block text-base font-[var(--weight-medium)]">{step.title}</span>
 								<span className="block text-sm text-ink-muted">{step.description}</span>
 							</span>
-							<Icon name="chevron-right" size={16} className="flex-none text-ink-muted" />
+							<Icon name="chevron-right" size={14} className="flex-none text-ink-muted" />
 						</button>
 					</li>
 				))}

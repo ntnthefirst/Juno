@@ -453,13 +453,11 @@ export function DocumentsScreen() {
 									label: "New document",
 									icon: "add",
 									onClick: () => setGenerating(true),
-									shortcut: ["Ctrl", "N"],
 								}}
 								secondaryAction={{
 									label: "Import PDF",
 									onClick: () => void pickAndImport(),
 								}}
-								tip="Signed documents carry an audit trail with timestamps and version history."
 							/>
 						) : shown.length === 0 ? (
 							<EmptyState

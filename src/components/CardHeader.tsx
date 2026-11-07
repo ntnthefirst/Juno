@@ -13,22 +13,22 @@ type CardHeaderProps = {
 
 /**
  * The head of a card: a title, a count, the screen it links to and an optional
- * add (Card Header in the design file). 36px tall, so a card that carries one
- * lines up with the rows under it.
+ * add (Card Header in the design file). 32px tall, 14px semibold with the link
+ * at 13px, as Section Header (49:622) draws it.
  */
 export function CardHeader({ title, count, link, add }: CardHeaderProps) {
 	return (
-		<header className="flex h-9 items-center gap-2">
-			<h2 className="text-lg font-[var(--weight-medium)]">{title}</h2>
+		<header className="flex h-8 items-center gap-2">
+			<h2 className="text-base font-[var(--weight-semibold)]">{title}</h2>
 			{count !== undefined && count > 0 ? (
-				<span className="tabular-nums text-base text-ink-muted">{count}</span>
+				<span className="tabular-nums text-dense text-ink-muted">{count}</span>
 			) : null}
 			<span className="min-w-px flex-1" />
 			{link ? (
 				<button
 					type="button"
 					onClick={link.onClick}
-					className="inline-flex h-8 items-center gap-1 rounded-[var(--radius-md)] px-1 text-base text-ink-muted transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-accent"
+					className="inline-flex h-8 items-center gap-1 rounded-[var(--radius-md)] px-1 text-dense text-ink-muted transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-accent"
 				>
 					{link.label}
 					<Icon name="chevron-right" size={12} />

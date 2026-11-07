@@ -132,9 +132,7 @@ export function RemindersScreen() {
 							label: "New reminder",
 							icon: "add",
 							onClick: () => openNewRecord("reminder"),
-							shortcut: ["Ctrl", "N"],
 						}}
-						tip="Reminders can be recurring and tied directly to clients or projects."
 					/>
 				) : (
 					order.map((bucket) => {

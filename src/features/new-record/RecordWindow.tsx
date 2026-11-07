@@ -52,7 +52,9 @@ export function RecordWindow({ title, saveLabel, busy, error, onSubmit, children
 			</header>
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-8 pt-6 pb-4">
-				<div className="flex flex-col gap-5">{children}</div>
+				<div className="flex flex-col gap-5 [&_label>span[aria-hidden]]:hidden [&_select]:border-[var(--line-strong)] [&_select]:bg-[var(--surface)]">
+					{children}
+				</div>
 				{error ? (
 					<div role="alert" className="mt-4 border-l-2 border-[var(--risk)] pl-4">
 						<p data-selectable className="text-sm text-[var(--risk)]">

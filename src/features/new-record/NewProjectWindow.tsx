@@ -86,7 +86,7 @@ export function NewProjectWindow({ prefill }: NewProjectWindowProps) {
 					Choose
 				</Button>
 			</div>
-			<Field label="Description" multiline rows={2} value={description} onChange={setDescription} />
+			<Field label="Description" multiline rows={1} value={description} onChange={setDescription} />
 		</RecordWindow>
 	);
 }

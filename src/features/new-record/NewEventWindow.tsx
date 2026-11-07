@@ -151,7 +151,7 @@ export function NewEventWindow({ prefill }: NewEventWindowProps) {
 				placeholder="No client"
 				options={lists.clients.map((client) => ({ value: client.id, label: client.name }))}
 			/>
-			<Field label="Notes" multiline rows={2} value={notes} onChange={setNotes} />
+			<Field label="Notes" multiline rows={1} value={notes} onChange={setNotes} />
 		</RecordWindow>
 	);
 }

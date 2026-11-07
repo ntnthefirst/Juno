@@ -104,7 +104,7 @@ export function NewReminderWindow({ prefill }: NewReminderWindowProps) {
 				/>
 			</FieldRow>
 			<Select label="Client or project" value={owner} onChange={setOwner} placeholder="Neither" options={options} />
-			<Field label="Notes" multiline rows={2} value={notes} onChange={setNotes} />
+			<Field label="Notes" multiline rows={1} value={notes} onChange={setNotes} />
 		</RecordWindow>
 	);
 }

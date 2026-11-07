@@ -240,13 +240,16 @@ Not code, but the packages above wait on some of it.
   digitally, the audit page), the Notes empty state (the screen uses the shared empty state until it is drawn), and a home for automations.
 - **Place the mascot** (package 10) in the logo frames on the Stylesheet page, the
   splash, setup, lock and every empty state, once one is chosen.
-- **Settings content that is design only.** `19 Settings / Documents` (`34:4424`)
-  shows a documents folder and "Keep every version", which the app has no setting
-  for (checked in `src/` and `electron/`), under the page `Signature image`. Either build them (a documents
-  folder setting and a keep-versions setting, with the services) or remove them
-  from the frame. `19 Settings / Security and data` (`34:4475`) draws Lock, Backup
-  and the agent log purge on one page where the app has Lock and Backup as
-  separate pages. Redraw to match `features/settings/pages.ts`.
+- **Settings, setup, splash and lock, where the app and the frames still differ.** The frame
+  `Signature image` draws a switch for "Keep every version"; the app says every version is
+  kept and has no control, since turning it off would delete history (decision 69). The
+  Mail step of setup draws three fields and an Add account button; the app opens the
+  account form in Settings instead, because an account needs SMTP and a connection test.
+  The Security frame draws Lock, Backup and Agent log on one page under a nav that lists
+  two; the app puts the agent log and Recent on the Backup page. The Help and about frame
+  draws no About card, and the app keeps it (version and database path). Mail accounts
+  rows keep Pause, Edit and Remove beside the status badge, which the frame omits. The
+  title bar of the setup and settings windows is 40px, the frames draw 44.
 - **Documents, Templates, Agent and Notes, where the app and the frames still differ.**
   The viewer frame draws a pencil in the title bar for a generated document, which has
   no edit (a new version is the way), a viewer bar 125px tall (the app keeps 48) and the

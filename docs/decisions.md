@@ -2278,3 +2278,43 @@ said reads are left out).
 **What would reverse this:** a client that polls reads so often that thirty days of
 them is still too many would want a count instead of rows. A need to see one
 source without the other would bring the second switch back.
+
+## 69. The settings, setup, splash and lock windows follow the frames
+
+The Settings, Setup, Splash and Lock frames draw sizes and content the app had
+not, and where the file and an older note disagree the file wins.
+
+- **Sizes.** Settings is 888 by 664 (it was 980 by 700), setup is 800 by 664 (it
+  was 760 by 620) and the splash is 420 by 300. Decisions 26 and 34 name the
+  older sizes; the reasons they give still stand.
+- **Setup asks what the frames draw.** About you (name, one email, one phone),
+  Your business (name, address, VAT number), Appearance, Lock as two switches,
+  Mail and Ready, each with Back. The first email and phone are the first entry
+  of the lists kept under Emails and phones. The establishment number is no
+  longer asked here and stays in settings. "Open Juno" starts the walkthrough,
+  which has its own way to close.
+- **The lock is one switch in settings.** Turning it on asks for a passphrase or
+  a PIN in the same dialog as before, and the sentence that the lock screen does
+  not protect the file on disk sits under the switch. The lock screen itself is
+  a centred icon, a title, one field and Unlock, with no card.
+- **Security and data is two pages.** Lock, and Backup, which now also holds the
+  agent log purge and the Recent list. Recent is no longer a page of its own.
+- **A documents folder.** New documents are written to a folder the owner picks
+  in a dialog in the main process, or to the one inside the data folder. Nothing
+  already filed moves, because every file keeps its absolute path. Page pictures
+  are stored relative to a folder, so they stay under the default one. There is
+  no tool for it, for the reason no tool takes a path (`security.md` section 2).
+- **"Keep every version" is not a setting.** A version is never replaced or
+  edited (`services/document-versions.ts`), so a switch that could turn it off
+  would be a switch that deletes history. The page says it is kept and offers no
+  control.
+- **The agent log can be purged now, by the owner only.** The button runs the
+  same retention as the launch purge. There is no tool, because an agent must not
+  be able to erase its own trail.
+- **What an agent can do shows a Kind and a Calls column.** Kind is the
+  permission row the tool belongs to; Calls is how often an agent or an
+  automation ran it, from the log.
+
+**What would reverse this:** a second place that needs a documents folder per
+client would turn the one setting into a rule. A real need to keep fewer
+versions would bring the switch back, with its own confirmation.

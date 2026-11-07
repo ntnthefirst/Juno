@@ -298,37 +298,16 @@ per group (`SCOPES` in `app/CommandPalette.tsx`): add Notes there. Recent takes 
 new `RecentKind` in `shared/types.ts` and a case in `services/recent.ts`, and the
 New menu (`NEW_MENU` in `app/screens.ts`) gets New note and New page.
 
+**The Note context menu.** Right click on a note row is the one kind of menu
+not built (decision 59). Add `"note"` to `MENU_KINDS` in `shared/menu.ts`, a case
+in `services/menu-registry.ts` (Open in a new window, Pin to the top, Duplicate,
+Move to a project, Delete, as `20 Notes / Context menu`, `76:7290`, and the
+Context Menu set, `76:2231`, draw them) and the handlers beside the note rows with
+`contextMenuFor`. Add the Blank menu's New note and New page there too.
+
 **Done when.** A note and a page can be made, searched, found in, linked to a
 client or project, archived and driven by an agent. Tests cover search and the
 day grouping. The empty state exists.
-
-#### Package 7. Context menus everywhere, native (M)
-
-**Figma.** `04 Overview / Context menu` (`76:7136`), `06 Calendar Month / Context
-menu` (`76:7545`), `10 Clients / Context menu` (`76:7237`), `14 Mail / Context
-menu` (`76:7471`), `15 Documents / Context menu` (`76:7359`), blank-area menu
-(`76:7418`), `20 Notes / Context menu` (`76:7290`). Component: Context Menu set
-(`76:2231`), kinds Reminder, Event, Client, Note, File, Mail, Blank, Project,
-Add, Block.
-
-**Behaviour.** A right click on a row, a note, a file, an event, a mail or the
-blank area of a list opens the menu the frame shows, with the shortcuts it shows.
-The menus are native (Electron `Menu.popup`) so they match Windows. The figures in
-the file are drawings of them. Items call the same service functions the buttons
-call, a destructive one asks first, and an item that does not apply is left out
-and not greyed.
-
-**Build.** One main-process module `windows/context-menu.ts` that builds a menu
-from a registry (kind plus record id) and an IPC channel `menu.show`. The
-renderer sends a kind and an id, never a list of items, so a script in the page
-cannot invent one. Interface only: no MCP tool. Respect the lock.
-
-**Done when.** Each kind opens with the right items, the keyboard menu key opens
-it too, and no menu appears while the app is locked.
-
-One already exists as a drawn menu and moves here: the right click on the intro and
-outro buttons in the composer (`features/mail/blocks/BlockMenu.tsx`), kind Block,
-with Edit this intro, New intro and Manage intros and outros.
 
 #### Package 8. Calendar layouts and the new-record windows (M, needs decision 4)
 

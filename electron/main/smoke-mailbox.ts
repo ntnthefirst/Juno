@@ -121,6 +121,7 @@ const SAMPLES: Sample[] = [
 				'<body><div class="hero"><h1 style="font-size: 20px">Nieuw dit najaar</h1>',
 				'<img src="https://hyge.example/track.gif" width="1" height="1">',
 				'<p>Bekijk het <a href="https://hyge.example/aanbod">volledige aanbod</a>.</p>',
+				'<p>De showroom is vrijdag om 10:00 open voor leveringen.</p>',
 				'<p onclick="alert(1)"><script>alert(1)</script>Tot binnenkort.</p></div></body></html>',
 			],
 		),

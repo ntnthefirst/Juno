@@ -4327,6 +4327,37 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (blockMenu !== "ok") throw new Error(`Smoke: intro menu ${blockMenu}`);
 									await shoot("mail-compose-intro");
+									// Choosing an intro and an outro puts their variables in as chips, never
+									// as braces. With nobody in To the first name has no value, so that chip
+									// is flagged, and the text twin of the message carries tokens, not labels.
+									const chipsIn = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const choose = async (label, name) => {
+												let menu = document.querySelector("[role=menu][aria-label='" + label + "']");
+												if (!menu) {
+													document.querySelector("button[aria-label='" + label + "']").click();
+													await wait(300);
+													menu = document.querySelector("[role=menu][aria-label='" + label + "']");
+												}
+												const item = menu && [...menu.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim().startsWith(name));
+												if (!item) return false;
+												item.click();
+												await wait(500);
+												return true;
+											};
+											if (!(await choose("Intro", "Friendly"))) return "no Friendly intro";
+											if (!(await choose("Outro", "Kind regards"))) return "no Kind regards outro";
+											const editor = document.querySelector("[role=textbox][aria-label='Message']");
+											const chips = [...editor.querySelectorAll("[data-juno-variable]")].map((el) => el.getAttribute("data-juno-variable"));
+											if (!chips.includes("first_name") || !chips.includes("my_name")) return "chips: " + chips.join(",");
+											if (editor.textContent.includes("{{")) return "braces in the message";
+											if (!editor.querySelector("[data-juno-variable='first_name'][data-missing]")) return "the first name chip is not flagged";
+											return "ok";
+										})()`,
+									);
+									if (chipsIn !== "ok") throw new Error(`Smoke: composer chips ${chipsIn}`);
+									await shoot("mail-compose-chips");
 									// The right click is the platform's menu (decision 59), which a page
 									// cannot click. Menu.popup is stood in for while the button is right
 									// clicked: it records what the main process offered and chooses
@@ -4343,8 +4374,7 @@ if (!app.requestSingleInstanceLock()) {
 										blocksPage = (await window.webContents.executeJavaScript(
 											`(async () => {
 												const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-												document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-												await wait(200);
+												// The pick above closed its menu, so nothing is open to dismiss.
 												const intro = document.querySelector("button[aria-label='Intro']");
 												intro.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
 												await wait(700);
@@ -4527,6 +4557,38 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (measured !== "ok") throw new Error(`Smoke: mail reader height ${measured}`);
+									// A link in the message is clickable and hovering it shows the real
+									// address with a way to open or copy it. The frame reports the hover to
+									// the window, which draws the popover; the shell opens https and nothing
+									// else, however the address got here.
+									const hovered = await mailFrame.executeJavaScript(
+										`(() => {
+											const a = document.querySelector("a[data-href]");
+											if (!a) return "no link in the message";
+											a.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+											return "ok";
+										})()`,
+									);
+									if (hovered !== "ok") throw new Error(`Smoke: link hover ${hovered}`);
+									await new Promise((r) => setTimeout(r, 500));
+									const popover = await window.webContents.executeJavaScript(
+										`(() => {
+											const box = document.querySelector("[role=group][aria-label='Link address']");
+											if (!box) return "no popover";
+											if (!box.textContent.includes("https://hyge.example/aanbod")) return "wrong address " + box.textContent;
+											return [...box.querySelectorAll("button")].map((b) => b.textContent.trim()).join("|");
+										})()`,
+									);
+									if (popover !== "Open in browser|Copy link") throw new Error(`Smoke: link popover ${popover}`);
+									await shoot("mail-link-hover");
+									for (const bad of ["http://example.com", "javascript:alert(1)", "mailto:a@b.be", "file:///c:/windows/system32/calc.exe"]) {
+										const refused = await window.webContents.executeJavaScript(
+											`window.juno.mail.openLink(${JSON.stringify(bad)}).then(() => "opened", () => "refused")`,
+										);
+										if (refused !== "refused") throw new Error(`Smoke: a link ${bad} reached the shell`);
+									}
+									await mailFrame.executeJavaScript(`document.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))`);
+									await new Promise((r) => setTimeout(r, 500));
 								}
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;

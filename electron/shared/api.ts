@@ -88,7 +88,6 @@ import type {
 	ClientEmail,
 	ClientEmailInput,
 	ClientEmailPatch,
-	ClientInput,
 	ClientPatch,
 	ClientPhone,
 	ClientPhoneInput,
@@ -190,6 +189,10 @@ import type {
 	OnboardingPatch,
 	OnboardingState,
 	SettingsSection,
+	ChildClosedInfo,
+	ClientIntakeInput,
+	NewRecordKind,
+	NewRecordPrefill,
 	MessageSuggestion,
 	SuggestionKind,
 	SuggestionOutcome,
@@ -254,7 +257,15 @@ export interface JunoApi {
 		 * has a channel back, so this is how a setting changed in one of them, and
 		 * setup finishing, reach the application behind it.
 		 */
-		onChildClosed(listener: () => void): () => void;
+		onChildClosed(listener: (info: ChildClosedInfo) => void): () => void;
+		/**
+		 * A small window for making one event, client, project or reminder, over
+		 * the main window (decision 60). `prefill` is what it starts from, which
+		 * is how a client or a project record quick-adds one of its own.
+		 */
+		openNewRecord(kind: NewRecordKind, prefill?: NewRecordPrefill): Promise<void>;
+		/** Called by that window when it is done. `created` says whether anything was saved. */
+		closeNewRecord(created: boolean): Promise<void>;
 		/** The first-run window. It is asked for by the main window, and by settings. */
 		openSetup(): Promise<void>;
 		closeSetup(): Promise<void>;
@@ -274,7 +285,7 @@ export interface JunoApi {
 	clients: {
 		list(query?: ListClientsQuery): Promise<ClientSummary[]>;
 		get(id: string): Promise<Client | null>;
-		create(input: ClientInput): Promise<Client>;
+		create(input: ClientIntakeInput): Promise<Client>;
 		update(id: string, patch: ClientPatch): Promise<Client>;
 		/** Soft delete. Returns the row so the interface can offer an undo. */
 		remove(id: string): Promise<Client>;

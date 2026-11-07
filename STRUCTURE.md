@@ -80,7 +80,7 @@ electron/
   main/services/        All business logic. The API
   main/ipc/             Thin adapters over services, behind the lock guard
   main/mcp/             Thin adapters over the same services, for agents
-  main/windows/         Main, settings, setup, splash, the shared chrome, and `context-menu.ts` (the native right-click menu)
+  main/windows/         Main, settings, setup, new-record, splash, the shared chrome, and `context-menu.ts` (the native right-click menu)
   main/vault.ts         safeStorage read and write, keyed by account id
   shared/               The contract both processes typecheck against
 src/
@@ -183,6 +183,14 @@ over the real app follows, and both can be replayed from Settings > General.
 
 There is one modal child at a time. Opening setup closes settings and the other
 way round, and when either closes the main process sends `window.childClosed`.
+
+A new event, client, project or reminder is the third modal child (decision 60):
+a 720 by 640 window at `#/new/<kind>`, built in `src/features/new-record/`, opened
+by the New menu, the palette, Ctrl N, the calendar grid and the quick adds on a
+client or project record, which pass a prefill in the address
+(`shared/new-record.ts`). `window.childClosed` carries `{ created }`, and
+`useRecordsChanged` (`src/lib/new-record.ts`) is how a screen reads again.
+Editing one of the four is still a page.
 
 `onboarding` lives in `settings.json`, not the database, so replacing the
 database does not replay setup and `npm run dev:clean` does.

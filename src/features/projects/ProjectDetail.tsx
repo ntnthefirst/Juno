@@ -24,7 +24,8 @@ import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
 import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { addDays, todayIso } from "../calendar/dates";
-import { newEventForm, type ScheduleForm } from "../calendar/schedule-form";
+import { openNewRecord } from "../../lib/new-record";
+import type { ScheduleForm } from "../calendar/schedule-form";
 import { scheduleRows, type ScheduleRow } from "../calendar/schedule-rows";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
 import { AssetList } from "./AssetList";
@@ -303,13 +304,19 @@ export function ProjectDetail({
 		{ id: "calendar", label: "Calendar", count: upcoming.length > 0 ? upcoming.length : null, countTone: "warn" },
 	];
 
+	// A new event belongs to this project and, when it has one, its client.
+	const addEvent = () =>
+		openNewRecord("event", {
+			projectId: current.id,
+			...(current.clientId ? { clientId: current.clientId } : {}),
+		});
+
 	// What the platform menus hand back. The items themselves are chosen in the
 	// main process from the project (decision 59); this only says what each does.
 	const addHandlers: MenuHandlers = {
 		"add-mail": () => setLinkMailOpen(true),
 		"add-time": () => onTimeForm(null),
-		"add-event": () =>
-			onSchedule(newEventForm({ projectId: current.id, ...(current.clientId ? { clientId: current.clientId } : {}) })),
+		"add-event": () => addEvent(),
 		"add-file": () => void act(() => window.juno.projects.assets.choose(current.id, "managed"), true),
 		"add-note": () => {
 			onTabChange("notes");
@@ -388,9 +395,7 @@ export function ProjectDetail({
 					<ProjectCalendar
 						projectId={current.id}
 						version={tick}
-						onAddEvent={() =>
-							onSchedule(newEventForm({ projectId: current.id, ...(current.clientId ? { clientId: current.clientId } : {}) }))
-						}
+						onAddEvent={addEvent}
 						onOpenForm={onSchedule}
 					/>
 				) : (

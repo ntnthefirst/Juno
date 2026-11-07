@@ -156,6 +156,12 @@ focuses the parent and sends `window.childClosed`; that event is how setup
 finishing, and a replay asked for in settings, reach the main window. Neither
 child has a channel back, and neither needs one.
 
+**Making an event, a client, a project or a reminder is the third** (decision
+60): a 720 by 640 modal child, entered by `#/new/<kind>`, opened by every path
+that creates one and prefilled from a client or project record. It follows the
+same one-modal-child rule, and its `childClosed` carries what it saved so the
+screen behind reads again.
+
 Every window draws its own title bar and lets the OS draw the caption buttons
 over it. `TITLEBAR_HEIGHT`, `--titlebar-height` and the gutters in
 `src/lib/platform.ts` are one number in three places, and they move together.
@@ -173,7 +179,9 @@ edge, non-modal, so the list behind it stays usable. Decision 30, and
 [.claude/rules/styling.md](.claude/rules/styling.md) section 5c.
 
 The settings window stays modal for the reason in decision 26, and that is not
-the same thing.
+the same thing. **One exception to "a form is a page" (decision 60):** a new
+event, client, project or reminder is a small window, as the design draws it.
+Editing one that exists is still a page.
 
 ## Development data
 

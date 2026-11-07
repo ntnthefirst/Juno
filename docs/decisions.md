@@ -1877,3 +1877,42 @@ the edit fallback for text.
 **What would reverse this:** native menus that cannot carry what a screen needs
 (an icon on every row, a submenu with a preview), which would move the drawn
 menu back in under the same registry.
+
+## 60. Making an event, client, project or reminder happens in a small window
+
+Amends decision 30. The design draws New event, New client, New project and New
+reminder as small windows (frames `58:4449`, `90:9301`, `90:9368`, `90:9426`),
+and the Figma file wins over an older rule.
+
+- **Four records, and only these four.** Each is a modal child of the main
+  window, 720 by 640 and fixed, with the title bar, the fields and a footer of
+  Cancel and the save button. They replace the create pages. Editing a record
+  that exists still opens its page (`ClientForm`, `ProjectForm`, `EventForm`,
+  `ReminderForm`), because the page is where the whole record is, and a form
+  with a sequence of steps does not fit in a window of this size.
+- **The one-modal-child rule holds** (decision 34). `windows/new-record-window.ts`
+  sits beside `setup-window.ts`, and opening one closes settings or setup, or
+  replaces another new-record window. It is entered by `#/new/<kind>` and
+  closed with `window.closeNewRecord`. When it closes, the main process focuses
+  the parent and sends `window.childClosed` with `{ created: kind | null }`, so
+  the screens behind it read again (`useRecordsChanged`) without a remount that
+  would drop the record that was open.
+- **Every path that creates one opens the window:** the New menu, the palette,
+  Ctrl N, the blank-area menu, a click on the calendar grid, and the quick adds
+  on a client or project record. Those pass a prefill (`clientId`, `projectId`,
+  a date or a start and end) in the window's address. The address can be edited
+  by a script in the page that opened it, so `shared/new-record.ts` checks the
+  shape of every field on both sides and drops what does not match.
+- **Saving goes through the existing services.** The client window sends the
+  contact details typed in it with the client, and `services/client-intake.ts`
+  makes the client and its primary email, phone and address in one transaction,
+  so the agent's `clients.create` takes the same fields. Dates and zones keep
+  the rules in `STRUCTURE.md` sections 4 and 5: a date is a plain
+  `YYYY-MM-DD`, an event is wall-clock with its own zone.
+- **Left out of the windows:** the client's language (a client has none yet, and
+  the status stands in its place), an event's location and project picker, and
+  a reminder's category, interval and lead days. They are on the edit page.
+
+**What would reverse this:** a fifth record whose form needs steps or a table,
+which is a page; or a platform where a modal child cannot be told apart from the
+window behind it.

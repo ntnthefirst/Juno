@@ -6,7 +6,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { blankMenuFor } from "../../lib/blank-menu";
-import { useScreenAction } from "../../lib/screen-actions";
+import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { BUCKET_LABELS, BUCKET_ORDER, plural, todayIso } from "./format";
 import { ReminderForm } from "./ReminderForm";
 import { ReminderRow } from "./ReminderRow";
@@ -20,8 +20,7 @@ type Load =
 export function RemindersScreen() {
 	const [includeDone, setIncludeDone] = useState(false);
 	const [load, setLoad] = useState<Load>({ status: "loading" });
-	const [form, setForm] = useState<{ reminder: Reminder | null } | null>(null);
-	useScreenAction("reminders", () => setForm({ reminder: null }));
+	const [form, setForm] = useState<{ reminder: Reminder } | null>(null);
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [deleted, setDeleted] = useState<Reminder | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -62,6 +61,9 @@ export function RemindersScreen() {
 			.then((rows) => setLoad({ status: "ready", rows }))
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, [fetchRows]);
+
+	// A new-record window saved a reminder, so the list reads again.
+	useRecordsChanged(refreshList);
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 	const dismissNotice = useCallback(() => setNotice(null), []);
@@ -116,7 +118,7 @@ export function RemindersScreen() {
 						>
 							{includeDone ? "Hide completed" : "Show completed"}
 						</Button>
-						<AddButton label="New reminder" onClick={() => setForm({ reminder: null })} />
+						<AddButton label="New reminder" onClick={() => openNewRecord("reminder")} />
 					</div>
 				</div>
 
@@ -142,7 +144,7 @@ export function RemindersScreen() {
 						action={{
 							label: "New reminder",
 							icon: "add",
-							onClick: () => setForm({ reminder: null }),
+							onClick: () => openNewRecord("reminder"),
 							shortcut: ["Ctrl", "N"],
 						}}
 						tip="Reminders can be recurring and tied directly to clients or projects."

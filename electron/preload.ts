@@ -17,6 +17,7 @@ import type { JunoApi } from "./shared/api";
 import type {
 	AgentAction,
 	AutomationRun,
+	ChildClosedInfo,
 	LockState,
 	MailOutboxMessage,
 	MailSyncStatus,
@@ -58,12 +59,15 @@ const api: JunoApi = {
 			};
 		},
 		onChildClosed: (listener) => {
-			const handler = () => listener();
+			const handler = (_event: Electron.IpcRendererEvent, info?: ChildClosedInfo) =>
+				listener(info ?? { created: null });
 			ipcRenderer.on("window.childClosed", handler);
 			return () => {
 				ipcRenderer.off("window.childClosed", handler);
 			};
 		},
+		openNewRecord: (kind, prefill) => call("window.openNewRecord", kind, prefill),
+		closeNewRecord: (created) => call("window.closeNewRecord", created),
 		openSetup: () => call("window.openSetup"),
 		closeSetup: () => call("window.closeSetup"),
 		isSetupOpen: () => call("window.isSetupOpen"),

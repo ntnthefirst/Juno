@@ -6,7 +6,7 @@ import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
 import { blankMenuFor } from "../../lib/blank-menu";
-import { useScreenAction } from "../../lib/screen-actions";
+import { openNewRecord } from "../../lib/new-record";
 import { useLoaded } from "../../lib/use-loaded";
 import { BUCKET_LABELS, BUCKET_ORDER, todayIso } from "../reminders/format";
 import { ReminderForm } from "../reminders/ReminderForm";
@@ -62,8 +62,7 @@ const loadUnread = () =>
  */
 export function OverviewScreen() {
 	const [clock, setClock] = useState<Clock | null>(null);
-	const [form, setForm] = useState<{ reminder: Reminder | null } | null>(null);
-	useScreenAction("overview", () => setForm({ reminder: null }));
+	const [form, setForm] = useState<{ reminder: Reminder } | null>(null);
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [deleted, setDeleted] = useState<Reminder | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -172,7 +171,7 @@ export function OverviewScreen() {
 										label="All reminders"
 										onClick={() => requestOpen({ kind: "screen", screen: "reminders" })}
 									/>
-									<AddButton label="New reminder" onClick={() => setForm({ reminder: null })} />
+									<AddButton label="New reminder" onClick={() => openNewRecord("reminder")} />
 								</>
 							}
 						>

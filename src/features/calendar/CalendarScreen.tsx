@@ -6,17 +6,19 @@ import type {
 	CalendarOccurrence,
 	CalendarReminderItem,
 	CalendarScope,
+	NewRecordPrefill,
 	Project,
 	Reminder,
 } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { IconButton } from "../../components/IconButton";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
-import { useScreenAction } from "../../lib/screen-actions";
+import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { ProjectForm } from "../projects/ProjectForm";
-import { ReminderForm, type ReminderSeed } from "../reminders/ReminderForm";
+import { ReminderForm } from "../reminders/ReminderForm";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
 import { AgendaView } from "./AgendaView";
 import {
@@ -37,7 +39,7 @@ import {
 	type ViewKind,
 } from "./dates";
 import { EventDetail } from "./EventDetail";
-import { EventForm, type EventSeed } from "./EventForm";
+import { EventForm } from "./EventForm";
 import { placeItems } from "./format";
 import { MonthView } from "./MonthView";
 import { ScopeDialog } from "./ScopeDialog";
@@ -49,10 +51,9 @@ type Load =
 	| { status: "error"; message: string };
 
 type FormState = {
-	event: CalendarEvent | null;
+	event: CalendarEvent;
 	occurrence: CalendarOccurrence | null;
 	scope: CalendarScope;
-	seed: EventSeed | null;
 };
 
 /** What the Undo toast does. Deleting an event, a reminder or a deadline each undo differently. */
@@ -88,12 +89,10 @@ export function CalendarScreen() {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [version, setVersion] = useState(0);
 	const [form, setForm] = useState<FormState | null>(null);
-	// Asked for from outside: an hour from now, for an hour, today.
-	useScreenAction("calendar", () => createAt(todayIso(), Math.min(23, new Date().getHours() + 1) * 60));
 	const [detail, setDetail] = useState<CalendarItem | null>(null);
 	const [question, setQuestion] = useState<ScopeQuestion | null>(null);
 	const [undo, setUndo] = useState<Undo | null>(null);
-	const [reminderForm, setReminderForm] = useState<{ reminder: Reminder | null; seed: ReminderSeed | null } | null>(null);
+	const [reminderForm, setReminderForm] = useState<{ reminder: Reminder } | null>(null);
 	const [projectForm, setProjectForm] = useState<Project | null>(null);
 	const [snoozing, setSnoozing] = useState<Reminder | null>(null);
 	const [warnings, setWarnings] = useState<string[] | null>(null);
@@ -155,6 +154,8 @@ export function CalendarScreen() {
 	}, [fetchItems, from, version]);
 
 	const refresh = useCallback(() => setVersion((v) => v + 1), []);
+	// A new-record window saved something, so the grid reads again.
+	useRecordsChanged(refresh);
 
 	const placed = useMemo(
 		() => (load.status === "ready" && from && to ? placeItems(load.items, from, to) : new Map()),
@@ -189,15 +190,14 @@ export function CalendarScreen() {
 	}
 
 	function createAt(date: string, minute: number | null) {
-		const seed: EventSeed =
+		const prefill: NewRecordPrefill =
 			minute === null
 				? { startLocal: date, endLocal: addDays(date, 1), allDay: true }
 				: {
 						startLocal: joinLocal(date, formatMinutes(minute)),
 						endLocal: addLocalMinutes(joinLocal(date, formatMinutes(minute)), 60),
-						allDay: false,
 					};
-		setForm({ event: null, occurrence: null, scope: "all", seed });
+		openNewRecord("event", prefill);
 	}
 
 	async function editEvent(item: CalendarOccurrence) {
@@ -216,7 +216,7 @@ export function CalendarScreen() {
 		}
 		withScope(item, "edit", (scope) => {
 			setQuestion(null);
-			setForm({ event, occurrence: item, scope, seed: null });
+			setForm({ event, occurrence: item, scope });
 		});
 	}
 
@@ -248,7 +248,7 @@ export function CalendarScreen() {
 			if (item.kind === "reminder") {
 				const reminder = await window.juno.reminders.get(item.reminderId);
 				if (!reminder) throw new Error("That reminder no longer exists.");
-				setReminderForm({ reminder, seed: null });
+				setReminderForm({ reminder });
 			} else {
 				const project = await window.juno.projects.get(item.projectId);
 				if (!project) throw new Error("That project no longer exists.");
@@ -317,7 +317,7 @@ export function CalendarScreen() {
 	}
 
 	function createReminderAt(date: string) {
-		setReminderForm({ reminder: null, seed: { dueOn: date } });
+		openNewRecord("reminder", { date });
 	}
 
 	/** A drag, turned into a wall-clock edit on the event's own zone. */
@@ -423,7 +423,6 @@ export function CalendarScreen() {
 		return (
 			<ReminderForm
 				reminder={reminderForm.reminder}
-				seed={reminderForm.seed}
 				backLabel="Calendar"
 				onClose={() => setReminderForm(null)}
 				onSaved={() => {
@@ -457,7 +456,6 @@ export function CalendarScreen() {
 				event={form.event}
 				occurrence={form.occurrence}
 				scope={form.scope}
-				seed={form.seed}
 				onClose={() => setForm(null)}
 				onSaved={() => {
 					setForm(null);
@@ -495,14 +493,12 @@ export function CalendarScreen() {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex flex-none min-w-0 items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:gap-3 sm:px-6">
-				<h1 className="min-w-0 shrink truncate text-h3">
+			<div className="flex min-h-12 flex-none min-w-0 items-center gap-3 px-6 py-2">
+				<h1 className="min-w-0 shrink truncate text-h2">
 					{heading}
 				</h1>
-				<div className="flex shrink-0 items-center gap-1">
-					<Button size="dense" onClick={() => step(-1)} aria-label="Previous">
-						{"<"}
-					</Button>
+				<div className="flex shrink-0 items-center gap-3">
+					<IconButton icon="chevron-left" label="Previous" onClick={() => step(-1)} />
 					<Button
 						size="dense"
 						onClick={() => {
@@ -513,9 +509,7 @@ export function CalendarScreen() {
 					>
 						Today
 					</Button>
-					<Button size="dense" onClick={() => step(1)} aria-label="Next">
-						{">"}
-					</Button>
+					<IconButton icon="chevron-right" label="Next" onClick={() => step(1)} />
 				</div>
 
 				<Segmented

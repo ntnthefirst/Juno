@@ -4,7 +4,8 @@ import { Icon } from "../../components/Icon";
 import { IconButton } from "../../components/IconButton";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
-import { addDays, addLocalMinutes, formatDate, formatTime, joinLocal, todayIso } from "./dates";
+import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
+import { addDays, formatDate, formatTime, todayIso } from "./dates";
 import { scheduleRows, type ScheduleRow } from "./schedule-rows";
 import type { ScheduleForm } from "./schedule-form";
 
@@ -66,6 +67,8 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 		};
 	}, [clientId, projectId, version]);
 
+	useRecordsChanged(refresh);
+
 	async function run(work: () => Promise<unknown>, done?: string) {
 		try {
 			await work();
@@ -76,27 +79,16 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 		}
 	}
 
+	function owner() {
+		return { ...(clientId ? { clientId } : {}), ...(projectId ? { projectId } : {}) };
+	}
+
 	function addEvent() {
-		const startLocal = joinLocal(todayIso(), "09:00");
-		onOpenForm({
-			kind: "event",
-			event: null,
-			seed: {
-				startLocal,
-				endLocal: addLocalMinutes(startLocal, 60),
-				allDay: false,
-				...(clientId ? { clientId } : {}),
-				...(projectId ? { projectId } : {}),
-			},
-		});
+		openNewRecord("event", owner());
 	}
 
 	function addReminder() {
-		onOpenForm({
-			kind: "reminder",
-			reminder: null,
-			seed: { ...(clientId ? { clientId } : {}), ...(projectId ? { projectId } : {}) },
-		});
+		openNewRecord("reminder", owner());
 	}
 
 	async function edit(row: ScheduleRow) {
@@ -104,15 +96,11 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 			if (row.kind === "event") {
 				const event = await window.juno.calendar.get(row.item.eventId);
 				if (!event) throw new Error("That event no longer exists.");
-				onOpenForm({
-					kind: "event",
-					event,
-					seed: { startLocal: event.startLocal, endLocal: event.endLocal, allDay: event.allDay },
-				});
+				onOpenForm({ kind: "event", event });
 			} else {
 				const reminder = await window.juno.reminders.get(row.item.reminderId);
 				if (!reminder) throw new Error("That reminder no longer exists.");
-				onOpenForm({ kind: "reminder", reminder, seed: {} });
+				onOpenForm({ kind: "reminder", reminder });
 			}
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));

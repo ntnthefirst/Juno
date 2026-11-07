@@ -245,6 +245,12 @@ of taste.
   `ActionMenu`; neither holds a list of items, because the main process builds the
   menu from the kind and the record. The drawn `ContextMenu` is for menus that are
   not a record's.
+- **One exception, from the design (decision 60): a new event, client, project
+  or reminder is a small modal window**, not a page (`features/new-record/`,
+  entered by `#/new/<kind>`). It is 720 by 640, follows the one-modal-child
+  rule and tells the screen behind it to refresh when it saves. It does not
+  spread: a fifth record, or any form with steps or a table, is a page, and
+  editing one of the four is a page too.
 - The settings **window** is still modal, for the reason in decision 26. Reading
   a row changes nothing; changing a setting changes what every screen shows.
 

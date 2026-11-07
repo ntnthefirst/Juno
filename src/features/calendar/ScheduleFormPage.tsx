@@ -15,7 +15,6 @@ export function ScheduleFormPage({ form, backLabel, onClose, onSaved }: Schedule
 		return (
 			<EventForm
 				event={form.event}
-				seed={form.seed}
 				backLabel={backLabel}
 				onClose={onClose}
 				onSaved={onSaved}
@@ -25,7 +24,6 @@ export function ScheduleFormPage({ form, backLabel, onClose, onSaved }: Schedule
 	return (
 		<ReminderForm
 			reminder={form.reminder}
-			seed={form.seed}
 			backLabel={backLabel}
 			onClose={onClose}
 			onSaved={onSaved}

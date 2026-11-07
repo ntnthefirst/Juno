@@ -17,6 +17,7 @@ import { OverviewScreen } from "../features/overview/OverviewScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
 import { currentRequest, onOpenRequest } from "../lib/open-entity";
+import { announceRecordsChanged } from "../lib/new-record";
 import { currentScreenAction, onScreenActionRequest, requestScreenAction } from "../lib/screen-actions";
 import { useTheme } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
@@ -88,7 +89,11 @@ function Shell() {
 		}
 
 		void check();
-		const stop = window.juno.window.onChildClosed(() => void check());
+		const stop = window.juno.window.onChildClosed((info) => {
+			void check();
+			// A new-record window that saved something: the screen behind it re-reads.
+			if (info.created) announceRecordsChanged();
+		});
 		return () => {
 			cancelled = true;
 			stop();

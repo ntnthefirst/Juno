@@ -10,8 +10,8 @@ import { messageOf } from "../../lib/errors";
 import { minutesToHours, parseHours } from "./time-format";
 
 type ProjectFormProps = {
-	/** Null creates, a project edits. */
-	project: Project | null;
+	/** The stored project being edited. A new one is made in its own window (decision 60). */
+	project: Project;
 	/**
 	 * Set when the form was reached from a client, which fixes the client and
 	 * hides the picker. A project opened from the projects screen may be moved
@@ -65,17 +65,17 @@ function parseAmount(raw: string): ParsedAmount {
 	return { ok: true, cents: match[1] === "-" ? -cents : cents };
 }
 
-function toValues(project: Project | null): Values {
+function toValues(project: Project): Values {
 	return {
-		name: project?.name ?? "",
-		clientId: project?.clientId ?? "",
-		statusId: project?.statusId ?? "",
-		description: project?.description ?? "",
-		startsOn: project?.startsOn ?? "",
-		dueOn: project?.dueOn ?? "",
-		agreedValue: centsToInput(project?.agreedValueCents ?? null),
-		estimatedHours: minutesToHours(project?.estimatedMinutes ?? null),
-		localPath: project?.localPath ?? "",
+		name: project.name,
+		clientId: project.clientId ?? "",
+		statusId: project.statusId ?? "",
+		description: project.description ?? "",
+		startsOn: project.startsOn ?? "",
+		dueOn: project.dueOn ?? "",
+		agreedValue: centsToInput(project.agreedValueCents),
+		estimatedHours: minutesToHours(project.estimatedMinutes),
+		localPath: project.localPath ?? "",
 	};
 }
 
@@ -175,9 +175,7 @@ export function ProjectForm({
 		};
 
 		try {
-			const saved = project
-				? await window.juno.projects.update(project.id, patch)
-				: await window.juno.projects.create({ ...patch, name });
+			const saved = await window.juno.projects.update(project.id, patch);
 			onSaved(saved);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -187,7 +185,7 @@ export function ProjectForm({
 
 	return (
 		<FormPage
-			title={project ? "Edit project" : "New project"}
+			title="Edit project"
 			onBack={onClose}
 			backLabel={backLabel}
 			actions={

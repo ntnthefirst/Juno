@@ -27,6 +27,7 @@ import { MarkdownNotes } from "../../components/MarkdownNotes";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
+import { openNewRecord } from "../../lib/new-record";
 import { requestOpen } from "../../lib/open-entity";
 import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
@@ -188,7 +189,7 @@ type ClientDetailProps = {
 	 * this only asks for it. Null means a new one.
 	 */
 	onEditContact: (contact: Contact | null) => void;
-	onEditProject: (project: Project | null) => void;
+	onEditProject: (project: Project) => void;
 	/** A date or a reminder is a page of its own, so the screen owns it. */
 	onSchedule: (form: ScheduleForm) => void;
 	/**
@@ -632,7 +633,7 @@ export function ClientDetail({
 				) : tab === "projects" ? (
 					<ProjectsSection
 						projects={projects}
-						onAdd={() => onEditProject(null)}
+						onAdd={() => openNewRecord("project", { clientId })}
 						onEdit={(id) => void editProject(id)}
 						onRemove={(project) => setPending({ kind: "project", id: project.id, name: project.name })}
 					/>

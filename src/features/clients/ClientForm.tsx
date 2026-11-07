@@ -8,8 +8,8 @@ import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 
 type ClientFormProps = {
-	/** Null creates, a client edits. */
-	client: Client | null;
+	/** The stored client being edited. A new one is made in its own window (decision 60). */
+	client: Client;
 	onClose: () => void;
 	onSaved: (client: Client) => void;
 };
@@ -22,13 +22,13 @@ type Values = {
 	notes: string;
 };
 
-function toValues(client: Client | null): Values {
+function toValues(client: Client): Values {
 	return {
-		name: client?.name ?? "",
-		statusId: client?.statusId ?? "",
-		vatNumber: client?.vatNumber ?? "",
-		website: client?.website ?? "",
-		notes: client?.notes ?? "",
+		name: client.name,
+		statusId: client.statusId ?? "",
+		vatNumber: client.vatNumber ?? "",
+		website: client.website ?? "",
+		notes: client.notes ?? "",
 	};
 }
 
@@ -44,7 +44,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 	const [values, setValues] = useState<Values>(() => toValues(client));
 	// Notes stay out of the way until there is something in them, or the user
 	// asks for the field. Filling in a client should not open on a blank essay.
-	const [notesOpen, setNotesOpen] = useState(() => (client?.notes ?? "").trim().length > 0);
+	const [notesOpen, setNotesOpen] = useState(() => (client.notes ?? "").trim().length > 0);
 	const [statuses, setStatuses] = useState<ReferenceItem[]>([]);
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -93,9 +93,7 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 		};
 
 		try {
-			const saved = client
-				? await window.juno.clients.update(client.id, patch)
-				: await window.juno.clients.create({ ...patch, name });
+			const saved = await window.juno.clients.update(client.id, patch);
 			onSaved(saved);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
@@ -105,12 +103,9 @@ export function ClientForm({ client, onClose, onSaved }: ClientFormProps) {
 
 	return (
 		<FormPage
-			title={client ? "Edit client" : "New client"}
+			title="Edit client"
 			onBack={onClose}
 			backLabel="Clients"
-			description={
-				client ? undefined : "Just the basics for now. Add emails, phone numbers, addresses and contacts once the client is saved."
-			}
 			actions={
 				<>
 					<Button onClick={onClose}>Cancel</Button>

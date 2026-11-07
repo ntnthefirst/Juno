@@ -759,6 +759,32 @@ if (!app.requestSingleInstanceLock()) {
 							 * The smoke script counts identical images afterwards and says so.
 							 * Read that line before using any of these as evidence.
 							 */
+							/**
+							 * The new-record windows (decision 60) open over the page this script
+							 * drives, so a step that presses New or Add cannot see them from inside
+							 * the page. The addresses they loaded are kept here, and a step asks for
+							 * the one it expects and closes it.
+							 */
+							const newRecordUrls: string[] = [];
+							app.on("browser-window-created", (_event, created) => {
+								created.webContents.on("did-finish-load", () => {
+									const url = created.webContents.getURL();
+									if (url.includes("#/new/")) newRecordUrls.push(url);
+								});
+							});
+							const expectNewRecordWindow = async (kind: string, what: string, fragment = "") => {
+								for (let waited = 0; waited < 5000; waited += 250) {
+									if (newRecordUrls.some((url) => url.includes(`#/new/${kind}`) && url.includes(fragment))) break;
+									await new Promise((resolve) => setTimeout(resolve, 250));
+								}
+								if (!newRecordUrls.some((url) => url.includes(`#/new/${kind}`) && url.includes(fragment))) {
+									throw new Error(`Smoke: ${what} did not open the new ${kind} window`);
+								}
+								newRecordUrls.length = 0;
+								(await import("./main/windows")).closeNewRecordWindow(false);
+								await new Promise((resolve) => setTimeout(resolve, 400));
+							};
+
 							const capture = async (contents: Electron.WebContents) => {
 								await contents.executeJavaScript(
 									`Promise.race([
@@ -1197,34 +1223,22 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(700);
 											const addEvent = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add event");
 											if (!addEvent) return "no add event button on the project";
+											// Adding an event opens the new event window (decision 60), which
+											// the main process checks after this step. The tab stays put.
 											addEvent.click();
-											await wait(600);
-											if (!document.querySelector("main").textContent.includes("New event")) return "the date form did not open from the project";
-											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(700);
-											if (!document.querySelector("main").textContent.includes("Events and reminders linked to this project")) return "back did not return to the calendar tab";
+											await wait(900);
+											// The window is modal and takes focus, which closes any menu the
+											// page opens next, so it is closed here once it has been seen.
+											await window.juno.window.closeNewRecord(false);
+											await wait(400);
+											if (!document.querySelector("main").textContent.includes("Events and reminders linked to this project")) return "the calendar tab did not stay after adding an event";
 											document.querySelector("main [role=tab]").click();
 											await wait(500);
 
-											// The "..." menu holds the folder actions, and the Add menu holds the five adds.
-											const more = main.querySelector("button[aria-label='More project actions']");
-											if (!more) return "no actions menu";
-											more.click();
-											await wait(300);
-											const labels = [...document.querySelectorAll("[role=menuitem]")].map((el) => el.textContent.trim());
-											for (const label of ["Open folder", "Copy folder path", "Change folder", "Run start command", "Archive", "Delete"]) {
-												if (!labels.some((one) => one.startsWith(label))) return "the menu has no " + label;
-											}
-											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(300);
-											main.querySelector("button[aria-label='Add to this project']").click();
-											await wait(300);
-											const adds = [...document.querySelectorAll("[role=menuitem]")].map((el) => el.textContent.trim());
-											for (const label of ["Link a mail", "Add time entry", "Add calendar event", "Add file", "Add note"]) {
-												if (!adds.includes(label)) return "the Add menu has no " + label;
-											}
-											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(300);
+											// The "..." and Add menus are the platform's now (decision 59), drawn by
+											// the main process, so the page can only prove the two buttons are there.
+											if (!main.querySelector("button[aria-label='More project actions']")) return "no actions menu";
+											if (!main.querySelector("button[aria-label='Add to this project']")) return "no add menu";
 
 											// Where the files are kept is one answer this screen still gives, from the files section.
 											const otherWays = main.querySelector("button[aria-label='Other ways to add a file']");
@@ -1242,6 +1256,7 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: project record ${opened}`);
+									await expectNewRecordWindow("event", "Add event on a project", "projectId=");
 									// Every tab and both menus, in both themes, with the storage dialog
 									// closed first. The timer runs for the Time tab shots, so the title bar
 									// pill is in them, and it is stopped again afterwards.
@@ -1274,11 +1289,7 @@ if (!app.requestSingleInstanceLock()) {
 										await timeService.start(ownProject.id, "Smoke timer");
 										await shoot("time", clickTab("Time"));
 										await timeService.stop();
-										const openMenu = (label: string) =>
-											`document.querySelector("main button[aria-label='${label}']").click(); await new Promise((r) => setTimeout(r, 350));`;
-										const closeMenu = `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await new Promise((r) => setTimeout(r, 300));`;
-										await shoot("menu", clickTab("Notes") + openMenu("More project actions"), closeMenu);
-										await shoot("add-menu", openMenu("Add to this project"), closeMenu);
+										// The "..." and Add menus are native (decision 59), so they are not photographed.
 									}
 								}
 								if (screen === "Client record") {
@@ -1302,12 +1313,13 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the client";
 											const addReminder = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add reminder");
 											if (!addReminder) return "no add reminder button on the client";
+											// Adding a reminder opens the new reminder window, prefilled with
+											// the client, and the client stays where it is.
 											addReminder.click();
-											await new Promise((r) => setTimeout(r, 600));
-											if (!document.querySelector("main").textContent.includes("New reminder")) return "the reminder form did not open from the client";
-											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await new Promise((r) => setTimeout(r, 700));
-											if (!document.querySelector("main [role=tablist]")) return "back did not return to the client";
+											await new Promise((r) => setTimeout(r, 900));
+											await window.juno.window.closeNewRecord(false);
+											await new Promise((r) => setTimeout(r, 400));
+											if (!document.querySelector("main [role=tablist]")) return "the client did not stay after adding a reminder";
 											const timeline = [...main.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().startsWith("Timeline"));
 											if (!timeline) return "no timeline tab";
 											timeline.click();
@@ -1333,6 +1345,7 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: client record ${opened}`);
+									await expectNewRecordWindow("reminder", "Add reminder on a client", "clientId=");
 								}
 								if (screen === "Agent log") {
 									const opened = await window.webContents.executeJavaScript(
@@ -1414,14 +1427,31 @@ if (!app.requestSingleInstanceLock()) {
 									const noted = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const newClient = document.querySelector("button[aria-label='New client']");
-											if (!newClient) return "no new client action";
-											newClient.click();
-											await wait(500);
-											const addNotes = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add notes");
-											if (!addNotes) return "no add notes action";
-											addNotes.click();
+											// New client is a window now (decision 60), so the field is
+											// reached through the edit page of a client that exists.
+											// A client of its own, so a bare install has one to open and a
+											// demo run keeps its seeded four. It is removed again below.
+											const made = await window.juno.clients.create({ name: "Notes smoke" });
+											window.__notesSmokeClient = made.id;
+											document.querySelector("nav button[data-nav=clients]").click();
+											await wait(900);
+											const row = [...document.querySelectorAll("main table tbody tr button")].find((el) => el.textContent.includes("Notes smoke"));
+											if (!row) return "no client row";
+											row.click();
+											await wait(700);
+											const actions = document.querySelector("button[aria-label$=' actions']");
+											if (!actions) return "no client actions menu";
+											actions.click();
 											await wait(300);
+											const editItem = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Edit");
+											if (!editItem) return "no edit item on the client";
+											editItem.click();
+											await wait(600);
+											const addNotes = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add notes");
+											if (addNotes) {
+												addNotes.click();
+												await wait(300);
+											}
 											const label = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Notes");
 											if (!label) return "no notes label";
 											const content = document.getElementById(label.htmlFor);
@@ -1457,11 +1487,23 @@ if (!app.requestSingleInstanceLock()) {
 									writeFileSync(joinPath(shotDir, `notes-editor.png`), notesImage.toPNG());
 
 									// Leaves without saving: the client list this screen is about to
-									// be photographed against has to stay exactly the seeded four.
+									// be photographed against has to stay exactly the seeded four. The
+									// rail entry brings the list back from the client that was open.
 									await window.webContents.executeJavaScript(
-										`(() => { const cancel = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel"); if (cancel) cancel.click(); })()`,
+										`(() => {
+											const cancel = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Cancel");
+											if (cancel) cancel.click();
+											document.querySelector("nav button[data-nav=clients]").click();
+										})()`,
 									);
-									await new Promise((r) => setTimeout(r, 400));
+									await new Promise((r) => setTimeout(r, 600));
+									await window.webContents.executeJavaScript(
+										`window.juno.clients.remove(window.__notesSmokeClient)`,
+									);
+									await window.webContents.executeJavaScript(
+										`document.querySelector("nav button[data-nav=clients]").click()`,
+									);
+									await new Promise((r) => setTimeout(r, 600));
 								}
 								if (screen === "Documents") {
 									// The search bar and the selection above the table: typed text
@@ -3692,42 +3734,41 @@ if (!app.requestSingleInstanceLock()) {
 									if (walked !== "ok") throw new Error(`Smoke: calendar ${walked}`);
 								}
 								if (screen === "Event form") {
-									// Opens the form from a day cell, then switches it to weekly so
-									// the recurrence editor is in the picture.
+									// A new event is a window now (decision 60), so the page with the
+									// recurrence editor is the one for an existing series: the weekly
+									// call, edited as a whole, switched to the weekday picker.
 									const opened = await window.webContents.executeJavaScript(
 										`(async () => {
-											// By accessible name, like the week switch above: the view
-											// buttons carry a long label and a short one at once.
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const month = document.querySelector("button[aria-label='Month']");
 											if (month) month.click();
-											await new Promise((r) => setTimeout(r, 400));
-											const add = document.querySelector("button[aria-label^='New event on']");
-											if (!add) return "no add button";
-											add.click();
-											await new Promise((r) => setTimeout(r, 600));
-											// A form is a page, not a modal (decision 30), so it lives
-											// in main rather than behind a dialog role.
+											await wait(400);
+											const chip = [...document.querySelectorAll("button[draggable=true]")].find((el) => el.textContent.includes("Weekly call"));
+											if (!chip) return "no recurring chip";
+											chip.click();
+											await wait(400);
+											const detail = document.querySelector("aside[aria-label]");
+											const edit = detail && [...detail.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Edit");
+											if (!edit) return "no edit on the side panel";
+											edit.click();
+											await wait(500);
+											const ask = document.querySelector("[role=dialog]");
+											if (!ask) return "no scope question";
+											[...ask.querySelectorAll("button")].find((el) => el.textContent.trim() === "All occurrences").click();
+											await wait(600);
 											const form = document.querySelector("main");
-											if (!form || !form.textContent.includes("New event")) return "no event form";
-											// The form is a sequence, and repetition is on the second
-											// step ("When"), so the title has to be filled in before
-											// the step rail will hand over to it.
-											const title = form.querySelector("input[type=text]");
-											if (!title) return "no title field";
-											const input = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											input.call(title, "Smoke run");
-											title.dispatchEvent(new Event("input", { bubbles: true }));
-											await new Promise((r) => setTimeout(r, 200));
+											if (!form || !form.textContent.includes("Edit all occurrences")) return "no series form";
+											// The form is a sequence, and repetition is on the second step.
 											const next = [...form.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
 											if (!next) return "no next";
 											next.click();
-											await new Promise((r) => setTimeout(r, 500));
+											await wait(500);
 											const repeats = [...form.querySelectorAll("select")].find((el) => [...el.options].some((o) => o.value === "WEEKLY"));
 											if (!repeats) return "no repeat select";
 											const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
 											setter.call(repeats, "WEEKLY");
 											repeats.dispatchEvent(new Event("change", { bubbles: true }));
-											await new Promise((r) => setTimeout(r, 400));
+											await wait(400);
 											return form.querySelector("[role=group][aria-label=Weekdays]") ? "ok" : "no weekday picker";
 										})()`,
 									);
@@ -4242,6 +4283,154 @@ if (!app.requestSingleInstanceLock()) {
 								}
 							}
 
+							// The four new-record windows (decision 60): each one is opened the
+							// way the application opens it, photographed in both themes, filled
+							// in through its own page and saved, and what it saved is read back
+							// through the main window, which also has to have been told.
+							if (process.env.JUNO_SMOKE_DEMO) {
+								const { getNewRecordWindow } = await import("./main/windows");
+								const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+								const inMain = (code: string) => window.webContents.executeJavaScript(code);
+								await inMain(
+									`window.__recordsChanged = 0; window.addEventListener("juno:records-changed", () => { window.__recordsChanged += 1; })`,
+								);
+								const fillHelpers = `
+									const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+									const control = (label) => {
+										const el = [...document.querySelectorAll("label")].find((l) => l.textContent.replace(/ \\*$/, "").trim() === label);
+										return el ? document.getElementById(el.htmlFor) : null;
+									};
+									const put = (label, value) => {
+										const el = control(label);
+										if (!el) throw new Error("no field " + label);
+										const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype
+											: el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+										Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
+										el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+									};
+									const press = (text) => {
+										const b = [...document.querySelectorAll("footer button")].find((x) => x.textContent.trim() === text);
+										if (!b) throw new Error("no button " + text);
+										b.click();
+									};
+								`;
+								type Walk = { kind: string; prefill: string; fill: string; save: string; check: string };
+								const clientId = (await inMain(`window.juno.clients.list().then((rows) => rows[0].id)`)) as string;
+								const walks: Walk[] = [
+									{
+										kind: "event",
+										prefill: `{ clientId: ${JSON.stringify(clientId)} }`,
+										fill: `put("Title", "Smoke workshop"); put("Repeats", "WEEKLY"); put("Notes", "Bring the quote.");`,
+										save: "Save event",
+										check: `(async () => {
+											const today = new Date();
+											const day = (n) => new Date(today.getTime() + n * 86400000).toISOString().slice(0, 10);
+											const items = await window.juno.calendar.list({ from: day(-2), to: day(10), includeReminders: false, includeDeadlines: false });
+											const hit = items.find((item) => item.title === "Smoke workshop");
+											if (!hit) return "the event was not saved";
+											const event = await window.juno.calendar.get(hit.eventId);
+											if (!event || !event.rrule || !event.rrule.includes("WEEKLY")) return "the repeat was not kept";
+											if (event.clientId !== ${JSON.stringify(clientId)}) return "the client prefill was not kept";
+											return "ok";
+										})()`,
+									},
+									{
+										kind: "client",
+										prefill: `{}`,
+										fill: `put("Name", "Smoke client"); put("Email", "smoke@client.test"); put("Phone", "+32 470 98 76 54"); put("Address", "Kerkstraat 1, 9000 Gent"); put("VAT number", "BE0123456789"); put("Notes", "Prefers email.");`,
+										save: "Save client",
+										check: `(async () => {
+											const rows = await window.juno.clients.list({ search: "Smoke client" });
+											const hit = rows.find((row) => row.name === "Smoke client");
+											if (!hit) return "the client was not saved";
+											if (hit.email !== "smoke@client.test") return "the email was not kept as the primary one";
+											const phones = await window.juno.clientPhones.listForClient(hit.id);
+											if (phones.length !== 1) return "the phone was not kept";
+											const addresses = await window.juno.clientAddresses.listForClient(hit.id);
+											if (addresses.length !== 1) return "the address was not kept";
+											return "ok";
+										})()`,
+									},
+									{
+										kind: "project",
+										prefill: `{ clientId: ${JSON.stringify(clientId)} }`,
+										fill: `put("Name", "Smoke table"); put("Due date", "2026-11-14"); put("Description", "A solid oak table.");`,
+										save: "Save project",
+										check: `(async () => {
+											const rows = await window.juno.projects.list();
+											const hit = rows.find((row) => row.name === "Smoke table");
+											if (!hit) return "the project was not saved";
+											if (hit.clientId !== ${JSON.stringify(clientId)}) return "the client prefill was not kept";
+											if (hit.dueOn !== "2026-11-14") return "the due date was not kept";
+											return "ok";
+										})()`,
+									},
+									{
+										kind: "reminder",
+										prefill: `{ date: "2026-10-19" }`,
+										fill: `put("What", "Smoke order planks"); put("Repeats", "months"); put("Notes", "Kiln dried.");`,
+										save: "Save reminder",
+										check: `(async () => {
+											const rows = await window.juno.reminders.list({});
+											const hit = rows.find((row) => row.title === "Smoke order planks");
+											if (!hit) return "the reminder was not saved";
+											if (hit.dueOn !== "2026-10-19") return "the date was not kept as a plain date";
+											if (hit.pattern !== "months") return "the repeat was not kept";
+											return "ok";
+										})()`,
+									},
+								];
+
+								for (const walk of walks) {
+									const before = (await inMain(`window.__recordsChanged`)) as number;
+									await inMain(`window.juno.window.openNewRecord(${JSON.stringify(walk.kind)}, ${walk.prefill})`);
+									let child = getNewRecordWindow();
+									for (let waited = 0; waited < 5000 && !child; waited += 250) {
+										await pause(250);
+										child = getNewRecordWindow();
+									}
+									if (!child) throw new Error(`Smoke: the new ${walk.kind} window did not open`);
+									const contents = child.webContents;
+									contents.on("console-message", (event) => {
+										if (event.level === "warning" || event.level === "error") {
+											console.error(`renderer: ${event.message}`);
+										}
+									});
+									if (contents.isLoading()) {
+										await new Promise<void>((resolve) => contents.once("did-finish-load", () => resolve()));
+									}
+									await pause(900);
+									front(child);
+
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await contents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await pause(350);
+										const image = await capture(contents);
+										writeFileSync(joinPath(shotDir, `new-${walk.kind}-${theme}.png`), image.toPNG());
+									}
+
+									// An empty form refuses to save and says why, in the window.
+									await contents.executeJavaScript(`(() => { ${fillHelpers} press(${JSON.stringify(walk.save)}); })()`);
+									await pause(500);
+									if (!getNewRecordWindow()) throw new Error(`Smoke: an empty new ${walk.kind} window saved and closed`);
+
+									await contents.executeJavaScript(`(async () => { ${fillHelpers} ${walk.fill} await wait(200); press(${JSON.stringify(walk.save)}); })()`);
+									for (let waited = 0; waited < 6000 && getNewRecordWindow(); waited += 250) await pause(250);
+									if (getNewRecordWindow()) throw new Error(`Smoke: the new ${walk.kind} window did not close after saving`);
+									await pause(300);
+
+									const checked = (await inMain(walk.check)) as string;
+									if (checked !== "ok") throw new Error(`Smoke: new ${walk.kind} window ${checked}`);
+									const after = (await inMain(`window.__recordsChanged`)) as number;
+									if (after <= before) throw new Error(`Smoke: saving a new ${walk.kind} did not tell the screen behind it`);
+									console.log(`SMOKE_DEMO new-${walk.kind}=ok`);
+								}
+								nativeTheme.themeSource = "system";
+							}
+
 							// Settings is a window of its own, so it is photographed as one.
 							// Opened through the same function the sidebar button calls, which
 							// is also what proves the modal child actually opens.
@@ -4582,9 +4771,6 @@ if (!app.requestSingleInstanceLock()) {
 
 										press({ mod: true, key: "n", code: "KeyN" });
 										await wait(900);
-										if (!document.querySelector("main").textContent.includes("New client")) return "new did not open the client form";
-										document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-										await wait(500);
 
 										press({ mod: true, key: "/", code: "Slash" });
 										await wait(500);
@@ -4598,6 +4784,7 @@ if (!app.requestSingleInstanceLock()) {
 									})()`,
 								)) as string;
 								if (keyed !== "ok") throw new Error(`Smoke: shortcuts ${keyed}`);
+								await expectNewRecordWindow("client", "Ctrl N on Clients");
 								console.log("SMOKE_DEMO shortcuts=ok");
 							}
 						}

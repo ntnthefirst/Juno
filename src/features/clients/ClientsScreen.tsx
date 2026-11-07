@@ -14,7 +14,7 @@ import type {
 } from "@shared/types";
 import type { Crumb } from "../../app/breadcrumb-context";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { useScreenAction } from "../../lib/screen-actions";
+import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { AddButton } from "../../components/AddButton";
 import { Avatar } from "../../components/Avatar";
 import { EmptyState } from "../../components/EmptyState";
@@ -74,13 +74,12 @@ export function ClientsScreen() {
 	useRecentTouch("client", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const bumpDetail = () => setDetailVersion((current) => current + 1);
-	const [form, setForm] = useState<{ client: Client | null } | null>(null);
-	useScreenAction("clients", () => setForm({ client: null }));
+	const [form, setForm] = useState<{ client: Client } | null>(null);
 	// Contacts and projects belong to the open client, and they are filled in on
 	// a page of their own, so the state sits here rather than in the detail pane
 	// that is too narrow to hold one.
 	const [contactForm, setContactForm] = useState<{ contact: Contact | null } | null>(null);
-	const [projectForm, setProjectForm] = useState<{ project: Project | null } | null>(null);
+	const [projectForm, setProjectForm] = useState<{ project: Project } | null>(null);
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
 	// A document from a template is a page too. Coming back from it lands on the
 	// Documents tab, where it was started from.
@@ -136,6 +135,12 @@ export function ClientsScreen() {
 			.then((rows) => setLoad({ status: "ready", rows }))
 			.catch((error: unknown) => setLoad({ status: "error", message: messageOf(error) }));
 	}, [fetchRows]);
+
+	// A new-record window saved something: the list and the open client read again.
+	useRecordsChanged(() => {
+		refreshList();
+		bumpDetail();
+	});
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 
@@ -222,13 +227,11 @@ export function ClientsScreen() {
 
 	let trail: Crumb[] = [];
 	if (form) {
-		trail = form.client
-			? [
-					clientCrumb,
-					{ label: selectedName ?? form.client.name, onSelect: () => setForm(null) },
-					{ label: "Edit client" },
-				]
-			: [clientCrumb, { label: "New client" }];
+		trail = [
+			clientCrumb,
+			{ label: selectedName ?? form.client.name, onSelect: () => setForm(null) },
+			{ label: "Edit client" },
+		];
 	} else if (contactForm && selectedId) {
 		trail = [
 			clientCrumb,
@@ -239,7 +242,7 @@ export function ClientsScreen() {
 		trail = [
 			clientCrumb,
 			{ label: selectedName ?? "Client", onSelect: () => setProjectForm(null) },
-			{ label: projectForm.project ? "Edit project" : "New project" },
+			{ label: "Edit project" },
 		];
 	} else if (scheduleForm && selectedId) {
 		trail = [
@@ -498,7 +501,7 @@ export function ClientsScreen() {
 						aria-label="Search clients"
 						className="w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 					/>
-					<AddButton label="New client" onClick={() => setForm({ client: null })} />
+					<AddButton label="New client" onClick={() => openNewRecord("client")} />
 				</div>
 			</div>
 
@@ -510,7 +513,7 @@ export function ClientsScreen() {
 				) : load.rows.length === 0 ? (
 					<Empty
 						searching={search.trim().length > 0}
-						onAdd={() => setForm({ client: null })}
+						onAdd={() => openNewRecord("client")}
 						onClearSearch={() => setSearch("")}
 					/>
 				) : (

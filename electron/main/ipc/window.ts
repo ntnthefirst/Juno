@@ -11,12 +11,15 @@
  * locked application still knows what it is drawing.
  */
 import { ipcMain } from "electron";
+import { cleanPrefill, isNewRecordKind } from "../../shared/new-record";
 import type { SettingsSection } from "../../shared/types";
 import {
+	closeNewRecordWindow,
 	closeSettingsWindow,
 	closeSetupWindow,
 	isSettingsOpen,
 	isSetupOpen,
+	openNewRecordWindow,
 	openSettingsWindow,
 	openSetupWindow,
 } from "../windows";
@@ -28,6 +31,16 @@ export function registerWindowIpc(): void {
 	});
 	ipcMain.handle("window.closeSettings", () => {
 		closeSettingsWindow();
+	});
+
+	ipcMain.handle("window.openNewRecord", (_event, kind: string, prefill: unknown) => {
+		// The kind and the prefill come from a renderer, so both are checked here
+		// before either reaches a window address.
+		if (!isNewRecordKind(kind)) return;
+		openNewRecordWindow(kind, cleanPrefill(prefill));
+	});
+	ipcMain.handle("window.closeNewRecord", (_event, created: boolean) => {
+		closeNewRecordWindow(created === true);
 	});
 
 	ipcMain.handle("window.isSetupOpen", () => isSetupOpen());

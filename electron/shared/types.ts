@@ -143,6 +143,17 @@ export interface ClientSummary {
 
 export type ClientInput = Partial<Omit<Client, keyof Standard | "sortName">> & { name: string };
 
+/**
+ * What the new-client window sends: the client, plus the contact details typed
+ * beside it. Each detail becomes the client's primary row of its kind.
+ */
+export type ClientIntakeInput = ClientInput & {
+	email?: string | null;
+	phone?: string | null;
+	/** One line, stored as the first address line. */
+	address?: string | null;
+};
+
 export type ClientPatch = Partial<Omit<Client, keyof Standard | "sortName">>;
 
 /**
@@ -569,6 +580,30 @@ export type ThemeSetting = "system" | "light" | "dark";
  * screen that needs one.
  */
 export type SettingsSection = "general" | "business" | "mail" | "documents" | "security" | "mcp";
+
+/** The four records that are made in a small window of their own (decision 60). */
+export type NewRecordKind = "event" | "client" | "project" | "reminder";
+
+/**
+ * What a new-record window starts from. Every field is optional and checked on
+ * both sides of the window boundary (shared/new-record.ts), because it travels
+ * in the window's address.
+ */
+export interface NewRecordPrefill {
+	clientId?: string;
+	projectId?: string;
+	/** YYYY-MM-DD. The day an event or a reminder falls on. */
+	date?: string;
+	/** Wall-clock, YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD for an all-day event. */
+	startLocal?: string;
+	endLocal?: string;
+	allDay?: boolean;
+}
+
+/** What `window.childClosed` carries: which record the closed window saved, if any. */
+export interface ChildClosedInfo {
+	created: NewRecordKind | null;
+}
 
 /**
  * One of the owner's email addresses. Several are normal, at most one is

@@ -192,8 +192,15 @@ export function hardenWindow(window: BrowserWindow, isDev: boolean): void {
  * flashing the wrong one. `section` is the settings tab to open on, which is
  * how "connect a mail account" reaches the right page from the main window.
  */
-export function viewUrl(isDev: boolean, view: "main" | "settings" | "setup", section?: string): string {
+export function viewUrl(
+	isDev: boolean,
+	view: "main" | "settings" | "setup" | "new",
+	section?: string,
+	query?: string,
+): string {
 	const base = isDev ? `${DEV_URL}/` : `${APP_ORIGIN}/index.html`;
 	if (view === "main") return base;
-	return section ? `${base}#/${view}/${section}` : `${base}#/${view}`;
+	const path = section ? `${base}#/${view}/${section}` : `${base}#/${view}`;
+	// For the new-record windows: what the form starts from, already checked.
+	return query ? `${path}?${query}` : path;
 }

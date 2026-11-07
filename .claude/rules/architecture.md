@@ -129,6 +129,13 @@ is only ever **one modal child at a time**: opening either closes the other.
 When one closes, the main process focuses the parent and sends
 `window.childClosed`, which is the only channel back from either.
 
+**The new-record windows are the third kind of modal child** (decision 60,
+`windows/new-record-window.ts`, `#/new/event`, `#/new/client`, `#/new/project`,
+`#/new/reminder`). They share the one-modal-child rule, and what they start from
+rides in the address as a prefill that `shared/new-record.ts` checks. Closing
+one sends `window.childClosed` with `{ created }`, which is what makes the
+screens behind it read again.
+
 Every window draws its own title bar and lets the operating system draw the
 caption buttons on top (`chrome.ts`). Three things have to move together when
 the title bar height changes: `TITLEBAR_HEIGHT`, `--titlebar-height`, and the

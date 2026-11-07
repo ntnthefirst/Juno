@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { blankMenuFor } from "../../lib/blank-menu";
-import { useScreenAction } from "../../lib/screen-actions";
+import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { AddButton } from "../../components/AddButton";
 import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
@@ -75,8 +75,7 @@ export function ProjectsScreen() {
 	useEffect(() => clearPending, []);
 	useRecentTouch("project", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
-	const [editing, setEditing] = useState<Project | null | "new">(null);
-	useScreenAction("projects", () => setEditing("new"));
+	const [editing, setEditing] = useState<Project | null>(null);
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
 	// A time entry is a form too: null is closed, an entry of null is a new one.
 	const [timeForm, setTimeForm] = useState<{ entry: TimeEntry | null } | null>(null);
@@ -115,6 +114,12 @@ export function ProjectsScreen() {
 			.then((rows) => setLoad({ status: "ready", rows }))
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, [fetchRows]);
+
+	// A new-record window saved something: the list and the open project read again.
+	useRecordsChanged(() => {
+		refreshList();
+		setDetailVersion((version) => version + 1);
+	});
 
 	const clearSelection = useCallback(() => {
 		setSelectedId(null);
@@ -199,7 +204,7 @@ export function ProjectsScreen() {
 		editing !== null
 			? [
 					{ label: "Projects", onSelect: () => setEditing(null) },
-					{ label: editing === "new" ? "New project" : "Edit project" },
+					{ label: "Edit project" },
 				]
 			: selectedId !== null && generating
 				? [
@@ -227,7 +232,7 @@ export function ProjectsScreen() {
 	if (editing !== null) {
 		return (
 			<ProjectForm
-				project={editing === "new" ? null : editing}
+				project={editing}
 				onClose={() => setEditing(null)}
 				onSaved={saved}
 			/>
@@ -319,7 +324,7 @@ export function ProjectsScreen() {
 
 					<div className="flex items-center gap-2">
 						{view ? <ViewControls view={view} onChange={changeView} /> : null}
-						<AddButton label="New project" onClick={() => setEditing("new")} />
+						<AddButton label="New project" onClick={() => openNewRecord("project")} />
 					</div>
 				</div>
 
@@ -378,7 +383,7 @@ export function ProjectsScreen() {
 						action={{
 							label: "New project",
 							icon: "add",
-							onClick: () => setEditing("new"),
+							onClick: () => openNewRecord("project"),
 							shortcut: ["Ctrl", "N"],
 						}}
 						tip="A project can belong to a client, or stand on its own."

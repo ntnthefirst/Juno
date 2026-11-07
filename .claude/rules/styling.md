@@ -149,6 +149,8 @@ New, where a record keeps its menu (a client, a project, a page, a document). Th
 there too, from any screen, by `app/TimerPill.tsx` (decision 56): a clock, the
 project name and a stop button, and nothing while no timer runs.
 
+Calendar is the one screen that fills the left slot with its own toolbar: the month heading, previous, Today, next and the view switch, with the page title left empty, as the month, week and agenda frames draw it. Overview leaves the title empty too.
+
 What the bar holds, from the Title Bar component (`14:221`) and its variants:
 Search, Recent, Reminders and New (a plus) at the left, then a divider and the
 way back when a record is open. The page title is centred on the window, and is

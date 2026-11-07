@@ -1,6 +1,7 @@
 import { IconButton } from "../../components/IconButton";
 import { useState } from "react";
 import type { MailOutboxMessage } from "@shared/types";
+import { tokensToLabels } from "@shared/mail-variables";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
@@ -135,7 +136,7 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 				</div>
 			) : (
 				<pre className="mt-6 whitespace-pre-wrap rounded-[var(--radius-lg)] border border-[var(--line)] p-4 text-base leading-[var(--leading-relaxed)]">
-					{message.bodyText}
+					{tokensToLabels(message.bodyText)}
 				</pre>
 			)}
 

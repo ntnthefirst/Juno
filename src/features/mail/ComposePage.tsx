@@ -202,9 +202,10 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 						continue;
 					}
 					const next = found[kind];
-					if ((next?.text ?? null) === put) continue;
-					editor.setBlock(kind, next?.text ?? null);
-					recordBlock(kind, next?.block.id ?? null, next?.text ?? null);
+					const body = next?.block.body ?? null;
+					if (body === put) continue;
+					editor.setBlock(kind, body);
+					recordBlock(kind, next?.block.id ?? null, body);
 				}
 			})
 			.catch(() => {
@@ -215,6 +216,26 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 			cancelled = true;
 		};
 	}, [blocks, blockContext, recordBlock]);
+
+	// A chip with nothing to put in is flagged in the message, so it is seen
+	// before Send refuses it. Asked again whenever the recipient, the client or
+	// the project changes, and for a draft that was saved and reopened.
+	useEffect(() => {
+		let cancelled = false;
+		window.juno.mail.blocks
+			.values(blockContext)
+			.then((values) => {
+				if (cancelled) return;
+				const empty = (Object.keys(values) as (keyof typeof values)[]).filter((name) => !values[name]?.trim());
+				editorRef.current?.markMissing(empty);
+			})
+			.catch(() => {
+				// The flag is a courtesy. Sending checks the same thing and says so.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [blockContext, bodyHtml]);
 
 	async function pickBlock(kind: ComposeBlockKind, blockId: string | null) {
 		const editor = editorRef.current;
@@ -227,9 +248,11 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 		}
 		try {
 			const rendered = await window.juno.mail.blocks.render(blockId, blockContext);
-			editor.setBlock(kind, rendered.text);
+			// The stored body goes in, so its variables are chips. They take their
+			// values when the message is sent.
+			editor.setBlock(kind, rendered.block.body);
 			blockMode.current[kind] = "manual";
-			recordBlock(kind, blockId, rendered.text);
+			recordBlock(kind, blockId, rendered.block.body);
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		}

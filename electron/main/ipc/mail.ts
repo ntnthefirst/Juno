@@ -215,6 +215,7 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.rules.runs", (_event, query: MailRuleRunQuery) => rules.runs(query));
 
 	ipcMain.handle("mail.blocks.resolve", (_event, context: ComposeBlockContext) => blocks.resolve(context));
+	ipcMain.handle("mail.blocks.values", (_event, context: ComposeBlockContext) => blocks.valuesFor(context));
 	ipcMain.handle("mail.blocks.render", (_event, id: string, context: ComposeBlockContext) =>
 		blocks.render(id, context),
 	);

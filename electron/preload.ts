@@ -619,6 +619,7 @@ const api: JunoApi = {
 			reorder: (kind, ids) => call("mail.blocks.reorder", kind, ids),
 			resolve: (context) => call("mail.blocks.resolve", context),
 			render: (id, context) => call("mail.blocks.render", id, context),
+			values: (context) => call("mail.blocks.values", context),
 		},
 		rules: {
 			list: (accountId) => call("mail.rules.list", accountId),

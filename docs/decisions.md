@@ -1721,7 +1721,7 @@ its model differs from the one built.
   design gives each block one rule and says nothing about two blocks sharing it.
   The list is the owner's, reordered by dragging, so the answer is visible and
   can be changed. Intros and outros are ordered separately.
-- **A block is ordinary text once it is in a message.** It is inserted once, when
+- **A block is ordinary text once it is in a message** (its variables stay chips until the message goes, decision 66). It is inserted once, when
   the composer opens or the recipient becomes known, and never again after the
   owner has chosen "No intro" or edited the line. A block never sends anything
   by itself.
@@ -2186,3 +2186,35 @@ editor and the Templates frame (`32:3699`).
 **What would reverse this:** a component edited by mistake that sent a hundred
 templates back to unreviewed would ask for a way to see what an edit changes
 before it is saved, not for copies. Copies are what detach is for.
+
+## 66. A variable in a message is a chip until the message goes
+
+Decision 55 said a block inserted into a message is ordinary text, with the value
+already in it. That is changed: in the composer an intro or an outro keeps its
+variables as **chips**, never as curly braces and never as resolved text, and
+they take their values when the message is sent or its preview is drawn.
+
+- **A draft stores the chip.** In the HTML it is a span marked
+  `data-juno-variable="first_name"`, and in the text twin it is the token
+  `{{first_name}}`, so a draft that is saved and reopened shows the chip again and
+  still follows the recipient, the client and the project if they change.
+- **The service puts the values in** (`shared/mail-variables.ts`,
+  `mail-outbox.requestSend` and `reviewForSend`). What is queued, and so what
+  every later step reads, has the value in both parts, escaped, and nothing of a
+  chip or a brace. The values are the ones `mail-blocks` works out for a block.
+- **A variable with no value stops the send.** A message is never sent with an
+  empty hole where a name should be. The service refuses, naming the variable and
+  what it comes from, and leaves the draft as it was. In the composer a chip that
+  has nothing to put in is drawn in the warning colours with a tooltip, before
+  Send is pressed.
+- **Choosing a block still checks nothing for you.** A rule skips a block whose
+  variable has no value, as before. Picked by hand, the block goes in and its chip
+  is flagged.
+- **An outro in a reply stays above the quoted original.** The design draws the
+  composer without a reply, so it neither agrees nor disagrees, and a mail
+  reader expects the sign-off under what was written, not under somebody else's
+  words.
+
+**What would reverse this:** a client who needed to see the resolved line while
+writing, rather than a flagged chip, would ask for a live preview beside the
+composer, not for the value in the text.

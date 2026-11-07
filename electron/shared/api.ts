@@ -24,6 +24,7 @@ import type {
 	ComposeBlockKind,
 	ComposeBlockPatch,
 	ComposeBlockRendered,
+	ComposeBlockVariable,
 	ComposeBlockResolution,
 	MailRule,
 	MailRuleInput,
@@ -1061,6 +1062,8 @@ export interface JunoApi {
 			resolve(context: ComposeBlockContext): Promise<ComposeBlockResolution>;
 			/** One block filled in for a message, whatever its rule says. */
 			render(id: string, context: ComposeBlockContext): Promise<ComposeBlockRendered>;
+			/** What each variable would be for a message like this, so the composer can flag a chip with nothing to put in. */
+			values(context: ComposeBlockContext): Promise<Record<ComposeBlockVariable, string>>;
 		};
 		/**
 		 * Rules per mailbox, checked top to bottom against new mail in the inbox

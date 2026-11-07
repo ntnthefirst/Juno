@@ -303,6 +303,14 @@ async function gather(context: ComposeBlockContext, db: Db): Promise<Facts> {
 	};
 }
 
+/** What each variable would be for a message with these recipients, client and project. */
+export async function valuesFor(
+	context: ComposeBlockContext,
+	db: Db = getDb(),
+): Promise<Record<ComposeBlockVariable, string>> {
+	return (await gather(context, db)).values;
+}
+
 function ruleMatches(rule: ComposeBlockRule, facts: Facts): boolean {
 	switch (rule) {
 		case "manual":

@@ -229,3 +229,105 @@ export function detectMoment(text: string, written: Date, now: Date = new Date()
 	}
 	return null;
 }
+
+export interface DetectedReminder {
+	/** `deadline` is a thing asked for by a day, `followup` is a promise to come back. */
+	kind: "deadline" | "followup";
+	/** `YYYY-MM-DD`, in the machine's local calendar. */
+	dueOn: string;
+	/** How the day is said in the bar: "Friday", "15 March". */
+	dayLabel: string;
+}
+
+/** The words that put a date after them in the sense of "no later than". */
+const DEADLINE_CUE_RE =
+	/\b(?:tegen|voor|uiterlijk|ten laatste|deadline(?:\s+is)?|by|before|no later than|due(?:\s+by|\s+on)?)\s+((?:(?:uiterlijk|graag|ten laatste|op|de|dit|deze|aanstaande|next|this|the|on)\s+)*)/g;
+
+/** A day expression at the very start of the text, which is what "by Friday" means. */
+const LEADING_DAY_RES = [
+	new RegExp(`^${RELATIVE_RE.source}`),
+	new RegExp(`^${WEEKDAY_RE.source}`),
+	new RegExp(`^${TEXT_DATE_RE.source}`),
+	new RegExp(`^${NUMERIC_DATE_RE.source}`),
+];
+
+/** What follows a number that makes it a quantity and not a date: "3-4 uur", "15/20 personen". */
+const QUANTITY_AFTER_RE = /^\s*(?:uur|u\b|h\b|hours?|personen|people|stuks|pieces|dagen|days|weken|weeks|euro|eur|€|%)/;
+const MONEY_RE = /€\s?\d[\d.,]*|\d[\d.,]*\s?(?:€|eur\b|euro\b|%)/g;
+
+/** Words that may sit between "ik laat" and "weten" without changing who is told what. */
+const WETEN_FILLER = `het|u|je|jullie|iets|nog|snel|spoedig|binnenkort|later|dan|volgende|deze|week|morgen|overmorgen|vandaag|${WEEKDAY_NAMES}`;
+
+const FOLLOW_UP_RES = [
+	new RegExp(String.raw`\b(?:ik|we|wij)\s+(?:laat|laten|zal|zullen)\s+(?:(?:${WETEN_FILLER})\s+){0,4}weten\b`),
+	/\b(?:ik|we|wij)\s+(?:laat|laten)\s+(?:(?:snel|nog|binnenkort|volgende|deze|week|later)\s+){0,3}iets\s+van\s+(?:me|mij|ons)\s+horen\b/,
+	new RegExp(String.raw`\b(?:ik|we|wij)\s+(?:kom|komen)\s+(?:(?:er|hier|daar|erop|hierop|daarop|op|bij|u|je|jullie|volgende|deze|week|nog|snel|binnenkort|later|${WEEKDAY_NAMES})\s+){0,5}terug\b`),
+	/\b(?:ik|we|wij)\s+(?:zal|zullen)\s+(?:(?:er|hier|daar|erop|snel|nog|binnenkort|later)\s+)*(?:op\s+)?terugkomen\b/,
+	/\b(?:ik|we|wij)\s+(?:bel|bellen)\s+(?:u|je|jullie)\s+(?:nog\s+|snel\s+)?terug\b/,
+	/\b(?:ik|we|wij)\s+(?:neem|nemen)\s+(?:binnenkort\s+|snel\s+)?contact\s+(?:met\s+(?:u|je|jullie)\s+)?op\b/,
+	/\b(?:i|we)(?:'ll|\s+will|\s+shall)\s+(?:get back to you|come back to you|follow up|be in touch|let you know|reach out)\b/,
+];
+
+/** How far ahead a deadline may be. A year-less date that already passed rolls into next year, and that is rarely what a request means. */
+const MAX_DEADLINE_DAYS = 180;
+
+const NEXT_WEEK_RE = /\b(?:volgende week|next week|binnen (?:een|1) week|within a week)\b/;
+/** Without a day, how long after the message was written a promise is worth checking on. */
+const FOLLOW_UP_DEFAULT_DAYS = 7;
+
+function daysBetween(from: Date, to: Date): number {
+	return Math.round((to.getTime() - from.getTime()) / 86_400_000);
+}
+
+function localIso(date: Date): string {
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** The day a "by ..." phrase names, or null when the number after the cue is a quantity. */
+function deadlineDay(sentence: string, written: Date): Date | null {
+	const clean = sentence.replace(MONEY_RE, " ");
+	DEADLINE_CUE_RE.lastIndex = 0;
+	for (let cue = DEADLINE_CUE_RE.exec(clean); cue; cue = DEADLINE_CUE_RE.exec(clean)) {
+		const rest = clean.slice(cue.index + cue[0].length);
+		for (const re of LEADING_DAY_RES) {
+			const hit = re.exec(rest);
+			if (!hit) continue;
+			if (QUANTITY_AFTER_RE.test(rest.slice(hit[0].length))) continue;
+			const day = dayOf(hit[0], written);
+			if (day) return day;
+		}
+	}
+	return null;
+}
+
+/**
+ * A message that asks for something by a day ("tegen vrijdag", "by Friday",
+ * "graag voor 15 maart"), or says its writer will come back ("ik laat iets
+ * weten", "I'll get back to you"). The first is due on that day, the second on
+ * the day named or a week after the message.
+ *
+ * Shy on purpose: a bare date is not a deadline, so a cue has to sit right in
+ * front of it. A sentence that also has a clock time is an appointment and is
+ * left to the calendar suggestion. A day that has passed is never offered.
+ */
+export function detectReminder(text: string, written: Date, now: Date = new Date()): DetectedReminder | null {
+	const body = stripQuotedHistory(text).slice(0, 6000).toLowerCase().replace(/[’‘]/g, "'");
+	const sentences = body.split(/[.!?;]\s+|\n+/);
+	const today = startOfDay(now);
+
+	for (const sentence of sentences) {
+		if (clockOf(sentence)) continue;
+		const day = deadlineDay(sentence, written);
+		if (!day || day < today || daysBetween(today, day) > MAX_DEADLINE_DAYS) continue;
+		return { kind: "deadline", dueOn: localIso(day), dayLabel: labelFor(day, now) };
+	}
+
+	for (const sentence of sentences) {
+		if (!FOLLOW_UP_RES.some((re) => re.test(sentence))) continue;
+		const named = clockOf(sentence) ? null : dayOf(sentence, written);
+		const day = named ?? addDays(startOfDay(written), NEXT_WEEK_RE.test(sentence) ? 7 : FOLLOW_UP_DEFAULT_DAYS);
+		if (day < today) continue;
+		return { kind: "followup", dueOn: localIso(day), dayLabel: labelFor(day, now) };
+	}
+	return null;
+}

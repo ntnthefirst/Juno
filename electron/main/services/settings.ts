@@ -147,7 +147,7 @@ const DEFAULT_DESKTOP: DesktopSettings = {
 	newNoteShortcut: { enabled: false, accelerator: DEFAULT_NEW_NOTE_ACCELERATOR },
 };
 
-const DEFAULT_SUGGESTIONS: SuggestionSources = { calendar: true, projects: true };
+const DEFAULT_SUGGESTIONS: SuggestionSources = { calendar: true, projects: true, reminders: true };
 
 /** Below the operating systems' ephemeral ranges, so nothing else is handed it. */
 export const MIN_MCP_PORT = 1024;
@@ -392,6 +392,7 @@ function normaliseSuggestions(raw: unknown): SuggestionSources {
 	return {
 		calendar: bool(sources.calendar, DEFAULT_SUGGESTIONS.calendar),
 		projects: bool(sources.projects, DEFAULT_SUGGESTIONS.projects),
+		reminders: bool(sources.reminders, DEFAULT_SUGGESTIONS.reminders),
 	};
 }
 

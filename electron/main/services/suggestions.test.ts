@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
-import { calendarEvents, clients, mailFolders, mailMessages, mailThreads, projects } from "../db/schema";
+import { calendarEvents, clients, mailFolders, mailMessages, mailThreads, projects, reminders } from "../db/schema";
 import * as accounts from "./mail-accounts";
 import { configureCredentialStore, MemoryCredentialStore } from "./mail-credentials";
 import { configureSettings } from "./settings";
@@ -93,7 +93,7 @@ describe("forMessage", () => {
 
 	it("is quiet when the source is switched off, and on by default", async () => {
 		const id = message("Vrijdag om 10:00 dan.");
-		expect(await suggestions.getSources()).toEqual({ calendar: true, projects: true });
+		expect(await suggestions.getSources()).toEqual({ calendar: true, projects: true, reminders: true });
 		await suggestions.setSources({ calendar: false });
 		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([]);
 		await suggestions.setSources({ calendar: true });
@@ -114,7 +114,7 @@ describe("Not now", () => {
 	});
 
 	it("refuses a kind that does not exist and a message that does not", async () => {
-		await expect(suggestions.dismiss(message("x"), "reminder", db)).rejects.toThrow(/not a kind of suggestion/);
+		await expect(suggestions.dismiss(message("x"), "invoice", db)).rejects.toThrow(/not a kind of suggestion/);
 		await expect(suggestions.dismiss("nope", "event", db)).rejects.toThrow(/does not exist/);
 	});
 });
@@ -200,5 +200,59 @@ describe("Link to project", () => {
 		await suggestions.setSources({ projects: true });
 		await suggestions.dismiss(gate, "project", db);
 		expect(await suggestions.forMessage(gate, db, TODAY)).toEqual([]);
+	});
+});
+
+describe("Add reminder", () => {
+	it("offers a reminder for a request by a day, and makes one when accepted", async () => {
+		const id = message("Dag Nathan, kan je de tekeningen tegen vrijdag bezorgen?");
+		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([
+			{
+				kind: "reminder",
+				messageId: id,
+				headline: "Janssens asks for something by Friday",
+				question: "Add a reminder for Friday?",
+			},
+		]);
+		expect(db.select().from(reminders).all()).toHaveLength(0);
+
+		const outcome = await suggestions.accept(id, "reminder", db, TODAY);
+		if (outcome.kind !== "reminder") throw new Error("expected a reminder");
+		expect(outcome.reminder).toMatchObject({ title: "Delivery, oak table", dueOn: "2026-11-06" });
+		expect(db.select().from(reminders).all()).toHaveLength(1);
+		await expect(suggestions.accept(id, "reminder", db, TODAY)).rejects.toThrow(/already answered/);
+		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([]);
+	});
+
+	it("offers one to hear back when the sender promises to, and files it under the thread's client", async () => {
+		const client = db.insert(clients).values({ name: "Janssens", sortName: "janssens" }).returning().get().id;
+		db.update(mailThreads).set({ clientId: client }).run();
+		const id = message("Bedankt voor de offerte. We laten iets weten.");
+		const found = await suggestions.forMessage(id, db, TODAY);
+		expect(found[0]).toMatchObject({ kind: "reminder", headline: "Janssens says they will follow up" });
+		const outcome = await suggestions.accept(id, "reminder", db, TODAY);
+		if (outcome.kind !== "reminder") throw new Error("expected a reminder");
+		expect(outcome.reminder).toMatchObject({ title: "Hear back from Janssens", dueOn: "2026-11-11", clientId: client });
+	});
+
+	it("does not fire on a mail that only has a date in it, or one the owner wrote", async () => {
+		expect(await suggestions.forMessage(message("De offerte van 12 november ligt klaar."), db, TODAY)).toEqual([]);
+		expect(await suggestions.forMessage(message("Vrijdag om 10:00 dan."), db, TODAY)).toHaveLength(1);
+		expect(
+			(await suggestions.forMessage(message("Vrijdag om 10:00 dan."), db, TODAY)).map((s) => s.kind),
+		).toEqual(["event"]);
+		expect(await suggestions.forMessage(message("Tegen vrijdag graag.", "hallo@juno.test"), db, TODAY)).toEqual([]);
+	});
+
+	it("follows its own switch and Not now, and stays apart from the calendar offer", async () => {
+		const id = message("Graag tegen vrijdag je cijfers.");
+		await suggestions.setSources({ reminders: false });
+		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([]);
+		await expect(suggestions.accept(id, "reminder", db, TODAY)).rejects.toThrow(/switched off/);
+		await suggestions.setSources({ reminders: true });
+		expect(await suggestions.forMessage(id, db, TODAY)).toHaveLength(1);
+		await suggestions.dismiss(id, "reminder", db);
+		expect(await suggestions.forMessage(id, db, TODAY)).toEqual([]);
+		expect(db.select().from(reminders).all()).toHaveLength(0);
 	});
 });

@@ -93,12 +93,12 @@ export function PermissionsPanel({ onNotice }: PermissionsPanelProps) {
 			</Section>
 
 			<Section title="Suggestions" anchor="mcp-suggestions">
-				{/* The design has one switch. It sets both sources, so a person who had one off sees it off here and turning it on brings both back. */}
+				{/* The design has one switch. It sets every source, so a person who had one off sees it off here and turning it on brings them all back. */}
 				<Toggle
 					label="From mail"
-					description="Dates, deadlines and which project a message belongs to."
-					checked={sources.calendar && sources.projects}
-					onChange={(next) => void switchSource({ calendar: next, projects: next })}
+					description="Dates, deadlines, follow-ups and which project a message belongs to."
+					checked={sources.calendar && sources.projects && sources.reminders}
+					onChange={(next) => void switchSource({ calendar: next, projects: next, reminders: next })}
 				/>
 			</Section>
 		</>

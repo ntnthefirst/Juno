@@ -721,7 +721,7 @@ export interface AppSettings {
 	agentInstructions: AgentInstructions;
 }
 
-export type SuggestionKind = "event" | "project";
+export type SuggestionKind = "event" | "project" | "reminder";
 
 /** One thing offered under a message. The words are the whole of what a person is asked. */
 export interface MessageSuggestion {
@@ -736,6 +736,7 @@ export interface MessageSuggestion {
 /** What pressing the button on a suggestion did. */
 export type SuggestionOutcome =
 	| { kind: "event"; event: CalendarEvent }
+	| { kind: "reminder"; reminder: Reminder }
 	| { kind: "project"; thread: MailThreadSummary; projectId: string; projectName: string };
 
 /**
@@ -748,6 +749,8 @@ export interface SuggestionSources {
 	calendar: boolean;
 	/** A project's name in a message, offered as a link to that project. */
 	projects: boolean;
+	/** A request by a day, or a promise to come back, offered as a reminder. */
+	reminders: boolean;
 }
 
 /**

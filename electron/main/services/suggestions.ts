@@ -9,9 +9,10 @@
  * local.
  *
  * The kinds are `event` (a day and a time in the words, offered as a calendar
- * event) and `project` (a project named in the words, offered as a link of the
+ * event), `project` (a project named in the words, offered as a link of the
  * whole conversation to that project, through the same service the reader's
- * Link to project button uses).
+ * Link to project button uses) and `reminder` (something asked for by a day, or
+ * a promise to come back, offered as a reminder through the reminders service).
  */
 import { and, eq, isNull } from "drizzle-orm";
 import type { MessageSuggestion, SuggestionKind, SuggestionOutcome, SuggestionSources } from "../../shared/types";
@@ -22,9 +23,10 @@ import * as calendar from "./calendar";
 import { htmlToText } from "./mail-html";
 import * as mailThreadsService from "./mail-threads";
 import * as settings from "./settings";
-import { detectMoment } from "./suggestions-detect";
+import * as remindersService from "./reminders";
+import { detectMoment, detectReminder } from "./suggestions-detect";
 
-const KINDS: SuggestionKind[] = ["event", "project"];
+const KINDS: SuggestionKind[] = ["event", "project", "reminder"];
 
 function requireKind(kind: string): SuggestionKind {
 	if (!KINDS.includes(kind as SuggestionKind)) throw new Error(`"${kind}" is not a kind of suggestion.`);
@@ -97,6 +99,54 @@ function findEvent(db: Db, messageId: string, today: Date): Found | null {
 			messageId,
 			headline: `${sender} mentions ${moment.dayLabel} at ${moment.time}`,
 			question: `Add "${title}" to the calendar?`,
+		},
+	};
+}
+
+interface FoundReminder {
+	suggestion: MessageSuggestion;
+	title: string;
+	dueOn: string;
+	notes: string;
+	clientId: string | null;
+}
+
+function findReminder(db: Db, messageId: string, today: Date): FoundReminder | null {
+	const row = db
+		.select({ message: mailMessages, account: mailAccounts, thread: mailThreads })
+		.from(mailMessages)
+		.innerJoin(mailAccounts, eq(mailMessages.accountId, mailAccounts.id))
+		.innerJoin(mailThreads, eq(mailMessages.threadId, mailThreads.id))
+		.where(and(eq(mailMessages.id, messageId), isNull(mailMessages.deletedAt)))
+		.get();
+	if (!row) return null;
+	const { message, account, thread } = row;
+
+	// What the owner wrote is the owner's own promise, not a request to chase.
+	if (message.fromAddress && message.fromAddress.toLowerCase() === account.email.toLowerCase()) return null;
+
+	const text = message.bodyText?.trim() ? message.bodyText : message.bodyHtml ? htmlToText(message.bodyHtml) : "";
+	if (!text) return null;
+
+	const written = new Date(message.sentAt ?? message.internalDate);
+	const found = detectReminder(text, Number.isNaN(written.getTime()) ? today : written, today);
+	if (!found) return null;
+
+	const sender = message.fromName?.trim() || message.fromAddress || "Someone";
+	const subject = cleanSubject(message.subject);
+	const deadline = found.kind === "deadline";
+	return {
+		title: deadline ? subject || `Request from ${sender}` : `Hear back from ${sender}`,
+		dueOn: found.dueOn,
+		notes: subject ? `From the mail "${subject}" from ${sender}.` : `From a mail from ${sender}.`,
+		clientId: thread.clientId,
+		suggestion: {
+			kind: "reminder",
+			messageId,
+			headline: deadline
+				? `${sender} asks for something by ${found.dayLabel}`
+				: `${sender} says they will follow up`,
+			question: `Add a reminder for ${found.dayLabel}?`,
 		},
 	};
 }
@@ -176,6 +226,10 @@ export async function forMessage(
 		const found = findProject(db, messageId);
 		if (found) out.push(found.suggestion);
 	}
+	if (sources.reminders && !answered(db, messageId, "reminder")) {
+		const found = findReminder(db, messageId, today);
+		if (found) out.push(found.suggestion);
+	}
 	return out;
 }
 
@@ -197,7 +251,7 @@ export async function dismiss(messageId: string, kind: string, db: Db = getDb())
 
 /**
  * The button that does what was offered. The press is the confirmation, and
- * neither a local calendar entry nor a link between a conversation and a
+ * neither a local calendar entry, a reminder nor a link between a conversation and a
  * project is one of the things that need the gate. The answer is recorded
  * before the work is done, so a second press cannot do it twice, and taken
  * back if the work could not be done.
@@ -212,11 +266,13 @@ export async function accept(
 	const sources = await settings.getSuggestionSources();
 	if (checked === "event" && !sources.calendar) throw new Error("Calendar suggestions are switched off.");
 	if (checked === "project" && !sources.projects) throw new Error("Project suggestions are switched off.");
+	if (checked === "reminder" && !sources.reminders) throw new Error("Reminder suggestions are switched off.");
 	if (answered(db, messageId, checked)) throw new Error("That suggestion was already answered.");
 
 	const event = checked === "event" ? findEvent(db, messageId, today) : null;
 	const project = checked === "project" ? findProject(db, messageId) : null;
-	if (!event && !project) throw new Error("That suggestion is no longer there. Open the message again.");
+	const reminder = checked === "reminder" ? findReminder(db, messageId, today) : null;
+	if (!event && !project && !reminder) throw new Error("That suggestion is no longer there. Open the message again.");
 
 	const at = stamp();
 	const [state] = db
@@ -231,6 +287,14 @@ export async function accept(
 				db,
 			);
 			return { kind: "event", event: created };
+		}
+		if (reminder) {
+			const created = await remindersService.create(
+				{ title: reminder.title, dueOn: reminder.dueOn, notes: reminder.notes, clientId: reminder.clientId },
+				db,
+				`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`,
+			);
+			return { kind: "reminder", reminder: created };
 		}
 		const found = project!;
 		const thread = await mailThreadsService.linkProject(found.threadId, found.projectId, db);

@@ -14,6 +14,7 @@ type SuggestionBarProps = {
 const ICONS: Record<MessageSuggestion["kind"], IconName> = {
 	event: "calendar",
 	project: "projects",
+	reminder: "reminders",
 };
 
 /**

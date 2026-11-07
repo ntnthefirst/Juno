@@ -54,6 +54,13 @@ const TRUSTED_EMAILS_KEY = "juno.mail.trustedEmails";
 const TRUSTED_SENDERS_KEY = "juno.mail.trustedSenders";
 const BLOCKED_SENDERS_KEY = "juno.mail.blockedSenders";
 
+/** The button on each kind of suggestion, named for what it does. */
+const ACTION_LABELS: Record<MessageSuggestion["kind"], string> = {
+	event: "Add to calendar",
+	project: "Link to project",
+	reminder: "Add reminder",
+};
+
 function readTrust(key: string): string[] {
 	try {
 		const value: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
@@ -398,7 +405,9 @@ export function MessageView({
 			onNotice(
 				outcome.kind === "event"
 					? `Added "${outcome.event.title}" to the calendar.`
-					: `Linked this conversation to ${outcome.projectName}.`,
+					: outcome.kind === "reminder"
+						? `Added the reminder "${outcome.reminder.title}".`
+						: `Linked this conversation to ${outcome.projectName}.`,
 			);
 			if (outcome.kind === "project") onChanged();
 		} catch (cause: unknown) {
@@ -612,7 +621,7 @@ export function MessageView({
 								<SuggestionBar
 									key={suggestion.kind}
 									suggestion={suggestion}
-									actionLabel={suggestion.kind === "event" ? "Add to calendar" : "Link to project"}
+									actionLabel={ACTION_LABELS[suggestion.kind]}
 									busy={offerBusy}
 									onAccept={() => void acceptOffer(suggestion)}
 									onDismiss={() => void dismissOffer(suggestion)}

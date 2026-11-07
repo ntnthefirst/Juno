@@ -373,8 +373,8 @@ if (!app.requestSingleInstanceLock()) {
 								const seededTemplates = await b.templates.list();
 								if (seededTemplates.length !== 1) throw new Error("Smoke: a first install should hold exactly one document template, found " + seededTemplates.length);
 								const tpl = seededTemplates[0];
-								if (tpl.isSystem || tpl.reviewedAt !== null || !tpl.layout || tpl.layout.pages.length < 2 || tpl.inputs.length === 0) {
-									throw new Error("Smoke: the example is not an unreviewed, paged template that asks for inputs: " + JSON.stringify({ isSystem: tpl.isSystem, reviewedAt: tpl.reviewedAt, pages: tpl.layout?.pages.length, inputs: tpl.inputs.length }));
+								if (tpl.isSystem || tpl.reviewedAt !== null || !tpl.canvas || tpl.canvas.layout.children.length < 2 || tpl.inputs.length === 0) {
+									throw new Error("Smoke: the example is not an unreviewed template on the canvas that asks for inputs: " + JSON.stringify({ isSystem: tpl.isSystem, reviewedAt: tpl.reviewedAt, pages: tpl.canvas?.layout.children.length, inputs: tpl.inputs.length }));
 								}
 								const exampleValues = Object.fromEntries(tpl.inputs.map((input) => [input.key, input.defaultValue ?? "het ontwerp en de bouw van een website"]));
 								const gen = await b.documents.generate({
@@ -725,11 +725,10 @@ if (!app.requestSingleInstanceLock()) {
 							{
 								const { statSync, readFileSync: readPdfBytes } = await import("node:fs");
 								const generatedRows = await (await import("./main/services/documents")).list({});
-								// The example is the one laid out as pages; the one on paper is
-								// checked on its own below.
-								const generated = generatedRows.find(
-									(row) => row.sourceKind === "generated" && row.pdfPath !== null && !row.bodyHtml.includes("juno-sheets"),
-								);
+								// Both generated documents are laid out on paper now: the example,
+								// which is two pages, and the small one the walk made itself, which
+								// is one.
+								const generated = generatedRows.find((row) => row.sourceKind === "generated" && row.pdfPath !== null);
 								if (!generated?.pdfPath) throw new Error("Smoke: no generated document has a PDF");
 								const size = statSync(generated.pdfPath).size;
 								if (size < 2000) {
@@ -739,22 +738,25 @@ if (!app.requestSingleInstanceLock()) {
 								if (head !== "%PDF-") {
 									throw new Error(`Smoke: the generated file starts with ${head}, not a PDF header`);
 								}
-								// The example is two pages, and the specimen banner sits above them. A
-								// page that spills onto a third sheet is a layout fault the bytes above
-								// would never show.
-								const { PDFDocument } = await import("pdf-lib");
-								const sheets = (await PDFDocument.load(readPdfBytes(generated.pdfPath))).getPageCount();
-								if (sheets !== 2) throw new Error(`Smoke: the example printed on ${sheets} sheets, not its two pages`);
-								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheets}`);
 								// A template on paper prints one sheet per page, at the paper's
-								// size, whatever A4 the printer was told to default to.
-								const onPaper = generatedRows.find((row) => row.pdfPath !== null && row.bodyHtml.includes("juno-sheets"));
-								if (!onPaper?.pdfPath) throw new Error("Smoke: the document on paper has no PDF");
-								const paperPdf = await PDFDocument.load(readPdfBytes(onPaper.pdfPath));
-								const { width: sheetWidth, height: sheetHeight } = paperPdf.getPage(0).getSize();
-								if (paperPdf.getPageCount() !== 1 || Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842) {
-									throw new Error(`Smoke: the document on paper printed ${paperPdf.getPageCount()} sheets of ${sheetWidth} x ${sheetHeight}, not one A4`);
+								// size, whatever A4 the printer was told to default to. The example
+								// is two pages, and one that ran onto a third sheet is a layout
+								// fault the bytes above would never show.
+								const { PDFDocument } = await import("pdf-lib");
+								const onPaper = generatedRows.filter((row) => row.pdfPath !== null && row.bodyHtml.includes("juno-sheets"));
+								const sheetCounts: number[] = [];
+								for (const row of onPaper) {
+									const paperPdf = await PDFDocument.load(readPdfBytes(row.pdfPath!));
+									const { width: sheetWidth, height: sheetHeight } = paperPdf.getPage(0).getSize();
+									if (Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842) {
+										throw new Error(`Smoke: a document on paper printed sheets of ${sheetWidth} x ${sheetHeight}, not A4`);
+									}
+									sheetCounts.push(paperPdf.getPageCount());
 								}
+								if (sheetCounts.sort().join() !== "1,2") {
+									throw new Error(`Smoke: the example and the small document should print on 2 and 1 sheets, got ${sheetCounts.join(", ")}`);
+								}
+								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheetCounts.join("+")}`);
 							}
 							window.webContents.reload();
 							await new Promise((r) => {
@@ -1672,19 +1674,17 @@ if (!app.requestSingleInstanceLock()) {
 									await new Promise((r) => setTimeout(r, 400));
 								}
 								if (screen === "Document templates") {
-									// The example first. It is the one template every first install has and
-									// the only one laid out on more than one page, so its preview and its
-									// editor are the first things a new owner opens.
+									// The example first. It is the one template every first install has,
+									// laid out on the canvas on two pages, so its preview and its editor
+									// are the first things a new owner opens.
 									const inspected = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
 											if (!row) return "no row for the example";
 											row.click();
-											await wait(900);
-											const frame = document.querySelector("main iframe");
-											if (!frame) return "the example has no preview";
-											return "ok";
+											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
+											return document.querySelector("main canvas") ? "ok" : "the example has no preview";
 										})()`,
 									) as string;
 									if (inspected !== "ok") throw new Error(`Smoke: the example document template ${inspected}`);
@@ -1694,16 +1694,19 @@ if (!app.requestSingleInstanceLock()) {
 										await new Promise((r) => setTimeout(r, 400));
 										writeFileSync(joinPath(shotDir, `document-template-example-${theme}.png`), (await capture(window.webContents)).toPNG());
 									}
-									// Into the page editor, where both pages have to be there to click on.
+									// Into the editor, where both pages have to be on the canvas.
 									const laidOut = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
 											if (!edit) return "no edit action";
 											edit.click();
-											await wait(800);
-											if (!document.querySelector("button[aria-label^='Page 1']")) return "no first page on the canvas";
-											if (!document.querySelector("button[aria-label^='Page 2']")) return "no second page on the canvas";
+											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
+											const content = document.querySelector("[data-canvas-content]");
+											if (!content) return "no canvas";
+											if (!content.textContent.includes("Voorbeeldovereenkomst")) return "the first page does not show its title";
+											if (!content.textContent.includes("Voor akkoord")) return "the second page does not show its signature block";
+											if (!document.body.textContent.includes("A4 portrait")) return "the sheet does not say its paper";
 											return "ok";
 										})()`,
 									) as string;

@@ -1020,6 +1020,7 @@ export function DesignPanel({
 			actions={actions}
 			clickBlocked={clickBlockedReason(layout, id)}
 			wholeBox={wholeBox}
+			hover={!paper}
 			onActions={(next) => structure((canvas) => setActions(canvas, id, next))}
 		/>
 	);

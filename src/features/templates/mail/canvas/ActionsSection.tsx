@@ -11,6 +11,11 @@ type ActionsSectionProps = {
 	clickBlocked: string | null;
 	/** Whether a click links the whole box, which Outlook on Windows does not: the text inside is all it makes clickable. */
 	wholeBox: boolean;
+	/**
+	 * Whether a hover can be added. Paper has no pointer, so a document leaves it
+	 * out; one already there is still listed so that it can be removed.
+	 */
+	hover?: boolean;
 	onActions: (actions: MailAction[]) => void;
 };
 
@@ -169,13 +174,13 @@ function HoverRow({ action, taken, onChange, onRemove }: HoverRowProps) {
  * colour, the underline or the opacity. That is all an email can do, because
  * every mail client removes scripts, so there is nothing else to offer.
  */
-export function ActionsSection({ actions, clickBlocked, wholeBox, onActions }: ActionsSectionProps) {
+export function ActionsSection({ actions, clickBlocked, wholeBox, hover = true, onActions }: ActionsSectionProps) {
 	const [adding, setAdding] = useState(false);
 	const clicked = hasClick(actions);
 	const used = actions.flatMap((action) => (action.trigger === "hover" ? [action.change] : []));
 	const options: { key: string; label: string; make: () => MailAction }[] = [
 		...(clicked || clickBlocked ? [] : [{ key: "click", label: "On click", make: newClick }]),
-		...HOVER_CHANGES.filter((option) => !used.includes(option.value)).map((option) => ({
+		...HOVER_CHANGES.filter((option) => hover && !used.includes(option.value)).map((option) => ({
 			key: option.value,
 			label: `On hover: ${option.label.toLowerCase()}`,
 			make: () => newHover(option.value),
@@ -235,7 +240,7 @@ export function ActionsSection({ actions, clickBlocked, wholeBox, onActions }: A
 					/>
 				),
 			)}
-			{used.length > 0 ? (
+			{used.length > 0 && hover ? (
 				<PanelNote tone="warn">
 					Works in Apple Mail, iOS Mail and Outlook on the web. Not in Gmail or Outlook on Windows.
 				</PanelNote>

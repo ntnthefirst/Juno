@@ -13,19 +13,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { LayoutBlock } from "../../shared/types";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { documentTemplates } from "../db/schema";
-import * as addresses from "./client-addresses";
 import * as clientsService from "./clients";
-import * as contactsService from "./contacts";
-import { compileLayout } from "./document-layout";
 import * as templates from "./document-templates";
 import { DOCUMENT_TEMPLATE_SEED_VERSION, exampleTemplate } from "./document-templates-seed";
 import * as documents from "./documents";
-import * as projectsService from "./projects";
 import * as settings from "./settings";
 
 const MIGRATIONS = resolve(process.cwd(), "electron/main/db/migrations");
@@ -253,77 +248,48 @@ describe("the seed", () => {
 			return row!;
 		}
 
-		async function ownerAndClient() {
-			await settings.setOwner({
-				businessName: "Juno",
-				firstName: "Nathan",
-				lastName: "Peeters",
-				addressLine1: "Kerkstraat 1",
-				postalCode: "9000",
-				city: "Gent",
-				vatNumber: "BE0123456789",
-			});
-			const client = await clientsService.create({ name: "obet", vatNumber: "BE0987654321" }, db);
-			await addresses.create(
-				{ clientId: client.id, addressLine1: "Stationsstraat 5", postalCode: "8000", city: "Brugge" },
-				db,
-			);
-			await contactsService.create(
-				{ clientId: client.id, name: "Laura", email: "laura@obet.be", isPrimary: true },
-				db,
-			);
-			return client;
-		}
-
-		const EXTRAS = {
+		const VALUES: Record<string, string> = {
+			date: "14 november 2026",
+			place: "Gent",
+			owner_name: "Juno",
+			owner_address: "Kerkstraat 1, 9000 Gent",
+			owner_vat: "BE0123456789",
+			client_name: "obet",
+			client_address: "Stationsstraat 5, 8000 Brugge",
+			client_vat: "BE0987654321",
+			project_name: "Nieuwe website",
 			scope: "het ontwerp en de bouw van een website",
+			start: "1 oktober 2026",
+			delivery: "14 november 2026",
+			fee: "2.100,00 euro",
 			payment_terms: "In één keer bij oplevering",
 			payment_days: "14",
 		};
 
-		it("compiles from its own page model", async () => {
+		it("is laid out on the canvas, on two pages of A4, and not on the page model", async () => {
 			const row = await example();
-			expect(row.layout).not.toBeNull();
-			expect(compileLayout(row.layout!)).toBe(row.bodyHtml);
+			expect(row.layout).toBeNull();
+			expect(row.canvas).not.toBeNull();
+			expect(row.canvas!.paper).toEqual({ size: "A4", orientation: "portrait" });
+			expect(row.canvas!.layout.children).toHaveLength(2);
 		});
 
-		it("shows one of each part of the editor", async () => {
+		it("shows a heading, a list, a table and a place to sign", async () => {
 			const row = await example();
-			const layout = row.layout!;
-			const flow = layout.pages.flatMap((page) => page.blocks);
-			const boxes = layout.pages.flatMap((page) => page.boxes);
-			const kinds = (blocks: LayoutBlock[]) => new Set(blocks.map((block) => block.kind));
-
-			expect(layout.pages).toHaveLength(2);
-			expect(kinds(flow)).toEqual(new Set(["heading", "paragraph", "list", "table", "spacer", "divider"]));
-			// Pinned to the paper: the client's address, and both signature blocks.
-			expect(boxes.map((box) => box.block.kind).sort()).toEqual(["paragraph", "signature", "signature"]);
-			// Every kind of placeholder a layout can carry: a value, and both forms of
-			// a condition.
-			expect(row.bodyHtml).toMatch(/\{\{\s*client\.name\s*\}\}/);
-			expect(row.bodyHtml).toContain("{{#if project.name}}");
-			expect(row.bodyHtml).toContain("{{#unless project.name}}");
-			for (const path of [
-				"owner.businessName",
-				"client.name",
-				"project.name",
-				"document.issuedOn",
-				"document.scope",
-			]) {
-				expect(row.placeholders).toContain(path);
-			}
-			expect(row.bodyHtml).toContain("data-signature-field");
-			expect(row.bodyHtml).toContain("<table>");
+			expect(row.bodyHtml).toContain("<h1");
+			expect(row.bodyHtml).toContain("<li>");
+			expect(row.bodyHtml).toContain("<table");
+			expect(row.bodyHtml).toContain("Voor akkoord");
 		});
 
-		it("asks for three values when it is used, and every one of them is written into the body", async () => {
+		it("asks for what it prints, and reads nothing from a record", async () => {
 			const row = await example();
-			expect(row.inputs.map((input) => [input.key, input.kind, input.required])).toEqual([
-				["scope", "textarea", true],
-				["payment_terms", "choice", true],
-				["payment_days", "number", false],
-			]);
-			for (const input of row.inputs) expect(row.placeholders).toContain(`document.${input.key}`);
+			const keys = row.inputs.map((input) => input.key);
+			expect(keys).toEqual(Object.keys(VALUES));
+			for (const key of keys) expect(row.placeholders).toContain(`document.${key}`);
+			// Every placeholder is one of its own inputs: a record value would have
+			// been refused when it was saved, and is not here.
+			expect(row.placeholders.filter((path) => !path.startsWith("document."))).toEqual([]);
 			const terms = row.inputs.find((input) => input.key === "payment_terms")!;
 			expect(terms.options).toContain(terms.defaultValue);
 		});
@@ -333,75 +299,45 @@ describe("the seed", () => {
 			expect(row.bodyHtml).toContain("Opdrachtgever");
 			expect(row.bodyHtml).toContain("Uw medewerking");
 			expect(row.bodyHtml).not.toMatch(/\bje\b|\bjouw\b/);
+			expect(row.bodyHtml).not.toMatch(/[—–]/);
 		});
 
-		it("renders without a single unresolved placeholder for a client with a project", async () => {
-			const client = await ownerAndClient();
-			const project = await projectsService.create(
-				{
-					clientId: client.id,
-					name: "Nieuwe website",
-					description: "Een website met vijf pagina's.",
-					startsOn: "2026-10-01",
-					dueOn: "2026-11-14",
-					agreedValueCents: 210000,
-				},
-				db,
-			);
+		it("renders with every value filled in, and nothing marked", async () => {
 			const row = await example();
-
-			const result = await documents.generate(
-				{ clientId: client.id, templateId: row.id, projectId: project.id, extras: EXTRAS },
+			const result = templates.renderCanvas(
+				{ templateId: row.id, canvas: row.canvas!, inputs: row.inputs, values: VALUES },
 				db,
 			);
 
 			expect(result.missing).toEqual([]);
-			expect(result.document.bodyHtml).not.toContain("juno-missing");
-			expect(result.document.bodyHtml).not.toContain("{{");
-			expect(result.document.bodyHtml).toContain("Nieuwe website");
-			expect(result.document.bodyHtml).toContain("Stationsstraat 5");
-			expect(result.document.bodyHtml).toContain("14/11/2026");
-			expect(result.document.bodyHtml).toContain("2 100,00");
-			expect(result.document.bodyHtml).toContain("Laura");
-			expect(result.document.bodyHtml).toContain("het ontwerp en de bouw van een website");
+			expect(result.html).not.toContain("juno-missing");
+			expect(result.html).not.toContain("{{");
+			for (const value of ["Nieuwe website", "Stationsstraat 5", "14 november 2026", "2.100,00 euro", "het ontwerp en de bouw"]) {
+				expect(result.html).toContain(value);
+			}
+		});
+
+		it("makes a document for a client that says what was typed and nothing from the client", async () => {
+			const client = await clientsService.create({ name: "Iemand anders" }, db);
+			const row = await example();
+
+			const result = await documents.generate({ clientId: client.id, templateId: row.id, extras: VALUES }, db);
+
+			expect(result.missing).toEqual([]);
+			expect(result.document.bodyHtml).toContain("obet");
+			expect(result.document.bodyHtml).not.toContain("Iemand anders");
 			// The banner and the signing block are decided by this flag.
 			expect(result.document.isSpecimen).toBe(true);
 		});
 
-		it("renders without a single unresolved placeholder for a client with no project", async () => {
-			const client = await ownerAndClient();
-			const row = await example();
-
-			const result = await documents.generate({ clientId: client.id, templateId: row.id, extras: EXTRAS }, db);
-
-			expect(result.missing).toEqual([]);
-			expect(result.document.bodyHtml).toContain("Vooraf schriftelijk overeengekomen");
-			expect(result.document.bodyHtml).toContain("Bij ondertekening");
-		});
-
-		it("leaves out the optional lines rather than marking them, for a client with only a name", async () => {
-			await settings.setOwner({
-				businessName: "Juno",
-				addressLine1: "Kerkstraat 1",
-				postalCode: "9000",
-				city: "Gent",
-			});
-			const client = await clientsService.create({ name: "obet" }, db);
-			const row = await example();
-
-			const result = await documents.generate({ clientId: client.id, templateId: row.id, extras: EXTRAS }, db);
-
-			expect(result.missing).toEqual([]);
-			expect(result.document.bodyHtml).not.toContain("Ondernemingsnummer");
-		});
-
 		it("marks what it asks for as missing until it has been given", async () => {
-			const client = await ownerAndClient();
+			const client = await clientsService.create({ name: "obet" }, db);
 			const row = await example();
 
 			const result = await documents.generate({ clientId: client.id, templateId: row.id }, db);
 
-			expect(result.missing).toEqual(["document.payment_days", "document.payment_terms", "document.scope"]);
+			expect(result.missing).toHaveLength(Object.keys(VALUES).length);
+			expect(result.missing).toContain("document.scope");
 		});
 	});
 });

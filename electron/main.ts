@@ -5416,6 +5416,60 @@ if (!app.requestSingleInstanceLock()) {
 								);
 								console.log("SMOKE_DEMO sidebar rail=ok");
 
+								// JUNO_SMOKE_MANY=1: 500 clients through the same service the form
+								// uses, then how long the list takes to show them and how a scroll
+								// holds up. They are removed again so the screens that follow are
+								// photographed against the seeded four.
+								if (process.env.JUNO_SMOKE_MANY) {
+									const many = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const ids = [];
+											for (let i = 0; i < 500; i++) {
+												const made = await window.juno.clients.create({ name: "Bulk client " + String(i).padStart(3, "0") });
+												ids.push(made.id);
+											}
+											document.querySelector("nav button[data-nav=overview]").click();
+											await wait(600);
+											const fetched = performance.now();
+											const fetchedRows = (await window.juno.clients.list({ limit: 1000 })).length;
+											const fetchMs = Math.round(performance.now() - fetched);
+											const start = performance.now();
+											document.querySelector("nav button[data-nav=clients]").click();
+											let rows = 0;
+											let firstMs = -1;
+											while (performance.now() - start < 10000) {
+												rows = document.querySelectorAll("main tbody tr").length;
+												if (rows > 0 && firstMs < 0) firstMs = Math.round(performance.now() - start);
+												if (rows >= 500) break;
+												await new Promise((r) => requestAnimationFrame(r));
+											}
+											await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+											const toRows = Math.round(performance.now() - start);
+											const scroller = [...document.querySelectorAll("main *")].find((el) => el.scrollHeight > el.clientHeight + 200 && getComputedStyle(el).overflowY !== "visible");
+											const frames = [];
+											if (scroller) {
+												let last = performance.now();
+												for (let step = 0; step < 60; step++) {
+													scroller.scrollTop += 400;
+													await new Promise((r) => requestAnimationFrame(r));
+													const now = performance.now();
+													frames.push(now - last);
+													last = now;
+												}
+											}
+											const worst = frames.length ? Math.round(Math.max(...frames)) : -1;
+											const mean = frames.length ? Math.round(frames.reduce((a, b) => a + b, 0) / frames.length) : -1;
+											const rowHeight = document.querySelector("main tbody tr td")?.getBoundingClientRect().height ?? 0;
+											for (const id of ids) await window.juno.clients.remove(id);
+											document.querySelector("nav button[data-nav=overview]").click();
+											await wait(600);
+											return { rows, firstMs, toRows, worst, mean, rowHeight, fetchMs, fetchedRows };
+										})()`,
+									)) as { rows: number; firstMs: number; toRows: number; worst: number; mean: number; rowHeight: number; fetchMs: number; fetchedRows: number };
+									console.log(`SMOKE_DEMO many rows=${many.rows} ms_to_first_row=${many.firstMs} ms_to_rows=${many.toRows} frame_mean=${many.mean} frame_worst=${many.worst} row_px=${many.rowHeight} list_call_ms=${many.fetchMs} list_call_rows=${many.fetchedRows}`);
+								}
+
 								// The keyboard. The title bar carries no name and a search, the palette
 								// opens on the shortcut and finds a client by name, a digit goes to a
 								// screen, "new" opens that screen's form, and the slash shows the
@@ -5443,6 +5497,22 @@ if (!app.requestSingleInstanceLock()) {
 										press({ mod: true, key: "k", code: "KeyK" });
 										await wait(500);
 										if (!document.querySelector("[data-palette]")) return "the shortcut did not open the palette";
+										return "ok";
+									})()`,
+								)) as string;
+								if (opened !== "ok") throw new Error(`Smoke: palette ${opened}`);
+								// The empty state, as frame 32:3943 draws it, in both themes.
+								for (const theme of ["light", "dark"] as const) {
+									nativeTheme.themeSource = theme;
+									await window.webContents.executeJavaScript(
+										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+									);
+									await new Promise((r) => setTimeout(r, 300));
+									writeFileSync(joinPath(shotDir, `palette-empty-${theme}.png`), (await capture(window.webContents)).toPNG());
+								}
+								const typed = (await window.webContents.executeJavaScript(
+									`(async () => {
+										${helpers}
 										const input = document.querySelector("[data-palette] input");
 										const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
 										set.call(input, "bodhi");
@@ -5453,9 +5523,17 @@ if (!app.requestSingleInstanceLock()) {
 										return "ok";
 									})()`,
 								)) as string;
-								if (opened !== "ok") throw new Error(`Smoke: palette ${opened}`);
-								const paletteImage = await capture(window.webContents);
-								writeFileSync(joinPath(shotDir, `palette.png`), paletteImage.toPNG());
+								if (typed !== "ok") throw new Error(`Smoke: palette ${typed}`);
+								for (const theme of ["light", "dark"] as const) {
+									nativeTheme.themeSource = theme;
+									await window.webContents.executeJavaScript(
+										`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+									);
+									await new Promise((r) => setTimeout(r, 300));
+									writeFileSync(joinPath(shotDir, `palette-${theme}.png`), (await capture(window.webContents)).toPNG());
+								}
+								nativeTheme.themeSource = "light";
+								await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", "light")`);
 
 								const keyed = (await window.webContents.executeJavaScript(
 									`(async () => {

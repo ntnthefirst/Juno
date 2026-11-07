@@ -6,6 +6,7 @@ import { Kbd } from "../components/Kbd";
 import { requestOpenClient } from "../lib/open-client";
 import { requestOpen } from "../lib/open-entity";
 import { rank } from "../lib/palette-search";
+import { listAllClients } from "../lib/list-all-clients";
 import { COMBOS, SCREEN_COMBOS, formatCombo } from "../lib/shortcuts";
 import { useLoaded } from "../lib/use-loaded";
 import { leadParticipant } from "../features/mail/format";
@@ -60,7 +61,7 @@ const RECORD_LABEL: Record<string, string> = {
 	documents: "Documents",
 };
 
-const loadClients = () => window.juno.clients.list();
+const loadClients = () => listAllClients();
 const loadProjects = () => window.juno.projects.list();
 const loadDocuments = () => window.juno.documents.list();
 const loadNotes = () => window.juno.notes.list();

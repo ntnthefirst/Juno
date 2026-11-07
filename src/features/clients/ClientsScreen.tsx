@@ -56,6 +56,8 @@ import { ClientPhonePanel } from "./ClientPhonePanel";
 import { ContactForm } from "./ContactForm";
 import { ProjectForm } from "../projects/ProjectForm";
 import { useRecentTouch } from "../../lib/use-recent-touch";
+import { listAllClients } from "../../lib/list-all-clients";
+import { useGradualCount } from "../../lib/use-gradual-count";
 
 type Load =
 	| { status: "loading" }
@@ -117,7 +119,7 @@ export function ClientsScreen() {
 	const filtersOn = JSON.stringify({ ...view, sort: null }) !== JSON.stringify({ ...EMPTY_VIEW, sort: null });
 
 	const fetchRows = useCallback(
-		() => window.juno.clients.list({ search: search.trim() || undefined }),
+		() => listAllClients(search.trim() || undefined),
 		[search],
 	);
 
@@ -656,6 +658,7 @@ function ClientTable({
 	onFailed,
 }: ClientTableProps) {
 	const rows = useMemo(() => applyView(allRows, view), [allRows, view]);
+	const visible = useGradualCount(rows.length);
 	const statusOptions = useMemo(
 		() => [
 			...statusesOf(allRows).map((status) => ({ value: status.id, label: status.label })),
@@ -751,7 +754,7 @@ function ClientTable({
 							</td>
 						</tr>
 					) : null}
-					{rows.map((row) => {
+					{rows.slice(0, visible).map((row) => {
 						const selected = row.id === selectedId;
 						return (
 							<tr

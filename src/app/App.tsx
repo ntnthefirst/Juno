@@ -149,6 +149,12 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	const [recentOpen, setRecentOpen] = useState(false);
 	const [agentPending, setAgentPending] = useState(0);
 
+	// The moment the application itself is on screen, for the smoke run's
+	// start-up timings. A mark costs nothing and is never read otherwise.
+	useEffect(() => {
+		performance.mark("juno:shell");
+	}, []);
+
 	useEffect(() => {
 		const refresh = () => {
 			void window.juno.agent.actions

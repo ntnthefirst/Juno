@@ -41,6 +41,34 @@ export class LockedError extends Error {
 
 let installed = false;
 
+type IpcTiming = { channel: string; count: number; total: number; max: number };
+let timings: Map<string, IpcTiming> | null = null;
+
+function record(channel: string, ms: number): void {
+	if (!timings) return;
+	const entry = timings.get(channel) ?? { channel, count: 0, total: 0, max: 0 };
+	entry.count += 1;
+	entry.total += ms;
+	entry.max = Math.max(entry.max, ms);
+	timings.set(channel, entry);
+}
+
+/**
+ * Starts counting how long each channel's handler takes, for the smoke run's
+ * timings. The handlers run on the main process, and node:sqlite is
+ * synchronous, so this is the time the window could not get an answer to
+ * anything else. Returns a function that stops counting and hands back the
+ * channels, slowest in total first. Off unless asked for.
+ */
+export function startIpcTimings(): () => IpcTiming[] {
+	timings = new Map();
+	return () => {
+		const result = [...(timings?.values() ?? [])].sort((a, b) => b.total - a.total);
+		timings = null;
+		return result;
+	};
+}
+
 export function installLockGuard(): void {
 	if (installed) return;
 	installed = true;
@@ -55,7 +83,13 @@ export function installLockGuard(): void {
 			if (isLocked() && !ALLOWED_WHILE_LOCKED.has(channel)) {
 				throw new LockedError(channel);
 			}
-			return listener(event, ...args);
+			if (!timings) return listener(event, ...args);
+			const started = performance.now();
+			try {
+				return await listener(event, ...args);
+			} finally {
+				record(channel, performance.now() - started);
+			}
 		});
 	}) as typeof ipcMain.handle;
 }

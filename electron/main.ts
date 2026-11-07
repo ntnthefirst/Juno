@@ -69,6 +69,9 @@ import { devDataDir } from "./main/dev-data";
 
 const isDev = Boolean(process.env.JUNO_DEV);
 
+/** When the boot reached each stage, on this process's clock. Read by the smoke run's timings. */
+const bootMarks = { ready: 0, windowCreated: 0, readyToShow: null as number | null };
+
 // A development run never touches installed data. Set before anything reads a
 // path, because app.getPath("userData") is resolved on first use and cached.
 if (isDev) app.setPath("userData", devDataDir());
@@ -93,6 +96,7 @@ if (!app.requestSingleInstanceLock()) {
 	app.on("second-instance", () => openMainWindow(isDev));
 
 	app.whenReady().then(async () => {
+		bootMarks.ready = performance.now();
 		// Before the first window, so the splash is the first thing carrying the
 		// right icon rather than the second.
 		applyDevDockIcon();
@@ -269,6 +273,10 @@ if (!app.requestSingleInstanceLock()) {
 		installSessionPolicy(isDev);
 
 		const window = hidden ? null : openMainWindow(isDev);
+		bootMarks.windowCreated = performance.now();
+		window?.once("ready-to-show", () => {
+			bootMarks.readyToShow = performance.now();
+		});
 		// Not on create: a window that exists but has not painted is a grey
 		// rectangle, which is the exact gap the splash is covering.
 		window?.once("ready-to-show", () => closeSplash());
@@ -333,6 +341,26 @@ if (!app.requestSingleInstanceLock()) {
 								joinPath(process.env.JUNO_SMOKE_SHOT, "mcp-notice.png"),
 								(await window.webContents.capturePage()).toPNG(),
 							);
+						}
+
+						// JUNO_SMOKE_PERF=1: the timings a person would feel, on a business of
+						// a realistic size, printed as SMOKE_PERF lines. See main/smoke-perf.ts.
+						if (process.env.JUNO_SMOKE_PERF) {
+							const { runPerfProbe } = await import("./main/smoke-perf");
+							try {
+								await runPerfProbe(window, bootMarks);
+							} catch (error) {
+								// Out at once with the reason, rather than waiting out the timeout.
+								console.error(`Smoke: ${error instanceof Error ? error.message : String(error)}`);
+								// A beat for the line to reach the pipe before the process goes.
+								setTimeout(() => app.exit(1), 300);
+								return;
+							}
+							// The timings are the whole of this run: the walk below expects a
+							// first run, which the probe has already answered.
+							console.log("SMOKE_READY perf");
+							app.quit();
+							return;
 						}
 
 						if (process.env.JUNO_SMOKE_DEMO) {

@@ -138,7 +138,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 	},
 	{
 		title: "Reading a message",
-		rows: [{ combos: [COMBOS.find], label: "Find in the open message" }],
+		rows: [{ combos: [COMBOS.find], label: "Find in the open message or page" }],
 	},
 	{
 		title: "In a project",

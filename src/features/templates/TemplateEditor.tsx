@@ -4,6 +4,7 @@ import type { ClientSummary, DocumentLayout, DocumentTemplate, LayoutBlock, Layo
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
+import { Segmented } from "../../components/Segmented";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import {
@@ -604,28 +605,18 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 					<h1 className="min-w-0 truncate text-h3">
 						{name || "Untitled template"}
 					</h1>
-					<div className="ml-2 flex rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5" role="group" aria-label="View">
-						<button
-							type="button"
-							aria-pressed={tab === "layout"}
-							onClick={() => setTab("layout")}
-							className={`h-[28px] rounded-[var(--radius-sm)] px-3 text-sm font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								tab === "layout" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
-							}`}
-						>
-							Layout
-						</button>
-						<button
-							type="button"
-							aria-pressed={tab === "details"}
-							onClick={() => setTab("details")}
-							className={`h-[28px] rounded-[var(--radius-sm)] px-3 text-sm font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-								tab === "details" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
-							}`}
-						>
-							Details
-						</button>
-					</div>
+					<span className="ml-2">
+						<Segmented
+							size="compact"
+							label="View"
+							value={tab}
+							onChange={setTab}
+							options={[
+								{ id: "layout", label: "Layout" },
+								{ id: "details", label: "Details" },
+							]}
+						/>
+					</span>
 				</div>
 				<div className="flex items-center gap-2">{saveActions}</div>
 			</div>

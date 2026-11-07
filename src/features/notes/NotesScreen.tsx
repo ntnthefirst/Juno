@@ -8,6 +8,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { Toast } from "../../components/Toast";
+import { GroupHeader } from "../../components/GroupHeader";
 import { groupByDay } from "../../lib/day-groups";
 import { messageOf } from "../../lib/errors";
 import { blankMenuFor } from "../../lib/blank-menu";
@@ -207,7 +208,7 @@ export function NotesScreen() {
 					{groups
 						? groups.map((group) => (
 								<section key={group.key} aria-label={groupLabel(group.label)} className="mb-2">
-									<h2 className="px-4 pt-3 pb-1 text-sm text-[var(--ink-muted)]">{groupLabel(group.label)}</h2>
+									<GroupHeader label={groupLabel(group.label)} className="px-4" />
 									{group.items.map(renderRow)}
 								</section>
 							))

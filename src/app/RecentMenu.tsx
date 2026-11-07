@@ -123,10 +123,10 @@ export function RecentMenu({ at, onClose }: RecentMenuProps) {
 				ref={surface}
 				role="menu"
 				aria-label="Recent"
-				className="animate-scale fixed z-[61] w-[280px] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-2"
+				className="animate-scale fixed z-[61] w-[328px] rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-2"
 				style={{ left, top: at.y, boxShadow: "var(--shadow-popover)" }}
 			>
-				<p className="px-2 pt-1 pb-1.5 text-overline uppercase text-[var(--ink-muted)]">Recent</p>
+				<p className="px-3 pt-1 pb-1.5 text-overline uppercase text-[var(--ink-muted)]">Recent</p>
 				{error ? (
 					<p className="px-2 py-3 text-dense text-[var(--risk)]">{error}</p>
 				) : items === null ? (
@@ -143,18 +143,18 @@ export function RecentMenu({ at, onClose }: RecentMenuProps) {
 									onMouseEnter={() => setActive(index)}
 									onClick={() => choose(item)}
 									className={[
-										"flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-2 py-1.5 text-left",
+										"flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-left",
 										active === index ? "bg-[var(--hover)]" : "",
 									].join(" ")}
 								>
 									<Icon name={KIND[item.kind].icon} size={16} className="flex-none text-[var(--ink-muted)]" />
 									<span className="min-w-0 flex-1">
-										<span className="block truncate text-dense font-[var(--weight-medium)] text-[var(--ink)]">{item.name}</span>
+										<span className="block truncate text-base font-[var(--weight-medium)] text-[var(--ink)]">{item.name}</span>
 										<span className="block truncate text-sm text-[var(--ink-muted)]">
 											{[KIND[item.kind].label, item.context].filter(Boolean).join(" · ")}
 										</span>
 									</span>
-									<span className="tabular flex-none text-sm text-[var(--ink-muted)]">{recentDay(item.openedAt)}</span>
+									<span className="tabular flex-none text-dense text-[var(--ink-muted)]">{recentDay(item.openedAt)}</span>
 								</button>
 							</li>
 						))}
@@ -166,7 +166,7 @@ export function RecentMenu({ at, onClose }: RecentMenuProps) {
 							type="button"
 							role="menuitem"
 							onClick={() => void clear()}
-							className="w-full rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-dense text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+							className="w-full rounded-[var(--radius-md)] px-3 py-2 text-left text-dense text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 						>
 							Clear recent
 						</button>

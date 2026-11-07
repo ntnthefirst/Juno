@@ -333,8 +333,8 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 				className="animate-scale flex max-h-[min(560px,72vh)] w-[min(640px,100%)] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--line)] bg-[var(--surface)]"
 				style={{ boxShadow: "var(--shadow-modal)" }}
 			>
-				<div className="flex h-12 flex-none items-center gap-3 border-b border-[var(--line)] px-4">
-					<Icon name="search" size={16} className="flex-none text-[var(--ink-muted)]" />
+				<div className="flex flex-none items-center gap-3 border-b border-[var(--line)] px-4 py-3.5">
+					<Icon name="search" size={18} className="flex-none text-[var(--ink-muted)]" />
 					<input
 						ref={input}
 						type="text"
@@ -353,11 +353,11 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 						autoComplete="off"
 						className="min-w-0 flex-1 bg-transparent text-lg text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
 					/>
-					<Kbd keys={["Esc"]} />
+					{term === "" ? <Kbd keys={["Esc"]} /> : <span className="font-mono text-micro text-[var(--ink-faint)]">Esc</span>}
 				</div>
 
 				{term !== "" ? (
-					<div role="tablist" aria-label="Where to look" className="flex flex-none items-center gap-1 px-3 pt-2 pb-1">
+					<div role="tablist" aria-label="Where to look" className="flex flex-none items-center gap-1.5 px-4 pt-2.5 pb-1.5">
 						{SCOPES.map((entry) => (
 							<button
 								key={entry.id}
@@ -371,7 +371,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 									setActive(0);
 								}}
 								className={[
-									"rounded-[var(--radius-md)] px-2 py-1 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)]",
+									"rounded-[var(--radius-md)] px-2.5 py-1 text-dense font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)]",
 									scope === entry.id
 										? "bg-[var(--hover)] text-[var(--ink)]"
 										: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
@@ -391,7 +391,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 					) : (
 						sections.map((section, sectionIndex) => (
 							<div key={section.title} role="group" aria-label={section.title}>
-								<p className="px-3 pt-3 pb-1 text-overline uppercase text-[var(--ink-muted)] first:pt-1">
+								<p className="px-3 pt-2.5 pb-1 text-overline uppercase text-[var(--ink-muted)] first:pt-1">
 									{section.title}
 								</p>
 								{section.items.map((item, itemIndex) => {
@@ -410,8 +410,8 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 											onClick={() => choose(item)}
 											className={[
 												"flex cursor-default items-center gap-3 rounded-[var(--radius-md)] px-3 transition-colors duration-[var(--duration-fast)]",
-												item.record ? "h-[52px]" : "h-11",
-												isActive ? "bg-[var(--hover)]" : "",
+												item.record ? "py-2" : "h-9",
+												isActive ? (item.record ? "bg-[var(--hover)]" : "bg-[var(--accent-soft)] text-[var(--accent)]") : "",
 											].join(" ")}
 										>
 											{item.record ? (
@@ -424,16 +424,20 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 												</span>
 											)}
 											<span className="min-w-0 flex-1">
-												<span className="block truncate text-dense font-[var(--weight-medium)]">{item.label}</span>
+												<span className={`block truncate text-base ${item.record ? "font-[var(--weight-medium)]" : ""}`}>{item.label}</span>
 												{item.detail ? (
 													<span className="block truncate text-sm text-[var(--ink-muted)]">{item.detail}</span>
 												) : null}
 											</span>
 											{item.record ? (
-												<span className="flex-none text-sm text-[var(--ink-muted)]">{RECORD_LABEL[item.record]}</span>
+												<span className="flex-none text-dense text-[var(--ink-faint)]">{RECORD_LABEL[item.record]}</span>
 											) : null}
-											{item.keys ? <Kbd keys={item.keys} /> : null}
-											{isActive && !item.keys ? <Kbd keys={["Enter"]} /> : null}
+											{item.keys ? (
+												<span className="flex-none font-mono text-micro text-[var(--ink-faint)]">{item.keys.join(" ")}</span>
+											) : null}
+											{isActive && !item.keys ? (
+												<span className="flex-none font-mono text-micro text-[var(--ink-faint)]">Enter</span>
+											) : null}
 										</div>
 									);
 								})}
@@ -442,21 +446,10 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 					)}
 				</div>
 
-				<div className="flex h-9 flex-none items-center gap-4 border-t border-[var(--line)] px-4 text-micro text-[var(--ink-muted)]">
-					<span className="flex items-center gap-1.5">
-						<Kbd keys={["↑", "↓"]} /> move
-					</span>
-					<span className="flex items-center gap-1.5">
-						<Kbd keys={["Enter"]} /> open
-					</span>
-					<span className="flex items-center gap-1.5">
-						<Kbd keys={["Esc"]} /> close
-					</span>
-					{term !== "" ? (
-						<span className="flex items-center gap-1.5">
-							<Kbd keys={["Tab"]} /> change where it looks
-						</span>
-					) : null}
+				<div className="flex flex-none items-center gap-4 bg-[var(--sunken)] px-4 py-2.5 text-sm text-[var(--ink-muted)]">
+					<span>Enter to open</span>
+					{term !== "" ? <span>Tab to change where it looks</span> : null}
+					<span>{formatCombo(COMBOS.find).join(" ")} finds inside a message or a page</span>
 				</div>
 			</div>
 		</div>,

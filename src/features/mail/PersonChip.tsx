@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Client, ClientSummary, MailAddress, MailMessageClient } from "@shared/types";
 import { Icon } from "../../components/Icon";
+import { Segmented } from "../../components/Segmented";
 import { messageOf } from "../../lib/errors";
 import { requestOpenClient } from "../../lib/open-client";
 import { ConnectClientDialog } from "./ConnectClientDialog";
@@ -150,7 +151,7 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 						) : lookup.match ? (
 							<div className="flex items-start gap-2">
 								<div className="min-w-0 flex-1">
-									<p className="text-micro uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+									<p className="text-overline uppercase text-[var(--ink-muted)]">
 										Client
 									</p>
 									<p className="truncate font-[var(--weight-medium)]">{lookup.match.clientName}</p>
@@ -197,39 +198,23 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 						<div className="mt-2 border-t border-[var(--line)] pt-2">
 							<div className="flex items-center gap-2">
 								<span className="min-w-0 flex-1">
-									<span className="block text-micro uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+									<span className="block text-overline uppercase text-[var(--ink-muted)]">
 										Sender
 									</span>
 									<span className="block font-[var(--weight-medium)]">{trust.trusted ? "Trusted" : "Not trusted"}</span>
 								</span>
-								<div
-									role="group"
-									aria-label="Trust"
-									className="flex shrink-0 rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5"
-								>
-									{[
-										{ value: true, label: "Trusted" },
-										{ value: false, label: "Not trusted" },
-									].map((option) => (
-										<button
-											key={option.label}
-											type="button"
-											aria-pressed={trust.trusted === option.value}
-											disabled={trust.viaClient && !option.value}
-											onClick={() => {
-												if (trust.trusted !== option.value) trust.onChange(option.value);
-											}}
-											className={[
-												"h-[28px] rounded-[var(--radius-sm)] px-3 text-sm transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] disabled:opacity-50",
-												trust.trusted === option.value
-													? "bg-[var(--surface)] font-[var(--weight-medium)] text-[var(--ink)]"
-													: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
-											].join(" ")}
-										>
-											{option.label}
-										</button>
-									))}
-								</div>
+								<Segmented
+									size="compact"
+									label="Trust"
+									value={trust.trusted ? "yes" : "no"}
+									onChange={(id) => {
+										if ((id === "yes") !== trust.trusted) trust.onChange(id === "yes");
+									}}
+									options={[
+										{ id: "yes", label: "Trusted" },
+										{ id: "no", label: "Not trusted", disabled: trust.viaClient },
+									]}
+								/>
 							</div>
 							{trust.viaClient ? (
 								<p className="mt-1 text-sm text-[var(--ink-muted)]">

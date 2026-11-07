@@ -1,4 +1,5 @@
 import { Button } from "../../../components/Button";
+import { Segmented } from "../../../components/Segmented";
 import { BLOCK_KINDS, BLOCK_KIND_LABELS, type BlockKind } from "./layout-actions";
 
 export type PlacementMode = "flow" | "box";
@@ -35,28 +36,17 @@ export function InsertToolbar({
 				<p className="mb-2 text-sm text-[var(--ink-muted)]">
 					Adding to page {activePageNumber} of {pageCount}
 				</p>
-				<div className="flex rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5" role="group" aria-label="Where a new block goes">
-					<button
-						type="button"
-						aria-pressed={placement === "flow"}
-						onClick={() => onPlacementChange("flow")}
-						className={`h-[28px] flex-1 rounded-[var(--radius-sm)] text-sm font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-							placement === "flow" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
-						}`}
-					>
-						In the flow
-					</button>
-					<button
-						type="button"
-						aria-pressed={placement === "box"}
-						onClick={() => onPlacementChange("box")}
-						className={`h-[28px] flex-1 rounded-[var(--radius-sm)] text-sm font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-							placement === "box" ? "bg-[var(--surface)] text-[var(--ink)]" : "text-[var(--ink-muted)]"
-						}`}
-					>
-						On the page
-					</button>
-				</div>
+				<Segmented
+					size="compact"
+					fill
+					label="Where a new block goes"
+					value={placement}
+					onChange={onPlacementChange}
+					options={[
+						{ id: "flow", label: "In the flow" },
+						{ id: "box", label: "On the page" },
+					]}
+				/>
 			</div>
 
 			<div>

@@ -10,6 +10,7 @@ import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
+import { Segmented } from "../../components/Segmented";
 import { StatusBadge } from "../../components/StatusBadge";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
@@ -172,37 +173,29 @@ type SetPickerProps = {
 	onSelect: (key: ReferenceSetKey) => void;
 };
 
-/** The lists as one row of tabs, each with how many values it shows. */
+/** The lists as one row, each with how many values it shows. */
 function SetPicker({ sets, selected, onSelect }: SetPickerProps) {
+	const first = sets[0];
+	if (!first) return null;
 	return (
-		<div
-			role="tablist"
-			aria-label="Which list"
-			className="flex gap-0.5 rounded-[var(--radius-md)] bg-[var(--sunken)] p-0.5"
-		>
-			{sets.map((entry) => {
-				const active = entry.set.key === selected;
-				const shown = entry.items.filter((item) => item.hiddenAt === null).length;
-				return (
-					<button
-						key={entry.set.id}
-						type="button"
-						role="tab"
-						aria-selected={active}
-						onClick={() => onSelect(entry.set.key)}
-						className={[
-							"flex h-8 min-w-0 flex-1 items-center justify-center gap-2 rounded-[var(--radius-sm)] px-3 text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]",
-							active
-								? "bg-[var(--surface)] font-[var(--weight-medium)] text-[var(--ink)] shadow-[0_0_0_1px_var(--line)]"
-								: "text-[var(--ink-muted)] hover:text-[var(--ink)]",
-						].join(" ")}
-					>
+		<Segmented
+			size="compact"
+			fill
+			label="Which list"
+			value={selected ?? first.set.key}
+			onChange={onSelect}
+			options={sets.map((entry) => ({
+				id: entry.set.key,
+				label: (
+					<span className="flex items-center gap-2">
 						<span className="truncate">{entry.set.label}</span>
-						<span className="tabular text-micro text-[var(--ink-muted)]">{shown}</span>
-					</button>
-				);
-			})}
-		</div>
+						<span className="tabular text-micro text-[var(--ink-muted)]">
+							{entry.items.filter((item) => item.hiddenAt === null).length}
+						</span>
+					</span>
+				),
+			}))}
+		/>
 	);
 }
 

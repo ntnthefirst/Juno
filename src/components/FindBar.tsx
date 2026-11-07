@@ -44,7 +44,7 @@ export function FindBar({ query, onQueryChange, count, current, onNext, onPrevio
 	return (
 		<div
 			role="search"
-			className="animate-pop flex h-10 w-[292px] items-center gap-2 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] pr-1 pl-3 shadow-[var(--shadow-popover)]"
+			className="animate-pop flex h-[46px] w-[386px] items-center gap-2 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] pr-1 pl-3 shadow-[var(--shadow-popover)]"
 		>
 			<Icon name="search" size={16} className="flex-none text-[var(--ink-muted)]" />
 			<input
@@ -56,7 +56,10 @@ export function FindBar({ query, onQueryChange, count, current, onNext, onPrevio
 				placeholder="Find"
 				className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-[var(--ink-faint)]"
 			/>
-			<span aria-live="polite" className="tabular flex-none text-dense text-[var(--ink-muted)]">
+			<span
+				aria-live="polite"
+				className={`tabular flex-none text-dense ${query !== "" && count === 0 ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
+			>
 				{label}
 			</span>
 			<button

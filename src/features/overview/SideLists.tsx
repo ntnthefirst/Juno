@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import type { ClientSummary, DocumentRecord, MailThreadSummary, ReferenceItem } from "@shared/types";
 import { Avatar } from "../../components/Avatar";
-import { Icon } from "../../components/Icon";
+import { CardHeader } from "../../components/CardHeader";
 import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
 import type { Loaded } from "../../lib/use-loaded";
@@ -9,32 +9,6 @@ import { belongsTo } from "../documents/belongs-to";
 import { formatWhen, leadParticipant } from "../mail/format";
 
 const SHOWN = 5;
-
-type SectionHeaderProps = {
-	title: string;
-	count?: number | null;
-	link: string;
-	onLink: () => void;
-};
-
-/** Heads one quiet list on the right edge. The link goes to the full screen. */
-function SectionHeader({ title, count, link, onLink }: SectionHeaderProps) {
-	return (
-		<header className="flex h-8 items-center gap-2 py-1">
-			<h2 className="text-base font-[var(--weight-semibold)]">{title}</h2>
-			{count ? <span className="text-dense tabular-nums text-ink-muted">{count}</span> : null}
-			<span className="min-w-px flex-1" />
-			<button
-				type="button"
-				onClick={onLink}
-				className="inline-flex items-center gap-1 text-dense text-ink-muted transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-accent"
-			>
-				{link}
-				<Icon name="chevron-right" size={12} />
-			</button>
-		</header>
-	);
-}
 
 type ListRowProps = {
 	name: string;
@@ -126,7 +100,7 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 	return (
 		<div className="flex flex-col gap-8">
 			<section>
-				<SectionHeader title="Unread mail" count={unreadCount} link="Mail" onLink={open("mail")} />
+				<CardHeader title="Unread mail" count={unreadCount ?? undefined} link={{ label: "Mail", onClick: open("mail") }} />
 				<Block
 					state={unread}
 					what="your mail"
@@ -151,7 +125,7 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 			</section>
 
 			<section>
-				<SectionHeader title="Documents" link="All documents" onLink={open("documents")} />
+				<CardHeader title="Documents" link={{ label: "All documents", onClick: open("documents") }} />
 				<Block
 					state={documents}
 					what="your documents"
@@ -173,7 +147,7 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 			</section>
 
 			<section>
-				<SectionHeader title="Clients" link="All clients" onLink={open("clients")} />
+				<CardHeader title="Clients" link={{ label: "All clients", onClick: open("clients") }} />
 				<Block
 					state={clients}
 					what="your clients"

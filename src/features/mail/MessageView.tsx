@@ -592,7 +592,7 @@ export function MessageView({
 
 					{visibleAttachments.length > 0 ? (
 						<div className="shrink-0 border-t border-[var(--line)] py-3">
-							<h3 className="text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+							<h3 className="text-overline uppercase text-[var(--ink-muted)]">
 								Attachments
 							</h3>
 							<ul
@@ -764,7 +764,7 @@ export function MessageView({
 												type="button"
 												aria-expanded={linksOpen}
 												onClick={() => setLinksOpen((current) => !current)}
-												className="text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+												className="text-overline uppercase text-[var(--ink-muted)] hover:text-[var(--ink)]"
 											>
 												Links ({body.links.length})
 											</button>

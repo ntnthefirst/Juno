@@ -563,7 +563,7 @@ export function AlignmentBox({ label, lit, onPlace }: AlignmentBoxProps) {
 						>
 							<span
 								aria-hidden
-								className={`rounded-full ${
+								className={`rounded-[var(--radius-full)] ${
 									state === "on"
 										? "h-2 w-2 bg-[var(--accent)]"
 										: state === "line"

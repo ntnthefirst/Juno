@@ -283,7 +283,7 @@ export function VisualEditor({ value, onChange, active, disabled = false, placeh
 							) : null}
 							{placeholderGroups.map((group) => (
 								<div key={group.label} className="mb-2 last:mb-0">
-									<p className="px-2 py-1 text-micro font-[var(--weight-medium)] uppercase tracking-wide text-[var(--ink-faint)]">
+									<p className="px-2 py-1 text-overline uppercase text-[var(--ink-faint)]">
 										{group.label}
 									</p>
 									{group.items.map((item) => (

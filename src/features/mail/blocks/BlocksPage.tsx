@@ -431,7 +431,7 @@ function BlockRow({
 			onDrop={onDrop}
 			className={`relative ${dragging ? "opacity-50" : ""}`}
 		>
-			{over ? <span aria-hidden className="absolute -top-px right-2 left-2 h-0.5 rounded-full bg-[var(--accent)]" /> : null}
+			{over ? <span aria-hidden className="absolute -top-px right-2 left-2 h-0.5 rounded-[var(--radius-full)] bg-[var(--accent)]" /> : null}
 			<button
 				type="button"
 				aria-current={selected ? "true" : undefined}

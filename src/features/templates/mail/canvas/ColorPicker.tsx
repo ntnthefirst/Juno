@@ -119,7 +119,7 @@ function step(event: KeyboardEvent): number {
 }
 
 const THUMB =
-	"pointer-events-none absolute h-[14px] w-[14px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] shadow-[var(--shadow-popover)]";
+	"pointer-events-none absolute h-[14px] w-[14px] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-full)] border-2 border-[var(--surface)] shadow-[var(--shadow-popover)]";
 
 const CHECKERS = "repeating-conic-gradient(var(--line) 0 25%, var(--surface) 0 50%) 0 0 / 8px 8px";
 
@@ -208,7 +208,7 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 				aria-valuemax={360}
 				aria-valuenow={Math.round(hue)}
 				style={{ background: HUE_SPECTRUM }}
-				className="relative h-[12px] cursor-pointer touch-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				className="relative h-[12px] cursor-pointer touch-none rounded-[var(--radius-full)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 				{...drag((event) => setHsv({ h: fraction(event).x * 360 }))}
 				onKeyDown={(event) => {
 					const by = step(event) * 360;
@@ -229,7 +229,7 @@ export function ColorArea({ value, onChange }: ColorAreaProps) {
 				aria-valuemax={100}
 				aria-valuenow={opacityPercent(value)}
 				style={{ background: `${opacityBackground(value)}, ${CHECKERS}` }}
-				className="relative h-[12px] cursor-pointer touch-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				className="relative h-[12px] cursor-pointer touch-none rounded-[var(--radius-full)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 				{...drag((event) => onChange(toHex({ ...parsed, a: fraction(event).x })))}
 				onKeyDown={(event) => {
 					const by = step(event);

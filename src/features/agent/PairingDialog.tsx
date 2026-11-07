@@ -129,7 +129,7 @@ function PairingPrompt({ request, onConnected, onChanged }: PairingPromptProps) 
 					readOnly={busy}
 					placeholder="000 000"
 					aria-describedby="pairing-message"
-					className="tabular w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-center font-mono text-h3 tracking-[0.2em] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+					className="tabular w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-center font-mono text-h3 tracking-widest text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
 				/>
 			</label>
 

@@ -130,7 +130,7 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 					<h2 className="pb-1 text-h3">Answered</h2>
 					{days.map((day) => (
 						<div key={day.heading} className="mt-4">
-							<p className="px-2 pb-1 text-micro uppercase tracking-[0.08em] text-[var(--ink-muted)]">
+							<p className="px-2 pb-1 text-overline uppercase text-[var(--ink-muted)]">
 								{day.heading}
 							</p>
 							<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">

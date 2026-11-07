@@ -55,7 +55,7 @@ export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 							<span aria-hidden className="absolute left-[11px] top-6 bottom-0 w-px bg-[var(--line)]" />
 						) : null}
 						<span
-							className={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${toneClass(entry.kind)}`}
+							className={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-full)] ${toneClass(entry.kind)}`}
 						>
 							<Icon name={ICONS[entry.kind]} size={12} />
 						</span>

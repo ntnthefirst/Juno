@@ -31,7 +31,7 @@ export function EntityChip({ entity, compact = false, onNotice }: EntityChipProp
 			</span>
 			<span className="flex min-w-0 flex-col text-left leading-tight">
 				{compact ? null : (
-					<span className="text-micro uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+					<span className="text-overline uppercase text-[var(--ink-muted)]">
 						{entity.role}
 					</span>
 				)}

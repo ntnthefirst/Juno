@@ -94,7 +94,7 @@ export function AccountRules({ accountId, rules, folders, onEdit, onChanged }: A
 								className={`relative flex items-center gap-2 border-b border-[var(--line)]/60 py-1.5 last:border-b-0 ${dragging === rule.id ? "opacity-50" : ""}`}
 							>
 								{over === rule.id && dragging !== rule.id ? (
-									<span aria-hidden className="absolute -top-px right-2 left-2 h-0.5 rounded-full bg-[var(--accent)]" />
+									<span aria-hidden className="absolute -top-px right-2 left-2 h-0.5 rounded-[var(--radius-full)] bg-[var(--accent)]" />
 								) : null}
 								<span aria-hidden className="tabular w-5 flex-none cursor-grab text-center text-sm text-[var(--ink-muted)]">
 									{index + 1}

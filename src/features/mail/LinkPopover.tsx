@@ -34,7 +34,7 @@ export function LinkPopover({ href, x, y, onOpen, onCopy, onEnter, onLeave }: Li
 			className="animate-pop fixed z-50 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] px-3 pt-2 pb-1 shadow-[var(--shadow-popover)]"
 			style={{ left, top: y, width: WIDTH }}
 		>
-			<p className="text-overline uppercase tracking-[0.06em] text-[var(--ink-muted)]">Goes to</p>
+			<p className="text-overline uppercase text-[var(--ink-muted)]">Goes to</p>
 			<p data-selectable className="mt-1 break-all font-mono text-micro text-[var(--ink)]">
 				{href}
 			</p>

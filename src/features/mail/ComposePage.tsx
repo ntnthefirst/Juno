@@ -774,7 +774,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 							>
 								<Icon name="attachment" size={18} />
 								{attachmentCount > 0 ? (
-									<span className="tabular absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--accent)] px-1 text-micro text-[var(--accent-ink)]">
+									<span className="tabular absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-[var(--radius-full)] bg-[var(--accent)] px-1 text-micro text-[var(--accent-ink)]">
 										{attachmentCount}
 									</span>
 								) : null}
@@ -816,7 +816,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 										/>
 										{projectFiles && projectFiles.assets.length > 0 ? (
 											<div>
-												<p className="px-2 pt-2 pb-1 text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+												<p className="px-2 pt-2 pb-1 text-overline uppercase text-[var(--ink-muted)]">
 													Files of {projectFiles.name}
 												</p>
 												<ul>

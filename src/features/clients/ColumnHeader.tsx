@@ -222,7 +222,7 @@ function ColumnPopover({
 					visibility: position ? "visible" : "hidden",
 				}}
 			>
-				<div className="px-3 pb-1 pt-2 text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+				<div className="px-3 pb-1 pt-2 text-overline uppercase text-[var(--ink-faint)]">
 					Sort
 				</div>
 				<div role="radiogroup" aria-label={`Sort ${label}`} className="flex flex-col pb-1">
@@ -250,7 +250,7 @@ function ColumnPopover({
 				{children ? (
 					<div className="flex min-h-0 flex-col border-t border-[var(--line)]">
 						<div className="flex items-center justify-between px-3 pb-1 pt-2">
-							<span className="text-micro font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+							<span className="text-overline uppercase text-[var(--ink-faint)]">
 								Filter
 							</span>
 							{filtered && onClearFilter ? (

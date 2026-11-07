@@ -341,7 +341,7 @@ export function CanvasStage({
 							}}
 							className="flex h-[32px] w-full cursor-ns-resize items-center justify-center rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 						>
-							<span className="h-[3px] w-[48px] rounded-full bg-[var(--line-strong)]" />
+							<span className="h-[3px] w-[48px] rounded-[var(--radius-full)] bg-[var(--line-strong)]" />
 						</button>
 						)}
 					</div>

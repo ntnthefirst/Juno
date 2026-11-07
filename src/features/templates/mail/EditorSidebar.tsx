@@ -154,7 +154,7 @@ export function EditorSidebar({
 
 			<div className="flex min-h-0 flex-1 flex-col border-t border-[var(--line)]">
 				<div className="flex h-[28px] flex-none items-center px-3">
-					<h2 className="text-micro font-[var(--weight-semibold)] tracking-[0.04em] text-[var(--ink-muted)] uppercase">
+					<h2 className="text-overline text-[var(--ink-muted)] uppercase">
 						Layers
 					</h2>
 					{onAddPage ? (

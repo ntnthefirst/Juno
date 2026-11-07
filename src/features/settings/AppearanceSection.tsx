@@ -162,7 +162,7 @@ function Window({ tone }: { tone: Tone }) {
 							key={row}
 							className={`flex h-[13px] flex-none items-center gap-1.5 rounded-[2px] px-1.5 ${c.surface}`}
 						>
-							<span className={`h-[5px] w-[5px] flex-none rounded-full ${c.mark}`} />
+							<span className={`h-[5px] w-[5px] flex-none rounded-[var(--radius-full)] ${c.mark}`} />
 							<Bar className={c.line} width={row === 3 ? 34 : 52} />
 						</span>
 					))}
@@ -173,5 +173,5 @@ function Window({ tone }: { tone: Tone }) {
 }
 
 function Bar({ className, width }: { className: string; width: number }): ReactNode {
-	return <span className={`block h-[3px] rounded-full ${className}`} style={{ width }} />;
+	return <span className={`block h-[3px] rounded-[var(--radius-full)] ${className}`} style={{ width }} />;
 }

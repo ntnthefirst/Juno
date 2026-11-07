@@ -38,7 +38,7 @@ export function ShortcutList({ onClose }: ShortcutListProps) {
 			<div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-x-6 gap-y-3">
 				{SHORTCUT_GROUPS.map((group) => (
 					<section key={group.title}>
-						<h3 className="text-micro font-[var(--weight-semibold)] tracking-[0.04em] text-[var(--ink-muted)] uppercase">
+						<h3 className="text-overline text-[var(--ink-muted)] uppercase">
 							{group.title}
 						</h3>
 						<dl className="mt-1 flex flex-col">

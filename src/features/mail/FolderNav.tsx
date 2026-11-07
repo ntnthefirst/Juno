@@ -54,7 +54,7 @@ function draggedThreads(event: React.DragEvent): string[] | null {
 }
 
 const HEADER_TEXT =
-	"min-w-0 truncate text-sm font-[var(--weight-medium)] uppercase tracking-[0.06em] text-[var(--ink-muted)]";
+	"min-w-0 truncate text-overline uppercase text-[var(--ink-muted)]";
 
 /**
  * Where mail is: every account, with the six folders it has and the tree of

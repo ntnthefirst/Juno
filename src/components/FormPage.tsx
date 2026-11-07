@@ -146,7 +146,7 @@ function StepRail({ steps, step, onStep }: StepRailProps) {
 							<span
 								aria-hidden
 								className={[
-									"tabular flex h-6 w-6 flex-none items-center justify-center rounded-full text-sm font-[var(--weight-medium)]",
+									"tabular flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] text-sm font-[var(--weight-medium)]",
 									current ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "bg-[var(--ok-soft)] text-[var(--ok)]",
 								].join(" ")}
 							>

@@ -112,7 +112,7 @@ export function BlockMenu({ kind, blocks, activeId, onPick, onManage }: BlockMen
 							onMouseLeave={() => setHovered(null)}
 							onFocus={() => setHovered(block.id)}
 							onBlur={() => setHovered(null)}
-							className="flex h-9 w-full items-center gap-2 rounded-[var(--radius-md)] px-2.5 text-left text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-visible:bg-[var(--accent-soft)]"
+							className="flex h-8 w-full items-center gap-2 rounded-[var(--radius-md)] pr-2.5 pl-2 text-left text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-visible:bg-[var(--accent-soft)]"
 						>
 							<span className="flex w-4 flex-none justify-center text-[var(--accent)]">
 								{block.id === activeId ? <CheckIcon width={14} height={14} strokeWidth={2.2} aria-hidden /> : null}
@@ -126,14 +126,14 @@ export function BlockMenu({ kind, blocks, activeId, onPick, onManage }: BlockMen
 						type="button"
 						role="menuitem"
 						onClick={() => choose(null)}
-						className="flex h-9 w-full items-center gap-2 rounded-[var(--radius-md)] px-2.5 text-left text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-visible:bg-[var(--accent-soft)]"
+						className="flex h-8 w-full items-center gap-2 rounded-[var(--radius-md)] pr-2.5 pl-2 text-left text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-visible:bg-[var(--accent-soft)]"
 					>
 						<span className="w-4 flex-none" />
 						No {noun}
 					</button>
 
 					{shown ? (
-						<div className="mt-1.5 rounded-[var(--radius-md)] bg-[var(--sunken)] px-2.5 py-2">
+						<div className="mt-1.5 rounded-[var(--radius-md)] bg-[var(--sunken)] px-3 py-2.5">
 							<p className="text-overline text-[var(--ink-muted)] uppercase">Preview</p>
 							<p className="mt-1 text-base">
 								<BlockText body={shown.body} />

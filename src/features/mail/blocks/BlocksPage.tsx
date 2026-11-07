@@ -3,9 +3,9 @@ import type { ComposeBlock, ComposeBlockKind, ComposeBlockRule, ComposeBlockVari
 import { Button } from "../../../components/Button";
 import { Dialog } from "../../../components/Dialog";
 import { Field } from "../../../components/Field";
-import { FormPage } from "../../../components/FormPage";
 import { Icon } from "../../../components/Icon";
 import { Segmented } from "../../../components/Segmented";
+import { usePublishBreadcrumb } from "../../../app/breadcrumb-context";
 import { messageOf } from "../../../lib/errors";
 import { useLoaded } from "../../../lib/use-loaded";
 import type { ManageTarget } from "./BlockMenu";
@@ -71,14 +71,32 @@ export function BlocksPage({ target, onBack }: BlocksPageProps) {
 		reload();
 	}
 
+	// The way back is in the title bar, as the design draws it, and Escape does
+	// the same thing.
+	usePublishBreadcrumb([{ label: "Mail", onSelect: onBack }, { label: "Intros and outros" }]);
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			if (document.querySelector("[role='dialog']")) return;
+			onBack();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [onBack]);
+
 	return (
-		<FormPage
-			title="Intros and outros"
-			backLabel="Mail"
-			onBack={onBack}
-			width="wide"
-			description="Lines added at the start and end of a mail. Each one has a rule for when it is added for you."
-		>
+		<div className="flex h-full min-h-0 flex-col overflow-y-auto px-6 pt-6 pb-6">
+			<header className="mb-6 flex flex-none items-start justify-between gap-6">
+				<div className="min-w-0">
+					<h1 className="text-h2">Intros and outros</h1>
+					<p className="mt-1 max-w-[90ch] text-base text-[var(--ink-muted)]">
+						Lines added at the start and end of a mail. Each one has a rule for when it is added for you.
+					</p>
+				</div>
+				<Button variant="primary" onClick={() => setChosen({ newKind: "intro" })}>
+					New block
+				</Button>
+			</header>
 			{loaded.status === "error" ? (
 				<p role="alert" className="mb-3 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
 					{loaded.message}
@@ -90,16 +108,11 @@ export function BlocksPage({ target, onBack }: BlocksPageProps) {
 				</p>
 			) : null}
 
-			<div className="grid min-h-[520px] grid-cols-[minmax(240px,320px)_minmax(0,1fr)] gap-6">
+			<div className="grid min-h-[520px] flex-1 grid-cols-[minmax(240px,360px)_minmax(0,1fr)] gap-6">
 				<nav
 					aria-label="Intros and outros"
 					className="flex min-h-0 flex-col rounded-[var(--radius-lg)] border border-[var(--line)] p-3"
 				>
-					<div className="mb-2 flex justify-end">
-						<Button variant="primary" size="dense" onClick={() => setChosen({ newKind: "intro" })}>
-							New block
-						</Button>
-					</div>
 					{KINDS.map((group) => {
 						const rows = blocks.filter((block) => block.kind === group);
 						return (
@@ -182,7 +195,7 @@ export function BlocksPage({ target, onBack }: BlocksPageProps) {
 					)}
 				</section>
 			</div>
-		</FormPage>
+		</div>
 	);
 }
 
@@ -300,7 +313,7 @@ function BlockEditor({ block, newKind, onSaved, onDeleted }: BlockEditorProps) {
 								// Keeps the caret in the text while the chip goes in.
 								onMouseDown={(event) => event.preventDefault()}
 								onClick={() => editor.current?.insert(variable)}
-								className="inline-flex h-[22px] items-center rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 text-micro text-[var(--accent)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+								className="inline-flex h-[22px] items-center rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 text-sm font-[var(--weight-medium)] text-[var(--accent)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 							>
 								{VARIABLE_LABEL[variable]}
 							</button>

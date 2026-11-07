@@ -16,7 +16,7 @@ type VariableEditorProps = {
 };
 
 const CHIP =
-	"mx-0.5 inline-flex h-[22px] items-center rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 align-baseline text-micro text-[var(--accent)] select-none";
+	"mx-0.5 inline-flex h-[22px] items-center rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 align-baseline text-sm font-[var(--weight-medium)] text-[var(--accent)] select-none";
 
 function chip(name: ComposeBlockVariable): HTMLSpanElement {
 	const element = document.createElement("span");

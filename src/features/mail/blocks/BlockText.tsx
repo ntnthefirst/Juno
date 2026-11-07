@@ -8,7 +8,7 @@ type VariableChipProps = {
 /** A variable drawn as a chip, never as curly braces. */
 export function VariableChip({ name }: VariableChipProps) {
 	return (
-		<span className="mx-0.5 inline-flex h-[22px] items-center rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 align-baseline text-micro text-[var(--accent)]">
+		<span className="mx-0.5 inline-flex h-[22px] items-center rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 align-baseline text-sm font-[var(--weight-medium)] text-[var(--accent)]">
 			{VARIABLE_LABEL[name]}
 		</span>
 	);

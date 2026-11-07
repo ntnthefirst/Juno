@@ -331,6 +331,67 @@ if (!app.requestSingleInstanceLock()) {
 							configureMailboxSource(openSmokeMailbox);
 							configureMailTransport(smokeTransport, smokeAppender);
 
+							// A first run with no data is the first thing a new owner sees, so each
+							// screen that has an empty state is looked at before anything is seeded:
+							// Overview with "Start here" (frame 25:358), Clients (29:1426), and the
+							// others against Empty State (21:572).
+							if (process.env.JUNO_SMOKE_SHOT) {
+								const { mkdirSync, writeFileSync } = await import("node:fs");
+								const { join: joinPath } = await import("node:path");
+								mkdirSync(process.env.JUNO_SMOKE_SHOT, { recursive: true });
+								const emptyChecks: { name: string; nav: string | null; text: string[] }[] = [
+									{ name: "overview", nav: "overview", text: ["Start here", "Add your first client", "Add a reminder", "Connect a mail account"] },
+									{ name: "clients", nav: "clients", text: ["No clients yet", "Add client"] },
+									{ name: "projects", nav: "projects", text: ["No projects yet"] },
+									{ name: "reminders", nav: null, text: [] },
+									{ name: "notes", nav: "notes", text: ["No notes yet"] },
+									{ name: "documents", nav: "documents", text: ["No documents yet"] },
+									{ name: "mail", nav: "mail", text: ["No mail accounts yet"] },
+								];
+								for (const step of emptyChecks) {
+									const reached = await window.webContents.executeJavaScript(
+										`(async () => {
+											const target = ${JSON.stringify(step.nav)} === null
+												? document.querySelector("header button[aria-label=Reminders]")
+												: document.querySelector("nav button[data-nav=" + JSON.stringify(${JSON.stringify(step.nav)}) + "]");
+											if (!target) return false;
+											target.click();
+											await new Promise((r) => setTimeout(r, 900));
+											return true;
+										})()`,
+									);
+									if (!reached) throw new Error(`Smoke: no way to reach the empty ${step.name} screen`);
+									const shown = (await window.webContents.executeJavaScript(
+										`document.querySelector("main")?.textContent ?? ""`,
+									)) as string;
+									for (const text of step.text) {
+										if (!shown.includes(text)) throw new Error(`Smoke: the empty ${step.name} screen does not say "${text}"`);
+									}
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await window.webContents.executeJavaScript(
+											`Promise.race([
+												new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))),
+												new Promise((r) => setTimeout(() => r(null), 500)),
+											])`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										writeFileSync(
+											joinPath(process.env.JUNO_SMOKE_SHOT, `empty-${step.name}-${theme}.png`),
+											(await window.webContents.capturePage()).toPNG(),
+										);
+									}
+								}
+								nativeTheme.themeSource = "system";
+								await window.webContents.executeJavaScript(
+									`document.documentElement.removeAttribute("data-theme"); document.querySelector("nav button[data-nav=overview]")?.click()`,
+								);
+								console.log("SMOKE_DEMO empty states=ok");
+							}
+
 							const created = (await window.webContents.executeJavaScript(`(async () => {
 								const b = window.juno;
 								const statuses = await b.reference.getSet("client_status");
@@ -1478,6 +1539,30 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (opened !== "ok") throw new Error(`Smoke: client record ${opened}`);
 									await expectNewRecordWindow("reminder", "Add reminder on a client", "clientId=");
+									// The other four tabs of the record (frames 90:8345, 90:8591, 90:8822
+									// and 90:9064), then back to the timeline, which the shot below shows.
+									for (const tab of ["Overview", "Projects", "Documents", "Mail", "Timeline"]) {
+										const switched = await window.webContents.executeJavaScript(
+											`(async () => {
+												const el = [...document.querySelectorAll("main [role=tab]")].find((t) => t.textContent.trim().startsWith(${JSON.stringify(tab)}));
+												if (!el) return false;
+												el.click();
+												await new Promise((r) => setTimeout(r, 800));
+												return true;
+											})()`,
+										);
+										if (!switched) throw new Error(`Smoke: client record has no ${tab} tab`);
+										if (tab === "Timeline") break;
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											const image = await capture(window.webContents);
+											writeFileSync(joinPath(shotDir, `client-tab-${tab.toLowerCase()}-${theme}.png`), image.toPNG());
+										}
+									}
 								}
 								if (screen === "Agent log") {
 									const opened = await window.webContents.executeJavaScript(
@@ -4061,6 +4146,28 @@ if (!app.requestSingleInstanceLock()) {
 									if (deleted !== "ok") throw new Error(`Smoke: calendar reminder actions ${deleted}`);
 								}
 								if (screen === "Week") {
+									// The timer pill is in the title bar on every screen, and its stop
+									// button is the same call as the Time tab's. It is started through the
+									// service, found here on the calendar, and stopped by pressing it.
+									{
+										const timers = await import("./main/services/time-entries");
+										const [anyProject] = await window.webContents.executeJavaScript(`window.juno.projects.list()`);
+										if (!anyProject) throw new Error("Smoke: no project to run a timer on");
+										await timers.start(anyProject.id, "Smoke pill");
+										await new Promise((r) => setTimeout(r, 600));
+										const stopped = await window.webContents.executeJavaScript(
+											`(async () => {
+												const stop = document.querySelector("header button[aria-label='Stop timer']");
+												if (!stop) return "no pill on the calendar while a timer runs";
+												stop.click();
+												await new Promise((r) => setTimeout(r, 600));
+												if (document.querySelector("header button[aria-label='Stop timer']")) return "the pill stayed after stopping";
+												return "ok";
+											})()`,
+										);
+										if (stopped !== "ok") throw new Error(`Smoke: timer pill ${stopped}`);
+										if (timers.running()) throw new Error("Smoke: the timer still runs after the pill stopped it");
+									}
 									const switched = await window.webContents.executeJavaScript(
 										`(async () => {
 											// By accessible name, not by text: the view switch carries a
@@ -4074,6 +4181,31 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (switched !== "ok") throw new Error(`Smoke: calendar week view ${switched}`);
+									// The agenda (frame 26:1292) is photographed from here, then the view
+									// goes back to the week the shot below expects.
+									const agenda = await window.webContents.executeJavaScript(
+										`(async () => {
+											const b = document.querySelector("button[aria-label='Agenda']");
+											if (!b) return "no agenda button";
+											b.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return "ok";
+										})()`,
+									);
+									if (agenda !== "ok") throw new Error(`Smoke: calendar agenda view ${agenda}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 400));
+										const image = await capture(window.webContents);
+										writeFileSync(joinPath(shotDir, `calendar-agenda-${theme}.png`), image.toPNG());
+									}
+									await window.webContents.executeJavaScript(
+										`document.querySelector("button[aria-label='Week']")?.click()`,
+									);
+									await new Promise((r) => setTimeout(r, 600));
 								}
 								if (screen === "Drafts") {
 									// A draft with a picture at a web address opens in the composer,

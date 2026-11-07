@@ -57,6 +57,7 @@ function step(command, args) {
 
 try {
 	await step("npm", ["run", "typecheck"]);
+	await step("node", ["scripts/release-notes.mjs"]);
 	await step("npm", ["run", "compile"]);
 	await step("npx", ["electron-builder", ...targets, "--publish", publish]);
 	console.log(`\nBuilt${targets.length ? ` for ${targets.join(" ")}` : ""}. See release/.`);

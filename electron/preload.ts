@@ -42,6 +42,9 @@ const api: JunoApi = {
 		},
 	},
 
+	menu: {
+		show: (request) => call("menu.show", request),
+	},
 	window: {
 		openSettings: (section) => call("window.openSettings", section),
 		closeSettings: () => call("window.closeSettings"),

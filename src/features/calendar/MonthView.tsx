@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import type { CalendarItem, CalendarReminderItem } from "@shared/types";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { blankMenuFor } from "../../lib/blank-menu";
 import { daysBetween, formatTime, weekdayShort } from "./dates";
-import { chipTone, itemMenuItems, itemTitle, type Placed } from "./format";
+import { chipTone, itemTitle, openItemMenu as openChipMenu, type Placed } from "./format";
 import { useWheelPaging } from "./use-wheel-paging";
 
 type MonthViewProps = {
@@ -23,13 +22,12 @@ type MonthViewProps = {
 	onDelete: (item: CalendarItem) => void;
 	onComplete: (item: CalendarReminderItem) => void;
 	onSnooze: (item: CalendarReminderItem) => void;
+	onChanged: () => void;
 	/** A wheel gesture past a step apart, over any part of the grid: page a month. */
 	onStep: (direction: -1 | 1) => void;
 };
 
 const MAX_CHIPS = 4;
-
-type MenuTarget = { kind: "item"; item: CalendarItem } | { kind: "cell"; date: string };
 
 /**
  * Six rows of seven. Each cell is a hairline and a number, not a card, and an
@@ -49,13 +47,12 @@ export function MonthView({
 	onDelete,
 	onComplete,
 	onSnooze,
+	onChanged,
 	onStep,
 }: MonthViewProps) {
 	const [dragging, setDragging] = useState<{ item: CalendarItem; fromDate: string } | null>(null);
 	const [over, setOver] = useState<string | null>(null);
 	const root = useRef<HTMLDivElement>(null);
-	const menu = useContextMenu();
-	const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
 	const page = useWheelPaging(onStep);
 
 	// The grid has nothing of its own to scroll, so a wheel anywhere on it pages
@@ -71,29 +68,8 @@ export function MonthView({
 	}, [page]);
 
 	function openItemMenu(event: ReactMouseEvent, item: CalendarItem) {
-		setMenuTarget({ kind: "item", item });
-		menu.open(event);
+		openChipMenu(event, item, { onOpen, onEdit, onDelete, onComplete, onSnooze, onChanged });
 	}
-
-	function openCellMenu(event: ReactMouseEvent, date: string) {
-		setMenuTarget({ kind: "cell", date });
-		menu.open(event);
-	}
-
-	const menuItems: MenuItem[] =
-		menuTarget?.kind === "item"
-			? itemMenuItems(menuTarget.item, { onOpen, onEdit, onDelete, onComplete, onSnooze })
-			: menuTarget?.kind === "cell"
-				? [
-						{ id: "new-event", label: "New event here", icon: "add", onSelect: () => onCreateAt(menuTarget.date) },
-						{
-							id: "new-reminder",
-							label: "New reminder here",
-							icon: "reminders",
-							onSelect: () => onCreateReminderAt(menuTarget.date),
-						},
-					]
-				: [];
 
 	function startDrag(event: DragEvent, p: Placed) {
 		event.dataTransfer.effectAllowed = "move";
@@ -149,7 +125,12 @@ export function MonthView({
 								if (event.target === event.currentTarget) onCreateAt(date);
 							}}
 							onContextMenu={(event) => {
-								if (event.target === event.currentTarget) openCellMenu(event, date);
+								if (event.target !== event.currentTarget) return;
+								// A day knows where it was clicked, so these two start on that date.
+								blankMenuFor("calendar", {
+									"new-event": () => onCreateAt(date),
+									"new-reminder": () => onCreateReminderAt(date),
+								})(event);
 							}}
 							className={[
 								"group flex min-h-0 flex-col border-b border-[var(--line)] px-1 pb-1 pt-1",
@@ -209,17 +190,6 @@ export function MonthView({
 				})}
 			</div>
 
-			{menu.at && menuTarget ? (
-				<ContextMenu
-					at={menu.at}
-					items={menuItems}
-					ariaLabel={menuTarget.kind === "item" ? "Event" : "Day"}
-					onClose={() => {
-						menu.close();
-						setMenuTarget(null);
-					}}
-				/>
-			) : null}
 		</div>
 	);
 }

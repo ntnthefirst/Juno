@@ -18,11 +18,11 @@ import { useScreenAction } from "../../lib/screen-actions";
 import { AddButton } from "../../components/AddButton";
 import { Avatar } from "../../components/Avatar";
 import { EmptyState } from "../../components/EmptyState";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { clearPendingClient, peekPendingClient } from "../../lib/open-client";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { blankMenuFor } from "../../lib/blank-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { ClientAddressPanel } from "./ClientAddressPanel";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
@@ -502,7 +502,7 @@ export function ClientsScreen() {
 				</div>
 			</div>
 
-			<div className="w-full flex-1 overflow-y-auto">
+			<div className="w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("clients")}>
 				{load.status === "loading" ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
 				) : load.status === "error" ? (
@@ -588,24 +588,16 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 		onSort: (direction: "asc" | "desc" | null) =>
 			onView({ ...view, sort: direction ? { column, direction } : null }),
 	});
-	const { at, open, close } = useContextMenu();
-	const [menuRow, setMenuRow] = useState<ClientSummary | null>(null);
-
-	function itemsFor(row: ClientSummary): MenuItem[] {
-		return [
-			{ id: "open", label: "Open", icon: "chevron-right", onSelect: () => onSelect(row) },
-			{ id: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(row) },
-			{ id: "add-note", label: "Add note", icon: "note", onSelect: () => onAddNote(row) },
+	const menuFor = (row: ClientSummary) =>
+		contextMenuFor(
+			{ kind: "client", id: row.id },
 			{
-				id: "delete",
-				label: "Delete",
-				icon: "remove",
-				danger: true,
-				separatorBefore: true,
-				onSelect: () => onDelete(row),
+				open: () => onSelect(row),
+				edit: () => onEdit(row),
+				"new-note": () => onAddNote(row),
+				delete: () => onDelete(row),
 			},
-		];
-	}
+		);
 
 	return (
 		<>
@@ -673,10 +665,7 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 							<tr
 								key={row.id}
 								onClick={() => onSelect(row)}
-								onContextMenu={(event) => {
-									setMenuRow(row);
-									open(event);
-								}}
+								onContextMenu={menuFor(row)}
 								className={`transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 									selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
 								}`}
@@ -710,9 +699,6 @@ function ClientTable({ allRows, view, onView, selectedId, onSelect, onEdit, onAd
 				</tbody>
 			</table>
 
-			{at && menuRow ? (
-				<ContextMenu at={at} items={itemsFor(menuRow)} ariaLabel={`${menuRow.name} actions`} onClose={close} />
-			) : null}
 		</>
 	);
 }

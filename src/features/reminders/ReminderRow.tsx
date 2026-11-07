@@ -1,10 +1,10 @@
 import { useState } from "react";
 import type { Reminder } from "@shared/types";
 import { Checkbox } from "../../components/Checkbox";
-import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { ActionMenu } from "../../components/ActionMenu";
 import { messageOf } from "../../lib/errors";
 import { prefersReducedMotion } from "../../lib/motion";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor, type MenuHandlers } from "../../lib/native-menu";
 import { describeDue, formatDate } from "./format";
 
 type ReminderRowProps = {
@@ -42,7 +42,6 @@ export function ReminderRow({
 	const [busy, setBusy] = useState(false);
 	// Set the moment a reminder is ticked, so the row folds away while the write happens.
 	const [leaving, setLeaving] = useState(false);
-	const menu = useContextMenu();
 
 	async function run(work: () => Promise<unknown>) {
 		if (busy) return;
@@ -85,61 +84,21 @@ export function ReminderRow({
 	}
 	const toggle = () => (done ? void run(() => window.juno.reminders.reopen(reminder.id)) : void complete());
 
-	const items: MenuItem[] = [
-		done
-			? {
-					id: "reopen",
-					label: "Reopen",
-					icon: "reminders",
-					disabled: busy,
-					onSelect: toggle,
-				}
-			: {
-					id: "complete",
-					label: "Mark done",
-					icon: "check",
-					disabled: busy,
-					onSelect: toggle,
-				},
-		...(done
-			? []
-			: [
-					{
-						id: "snooze",
-						label: "Snooze",
-						icon: "today" as const,
-						disabled: busy,
-						onSelect: () => onSnooze(reminder),
-					},
-				]),
-		...(reminder.actionUrl && reminder.actionLabel
-			? [
-					{
-						id: "action",
-						label: reminder.actionLabel,
-						icon: "external" as const,
-						disabled: busy,
-						onSelect: () => void run(() => window.juno.reminders.openAction(reminder.id)),
-					},
-				]
-			: []),
-		{
-			id: "edit",
-			label: "Edit",
-			icon: "edit",
-			disabled: busy,
-			onSelect: () => onEdit(reminder),
-		},
-		{
-			id: "delete",
-			label: "Delete",
-			icon: "remove",
-			danger: true,
-			separatorBefore: true,
-			disabled: busy,
-			onSelect: () => void remove(),
-		},
-	];
+	// The items are chosen in the main process from the reminder (decision 59).
+	// This says what each one does here.
+	const handlers: MenuHandlers = {
+		complete: toggle,
+		reopen: toggle,
+		snooze: () => onSnooze(reminder),
+		"open-link": () => void run(() => window.juno.reminders.openAction(reminder.id)),
+		edit: () => onEdit(reminder),
+		// The client is one of the fields of the edit form.
+		"move-to-client": () => onEdit(reminder),
+		delete: () => void remove(),
+		done: () => onChanged(),
+		failed: onError,
+	};
+	const target = { kind: "reminder", id: reminder.id } as const;
 
 	return (
 		<div
@@ -148,7 +107,7 @@ export function ReminderRow({
 		>
 			<div className={leaving ? "min-h-0 overflow-hidden" : "min-h-0"}>
 				<div
-					onContextMenu={menu.open}
+					onContextMenu={contextMenuFor(target, handlers)}
 					className="group flex items-center gap-1 rounded-[var(--radius-lg)] px-1 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
 				>
 					<span className="flex h-8 w-8 flex-none items-center justify-center">
@@ -182,12 +141,9 @@ export function ReminderRow({
 					</span>
 
 					<span className="flex-none opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100">
-						<MenuButton items={items} ariaLabel={`More for ${reminder.title}`} disabled={busy} />
+						<ActionMenu target={target} handlers={handlers} ariaLabel={`More for ${reminder.title}`} size="dense" />
 					</span>
 
-					{menu.at ? (
-						<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={reminder.title} />
-					) : null}
 				</div>
 			</div>
 		</div>

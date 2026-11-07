@@ -2,14 +2,11 @@ import {
 	useEffect,
 	useLayoutEffect,
 	useRef,
-	useState,
 	type MouseEvent as ReactMouseEvent,
 } from "react";
 import type { CalendarItem, CalendarReminderItem } from "@shared/types";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
-import { useContextMenu } from "../../lib/use-context-menu";
 import { formatDateLong, formatMinutes } from "./dates";
-import { dotTone, itemMenuItems, itemTitle, KIND_LABELS, type Placed } from "./format";
+import { dotTone, openItemMenu as openChipMenu, itemTitle, KIND_LABELS, type Placed } from "./format";
 import { useWheelPaging } from "./use-wheel-paging";
 
 type AgendaViewProps = {
@@ -22,6 +19,7 @@ type AgendaViewProps = {
 	onDelete: (item: CalendarItem) => void;
 	onComplete: (item: CalendarReminderItem) => void;
 	onSnooze: (item: CalendarReminderItem) => void;
+	onChanged: () => void;
 	/** A wheel gesture past the top or bottom of the list: page the range. */
 	onStep: (direction: -1 | 1) => void;
 	/**
@@ -54,12 +52,11 @@ export function AgendaView({
 	onDelete,
 	onComplete,
 	onSnooze,
+	onChanged,
 	onStep,
 	direction,
 }: AgendaViewProps) {
 	const scroller = useRef<HTMLDivElement>(null);
-	const menu = useContextMenu();
-	const [menuItem, setMenuItem] = useState<CalendarItem | null>(null);
 	const page = useWheelPaging(onStep);
 	const days = dates.filter((date) => (placed.get(date) ?? []).length > 0);
 	const range = dates[0] ?? "";
@@ -91,11 +88,8 @@ export function AgendaView({
 	}, [page]);
 
 	function openItemMenu(event: ReactMouseEvent<HTMLElement>, item: CalendarItem) {
-		setMenuItem(item);
-		menu.open(event);
+		openChipMenu(event, item, { onOpen, onEdit, onDelete, onComplete, onSnooze, onChanged });
 	}
-
-	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete, onComplete, onSnooze }) : [];
 
 	return (
 		<div ref={scroller} className="h-full overflow-y-auto overscroll-contain">
@@ -148,17 +142,6 @@ export function AgendaView({
 				</div>
 			)}
 
-			{menu.at && menuItem ? (
-				<ContextMenu
-					at={menu.at}
-					items={menuItems}
-					ariaLabel="Event"
-					onClose={() => {
-						menu.close();
-						setMenuItem(null);
-					}}
-				/>
-			) : null}
 		</div>
 	);
 }

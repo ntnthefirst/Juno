@@ -6,10 +6,8 @@ import {
 	type PointerEvent,
 } from "react";
 import type { CalendarItem, CalendarOccurrence, CalendarReminderItem } from "@shared/types";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
-import { useContextMenu } from "../../lib/use-context-menu";
 import { formatMinutes, snap, weekdayShort } from "./dates";
-import { chipTone, itemMenuItems, itemTitle, laneLayout, type Placed } from "./format";
+import { chipTone, openItemMenu as openChipMenu, itemTitle, laneLayout, type Placed } from "./format";
 import { useWheelPaging } from "./use-wheel-paging";
 
 type WeekViewProps = {
@@ -29,6 +27,7 @@ type WeekViewProps = {
 	onDelete: (item: CalendarItem) => void;
 	onComplete: (item: CalendarReminderItem) => void;
 	onSnooze: (item: CalendarReminderItem) => void;
+	onChanged: () => void;
 	/** A wheel gesture over the header, the all-day row or an edge: page a week. */
 	onStep: (direction: -1 | 1) => void;
 };
@@ -67,14 +66,13 @@ export function WeekView({
 	onDelete,
 	onComplete,
 	onSnooze,
+	onChanged,
 	onStep,
 }: WeekViewProps) {
 	const root = useRef<HTMLDivElement>(null);
 	const scroller = useRef<HTMLDivElement>(null);
 	const grid = useRef<HTMLDivElement>(null);
 	const [drag, setDrag] = useState<Drag | null>(null);
-	const menu = useContextMenu();
-	const [menuItem, setMenuItem] = useState<CalendarItem | null>(null);
 	const page = useWheelPaging(onStep);
 
 	// Open on the working day, not on midnight.
@@ -113,8 +111,7 @@ export function WeekView({
 	}, [page]);
 
 	function openItemMenu(event: MouseEvent<HTMLElement>, item: CalendarItem) {
-		setMenuItem(item);
-		menu.open(event);
+		openChipMenu(event, item, { onOpen, onEdit, onDelete, onComplete, onSnooze, onChanged });
 	}
 
 	function columnWidth(): number {
@@ -161,8 +158,6 @@ export function WeekView({
 		const minute = snap(((event.clientY - rect.top) / HOUR_PX) * 60, 30);
 		onCreateAt(date, Math.min(23 * 60 + 30, Math.max(0, minute)));
 	}
-
-	const menuItems: MenuItem[] = menuItem ? itemMenuItems(menuItem, { onOpen, onEdit, onDelete, onComplete, onSnooze }) : [];
 
 	return (
 		<div ref={root} className="flex h-full min-h-0 flex-col">
@@ -328,17 +323,6 @@ export function WeekView({
 				</div>
 			</div>
 
-			{menu.at && menuItem ? (
-				<ContextMenu
-					at={menu.at}
-					items={menuItems}
-					ariaLabel="Event"
-					onClose={() => {
-						menu.close();
-						setMenuItem(null);
-					}}
-				/>
-			) : null}
 		</div>
 	);
 }

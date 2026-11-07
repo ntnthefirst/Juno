@@ -1831,3 +1831,49 @@ does not make a scheduled step run.
 
 **What would reverse this:** a screen drawn for automations of their own, with
 a trigger editor too large for a tab.
+
+---
+
+## 59. Right-click menus are the platform's, built in the main process from a registry
+
+The design draws ten menus (Reminder, Event, Client, Note, File, Mail, Blank,
+Project, Add, Block) and says they are drawings of the menus Windows shows. So
+they are Electron `Menu.popup` menus, and the drawn `ContextMenu` stays only
+where the menu is not a record's: the title bar's New, a filter, a view switch,
+the edit fallback for text.
+
+- **The renderer sends a kind and an id, never a list.** `menu.show` takes
+  `{ kind, id, context, x, y }`, checked in `shared/menu.ts`. What is offered is
+  decided in `services/menu-registry.ts` from the record, so a script in the page
+  cannot invent an item and an item that does not apply (Reopen on an open
+  reminder, Archive on an archived project) is left out rather than greyed.
+  `context` is a closed vocabulary (`deadline`, `trash`, `detail`, `unread`) for
+  the few places one kind shows a variant, not free text.
+- **What comes back is typed.** `windows/context-menu.ts` turns the choice into
+  an outcome: nothing, done (the main process did it, through a service), failed
+  (with words), or a named action for the screen. Opening a form, going to a
+  record and asking first are the screen's, because only the window can. A
+  delete still asks first and still has its undo, because it runs the screen's
+  own flow. The main process performs only snoozing until tomorrow, opening a
+  file or folder and copying a folder path, none of which sends, signs, files or
+  deletes.
+- **Accelerators are printed only where the key works.** The mail list's U, S,
+  E, M and Delete and a project page's Ctrl O and Delete are, so those show. The
+  frame's Space, Enter, Ctrl E and Ctrl D on reminders and events are not
+  bound, and a hint on a menu that does nothing is worse than none.
+- **Interface only.** There is no MCP tool: an agent reaches the same actions
+  through their own tools and their own gate. The menu opens only while the
+  app is unlocked, checked in the IPC guard and again where it is drawn.
+- **The menu key works** because it fires the same event with no coordinates,
+  and the menu then hangs off the focused element.
+- **The "..." and Add buttons** (`components/ActionMenu.tsx`) take a target and
+  what the screen does with each answer, and open the same native menus. This
+  closes the "for now" of decision 56.
+- **Left out because the app cannot do them yet:** Duplicate and Send an invite
+  on an event, Send a mail and Archive on a client, Rename, Download and Send by
+  mail on a file, Reply and Forward from the mail list, Paste on a blank area,
+  and the Note menu until notes exist (TODO package 4).
+
+**What would reverse this:** native menus that cannot carry what a screen needs
+(an icon on every row, a submenu with a preview), which would move the drawn
+menu back in under the same registry.

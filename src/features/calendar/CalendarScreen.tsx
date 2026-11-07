@@ -578,6 +578,7 @@ export function CalendarScreen() {
 						onDelete={(item) => remove(item)}
 						onComplete={complete}
 						onSnooze={(item) => void snooze(item)}
+						onChanged={refresh}
 						onStep={step}
 					/>
 				) : view === "week" ? (
@@ -594,6 +595,7 @@ export function CalendarScreen() {
 						onDelete={(item) => remove(item)}
 						onComplete={complete}
 						onSnooze={(item) => void snooze(item)}
+						onChanged={refresh}
 						onStep={step}
 					/>
 				) : (
@@ -607,6 +609,7 @@ export function CalendarScreen() {
 						onDelete={(item) => remove(item)}
 						onComplete={complete}
 						onSnooze={(item) => void snooze(item)}
+						onChanged={refresh}
 						onStep={step}
 					/>
 				)}

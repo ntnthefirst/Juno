@@ -240,6 +240,11 @@ of taste.
   opens or swaps the panel's own content (a row, an "Add" or "Edit" button
   marked `data-opens-panel`) or lands inside a menu, a dialog or another
   popover the screen or the panel opened on top of everything.
+- **A record's right-click menu is the platform's**, not drawn (decision 59). A
+  row calls `contextMenuFor(target, handlers)` and a "..." button is an
+  `ActionMenu`; neither holds a list of items, because the main process builds the
+  menu from the kind and the record. The drawn `ContextMenu` is for menus that are
+  not a record's.
 - The settings **window** is still modal, for the reason in decision 26. Reading
   a row changes nothing; changing a setting changes what every screen shows.
 

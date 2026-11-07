@@ -48,6 +48,7 @@ electron/
     windows/
       index.ts            the registry: one main window, one modal settings child
       chrome.ts           CSP, navigation rules, the native title-bar overlay
+      context-menu.ts     the native right-click menu, built from the menu registry
       main-window.ts      the application window
       settings-window.ts  fixed size, modal child of the main window
       setup-window.ts     smaller, the same shape, the first run

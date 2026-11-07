@@ -13,6 +13,7 @@
  * Every method is async because it crosses a process boundary, even where the
  * service behind it is synchronous.
  */
+import type { MenuOutcome, MenuRequest } from "./menu";
 import type {
 	ComposeBlock,
 	ComposeBlockContext,
@@ -258,6 +259,16 @@ export interface JunoApi {
 		openSetup(): Promise<void>;
 		closeSetup(): Promise<void>;
 		isSetupOpen(): Promise<boolean>;
+	};
+
+	/**
+	 * The right-click menus, drawn by the platform. The renderer names a kind and
+	 * a record and where to open; what the menu offers is decided in the main
+	 * process, and what comes back says what the screen has to do. There is no
+	 * way to hand it a list of items.
+	 */
+	menu: {
+		show(request: MenuRequest): Promise<MenuOutcome>;
 	};
 
 	clients: {

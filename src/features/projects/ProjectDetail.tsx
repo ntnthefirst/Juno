@@ -15,13 +15,14 @@ import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
-import { MenuButton, type MenuItem } from "../../components/Menu";
+import { MenuButton } from "../../components/Menu";
+import type { MenuHandlers } from "../../lib/native-menu";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Tabs, type TabItem } from "../../components/Tabs";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
-import { COMBOS, formatCombo, matchesCombo } from "../../lib/shortcuts";
+import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { addDays, todayIso } from "../calendar/dates";
 import { newEventForm, type ScheduleForm } from "../calendar/schedule-form";
 import { scheduleRows, type ScheduleRow } from "../calendar/schedule-rows";
@@ -292,9 +293,7 @@ export function ProjectDetail({
 	const project = current;
 	const firstCommand = commands[0] ?? null;
 	const runOf = (commandId: string) => runs.find((one) => one.commandId === commandId) ?? null;
-	const firstRunning = firstCommand ? runOf(firstCommand.id)?.state === "running" : false;
 	const nextEvent = upcoming.find((row) => row.kind === "event") ?? null;
-	const archived = status?.key === "archived";
 
 	const tabs: TabItem<ProjectTab>[] = [
 		{ id: "notes", label: "Notes" },
@@ -304,92 +303,44 @@ export function ProjectDetail({
 		{ id: "calendar", label: "Calendar", count: upcoming.length > 0 ? upcoming.length : null, countTone: "warn" },
 	];
 
-	const addItems: MenuItem[] = [
-		{ id: "mail", label: "Link a mail", icon: "mail", onSelect: () => setLinkMailOpen(true) },
-		{ id: "time", label: "Add time entry", icon: "recent", onSelect: () => onTimeForm(null) },
-		{
-			id: "event",
-			label: "Add calendar event",
-			icon: "calendar",
-			onSelect: () =>
-				onSchedule(newEventForm({ projectId: current.id, ...(current.clientId ? { clientId: current.clientId } : {}) })),
+	// What the platform menus hand back. The items themselves are chosen in the
+	// main process from the project (decision 59); this only says what each does.
+	const addHandlers: MenuHandlers = {
+		"add-mail": () => setLinkMailOpen(true),
+		"add-time": () => onTimeForm(null),
+		"add-event": () =>
+			onSchedule(newEventForm({ projectId: current.id, ...(current.clientId ? { clientId: current.clientId } : {}) })),
+		"add-file": () => void act(() => window.juno.projects.assets.choose(current.id, "managed"), true),
+		"add-note": () => {
+			onTabChange("notes");
+			// The editor is on the tab that is about to draw, so it is found a moment later.
+			window.setTimeout(() => document.querySelector<HTMLElement>("[aria-label='Project notes']")?.focus(), 60);
 		},
-		{
-			id: "file",
-			label: "Add file",
-			icon: "attachment",
-			onSelect: () => void act(() => window.juno.projects.assets.choose(current.id, "managed"), true),
-		},
-		{
-			id: "note",
-			label: "Add note",
-			icon: "note",
-			onSelect: () => {
-				onTabChange("notes");
-				// The editor is on the tab that is about to draw, so it is found a moment later.
-				window.setTimeout(() => document.querySelector<HTMLElement>("[aria-label='Project notes']")?.focus(), 60);
-			},
-		},
-	];
+	};
 
-	const moreItems: MenuItem[] = [
-		{ id: "open", label: "Open folder", icon: "folder-open", hint: formatCombo(COMBOS.openFolder).join(" "), onSelect: openFolder },
-		{
-			id: "copy",
-			label: "Copy folder path",
-			icon: "copy",
-			onSelect: () => {
-				void window.juno.projects
-					.storage(current.id)
-					.then((info) => navigator.clipboard.writeText(current.localPath ?? info.path))
-					.then(() => setNotice("Folder path copied."))
-					.catch((cause: unknown) => setNotice(messageOf(cause)));
-			},
+	const moreHandlers: MenuHandlers = {
+		"change-folder": () =>
+			void window.juno.projects
+				.chooseLocalFolder()
+				.then((chosen) =>
+					chosen ? act(() => window.juno.projects.update(current.id, { localPath: chosen }), true) : undefined,
+				)
+				.catch((cause: unknown) => setNotice(messageOf(cause))),
+		"run-start": () => {
+			if (firstCommand) void start(firstCommand);
 		},
-		{
-			id: "change",
-			label: "Change folder",
-			icon: "edit",
-			onSelect: () =>
-				void window.juno.projects
-					.chooseLocalFolder()
-					.then((chosen) =>
-						chosen ? act(() => window.juno.projects.update(current.id, { localPath: chosen }), true) : undefined,
-					)
-					.catch((cause: unknown) => setNotice(messageOf(cause))),
+		"stop-start": () => {
+			if (firstCommand) void stop(firstCommand.id);
 		},
-		{
-			id: "run",
-			label: firstRunning ? "Stop start command" : "Run start command",
-			icon: firstRunning ? "stop" : "play",
-			disabled: firstCommand === null,
-			onSelect: () => {
-				if (!firstCommand) return;
-				if (firstRunning) void stop(firstCommand.id);
-				else void start(firstCommand);
-			},
-		},
-		{
-			id: "archive",
-			label: "Archive",
-			icon: "archive",
-			separatorBefore: true,
-			disabled: archived,
-			onSelect: () =>
-				void act(async () => {
-					await window.juno.projects.archive(current.id);
-					setNotice("Project archived.");
-				}, true),
-		},
-		{
-			id: "delete",
-			label: "Delete",
-			icon: "remove",
-			danger: true,
-			hint: formatCombo(COMBOS.deleteRecord).join(" "),
-			onSelect: removeProject,
-		},
-	];
+		archive: () =>
+			void act(async () => {
+				await window.juno.projects.archive(current.id);
+				setNotice("Project archived.");
+			}, true),
+		delete: removeProject,
+		done: (message) => setNotice(message ?? null),
+		failed: (message) => setNotice(message),
+	};
 
 	const subtitle = [client ? client.name : "Your own work", current.dueOn ? `due ${formatDate(current.dueOn)}` : null]
 		.filter(Boolean)
@@ -408,8 +359,8 @@ export function ProjectDetail({
 						<p className="text-sm text-[var(--ink-muted)]">{subtitle}</p>
 					</div>
 					<div className="flex flex-none items-center gap-1">
-						<ActionMenu ariaLabel="Add to this project" label="Add" icon="add" items={addItems} />
-						<ActionMenu ariaLabel="More project actions" items={moreItems} />
+						<ActionMenu target={{ kind: "add", id: current.id }} handlers={addHandlers} ariaLabel="Add to this project" label="Add" icon="add" />
+						<ActionMenu target={{ kind: "project", id: current.id, context: "detail" }} handlers={moreHandlers} ariaLabel="More project actions" />
 					</div>
 				</header>
 

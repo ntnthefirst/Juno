@@ -9,13 +9,14 @@ import { Checkbox } from "../../components/Checkbox";
 import { EmptyState } from "../../components/EmptyState";
 import { IconAction } from "../../components/IconAction";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
-import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { MenuButton } from "../../components/Menu";
 import { SectionSwitch } from "../../components/SectionSwitch";
 import { Select } from "../../components/Select";
 import { SelectAllButton } from "../../components/SelectAllButton";
 import { Toast } from "../../components/Toast";
 import { groupByDay } from "../../lib/day-groups";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { blankMenuFor } from "../../lib/blank-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
@@ -378,7 +379,7 @@ export function DocumentsScreen() {
 						</div>
 					) : null}
 
-					<div className="min-h-0 w-full flex-1 overflow-y-auto">
+					<div className="min-h-0 w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("documents")}>
 						{load.status === "loading" ? (
 							<p className="text-[var(--ink-muted)]">Loading.</p>
 						) : load.status === "error" ? (
@@ -431,6 +432,7 @@ export function DocumentsScreen() {
 								}
 								onSelect={selectDocument}
 								onRemove={(record) => void removeFromList(record)}
+								onFailed={setNotice}
 							/>
 						)}
 					</div>
@@ -474,6 +476,7 @@ type DocumentTableProps = {
 	onToggle: (id: string) => void;
 	onSelect: (id: string, title: string) => void;
 	onRemove: (record: DocumentRecord) => void;
+	onFailed: (message: string) => void;
 };
 
 const HEADS = ["Title", "Linked to", "Status", "Issued"];
@@ -482,13 +485,8 @@ const HEADS = ["Title", "Linked to", "Status", "Issued"];
  * Rows are the structure. No outer border, no filled header, no card, per
  * brand/BRAND.md section 7.
  */
-function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRemove }: DocumentTableProps) {
+function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRemove, onFailed }: DocumentTableProps) {
 	const labels = new Map(rows.statuses.map((item) => [item.id, item.label]));
-	const menu = useContextMenu();
-	// Which row the menu belongs to. The menu is one element for the whole
-	// table rather than one per row: sixty rows would otherwise each carry a
-	// portal that is closed.
-	const [target, setTarget] = useState<DocumentRecord | null>(null);
 	const [expanded, setExpanded] = useState<string[]>([]);
 	const hasSelection = selectedIds.length > 0;
 	const toggleVersions = (id: string) =>
@@ -505,24 +503,11 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 		[rows.records],
 	);
 
-	const items: MenuItem[] = target
-		? [
-				{
-					id: "open",
-					label: "Open",
-					icon: "documents",
-					onSelect: () => onSelect(target.id, target.title),
-				},
-				{
-					id: "delete",
-					label: "Delete",
-					icon: "remove",
-					danger: true,
-					separatorBefore: true,
-					onSelect: () => onRemove(target),
-				},
-			]
-		: [];
+	const menuFor = (row: DocumentRecord) =>
+		contextMenuFor(
+			{ kind: "file", id: row.id },
+			{ open: () => onSelect(row.id, row.title), delete: () => onRemove(row), failed: onFailed },
+		);
 
 	return (
 		<>
@@ -567,10 +552,7 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 						<Fragment key={row.id}>
 						<tr
 							onClick={open}
-							onContextMenu={(event) => {
-								setTarget(row);
-								menu.open(event);
-							}}
+							onContextMenu={menuFor(row)}
 							className={`group transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 								selected || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
 							}`}
@@ -643,9 +625,6 @@ function DocumentTable({ rows, selectedId, selectedIds, onToggle, onSelect, onRe
 				))}
 			</tbody>
 		</table>
-		{menu.at && target ? (
-			<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={target.title} />
-		) : null}
 		</>
 	);
 }

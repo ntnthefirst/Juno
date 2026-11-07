@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { ComposeBlock, ComposeBlockKind } from "@shared/types";
 import { CheckIcon } from "@heroicons/react/24/outline";
-import { ContextMenu, type MenuItem } from "../../../components/Menu";
 import { Tooltip } from "../../../components/Tooltip";
 import { TOOLBAR_BUTTON } from "../../../components/toolbar-styles";
-import { useContextMenu } from "../../../lib/use-context-menu";
+import { contextMenuFor } from "../../../lib/native-menu";
 import { BlockText } from "./BlockText";
 import { BlockIcon } from "./BlockIcons";
 import { KIND_LABEL, RULE_SHORT } from "./block-text";
@@ -38,7 +37,6 @@ export function BlockMenu({ kind, blocks, activeId, onPick, onManage }: BlockMen
 	const root = useRef<HTMLDivElement>(null);
 	const [open, setOpen] = useState(false);
 	const [hovered, setHovered] = useState<string | null>(null);
-	const menu = useContextMenu();
 
 	useEffect(() => {
 		if (!open) return;
@@ -69,15 +67,16 @@ export function BlockMenu({ kind, blocks, activeId, onPick, onManage }: BlockMen
 	}
 
 	const inUse = blocks.find((block) => block.id === activeId) ?? blocks[0] ?? null;
-	const items: MenuItem[] = [
+	// The right-click menu is the platform's, built in the main process
+	// (decision 59). This says what its three items do.
+	const manageMenu = contextMenuFor(
+		{ kind: "block", id: kind },
 		{
-			id: "edit",
-			label: `Edit this ${noun}`,
-			onSelect: () => onManage?.(inUse ? { blockId: inUse.id } : { newKind: kind }),
+			"edit-block": () => onManage?.(inUse ? { blockId: inUse.id } : { newKind: kind }),
+			"new-block": () => onManage?.({ newKind: kind }),
+			"manage-blocks": () => onManage?.(null),
 		},
-		{ id: "new", label: `New ${noun}`, onSelect: () => onManage?.({ newKind: kind }) },
-		{ id: "manage", label: "Manage intros and outros", separatorBefore: true, onSelect: () => onManage?.(null) },
-	];
+	);
 
 	return (
 		<div ref={root} className="relative" data-popover-root>
@@ -88,7 +87,7 @@ export function BlockMenu({ kind, blocks, activeId, onPick, onManage }: BlockMen
 					aria-haspopup="menu"
 					aria-expanded={open}
 					onClick={() => setOpen((current) => !current)}
-					onContextMenu={onManage ? menu.open : undefined}
+					onContextMenu={onManage ? manageMenu : undefined}
 					className={`${BUTTON}${open ? " bg-[var(--accent-soft)]! text-[var(--accent)]!" : ""}`}
 				>
 					<BlockIcon kind={kind} />
@@ -147,7 +146,6 @@ export function BlockMenu({ kind, blocks, activeId, onPick, onManage }: BlockMen
 				</div>
 			) : null}
 
-			{menu.at && onManage ? <ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={`Manage ${noun}`} /> : null}
 		</div>
 	);
 }

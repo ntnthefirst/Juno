@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectTimelineEntry, ProjectTimelineKind } from "@shared/types";
-import { ActionMenu } from "../../components/ActionMenu";
-import type { MenuItem } from "../../components/Menu";
+import { MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
 import { shortDay } from "./time-format";
@@ -103,7 +102,7 @@ export function ProjectTimeline({ projectId, version }: ProjectTimelineProps) {
 		<section className="px-1">
 			<div className="mb-6 flex items-center justify-between gap-4">
 				<h2 className="text-h3">Timeline</h2>
-				<ActionMenu ariaLabel="Filter the timeline" label="Filter" icon="filter" items={items} />
+				<MenuButton ariaLabel="Filter the timeline" label="Filter" icon="filter" items={items} size="base" />
 			</div>
 
 			{load.status === "loading" ? (

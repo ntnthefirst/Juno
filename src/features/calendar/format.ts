@@ -1,5 +1,6 @@
 import type { CalendarItem, CalendarOccurrence, CalendarReminderItem } from "@shared/types";
-import type { MenuItem } from "../../components/Menu";
+import type { MouseEvent as ReactMouseEvent } from "react";
+import { contextMenuFor, type MenuHandlers, type MenuTarget } from "../../lib/native-menu";
 import { addDays, dateOf, daysBetween, localDateOfInstant, localMinuteOfInstant } from "./dates";
 
 /** Something drawn on one day of the grid. A multi-day item is placed once per day. */
@@ -145,41 +146,50 @@ export type ItemActions = {
 	onDelete: (item: CalendarItem) => void;
 	onComplete: (item: CalendarReminderItem) => void;
 	onSnooze: (item: CalendarReminderItem) => void;
+	/** The main process did the work itself, so the grid reloads. */
+	onChanged: () => void;
 };
 
 /**
  * The right-click menu for a chip on the grid, in Month, Week or Agenda.
  *
- * Every kind of item can be opened, edited and removed from here. What
- * "delete" means differs by kind and the label says so: an event is deleted, a
- * reminder is deleted, and a project deadline is cleared, which leaves the
- * project and only takes its date away.
+ * The items are chosen in the main process from the record (decision 59), and
+ * this says what each one does here. Every kind of item can be opened, edited
+ * and removed. What "delete" means differs by kind and the menu labels it: an
+ * event is deleted, a reminder is deleted, and a project deadline is cleared,
+ * which leaves the project and only takes its date away.
  */
-export function itemMenuItems(item: CalendarItem, actions: ItemActions): MenuItem[] {
-	const items: MenuItem[] = [
-		{ id: "open", label: "Open", icon: "external", onSelect: () => actions.onOpen(item) },
-	];
-	if (item.kind === "reminder") {
-		items.push(
-			{ id: "complete", label: "Mark done", icon: "check", onSelect: () => actions.onComplete(item) },
-			{ id: "snooze", label: "Snooze", icon: "calendar", onSelect: () => actions.onSnooze(item) },
-		);
+export function itemMenu(item: CalendarItem, actions: ItemActions): { target: MenuTarget; handlers: MenuHandlers } {
+	const common: MenuHandlers = {
+		open: () => actions.onOpen(item),
+		edit: () => actions.onEdit(item),
+		delete: () => actions.onDelete(item),
+		done: () => actions.onChanged(),
+	};
+	switch (item.kind) {
+		case "event":
+			return { target: { kind: "event", id: item.eventId }, handlers: common };
+		case "deadline":
+			return { target: { kind: "event", id: item.projectId, context: "deadline" }, handlers: common };
+		case "reminder":
+			return {
+				target: { kind: "reminder", id: item.reminderId },
+				handlers: {
+					...common,
+					complete: () => actions.onComplete(item),
+					reopen: () => actions.onChanged(),
+					snooze: () => actions.onSnooze(item),
+					// The client is one of the fields of the edit form.
+					"move-to-client": () => actions.onEdit(item),
+				},
+			};
 	}
-	items.push({
-		id: "edit",
-		label: item.kind === "deadline" ? "Edit project" : "Edit",
-		icon: "edit",
-		onSelect: () => actions.onEdit(item),
-	});
-	items.push({
-		id: "delete",
-		label: item.kind === "deadline" ? "Clear deadline" : "Delete",
-		icon: "remove",
-		danger: true,
-		separatorBefore: true,
-		onSelect: () => actions.onDelete(item),
-	});
-	return items;
+}
+
+/** The `onContextMenu` of a chip. */
+export function openItemMenu(event: ReactMouseEvent, item: CalendarItem, actions: ItemActions): void {
+	const { target, handlers } = itemMenu(item, actions);
+	contextMenuFor(target, handlers)(event);
 }
 
 export const KIND_LABELS: Record<CalendarItem["kind"], string> = {

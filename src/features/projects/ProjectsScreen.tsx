@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { blankMenuFor } from "../../lib/blank-menu";
 import { useScreenAction } from "../../lib/screen-actions";
 import { AddButton } from "../../components/AddButton";
 import { EmptyState } from "../../components/EmptyState";
@@ -157,14 +158,6 @@ export function ProjectsScreen() {
 			refreshList();
 		} catch (cause: unknown) {
 			setLoad({ status: "error", message: messageOf(cause) });
-		}
-	}
-
-	async function openFolder(project: ProjectSummary) {
-		try {
-			await window.juno.projects.openLocalFolder(project.id);
-		} catch (cause: unknown) {
-			setNotice(messageOf(cause));
 		}
 	}
 
@@ -365,7 +358,7 @@ export function ProjectsScreen() {
 				) : null}
 			</div>
 
-			<div className="min-h-0 w-full flex-1 overflow-y-auto">
+			<div className="min-h-0 w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("projects")}>
 				{load.status === "loading" || !view ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
 				) : load.status === "error" ? (
@@ -409,7 +402,7 @@ export function ProjectsScreen() {
 						previews={view.previews}
 						onOpen={open}
 						onRemove={(project) => void remove(project)}
-						onOpenFolder={(project) => void openFolder(project)}
+						onFailed={setNotice}
 					/>
 				) : (
 					<ProjectTable
@@ -417,7 +410,7 @@ export function ProjectsScreen() {
 						dense={view.layout === "list" || !view.previews}
 						onOpen={open}
 						onRemove={(project) => void remove(project)}
-						onOpenFolder={(project) => void openFolder(project)}
+						onFailed={setNotice}
 					/>
 				)}
 			</div>

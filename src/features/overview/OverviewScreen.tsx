@@ -5,6 +5,7 @@ import { Avatar } from "../../components/Avatar";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
+import { blankMenuFor } from "../../lib/blank-menu";
 import { useScreenAction } from "../../lib/screen-actions";
 import { useLoaded } from "../../lib/use-loaded";
 import { BUCKET_LABELS, BUCKET_ORDER, todayIso } from "../reminders/format";
@@ -136,7 +137,7 @@ export function OverviewScreen() {
 	const suggested = suggestions.status === "ready" ? suggestions.value : [];
 
 	return (
-		<div className="h-full overflow-y-auto">
+		<div className="h-full overflow-y-auto" onContextMenu={blankMenuFor("overview")}>
 			<div className="w-full px-8 pb-12 pt-8">
 				<header className="animate-rise flex items-center gap-4">
 					<Avatar name={who} size={48} />

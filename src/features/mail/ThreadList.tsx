@@ -1,13 +1,12 @@
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef } from "react";
 import type { MailOutboxMessage, MailThreadSummary } from "@shared/types";
 import { Avatar } from "../../components/Avatar";
 import { Checkbox } from "../../components/Checkbox";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { groupByDay } from "../../lib/day-groups";
 import { stagger } from "../../lib/motion";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { startThreadDrag } from "./drag";
 import { formatWhen, leadParticipant, participantsLine } from "./format";
 import { OutboxRow } from "./OutboxRow";
@@ -105,8 +104,6 @@ export function ThreadList({
 	onToggleSelect,
 	onAction,
 }: ThreadListProps) {
-	const menu = useContextMenu();
-	const [target, setTarget] = useState<MailThreadSummary | null>(null);
 	// The row buttons, so the arrow keys can move focus between them. A list you
 	// cannot walk with the keyboard is a list you have to aim at.
 	const rows = useRef(new Map<string, HTMLButtonElement>());
@@ -149,65 +146,26 @@ export function ThreadList({
 	const hasSelection = selectedIds.length > 0;
 	const removeAction: ThreadAction = inTrash ? "deleteForever" : "trash";
 
-	function menuItems(thread: MailThreadSummary): MenuItem[] {
-		const unread = thread.unreadCount > 0;
-		return [
-			{ id: "open", label: "Open", icon: "mail", onSelect: () => onAction("open", [thread.id]) },
-			unread
-				? {
-						id: "read",
-						label: "Mark read",
-						icon: "read",
-						separatorBefore: true,
-						onSelect: () => onAction("markRead", [thread.id]),
-					}
-				: {
-						id: "unread",
-						label: "Mark unread",
-						icon: "unread",
-						separatorBefore: true,
-						onSelect: () => onAction("markUnread", [thread.id]),
-					},
+	// The items are chosen in the main process from the conversation (decision
+	// 59). This says which row action each one is.
+	function menuFor(thread: MailThreadSummary) {
+		const ids = [thread.id];
+		return contextMenuFor(
+			{ kind: "mail", id: thread.id, ...(inTrash ? { context: "trash" as const } : {}) },
 			{
-				id: "flag",
-				label: thread.isFlagged ? "Clear flag" : "Flag",
-				icon: "flag",
-				onSelect: () => onAction(thread.isFlagged ? "unflag" : "flag", [thread.id]),
+				open: () => onAction("open", ids),
+				"mark-read": () => onAction("markRead", ids),
+				"mark-unread": () => onAction("markUnread", ids),
+				flag: () => onAction("flag", ids),
+				unflag: () => onAction("unflag", ids),
+				archive: () => onAction("archive", ids),
+				move: () => onAction("move", ids),
+				junk: () => onAction("junk", ids),
+				link: () => onAction("link", ids),
+				delete: () => onAction("trash", ids),
+				"delete-forever": () => onAction("deleteForever", ids),
 			},
-			{
-				id: "archive",
-				label: "Archive",
-				icon: "archive",
-				separatorBefore: true,
-				onSelect: () => onAction("archive", [thread.id]),
-			},
-			{ id: "move", label: "Move to folder", icon: "projects", onSelect: () => onAction("move", [thread.id]) },
-			{ id: "junk", label: "Junk", icon: "junk", onSelect: () => onAction("junk", [thread.id]) },
-			{
-				id: "link",
-				label: thread.clientId ? "Change client link" : "Link to client",
-				icon: "link",
-				separatorBefore: true,
-				onSelect: () => onAction("link", [thread.id]),
-			},
-			inTrash
-				? {
-						id: "delete",
-						label: "Delete forever",
-						icon: "remove",
-						danger: true,
-						separatorBefore: true,
-						onSelect: () => onAction("deleteForever", [thread.id]),
-					}
-				: {
-						id: "trash",
-						label: "Move to trash",
-						icon: "remove",
-						danger: true,
-						separatorBefore: true,
-						onSelect: () => onAction("trash", [thread.id]),
-					},
-		];
+		);
 	}
 
 	/**
@@ -309,10 +267,7 @@ export function ThreadList({
 									onDragStart={(event) => startThreadDrag(event, dragIds, thread.subject || "1 thread")}
 									className="animate-rise group relative"
 									style={stagger(entries.indexOf(entry))}
-									onContextMenu={(event) => {
-										setTarget(thread);
-										menu.open(event);
-									}}
+									onContextMenu={menuFor(thread)}
 								>
 									<div
 										className={[
@@ -471,14 +426,6 @@ export function ThreadList({
 				))}
 			</ul>
 
-			{menu.at && target ? (
-				<ContextMenu
-					at={menu.at}
-					items={menuItems(target)}
-					onClose={menu.close}
-					ariaLabel={`Actions for ${participantsLine(target.participants, "Me")}`}
-				/>
-			) : null}
 		</div>
 	);
 }

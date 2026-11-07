@@ -18,8 +18,7 @@ import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { useScreenAction } from "../../lib/screen-actions";
-import { useContextMenu } from "../../lib/use-context-menu";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { blankMenuFor } from "../../lib/blank-menu";
 import { BlocksPage } from "./blocks/BlocksPage";
 import type { ManageTarget } from "./blocks/BlockMenu";
 import { ComposePage, type ComposeSeed } from "./ComposePage";
@@ -139,7 +138,6 @@ export function MailScreen() {
 	const [folderEmpty, setFolderEmpty] = useState<MailFolder | null>(null);
 	const [folderBusy, setFolderBusy] = useState(false);
 	// A right click on the list where there is no row: what the list as a whole can do.
-	const listMenu = useContextMenu();
 	// The styled mail column on the right. Remembered for the session, so coming
 	// back to Mail finds it the way it was left.
 	const [stylesOpen, setStylesOpen] = useState(() => {
@@ -878,47 +876,19 @@ export function MailScreen() {
 		: null;
 	const moveAccountId = moveTarget ? (threadById(moveTarget[0] ?? "")?.accountId ?? null) : null;
 
-	function listItems(): MenuItem[] {
-		const visible = (threads ?? []).map((thread) => thread.id);
-		return [
-			{
-				id: "new",
-				label: "New message",
-				icon: "add",
-				onSelect: () => setCompose({ accountId: selection?.accountId ?? accounts?.[0]?.id }),
+	const listMenu = blankMenuFor(
+		"mail",
+		{
+			"new-message": () => setCompose({ accountId: selection?.accountId ?? accounts?.[0]?.id }),
+			sync: () => void syncNow(selection?.accountId ?? undefined),
+			"select-all": selectEveryThread,
+			"mark-all-read": () => {
+				if (selectedFolder) handleFolderAction("markAllRead", selectedFolder);
 			},
-			{
-				id: "sync",
-				label: "Sync now",
-				icon: "sync",
-				onSelect: () => void syncNow(selection?.accountId ?? undefined),
-			},
-			{
-				id: "select-all",
-				label: "Select all",
-				icon: "check",
-				separatorBefore: true,
-				disabled: visible.length === 0,
-				onSelect: selectEveryThread,
-			},
-			{
-				id: "read-all",
-				label: "Mark all read",
-				icon: "read",
-				disabled: !selectedFolder || selectedFolder.unreadCount === 0,
-				onSelect: () => {
-					if (selectedFolder) handleFolderAction("markAllRead", selectedFolder);
-				},
-			},
-			{
-				id: "styled",
-				label: stylesOpen ? "Hide styled mail" : "Show styled mail",
-				icon: "templates",
-				separatorBefore: true,
-				onSelect: () => setStylesOpen((open) => !open),
-			},
-		];
-	}
+			"toggle-styled-mail": () => setStylesOpen((open) => !open),
+		},
+		selectedFolder && selectedFolder.unreadCount > 0 ? "unread" : undefined,
+	);
 	const pending = Object.values(sync).reduce((total, status) => total + status.pending, 0);
 
 	return (
@@ -1046,7 +1016,7 @@ export function MailScreen() {
 							</div>
 						) : null}
 
-						<div className="min-h-0 flex-1 overflow-y-auto" onContextMenu={listMenu.open}>
+						<div className="min-h-0 flex-1 overflow-y-auto" onContextMenu={listMenu}>
 							<ThreadList
 								threads={threads}
 								{...(showingDrafts
@@ -1101,15 +1071,6 @@ export function MailScreen() {
 					</div>
 				)}
 			</div>
-
-			{listMenu.at ? (
-				<ContextMenu
-					at={listMenu.at}
-					items={listItems()}
-					onClose={listMenu.close}
-					ariaLabel="Actions for this list"
-				/>
-			) : null}
 
 			{stylesOpen ? (
 				<StyledMailPane

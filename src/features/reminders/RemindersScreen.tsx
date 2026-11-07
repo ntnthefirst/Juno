@@ -5,6 +5,7 @@ import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { blankMenuFor } from "../../lib/blank-menu";
 import { useScreenAction } from "../../lib/screen-actions";
 import { BUCKET_LABELS, BUCKET_ORDER, plural, todayIso } from "./format";
 import { ReminderForm } from "./ReminderForm";
@@ -94,7 +95,7 @@ export function RemindersScreen() {
 	}
 
 	return (
-		<div className="h-full overflow-y-auto p-8">
+		<div className="h-full overflow-y-auto p-8" onContextMenu={blankMenuFor("reminders")}>
 			<div className="w-full">
 				<div className="mb-6 flex items-center justify-between gap-4">
 					<div className="flex items-baseline gap-3">

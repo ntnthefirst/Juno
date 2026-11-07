@@ -1,9 +1,7 @@
-import { useState } from "react";
 import type { ProjectSummary } from "@shared/types";
 import { Icon } from "../../components/Icon";
-import { ContextMenu, type MenuItem } from "../../components/Menu";
 import { StatusBadge } from "../../components/StatusBadge";
-import { useContextMenu } from "../../lib/use-context-menu";
+import { contextMenuFor } from "../../lib/native-menu";
 import { formatCents, formatDate, LINK_ICONS, LINK_LABELS } from "./format";
 import { ProjectCover } from "./ProjectCover";
 
@@ -16,7 +14,8 @@ type ProjectTableProps = {
 	dense: boolean;
 	onOpen: (project: ProjectSummary) => void;
 	onRemove: (project: ProjectSummary) => void;
-	onOpenFolder: (project: ProjectSummary) => void;
+	/** The main process could not do what the menu asked. */
+	onFailed: (message: string) => void;
 };
 
 const HEADS = ["Project", "Client", "Status", "Due", "Value"];
@@ -26,33 +25,7 @@ const HEADS = ["Project", "Client", "Status", "Due", "Value"];
  * brand/BRAND.md section 7. The two layouts share one table because the only
  * thing that differs is whether a row carries a thumbnail and a second line.
  */
-export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: ProjectTableProps) {
-	const menu = useContextMenu();
-	// One menu for the whole table rather than one per row: two hundred rows
-	// would otherwise each carry a portal that is closed.
-	const [target, setTarget] = useState<ProjectSummary | null>(null);
-
-	const items: MenuItem[] = target
-		? [
-				{ id: "open", label: "Open", icon: "projects", onSelect: () => onOpen(target) },
-				{
-					id: "folder",
-					label: "Open the folder",
-					icon: "folder-open",
-					disabled: !target.localPath,
-					onSelect: () => onOpenFolder(target),
-				},
-				{
-					id: "delete",
-					label: "Delete",
-					icon: "remove",
-					danger: true,
-					separatorBefore: true,
-					onSelect: () => onRemove(target),
-				},
-			]
-		: [];
-
+export function ProjectTable({ rows, dense, onOpen, onRemove, onFailed }: ProjectTableProps) {
 	return (
 		<>
 			<table className="w-full table-fixed border-collapse">
@@ -85,10 +58,7 @@ export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: Pr
 						<tr
 							key={row.id}
 							onClick={() => onOpen(row)}
-							onContextMenu={(event) => {
-								setTarget(row);
-								menu.open(event);
-							}}
+							onContextMenu={contextMenuFor({ kind: "project", id: row.id }, { open: () => onOpen(row), delete: () => onRemove(row), failed: onFailed })}
 							className="transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
 						>
 							<td
@@ -148,9 +118,6 @@ export function ProjectTable({ rows, dense, onOpen, onRemove, onOpenFolder }: Pr
 				</tbody>
 			</table>
 
-			{menu.at && target ? (
-				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={target.name} />
-			) : null}
 		</>
 	);
 }

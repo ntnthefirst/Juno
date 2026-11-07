@@ -153,7 +153,8 @@ If step 3 cannot be one line, stop and fix the service first.
   path or statement. See [security.md](security.md).
 - Don't expose a tool that returns a credential, in any form, masked or not.
 - Don't add a tool that drives the UI ("open the clients screen"). The agent
-  operates the business, not the window.
+  operates the business, not the window. The right-click menus (`menu.show`,
+  decision 59) are interface only for the same reason.
 - Don't let a tool be the only caller of a service function. If the UI cannot do
   it, question whether it should exist.
 - Don't version tools by suffix (`clients.list_v2`). Change the schema and the

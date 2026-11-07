@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayHeading, logOutcome, logWho, parseMailPreview, timeAgo, timeLeft } from "./format";
+import { logOutcome, logWho, parseMailPreview, timeAgo, timeLeft } from "./format";
 import { toolVisual } from "./tool-visual";
 
 const NOW = new Date("2026-10-02T12:00:00").getTime();
@@ -16,14 +16,6 @@ describe("timeAgo and timeLeft", () => {
 		expect(timeLeft(new Date(NOW + 23 * 3_600_000 + 10_000).toISOString(), NOW)).toBe("23 h left");
 		expect(timeLeft(new Date(NOW + 40 * 60_000).toISOString(), NOW)).toBe("40 min left");
 		expect(timeLeft(new Date(NOW - 1).toISOString(), NOW)).toBe("expired");
-	});
-});
-
-describe("dayHeading", () => {
-	it("names today and yesterday, and dates the rest", () => {
-		expect(dayHeading("2026-10-02T09:00:00", NOW)).toBe("Today");
-		expect(dayHeading("2026-10-01T23:00:00", NOW)).toBe("Yesterday");
-		expect(dayHeading("2026-09-20T09:00:00", NOW)).toBe("20/09/2026");
 	});
 });
 
@@ -75,6 +67,7 @@ describe("the log's outcome and who", () => {
 			"Sent by you, request closed",
 		);
 		expect(logOutcome(row({ toolName: "mail.draft" })).label).toBe("Draft created");
+		expect(logOutcome(row({ result: "read", toolName: "clients.list" })).label).toBe("Read");
 		expect(logOutcome(row({ actionId: "a" })).label).toBe("Approved");
 		expect(logOutcome(row({})).label).toBe("Allowed");
 		expect(logOutcome(row({ result: "rejected", actionId: "a" })).label).toBe("Rejected");

@@ -18,13 +18,16 @@
  * declares how to build that text (`prepare`) and how to check it is still what
  * will run (`verify`), so nothing mail-shaped is special-cased in this file.
  *
- * A write that runs writes an audit row. Reads do not: a log of every list
- * call buries the one line that mattered.
+ * A call that runs writes an audit row, a read as well as a write, so the log
+ * can say what an agent looked at (the design draws it). A read's row carries
+ * no arguments and no result, only the tool and who asked, and the log purges
+ * reads sooner than writes (services/agent-audit.ts).
  */
 import type { AgentAction, AgentActionSource, ToolSummary } from "../../shared/types";
 import * as actions from "../services/agent-actions";
 import * as audit from "../services/agent-audit";
 import * as permissions from "../services/agent-permissions";
+import { summaryFor } from "../services/agent-summary";
 import { isLocked } from "../services/lock";
 import { allTools, toolByName, toolSummaries } from "./registry";
 import type { ToolDescriptor } from "./types";
@@ -97,25 +100,6 @@ function describe(tool: ToolDescriptor): string {
 		: `${base} The owner can set this kind of call to run without asking, and then it returns its result instead.`;
 }
 
-const MAX_SUMMARY_VALUE = 60;
-
-/** A compact, readable argument line. The whole object is shown in the app. */
-function summarise(tool: ToolDescriptor, args: Record<string, unknown>): string {
-	const parts: string[] = [];
-	for (const [key, value] of Object.entries(args)) {
-		if (value === undefined || value === null || value === "") continue;
-		let rendered: string;
-		if (typeof value === "string") rendered = value;
-		else if (typeof value === "number" || typeof value === "boolean") rendered = String(value);
-		else if (Array.isArray(value)) rendered = `${value.length} item${value.length === 1 ? "" : "s"}`;
-		else rendered = "...";
-		if (rendered.length > MAX_SUMMARY_VALUE) rendered = `${rendered.slice(0, MAX_SUMMARY_VALUE - 3)}...`;
-		parts.push(`${key}: ${rendered}`);
-		if (parts.length === 4) break;
-	}
-	return parts.length > 0 ? `${tool.title} (${parts.join(", ")})` : tool.title;
-}
-
 export interface CallOptions {
 	source?: AgentActionSource;
 	/** The automation run a step belongs to, so a stopped run can resume. */
@@ -163,7 +147,7 @@ export async function callTool(
 		const action = await actions.request({
 			toolName: tool.name,
 			args,
-			summary: prepared?.summary ?? summarise(tool, args),
+			summary: prepared?.summary ?? summaryFor(tool.name, tool.title, args),
 			preview: prepared?.preview ?? null,
 			seal: prepared?.seal ?? null,
 			source,
@@ -174,12 +158,14 @@ export async function callTool(
 
 	try {
 		const result = await tool.handler(args);
-		if (!tool.readOnly) {
+		if (tool.readOnly) {
+			audit.recordRead({ actor: source === "automation" ? "automation" : "agent", toolName: tool.name, title: tool.title });
+		} else {
 			audit.record({
 				actor: source === "automation" ? "automation" : "agent",
 				toolName: tool.name,
 				args,
-				summary: summarise(tool, args),
+				summary: summaryFor(tool.name, tool.title, args),
 				result: "ok",
 				...entityOf(result),
 			});
@@ -192,7 +178,7 @@ export async function callTool(
 				actor: source === "automation" ? "automation" : "agent",
 				toolName: tool.name,
 				args,
-				summary: summarise(tool, args),
+				summary: summaryFor(tool.name, tool.title, args),
 				result: "failed",
 				error: message,
 			});

@@ -12,7 +12,7 @@
  * copy of the business in a table nobody thinks about.
  */
 import { createHash } from "node:crypto";
-import { and, count, desc, eq, gte, inArray, isNull, lt, notInArray, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lt, lte, notInArray, or, type SQL } from "drizzle-orm";
 import type {
 	AgentActionState,
 	AuditActor,
@@ -75,6 +75,49 @@ export interface RecordInput {
 	entityId?: string | null;
 	actionId?: string | null;
 	error?: string | null;
+}
+
+/** A read of the same tool by the same caller inside this window is one row, not a stream. */
+const READ_DEDUPE_MS = 30_000;
+
+/** Reads that only let a caller follow its own requests. They are polled, and say nothing about the business. */
+const UNLOGGED_READS = new Set(["agent.get_action", "agent.list_actions"]);
+
+export interface ReadInput {
+	actor: AuditActor;
+	toolName: string;
+	/** The tool's own title. No argument is copied, so no search text, id or body can reach the log. */
+	title: string;
+}
+
+/**
+ * Logs that a caller looked, and nothing about what it saw. The row has no
+ * argument digest worth reading (it digests an empty object), no entity and no
+ * result, so a mail body or a search term cannot end up here. Repeats inside
+ * thirty seconds collapse into the first, and reads are purged sooner than
+ * writes (purgeOldEvents). Never throws, like record.
+ */
+export function recordRead(input: ReadInput, db: Db = getDb(), now: Date = new Date()): AuditEvent | null {
+	if (UNLOGGED_READS.has(input.toolName)) return null;
+	try {
+		const since = new Date(now.getTime() - READ_DEDUPE_MS).toISOString();
+		const recent = db
+			.select({ id: auditEvents.id })
+			.from(auditEvents)
+			.where(
+				and(
+					eq(auditEvents.toolName, input.toolName),
+					eq(auditEvents.actor, input.actor),
+					eq(auditEvents.result, "read"),
+					gte(auditEvents.createdAt, since),
+				),
+			)
+			.get();
+		if (recent) return null;
+	} catch {
+		return null;
+	}
+	return record({ actor: input.actor, toolName: input.toolName, args: {}, summary: input.title, result: "read" }, db);
 }
 
 /**
@@ -153,6 +196,10 @@ const OPEN_ACTION_STATES: AgentActionState[] = ["pending", "approved"];
 /** How long a row lives before it is eligible for the purge below. */
 const RETENTION_MONTHS = 6;
 
+/** Reads are many and say little, so they live a month and never more than this many. */
+const READ_RETENTION_DAYS = 30;
+const READ_KEEP = 2000;
+
 /**
  * Deletes rows older than six months, and returns how many.
  *
@@ -172,7 +219,27 @@ export function purgeOldEvents(db: Db = getDb(), now: Date = new Date()): number
 	cutoff.setUTCMonth(cutoff.getUTCMonth() - RETENTION_MONTHS);
 	const cutoffIso = cutoff.toISOString();
 
+	const readCutoff = new Date(now.getTime() - READ_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
 	return db.transaction((tx) => {
+		// Reads first: older than a month, or beyond the newest READ_KEEP.
+		const oldReads = tx.select({ count: count() }).from(auditEvents).where(and(eq(auditEvents.result, "read"), lt(auditEvents.createdAt, readCutoff))).get()?.count ?? 0;
+		if (oldReads > 0) tx.delete(auditEvents).where(and(eq(auditEvents.result, "read"), lt(auditEvents.createdAt, readCutoff))).run();
+		const keepFrom = tx
+			.select({ createdAt: auditEvents.createdAt })
+			.from(auditEvents)
+			.where(eq(auditEvents.result, "read"))
+			.orderBy(desc(auditEvents.createdAt), desc(auditEvents.id))
+			.limit(1)
+			.offset(READ_KEEP)
+			.get();
+		let extraReads = 0;
+		if (keepFrom) {
+			const over = and(eq(auditEvents.result, "read"), lte(auditEvents.createdAt, keepFrom.createdAt));
+			extraReads = tx.select({ count: count() }).from(auditEvents).where(over).get()?.count ?? 0;
+			tx.delete(auditEvents).where(over).run();
+		}
+
 		const openActionIds = tx
 			.select({ id: agentActions.id })
 			.from(agentActions)
@@ -192,9 +259,7 @@ export function purgeOldEvents(db: Db = getDb(), now: Date = new Date()): number
 		// accepts as bound parameters in one statement.
 		const where = and(...conditions);
 		const due = tx.select({ count: count() }).from(auditEvents).where(where).get()?.count ?? 0;
-		if (due === 0) return 0;
-
-		tx.delete(auditEvents).where(where).run();
-		return due;
+		if (due > 0) tx.delete(auditEvents).where(where).run();
+		return due + oldReads + extraReads;
 	});
 }

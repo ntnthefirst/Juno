@@ -3177,7 +3177,8 @@ export interface AgentActionListQuery {
 }
 
 export type AuditActor = "user" | "agent" | "automation";
-export type AuditResult = "ok" | "failed" | "pending" | "rejected" | "expired" | "closed";
+/** "read" is a call that looked and changed nothing; every other result is a write or a decision. */
+export type AuditResult = "ok" | "read" | "failed" | "pending" | "rejected" | "expired" | "closed";
 
 export interface AuditEvent extends Standard {
 	actor: AuditActor;

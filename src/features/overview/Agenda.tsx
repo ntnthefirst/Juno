@@ -1,5 +1,5 @@
-import { useCallback, type ReactNode } from "react";
-import type { AgentAction, CalendarItem, Reminder } from "@shared/types";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import type { AgentAction, AgentActionView, CalendarItem, Reminder } from "@shared/types";
 import { Icon } from "../../components/Icon";
 import { requestOpen } from "../../lib/open-entity";
 import { useLoaded } from "../../lib/use-loaded";
@@ -23,6 +23,28 @@ type AgendaProps = {
 	onDeleted: (reminder: Reminder) => void;
 	onError: (message: string) => void;
 };
+
+/** What each waiting request is called, from the same words the Agent screen uses. */
+function useRequestTitles(requests: AgentAction[]): Map<string, string> {
+	const [titles, setTitles] = useState<Map<string, string>>(new Map());
+	const key = requests.map((action) => action.id).join(",");
+	useEffect(() => {
+		if (key === "") return;
+		let cancelled = false;
+		window.juno.agent.actions
+			.describe(key.split(","))
+			.then((views: AgentActionView[]) => {
+				if (!cancelled) setTitles(new Map(views.map((view) => [view.actionId, view.title])));
+			})
+			.catch(() => {
+				// The stored sentence still reads as a request.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [key]);
+	return titles;
+}
 
 type Entry = {
 	key: string;
@@ -101,6 +123,7 @@ export function Agenda({
 	onError,
 }: AgendaProps) {
 	const now = useNow();
+	const titles = useRequestTitles(requests);
 	const load = useCallback(
 		() =>
 			today
@@ -131,7 +154,7 @@ export function Agenda({
 							</span>
 						</span>
 						<span className="min-w-0 flex-1">
-							<span className="block truncate text-base">{action.summary}</span>
+							<span className="block truncate text-base">{titles.get(action.id) ?? action.summary}</span>
 							<span className="block truncate text-sm text-ink-muted">
 								{style.label} · asked {now === null ? "" : timeAgo(action.createdAt, now)}
 							</span>

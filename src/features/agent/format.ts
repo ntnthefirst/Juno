@@ -45,6 +45,7 @@ export const RUN_TONES: Record<AutomationRunStatus, string> = {
 
 export const RESULT_TONES: Record<AuditResult, string> = {
 	ok: "text-[var(--ok)]",
+	read: "text-[var(--ink-muted)]",
 	failed: "text-[var(--risk)]",
 	pending: "text-[var(--warn)]",
 	rejected: "text-[var(--ink-muted)]",
@@ -104,18 +105,6 @@ export function timeLeft(iso: string, nowMs: number): string {
 	return `${Math.floor(gap / HOUR)} h left`;
 }
 
-/** The heading a day's answered requests sit under. */
-export function dayHeading(iso: string, nowMs: number): string {
-	const at = new Date(iso);
-	if (Number.isNaN(at.getTime())) return iso;
-	const startOf = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
-	const days = Math.round((startOf(new Date(nowMs)) - startOf(at)) / DAY);
-	if (days <= 0) return "Today";
-	if (days === 1) return "Yesterday";
-	const pad = (value: number) => String(value).padStart(2, "0");
-	return `${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()}`;
-}
-
 export type MailPreview = {
 	/** From, To, Cc, Bcc, Subject and Attached, in the order they were written. */
 	headers: { label: string; value: string }[];
@@ -158,6 +147,8 @@ type LogRow = Pick<AuditEvent, "actor" | "toolName" | "result" | "actionId">;
 /** What a log row says happened, in the design's words. */
 export function logOutcome(row: LogRow): { label: string; tone: string } {
 	switch (row.result) {
+		case "read":
+			return { label: "Read", tone: "bg-[var(--sunken)] text-[var(--ink-muted)]" };
 		case "closed":
 			return { label: "Sent by you, request closed", tone: "bg-[var(--sunken)] text-[var(--ink-muted)]" };
 		case "rejected":

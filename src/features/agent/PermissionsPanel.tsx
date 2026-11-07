@@ -92,21 +92,14 @@ export function PermissionsPanel({ onNotice }: PermissionsPanelProps) {
 				</ul>
 			</Section>
 
-			<Section title="Suggestions" anchor="mcp-suggestions" description="What Juno offers under a message in your mail.">
+			<Section title="Suggestions" anchor="mcp-suggestions">
+				{/* The design has one switch. It sets both sources, so a person who had one off sees it off here and turning it on brings both back. */}
 				<Toggle
-					label="Dates and times"
-					description="A day and a time in a message, offered as a calendar event."
-					checked={sources.calendar}
-					onChange={(next) => void switchSource({ calendar: next })}
+					label="From mail"
+					description="Dates, deadlines and which project a message belongs to."
+					checked={sources.calendar && sources.projects}
+					onChange={(next) => void switchSource({ calendar: next, projects: next })}
 				/>
-				<div className="mt-2">
-					<Toggle
-						label="Projects"
-						description="A project's name in a message, offered as a link to that project."
-						checked={sources.projects}
-						onChange={(next) => void switchSource({ projects: next })}
-					/>
-				</div>
 			</Section>
 		</>
 	);

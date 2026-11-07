@@ -79,10 +79,13 @@ describe("the tool surface", () => {
 });
 
 describe("calling a tool", () => {
-	it("runs a read-only tool and writes nothing to the log", async () => {
-		const result = await callTool("clients.list", {});
+	it("runs a read-only tool and logs that it looked, with no argument and no result", async () => {
+		const result = await callTool("clients.list", { query: "private search" });
 		expect(result).toEqual([]);
-		expect(await audit.list({})).toHaveLength(0);
+		const rows = await audit.list({});
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ result: "read", toolName: "clients.list", summary: "List clients", entityId: null });
+		expect(JSON.stringify(rows[0])).not.toContain("private search");
 	});
 
 	it("parks a tool that needs approval, and does not create anything", async () => {
@@ -93,7 +96,7 @@ describe("calling a tool", () => {
 		};
 
 		expect(result.status).toBe("pending");
-		expect(result.summary).toBe("Create a client (name: obet)");
+		expect(result.summary).toBe('Create the client "obet"');
 		expect(await callTool("clients.list", {})).toEqual([]);
 
 		const pending = await actions.list({ states: ["pending"] });
@@ -268,7 +271,7 @@ describe("permission levels", () => {
 describe("intros and outros", () => {
 	it("reads without asking, and parks every write until a person approves", async () => {
 		expect(await callTool("mail.blocks.list", {})).toEqual([]);
-		expect(await audit.list({})).toHaveLength(0);
+		expect((await audit.list({})).filter((row) => row.result !== "read")).toHaveLength(0);
 
 		const parked = (await callTool("mail.blocks.create", {
 			kind: "intro",

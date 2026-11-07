@@ -64,15 +64,13 @@ export function AgentScreen() {
 	return (
 		<div className="h-full overflow-y-auto p-8">
 			<div className="w-full">
-				<div className="flex items-center gap-4">
-					<span className="flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--accent-soft)] text-[var(--accent)]">
-						<Icon name="agent" size={24} />
+				<div className="flex items-center gap-6">
+					<span className="flex size-[72px] shrink-0 items-center justify-center rounded-[var(--radius-xl)] bg-[var(--accent-soft)] text-[var(--accent)]">
+						<Icon name="agent" size={32} />
 					</span>
 					<div>
-						<h1 className="text-h2">
-							Agent
-						</h1>
-						<p className="mt-1 max-w-[68ch] text-[var(--ink-muted)]">
+						<h1 className="text-h1">Agent</h1>
+						<p className="mt-1.5 max-w-[880px] text-lg text-[var(--ink-muted)]">
 							Juno exposes everything it can do to an agent on this machine. Reading happens freely; anything
 							that changes a record or sends a mail waits here for you.
 						</p>
@@ -164,7 +162,7 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 			</p>
 			{rows.length === 0 ? (
 				<p className="mt-6 max-w-[68ch] text-[var(--ink-muted)]">
-					Nothing yet. Every call that changes a record is logged here, with who made it and how it ended.
+					Nothing yet. Every call an agent makes is logged here, with who made it and how it ended. A read says only that it happened, never what it saw.
 				</p>
 			) : (
 				<table className="mt-6 w-full border-collapse text-left">
@@ -184,7 +182,7 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 								<tr key={row.id} className="h-[52px] border-b border-[var(--line)] align-middle hover:bg-[var(--hover)]">
 									<td className="tabular py-2 pr-4 text-dense text-[var(--ink-muted)]">{formatLogWhen(row.createdAt)}</td>
 									<td className="py-2 pr-4">
-										<span className="font-mono text-sm">{row.toolName}</span>
+										<span className={`font-mono text-sm ${row.result === "read" ? "text-[var(--ink-muted)]" : ""}`}>{row.toolName}</span>
 										{view?.entity ? (
 											<div className="mt-1">
 												<EntityChip entity={view.entity} compact onNotice={onNotice} />

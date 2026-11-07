@@ -23,11 +23,11 @@ export function EntityChip({ entity, compact = false, onNotice }: EntityChipProp
 	const body = (
 		<>
 			<span
-				className={`flex size-6 shrink-0 items-center justify-center rounded-[var(--radius-sm)] ${
+				className={`flex shrink-0 items-center justify-center rounded-[var(--radius-md)] ${compact ? "size-6" : "size-7"} ${
 					entity.gone ? "bg-[var(--sunken)] text-[var(--ink-faint)]" : "bg-[var(--accent-soft)] text-[var(--accent)]"
 				}`}
 			>
-				<Icon name={KIND_ICONS[entity.kind]} size={14} />
+				<Icon name={KIND_ICONS[entity.kind]} size={compact ? 14 : 16} />
 			</span>
 			<span className="flex min-w-0 flex-col text-left leading-tight">
 				{compact ? null : (
@@ -36,7 +36,7 @@ export function EntityChip({ entity, compact = false, onNotice }: EntityChipProp
 					</span>
 				)}
 				<span
-					className={`truncate text-dense ${entity.gone ? "text-[var(--ink-muted)] line-through" : "font-[var(--weight-medium)]"}`}
+					className={`truncate ${compact ? "text-dense" : "text-base"} ${entity.gone ? "text-[var(--ink-muted)] line-through" : "font-[var(--weight-medium)]"}`}
 				>
 					{label}
 				</span>
@@ -49,7 +49,9 @@ export function EntityChip({ entity, compact = false, onNotice }: EntityChipProp
 	);
 
 	const shape =
-		"inline-flex max-w-[280px] min-w-0 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--paper)] py-1 pl-1 pr-2";
+		compact
+			? "inline-flex max-w-[280px] min-w-0 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--paper)] py-1 pl-1 pr-2"
+			: "inline-flex max-w-[320px] min-w-0 items-center gap-3 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--paper)] py-2 pl-2 pr-3";
 
 	if (!openable) {
 		return (

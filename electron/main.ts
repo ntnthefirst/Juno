@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, Menu, nativeTheme, shell } from "electron";
+import { app, globalShortcut, Menu, nativeTheme, shell } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -55,7 +55,10 @@ import { configureMailThreads } from "./main/services/mail-threads";
 import { ensureSeeded } from "./main/services/seed";
 import * as settings from "./main/services/settings";
 import { configureBackground, launchedHidden, runsInBackground, syncBackground } from "./main/background";
-import { focusMainWindow, getMainWindow, openMainWindow } from "./main/windows";
+import { installNotifications } from "./main/notifications";
+import * as desktop from "./main/services/desktop";
+import { badgeCount, desktopPorts, isWindows, releaseDesktop, startBadge, syncBadge, trayExists } from "./main/tray";
+import { focusMainWindow, getMainWindow, onMainWindowCreated, openMainWindow } from "./main/windows";
 import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
 import { installOnQuit, startUpdates } from "./main/services/updates";
@@ -216,8 +219,20 @@ if (!app.requestSingleInstanceLock()) {
 			ephemeralPort: Boolean(process.env.JUNO_SMOKE),
 			onBackgroundChange: () => syncBackground(),
 		});
-		configureBackground(() => openMainWindow(isDev));
+		configureBackground(isDev);
+		// The tray, the taskbar badge and the global shortcut are Windows only, and
+		// the ports say so rather than each caller checking.
+		desktop.configure(
+			desktopPorts(isDev, async () => {
+				await syncBackground();
+				await syncBadge();
+			}),
+		);
 		await syncBackground();
+		installNotifications(isDev);
+		startBadge();
+		onMainWindowCreated((created) => created.once("ready-to-show", () => void syncBadge()));
+		await desktop.applyShortcut();
 
 		// In development only the mail host is served; the window comes from Vite.
 		registerAppScheme(isDev ? null : join(app.getAppPath(), "dist"));
@@ -4859,6 +4874,48 @@ if (!app.requestSingleInstanceLock()) {
 								console.log("SMOKE_DEMO shortcuts=ok");
 							}
 						}
+						if (isWindows) {
+							// What can be seen without a person at a real toast: the tray icon, the
+							// badge following the requests, the shortcut and what a refusal says.
+							// The buttons on a real toast are not reachable from here.
+							await desktop.update({ tray: true });
+							if (!trayExists()) throw new Error("Smoke: the tray icon did not appear");
+							await desktop.update({ tray: false });
+							if (trayExists()) throw new Error("Smoke: the tray icon stayed after it was turned off");
+
+							const agentActions = await import("./main/services/agent-actions");
+							// The demo business already has requests waiting, so count from there.
+							await syncBadge();
+							const before = badgeCount();
+							const waiting = await agentActions.request({
+								toolName: "mail.send",
+								args: { id: "smoke" },
+								summary: "Smoke request",
+								source: "mcp",
+							});
+							await new Promise((resolve) => setTimeout(resolve, 300));
+							if (badgeCount() !== before + 1) throw new Error(`Smoke: the badge said ${badgeCount()} with one more request waiting than ${before}`);
+							await agentActions.reject(waiting.id);
+							await new Promise((resolve) => setTimeout(resolve, 300));
+							if (badgeCount() !== before) throw new Error(`Smoke: the badge said ${badgeCount()} after the request was answered, not ${before}`);
+
+							const turnedOn = await desktop.update({ newNoteShortcut: { enabled: true } });
+							if (!turnedOn.shortcut.registered || !globalShortcut.isRegistered("Ctrl+Alt+N")) {
+								throw new Error(`Smoke: the shortcut was not taken: ${turnedOn.shortcut.problem}`);
+							}
+							const occupied = "Ctrl+Shift+F9";
+							globalShortcut.register(occupied, () => undefined);
+							const refused = await desktop.update({ newNoteShortcut: { accelerator: occupied } });
+							globalShortcut.unregister(occupied);
+							if (refused.shortcut.registered || !refused.shortcut.problem) {
+								throw new Error("Smoke: a combination already taken did not say so");
+							}
+							await desktop.update({ newNoteShortcut: { enabled: false, accelerator: "Ctrl+Alt+N" } });
+							if (globalShortcut.isRegistered("Ctrl+Alt+N") || globalShortcut.isRegistered(occupied)) {
+								throw new Error("Smoke: the shortcut was still held after it was turned off");
+							}
+							console.log("SMOKE_DEMO desktop tray=ok badge=ok shortcut=ok");
+						}
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);
 						app.quit();
 					})();
@@ -4884,6 +4941,9 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	app.on("before-quit", (event) => {
+		// The tray icon and the shortcut go first, so a quit that is held up for an
+		// update does not leave an icon in the notification area that does nothing.
+		releaseDesktop();
 		// A downloaded update is installed here, with a window saying so. That
 		// pass quits again and lands below on its second visit.
 		if (installOnQuit(event)) return;

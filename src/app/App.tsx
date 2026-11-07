@@ -17,7 +17,7 @@ import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { OverviewScreen } from "../features/overview/OverviewScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
-import { currentRequest, onOpenRequest } from "../lib/open-entity";
+import { currentRequest, onOpenRequest, requestOpen } from "../lib/open-entity";
 import { announceRecordsChanged } from "../lib/new-record";
 import { currentScreenAction, onScreenActionRequest, requestScreenAction, type ScreenAction } from "../lib/screen-actions";
 import { useTheme } from "../lib/theme";
@@ -236,6 +236,30 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			}),
 		[],
 	);
+
+	// A toast or the tray asked for something. The main process only holds a
+	// request while Juno is unlocked, so what arrives here was asked for by a
+	// person at an unlocked machine. Reading it also covers a window that was
+	// opened for the purpose and had not mounted when the request was made.
+	useEffect(() => {
+		let cancelled = false;
+		const take = () => {
+			void window.juno.window
+				.takeShellRequest()
+				.then((request) => {
+					if (cancelled || !request) return;
+					if (request.kind === "agent") requestOpen({ kind: "screen", screen: "agent" });
+					else requestScreenAction("notes", "new");
+				})
+				.catch(() => undefined);
+		};
+		take();
+		const stop = window.juno.window.onShellRequest(take);
+		return () => {
+			cancelled = true;
+			stop();
+		};
+	}, []);
 
 	// An agent wrote a draft. It opens in the editor on the mail screen, the way
 	// one a person started would, and it is the person who sends it.

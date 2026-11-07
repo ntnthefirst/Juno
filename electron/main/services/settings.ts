@@ -28,11 +28,14 @@ import {
 	normaliseInstructions,
 	normalisePermissions,
 } from "../../shared/agent-permissions";
+import { DEFAULT_NEW_NOTE_ACCELERATOR, normaliseAccelerator } from "../../shared/accelerator";
 import type {
 	AccountingTool,
 	AgentInstructions,
 	AgentPermissions,
 	AppSettings,
+	DesktopPatch,
+	DesktopSettings,
 	LockSettings,
 	McpServerSettings,
 	OnboardingPatch,
@@ -132,6 +135,18 @@ const DEFAULT_UPDATES: UpdateSettings = { autoInstall: true, lastCheckedAt: null
  */
 const DEFAULT_MCP_SERVER: McpServerSettings = { enabled: true, port: null, background: true };
 
+/**
+ * Toasts, the tray icon and the badge are on, because they are how a request or
+ * a due reminder reaches someone who is not looking at Juno. The shortcut claims
+ * a key in every program, so it waits to be asked for.
+ */
+const DEFAULT_DESKTOP: DesktopSettings = {
+	toasts: true,
+	tray: true,
+	badge: true,
+	newNoteShortcut: { enabled: false, accelerator: DEFAULT_NEW_NOTE_ACCELERATOR },
+};
+
 const DEFAULT_SUGGESTIONS: SuggestionSources = { calendar: true, projects: true };
 
 /** Below the operating systems' ephemeral ranges, so nothing else is handed it. */
@@ -153,6 +168,7 @@ const DEFAULTS: AppSettings = {
 	projectsView: DEFAULT_PROJECTS_VIEW,
 	updates: DEFAULT_UPDATES,
 	mcpServer: DEFAULT_MCP_SERVER,
+	desktop: DEFAULT_DESKTOP,
 	suggestions: DEFAULT_SUGGESTIONS,
 	agentPermissions: DEFAULT_PERMISSIONS,
 	agentInstructions: DEFAULT_INSTRUCTIONS,
@@ -272,6 +288,7 @@ function normalise(raw: unknown): AppSettings {
 			projectsView: { ...DEFAULT_PROJECTS_VIEW },
 			updates: { ...DEFAULT_UPDATES },
 			mcpServer: { ...DEFAULT_MCP_SERVER },
+			desktop: normaliseDesktop(undefined),
 			suggestions: { ...DEFAULT_SUGGESTIONS },
 			agentPermissions: { ...DEFAULT_PERMISSIONS },
 			agentInstructions: { ...DEFAULT_INSTRUCTIONS, areas: [] },
@@ -346,9 +363,25 @@ function normalise(raw: unknown): AppSettings {
 		projectsView: normaliseProjectsView(raw.projectsView),
 		updates: normaliseUpdates(raw.updates),
 		mcpServer: normaliseMcpServer(raw.mcpServer),
+		desktop: normaliseDesktop(raw.desktop),
 		suggestions: normaliseSuggestions(raw.suggestions),
 		agentPermissions: normalisePermissions(raw.agentPermissions),
 		agentInstructions: normaliseInstructions(raw.agentInstructions),
+	};
+}
+
+/** An accelerator that is not a usable shortcut falls back to the default rather than being trusted. */
+function normaliseDesktop(raw: unknown): DesktopSettings {
+	const desktop = isRecord(raw) ? raw : {};
+	const shortcut = isRecord(desktop.newNoteShortcut) ? desktop.newNoteShortcut : {};
+	return {
+		toasts: bool(desktop.toasts, DEFAULT_DESKTOP.toasts),
+		tray: bool(desktop.tray, DEFAULT_DESKTOP.tray),
+		badge: bool(desktop.badge, DEFAULT_DESKTOP.badge),
+		newNoteShortcut: {
+			enabled: bool(shortcut.enabled, DEFAULT_DESKTOP.newNoteShortcut.enabled),
+			accelerator: normaliseAccelerator(shortcut.accelerator) ?? DEFAULT_DESKTOP.newNoteShortcut.accelerator,
+		},
 	};
 }
 
@@ -431,6 +464,7 @@ export async function get(): Promise<AppSettings> {
 		projectsView: { ...current.projectsView },
 		updates: { ...current.updates },
 		mcpServer: { ...current.mcpServer },
+		desktop: normaliseDesktop(current.desktop),
 		suggestions: { ...current.suggestions },
 		agentPermissions: { ...current.agentPermissions },
 		agentInstructions: normaliseInstructions(current.agentInstructions),
@@ -485,6 +519,36 @@ export async function setMcpServer(patch: Partial<McpServerSettings>): Promise<M
 	const current = read();
 	const next = normaliseMcpServer({ ...current.mcpServer, ...patch });
 	return { ...write({ ...current, mcpServer: next }).mcpServer };
+}
+
+export async function getDesktop(): Promise<DesktopSettings> {
+	const current = read().desktop;
+	return { ...current, newNoteShortcut: { ...current.newNoteShortcut } };
+}
+
+/** A patch, because each switch stands alone. A shortcut that cannot be one is refused, not replaced. */
+export async function setDesktop(
+	patch: DesktopPatch,
+): Promise<DesktopSettings> {
+	const current = read();
+	let accelerator = current.desktop.newNoteShortcut.accelerator;
+	if (patch.newNoteShortcut?.accelerator !== undefined) {
+		const checked = normaliseAccelerator(patch.newNoteShortcut.accelerator);
+		if (!checked) {
+			throw new Error("A shortcut needs a modifier (Ctrl, Alt, Shift or Win) and one key, for example Ctrl+Alt+N.");
+		}
+		accelerator = checked;
+	}
+	const next: DesktopSettings = {
+		toasts: patch.toasts ?? current.desktop.toasts,
+		tray: patch.tray ?? current.desktop.tray,
+		badge: patch.badge ?? current.desktop.badge,
+		newNoteShortcut: {
+			enabled: patch.newNoteShortcut?.enabled ?? current.desktop.newNoteShortcut.enabled,
+			accelerator,
+		},
+	};
+	return { ...write({ ...current, desktop: next }).desktop };
 }
 
 export async function getSuggestionSources(): Promise<SuggestionSources> {

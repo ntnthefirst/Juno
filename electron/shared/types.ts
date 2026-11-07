@@ -703,6 +703,8 @@ export interface AppSettings {
 	updates: UpdateSettings;
 	/** Whether the agent server is on, and the port it was given if it was given one. */
 	mcpServer: McpServerSettings;
+	/** Toasts, the tray icon, the taskbar badge and the global shortcut. */
+	desktop: DesktopSettings;
 	/** Which kinds of suggestion the reader may make under a message. */
 	suggestions: SuggestionSources;
 	/** How far an agent may go on its own, per kind of thing it can do. */
@@ -785,6 +787,47 @@ export interface AgentInstructions {
 	mail: string;
 	areas: AgentInstructionArea[];
 }
+
+/**
+ * What Juno does at the edge of the desktop on Windows: toasts, the tray icon,
+ * the taskbar badge and one global shortcut. Whether closing the window keeps
+ * Juno running is `McpServerSettings.background`, shown on the same page.
+ */
+export interface DesktopSettings {
+	/** Show Windows notifications at all. */
+	toasts: boolean;
+	/** Keep an icon in the notification area. It stays while Juno runs in the background, whatever this says. */
+	tray: boolean;
+	/** The number of agent requests waiting, drawn on the taskbar button. */
+	badge: boolean;
+	/** A shortcut that works from any program. Off until a person turns it on. */
+	newNoteShortcut: { enabled: boolean; accelerator: string };
+}
+
+/** The shortcut as the settings page shows it: taken, or why it is not. */
+export interface ShortcutStatus {
+	registered: boolean;
+	/** Set when it is on but could not be taken, in words that say what to do. */
+	problem: string | null;
+}
+
+/** Any of the switches, each on its own. */
+export type DesktopPatch = Partial<Omit<DesktopSettings, "newNoteShortcut">> & {
+	newNoteShortcut?: Partial<DesktopSettings["newNoteShortcut"]>;
+};
+
+/** What the page reads in one go. */
+export interface DesktopView {
+	settings: DesktopSettings;
+	shortcut: ShortcutStatus;
+	/** Whether closing the window keeps Juno running. */
+	keepRunning: boolean;
+	/** False off Windows, where none of this exists. */
+	supported: boolean;
+}
+
+/** What the main process asks the main window to do for it. Only sent while Juno is unlocked. */
+export type ShellRequest = { kind: "agent" } | { kind: "new-note" };
 
 export interface McpServerSettings {
 	/** On by default: the point of it is that an agent can just be pointed at it. */

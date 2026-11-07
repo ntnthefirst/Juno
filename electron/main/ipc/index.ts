@@ -16,6 +16,7 @@ import { registerClientEmailsIpc } from "./client-emails";
 import { registerClientLinksIpc } from "./client-links";
 import { registerClientPhonesIpc } from "./client-phones";
 import { registerClientsIpc } from "./clients";
+import { registerDesktopIpc } from "./desktop";
 import { registerDocumentsIpc } from "./documents";
 import { registerContactsIpc } from "./contacts";
 import { registerGeocodingIpc } from "./geocoding";
@@ -44,6 +45,7 @@ export function registerAllIpc(): void {
 	registerLockIpc();
 	registerSettingsIpc();
 	registerUpdatesIpc();
+	registerDesktopIpc();
 
 	registerClientsIpc();
 	registerClientEmailsIpc();

@@ -19,7 +19,7 @@
  */
 import { app, BrowserWindow } from "electron";
 import * as lock from "../services/lock";
-import type { NewRecordKind, NewRecordPrefill } from "../../shared/types";
+import type { NewRecordKind, NewRecordPrefill, ShellRequest } from "../../shared/types";
 import { createMainWindow } from "./main-window";
 import { createNewRecordWindow } from "./new-record-window";
 import { createSettingsWindow } from "./settings-window";
@@ -45,6 +45,13 @@ let setupCloseAllowed = false;
 let quitting = false;
 let quitHookInstalled = false;
 
+const createdListeners = new Set<(window: BrowserWindow) => void>();
+
+/** For things that draw on the main window, such as the taskbar badge, and must redo it for a new one. */
+export function onMainWindowCreated(listener: (window: BrowserWindow) => void): void {
+	createdListeners.add(listener);
+}
+
 export function openMainWindow(isDev: boolean): BrowserWindow {
 	devMode = isDev;
 
@@ -63,6 +70,8 @@ export function openMainWindow(isDev: boolean): BrowserWindow {
 	}
 
 	mainWindow = createMainWindow(isDev);
+	const created = mainWindow;
+	for (const listener of createdListeners) listener(created);
 	mainWindow.on("closed", () => {
 		mainWindow = null;
 	});
@@ -78,6 +87,35 @@ export function openMainWindow(isDev: boolean): BrowserWindow {
 	});
 
 	return mainWindow;
+}
+
+/**
+ * Something the main process wants the main window to do: show the Agent
+ * screen, or start a note. Held until the renderer takes it, because a window
+ * opened for the purpose has not mounted yet when the request is made.
+ */
+let pendingShell: ShellRequest | null = null;
+
+/**
+ * The window comes up either way. Locked, it shows the lock screen and the
+ * request is dropped, so nothing a toast or the tray asked for runs behind it.
+ */
+export function requestShell(request: ShellRequest): void {
+	const window = getMainWindow() ?? openMainWindow(devMode);
+	focusMainWindow();
+	if (lock.isLocked()) {
+		pendingShell = null;
+		return;
+	}
+	pendingShell = request;
+	if (!window.webContents.isLoading()) window.webContents.send("window.shellRequest");
+}
+
+/** The renderer asks once it can act. Taking it clears it, so it runs once. */
+export function takeShellRequest(): ShellRequest | null {
+	const request = lock.isLocked() ? null : pendingShell;
+	pendingShell = null;
+	return request;
 }
 
 export function getMainWindow(): BrowserWindow | null {

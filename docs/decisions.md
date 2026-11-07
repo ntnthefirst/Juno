@@ -1974,3 +1974,41 @@ project and reads like a document (frame `73:5038`). That is what a document is
 **What would reverse this:** pages that need to be signed or sent as a file. That
 is a render to PDF, which `documents.render_pdf` already does from the body, and
 not a different table.
+
+## 63. Toasts, the tray, the badge and one shortcut are Windows only, and go through the same gates
+
+Juno reaches the desktop in four places: Windows notifications with buttons, the
+tray icon, a count on the taskbar button and a shortcut for a new note. All of it
+is Windows only, behind one platform check, with nothing stubbed for another
+system. Nothing in it sends anything off the machine.
+
+- **A button is a click.** A due reminder offers Complete and Snooze when it is
+  the only one due, because a button on a summary of five would have to guess.
+  An agent request offers Review. Complete and Snooze call the reminders
+  service. Review brings the Agent screen up and nothing else: **a toast never
+  approves** (decision 24). The set of actions is closed (`ToastAction`), and
+  the toast carries an index into it, not a callback.
+- **Locked, a toast is generic.** It names no client, mail or record, and it has
+  no buttons. A button on a toast made before the lock came on is held until a
+  person has unlocked, runs once, and is dropped after ten minutes. The tray's
+  New note and the shortcut ask the lock first and only show the lock screen.
+  The main process holds a request for the window only while unlocked.
+- **The badge is a taskbar overlay with the number of agent requests waiting.**
+  It is drawn from the change event of the requests, never from a timer, and
+  clears when the last one is answered or expires.
+- **The tray icon is there when the setting says so, and always while Juno runs
+  without a window** (decision 52). Its menu is Open Juno, New note and Quit
+  Juno. Quit really quits, past the keep-running setting, and the icon and the
+  shortcut are released first.
+- **The global shortcut is off until a person turns it on in Settings.** It needs
+  a modifier and one key, it is released when turned off and on quit, and a
+  combination another program holds is said so on the page. An agent can read
+  the settings and change toasts, tray and badge (`desktop.get`,
+  `desktop.update`). It cannot change the shortcut, because that takes a key
+  away from every other program.
+- **Running in the background** stays one setting, `mcpServer.background`, shown
+  on the Notifications and tray page as well as under MCP.
+
+**What would reverse this:** a second platform. Then the tray and the badge get
+their own adapter for it, and the services, which hold the rules, stay as they
+are.

@@ -22,9 +22,11 @@ import {
 	openNewRecordWindow,
 	openSettingsWindow,
 	openSetupWindow,
+	takeShellRequest,
 } from "../windows";
 
 export function registerWindowIpc(): void {
+	ipcMain.handle("window.takeShellRequest", () => takeShellRequest());
 	ipcMain.handle("window.isSettingsOpen", () => isSettingsOpen());
 	ipcMain.handle("window.openSettings", (_event, section?: SettingsSection) => {
 		openSettingsWindow(section);

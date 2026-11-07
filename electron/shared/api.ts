@@ -15,6 +15,9 @@
  */
 import type { MenuOutcome, MenuRequest } from "./menu";
 import type {
+	DesktopPatch,
+	DesktopView,
+	ShellRequest,
 	ComposeBlock,
 	ComposeBlockContext,
 	ComposeBlockInput,
@@ -267,6 +270,13 @@ export interface JunoApi {
 		 * setup finishing, reach the application behind it.
 		 */
 		onChildClosed(listener: (info: ChildClosedInfo) => void): () => void;
+		/**
+		 * What a toast or the tray asked of the main window, held until it can act.
+		 * Null while locked, so nothing asked for runs behind the lock.
+		 */
+		takeShellRequest(): Promise<ShellRequest | null>;
+		/** Fires when the main window is already up and a request arrives. Read it with `takeShellRequest`. */
+		onShellRequest(listener: () => void): () => void;
 		/**
 		 * A small window for making one event, client, project or reminder, over
 		 * the main window (decision 60). `prefill` is what it starts from, which
@@ -547,6 +557,16 @@ export interface JunoApi {
 	 * installs without asking and none that reads the feed URL: the renderer
 	 * says check, install or auto-install, and is told what happened.
 	 */
+	/**
+	 * Toasts, the tray icon, the taskbar badge and the global shortcut (Windows).
+	 * Whether closing the window keeps Juno running is `agent.server`.
+	 */
+	desktop: {
+		get(): Promise<DesktopView>;
+		/** Saves the switches given and brings the tray, badge and shortcut in line. Throws for a shortcut that cannot be one. */
+		update(patch: DesktopPatch): Promise<DesktopView>;
+	};
+
 	updates: {
 		status(): Promise<UpdateStatus>;
 		/**

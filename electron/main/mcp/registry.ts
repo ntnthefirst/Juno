@@ -31,6 +31,7 @@ import { searchTools } from "./search";
 import { settingsTools } from "./settings";
 import { suggestionTools } from "./suggestions";
 import { timeTools } from "./time";
+import { desktopTools } from "./desktop";
 import { updateTools } from "./updates";
 import type { ToolDescriptor } from "./types";
 
@@ -51,6 +52,7 @@ const lists: ToolDescriptor[][] = [
 	referenceTools,
 	settingsTools,
 	updateTools,
+	desktopTools,
 	templateTools,
 	documentTools,
 	reminderTools,

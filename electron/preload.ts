@@ -66,6 +66,14 @@ const api: JunoApi = {
 				ipcRenderer.off("window.childClosed", handler);
 			};
 		},
+		takeShellRequest: () => call("window.takeShellRequest"),
+		onShellRequest: (listener) => {
+			const handler = () => listener();
+			ipcRenderer.on("window.shellRequest", handler);
+			return () => {
+				ipcRenderer.off("window.shellRequest", handler);
+			};
+		},
 		openNewRecord: (kind, prefill) => call("window.openNewRecord", kind, prefill),
 		closeNewRecord: (created) => call("window.closeNewRecord", created),
 		openSetup: () => call("window.openSetup"),
@@ -281,6 +289,10 @@ const api: JunoApi = {
 		needsOnboarding: () => call("settings.needsOnboarding"),
 	},
 
+	desktop: {
+		get: () => call("desktop.get"),
+		update: (patch) => call("desktop.update", patch),
+	},
 	updates: {
 		status: () => call("updates.status"),
 		check: () => call("updates.check"),

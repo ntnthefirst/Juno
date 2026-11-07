@@ -21,7 +21,7 @@ import { offerDraft } from "../lib/open-draft";
 import { currentRequest, onOpenRequest, requestOpen } from "../lib/open-entity";
 import { announceRecordsChanged } from "../lib/new-record";
 import { currentScreenAction, onScreenActionRequest, requestScreenAction, type ScreenAction } from "../lib/screen-actions";
-import { useTheme } from "../lib/theme";
+import { useThemeSync } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
 import { DocumentDropLayer } from "./DocumentDropLayer";
 import { BreadcrumbProvider } from "./breadcrumb";
@@ -51,7 +51,7 @@ export function App() {
  * configure rather than replacing it.
  */
 function Shell() {
-	useTheme();
+	useThemeSync();
 	const [lock, setLock] = useState<LockState | null>(null);
 	const [walkthroughOpen, setWalkthroughOpen] = useState(false);
 

@@ -123,6 +123,16 @@ dark window. Set only the second and the window chrome changes while the app doe
 not. `system` means removing the attribute and setting `themeSource` to `system`,
 not resolving the OS preference yourself.
 
+**And the page goes first.** The main process sends the theme to every window,
+waits for each to answer after the frame that shows it (at most 120ms), and
+only then changes `themeSource`, the overlay and the window background
+(`windows/theme-switch.ts`). While it changes, `data-theme-switching` on
+`<html>` holds every transition off, so colours land in one frame instead of
+easing across one control at a time. Applying the theme never sets React state
+at the root of a window: `useThemeSync` writes the attribute and nothing else.
+The native colours are `windows/native-palette.ts`, and its test fails when
+they drift from `--paper` and `--ink-muted`.
+
 - Every screen gets looked at in **both** themes before it is done, and that
   includes screens reached only from a settings page or a lock screen. Toggle the
   `data-theme` attribute on `<html>`, don't just trust the tokens.

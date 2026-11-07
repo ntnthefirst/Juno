@@ -24,6 +24,7 @@ import {
 } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
 import { registerAllIpc } from "./main/ipc";
+import { applyStoredTheme } from "./main/ipc/settings";
 import * as agentAudit from "./main/services/agent-audit";
 import { configureClaudeDesktop } from "./main/services/claude-desktop";
 import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
@@ -62,7 +63,7 @@ import { installNotifications } from "./main/notifications";
 import * as desktop from "./main/services/desktop";
 import { badgeCount, desktopPorts, isWindows, releaseDesktop, startBadge, syncBadge, trayExists } from "./main/tray";
 import { focusMainWindow, getMainWindow, onMainWindowCreated, openMainWindow } from "./main/windows";
-import { applyDevDockIcon, installSessionPolicy } from "./main/windows/chrome";
+import { applyDevDockIcon, followSystemTheme, installSessionPolicy } from "./main/windows/chrome";
 import { closeSplash, showSplash, splashStep } from "./main/windows/splash";
 import { installOnQuit, startUpdates } from "./main/services/updates";
 import { devDataDir } from "./main/dev-data";
@@ -108,6 +109,9 @@ if (!app.requestSingleInstanceLock()) {
 		// service has to import `electron` and every one stays testable in plain
 		// Node.
 		settings.configureSettings(userDataDir());
+		// Before the splash and the first window, so both open in the chosen theme.
+		await applyStoredTheme();
+		followSystemTheme();
 		const hidden = await launchedHidden();
 		if (!process.env.JUNO_SMOKE && !hidden) showSplash();
 		configureBackups({ directory: backupsDir(), databaseFile: databasePath() });

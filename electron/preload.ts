@@ -273,6 +273,7 @@ const api: JunoApi = {
 		getProjectsView: () => call("settings.getProjectsView"),
 		setProjectsView: (patch) => call("settings.setProjectsView", patch),
 		setTheme: (theme) => call("settings.setTheme", theme),
+		themeApplied: () => call("settings.themeApplied"),
 		onThemeChange: (listener) => {
 			const handler = (_event: Electron.IpcRendererEvent, theme: ThemeSetting) => listener(theme);
 			ipcRenderer.on("settings.themeChanged", handler);

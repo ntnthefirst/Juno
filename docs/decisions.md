@@ -152,6 +152,15 @@ on `<html>`, and the main process sets `nativeTheme.themeSource` to the same
 value so the title bar, menus and native dialogs match. Setting only one of the
 two produces a light title bar over a dark window.
 
+The order matters as much as the pair. The pages go first: the main process
+sends the theme to every window, each applies it with transitions held off and
+answers after the frame that shows it, and only then are `themeSource`, the
+caption-button overlay and the window background changed
+(`electron/main/windows/theme-switch.ts`). The other way round, the caption
+buttons flipped a third of a second before the page did. The stored theme is
+set on `themeSource` at startup, before the splash, so the first frame is
+already in it.
+
 The token cascade in `brand/tokens.css` already handles all three: `:root` is
 light, the `prefers-color-scheme` block follows the OS, and an explicit
 `data-theme` overrides both. Do not add a second mechanism.

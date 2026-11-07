@@ -9,6 +9,16 @@
 
 @import "./tokens.css";
 
+/* For a moment while the theme changes, nothing transitions, so every colour
+ * lands in the same frame instead of each control easing across on its own.
+ * src/lib/theme.ts sets and clears the attribute. Outside any layer on
+ * purpose: an unlayered rule beats every Tailwind utility without !important. */
+:root[data-theme-switching] *,
+:root[data-theme-switching] *::before,
+:root[data-theme-switching] *::after {
+	transition: none;
+}
+
 @layer base {
 	* {
 		box-sizing: border-box;

@@ -553,6 +553,12 @@ export interface JunoApi {
 		getTheme(): Promise<ThemeSetting>;
 		/** Also sets nativeTheme.themeSource, or the title bar disagrees with the window. */
 		setTheme(theme: ThemeSetting): Promise<ThemeSetting>;
+		/**
+		 * Says this window shows the theme it was last sent. The main process
+		 * waits for it before changing the caption buttons, so they do not flip
+		 * ahead of the page.
+		 */
+		themeApplied(): Promise<void>;
 		/** Fires in every window, so a change made in settings reaches the app. */
 		onThemeChange(listener: (theme: ThemeSetting) => void): () => void;
 		/** How the projects screen is drawn. A preference, not a record. */

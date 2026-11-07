@@ -2,7 +2,7 @@ import { BrowserWindow } from "electron";
 import { join } from "node:path";
 import { prefillToQuery } from "../../shared/new-record";
 import type { NewRecordKind, NewRecordPrefill } from "../../shared/types";
-import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
+import { hardenWindow, titleBarOptions, viewUrl, windowBackground, windowIcon } from "./chrome";
 
 /**
  * Making a new event, client, project or reminder happens in a small window
@@ -33,7 +33,7 @@ export function createNewRecordWindow(
 		fullscreenable: false,
 		show: false,
 		icon: windowIcon(),
-		backgroundColor: "#f6f6fa",
+		backgroundColor: windowBackground(),
 		...titleBarOptions(),
 		webPreferences: {
 			// dist-electron/main/windows -> dist-electron/preload.js

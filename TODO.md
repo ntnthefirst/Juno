@@ -99,6 +99,12 @@ Everything decided and buildable here is built. What is left needs your hands.
   card, so it needs a card reader driver and a native module. Needs an itsme or
   signing-provider agreement, or a decision to take on eID through PKCS#11
   (decision 38).
+- **A trusted timestamp and a trust list for digital signatures.** The
+  certificate is checked for a key, a validity period and its intended use. It is
+  not checked against a trust list, and no timestamp authority is used, so a
+  signature does not carry a trusted time and cannot be verified after the
+  certificate expires. A timestamp authority is an outside service you would pick
+  (and may pay for), and a trust list is a choice of which authorities to believe.
 - **The mascot.** Parked. Two attempts were rejected: a hand-drawn set
   (`brand/mascot`, delete it) and ten free CC0 outline candidates from
   Openclipart (`brand/mascot-candidates`, contact sheet in `preview.html`,
@@ -142,20 +148,7 @@ The file is read only from the code side. These are yours to draw or tidy.
 
 Nothing here needs a decision, only time.
 
-- **The walkthrough has no Notes step.** `features/onboarding/Walkthrough.tsx`
-  lists the places from Overview to Documents without Notes, which became the
-  seventh place on the rail (decision 61).
-- **No detector offers a reminder.** The Suggestion Bar frame has an "Add
-  reminder" kind; the mail suggestions detect calendar and project links only.
-- **Scans.** A PDF with no text layer cannot be matched to a document, only
-  imported, until there is OCR.
-- **Rotated pages.** A page with a rotation is refused by the stamp, with a
-  message. Rotate it upright first.
-- **A trust check and a timestamp for digital signatures.** The certificate is
-  checked for a key, a validity period and its intended use. It is not checked
-  against a trust list, and no timestamp authority is used, so a signature does
-  not carry a trusted time. Adding both would make it verifiable after the
-  certificate expires.
+Nothing is open here.
 
 ---
 
@@ -168,6 +161,9 @@ Written down so nobody builds them by accident.
   side-effectful, so it is excluded from anything unattended by the same rule
   that keeps sending out of an automation, and an agent can only ask for a rule
   through the approval gate.
+- **No OCR for scans.** A PDF with no text layer cannot be matched to a
+  document, only imported. OCR needs a large engine and language data shipped
+  in the app, which is a decision about installer size and not a missing piece.
 - **An automation cannot pass one step's result to the next.** Anything that
   needs the output of a previous step is a job for an agent, which can read and
   then decide, rather than for a recording.

@@ -2279,9 +2279,10 @@ said reads are left out).
   agent keeps the blocks it was given. A deleted page keeps its pictures, like any
   document file, so the delete can be undone.
 - **Mail suggestions have one switch.** The Permissions page draws "From mail", and
-  it sets both the calendar and the project source. Switching one source off and
-  the other on is no longer offered in the window; an install that had one off
-  shows the switch off, and turning it on brings both back.
+  it sets every source (calendar, project and, since decision 70, reminder).
+  Switching one source off and the others on is no longer offered in the window;
+  an install that had one off shows the switch off, and turning it on brings
+  them all back.
 
 **What would reverse this:** a client that polls reads so often that thirty days of
 them is still too many would want a count instead of rows. A need to see one
@@ -2326,3 +2327,30 @@ not, and where the file and an older note disagree the file wins.
 **What would reverse this:** a second place that needs a documents folder per
 client would turn the one setting into a rule. A real need to keep fewer
 versions would bring the switch back, with its own confirmation.
+
+## 70. A mail that asks for something by a day offers a reminder
+
+The Suggestion Bar frame (`84:2156`) draws a third kind, Add reminder, next to
+Add to calendar and Link to project.
+
+- **Two things are detected** (`services/suggestions-detect.ts`, `detectReminder`),
+  in Dutch and English: a request by a day, where a cue sits right in front of
+  the day ("tegen vrijdag", "graag voor 15 maart", "by Friday", "no later than
+  next Monday"), and a promise to come back ("ik laat iets weten", "I'll get back
+  to you"). The request is due that day. The promise is due on the day it names, or
+  a week after the message was written.
+- **It errs towards saying nothing.** A bare date is not a deadline. A sentence
+  with a clock time is an appointment and is left to the calendar suggestion. A
+  number that is a quantity or a price ("3-4 uur", "15%", "10.12 euro") is not a
+  day. A day that has passed, or a year-less day more than 180 days ahead (which
+  is a past day rolled into next year), is not offered. Quoted history and mail the
+  owner wrote are skipped.
+- **Accepting is the owner pressing a button**, so it creates the reminder through
+  `reminders.create` and nothing else, like the calendar suggestion does. It is
+  not an agent tool, so no permission row applies. The kind is `reminder` in
+  `mail_suggestion_states`, and Not now hides it for that message for good.
+- **The same switch.** `SuggestionSources` gains `reminders`, on by default, and
+  the one "From mail" toggle sets all three.
+
+**What would reverse this:** if the bar teaches people to ignore it, the cues are
+too wide and the list shrinks to the strongest ones.

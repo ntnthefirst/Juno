@@ -3,6 +3,7 @@ import type { UpdateStatus } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
+import { ReleaseNoteEntry } from "./ReleaseNoteEntry";
 import { Section, SectionError } from "./Section";
 
 function formatWhen(iso: string | null): string {
@@ -111,6 +112,13 @@ export function UpdatesSection() {
 							<span className="tabular">{formatWhen(status.lastCheckedAt)}</span>
 						</Row>
 					</dl>
+
+					{status.newNotes && status.newVersion ? (
+						<div className="rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
+							<p className="mb-3 text-overline uppercase text-[var(--ink-muted)]">What is in this update</p>
+							<ReleaseNoteEntry note={status.newNotes} compact />
+						</div>
+					) : null}
 
 					{canInstall ? (
 						<div className="flex items-center justify-between gap-4">

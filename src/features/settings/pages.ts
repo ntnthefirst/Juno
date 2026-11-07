@@ -18,6 +18,7 @@ import type { IconName } from "../../components/Icon";
 export type SettingsPageId =
 	| "appearance"
 	| "updates"
+	| "release-notes"
 	| "desktop"
 	| "about"
 	| "details"
@@ -67,6 +68,7 @@ export const GROUPS: SettingsGroup[] = [
 export const PAGES: SettingsPage[] = [
 	{ id: "appearance", group: "general", label: "Appearance", anchors: ["appearance"], solo: true },
 	{ id: "updates", group: "general", label: "Updates", anchors: ["updates"], solo: true },
+	{ id: "release-notes", group: "general", label: "Release notes", anchors: ["release-notes"], solo: true },
 	{ id: "desktop", group: "general", label: "Notifications and tray", anchors: ["desktop"], solo: true },
 	{ id: "about", group: "general", label: "Help and about", anchors: ["onboarding", "about"], solo: false },
 

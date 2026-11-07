@@ -93,8 +93,14 @@ export const SETTING_ENTRIES: SettingEntry[] = [
 			"automatic",
 			"auto install",
 			"version",
-			"changelog",
 		],
+	},
+	{
+		tab: "general",
+		anchor: "release-notes",
+		title: "Release notes",
+		description: "What each version of Juno changed.",
+		keywords: ["release notes", "changelog", "what's new", "whats new", "changes", "history", "version", "fixes", "improvements"],
 	},
 	{
 		tab: "general",

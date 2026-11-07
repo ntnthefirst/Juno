@@ -245,13 +245,6 @@ the code that depends on it.
    a seventh place is a decision and not an edit. Options: add the entry (and
    change that section), or reach Notes from the Documents switch. Blocks
    package 4.
-4. **Separate windows for creating a record.** The design draws New event, New
-   client, New project and New reminder as small windows (frames listed in
-   package 8). Decision 30 says anything with fields is a page, and decision 34
-   allows one modal child at a time. Either the new-record windows replace the
-   pages and join the one-modal-child rule, or they are dropped and the design
-   frames are redrawn as pages. The owner asked for a window for calendar items
-   specifically. Blocks package 8.
 5. **Pages: a kind of document or a table of their own.** A page in the design
    sits in the Documents list and belongs to a client or a project, which is
    what a document does (decision 48). Recommended: a document kind, so the
@@ -308,36 +301,6 @@ Context Menu set, `76:2231`, draw them) and the handlers beside the note rows wi
 **Done when.** A note and a page can be made, searched, found in, linked to a
 client or project, archived and driven by an agent. Tests cover search and the
 day grouping. The empty state exists.
-
-#### Package 8. Calendar layouts and the new-record windows (M, needs decision 4)
-
-**Figma.** `06 Calendar Month / Default` (`26:693`), `07 Calendar Week / Default`
-(`26:1026`), `08 Calendar Agenda / Default` (`26:1292`), `09 Event Window / Default`
-(`58:4449`), `09 New client window` (`90:9301`), `09 New project window` (`90:9368`),
-`09 New reminder window` (`90:9426`).
-
-**Behaviour and layout.**
-
-- **Month fills the window.** The weekday row is fixed and the six week rows share
-  the rest of the height equally, so the grid always reaches the bottom edge. A
-  day with more events than fit shows "+N more".
-- **Week.** The all-day row is one cell high (32px) with the chips inside it, and
-  grows only when a day has more than one all-day item. An hour is 40px. A 60
-  minute event's title is a single line.
-- **The new-record windows.** If decision 4 says yes: a small fixed window, a
-  modal child of the main window, opened by New and by the palette, with the
-  fields in the frame (the event window has Title, Date, Starts, Ends, Time zone,
-  Repeats, Client, Notes, Cancel, Save event). It follows the one-modal-child rule
-  and sends `window.childClosed` when it closes so the screen behind refreshes.
-  If no: build these as pages and redraw the four frames.
-
-**Build.** Check first whether `features/calendar/MonthView.tsx` and `WeekView.tsx`
-already behave this way, and fix only what does not. The windows go in
-`electron/main/windows/` next to `setup-window.ts`, entered by a hash route like
-`#/new/event`.
-
-**Done when.** Both calendar views fill their space at 1280 by 720 and at 1920 by
-1080, and a window opens, saves and refreshes the screen behind it.
 
 #### Package 9. Overview (M)
 

@@ -2,6 +2,24 @@
 
 Newest first. The rules for writing an entry are in `.claude/rules/release-notes.md`.
 
+## 1.1.0
+Released: 2026-11-08
+
+Juno shows what changed in every version, and select all in Mail takes every matching conversation.
+
+### New
+- Settings has a Release notes page with what changed in every version of Juno.
+- Settings, Updates shows what an update changes before you install it.
+
+### Improvements
+- Select all in Mail takes every conversation that matches the folder, filters and search, not only the ones on screen.
+- Mail offers to link a conversation to the client's open project, even when the mail does not name the project.
+- Changing the theme repaints the whole window at once, the title bar buttons included.
+- The Clients list and the client picker show their clients as soon as they open.
+
+### Fixes
+- Mail and an open page used to keep redrawing in the background, which made them feel slow.
+
 ## 1.0.0
 Released: 2026-11-07
 

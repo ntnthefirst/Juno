@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, nativeTheme, shell } from "electron";
+import { app, Menu, nativeTheme, shell } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -4081,23 +4081,36 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (blockMenu !== "ok") throw new Error(`Smoke: intro menu ${blockMenu}`);
 									await shoot("mail-compose-intro");
-									const blocksPage = await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(200);
-											const intro = document.querySelector("button[aria-label='Intro']");
-											intro.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
-											await wait(300);
-											const manage = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Manage intros and outros");
-											if (!manage) return "no manage item";
-											manage.click();
-											await wait(700);
-											if (![...document.querySelectorAll("h1")].some((el) => el.textContent.includes("Intros and outros"))) return "no manage page";
-											if (!document.querySelector("[role=textbox][aria-label='Text']")) return "no text field";
-											return "ok";
-										})()`,
-									);
+									// The right click is the platform's menu (decision 59), which a page
+									// cannot click. Menu.popup is stood in for while the button is right
+									// clicked: it records what the main process offered and chooses
+									// "Manage intros and outros" the way a person would.
+									const realPopup = Menu.prototype.popup;
+									let offered: string[] = [];
+									Menu.prototype.popup = function (this: Menu, options) {
+										offered = this.items.map((item) => item.label);
+										this.items.find((item) => item.label === "Manage intros and outros")?.click();
+										options?.callback?.();
+									};
+									let blocksPage: string;
+									try {
+										blocksPage = (await window.webContents.executeJavaScript(
+											`(async () => {
+												const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+												document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await wait(200);
+												const intro = document.querySelector("button[aria-label='Intro']");
+												intro.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
+												await wait(700);
+												if (![...document.querySelectorAll("h1")].some((el) => el.textContent.includes("Intros and outros"))) return "no manage page";
+												if (!document.querySelector("[role=textbox][aria-label='Text']")) return "no text field";
+												return "ok";
+											})()`,
+										)) as string;
+									} finally {
+										Menu.prototype.popup = realPopup;
+									}
+									if (!offered.includes("Manage intros and outros")) throw new Error(`Smoke: the intro menu offered ${offered.join(" | ") || "nothing"}`);
 									if (blocksPage !== "ok") throw new Error(`Smoke: manage page ${blocksPage}`);
 									await shoot("mail-blocks");
 									const backToCompose = await window.webContents.executeJavaScript(

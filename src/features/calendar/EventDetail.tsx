@@ -70,7 +70,7 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 					<>
 						<IconButton icon="reminders" label="Snooze" onClick={onSnooze} />
 						<Button variant="primary" onClick={onComplete}>
-							Mark done
+							Complete
 						</Button>
 					</>
 				) : null

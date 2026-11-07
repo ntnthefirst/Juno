@@ -31,7 +31,7 @@ function ask(kind: MenuKind, id: string, context?: MenuRequest["context"]) {
 const ids = (entries: Awaited<ReturnType<typeof ask>>) => entries.map((entry) => entry.id);
 
 describe("reminder menu", () => {
-	it("offers Mark done and the snoozes on an open reminder, and Reopen on a finished one", async () => {
+	it("offers Complete and the snoozes on an open reminder, and Reopen on a finished one", async () => {
 		const open = await reminders.create({ title: "Chase the deposit", dueOn: "2099-01-01" }, db);
 		expect(ids(await ask("reminder", open.id))).toEqual([
 			"complete",

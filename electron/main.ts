@@ -4227,7 +4227,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!chip()) return "no reminder chip";
 											chip().click();
 											await wait(500);
-											for (const need of ["Mark done", "Snooze", "Edit", "Delete"]) {
+											for (const need of ["Complete", "Snooze", "Edit", "Delete"]) {
 												if (!named(need)) return "the reminder panel has no " + need;
 											}
 											return "panel";
@@ -4235,7 +4235,7 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (acted !== "panel") throw new Error(`Smoke: calendar reminder actions ${acted}`);
 									// The panel as it is: Edit and Delete beside the close cross, and
-									// Snooze beside Mark done at the bottom.
+									// Snooze beside Complete at the bottom.
 									await capture(window.webContents);
 									writeFileSync(joinPath(shotDir, "calendar-panel.png"), (await capture(window.webContents)).toPNG());
 									const deleted = await window.webContents.executeJavaScript(

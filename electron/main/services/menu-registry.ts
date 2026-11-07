@@ -5,7 +5,7 @@
  * menu was opened on. The renderer names a kind and an id and nothing else, so
  * a page cannot invent an item, and the rule "an item that does not apply is
  * left out, not greyed" is decided here once: a finished reminder offers
- * Reopen where an open one offers Mark done.
+ * Reopen where an open one offers Complete.
  *
  * This file only decides what is on the menu. Choosing an item either hands
  * a named action back to the screen, or is done by `menu-actions.ts`.
@@ -98,7 +98,7 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 			if (!reminder) return [];
 			const done = reminder.bucket === "done";
 			const entries: MenuEntry[] = [
-				done ? { id: "reopen", label: "Reopen", icon: "undo" } : { id: "complete", label: "Mark done", icon: "check" },
+				done ? { id: "reopen", label: "Reopen", icon: "undo" } : { id: "complete", label: "Complete", icon: "check" },
 			];
 			if (!done) {
 				entries.push(
@@ -128,7 +128,7 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 			return [
 				{ id: "open", label: "Open", icon: "external" },
 				{ id: "edit", label: "Edit", icon: "edit" },
-				{ id: "duplicate-event", label: "Duplicate", icon: "templates" },
+				{ id: "duplicate-event", label: "Duplicate", icon: "copy" },
 				REMOVE,
 			];
 		}
@@ -256,7 +256,7 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 				note.pinnedAt
 					? { id: "unpin-note", label: "Unpin from the top", icon: "flag" }
 					: { id: "pin-note", label: "Pin to the top", icon: "flag" },
-				{ id: "duplicate-note", label: "Duplicate", icon: "templates", accelerator: "CommandOrControl+D" },
+				{ id: "duplicate-note", label: "Duplicate", icon: "copy", accelerator: "CommandOrControl+D" },
 				{ id: "move-to-project", label: "Move to a project", icon: "projects" },
 				{ ...REMOVE, accelerator: "Delete" },
 			];

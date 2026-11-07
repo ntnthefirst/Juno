@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
-import appIcon from "../assets/icon.png";
+import { Button } from "./Button";
+import { Icon } from "./Icon";
 
 type LockScreenProps = {
 	state: LockState;
@@ -22,6 +23,7 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 	const [lockedOutUntil, setLockedOutUntil] = useState<string | null>(state.lockedOutUntil);
 	const [secondsLeft, setSecondsLeft] = useState(0);
 	const input = useRef<HTMLInputElement>(null);
+	const inputId = useId();
 
 	useEffect(() => {
 		input.current?.focus();
@@ -80,23 +82,23 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 	const isPin = state.method === "pin";
 
 	return (
-		<div className="fixed inset-0 z-50 grid place-items-center bg-[var(--paper)]">
-			<div
-				className="w-[340px] rounded-[var(--radius-xl)] border border-[var(--line)] bg-[var(--surface)] p-8 text-center"
-				style={{ boxShadow: "var(--shadow-modal)" }}
-			>
-				<img
-					src={appIcon}
-					alt="Juno"
-					className="mx-auto h-14 w-14 object-contain filter drop-shadow-[0_4px_16px_rgba(91,79,225,0.25)]"
-				/>
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--paper)] pb-16">
+			<div className="flex w-[280px] flex-col items-stretch">
+				<span className="mx-auto flex h-14 w-14 items-center justify-center rounded-[var(--radius-xl)] bg-[var(--accent-soft)] text-[var(--accent)]">
+					<Icon name="lock" size={24} />
+				</span>
 
-				<h1 className="mt-4 text-lg font-[var(--weight-medium)]">
-					Juno is locked
-				</h1>
+				<h1 className="mt-4 text-center text-h3">Juno is locked</h1>
+				<p className="mt-1.5 text-center text-dense text-[var(--ink-muted)]">
+					{isPin ? "Enter your PIN to continue." : "Enter your passphrase to continue."}
+				</p>
 
-				<form onSubmit={submit} className="mt-5">
+				<form onSubmit={submit} className="mt-6">
+					<label htmlFor={inputId} className="mb-1.5 block text-sm font-[var(--weight-medium)]">
+						{isPin ? "PIN" : "Passphrase"}
+					</label>
 					<input
+						id={inputId}
 						ref={input}
 						type="password"
 						inputMode={isPin ? "numeric" : "text"}
@@ -104,35 +106,26 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 						disabled={busy || waiting}
 						value={secret}
 						onChange={(e) => setSecret(e.target.value)}
-						placeholder={isPin ? "PIN" : "Passphrase"}
-						aria-label={isPin ? "PIN" : "Passphrase"}
-						className="w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-center text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:outline-none disabled:opacity-60"
+						className="h-10 w-full rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-base text-[var(--ink)] focus:border-[var(--focus)] focus:shadow-[inset_0_0_0_1px_var(--focus)] disabled:opacity-60"
 					/>
 
-					<button
-						type="submit"
-						disabled={busy || waiting || secret.length === 0}
-						className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2 font-[var(--weight-medium)] text-[var(--accent-ink)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
-					>
-						{busy ? "Checking" : "Unlock"}
-					</button>
+					<div className="mt-4 flex justify-center">
+						<Button type="submit" variant="primary" disabled={busy || waiting || secret.length === 0}>
+							{busy ? "Checking" : "Unlock"}
+						</Button>
+					</div>
 				</form>
 
 				<p
 					role="status"
 					aria-live="polite"
-					className="mt-3 min-h-[1.25rem] text-sm text-[var(--risk)]"
+					className="mt-3 min-h-[1.25rem] text-center text-sm text-[var(--risk)]"
 				>
 					{waiting
 						? secondsLeft > 0
 							? `Too many attempts. Try again in ${formatWait(secondsLeft)}.`
 							: "Too many attempts."
 						: (error ?? "")}
-				</p>
-
-				<p className="mt-4 text-micro text-[var(--ink-muted)]">
-					The lock screen protects against someone using this machine. It does not encrypt the
-					database on disk.
 				</p>
 			</div>
 		</div>

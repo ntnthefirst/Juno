@@ -70,6 +70,15 @@ const isDev = Boolean(process.env.JUNO_DEV);
 // path, because app.getPath("userData") is resolved on first use and cached.
 if (isDev) app.setPath("userData", devDataDir());
 
+// Windows names a toast after this identity and sends a press on one of its
+// buttons back through it. It has to match the id the installer gives the Start
+// menu shortcut, or a toast is labelled with the raw id and its buttons have
+// nowhere to arrive. A development run keeps to itself so the two never mix.
+if (process.platform === "win32") {
+	app.setAppUserModelId(isDev ? process.execPath : "be.digistra.juno");
+	app.setToastActivatorCLSID("{45d8f049-2782-4b30-8e40-adbb6dca64f3}");
+}
+
 registerAppSchemePrivileges();
 
 if (!app.requestSingleInstanceLock()) {

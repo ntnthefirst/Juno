@@ -15,6 +15,8 @@ import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
+import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { SPECIAL_LABELS } from "./folder-tree";
 import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { useScreenAction } from "../../lib/screen-actions";
@@ -289,6 +291,19 @@ export function MailScreen() {
 	// the account it belongs to. A sent message drops out of the outbox rows on
 	// its own and shows up in Sent instead.
 	const showingDrafts = selection?.view === "drafts";
+	// The page title is the folder in view, and nothing while a message is being
+	// written, as the design draws it. A page of its own publishes its own trail.
+	const titleFolder = selection?.folderId
+		? (folders[selection.accountId ?? ""]?.find((folder) => folder.id === selection.folderId) ?? null)
+		: null;
+	const folderTitle = showingDrafts
+		? SPECIAL_LABELS.drafts
+		: titleFolder
+			? titleFolder.specialUse
+				? SPECIAL_LABELS[titleFolder.specialUse]
+				: titleFolder.name
+			: "Mail";
+	usePublishBreadcrumb(blocksPage ? [] : [{ label: compose ? "" : folderTitle }]);
 	const inTrash = selection?.view === "trash";
 	// The list there is the folder as it is, so neither a search nor a filter
 	// reaches it: a search would leave the folder for the whole account.
@@ -827,40 +842,6 @@ export function MailScreen() {
 		);
 	}
 
-	if (compose) {
-		return (
-			<ComposePage
-				seed={compose}
-				onManage={(draft, target) => {
-					setBlocksPage({ target, returnTo: draft ? { draft } : compose });
-					setCompose(null);
-				}}
-				onClose={() => setCompose(null)}
-				onDeleted={() => {
-					setCompose(null);
-					setNotice("Draft deleted.");
-					setOutboxVersion((v) => v + 1);
-					setOpened(null);
-				}}
-				onDone={(message, queued, closedRequest) => {
-					setCompose(null);
-					setNotice(
-						closedRequest
-							? `Sent. The request "${closedRequest}" is closed.`
-							: queued
-								? "Message queued."
-								: "Draft saved.",
-					);
-					setOutboxVersion((v) => v + 1);
-					const draftsFolderId =
-						folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
-					setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
-					setOpened({ kind: "outbox", id: message.id });
-				}}
-			/>
-		);
-	}
-
 	if (folderForm) {
 		return (
 			<FolderFormPage
@@ -920,7 +901,7 @@ export function MailScreen() {
 			</TitleBarSlot>
 			<div
 				className={[
-					"w-[264px] shrink-0 flex-col border-r border-[var(--line)]",
+					"w-[288px] shrink-0 flex-col border-r border-[var(--line)]",
 					readerOpen ? "hidden min-[1100px]:flex" : "flex",
 				].join(" ")}
 			>
@@ -965,7 +946,37 @@ export function MailScreen() {
 			</div>
 
 			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
-				{selectedThreadId && readerOpen ? (
+				{compose ? (
+					<ComposePage
+						seed={compose}
+						onManage={(draft, target) => {
+							setBlocksPage({ target, returnTo: draft ? { draft } : compose });
+							setCompose(null);
+						}}
+						onClose={() => setCompose(null)}
+						onDeleted={() => {
+							setCompose(null);
+							setNotice("Draft deleted.");
+							setOutboxVersion((v) => v + 1);
+							setOpened(null);
+						}}
+						onDone={(message, queued, closedRequest) => {
+							setCompose(null);
+							setNotice(
+								closedRequest
+									? `Sent. The request "${closedRequest}" is closed.`
+									: queued
+										? "Message queued."
+										: "Draft saved.",
+							);
+							setOutboxVersion((v) => v + 1);
+							const draftsFolderId =
+								folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
+							setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
+							setOpened({ kind: "outbox", id: message.id });
+						}}
+					/>
+				) : selectedThreadId && readerOpen ? (
 					<ThreadView
 						key={`${selectedThreadId}:${opened?.kind === "thread" ? opened.opens : 0}`}
 						threadId={selectedThreadId}

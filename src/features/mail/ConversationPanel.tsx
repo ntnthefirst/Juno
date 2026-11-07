@@ -18,7 +18,7 @@ type ConversationPanelProps = {
 };
 
 /** Every row is this tall, so the graph beside them can be drawn from the index alone. */
-const ROW = 68;
+const ROW = 72;
 const LANE = 18;
 const GUTTER = 16;
 const TOP = 10;
@@ -79,8 +79,8 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 	const height = TOP * 2 + entries.length * ROW;
 
 	return (
-		<aside aria-label="Conversation" className="flex w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]">
-			<h3 className="flex shrink-0 items-baseline justify-between px-4 pb-1 pt-4 text-overline uppercase text-[var(--ink-muted)]">
+		<aside aria-label="Conversation" className="flex w-[348px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]">
+			<h3 className="flex h-12 shrink-0 items-center justify-between px-4 text-overline uppercase text-[var(--ink-muted)]">
 				Conversation
 				<span className="tabular normal-case tracking-normal">{entries.length}</span>
 			</h3>
@@ -163,7 +163,6 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 										onClick={() => onSelect(id)}
 										style={{
 											paddingLeft: gutter + 12,
-											boxShadow: selected ? `inset 3px 0 0 ${laneColor(row.lane)}` : undefined,
 										}}
 										className={[
 											"flex h-full w-full flex-col justify-center gap-0.5 pr-4 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
@@ -171,7 +170,7 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 											selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
 										].join(" ")}
 									>
-										<span className="flex items-center gap-2 text-dense">
+										<span className="flex items-center gap-2 text-base">
 											<span
 												className={`truncate ${unread ? "font-[var(--weight-semibold)]" : "font-[var(--weight-medium)]"}`}
 											>
@@ -187,16 +186,16 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 											{hasAttachment ? (
 												<Icon name="attachment" size={12} className="shrink-0 text-[var(--ink-muted)]" />
 											) : null}
-											<span className="tabular ml-auto shrink-0 text-sm text-[var(--ink-muted)]">
+											<span className="tabular ml-auto shrink-0 text-dense text-[var(--ink-muted)]">
 												{formatWhen(when)}
 											</span>
 										</span>
 										{mine ? (
-											<span className="truncate text-sm text-[var(--ink-muted)]">
+											<span className="truncate text-dense text-[var(--ink-muted)]">
 												To {participantsLine(entry.message.to)}
 											</span>
 										) : null}
-										<span className="flex items-center gap-2 text-sm text-[var(--ink-muted)]">
+										<span className="flex items-center gap-2 text-dense text-[var(--ink-muted)]">
 											{entry.kind === "message" && entry.message.folderName ? (
 												<span
 													title={`In ${entry.message.folderName}`}

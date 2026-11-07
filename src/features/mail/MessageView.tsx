@@ -454,6 +454,35 @@ export function MessageView({
 		},
 	];
 
+	// What the reader is told about the body comes straight under the header, as
+	// the design draws it, before anything offered about the message.
+	const bodyShown = !(!message.bodyFetched && (clientLinked || trusted)) && !bodyError;
+	const trustNotice = !bodyShown ? null : !clientLinked && !trusted ? (
+		<Notice
+			actions={
+				<>
+					<Button size="dense" onClick={trustEmail}>
+						Trust this email
+					</Button>
+					{trustDecision === "unknown" ? (
+						<Button size="dense" onClick={blockSender}>
+							Don't trust sender
+						</Button>
+					) : null}
+					<Button size="dense" onClick={trustSender} disabled={!senderAddress}>
+						Trust sender
+					</Button>
+				</>
+			}
+		>
+			{trustDecision === "blocked"
+				? "This sender is not trusted. Content stays blocked."
+				: "This email is not trusted. Content and links stay blocked."}
+		</Notice>
+	) : body?.suspicious ? (
+		<Notice role="status">Weird content was removed before this email was shown.</Notice>
+	) : null;
+
 	return (
 		<article
 			className={`border-t border-[var(--line)] first:border-t-0 ${open ? "flex flex-1 flex-col" : ""}`}
@@ -462,12 +491,12 @@ export function MessageView({
 			{open ? (
 				// Not a button while open: the sender is a control of its own, and a
 				// button cannot hold another one.
-				<div className="flex w-full shrink-0 items-start gap-3 bg-[var(--hover)] px-8 py-3">
-					<div className="flex min-w-0 flex-1 items-baseline gap-2">
-						<span className="text-sm text-[var(--ink-muted)]">From</span>
+				<div className="flex w-full shrink-0 items-center gap-3 bg-[var(--sunken)] px-6 pt-3 pb-2">
+					<div className="flex min-w-0 flex-1 items-center gap-3">
+						<span className="text-base text-[var(--ink-muted)]">From</span>
 						{message.from ? (
 							<span
-								className={`min-w-0 ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
+								className={`min-w-0 text-lg ${message.isSeen ? "font-[var(--weight-medium)]" : "font-[var(--weight-semibold)]"}`}
 							>
 								<PersonChip
 									person={message.from}
@@ -483,7 +512,7 @@ export function MessageView({
 								/>
 							</span>
 						) : (
-							<span className="font-[var(--weight-medium)]">{from}</span>
+							<span className="text-lg font-[var(--weight-medium)]">{from}</span>
 						)}
 						{detailsOpen && message.from ? (
 							<span data-selectable className="min-w-0 truncate text-sm text-[var(--ink-muted)]">
@@ -492,7 +521,7 @@ export function MessageView({
 						) : null}
 					</div>
 					<span
-						className="tabular shrink-0 text-sm text-[var(--ink-muted)]"
+						className="tabular shrink-0 text-base text-[var(--ink-muted)]"
 						title={formatFull(message.internalDate)}
 					>
 						{detailsOpen
@@ -534,9 +563,9 @@ export function MessageView({
 			)}
 
 			{open ? (
-				<div className="flex flex-1 flex-col px-8">
-					<div className="-mx-8 bg-[var(--hover)] px-8">
-						<div className="flex shrink-0 items-center gap-2 pb-2 text-sm text-[var(--ink-muted)]">
+				<div className="flex flex-1 flex-col px-6">
+					<div className="-mx-6 bg-[var(--sunken)] px-6">
+						<div className="flex shrink-0 items-center gap-3 pb-3 text-base text-[var(--ink-muted)]">
 								<span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
 									<span>To</span>
 									{message.to.length === 0 ? <span>(nobody)</span> : null}
@@ -575,8 +604,10 @@ export function MessageView({
 
 					</div>
 
+					{trustNotice ? <div className="-mx-6 shrink-0">{trustNotice}</div> : null}
+
 					{offers && offers.messageId === message.id && offers.list.length > 0 ? (
-						<div className="flex shrink-0 flex-col gap-2 pt-3">
+						<div className="-mx-2 flex shrink-0 flex-col gap-2 py-3">
 							{offers.list.map((suggestion) => (
 								<SuggestionBar
 									key={suggestion.kind}
@@ -702,36 +733,11 @@ export function MessageView({
 							{bodyError}
 						</p>
 					) : (
-						<div className="-mx-8 flex flex-1 flex-col">
-							{!clientLinked && !trusted ? (
-								<Notice
-									actions={
-										<>
-											<Button size="dense" onClick={trustEmail}>
-												Trust this email
-											</Button>
-											{trustDecision === "unknown" ? (
-												<Button size="dense" onClick={blockSender}>
-													Don't trust sender
-												</Button>
-											) : null}
-											<Button size="dense" onClick={trustSender} disabled={!senderAddress}>
-												Trust sender
-											</Button>
-										</>
-									}
-								>
-									{trustDecision === "blocked"
-										? "This sender is not trusted. Content stays blocked."
-										: "This email is not trusted. Content and links stay blocked."}
-								</Notice>
-							) : (
+						<div className="-mx-6 flex flex-1 flex-col">
+							{!clientLinked && !trusted ? null : (
 								<>
-									{body?.suspicious ? (
-										<Notice role="status">Weird content was removed before this email was shown.</Notice>
-									) : null}
 									{body && body.remoteImages > 0 && !remoteImages ? (
-										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-8 py-2 text-sm">
+										<div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] bg-[var(--sunken)] px-6 py-2 text-sm">
 											<span className="text-[var(--ink-muted)]">
 												{body.remoteImages} remote{" "}
 												{body.remoteImages === 1 ? "image" : "images"} not loaded. Loading them
@@ -754,12 +760,12 @@ export function MessageView({
 										onLoad={() => {
 											if (findOpen && findQuery !== "") tellFrame("search", findQuery);
 										}}
-										className="block min-h-full w-full shrink-0 overflow-x-auto overflow-y-hidden border-t border-[var(--line)] bg-[var(--surface)]"
+										className="block min-h-full w-full shrink-0 overflow-x-auto overflow-y-hidden bg-[var(--surface)]"
 										style={frameHeight === null ? undefined : { height: frameHeight }}
 									/>
 
 									{body && body.links.length > 0 ? (
-										<div className="shrink-0 border-t border-[var(--line)] px-8 py-3">
+										<div className="shrink-0 border-t border-[var(--line)] px-6 py-3">
 											<button
 												type="button"
 												aria-expanded={linksOpen}

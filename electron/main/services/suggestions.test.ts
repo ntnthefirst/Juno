@@ -79,7 +79,7 @@ describe("forMessage", () => {
 			{
 				kind: "event",
 				messageId: id,
-				headline: "Janssens mentions Friday at 10:00.",
+				headline: "Janssens mentions Friday at 10:00",
 				question: 'Add "Delivery, oak table" to the calendar?',
 			},
 		]);
@@ -157,7 +157,7 @@ describe("Link to project", () => {
 			{
 				kind: "project",
 				messageId: id,
-				headline: "This looks like part of Kitchen cabinets.",
+				headline: "This looks like part of Kitchen cabinets",
 				question: "Link this message to the project?",
 			},
 		]);

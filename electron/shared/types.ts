@@ -719,7 +719,7 @@ export type SuggestionKind = "event" | "project";
 export interface MessageSuggestion {
 	kind: SuggestionKind;
 	messageId: string;
-	/** "Janssens mentions Friday at 10:00." */
+	/** "Janssens mentions Friday at 10:00" */
 	headline: string;
 	/** "Add "Delivery, oak table" to the calendar?" */
 	question: string;

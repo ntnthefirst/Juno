@@ -26,13 +26,13 @@ export function SuggestionBar({ suggestion, actionLabel, busy, onAccept, onDismi
 		<div
 			role="group"
 			aria-label={suggestion.headline}
-			className="flex shrink-0 items-center gap-3 rounded-[var(--radius-lg)] bg-[var(--accent-soft)] py-2 pr-2 pl-2"
+			className="flex h-14 shrink-0 items-center gap-3 rounded-[var(--radius-md)] bg-[var(--accent-soft)] px-3 py-2.5"
 		>
-			<span className="flex size-8 flex-none items-center justify-center rounded-[var(--radius-md)] bg-[var(--surface)] text-[var(--accent)]">
+			<span className="flex size-7 flex-none items-center justify-center rounded-[var(--radius-sm)] bg-[var(--surface)] text-[var(--accent)]">
 				<Icon name={ICONS[suggestion.kind]} size={16} />
 			</span>
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-dense font-[var(--weight-medium)]">{suggestion.headline}</p>
+				<p className="truncate text-base font-[var(--weight-medium)]">{suggestion.headline}</p>
 				<p className="truncate text-sm text-[var(--ink-muted)]">{suggestion.question}</p>
 			</div>
 			<Button size="dense" disabled={busy} onClick={onDismiss}>

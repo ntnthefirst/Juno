@@ -62,8 +62,8 @@ export function ListSearchBar({
 	}, [open]);
 
 	return (
-		<div ref={wrapper} className="relative min-w-[200px] max-w-[360px] flex-1">
-			<div className="flex h-10 items-center gap-2 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pr-1.5 pl-3 focus-within:border-[var(--focus)]">
+		<div ref={wrapper} className="relative flex min-w-[200px] max-w-[580px] flex-1 items-center gap-2">
+			<div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pr-1.5 pl-3 focus-within:border-[var(--focus)]">
 				<Icon name="search" size={16} className="flex-none text-[var(--ink-faint)]" />
 				<input
 					type="search"
@@ -84,27 +84,27 @@ export function ListSearchBar({
 						<Icon name="close" size={12} />
 					</button>
 				) : null}
-				{filters ? (
-					<button
-						type="button"
-						aria-label="Filters"
-						title="Filters"
-						aria-expanded={open}
-						onClick={() => setOpen((current) => !current)}
-						className={[
-							"inline-flex h-[28px] shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5",
-							filterCount > 0 || open
-								? "bg-[var(--accent-soft)] text-[var(--accent)]"
-								: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
-						].join(" ")}
-					>
-						<Icon name="filter" size={14} />
-						{filterCount > 0 ? (
-							<span className="tabular text-micro">{filterCount}</span>
-						) : null}
-					</button>
-				) : null}
 			</div>
+			{filters ? (
+				<button
+					type="button"
+					aria-label="Filters"
+					title="Filters"
+					aria-expanded={open}
+					onClick={() => setOpen((current) => !current)}
+					className={[
+						"inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-[var(--radius-md)] px-1.5",
+						filterCount > 0 || open
+							? "bg-[var(--accent-soft)] text-[var(--accent)]"
+							: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
+					].join(" ")}
+				>
+					<Icon name="filter" size={14} />
+					{filterCount > 0 ? (
+						<span className="tabular text-micro">{filterCount}</span>
+					) : null}
+				</button>
+			) : null}
 
 			{open && filters ? (
 				<div

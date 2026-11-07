@@ -2,6 +2,7 @@ import { Fragment, useMemo, useRef } from "react";
 import type { MailOutboxMessage, MailThreadSummary } from "@shared/types";
 import { Avatar } from "../../components/Avatar";
 import { Checkbox } from "../../components/Checkbox";
+import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { GroupHeader } from "../../components/GroupHeader";
@@ -137,6 +138,17 @@ export function ThreadList({
 	}
 	if (threads === null || (outbox && outbox.messages === null)) {
 		return <p className="px-4 text-[var(--ink-muted)]">Loading.</p>;
+	}
+	if (merged.length === 0) {
+		return searching ? (
+			<EmptyState
+				icon="search"
+				title="Nothing found"
+				description="No mail matches that search. Try another word or clear the filters."
+			/>
+		) : (
+			<EmptyState icon="mail" title="No messages here" description="This folder has no mail yet." />
+		);
 	}
 	const entries = merged;
 	if (entries.length === 0) {
@@ -274,27 +286,25 @@ export function ThreadList({
 								>
 									<div
 										className={[
-											"flex items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+											"flex min-h-16 items-center gap-3 rounded-[var(--radius-md)] py-2 pr-4 pl-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 											active || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
 										].join(" ")}
 									>
-										{/* An unread row has a dot in the margin, so the avatar can stay a picture. */}
-										{unread ? (
-											<UnreadDot className="absolute top-1/2 left-0 -translate-y-1/2" />
-										) : null}
+										{/* An unread row starts with the dot, then the avatar, as the design draws it. */}
+										{unread ? <UnreadDot /> : null}
 										{/*
 											The avatar doubles as the row's selector: hovering it, focusing
 											it with the keyboard, or selecting anything else in the list turns
 											it into a checkbox, so the list stays free of checkboxes until
 											somebody wants them.
 										*/}
-										<span className="relative flex h-8 w-8 flex-none items-center justify-center">
+										<span className="relative flex h-[34px] w-[34px] flex-none items-center justify-center">
 											<span
 												className={
 													hasSelection ? "invisible" : "group-hover:invisible group-focus-within:invisible"
 												}
 											>
-												<Avatar name={lead} size={32} />
+												<Avatar name={lead} size={34} />
 											</span>
 											<Checkbox
 												checked={checked}
@@ -328,7 +338,7 @@ export function ThreadList({
 											<div className="flex items-baseline gap-2">
 												<span
 													className={`min-w-0 flex-1 truncate text-base ${
-														unread ? "font-[var(--weight-semibold)] text-[var(--ink)]" : "text-[var(--ink)]"
+														unread ? "font-[var(--weight-semibold)] text-[var(--ink)]" : "font-[var(--weight-medium)] text-[var(--ink)]"
 													}`}
 												>
 													{participantsLine(thread.participants, "Me")}
@@ -358,16 +368,14 @@ export function ThreadList({
 															<Icon name="attachment" size={12} />
 														</span>
 													) : null}
-													<span className="tabular text-sm text-[var(--ink-muted)]">
+													<span className="tabular text-dense text-[var(--ink-muted)]">
 														{formatWhen(thread.lastMessageAt)}
 													</span>
 												</span>
 											</div>
 											<div className="mt-0.5 flex items-baseline gap-2">
-												<span className="min-w-0 flex-1 truncate text-dense text-[var(--ink-muted)]">
-													<span className={unread ? "font-[var(--weight-medium)] text-[var(--ink)]" : "text-[var(--ink)]"}>
-														{thread.subject}
-													</span>
+												<span className="min-w-0 flex-1 truncate text-base text-[var(--ink-muted)]">
+													<span className={unread ? "text-[var(--ink)]" : ""}>{thread.subject}</span>
 													{thread.snippet ? ` ${thread.snippet}` : ""}
 												</span>
 												{/* Beside Juno's own unsent messages, the server's are told apart. */}

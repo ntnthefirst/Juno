@@ -331,24 +331,23 @@ export function FolderNav({
 					// the way a tree does everywhere else.
 					onDoubleClick={options.expandable ? options.onToggleExpand : undefined}
 					aria-current={active ? "true" : undefined}
-					style={{ height: "var(--row-height)" }}
 					className={[
-						"flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] pr-2 pl-5 text-left text-dense",
+						`flex h-10 min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] pr-4 text-left text-base ${options.expandable ? "pl-5" : "pl-4"}`,
 						"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 						isDropTarget
 							? "bg-[var(--accent-soft)] ring-2 ring-[var(--accent)] ring-inset"
 							: active
-								? "bg-[var(--accent-soft)] font-[var(--weight-medium)] text-[var(--accent)]"
+								? "bg-[var(--accent-soft)] text-[var(--accent)]"
 								: folder && !folder.syncEnabled
 									? "text-[var(--ink-muted)] hover:bg-[var(--hover)]"
 									: "text-[var(--ink)] hover:bg-[var(--hover)]",
 					].join(" ")}
 					title={folder ? (folder.syncEnabled ? folder.path : `${folder.path} (not synced)`) : label}
 				>
-					<Icon name={icon} size={14} />
+					<Icon name={icon} size={16} />
 					<span className="min-w-0 flex-1 truncate">{label}</span>
 					{badge && badge > 0 ? (
-						<span className="tabular shrink-0 text-micro text-[var(--ink-muted)]">{badge}</span>
+						<span className={`tabular shrink-0 text-dense ${active ? "text-[var(--accent)]" : "text-[var(--ink-muted)]"}`}>{badge}</span>
 					) : null}
 				</button>
 			</div>

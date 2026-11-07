@@ -341,11 +341,11 @@ export function ThreadView({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col animate-fade">
-			<div className="shrink-0 border-b border-[var(--line)] px-8 pb-4 pt-6">
+			<div className="shrink-0 px-6 pt-4">
 				<button
 					type="button"
 					onClick={onBack}
-					className="-ml-1.5 inline-flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-sm text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+					className="-ml-1.5 inline-flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 				>
 					<Icon
 						name="chevron-left"
@@ -354,11 +354,11 @@ export function ThreadView({
 					Back
 				</button>
 
-				<div className="mt-2 flex items-start justify-between gap-6">
-					<h2 className="min-w-0 text-h3">
+				<div className="mt-2 flex min-h-[52px] items-center justify-between gap-6">
+					<h2 className="min-w-0 text-h2">
 						{summary.subject}
 					</h2>
-					<div className="flex shrink-0 items-center gap-1">
+					<div className="flex shrink-0 items-center gap-3">
 						{openMessage ? (
 							<>
 								<ToolbarAction
@@ -387,7 +387,7 @@ export function ThreadView({
 							</>
 						) : null}
 						<ToolbarAction
-							icon="branch"
+							icon="link"
 							label={overviewOpen ? "Hide the conversation" : "Show the conversation"}
 							pressed={overviewOpen}
 							onClick={toggleOverview}
@@ -415,7 +415,7 @@ export function ThreadView({
 					</div>
 				</div>
 
-				<div className="mt-2 flex items-center gap-2">
+				<div className="flex items-center gap-2 pb-3">
 					{summary.clientName ? (
 						<span className="rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-1 text-sm text-[var(--accent)]">
 							{summary.clientName}
@@ -437,7 +437,7 @@ export function ThreadView({
 							{summary.projectName}
 						</button>
 					) : null}
-					<p className="tabular text-sm text-[var(--ink-muted)]">
+					<p className="tabular text-base text-[var(--ink-muted)]">
 						{entries.length} {entries.length === 1 ? "message" : "messages"}
 					</p>
 				</div>
@@ -541,7 +541,7 @@ type ToolbarActionProps = {
 	onClick: () => void;
 };
 
-/** A 32px icon button in the reader's toolbar. The label is its only wording. */
+/** A 40px icon button in the reader's toolbar, as the Icon Button in the design. The label is its only wording. */
 function ToolbarAction({ icon, label, danger = false, pressed, onClick }: ToolbarActionProps) {
 	return (
 		<button
@@ -551,7 +551,7 @@ function ToolbarAction({ icon, label, danger = false, pressed, onClick }: Toolba
 			aria-pressed={pressed}
 			onClick={onClick}
 			className={[
-				"inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)]",
+				"inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)]",
 				"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 				danger
 					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
@@ -562,7 +562,7 @@ function ToolbarAction({ icon, label, danger = false, pressed, onClick }: Toolba
 		>
 			<Icon
 				name={icon}
-				size={14}
+				size={18}
 			/>
 		</button>
 	);

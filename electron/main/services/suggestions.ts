@@ -95,7 +95,7 @@ function findEvent(db: Db, messageId: string, today: Date): Found | null {
 		suggestion: {
 			kind: "event",
 			messageId,
-			headline: `${sender} mentions ${moment.dayLabel} at ${moment.time}.`,
+			headline: `${sender} mentions ${moment.dayLabel} at ${moment.time}`,
 			question: `Add "${title}" to the calendar?`,
 		},
 	};
@@ -154,7 +154,7 @@ ${body}`;
 		suggestion: {
 			kind: "project",
 			messageId,
-			headline: `This looks like part of ${chosen.name.trim()}.`,
+			headline: `This looks like part of ${chosen.name.trim()}`,
 			question: "Link this message to the project?",
 		},
 	};

@@ -31,7 +31,7 @@ type NoticeProps = {
 export function Notice({ tone = "warn", children, actions, icon, layout = "band", role }: NoticeProps) {
 	const metrics =
 		layout === "band"
-			? "min-h-[40px] flex-wrap px-8 py-2"
+			? "min-h-[40px] flex-wrap px-6 py-2"
 			: "rounded-[var(--radius-md)] px-3 py-2.5";
 
 	return (

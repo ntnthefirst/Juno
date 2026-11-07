@@ -74,62 +74,39 @@ your hands, a real account or a real client, rather than code.
   on the taskbar button clearing with the last request, and the Ctrl+Alt+N
   shortcut from another program, including the message when another program
   already owns the combination. Settings > General > Notifications and tray.
+- **No mailbox rule has run against a real server yet.** The rules (Settings >
+  Mail accounts > an account) are proven against a mailbox held in memory, which
+  never disagrees with a real server about what a move or a flag does. Use a
+  spare account first, not your working one. Connect it and let the first sync
+  finish, and check that none of the mail already there is touched. Write a rule
+  for your own address that marks read, flags and moves to a folder, send
+  yourself two messages, sync, and check the webmail shows the read mark, the
+  flag and the move as well as Juno does, and that the history on the account
+  page names the rule for each action. Write a rule whose folder you delete on
+  the server, send one more message, and check the failure is listed once with
+  its reason and not tried again at the next sync. Note which provider you used,
+  and whether it answered the move with the new UID or only at the next sync.
 
 ## 4. Not tasks
 
 Written down so nobody builds them by accident.
 
-- **Nothing files mail on its own except the owner's mailbox rules** (5b).
-  An agent or an automation still cannot: filing is side-effectful, so it is
-  excluded from anything unattended by the same rule that keeps sending out of
-  an automation.
+- **Nothing files mail on its own except the owner's mailbox rules**
+  (decision 64). An agent or an automation still cannot: filing is
+  side-effectful, so it is excluded from anything unattended by the same rule
+  that keeps sending out of an automation, and an agent can only ask for a rule
+  through the approval gate.
 - **An automation cannot pass one step's result to the next.** Anything that
   needs the output of a previous step is a job for an agent, which can read and
   then decide, rather than for a recording.
 
-## 5. Mail rules: greetings for every message, automation per mailbox
+## 5. Mail: greetings for every message
 
-Greetings and sign-offs became intros and outros in the composer, and are built
-(5a). Automation belongs to one mailbox, so each mailbox has its own list.
-
-Automation rules are built like Cloudflare's rules: a rule has a **name**, an on
-and off switch, **conditions** and **what it does**. Rules sit in an **ordered
-list** that is reordered by dragging, and are checked top to bottom. Stored in
-the database with the five columns, behind a service, IPC channels and MCP tools,
-like everything else (decision 2).
-
-### 5a. Greetings and sign-offs
-
-Built as intros and outros in the mail composer (decision 55), following the
-design instead of the static-text plan that was written here before. The
-service is `services/mail-blocks.ts`, the screens are in
-`src/features/mail/blocks/`. The unfinished branch `wip/mail-phrases` is kept as
-a reference only: its model differs and it is not to be merged.
-
-### 5b. Automation rules per mailbox
-
-- **The account gets a detail page.** Settings > Mail accounts lists the
-  connected mailboxes; clicking one opens its page (a `FormPage`, decision 30)
-  with its details, its folders (the folders dialog moves here) and its rules.
-- **When they run.** On every sync of that mailbox, on new incoming messages in
-  its **inbox** only. Not on sent mail, not on other folders, and not again on
-  a message a rule has already seen.
-- **Conditions** on the sender, the recipients, the subject, whether the
-  sender is a client, and whether it has attachments.
-- **Actions**, one or several per rule: move to a folder, move to trash,
-  archive, mark read, flag, link the thread to its client. For example "from
-  this address: mark read and move to trash".
-- **Order, like Cloudflare.** Rules run top to bottom. Each rule has its own
-  choice of whether a match stops the rules below it or lets them run too.
-- **The owner's rules may file on their own.** Moving and deleting on the
-  server is filing, which the project otherwise never does unattended
-  (mcp.md section 4). A rule the owner wrote and switched on is the owner's
-  standing instruction, so it runs without asking each time. That is an
-  exception, and it covers these rules only: an agent may create or edit a
-  rule only through the approval gate, and an automation may not run one.
-  Write the exception into docs/decisions.md in the same commit.
-- Every action a rule takes writes an audit row naming the rule, so "why did
-  this message move" always has an answer.
+Greetings and sign-offs became intros and outros in the composer, and are
+built (decision 55), following the design instead of the static-text plan that
+was written here before. The service is `services/mail-blocks.ts`, the screens
+are in `src/features/mail/blocks/`. The unfinished branch `wip/mail-phrases`
+is kept as a reference only: its model differs and it is not to be merged.
 
 ## 6. Components for document templates on paper
 

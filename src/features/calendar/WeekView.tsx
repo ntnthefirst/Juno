@@ -7,7 +7,7 @@ import {
 } from "react";
 import type { CalendarItem, CalendarOccurrence, CalendarReminderItem } from "@shared/types";
 import { formatMinutes, snap, weekdayShort } from "./dates";
-import { chipTone, openItemMenu as openChipMenu, itemTitle, laneLayout, type Placed } from "./format";
+import { chipTone, dotTone, openItemMenu as openChipMenu, itemTitle, laneLayout, type Placed } from "./format";
 import { useWheelPaging } from "./use-wheel-paging";
 
 type WeekViewProps = {
@@ -32,7 +32,8 @@ type WeekViewProps = {
 	onStep: (direction: -1 | 1) => void;
 };
 
-const HOUR_PX = 48;
+/** An hour is 56px tall, as the Week frame draws it (26:1026). */
+const HOUR_PX = 56;
 const SNAP = 15;
 const MIN_PX = 20;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -164,31 +165,28 @@ export function WeekView({
 			<div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] overflow-y-auto border-b border-[var(--line)] [scrollbar-gutter:stable]">
 				<div />
 				{dates.map((date) => (
-					<div key={date} className="flex items-baseline gap-1.5 px-2 py-1.5">
-						<span className="text-micro uppercase tracking-[0.08em] text-[var(--ink-muted)]">
-							{weekdayShort(date)}
-						</span>
+					<div key={date} className="flex h-[42px] items-center gap-2 px-3">
 						<span
-							className={`tabular text-dense ${
-								date === today
-									? "rounded-[var(--radius-full)] bg-[var(--accent)] px-1.5 font-[var(--weight-medium)] text-[var(--accent-ink)]"
-									: ""
+							className={`tabular inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-[var(--radius-full)] text-base ${
+								date === today ? "bg-[var(--accent)] text-[var(--accent-ink)]" : ""
 							}`}
 						>
 							{Number(date.slice(8, 10))}
 						</span>
+						<span className="text-overline uppercase text-[var(--ink-muted)]">{weekdayShort(date)}</span>
 					</div>
 				))}
 			</div>
 
 			<div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] overflow-y-auto border-b border-[var(--line)] [scrollbar-gutter:stable]">
-				<div className="px-2 py-1 text-micro text-[var(--ink-muted)]">all day</div>
-				{dates.map((date, index) => {
+				<div className="flex min-h-8 items-center whitespace-nowrap pl-3 text-sm text-[var(--ink-muted)]">All day</div>
+				{dates.map((date) => {
 					const dated = (placed.get(date) ?? []).filter((p) => p.dated);
 					return (
+						// One cell high, 32px, until a day has more than one all-day item.
 						<div
 							key={date}
-							className={`flex min-h-7 flex-col gap-px px-1 py-1 ${index !== 0 ? "border-l border-[var(--line)]" : ""}`}
+							className="flex min-h-8 flex-col gap-1 p-1"
 							onDoubleClick={(event) => {
 								if (event.target === event.currentTarget) onCreateAt(date, null);
 							}}
@@ -202,7 +200,7 @@ export function WeekView({
 									onContextMenu={(event) => openItemMenu(event, p.item)}
 									title={itemTitle(p.item)}
 									className={[
-										"h-5 truncate rounded-[var(--radius-sm)] px-1.5 text-left text-micro font-[var(--weight-medium)] leading-none",
+										"h-6 shrink-0 truncate rounded-[var(--radius-sm)] px-2 text-left text-dense",
 										chipTone(p.item),
 										p.continued ? "rounded-l-none" : "",
 										p.continues ? "rounded-r-none" : "",
@@ -225,7 +223,7 @@ export function WeekView({
 						{HOURS.map((hour) => (
 							<div
 								key={hour}
-								className="tabular absolute right-2 -translate-y-1/2 text-micro text-[var(--ink-muted)]"
+								className="tabular absolute right-2 font-mono text-micro text-[var(--ink-muted)]"
 								style={{ top: hour * HOUR_PX }}
 							>
 								{hour === 0 ? "" : formatMinutes(hour * 60)}
@@ -239,7 +237,7 @@ export function WeekView({
 							return (
 								<div
 									key={date}
-									className={`relative ${index !== 0 ? "border-l border-[var(--line)]" : ""}`}
+									className={`relative ${index !== 0 ? "border-l border-[var(--line)]" : ""} ${index >= 5 ? "bg-[var(--sunken)]" : ""}`}
 									onClick={(event) => slotClick(event, date)}
 								>
 									{HOURS.map((hour) => (
@@ -262,8 +260,9 @@ export function WeekView({
 										const dayShift = active?.mode === "move" ? active.dayDelta : 0;
 										const startMinute = p.startMinute + (active?.mode === "move" ? active.minuteDelta : 0);
 										const endMinute = p.endMinute + (active ? active.minuteDelta : 0);
-										const top = (startMinute / 60) * HOUR_PX;
-										const height = Math.max(MIN_PX, ((Math.max(endMinute, startMinute) - startMinute) / 60) * HOUR_PX);
+										// Inset 2px above and below, so two blocks that meet do not touch.
+										const top = (startMinute / 60) * HOUR_PX + 2;
+										const height = Math.max(MIN_PX, ((Math.max(endMinute, startMinute) - startMinute) / 60) * HOUR_PX - 4);
 										const lane = lanes.get(p.key) ?? { lane: 0, lanes: 1 };
 										const item = p.item;
 										const label = item.kind === "event" ? item.title : itemTitle(item);
@@ -285,25 +284,28 @@ export function WeekView({
 												}}
 												onContextMenu={(event) => openItemMenu(event, item)}
 												className={[
-													"absolute z-[1] flex cursor-grab select-none flex-col overflow-hidden rounded-[var(--radius-sm)] border border-[var(--surface)] px-1.5 py-0.5 text-micro leading-tight",
+													"absolute z-[1] flex cursor-grab select-none gap-2 overflow-hidden rounded-[var(--radius-sm)] pr-2",
 													chipTone(item),
 													active ? "opacity-80 shadow-[var(--shadow-popover)]" : "",
 												].join(" ")}
 												style={{
 													top,
 													height,
-													left: `calc(${(lane.lane / lane.lanes) * 100}% + ${dayShift * 100}%)`,
-													width: `${(1 / lane.lanes) * 100}%`,
+													left: `calc(${(lane.lane / lane.lanes) * 100}% + ${dayShift * 100}% + 4px)`,
+													width: `calc(${(1 / lane.lanes) * 100}% - 8px)`,
 												}}
 											>
-												<span className="truncate font-[var(--weight-medium)]">{label}</span>
-												{height >= 34 ? (
-													<span className="tabular truncate opacity-80">
-														{formatMinutes(Math.max(0, startMinute))}
-														{" to "}
-														{formatMinutes(Math.min(1440, endMinute))}
-													</span>
-												) : null}
+												<span aria-hidden className={`w-[3px] shrink-0 ${dotTone(item)}`} />
+												<span className="flex min-w-0 flex-1 flex-col justify-center">
+													<span className="truncate text-dense font-[var(--weight-medium)]">{label}</span>
+													{height >= 44 ? (
+														<span className="tabular truncate text-sm">
+															{formatMinutes(Math.max(0, startMinute))}
+															{" to "}
+															{formatMinutes(Math.min(1440, endMinute))}
+														</span>
+													) : null}
+												</span>
 												{item.kind === "event" && !p.continues ? (
 													<span
 														aria-hidden

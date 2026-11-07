@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import type { CalendarItem, CalendarReminderItem } from "@shared/types";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { daysBetween, formatTime, weekdayShort } from "./dates";
@@ -27,7 +27,22 @@ type MonthViewProps = {
 	onStep: (direction: -1 | 1) => void;
 };
 
-const MAX_CHIPS = 4;
+/**
+ * The day cell as the design draws it (Day Cell, 20:501): 8px above the number,
+ * a 26px number, 4px, then chips 24px high with 4px between, and 6px below.
+ * How many chips fit is worked out from the height the grid was given, so a
+ * short window shows "+N more" sooner instead of clipping a chip in half.
+ */
+const CELL_TOP = 8 + 26 + 4;
+const CELL_BOTTOM = 6;
+const CHIP_HEIGHT = 24;
+const CHIP_GAP = 4;
+const ROWS = 6;
+
+function chipsThatFit(cellHeight: number): number {
+	const room = cellHeight - CELL_TOP - CELL_BOTTOM;
+	return Math.max(1, Math.floor((room + CHIP_GAP) / (CHIP_HEIGHT + CHIP_GAP)));
+}
 
 /**
  * Six rows of seven. Each cell is a hairline and a number, not a card, and an
@@ -53,7 +68,20 @@ export function MonthView({
 	const [dragging, setDragging] = useState<{ item: CalendarItem; fromDate: string } | null>(null);
 	const [over, setOver] = useState<string | null>(null);
 	const root = useRef<HTMLDivElement>(null);
+	const grid = useRef<HTMLDivElement>(null);
+	const [fit, setFit] = useState(3);
 	const page = useWheelPaging(onStep);
+
+	// The six rows share the height equally, so one measurement covers every cell.
+	useLayoutEffect(() => {
+		const node = grid.current;
+		if (!node) return;
+		const measure = () => setFit(chipsThatFit(node.clientHeight / ROWS));
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
 
 	// The grid has nothing of its own to scroll, so a wheel anywhere on it pages
 	// the month. No preventDefault is called, so this stays a passive listener.
@@ -88,24 +116,21 @@ export function MonthView({
 
 	return (
 		<div ref={root} className="flex h-full min-h-0 flex-col">
-			<div className="grid grid-cols-7 border-b border-[var(--line)]">
+			<div className="grid h-10 flex-none grid-cols-7 border-b border-[var(--line)]">
 				{dates.slice(0, 7).map((date) => (
-					<div
-						key={date}
-						className="px-2 py-1.5 text-micro uppercase tracking-[0.08em] text-[var(--ink-muted)]"
-					>
+					<div key={date} className="flex items-center px-3 text-overline uppercase text-[var(--ink-muted)]">
 						{weekdayShort(date)}
 					</div>
 				))}
 			</div>
 
-			<div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
+			<div ref={grid} className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
 				{dates.map((date, index) => {
 					const inMonth = date.slice(0, 7) === month;
 					const isToday = date === today;
 					const items = placed.get(date) ?? [];
-					const overflow = items.length > MAX_CHIPS ? items.length - (MAX_CHIPS - 1) : 0;
-					const visible = overflow > 0 ? items.slice(0, MAX_CHIPS - 1) : items;
+					const overflow = items.length > fit ? items.length - (fit - 1) : 0;
+					const visible = overflow > 0 ? items.slice(0, fit - 1) : items;
 					return (
 						<div
 							key={date}
@@ -133,20 +158,21 @@ export function MonthView({
 								})(event);
 							}}
 							className={[
-								"group flex min-h-0 flex-col border-b border-[var(--line)] px-1 pb-1 pt-1",
-								index % 7 !== 0 ? "border-l" : "",
-								over === date ? "bg-[var(--accent-soft)]" : inMonth ? "" : "bg-[var(--sunken)]/60",
+								"group flex min-h-0 flex-col gap-1 px-1.5 pb-1.5 pt-2",
+								index % 7 !== 6 ? "border-r border-[var(--line)]" : "",
+								index < 35 ? "border-b border-[var(--line)]" : "",
+								over === date ? "bg-[var(--accent-soft)]" : inMonth ? "" : "bg-[var(--sunken)]",
 							].join(" ")}
 						>
-							<div className="mb-0.5 flex items-center justify-between px-1">
+							<div className="flex flex-none items-center justify-between">
 								<button
 									type="button"
 									onClick={() => onOpenDay(date)}
 									aria-label={`Open ${date}`}
 									className={[
-										"tabular inline-flex h-6 min-w-6 items-center justify-center rounded-[var(--radius-full)] px-1 text-dense",
+										"tabular inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-[var(--radius-full)] text-base",
 										isToday
-											? "bg-[var(--accent)] font-[var(--weight-medium)] text-[var(--accent-ink)]"
+											? "bg-[var(--accent)] text-[var(--accent-ink)]"
 											: inMonth
 												? "text-[var(--ink)] hover:bg-[var(--hover)]"
 												: "text-[var(--ink-muted)] hover:bg-[var(--hover)]",
@@ -164,7 +190,7 @@ export function MonthView({
 								</button>
 							</div>
 
-							<div className="flex min-h-0 flex-1 flex-col gap-px overflow-hidden">
+							<div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
 								{visible.map((p) => (
 									<Chip
 										key={p.key}
@@ -179,7 +205,7 @@ export function MonthView({
 									<button
 										type="button"
 										onClick={() => onOpenDay(date)}
-										className="tabular truncate rounded-[var(--radius-sm)] px-1.5 text-left text-micro text-[var(--ink-muted)] hover:bg-[var(--hover)]"
+										className="tabular h-6 shrink-0 truncate rounded-[var(--radius-sm)] px-2 text-left text-dense text-[var(--ink-muted)] hover:bg-[var(--hover)]"
 									>
 										{overflow} more
 									</button>
@@ -217,14 +243,14 @@ function Chip({ placed, onOpen, onDragStart, onDragEnd, onContextMenu }: ChipPro
 			onContextMenu={(event) => onContextMenu(event, item)}
 			title={itemTitle(item)}
 			className={[
-				"flex h-5 w-full min-w-0 shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-left text-micro font-[var(--weight-medium)] leading-none",
+				"flex h-6 w-full min-w-0 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 text-left text-dense",
 				chipTone(item),
 				placed.continued ? "rounded-l-none" : "",
 				placed.continues ? "rounded-r-none" : "",
 				draggable ? "cursor-grab" : "",
 			].join(" ")}
 		>
-			{time ? <span className="tabular shrink-0 opacity-80">{time}</span> : null}
+			{time ? <span className="tabular shrink-0">{time}</span> : null}
 			<span className="truncate">{itemTitle(item)}</span>
 		</button>
 	);

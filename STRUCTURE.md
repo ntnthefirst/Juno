@@ -197,7 +197,10 @@ by the New menu, the palette, Ctrl N, the calendar grid and the quick adds on a
 client or project record, which pass a prefill in the address
 (`shared/new-record.ts`). `window.childClosed` carries `{ created }`, and
 `useRecordsChanged` (`src/lib/new-record.ts`) is how a screen reads again.
-Editing one of the four is still a page.
+Editing one of the four is still a page. Event and reminder are one window with
+an Event | Reminder switch (`NewEventWindow.tsx`): `#/new/event` and
+`#/new/reminder` only pick the side it opens on. A new event always takes the
+computer's time zone, and the event edit page has no zone field either.
 
 `onboarding` lives in `settings.json`, not the database, so replacing the
 database does not replay setup and `npm run dev:clean` does.

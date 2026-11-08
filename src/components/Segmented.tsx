@@ -26,9 +26,10 @@ type SegmentedProps<Id extends string> = {
 	/**
 	 * Base is the Segmented Control, compact the 28px one for the title bar and
 	 * toolbars, icons the View Switch: 40 by 32px glyph options, and icons-compact the View Switch
-	 * Compact for the title bar.
+	 * Compact for the title bar, and tall the Switch that sits beside a 44px field,
+	 * as the new event window draws Event | Reminder.
 	 */
-	size?: "base" | "compact" | "icons" | "icons-compact";
+	size?: "base" | "compact" | "icons" | "icons-compact" | "tall";
 	/** Runs the width of its container, the options sharing it equally. */
 	fill?: boolean;
 };
@@ -38,6 +39,7 @@ const FRAME = {
 	compact: "gap-0.5 rounded-[var(--radius-md)] p-0.5",
 	icons: "gap-0.5 rounded-[var(--radius-lg)] p-1",
 	"icons-compact": "gap-0.5 rounded-[var(--radius-md)] p-0.5",
+	tall: "gap-1 rounded-[var(--radius-lg)] p-1",
 };
 
 const OPTION = {
@@ -45,6 +47,7 @@ const OPTION = {
 	compact: "rounded-[var(--radius-sm)] px-2.5 py-[3px] text-dense",
 	icons: "h-8 w-10 justify-center rounded-[var(--radius-md)]",
 	"icons-compact": "h-6 w-8 justify-center rounded-[var(--radius-sm)]",
+	tall: "rounded-[var(--radius-md)] px-4 py-2 text-base",
 };
 
 /**

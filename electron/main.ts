@@ -4982,7 +4982,23 @@ if (!app.requestSingleInstanceLock()) {
 									{
 										kind: "event",
 										prefill: `{ clientId: ${JSON.stringify(clientId)} }`,
-										fill: `put("Title", "Smoke workshop"); put("Repeats", "WEEKLY"); put("Notes", "Bring the quote.");`,
+										// The event and reminder window names its fields for a screen
+										// reader rather than with label elements, so these two walks find
+										// them by that name. The notes are a text editor, typed into.
+										fill: `
+											const named = (name) => document.querySelector("[aria-label=" + JSON.stringify(name) + "]");
+											const set = (el, value) => {
+												if (!el) throw new Error("no field");
+												const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+												Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
+												el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+											};
+											set(named("Title"), "Smoke workshop");
+											set(named("Location"), "Kerkstraat 1, 9000 Gent");
+											set(named("Repeat"), "WEEKLY");
+											control("Notes").focus();
+											document.execCommand("insertText", false, "Bring the quote.");
+										`,
 										save: "Save event",
 										check: `(async () => {
 											const today = new Date();
@@ -4993,6 +5009,8 @@ if (!app.requestSingleInstanceLock()) {
 											const event = await window.juno.calendar.get(hit.eventId);
 											if (!event || !event.rrule || !event.rrule.includes("WEEKLY")) return "the repeat was not kept";
 											if (event.clientId !== ${JSON.stringify(clientId)}) return "the client prefill was not kept";
+											if (event.location !== "Kerkstraat 1, 9000 Gent") return "the location was not kept";
+											if (event.timezone !== Intl.DateTimeFormat().resolvedOptions().timeZone) return "the event is not in the computer's zone";
 											return "ok";
 										})()`,
 									},
@@ -5030,7 +5048,21 @@ if (!app.requestSingleInstanceLock()) {
 									{
 										kind: "reminder",
 										prefill: `{ date: "2026-10-19" }`,
-										fill: `put("What", "Smoke order planks"); put("Repeats", "months"); put("Notes", "Kiln dried.");`,
+										fill: `
+											const named = (name) => document.querySelector("[aria-label=" + JSON.stringify(name) + "]");
+											const set = (el, value) => {
+												if (!el) throw new Error("no field");
+												const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+												Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
+												el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+											};
+											if (named("Location")) throw new Error("a reminder offers a location");
+											set(named("Title"), "Smoke order planks");
+											set(named("Due at"), "10:30");
+											set(named("Repeat"), "months");
+											control("Notes").focus();
+											document.execCommand("insertText", false, "Kiln dried.");
+										`,
 										save: "Save reminder",
 										check: `(async () => {
 											const rows = await window.juno.reminders.list({});
@@ -5038,6 +5070,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!hit) return "the reminder was not saved";
 											if (hit.dueOn !== "2026-10-19") return "the date was not kept as a plain date";
 											if (hit.pattern !== "months") return "the repeat was not kept";
+											if (hit.dueTime !== "10:30") return "the due time was not kept";
 											return "ok";
 										})()`,
 									},

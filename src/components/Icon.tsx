@@ -110,6 +110,7 @@ export type IconName =
 	| "today"
 	| "panel"
 	| "recent"
+	| "time"
 	| "clients"
 	| "client"
 	| "projects"
@@ -462,6 +463,7 @@ const ICONS: Record<IconName, Glyph> = {
 	overview: HomeIcon,
 	today: ClockIcon,
 	recent: ClockIcon,
+	time: ClockIcon,
 	clients: UsersIcon,
 	client: BuildingOffice2Icon,
 	projects: FolderIcon,

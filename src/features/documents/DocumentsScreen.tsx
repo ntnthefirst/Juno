@@ -600,19 +600,28 @@ function DocumentList({ rows, selectedId, selectedIds, onToggle, onSelect, onRem
 											selected || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
 										}`}
 									>
+										{/* The tick takes the tile's place: under the pointer, on focus,
+										    and on every row once anything is ticked. */}
 										<span
-											className={`relative flex size-9 flex-none items-center justify-center rounded-[var(--radius-md)] ${kind.tile}`}
+											className={`relative flex size-9 flex-none items-center justify-center rounded-[var(--radius-md)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+												hasSelection ? "" : `${kind.tile} group-hover:bg-transparent group-has-[:focus-visible]:bg-transparent`
+											}`}
 											onClick={(event) => event.stopPropagation()}
 										>
-											<Icon name={kind.icon} size={18} />
-											<Checkbox
-												checked={checked}
-												onChange={() => onToggle(row.id)}
-												aria-label={`Select ${row.title}`}
-												className={`absolute inset-0 m-auto bg-[var(--surface)] ${
+											{hasSelection ? null : (
+												<Icon
+													name={kind.icon}
+													size={18}
+													className="transition-opacity duration-[var(--duration-fast)] ease-[var(--ease)] group-hover:opacity-0 group-has-[:focus-visible]:opacity-0"
+												/>
+											)}
+											<span
+												className={`absolute inset-0 flex items-center justify-center transition-opacity duration-[var(--duration-fast)] ease-[var(--ease)] ${
 													hasSelection ? "" : "opacity-0 group-hover:opacity-100 has-[:focus-visible]:opacity-100"
 												}`}
-											/>
+											>
+												<Checkbox checked={checked} onChange={() => onToggle(row.id)} aria-label={`Select ${row.title}`} />
+											</span>
 										</span>
 										<div className="min-w-0 flex-1">
 											<button

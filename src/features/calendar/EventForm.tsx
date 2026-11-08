@@ -1,5 +1,5 @@
 import { listAllClients } from "../../lib/list-all-clients";
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import type {
 	CalendarEvent,
 	CalendarEventPatch,
@@ -14,7 +14,17 @@ import { FormPage, type FormStep } from "../../components/FormPage";
 import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
-import { addDays, addLocalMinutes, dateOf, joinLocal, localMinutesBetween, machineTimeZone, timeOf } from "./dates";
+import {
+	addDays,
+	addLocalMinutes,
+	dateOf,
+	formatTime,
+	joinLocal,
+	localDateOfInstant,
+	localMinutesBetween,
+	machineTimeZone,
+	timeOf,
+} from "./dates";
 import { LocationField } from "./LocationField";
 import { RecurrenceEditor, type RecurrenceValue } from "./RecurrenceEditor";
 import { buildRule, parseRule } from "./recurrence";
@@ -38,13 +48,17 @@ type Values = {
 	startTime: string;
 	endDate: string;
 	endTime: string;
-	timezone: string;
 	recurrence: RecurrenceValue;
 	location: string;
 	notes: string;
 	clientId: string;
 	projectId: string;
 };
+
+/** An instant as a wall-clock string on this computer's clock. */
+function machineLocalOf(utcIso: string): string {
+	return joinLocal(localDateOfInstant(utcIso), formatTime(utcIso));
+}
 
 function recurrenceOf(rrule: string | null, startLocal: string): RecurrenceValue {
 	if (!rrule) return { mode: "none" };
@@ -56,9 +70,13 @@ function toValues(event: CalendarEvent, occurrence: CalendarOccurrence | null, s
 	// For one occurrence, or this and following, the times come from the
 	// occurrence being looked at rather than from the series' first one.
 	const timed = scope !== "all" && occurrence ? occurrence : event;
-	const startLocal = timed.startLocal;
-	const endLocal = timed.endLocal;
 	const allDay = timed.allDay;
+	// There is no zone on the form and a save writes the computer's, so an event
+	// made in another zone shows its times as they fall here. One occurrence of
+	// a series keeps the series' zone, so its times stay as they were written.
+	const moveToHere = !allDay && timed.timezone !== machineTimeZone() && !(scope === "this" && event.rrule !== null);
+	const startLocal = moveToHere ? machineLocalOf(timed.startUtc) : timed.startLocal;
+	const endLocal = moveToHere ? machineLocalOf(timed.endUtc) : timed.endLocal;
 	const source = scope === "this" && occurrence ? occurrence : event;
 	return {
 		title: source.title,
@@ -68,7 +86,6 @@ function toValues(event: CalendarEvent, occurrence: CalendarOccurrence | null, s
 		// An all-day end is exclusive in storage and inclusive on the form.
 		endDate: allDay && endLocal ? addDays(dateOf(endLocal), -1) : dateOf(endLocal),
 		endTime: allDay ? "10:00" : timeOf(endLocal),
-		timezone: event.timezone || machineTimeZone(),
 		recurrence: recurrenceOf(event.rrule, startLocal),
 		location: source.location ?? "",
 		notes: source.notes ?? "",
@@ -110,12 +127,6 @@ export function EventForm({ event, occurrence = null, scope = "all", backLabel, 
 	const [busy, setBusy] = useState(false);
 
 	const singleOccurrence = scope === "this" && event.rrule !== null;
-
-	const zones = useMemo(() => {
-		const list = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
-		if (!list.includes(values.timezone)) list.unshift(values.timezone);
-		return list.map((zone) => ({ value: zone, label: zone }));
-	}, [values.timezone]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -211,7 +222,9 @@ export function EventForm({ event, occurrence = null, scope = "all", backLabel, 
 					allDay: values.allDay,
 					startLocal: start,
 					endLocal: end,
-					timezone: values.timezone,
+					// Saved in the computer's zone, whatever zone it was made in: there is
+					// no zone to pick, so the times on the form are this machine's.
+					timezone: machineTimeZone(),
 					location: values.location.trim() || null,
 					notes: values.notes.trim() || null,
 					clientId: values.clientId || null,
@@ -319,12 +332,6 @@ export function EventForm({ event, occurrence = null, scope = "all", backLabel, 
 							<Field label="At" type="time" required value={values.endTime} onChange={(v) => set("endTime", v)} tabular />
 						)}
 
-						{values.allDay ? null : (
-							<div className="col-span-2">
-								<Select label="Time zone" value={values.timezone} onChange={(v) => set("timezone", v)} options={zones} disabled={singleOccurrence} />
-							</div>
-						)}
-
 						<div className="col-span-2 border-t border-[var(--line)] pt-4">
 							<RecurrenceEditor
 								value={values.recurrence}
@@ -334,7 +341,7 @@ export function EventForm({ event, occurrence = null, scope = "all", backLabel, 
 							/>
 							{singleOccurrence ? (
 								<p className="mt-2 text-sm text-[var(--ink-muted)]">
-									The repeat rule, zone and client belong to the whole series.
+									The repeat rule and client belong to the whole series.
 								</p>
 							) : null}
 						</div>

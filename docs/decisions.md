@@ -2464,3 +2464,50 @@ Microsoft, and every other provider still takes a password or an app password.
 SMTP again, which would make the sign-in a convenience rather than the only
 way in, or Google lifting the assessment, which would bring Gmail onto the
 same flow.
+
+## 74. A calendar subscription is read only, and its address is a secret
+
+Juno subscribes to calendars it reads from an https address and keeps up to
+date by itself: Google's secret address in iCal format, an Outlook published
+calendar, public holidays, a booking tool. Settings > Mail accounts lists them
+under the accounts (frames `190:628` and `190:797`), and the add-account flow
+offers one for a Google account (`190:473`). Decision 11 said import comes
+before sync; this is a third thing, reading someone else's calendar on a
+schedule, and CalDAV is still a later phase.
+
+- **Read only.** Its events are drawn in its colour and cannot be moved,
+  resized, edited or deleted; a click shows one with a line saying where it
+  comes from. The next fetch would put back anything changed here.
+- **Its own tables.** `calendar_subscriptions` and
+  `calendar_subscription_events`, not rows in `calendar_events` with a flag.
+  Every query, edit, export, agent tool and right-click menu written for
+  Juno's own events stays as it is and cannot reach a feed's event by
+  forgetting a filter. The range query takes `includeSubscriptions` and adds
+  them as items of their own kind, which the views must handle and the type
+  checker makes them. A client's or a project's schedule leaves them out.
+  Exceptions are JSON on the row, because nothing edits them.
+- **The address is kept like a password.** Anyone holding a Google secret
+  address reads the calendar, so it goes to the credential store, keyed by
+  the subscription, and the row keeps the host and a hash (security.md
+  section 1). No IPC channel and no tool returns it, an error names the host
+  only, and removing a subscription forgets it.
+- **Fetching is the main process's, under the guard pictures already use**
+  (`services/public-fetch.ts`): https only, a public host on every redirect, a
+  10 MB cap counted as the body arrives, 20 seconds, and If-None-Match and
+  If-Modified-Since. The feed is hostile input (`services/calendar-feed.ts`):
+  at most 10,000 events, text cleaned and cut short, a COUNT cut to 2,000,
+  and an hourly rule dropped, as an import drops it.
+- **A failed fetch keeps the last good events** and the reason is on the row
+  in plain words. It is fetched once shortly after launch, then on its
+  interval (15 minutes, an hour or a day) while Juno runs and is unlocked,
+  and on demand from the row.
+- **Asking Juno to fetch an address is the owner's decision.**
+  `calendar.subscriptions.preview`, `create`, `update` and `refresh` are in
+  the Send and file row, so they park whatever the levels say, and the owner
+  reads the address before Juno goes to it. `remove` is in the Delete row.
+  Reading the list is in the Read row, and `calendar.list_events` takes
+  `include_subscriptions`.
+
+**What would reverse this:** two-way sync with a calendar server, which would
+make these events editable and their server the owner of them, as decision 23
+already foresees for CalDAV.

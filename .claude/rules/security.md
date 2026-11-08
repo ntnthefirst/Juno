@@ -47,9 +47,14 @@ May not expose, ever:
   after `safeLinkHref` (https or mailto), the same check the page was saved with.
   `pages.chooseImage` takes no path at all: the file is picked in a dialog in the main
   process and copied into the page's own folder (decision 68). Neither is an MCP tool.
-  The one exception is `mail.templates.loadPicture`, reached only after the person
-  confirms a source in a dialog (`services/mail-pictures.ts`): https only, a public
-  host on every redirect, a size cap, and raster formats only. It is not an MCP tool.
+  There are two exceptions, and both fetch through `services/public-fetch.ts`: https
+  only, a public host on every redirect, a size cap counted as the body arrives, and
+  a time limit. `mail.templates.loadPicture` is reached only after the person
+  confirms a source in a dialog (`services/mail-pictures.ts`), takes raster formats
+  only, and is not an MCP tool. `calendar.subscriptions.preview`, `create` and
+  `update` take the address of a calendar the person pasted (decision 74); their MCP
+  tools park for approval whatever the levels say, and the address is kept in the
+  credential store, never returned.
 
 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`,
 `webSecurity: true`. None of these gets turned off to make an import work. If a

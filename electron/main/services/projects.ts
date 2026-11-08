@@ -22,7 +22,7 @@ import type {
 	ProjectSummary,
 } from "../../shared/types";
 import { getDb, type Db } from "../db";
-import { now } from "../db/columns";
+import { LOCAL_OWNER_ID, now } from "../db/columns";
 import {
 	clients,
 	projectAssets,
@@ -33,6 +33,7 @@ import {
 	referenceItems,
 	referenceSets,
 } from "../db/schema";
+import { cleanIds, requireAll, reviewOf, type BulkReview } from "./bulk";
 import { requireClient } from "./clients";
 import {
 	checkChosenFolder,
@@ -442,7 +443,11 @@ export async function setCover(
  */
 export async function archive(id: string, db: Db = getDb()): Promise<Project> {
 	requireProject(id, db);
+	return update(id, { statusId: archivedStatusId(db) }, db);
+}
 
+/** The Archived project status, added to the set the first time it is needed. */
+function archivedStatusId(db: Db): string {
 	const set = db
 		.select({ id: referenceSets.id })
 		.from(referenceSets)
@@ -481,6 +486,132 @@ export async function archive(id: string, db: Db = getDb()): Promise<Project> {
 			.returning({ id: referenceItems.id })
 			.get();
 	}
+	return item.id;
+}
 
-	return update(id, { statusId: item.id }, db);
+/* ---------------------------------------------------------------- several */
+
+const NOUN = { one: "project", many: "projects" };
+
+/**
+ * The rows a bulk call names, deleted or not, in the order given. Every id
+ * must be one of this owner's projects or nothing happens (services/bulk.ts).
+ */
+function ownRows(ids: unknown, db: Db): Project[] {
+	const wanted = cleanIds(ids, NOUN);
+	const rows = db
+		.select()
+		.from(projects)
+		.where(and(inArray(projects.id, wanted), eq(projects.ownerId, LOCAL_OWNER_ID)))
+		.all() as Project[];
+	const byId = new Map(rows.map((row) => [row.id, row]));
+	requireAll(wanted, new Set(byId.keys()), NOUN);
+	return wanted.map((id) => byId.get(id)!);
+}
+
+/**
+ * Sets each project's status to Archived, in one go, writing each move on its
+ * timeline as `update` does. A deleted project is left alone.
+ */
+export async function archiveMany(ids: string[], db: Db = getDb()): Promise<Project[]> {
+	return db.transaction((tx) => {
+		const rows = ownRows(ids, tx);
+		const statusId = archivedStatusId(tx);
+		const at = now();
+		const changed: Project[] = [];
+		for (const row of rows) {
+			if (row.deletedAt !== null) continue;
+			const updated = tx
+				.update(projects)
+				.set({ statusId, updatedAt: at })
+				.where(eq(projects.id, row.id))
+				.returning()
+				.get() as Project | undefined;
+			if (!updated) continue;
+			if (row.statusId !== statusId) {
+				tx.insert(projectStatusChanges)
+					.values({ projectId: row.id, fromStatusId: row.statusId, toStatusId: statusId, changedAt: at })
+					.run();
+			}
+			changed.push(updated);
+		}
+		return changed;
+	});
+}
+
+/** Soft deletes each project, in one go. One that is already deleted is left alone and not returned. */
+export async function removeMany(ids: string[], db: Db = getDb()): Promise<Project[]> {
+	return db.transaction((tx) => {
+		const at = now();
+		const live = ownRows(ids, tx).filter((row) => row.deletedAt === null);
+		if (live.length === 0) return [];
+		return tx
+			.update(projects)
+			.set({ deletedAt: at, updatedAt: at })
+			.where(inArray(projects.id, live.map((row) => row.id)))
+			.returning()
+			.all() as Project[];
+	});
+}
+
+/** Brings each deleted project back, in one go. One that was never deleted is left alone and not returned. */
+export async function restoreMany(ids: string[], db: Db = getDb()): Promise<Project[]> {
+	return db.transaction((tx) => {
+		const gone = ownRows(ids, tx).filter((row) => row.deletedAt !== null);
+		if (gone.length === 0) return [];
+		return tx
+			.update(projects)
+			.set({ deletedAt: null, updatedAt: now() })
+			.where(inArray(projects.id, gone.map((row) => row.id)))
+			.returning()
+			.all() as Project[];
+	});
+}
+
+/**
+ * What a person reads before an agent's bulk call on projects runs: every
+ * project by name. Refuses a list that names a project nobody has, or one
+ * where there is nothing left to do. Reading it never adds the Archived status.
+ */
+export function reviewMany(action: "archive" | "delete" | "restore", ids: string[], db: Db = getDb()): BulkReview {
+	const rows = ownRows(ids, db);
+	if (action === "archive") {
+		const archivedIds = new Set(
+			db
+				.select({ id: referenceItems.id })
+				.from(referenceItems)
+				.innerJoin(referenceSets, eq(referenceItems.setId, referenceSets.id))
+				.where(
+					and(
+						eq(referenceSets.key, "project_status"),
+						eq(referenceItems.key, "archived"),
+						isNull(referenceItems.deletedAt),
+					),
+				)
+				.all()
+				.map((item) => item.id),
+		);
+		return reviewOf(
+			{
+				verb: "Archive",
+				noun: NOUN,
+				afterwards: "Each keeps its files, notes and history, and can be given another status later.",
+				skippedAs: "Deleted or archived already",
+			},
+			rows.map((row) => ({
+				name: row.name,
+				skipped: row.deletedAt !== null || (row.statusId !== null && archivedIds.has(row.statusId)),
+			})),
+		);
+	}
+	if (action === "delete") {
+		return reviewOf(
+			{ verb: "Delete", noun: NOUN, afterwards: "Each can be restored afterwards.", skippedAs: "Deleted already" },
+			rows.map((row) => ({ name: row.name, skipped: row.deletedAt !== null })),
+		);
+	}
+	return reviewOf(
+		{ verb: "Restore", noun: NOUN, afterwards: "Each comes back with its files and notes.", skippedAs: "Not deleted" },
+		rows.map((row) => ({ name: row.name, skipped: row.deletedAt === null })),
+	);
 }

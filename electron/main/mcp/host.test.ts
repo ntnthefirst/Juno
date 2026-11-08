@@ -584,6 +584,27 @@ describe("actions on a selection", () => {
 		expect(await clients.list()).toHaveLength(0);
 	});
 
+	it("puts the project tools in their rows, and parks a bulk project delete naming every project", async () => {
+		expect(permissions.rowOf("projects.archive_many")).toBe("change");
+		expect(permissions.rowOf("projects.restore_many")).toBe("change");
+		expect(permissions.rowOf("projects.delete_many")).toBe("delete");
+
+		const projects = await import("../services/projects");
+		const a = await projects.create({ name: "Kitchen cabinets" });
+		const b = await projects.create({ name: "Oak dining table" });
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "allow", delete: "allow" });
+
+		const parked = (await callTool("projects.delete_many", { project_ids: [a.id, b.id] })) as Parked;
+		expect(parked.status).toBe("pending");
+		expect(parked.summary).toBe("Delete 2 projects");
+		const [pending] = await actions.list({ states: ["pending"] });
+		expect(pending!.preview).toContain("- Kitchen cabinets\n- Oak dining table");
+		expect(await projects.list()).toHaveLength(2);
+
+		await actions.approve(parked.actionId);
+		expect(await projects.list()).toHaveLength(0);
+	});
+
 	it("refuses at once a bulk client call that names a client nobody has", async () => {
 		const clients = await import("../services/clients");
 		const real = await clients.create({ name: "Van Damme" });

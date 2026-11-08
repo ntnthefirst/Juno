@@ -458,6 +458,14 @@ export interface JunoApi {
 		restore(id: string): Promise<Project>;
 		/** Sets the status to "Archived", adding that status the first time. */
 		archive(id: string): Promise<Project>;
+		/**
+		 * Archive, delete and restore for a selection, each in one go. An id that
+		 * is not a project refuses the whole call; a project already in that
+		 * state is left out of what comes back.
+		 */
+		archiveMany(ids: string[]): Promise<Project[]>;
+		removeMany(ids: string[]): Promise<Project[]>;
+		restoreMany(ids: string[]): Promise<Project[]>;
 		timeline(query: ProjectTimelineQuery): Promise<ProjectTimelineEntry[]>;
 
 		/** Which folder this project's own files are in, and how much is in it. */

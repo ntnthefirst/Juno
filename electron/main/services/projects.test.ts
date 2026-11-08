@@ -7,8 +7,10 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
+import { projectStatusChanges, projects as projectsTable, referenceItems, referenceSets } from "../db/schema";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import * as clients from "./clients";
@@ -383,5 +385,80 @@ describe("a project's commands", () => {
 				db,
 			),
 		).rejects.toThrow(/no folder at/);
+	});
+});
+
+describe("several projects at once", () => {
+	function statusSet(db: Db) {
+		db.insert(referenceSets).values({ key: "project_status", label: "Project status" }).run();
+	}
+
+	it("archives every project in one call, adding the status once and writing each move", async () => {
+		const db = freshDb();
+		statusSet(db);
+		const a = await projects.create({ name: "Kitchen cabinets" }, db);
+		const b = await projects.create({ name: "Oak dining table" }, db);
+		const gone = await projects.create({ name: "Hallway" }, db);
+		await projects.remove(gone.id, db);
+
+		const done = await projects.archiveMany([a.id, b.id, gone.id], db);
+		expect(done.map((row) => row.id)).toEqual([a.id, b.id]);
+		const statusId = done[0]!.statusId;
+		expect(statusId).not.toBeNull();
+		expect(done.every((row) => row.statusId === statusId)).toBe(true);
+		const archivedItems = db.select().from(referenceItems).where(eq(referenceItems.key, "archived")).all();
+		expect(archivedItems).toHaveLength(1);
+		const moves = db.select().from(projectStatusChanges).where(inArray(projectStatusChanges.projectId, [a.id, b.id])).all();
+		expect(moves).toHaveLength(2);
+
+		// Archived again: the status is the same, so no second move is written.
+		await projects.archiveMany([a.id], db);
+		expect(db.select().from(projectStatusChanges).where(eq(projectStatusChanges.projectId, a.id)).all()).toHaveLength(1);
+	});
+
+	it("soft deletes and restores in one call each, leaving out a project already there", async () => {
+		const db = freshDb();
+		const a = await projects.create({ name: "Kitchen cabinets" }, db);
+		const b = await projects.create({ name: "Oak dining table" }, db);
+		await projects.remove(b.id, db);
+
+		const removed = await projects.removeMany([a.id, b.id], db);
+		expect(removed.map((row) => row.id)).toEqual([a.id]);
+		expect(removed[0]!.deletedAt).not.toBeNull();
+		expect(await projects.list({}, db)).toHaveLength(0);
+
+		const restored = await projects.restoreMany([a.id, b.id], db);
+		expect(restored.map((row) => row.id).sort()).toEqual([a.id, b.id].sort());
+		expect(await projects.restoreMany([a.id], db)).toEqual([]);
+		expect(await projects.list({}, db)).toHaveLength(2);
+	});
+
+	it("refuses the whole call for an id nobody has or another owner's, and changes nothing", async () => {
+		const db = freshDb();
+		const mine = await projects.create({ name: "Kitchen cabinets" }, db);
+		const theirs = db.insert(projectsTable).values({ name: "Elders", ownerId: "someone-else" }).returning().get();
+
+		await expect(projects.removeMany([mine.id, "missing"], db)).rejects.toThrow(/No project with id "missing"/);
+		await expect(projects.removeMany([mine.id, theirs.id], db)).rejects.toThrow(/No project with id/);
+		await expect(projects.archiveMany([theirs.id], db)).rejects.toThrow(/No project with id/);
+		await expect(projects.removeMany([], db)).rejects.toThrow(/at least one project/);
+		expect(await projects.get(mine.id, db)).not.toBeNull();
+		expect(db.select().from(projectsTable).where(eq(projectsTable.id, theirs.id)).get()?.deletedAt).toBeNull();
+	});
+
+	it("names every project in what an agent's request shows, without adding a status by reading", async () => {
+		const db = freshDb();
+		statusSet(db);
+		const a = await projects.create({ name: "Kitchen cabinets" }, db);
+		const b = await projects.create({ name: "Oak dining table" }, db);
+
+		const review = projects.reviewMany("archive", [a.id, b.id], db);
+		expect(review.summary).toBe("Archive 2 projects");
+		expect(review.preview).toContain("- Kitchen cabinets\n- Oak dining table");
+		expect(db.select().from(referenceItems).where(eq(referenceItems.key, "archived")).all()).toHaveLength(0);
+
+		await projects.archiveMany([a.id], db);
+		expect(projects.reviewMany("archive", [a.id, b.id], db).preview).toContain("archived already, so left alone: Kitchen cabinets.");
+		expect(() => projects.reviewMany("restore", [a.id], db)).toThrow(/nothing to do/);
 	});
 });

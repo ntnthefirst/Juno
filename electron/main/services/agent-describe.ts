@@ -70,6 +70,7 @@ const KEY_KINDS: Record<string, AgentEntityKind> = {
 	client_ids: "client",
 	contact_id: "contact",
 	project_id: "project",
+	project_ids: "project",
 	account_id: "mailAccount",
 	folder_id: "mailFolder",
 	thread_id: "mailThread",

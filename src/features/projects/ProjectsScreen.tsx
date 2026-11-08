@@ -4,8 +4,12 @@ import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { TitleSearch } from "../../app/TitleSearch";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
+import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
+import { SelectionBar } from "../../components/SelectionBar";
 import { Toast } from "../../components/Toast";
+import { useRowSelection } from "../../lib/use-row-selection";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
@@ -198,6 +202,47 @@ export function ProjectsScreen() {
 			view.sort,
 		);
 	}, [rows, view, needle, statusFilter]);
+	const shownIds = useMemo(() => shown.map((row) => row.id), [shown]);
+	const selection = useRowSelection(shownIds);
+	// A delete of several asks first, and is undone as one.
+	const [confirmingDelete, setConfirmingDelete] = useState<string[] | null>(null);
+	const [deletedMany, setDeletedMany] = useState<Project[] | null>(null);
+
+	async function archiveSelected(ids: string[]) {
+		try {
+			const archived = await window.juno.projects.archiveMany(ids);
+			setNotice(archived.length === 1 ? `${archived[0]!.name} archived.` : `${archived.length} projects archived.`);
+			selection.clear();
+			refreshList();
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	async function deleteSelected(ids: string[]) {
+		setConfirmingDelete(null);
+		try {
+			const removed = await window.juno.projects.removeMany(ids);
+			selection.clear();
+			setDeleted(null);
+			setDeletedMany(removed);
+			refreshList();
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	async function restoreMany() {
+		if (!deletedMany) return;
+		const ids = deletedMany.map((project) => project.id);
+		setDeletedMany(null);
+		try {
+			await window.juno.projects.restoreMany(ids);
+			refreshList();
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
 
 	usePublishBreadcrumb(
 		editing !== null
@@ -333,6 +378,32 @@ export function ProjectsScreen() {
 				) : null}
 			</div>
 
+			{selection.selectedIds.length > 0 && shown.length > 0 ? (
+				<div className="mb-6">
+					<SelectionBar
+						count={selection.selectedIds.length}
+						allSelected={selection.allSelected}
+						onSelectAll={selection.selectAll}
+						onClear={selection.clear}
+						actions={[
+							{
+								id: "archive",
+								icon: "archive",
+								label: "Archive",
+								onSelect: () => void archiveSelected(selection.selectedIds),
+							},
+							{
+								id: "delete",
+								icon: "remove",
+								label: "Delete",
+								danger: true,
+								onSelect: () => setConfirmingDelete(selection.selectedIds),
+							},
+						]}
+					/>
+				</div>
+			) : null}
+
 			<div className="min-h-0 w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("projects")}>
 				{load.status === "loading" || !view ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
@@ -373,6 +444,8 @@ export function ProjectsScreen() {
 						rows={shown}
 						size={view.size}
 						previews={view.previews}
+						held={selection.held}
+						onPick={selection.pick}
 						onOpen={open}
 						onRemove={(project) => void remove(project)}
 						onFailed={setNotice}
@@ -381,6 +454,8 @@ export function ProjectsScreen() {
 					<ProjectTable
 						rows={shown}
 						dense={view.layout === "list" || !view.previews}
+						held={selection.held}
+						onPick={selection.pick}
 						onOpen={open}
 						onRemove={(project) => void remove(project)}
 						onFailed={setNotice}
@@ -397,8 +472,38 @@ export function ProjectsScreen() {
 				/>
 			) : null}
 
-			{deleted === null && notice ? (
+			{deletedMany ? (
+				<Toast
+					message={
+						deletedMany.length === 1 ? `${deletedMany[0]!.name} deleted.` : `${deletedMany.length} projects deleted.`
+					}
+					actionLabel="Undo"
+					onAction={() => void restoreMany()}
+					onDismiss={() => setDeletedMany(null)}
+				/>
+			) : null}
+
+			{deleted === null && deletedMany === null && notice ? (
 				<Toast message={notice} onDismiss={() => setNotice(null)} />
+			) : null}
+
+			{confirmingDelete ? (
+				<Dialog
+					title={confirmingDelete.length === 1 ? "Delete 1 project?" : `Delete ${confirmingDelete.length} projects?`}
+					width="narrow"
+					onClose={() => setConfirmingDelete(null)}
+				>
+					<p className="mt-3 text-base">
+						{confirmingDelete.length === 1 ? "The project is" : `${confirmingDelete.length} projects are`} removed
+						from your list. You can undo this straight after.
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setConfirmingDelete(null)}>Cancel</Button>
+						<Button variant="danger" onClick={() => void deleteSelected(confirmingDelete)}>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
 		</div>
 	);

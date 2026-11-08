@@ -48,7 +48,9 @@ import { WeekView } from "./WeekView";
 
 type Load =
 	| { status: "loading" }
-	| { status: "ready"; items: CalendarItem[] }
+	// The range the items were read for travels with them, so the grid never
+	// draws new dates over old items, or old dates while the new ones load.
+	| { status: "ready"; items: CalendarItem[]; view: ViewKind; anchor: string; dates: string[] }
 	| { status: "error"; message: string };
 
 type FormState = {
@@ -140,11 +142,11 @@ export function CalendarScreen() {
 	}, [from, to, showReminders, showDeadlines]);
 
 	useEffect(() => {
-		if (!from) return;
+		if (!from || !anchor) return;
 		let cancelled = false;
 		fetchItems()
 			.then((items) => {
-				if (!cancelled) setLoad({ status: "ready", items });
+				if (!cancelled) setLoad({ status: "ready", items, view, anchor, dates });
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setLoad({ status: "error", message: messageOf(cause) });
@@ -152,15 +154,18 @@ export function CalendarScreen() {
 		return () => {
 			cancelled = true;
 		};
-	}, [fetchItems, from, version]);
+	}, [fetchItems, from, version, view, anchor, dates]);
 
 	const refresh = useCallback(() => setVersion((v) => v + 1), []);
 	// A new-record window saved something, so the grid reads again.
 	useRecordsChanged(refresh);
 
 	const placed = useMemo(
-		() => (load.status === "ready" && from && to ? placeItems(load.items, from, to) : new Map()),
-		[load, from, to],
+		() =>
+			load.status === "ready" && load.dates.length > 0
+				? placeItems(load.items, load.dates[0], load.dates[load.dates.length - 1])
+				: new Map(),
+		[load],
 	);
 
 	function step(towards: -1 | 1) {
@@ -540,10 +545,10 @@ export function CalendarScreen() {
 							{load.message}
 						</p>
 					</div>
-				) : !anchor || !today ? null : view === "month" ? (
+				) : load.status !== "ready" || !today ? null : load.view === "month" ? (
 					<MonthView
-						dates={dates}
-						month={anchor.slice(0, 7)}
+						dates={load.dates}
+						month={load.anchor.slice(0, 7)}
 						today={today}
 						placed={placed}
 						onOpen={setDetail}
@@ -562,9 +567,9 @@ export function CalendarScreen() {
 						onStep={step}
 						direction={direction}
 					/>
-				) : view === "week" ? (
+				) : load.view === "week" ? (
 					<WeekView
-						dates={dates}
+						dates={load.dates}
 						today={today}
 						placed={placed}
 						nowMinute={nowMinute}
@@ -583,7 +588,7 @@ export function CalendarScreen() {
 				) : (
 					<AgendaView
 						direction={direction}
-						dates={dates}
+						dates={load.dates}
 						today={today}
 						placed={placed}
 						onOpen={setDetail}

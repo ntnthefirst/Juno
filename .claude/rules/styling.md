@@ -345,6 +345,10 @@ The animations are utilities, not keyframes written at the call site:
   new animation needs nothing to opt in.
 - The raised side of `SectionSwitch` slides: each side is its own screen, so it
   remembers where it was and the new copy moves from there.
+- **The calendar pages like a scroll** (`features/calendar/PageSlide.tsx`):
+  the old month or week slides out the whole way while the next one follows
+  edge to edge, with no fade, and the page waits for its items before it
+  moves, so nothing appears after it lands.
 
 ## 5f. The keyboard
 

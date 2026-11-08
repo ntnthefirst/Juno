@@ -9,6 +9,7 @@ import type { CalendarItem, CalendarOccurrence, CalendarReminderItem } from "@sh
 import { formatMinutes, snap, weekdayShort } from "./dates";
 import { chipTone, dotTone, openItemMenu as openChipMenu, itemTitle, laneLayout, type Placed } from "./format";
 import { useWheelPaging } from "./use-wheel-paging";
+import { PageSlide } from "./PageSlide";
 
 type WeekViewProps = {
 	/** Seven dates, Monday first. */
@@ -79,7 +80,6 @@ export function WeekView({
 	const [drag, setDrag] = useState<Drag | null>(null);
 	// The empty half hour under the pointer, drawn as the slot a click would fill.
 	const [ghost, setGhost] = useState<{ date: string; minute: number } | null>(null);
-	const slide = direction > 0 ? "animate-page-left" : "animate-page-right";
 	const page = useWheelPaging(onStep);
 
 	// Open on the working day, not on midnight.
@@ -190,7 +190,8 @@ export function WeekView({
 			{/* The dates and the all-day row are one band, with no rule between them. */}
 			<div className="grid grid-cols-[56px_minmax(0,1fr)] overflow-hidden overflow-y-auto [scrollbar-gutter:stable]">
 				<div />
-				<div key={dates[0]} className={`grid grid-cols-7 ${slide}`}>
+				<PageSlide pageKey={dates[0]} axis="x" direction={direction}>
+				<div key={dates[0]} className="grid grid-cols-7">
 				{dates.map((date) => (
 					<div key={date} className="flex h-[42px] items-center gap-2 px-3">
 						<span
@@ -204,11 +205,13 @@ export function WeekView({
 					</div>
 				))}
 				</div>
+				</PageSlide>
 			</div>
 
 			<div className="grid grid-cols-[56px_minmax(0,1fr)] overflow-hidden overflow-y-auto border-b border-[var(--line)] [scrollbar-gutter:stable]">
 				<div className="flex min-h-8 items-center whitespace-nowrap pl-3 text-sm text-[var(--ink-muted)]">All day</div>
-				<div key={dates[0]} className={`grid grid-cols-7 ${slide}`}>
+				<PageSlide pageKey={dates[0]} axis="x" direction={direction}>
+				<div key={dates[0]} className="grid grid-cols-7">
 				{dates.map((date) => {
 					const dated = (placed.get(date) ?? []).filter((p) => p.dated);
 					return (
@@ -242,6 +245,7 @@ export function WeekView({
 					);
 				})}
 				</div>
+				</PageSlide>
 			</div>
 
 			<div
@@ -269,10 +273,11 @@ export function WeekView({
 							</div>
 						) : null}
 					</div>
+					<PageSlide pageKey={dates[0]} axis="x" direction={direction} className="col-span-7">
 					<div
 						ref={grid}
 						key={dates[0]}
-						className={`relative col-span-7 grid grid-cols-7 ${slide}`}
+						className="relative grid h-full grid-cols-7"
 						onMouseLeave={() => setGhost(null)}
 					>
 						{nowMinute !== null ? (
@@ -386,6 +391,7 @@ export function WeekView({
 							);
 						})}
 					</div>
+					</PageSlide>
 				</div>
 			</div>
 

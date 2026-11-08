@@ -5,6 +5,7 @@ import { blankMenuFor } from "../../lib/blank-menu";
 import { daysBetween, formatTime, weekdayShort } from "./dates";
 import { chipTone, itemTitle, openItemMenu as openChipMenu, type Placed } from "./format";
 import { useWheelPaging } from "./use-wheel-paging";
+import { PageSlide } from "./PageSlide";
 
 type MonthViewProps = {
 	/** Forty-two dates, Monday first. */
@@ -129,12 +130,8 @@ export function MonthView({
 				))}
 			</div>
 
-			<div className="min-h-0 flex-1 overflow-hidden">
-			<div
-				ref={grid}
-				key={month}
-				className={`grid h-full grid-cols-7 grid-rows-6 ${direction > 0 ? "animate-page-up" : "animate-page-down"}`}
-			>
+			<PageSlide pageKey={month} axis="y" direction={direction} className="min-h-0 flex-1">
+			<div ref={grid} key={month} className="grid h-full grid-cols-7 grid-rows-6">
 				{dates.map((date, index) => {
 					const inMonth = date.slice(0, 7) === month;
 					const isToday = date === today;
@@ -225,7 +222,7 @@ export function MonthView({
 					);
 				})}
 			</div>
-			</div>
+			</PageSlide>
 
 		</div>
 	);

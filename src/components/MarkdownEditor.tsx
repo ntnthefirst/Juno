@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Compartment, EditorState, type Range } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, type Range } from "@codemirror/state";
 import {
 	Decoration,
 	type DecorationSet,
@@ -16,6 +16,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages as codeLanguages } from "@codemirror/language-data";
 import { GFM } from "@lezer/markdown";
+import { Icon, type IconName } from "./Icon";
 
 type MarkdownEditorProps = {
 	value: string;
@@ -26,7 +27,69 @@ type MarkdownEditorProps = {
 	rows?: number;
 	ariaLabel?: string;
 	disabled?: boolean;
+	/**
+	 * Draws the format bar above the text (bold, italic, heading, list,
+	 * checklist, link) and a field border around both, as the notes fields in
+	 * the design have it. Text only: there is no way to put a picture in.
+	 */
+	toolbar?: boolean;
 };
+
+/** Wraps the selection in a mark (`**`, `*`), or opens an empty pair with the cursor inside. */
+function wrapSelection(view: EditorView, mark: string): boolean {
+	view.dispatch(
+		view.state.changeByRange((range) => ({
+			changes: [
+				{ from: range.from, insert: mark },
+				{ from: range.to, insert: mark },
+			],
+			range: EditorSelection.range(range.from + mark.length, range.to + mark.length),
+		})),
+	);
+	view.focus();
+	return true;
+}
+
+/** Puts a prefix (`- `, `- [ ] `, `## `) in front of every line the selection touches, or takes it off when all have it. */
+function toggleLinePrefix(view: EditorView, prefix: string): boolean {
+	const { state } = view;
+	const lines = new Set<number>();
+	for (const range of state.selection.ranges) {
+		for (let at = state.doc.lineAt(range.from).number; at <= state.doc.lineAt(range.to).number; at++) lines.add(at);
+	}
+	const all = [...lines].every((number) => state.doc.line(number).text.startsWith(prefix));
+	const changes = [...lines].map((number) => {
+		const line = state.doc.line(number);
+		return all ? { from: line.from, to: line.from + prefix.length, insert: "" } : { from: line.from, insert: prefix };
+	});
+	view.dispatch({ changes });
+	view.focus();
+	return true;
+}
+
+/** Turns the selection into a link and selects the address part, ready to paste over. */
+function insertLink(view: EditorView): boolean {
+	const range = view.state.selection.main;
+	const text = view.state.sliceDoc(range.from, range.to) || "link";
+	const address = "https://";
+	const insert = `[${text}](${address})`;
+	const start = range.from + text.length + 3;
+	view.dispatch({
+		changes: { from: range.from, to: range.to, insert },
+		selection: EditorSelection.range(start, start + address.length),
+	});
+	view.focus();
+	return true;
+}
+
+const FORMAT_TOOLS: { label: string; keys?: string; icon?: IconName; glyph?: string; glyphClass?: string; run: (view: EditorView) => boolean }[] = [
+	{ label: "Bold", keys: "Ctrl B", glyph: "B", glyphClass: "font-[var(--weight-bold)]", run: (view) => wrapSelection(view, "**") },
+	{ label: "Italic", keys: "Ctrl I", glyph: "I", glyphClass: "italic", run: (view) => wrapSelection(view, "*") },
+	{ label: "Heading", glyph: "H", glyphClass: "font-[var(--weight-semibold)]", run: (view) => toggleLinePrefix(view, "## ") },
+	{ label: "List", icon: "list", run: (view) => toggleLinePrefix(view, "- ") },
+	{ label: "Checklist", icon: "check", run: (view) => toggleLinePrefix(view, "- [ ] ") },
+	{ label: "Link", icon: "link", run: insertLink },
+];
 
 /**
  * The dash or asterisk of a bullet list item, replaced by a real bullet glyph
@@ -309,7 +372,12 @@ function buildExtensions(options: {
 	return [
 		markdown({ base: markdownLanguage, codeLanguages, extensions: GFM }),
 		history(),
-		keymap.of([...defaultKeymap, ...historyKeymap]),
+		keymap.of([
+			{ key: "Mod-b", run: (view) => wrapSelection(view, "**") },
+			{ key: "Mod-i", run: (view) => wrapSelection(view, "*") },
+			...defaultKeymap,
+			...historyKeymap,
+		]),
 		liveMarkdownPlugin,
 		EditorView.lineWrapping,
 		drawSelection({ cursorBlinkRate: reducedMotion ? 0 : 1200 }),
@@ -332,7 +400,7 @@ function buildExtensions(options: {
  * text grows, `**bold**` turns bold, a link becomes a link, and the markup
  * characters that make it so fade out except on the line the cursor sits on.
  */
-export function MarkdownEditor({ value, onChange, id, placeholder, rows = 8, ariaLabel, disabled = false }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, onChange, id, placeholder, rows = 8, ariaLabel, disabled = false, toolbar = false }: MarkdownEditorProps) {
 	const hostRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	const onChangeRef = useRef(onChange);
@@ -396,6 +464,35 @@ export function MarkdownEditor({ value, onChange, id, placeholder, rows = 8, ari
 			]),
 		});
 	}, [disabled]);
+
+	if (toolbar) {
+		return (
+			<div
+				className={`w-full overflow-hidden rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] focus-within:border-[var(--focus)] focus-within:shadow-[inset_0_0_0_1px_var(--focus)] motion-safe:transition-colors motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease)]${disabled ? " opacity-60" : ""}`}
+			>
+				<div role="toolbar" aria-label="Format" className="flex items-center gap-0.5 border-b border-[var(--line)] px-1.5 py-0.5">
+					{FORMAT_TOOLS.map((tool) => (
+						<button
+							key={tool.label}
+							type="button"
+							disabled={disabled}
+							aria-label={tool.label}
+							title={tool.keys ? `${tool.label} (${tool.keys})` : tool.label}
+							// Keeps the cursor and the selection in the text while the bar is used.
+							onMouseDown={(event) => event.preventDefault()}
+							onClick={() => {
+								if (viewRef.current) tool.run(viewRef.current);
+							}}
+							className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)] active:scale-90"
+						>
+							{tool.icon ? <Icon name={tool.icon} size={14} /> : <span className={tool.glyphClass}>{tool.glyph}</span>}
+						</button>
+					))}
+				</div>
+				<div ref={hostRef} />
+			</div>
+		);
+	}
 
 	return (
 		<div

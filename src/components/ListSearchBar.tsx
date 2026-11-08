@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "./Button";
+import { TitleSearch } from "../app/TitleSearch";
 import { Icon, type IconName } from "./Icon";
 
 type ListSearchBarProps = {
@@ -18,15 +19,14 @@ type ListSearchBarProps = {
 };
 
 /**
- * A search box with the filters folded into it, behind a funnel that opens a
- * popover and closes on a click outside or Escape.
+ * A list's search and its filters. The search is in the title bar
+ * (`TitleSearch`), where Ctrl F finds it on every list screen, and what stays
+ * on the page is the funnel, which opens a popover and closes on a click
+ * outside or Escape.
  *
  * The mail list (`MailSearchBar.tsx`) had this shape first. Every list of
  * templates, documents or records that needs a search and a handful of
- * filters grows the same three parts, so they live here once: the search
- * field stays a fixed width rather than stretching across the list, because
- * a control that grows with the window draws the eye to empty space instead
- * of to the rows underneath it.
+ * filters grows the same parts, so they live here once.
  */
 export function ListSearchBar({
 	search,
@@ -62,29 +62,8 @@ export function ListSearchBar({
 	}, [open]);
 
 	return (
-		<div ref={wrapper} className="relative flex min-w-[200px] max-w-[580px] flex-1 items-center gap-2">
-			<div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pr-1.5 pl-3 focus-within:border-[var(--focus)]">
-				<Icon name="search" size={16} className="flex-none text-[var(--ink-faint)]" />
-				<input
-					type="search"
-					value={search}
-					onChange={(event) => onSearch(event.target.value)}
-					placeholder={placeholder}
-					aria-label={label}
-					className="min-w-0 flex-1 bg-transparent text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
-				/>
-				{search ? (
-					<button
-						type="button"
-						aria-label="Clear search"
-						title="Clear search"
-						onClick={() => onSearch("")}
-						className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
-					>
-						<Icon name="close" size={12} />
-					</button>
-				) : null}
-			</div>
+		<div ref={wrapper} className="relative flex items-center">
+			<TitleSearch value={search} onChange={onSearch} placeholder={label} />
 			{filters ? (
 				<button
 					type="button"
@@ -110,7 +89,7 @@ export function ListSearchBar({
 				<div
 					role="group"
 					aria-label={filtersAriaLabel ?? `${label} filters`}
-					className="animate-pop absolute top-full right-0 left-0 z-20 mt-1 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-popover)]"
+					className="animate-pop absolute top-full left-0 z-20 mt-1 w-[320px] rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-popover)]"
 				>
 					{filters}
 					<div className="mt-3 flex justify-between">

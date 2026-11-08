@@ -16,8 +16,8 @@ import type { Crumb } from "../../app/breadcrumb-context";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
+import { TitleSearch } from "../../app/TitleSearch";
 import { Avatar } from "../../components/Avatar";
-import { Icon } from "../../components/Icon";
 import { MenuButton } from "../../components/Menu";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
@@ -530,43 +530,29 @@ export function ClientsScreen() {
 
 	return (
 		<div className="relative flex h-full flex-col p-8">
-			<div className="mb-6 flex w-full items-center justify-end gap-4">
-				<div className="relative">
-					<span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)]">
-						<Icon name="search" />
-					</span>
-					<input
-						type="search"
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-						placeholder="Search clients"
-						aria-label="Search clients"
-						className="h-[36px] w-[280px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-9 pr-3 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-					/>
-				</div>
-				<TitleBarSlot side="overflow">
-					<MenuButton
-						ariaLabel="How this list is shown"
-						size="dense"
-						items={[
-							{
-								id: "clear-filters",
-								label: "Clear filters",
-								icon: "close",
-								disabled: !filtersOn,
-								onSelect: () => setView({ ...EMPTY_VIEW, sort: view.sort }),
-							},
-							{
-								id: "reset-sort",
-								label: "Reset sorting",
-								icon: "undo",
-								disabled: view.sort === null,
-								onSelect: () => setView({ ...view, sort: null }),
-							},
-						]}
-					/>
-				</TitleBarSlot>
-			</div>
+			<TitleSearch value={search} onChange={setSearch} placeholder="Search clients" />
+			<TitleBarSlot side="overflow">
+				<MenuButton
+					ariaLabel="How this list is shown"
+					size="dense"
+					items={[
+						{
+							id: "clear-filters",
+							label: "Clear filters",
+							icon: "close",
+							disabled: !filtersOn,
+							onSelect: () => setView({ ...EMPTY_VIEW, sort: view.sort }),
+						},
+						{
+							id: "reset-sort",
+							label: "Reset sorting",
+							icon: "undo",
+							disabled: view.sort === null,
+							onSelect: () => setView({ ...view, sort: null }),
+						},
+					]}
+				/>
+			</TitleBarSlot>
 
 			<div className="w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("clients")}>
 				{load.status === "loading" ? (
@@ -698,7 +684,8 @@ function ClientTable({
 
 	return (
 		<>
-			<table className="w-full border-collapse">
+			{/* Separate borders, so the header keeps its rule while it is stuck to the top. */}
+			<table className="w-full border-separate border-spacing-0">
 				<thead>
 					<tr>
 					<ColumnHeader {...headerProps("name", "Name")} />

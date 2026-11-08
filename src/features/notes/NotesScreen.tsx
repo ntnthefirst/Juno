@@ -5,6 +5,7 @@ import { BlockEditor } from "../../components/BlockEditor";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
+import { TitleSearch } from "../../app/TitleSearch";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
 import { Toast } from "../../components/Toast";
@@ -181,21 +182,7 @@ export function NotesScreen() {
 					<h1 className="text-h2 text-[var(--ink)]">Notes</h1>
 					{all ? <span className="tabular text-base text-[var(--ink-muted)]">{all.length}</span> : null}
 				</div>
-				<div className="px-4 pb-3">
-					<label className="flex h-9 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--sunken)] px-3 text-[var(--ink-muted)] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus)]">
-						<Icon name="search" size={16} />
-						<input
-							value={search}
-							onChange={(event) => setSearch(event.target.value)}
-							onKeyDown={(event) => {
-								if (event.key === "Escape") setSearch("");
-							}}
-							placeholder="Search notes"
-							aria-label="Search notes"
-							className="min-w-0 flex-1 bg-transparent text-dense text-[var(--ink)] outline-none placeholder:text-[var(--ink-muted)]"
-						/>
-					</label>
-				</div>
+				<TitleSearch value={search} onChange={setSearch} placeholder="Search notes" />
 				<div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
 					{notes.status === "loading" ? <p className="px-4 text-dense text-[var(--ink-muted)]">Loading.</p> : null}
 					{notes.status === "error" ? (

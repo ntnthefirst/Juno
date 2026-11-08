@@ -159,18 +159,35 @@ New, where a record keeps its menu (a client, a project, a page, a document). Th
 there too, from any screen, by `app/TimerPill.tsx` (decision 56): a clock, the
 project name and a stop button, and nothing while no timer runs.
 
-Calendar is the one screen that fills the left slot with its own toolbar: the month heading, previous, Today, next and the view switch, with the page title left empty, as the month, week and agenda frames draw it. Overview leaves the title empty too.
+Calendar is the one screen that fills the left slot with its own toolbar: the month heading, previous, Today, next and the view switch, with the page title left empty, as the month, week and agenda frames draw it.
 
 What the bar holds, from the Title Bar component (`14:221`) and its variants:
-Search, Recent, Reminders and New (a plus) at the left, then a divider and the
-way back when a record is open. The page title is centred on the window, and is
-the record's name while one is open. At the right are the screen's own actions,
-a divider and the agent. On Calendar, Clients, Projects, Documents, Templates
-and Reminders New is a text button at the right instead of the plus
-(`NEW_AT_RIGHT` in `app/screens.ts`). Recent lists the last 20 records opened
-(`services/recent.ts`), the bell opens the Reminders screen, and New offers
-what `NEW_MENU` lists (note, page, event, client, project, then Import a file). **The lock has no button**: no frame draws one, so it is
-the palette command and Ctrl or Cmd Shift L.
+Search, Recent and Reminders at the left, then a divider and the page title,
+which is the record's name while one is open, after the way back and a slash.
+At the right are the screen's own actions, New as a text button, the record's
+"...", a divider and the agent. New makes the screen's own record at once where
+`NEW_AT_RIGHT` in `app/screens.ts` lists the screen, and opens the New menu
+everywhere else (note, page, event, client, project, then Import a file, from
+`NEW_MENU`). With a document open the plus at the left takes its place.
+
+Recent, the bell and the agent each open a dropdown (`app/RecentMenu.tsx`,
+`app/RemindersMenu.tsx`, `app/AgentMenu.tsx`), and the foot of the last two
+opens the full screen. Recent lists the last 20 records opened
+(`services/recent.ts`). The bell lists what is overdue, due today and due soon,
+ticked off in place. The agent lists what waits for you and what it did
+lately: a request that only changes a record here is answered in the menu, and
+one that sends, signs, files or deletes says Review and opens the Agent screen,
+because its whole payload is read there first (`review` on the request's words,
+decided in the service).
+
+**A list's search is in the title bar** (`app/TitleSearch.tsx`), first in the
+right slot, on every screen that filters a list: Clients, Projects, Mail,
+Notes, Documents and both template screens. Ctrl or Cmd F puts the cursor in
+it; an open message or page finds inside itself with the same keys instead, by
+listening on the document, which hears the key first. Ctrl or Cmd Shift F
+opens the palette, like Ctrl or Cmd K. A list's filters stay on the page,
+behind the funnel. **The lock has no button**: no frame draws one, so it is the
+palette command and Ctrl or Cmd Shift L.
 
 ## 5b. The sidebar is a rail, and it never opens
 

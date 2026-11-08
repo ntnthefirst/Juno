@@ -87,6 +87,8 @@ export const SCREEN_COMBOS: Partial<Record<ScreenId, string>> = {
 
 export const COMBOS = {
 	palette: "mod+k",
+	/** The palette as well, on the keys a list's own search sits beside. */
+	searchEverywhere: "mod+shift+f",
 	recent: "mod+e",
 	reminders: "mod+shift+r",
 	newItem: "mod+n",
@@ -112,7 +114,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 	{
 		title: "General",
 		rows: [
-			{ combos: [COMBOS.palette], label: "Search and commands" },
+			{ combos: [COMBOS.palette, COMBOS.searchEverywhere], label: "Search and commands" },
+			{ combos: [COMBOS.find], label: "Search this list" },
 			{ combos: [COMBOS.recent], label: "Recent records" },
 			{ combos: [COMBOS.reminders], label: "Reminders" },
 			{ combos: [COMBOS.newItem], label: "New, on this screen" },

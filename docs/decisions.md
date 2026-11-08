@@ -2390,3 +2390,30 @@ update that is waiting, and to an agent.
 **What would reverse this:** a release rhythm fast enough that writing notes by
 hand is skipped, in which case drafts are generated from the log and still edited
 by a person.
+
+## 72. The title bar reads left to right, holds a list's search, and its buttons open dropdowns
+
+Amends decision 54. The Title Bar frames moved the page title from the middle
+of the window to the left, after a divider beside Search, Recent and Reminders,
+and put New at the right of every screen.
+
+- **The title sits at the left**, after the divider, or after the way back and
+  a slash while a record is open. Calendar keeps the left slot for its toolbar.
+- **New is a text button at the right everywhere.** Where the screen makes one
+  kind of record it makes that at once; elsewhere it opens the New menu. With a
+  document open the plus at the left stays, as the page frame draws it.
+- **A list's search is in the title bar** (`app/TitleSearch.tsx`), on every
+  screen that filters a list. Ctrl or Cmd F focuses it, an open message or page
+  keeps the same keys for its own find, and Ctrl or Cmd Shift F opens the
+  palette.
+- **The bell and the agent open dropdowns**, the shape Recent already had. The
+  bell lists what is overdue, due today and due soon. The agent lists what is
+  waiting and what it did lately, and offers Approve and Reject only for a
+  request that changes a record here. One that sends, signs, files or deletes
+  says Review and opens the Agent screen, where its payload is shown in full
+  first (decision 44). The service decides which is which, and approving goes
+  through the same gate either way.
+
+**What would reverse this:** a screen whose search needs more room than the
+title bar has, or a request kind whose short line cannot say enough to be
+answered from a menu, which would then say Review as well.

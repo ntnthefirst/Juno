@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
+import { TitleSearch } from "../../app/TitleSearch";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { EmptyState } from "../../components/EmptyState";
-import { Icon } from "../../components/Icon";
 import { Toast } from "../../components/Toast";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
@@ -308,25 +308,12 @@ export function ProjectsScreen() {
 
 	return (
 		<div className="flex h-full flex-col px-6 py-8 lg:px-8 xl:px-10">
+			<TitleSearch value={term} onChange={setTerm} placeholder="Search projects" />
 			<div className="mb-6 flex w-full flex-col gap-4">
 				{view ? <ViewControls view={view} onChange={changeView} /> : null}
 
 				{rows && rows.projects.length > 0 ? (
 					<div className="flex items-center gap-2">
-						<div className="relative min-w-0 flex-1">
-							<span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)]">
-								<Icon name="search" />
-							</span>
-							<input
-								type="search"
-								value={term}
-								onChange={(event) => setTerm(event.target.value)}
-								aria-label="Search projects"
-								placeholder="Search by name, client, description or folder"
-								className="h-[36px] w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] pl-9 pr-3 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-							/>
-						</div>
-
 						<select
 							value={statusFilter}
 							onChange={(event) => setStatusFilter(event.target.value)}

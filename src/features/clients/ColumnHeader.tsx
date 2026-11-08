@@ -80,7 +80,7 @@ export function ColumnHeader({
 			ref={cell}
 			aria-sort={ariaSort}
 			className={[
-				"border-b border-[var(--line)] px-3 pb-2 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]",
+				"sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--surface)] px-3 pt-2 pb-2 text-sm font-[var(--weight-medium)] text-[var(--ink-muted)]",
 				align === "right" ? "text-right" : "text-left",
 			].join(" ")}
 		>

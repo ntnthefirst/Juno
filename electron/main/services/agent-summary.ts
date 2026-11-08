@@ -181,6 +181,13 @@ function special(toolName: string, args: Record<string, unknown>, db: Db): strin
 		case "mail.file.empty_folder":
 			return named ? `Empty the folder "${named}"` : "Empty a mail folder";
 	}
+	// A call on a selection says how many: "Delete 3 clients".
+	if (toolName.endsWith("_many")) {
+		const verb = VERBS[(toolName.split(".").pop() ?? "").replace(/_many$/, "")];
+		const noun = nounOf(toolName);
+		const list = Object.entries(args).find(([key, value]) => key.endsWith("_ids") && Array.isArray(value));
+		if (verb && noun) return list ? `${verb} ${plural(count(list[1]), noun, `${noun}s`)}` : `${verb} several ${noun}s`;
+	}
 	if (toolName.startsWith("mail.file.")) {
 		const verb = toolName.slice("mail.file.".length).replace(/_messages$/, "");
 		const n = count(args.message_ids) || count(args.thread_ids);

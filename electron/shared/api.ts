@@ -330,6 +330,14 @@ export interface JunoApi {
 		remove(id: string): Promise<Client>;
 		restore(id: string): Promise<Client>;
 		/**
+		 * The same three for a selection, each in one go. An id that is not a
+		 * client refuses the whole call; a client already in that state is left
+		 * out of what comes back.
+		 */
+		archiveMany(ids: string[]): Promise<Client[]>;
+		removeMany(ids: string[]): Promise<Client[]>;
+		restoreMany(ids: string[]): Promise<Client[]>;
+		/**
 		 * What has happened with this client, assembled from the records that
 		 * already hold it. Newest first.
 		 */

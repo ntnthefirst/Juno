@@ -18,6 +18,10 @@ import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { TitleSearch } from "../../app/TitleSearch";
 import { Avatar } from "../../components/Avatar";
+import { Button } from "../../components/Button";
+import { Checkbox } from "../../components/Checkbox";
+import { Dialog } from "../../components/Dialog";
+import { SelectionBar } from "../../components/SelectionBar";
 import { MenuButton } from "../../components/Menu";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
@@ -58,6 +62,7 @@ import { ProjectForm } from "../projects/ProjectForm";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { listAllClients } from "../../lib/list-all-clients";
 import { useGradualCount } from "../../lib/use-gradual-count";
+import { useRowSelection } from "../../lib/use-row-selection";
 
 type Load =
 	| { status: "loading" }
@@ -117,6 +122,14 @@ export function ClientsScreen() {
 	const [view, setView] = useState<ClientView>(EMPTY_VIEW);
 
 	const filtersOn = JSON.stringify({ ...view, sort: null }) !== JSON.stringify({ ...EMPTY_VIEW, sort: null });
+
+	// The rows as the table draws them, which is what select all and a Shift run go by.
+	const shownRows = useMemo(() => (load.status === "ready" ? applyView(load.rows, view) : []), [load, view]);
+	const shownIds = useMemo(() => shownRows.map((row) => row.id), [shownRows]);
+	const selection = useRowSelection(shownIds);
+	// A delete of several asks first, and is undone as one.
+	const [confirmingDelete, setConfirmingDelete] = useState<string[] | null>(null);
+	const [deletedMany, setDeletedMany] = useState<Client[] | null>(null);
 
 	const fetchRows = useCallback(
 		() => listAllClients(search.trim() || undefined),
@@ -229,6 +242,65 @@ export function ClientsScreen() {
 				return;
 			}
 			setCompose({ clientId, to: [{ name: null, address: to.email }] });
+		} catch (error: unknown) {
+			setNotice(messageOf(error));
+		}
+	}
+
+	/**
+	 * One message to the selected clients' primary addresses, all in Bcc so no
+	 * client sees who else it went to. A client with no address is left off,
+	 * and the toast says how many once the composer closes.
+	 */
+	function mailSelected(ids: string[]) {
+		const picked = load.status === "ready" ? load.rows.filter((row) => ids.includes(row.id)) : [];
+		const reachable = picked.filter((row) => row.email);
+		if (reachable.length === 0) {
+			setNotice(ids.length === 1 ? "This client has no email address yet." : "None of these clients has an email address yet.");
+			return;
+		}
+		const missing = picked.length - reachable.length;
+		if (missing > 0) {
+			setNotice(`${missing} of ${picked.length} clients have no email address, so they are not on the message.`);
+		}
+		setCompose({
+			clientId: reachable.length === 1 ? reachable[0]!.id : null,
+			bcc: reachable.map((row) => ({ name: row.name, address: row.email! })),
+		});
+		selection.clear();
+	}
+
+	async function archiveSelected(ids: string[]) {
+		try {
+			const archived = await window.juno.clients.archiveMany(ids);
+			setNotice(archived.length === 1 ? `${archived[0]!.name} archived.` : `${archived.length} clients archived.`);
+			selection.clear();
+			refreshList();
+		} catch (error: unknown) {
+			setNotice(messageOf(error));
+		}
+	}
+
+	async function deleteSelected(ids: string[]) {
+		setConfirmingDelete(null);
+		try {
+			const removed = await window.juno.clients.removeMany(ids);
+			selection.clear();
+			setDeleted(null);
+			setDeletedMany(removed);
+			refreshList();
+		} catch (error: unknown) {
+			setNotice(messageOf(error));
+		}
+	}
+
+	async function restoreMany() {
+		if (!deletedMany) return;
+		const ids = deletedMany.map((client) => client.id);
+		setDeletedMany(null);
+		try {
+			await window.juno.clients.restoreMany(ids);
+			refreshList();
 		} catch (error: unknown) {
 			setNotice(messageOf(error));
 		}
@@ -554,6 +626,33 @@ export function ClientsScreen() {
 				/>
 			</TitleBarSlot>
 
+			{selection.selectedIds.length > 0 && load.status === "ready" && load.rows.length > 0 ? (
+				<div className="mb-6">
+					<SelectionBar
+						count={selection.selectedIds.length}
+						allSelected={selection.allSelected}
+						onSelectAll={selection.selectAll}
+						onClear={selection.clear}
+						actions={[
+							{ id: "mail", icon: "mail", label: "Send mail", onSelect: () => mailSelected(selection.selectedIds) },
+							{
+								id: "archive",
+								icon: "archive",
+								label: "Archive",
+								onSelect: () => void archiveSelected(selection.selectedIds),
+							},
+							{
+								id: "delete",
+								icon: "remove",
+								label: "Delete",
+								danger: true,
+								onSelect: () => setConfirmingDelete(selection.selectedIds),
+							},
+						]}
+					/>
+				</div>
+			) : null}
+
 			<div className="w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("clients")}>
 				{load.status === "loading" ? (
 					<p className="text-[var(--ink-muted)]">Loading.</p>
@@ -568,6 +667,9 @@ export function ClientsScreen() {
 				) : (
 					<ClientTable
 						allRows={load.rows}
+						rows={shownRows}
+						held={selection.held}
+						onPick={selection.pick}
 						view={view}
 						onView={setView}
 						selectedId={selectedId}
@@ -586,7 +688,7 @@ export function ClientsScreen() {
 				)}
 			</div>
 
-			{deleted === null && notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
+			{deleted === null && deletedMany === null && notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
 			{deleted ? (
 				<Toast
 					message={`${deleted.name} deleted.`}
@@ -594,6 +696,35 @@ export function ClientsScreen() {
 					onAction={() => void restore()}
 					onDismiss={dismissUndo}
 				/>
+			) : null}
+			{deletedMany ? (
+				<Toast
+					message={
+						deletedMany.length === 1 ? `${deletedMany[0]!.name} deleted.` : `${deletedMany.length} clients deleted.`
+					}
+					actionLabel="Undo"
+					onAction={() => void restoreMany()}
+					onDismiss={() => setDeletedMany(null)}
+				/>
+			) : null}
+
+			{confirmingDelete ? (
+				<Dialog
+					title={confirmingDelete.length === 1 ? "Delete 1 client?" : `Delete ${confirmingDelete.length} clients?`}
+					width="narrow"
+					onClose={() => setConfirmingDelete(null)}
+				>
+					<p className="mt-3 text-base">
+						{confirmingDelete.length === 1 ? "The client is" : `${confirmingDelete.length} clients are`} removed
+						from your list. You can undo this straight after.
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setConfirmingDelete(null)}>Cancel</Button>
+						<Button variant="danger" onClick={() => void deleteSelected(confirmingDelete)}>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
 
 			{notePanel ? (
@@ -612,7 +743,14 @@ export function ClientsScreen() {
 }
 
 type ClientTableProps = {
+	/** Every client loaded, which the column filters offer their choices from. */
 	allRows: ClientSummary[];
+	/** The rows after the view's filters and sort, as drawn. */
+	rows: ClientSummary[];
+	/** The rows ticked. Once any is, a click ticks rather than opens. */
+	held: ReadonlySet<string>;
+	/** `extend` (Shift) ticks the run from the last row ticked. */
+	onPick: (id: string, extend: boolean) => void;
 	view: ClientView;
 	onView: (view: ClientView) => void;
 	selectedId: string | null;
@@ -633,6 +771,9 @@ type ClientTableProps = {
  */
 function ClientTable({
 	allRows,
+	rows,
+	held,
+	onPick,
 	view,
 	onView,
 	selectedId,
@@ -645,8 +786,8 @@ function ClientTable({
 	onDone,
 	onFailed,
 }: ClientTableProps) {
-	const rows = useMemo(() => applyView(allRows, view), [allRows, view]);
 	const visible = useGradualCount(rows.length);
+	const hasSelection = held.size > 0;
 	const statusOptions = useMemo(
 		() => [
 			...statusesOf(allRows).map((status) => ({ value: status.id, label: status.label })),
@@ -745,28 +886,61 @@ function ClientTable({
 					) : null}
 					{rows.slice(0, visible).map((row) => {
 						const selected = row.id === selectedId;
+						const checked = held.has(row.id);
+						// Once anything is ticked, a click anywhere on a row ticks it
+						// instead of opening it, the way the mail list does.
+						const activate = (extend: boolean) => (hasSelection ? onPick(row.id, extend) : onSelect(row));
 						return (
 							<tr
 								key={row.id}
-								onClick={() => onSelect(row)}
+								onClick={(event) => activate(event.shiftKey)}
 								onContextMenu={menuFor(row)}
-								className={`transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
-									selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
+								className={`group transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
+									selected || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
 								}`}
 							>
 								<td
 									className="border-b border-[var(--line)]/60 px-3 text-dense"
 									style={{ height: "var(--row-height-roomy)" }}
 								>
-									<button
-										type="button"
-										aria-current={selected ? "true" : undefined}
-										onClick={() => onSelect(row)}
-										className="flex w-full min-w-0 items-center gap-3 text-left"
-									>
-										<Avatar name={row.name} size={28} shape="square" />
-										<span className="truncate">{row.name}</span>
-									</button>
+									<div className="flex min-w-0 items-center gap-3">
+										{/*
+											The tick takes the avatar's place: under the pointer, on
+											keyboard focus, and on every row once anything is ticked.
+										*/}
+										<span className="relative flex size-7 flex-none items-center justify-center">
+											<span className={hasSelection ? "invisible" : "group-hover:invisible group-focus-within:invisible"}>
+												<Avatar name={row.name} size={28} shape="square" />
+											</span>
+											<label
+												onClick={(event) => event.stopPropagation()}
+												className={[
+													"absolute inset-0 flex cursor-pointer items-center justify-center",
+													hasSelection ? "" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+												].join(" ")}
+											>
+												<Checkbox
+													checked={checked}
+													onChange={(event) => onPick(row.id, (event.nativeEvent as MouseEvent).shiftKey)}
+													aria-label={`Select ${row.name}`}
+												/>
+											</label>
+										</span>
+										<button
+											type="button"
+											aria-current={selected && !hasSelection ? "true" : undefined}
+											aria-pressed={hasSelection ? checked : undefined}
+											onClick={(event) => {
+												// The row takes the same click; without this a tick would be
+												// made and undone by one press.
+												event.stopPropagation();
+												activate(event.shiftKey);
+											}}
+											className="flex min-w-0 flex-1 items-center text-left"
+										>
+											<span className="truncate">{row.name}</span>
+										</button>
+									</div>
 								</td>
 								<td className="border-b border-[var(--line)]/60 px-3 text-dense">
 									{row.status ? <StatusBadge label={row.status.label} tone={row.status.tone} /> : null}

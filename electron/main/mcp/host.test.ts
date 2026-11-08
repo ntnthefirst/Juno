@@ -553,3 +553,43 @@ describe("components for document templates", () => {
 		expect(await callTool("templates.components.list", {})).toHaveLength(1);
 	});
 });
+
+describe("actions on a selection", () => {
+	type Parked = { status: string; actionId: string; summary: string };
+
+	it("puts the client tools in their rows, the delete in Delete", () => {
+		expect(permissions.rowOf("clients.archive_many")).toBe("change");
+		expect(permissions.rowOf("clients.restore_many")).toBe("change");
+		expect(permissions.rowOf("clients.delete_many")).toBe("delete");
+		expect(permissions.isLockedTool("clients.delete_many")).toBe(true);
+	});
+
+	it("parks a bulk client delete as one request naming every client, and deletes nothing until approved", async () => {
+		const clients = await import("../services/clients");
+		const names = ["Van Damme", "Peeters", "Janssens"];
+		const made = [];
+		for (const name of names) made.push(await clients.create({ name }));
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "allow", delete: "allow" });
+
+		const parked = (await callTool("clients.delete_many", { client_ids: made.map((client) => client.id) })) as Parked;
+		expect(parked.status).toBe("pending");
+		expect(parked.summary).toBe("Delete 3 clients");
+		expect(await clients.list()).toHaveLength(3);
+
+		const pending = await actions.list({ states: ["pending"] });
+		expect(pending).toHaveLength(1);
+		for (const name of names) expect(pending[0]!.preview).toContain(`- ${name}`);
+
+		await actions.approve(parked.actionId);
+		expect(await clients.list()).toHaveLength(0);
+	});
+
+	it("refuses at once a bulk client call that names a client nobody has", async () => {
+		const clients = await import("../services/clients");
+		const real = await clients.create({ name: "Van Damme" });
+		await expect(callTool("clients.delete_many", { client_ids: [real.id, "missing"] })).rejects.toThrow(
+			/No client with id "missing"/,
+		);
+		expect(await actions.list({ states: ["pending"] })).toHaveLength(0);
+	});
+});

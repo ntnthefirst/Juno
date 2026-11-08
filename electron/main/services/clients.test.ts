@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
-import { clientStatusChanges, referenceItems, referenceSets } from "../db/schema";
+import { clientStatusChanges, clients as clientsTable, referenceItems, referenceSets } from "../db/schema";
 import * as clientAddresses from "./client-addresses";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
@@ -394,5 +394,90 @@ describe("search", () => {
 		const client = await clients.create({ name: "Van Acker NV" }, db);
 		await clients.remove(client.id, db);
 		expect(await search.global("acker", 10, db)).toHaveLength(0);
+	});
+});
+
+describe("several clients at once", () => {
+	/** A client of an owner who is not this one, which no call here may touch. */
+	function strangersClient(db: Db) {
+		return db.insert(clientsTable).values({ name: "Elders", sortName: "elders", ownerId: "someone-else" }).returning().get();
+	}
+
+	it("soft deletes every client in one call, and restores them the same way", async () => {
+		const db = freshDb();
+		const a = await clients.create({ name: "Van Damme" }, db);
+		const b = await clients.create({ name: "Peeters" }, db);
+		const c = await clients.create({ name: "Janssens" }, db);
+
+		const removed = await clients.removeMany([a.id, b.id], db);
+		expect(removed.map((row) => row.id).sort()).toEqual([a.id, b.id].sort());
+		expect(removed.every((row) => row.deletedAt !== null && row.updatedAt === row.deletedAt)).toBe(true);
+		expect((await clients.list({}, db)).map((row) => row.id)).toEqual([c.id]);
+
+		const restored = await clients.restoreMany([a.id, b.id], db);
+		expect(restored.every((row) => row.deletedAt === null)).toBe(true);
+		expect(await clients.list({}, db)).toHaveLength(3);
+	});
+
+	it("leaves out a client already in the state asked for, and counts each id once", async () => {
+		const db = freshDb();
+		const a = await clients.create({ name: "Van Damme" }, db);
+		const b = await clients.create({ name: "Peeters" }, db);
+		await clients.remove(a.id, db);
+
+		const removed = await clients.removeMany([a.id, b.id, b.id], db);
+		expect(removed.map((row) => row.id)).toEqual([b.id]);
+		expect(await clients.restoreMany([a.id], db)).toHaveLength(1);
+		expect(await clients.restoreMany([a.id], db)).toEqual([]);
+	});
+
+	it("refuses the whole call for an id nobody has or another owner's, and changes nothing", async () => {
+		const db = freshDb();
+		const mine = await clients.create({ name: "Van Damme" }, db);
+		const theirs = strangersClient(db);
+
+		await expect(clients.removeMany([mine.id, "missing"], db)).rejects.toThrow(/No client with id "missing"/);
+		await expect(clients.removeMany([mine.id, theirs.id], db)).rejects.toThrow(/No client with id/);
+		await expect(clients.archiveMany([theirs.id], db)).rejects.toThrow(/No client with id/);
+		expect(await clients.get(mine.id, db)).not.toBeNull();
+		const stranger = db.select().from(clientsTable).where(eq(clientsTable.id, theirs.id)).get();
+		expect(stranger?.deletedAt).toBeNull();
+	});
+
+	it("refuses an empty list and one that is too long", async () => {
+		const db = freshDb();
+		await expect(clients.removeMany([], db)).rejects.toThrow(/at least one client/);
+		const many = Array.from({ length: 501 }, (_, index) => `id-${index}`);
+		await expect(clients.removeMany(many, db)).rejects.toThrow(/At most 500 clients/);
+	});
+
+	it("archives into the Archived status, writes each change on the timeline and skips a deleted client", async () => {
+		const db = freshDb();
+		const lead = createStatus(db, "Lead");
+		const archived = createStatus(db, "Archived");
+		const a = await clients.create({ name: "Van Damme", statusId: lead.id }, db);
+		const b = await clients.create({ name: "Peeters" }, db);
+		const gone = await clients.create({ name: "Janssens" }, db);
+		await clients.remove(gone.id, db);
+
+		const done = await clients.archiveMany([a.id, b.id, gone.id], db);
+		expect(done.map((row) => row.id)).toEqual([a.id, b.id]);
+		expect(done.every((row) => row.statusId === archived.id)).toBe(true);
+		expect(statusChangesFor(db, a.id)).toMatchObject([{ fromStatusId: lead.id, toStatusId: archived.id }]);
+		expect((await clients.list({ includeDeleted: true }, db)).find((row) => row.id === gone.id)?.status).toBeNull();
+	});
+
+	it("names every client in what an agent's request shows, and refuses one with nothing to do", async () => {
+		const db = freshDb();
+		const a = await clients.create({ name: "Van Damme" }, db);
+		const b = await clients.create({ name: "Peeters" }, db);
+		await clients.remove(b.id, db);
+
+		const review = clients.reviewMany("delete", [a.id, b.id], db);
+		expect(review.summary).toBe("Delete 1 client");
+		expect(review.preview).toContain("- Van Damme");
+		expect(review.preview).toContain("Deleted already, so left alone: Peeters.");
+		expect(() => clients.reviewMany("delete", [b.id], db)).toThrow(/nothing to do/);
+		expect(clients.reviewMany("restore", [b.id], db).summary).toBe("Restore 1 client");
 	});
 });

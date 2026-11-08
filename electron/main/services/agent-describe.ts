@@ -67,6 +67,7 @@ const ROLES: Record<AgentEntityKind, string> = {
 /** The argument names that always mean one kind of record. */
 const KEY_KINDS: Record<string, AgentEntityKind> = {
 	client_id: "client",
+	client_ids: "client",
 	contact_id: "contact",
 	project_id: "project",
 	account_id: "mailAccount",

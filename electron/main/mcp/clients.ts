@@ -23,6 +23,21 @@ function fields(args: Record<string, unknown>): Record<string, unknown> {
 	return mapped;
 }
 
+const manyIds: Record<string, unknown> = {
+	type: "object",
+	properties: {
+		client_ids: {
+			type: "array",
+			items: { type: "string" },
+			minItems: 1,
+			maxItems: 500,
+			description: "The clients' ids, from clients.list. At most 500.",
+		},
+	},
+	required: ["client_ids"],
+	additionalProperties: false,
+};
+
 const writableProperties: Record<string, unknown> = {
 	status_id: {
 		type: ["string", "null"],
@@ -296,5 +311,38 @@ export const clientTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: (args) => clients.restore(args.client_id as string),
+	},
+	{
+		name: "clients.archive_many",
+		title: "Archive several clients",
+		description:
+			"Give each client the Archived status, in one go. A client that is deleted is left alone. Every id must be a client's, or nothing changes. Returns the clients it archived.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: manyIds,
+		prepare: async (args) => clients.reviewMany("archive", args.client_ids as string[]),
+		handler: (args) => clients.archiveMany(args.client_ids as string[]),
+	},
+	{
+		name: "clients.delete_many",
+		title: "Delete several clients",
+		description:
+			"Soft delete each client, in one go, as one request listing every client. A client already deleted is left alone. Every id must be a client's, or nothing changes. Undo with clients.restore_many.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: manyIds,
+		prepare: async (args) => clients.reviewMany("delete", args.client_ids as string[]),
+		handler: (args) => clients.removeMany(args.client_ids as string[]),
+	},
+	{
+		name: "clients.restore_many",
+		title: "Restore several clients",
+		description:
+			"Bring each soft-deleted client back, in one go. A client that is not deleted is left alone. Every id must be a client's, or nothing changes.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: manyIds,
+		prepare: async (args) => clients.reviewMany("restore", args.client_ids as string[]),
+		handler: (args) => clients.restoreMany(args.client_ids as string[]),
 	},
 ];

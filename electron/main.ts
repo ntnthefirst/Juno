@@ -1653,8 +1653,15 @@ if (!app.requestSingleInstanceLock()) {
 											// there, and adding one opens a page, not a dialog, and back
 											// returns to the client.
 											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the client";
-											const addReminder = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add reminder");
-											if (!addReminder) return "no add reminder button on the client";
+											// One Add beside the heading, and the menu says which.
+											const add = [...main.querySelectorAll("section")]
+												.find((el) => el.querySelector("h2")?.textContent.trim() === "Dates and reminders")
+												?.querySelector("button[aria-haspopup=menu]");
+											if (!add) return "no add button beside the client's dates";
+											add.click();
+											await new Promise((r) => setTimeout(r, 300));
+											const addReminder = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim().startsWith("Add reminder"));
+											if (!addReminder) return "no add reminder item on the client";
 											// Adding a reminder opens the new reminder window, prefilled with
 											// the client, and the client stays where it is.
 											addReminder.click();

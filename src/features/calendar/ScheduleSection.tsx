@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/Button";
-import { Icon } from "../../components/Icon";
 import { IconButton } from "../../components/IconButton";
+import { ContextMenu } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
@@ -43,6 +43,8 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 	const [all, setAll] = useState(false);
 	const [undo, setUndo] = useState<Undo | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	const addButton = useRef<HTMLButtonElement>(null);
+	const [addAt, setAddAt] = useState<{ x: number; y: number } | null>(null);
 
 	const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -148,21 +150,41 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 	const rows = useMemo(() => (load.status === "ready" ? load.rows : []), [load]);
 	const shown = useMemo(() => (all ? rows : rows.slice(0, SHOWN)), [all, rows]);
 
+	function openAddMenu() {
+		const box = addButton.current?.getBoundingClientRect();
+		// Hung from its right edge, since the link sits at the right of a narrow column.
+		if (box) setAddAt({ x: box.right, y: box.bottom + 4 });
+	}
+
 	return (
 		<section>
 			<div className="mb-2 flex items-center justify-between gap-4">
-				<h2 className="text-h3">Dates and reminders</h2>
-				<div className="flex items-center gap-1">
-					<Button size="dense" onClick={addEvent}>
-						<Icon name="calendar" />
-						Add date
-					</Button>
-					<Button size="dense" onClick={addReminder}>
-						<Icon name="reminders" />
-						Add reminder
-					</Button>
-				</div>
+				<h2 className="text-h3 whitespace-nowrap">Dates and reminders</h2>
+				{/* One Add, as the client frame (170:12408) draws it, so the heading
+				    keeps its line in the 420px column. The menu says which. */}
+				<button
+					ref={addButton}
+					type="button"
+					aria-haspopup="menu"
+					aria-expanded={addAt !== null}
+					onClick={openAddMenu}
+					className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				>
+					Add
+				</button>
 			</div>
+			{addAt ? (
+				<ContextMenu
+					at={addAt}
+					ariaLabel="Add"
+					anchor="top-right"
+					onClose={() => setAddAt(null)}
+					items={[
+						{ id: "date", label: "Add date", icon: "calendar", onSelect: addEvent },
+						{ id: "reminder", label: "Add reminder", icon: "reminders", onSelect: addReminder },
+					]}
+				/>
+			) : null}
 
 			{load.status === "error" ? (
 				<p className="border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">

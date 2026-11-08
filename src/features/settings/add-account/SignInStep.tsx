@@ -199,8 +199,8 @@ function MicrosoftCard({ email, name, config, state, onSignIn, onCancel }: Micro
 				Juno never sees your password. You can take its access away at any time in your Microsoft account.
 			</p>
 			{ready ? null : (
-				<p role="status" className="text-sm text-[var(--warn)]">
-					Sign-in with Microsoft is not set up in this copy of Juno yet.
+				<p role="status" className="text-sm text-[var(--ink-muted)]">
+					Sign-in with Microsoft is coming soon. Until then, Outlook.com and Microsoft 365 accounts cannot be added.
 				</p>
 			)}
 			<div className="flex items-center gap-2">

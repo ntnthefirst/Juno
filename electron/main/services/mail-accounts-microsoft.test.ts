@@ -140,10 +140,10 @@ describe("signing in with Microsoft", () => {
 		await expect(signIns.signIn("jan@hotmail.com")).rejects.toThrow(/signed in to Microsoft as someone.else@outlook.com/);
 	});
 
-	it("says it is not set up while the application ID is empty, without opening anything", async () => {
+	it("says it is coming soon while the application ID is empty, without opening anything", async () => {
 		signIns.configureMicrosoftSignIn({ clientId: "" });
 		expect(signIns.signInConfigured()).toBe(false);
-		await expect(signIns.signIn("jan@hotmail.com")).rejects.toThrow(/not set up/);
+		await expect(signIns.signIn("jan@hotmail.com")).rejects.toThrow(/coming soon/);
 		expect(opened).toHaveLength(0);
 	});
 

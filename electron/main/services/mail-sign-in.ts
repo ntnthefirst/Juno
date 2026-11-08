@@ -70,7 +70,7 @@ export function signInConfigured(): boolean {
 }
 
 const NOT_SET_UP =
-	"Sign-in with Microsoft is not set up in this copy of Juno yet. The application ID has to be added to the build first.";
+	"Sign-in with Microsoft is coming soon. Until then, Outlook.com and Microsoft 365 accounts cannot be added.";
 
 type PendingSignIn = { email: string; tokens: MicrosoftTokens; expiresAt: number };
 

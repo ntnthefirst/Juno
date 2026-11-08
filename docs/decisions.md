@@ -2447,7 +2447,7 @@ Microsoft, and every other provider still takes a password or an app password.
   URL (decision 6 named only that and the signing certificate). It is public:
   it names the application to Microsoft and grants nothing on its own, so it
   is committed, in `electron/shared/oauth.ts`. While it is empty the two
-  Microsoft tiles say sign-in is not set up yet.
+  Microsoft tiles say "Coming soon" and cannot be picked.
 - **Only Microsoft.** Gmail could sign in the same way, but Google's mail
   scope is restricted, and an application that asks for it needs a paid
   security assessment every year. Gmail keeps the app password, with a guide

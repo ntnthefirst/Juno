@@ -6,7 +6,7 @@
  * committed. It is not a secret, and there is no client secret at all. Juno is
  * a public client and proves each sign-in with PKCE instead.
  *
- * While it is empty, Microsoft sign-in is not set up in this copy of Juno, and
+ * While it is empty, Microsoft sign-in reads "Coming soon" in this copy of Juno, and
  * the Outlook.com and Microsoft 365 tiles say so instead of failing.
  */
 export const MICROSOFT_CLIENT_ID = "";

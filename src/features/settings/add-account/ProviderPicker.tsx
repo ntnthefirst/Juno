@@ -38,7 +38,7 @@ export function ProviderPicker({ onPick, onOther, onByHand }: ProviderPickerProp
 
 type ProviderTileProps = {
 	provider: MailProvider;
-	/** A Microsoft tile while this copy of Juno has no application ID. */
+	/** A Microsoft tile while Microsoft sign-in is not switched on: it reads "Coming soon". */
 	unavailable: boolean;
 	onPick: () => void;
 };
@@ -56,7 +56,7 @@ function ProviderTile({ provider, unavailable, onPick }: ProviderTileProps) {
 			<span className="flex min-w-0 flex-col">
 				<span className="truncate text-base font-[var(--weight-medium)] text-[var(--ink)]">{provider.name}</span>
 				<span className="truncate text-sm text-[var(--ink-muted)]">
-					{unavailable ? "Sign-in not set up yet" : provider.line}
+					{unavailable ? "Coming soon" : provider.line}
 				</span>
 			</span>
 		</button>

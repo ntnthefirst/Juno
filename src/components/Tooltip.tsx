@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Kbd } from "./Kbd";
 
@@ -20,6 +20,8 @@ const SHOW_DELAY = 350;
 /** Moving from one trigger to the next inside this window skips the delay. */
 const WARM_WINDOW = 400;
 const GAP = 10;
+/** The closest a label comes to the edge of the window. */
+const MARGIN = 8;
 
 // Shared across every tooltip, so sweeping the pointer down a column of icons
 // shows each label at once instead of waiting out the delay on every one.
@@ -40,9 +42,22 @@ let lastHiddenAt = 0;
 export function Tooltip({ label, keys, side = "right", className = "flex", children }: TooltipProps) {
 	const anchor = useRef<HTMLSpanElement>(null);
 	const timer = useRef<number | undefined>(undefined);
+	const bubble = useRef<HTMLSpanElement>(null);
 	const [spot, setSpot] = useState<Spot | null>(null);
 
 	useEffect(() => () => window.clearTimeout(timer.current), []);
+
+	// A label under a trigger at the edge of the window (Search, top left) would
+	// be centred half outside it. Measured before paint and pushed back inside,
+	// so it is never drawn clipped and then moved.
+	useLayoutEffect(() => {
+		const element = bubble.current;
+		if (!spot || !element) return;
+		const width = element.offsetWidth;
+		const wanted = side === "bottom" ? spot.x - width / 2 : spot.x;
+		const room = window.innerWidth - width - MARGIN;
+		element.style.left = `${Math.max(MARGIN, Math.min(wanted, room))}px`;
+	}, [spot, side]);
 
 	function reveal() {
 		const element = anchor.current;
@@ -84,11 +99,12 @@ export function Tooltip({ label, keys, side = "right", className = "flex", child
 			{spot
 				? createPortal(
 						<span
+							ref={bubble}
 							aria-hidden
 							style={{ left: spot.x, top: spot.y }}
 							className={[
 								"animate-pop pointer-events-none fixed z-[70] inline-flex items-center gap-2 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--ink)] px-2 py-1 text-sm text-[var(--surface)] shadow-[var(--shadow-popover)]",
-								side === "right" ? "-translate-y-1/2" : "-translate-x-1/2",
+								side === "right" ? "-translate-y-1/2" : "",
 							].join(" ")}
 						>
 							{label}

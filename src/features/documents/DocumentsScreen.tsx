@@ -6,12 +6,12 @@ import { DOCUMENT_SWITCH } from "../../app/screens";
 import { Checkbox } from "../../components/Checkbox";
 import { EmptyState } from "../../components/EmptyState";
 import { Icon, type IconName } from "../../components/Icon";
-import { IconAction } from "../../components/IconAction";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { MenuButton } from "../../components/Menu";
 import { SectionSwitch } from "../../components/SectionSwitch";
 import { Select } from "../../components/Select";
 import { SelectAllButton } from "../../components/SelectAllButton";
+import { SelectionBar } from "../../components/SelectionBar";
 import { Toast } from "../../components/Toast";
 import { ComposePage } from "../mail/ComposePage";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
@@ -22,6 +22,7 @@ import { contextMenuFor } from "../../lib/native-menu";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
+import { useRowSelection } from "../../lib/use-row-selection";
 import { activeDocumentFilterCount, NO_DOCUMENT_FILTERS, type DocumentFilters } from "./document-filters";
 import { DocumentDetail, SpecimenMark } from "./DocumentDetail";
 import { PageView } from "./PageView";
@@ -78,7 +79,6 @@ export function DocumentsScreen() {
 	const [notice, setNotice] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
 	const [filters, setFilters] = useState<DocumentFilters>(NO_DOCUMENT_FILTERS);
-	const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
 	const fetchRows = useCallback(async (): Promise<Rows> => {
 		const [records, statusSet] = await Promise.all([
@@ -118,8 +118,6 @@ export function DocumentsScreen() {
 		setSelectedId(null);
 		setSelectedTitle(null);
 	}, []);
-
-	const clearRowSelection = useCallback(() => setSelectedIds([]), []);
 
 	function selectDocument(id: string, title: string) {
 		setSelectedId(id);
@@ -261,8 +259,14 @@ export function DocumentsScreen() {
 		if (needle) list = list.filter((r) => matches(r, needle));
 		return list;
 	}, [records, needle, filters]);
-	const allSelected = shown.length > 0 && shown.every((r) => selectedIds.includes(r.id));
-	const someSelected = selectedIds.length > 0 && !allSelected;
+	// The list draws newest first, so a Shift run and select all go by that order.
+	const orderedIds = useMemo(
+		() => [...shown].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((r) => r.id),
+		[shown],
+	);
+	const selection = useRowSelection(orderedIds);
+	const clearRowSelection = selection.clear;
+	const selectedIds = selection.selectedIds;
 
 	// Sending a document by mail opens the composer with it attached. Nothing goes until it is sent there.
 	if (sending) {
@@ -358,20 +362,7 @@ export function DocumentsScreen() {
 					</div>
 
 					{load.status === "ready" && load.rows.records.length > 0 ? (
-						<div className="mb-4 flex items-center gap-2 w-full">
-							<SelectAllButton
-								checked={allSelected}
-								indeterminate={someSelected}
-								disabled={shown.length === 0}
-								onSelectAll={() => setSelectedIds(shown.map((r) => r.id))}
-								onClearSelection={clearRowSelection}
-							/>
-							{selectedIds.length > 0 ? (
-								<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
-									{selectedIds.length} selected
-								</span>
-							) : null}
-
+						<div className="mb-4 w-full">
 							<ListSearchBar
 								search={search}
 								onSearch={setSearch}
@@ -408,17 +399,31 @@ export function DocumentsScreen() {
 									</>
 								}
 							/>
-
 							{selectedIds.length > 0 ? (
-								<div className="ml-auto flex items-center gap-1">
-									<IconAction
-										icon="remove"
-										label="Delete"
-										danger
-										onClick={() => void removeSelected(selectedIds)}
-									/>
-								</div>
-							) : null}
+								<SelectionBar
+									count={selectedIds.length}
+									allSelected={selection.allSelected}
+									onSelectAll={selection.selectAll}
+									onClear={clearRowSelection}
+									actions={[
+										{
+											id: "delete",
+											icon: "remove",
+											label: "Delete",
+											danger: true,
+											onSelect: () => void removeSelected(selectedIds),
+										},
+									]}
+								/>
+							) : (
+								<SelectAllButton
+									checked={false}
+									indeterminate={false}
+									disabled={shown.length === 0}
+									onSelectAll={selection.selectAll}
+									onClearSelection={clearRowSelection}
+								/>
+							)}
 						</div>
 					) : null}
 
@@ -466,11 +471,7 @@ export function DocumentsScreen() {
 								rows={{ records: shown, statuses }}
 								selectedId={selectedId}
 								selectedIds={selectedIds}
-								onToggle={(id) =>
-									setSelectedIds((current) =>
-										current.includes(id) ? current.filter((other) => other !== id) : [...current, id],
-									)
-								}
+								onToggle={selection.pick}
 								onSelect={selectDocument}
 								onRemove={(record) => void removeFromList(record)}
 								onSend={setSending}
@@ -515,7 +516,8 @@ type DocumentListProps = {
 	rows: Rows;
 	selectedId: string | null;
 	selectedIds: string[];
-	onToggle: (id: string) => void;
+	/** `extend` (Shift) adds the run from the last row ticked. */
+	onToggle: (id: string, extend: boolean) => void;
 	onSelect: (id: string, title: string) => void;
 	onRemove: (record: DocumentRecord) => void;
 	onSend: (record: DocumentRecord) => void;
@@ -586,7 +588,7 @@ function DocumentList({ rows, selectedId, selectedIds, onToggle, onSelect, onRem
 							const checked = selectedIds.includes(row.id);
 							// A plain click opens the record; once anything is ticked, the
 							// same click ticks instead, the way the mail template rows do.
-							const open = () => (hasSelection ? onToggle(row.id) : onSelect(row.id, row.title));
+							const open = (extend: boolean) => (hasSelection ? onToggle(row.id, extend) : onSelect(row.id, row.title));
 							const unfolded = expanded.includes(row.id);
 							const kind = kindOf(row);
 							const status = row.statusId ? labels.get(row.statusId) : undefined;
@@ -594,7 +596,7 @@ function DocumentList({ rows, selectedId, selectedIds, onToggle, onSelect, onRem
 							return (
 								<li key={row.id}>
 									<div
-										onClick={open}
+										onClick={(event) => open(event.shiftKey)}
 										onContextMenu={menuFor(row)}
 										className={`group flex h-14 cursor-default items-center gap-4 rounded-[var(--radius-md)] p-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] ${
 											selected || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
@@ -620,7 +622,11 @@ function DocumentList({ rows, selectedId, selectedIds, onToggle, onSelect, onRem
 													hasSelection ? "" : "opacity-0 group-hover:opacity-100 has-[:focus-visible]:opacity-100"
 												}`}
 											>
-												<Checkbox checked={checked} onChange={() => onToggle(row.id)} aria-label={`Select ${row.title}`} />
+												<Checkbox
+													checked={checked}
+													onChange={(event) => onToggle(row.id, (event.nativeEvent as MouseEvent).shiftKey)}
+													aria-label={`Select ${row.title}`}
+												/>
 											</span>
 										</span>
 										<div className="min-w-0 flex-1">
@@ -631,7 +637,7 @@ function DocumentList({ rows, selectedId, selectedIds, onToggle, onSelect, onRem
 													// The row handles the same click; without this a tick
 													// would be made and undone by the one press.
 													event.stopPropagation();
-													open();
+													open(event.shiftKey);
 												}}
 												className="flex max-w-full min-w-0 items-center gap-2 text-left text-base"
 											>

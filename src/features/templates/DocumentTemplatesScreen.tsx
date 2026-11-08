@@ -8,12 +8,13 @@ import { Button } from "../../components/Button";
 import { Checkbox } from "../../components/Checkbox";
 import { MenuButton } from "../../components/Menu";
 import { Dialog } from "../../components/Dialog";
-import { IconAction } from "../../components/IconAction";
 import { InlineAdd } from "../../components/InlineAdd";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
 import { PdfViewer } from "../../components/PdfViewer";
 import { SectionSwitch } from "../../components/SectionSwitch";
 import { SelectAllButton } from "../../components/SelectAllButton";
+import { SelectionBar } from "../../components/SelectionBar";
+import { withAll } from "../../lib/select-all";
 import { messageOf } from "../../lib/errors";
 import {
 	activeDocumentTemplateFilterCount,
@@ -146,7 +147,6 @@ export function DocumentTemplatesScreen() {
 		return list;
 	}, [rows, needle, filters]);
 	const allSelected = shown.length > 0 && shown.every((row) => selectedIds.includes(row.id));
-	const someSelected = selectedIds.length > 0 && !allSelected;
 
 	const ofTemplate = view.status === "preview" || view.status === "edit" || view.status === "use" ? view : null;
 	const selected = ofTemplate && load.status === "ready" ? load.rows.find((row) => row.id === ofTemplate.id) ?? null : null;
@@ -344,20 +344,7 @@ export function DocumentTemplatesScreen() {
 				) : null}
 
 				{load.status === "ready" && rows.length > 0 ? (
-					<div className="mt-5 flex items-center gap-2">
-						<SelectAllButton
-							checked={allSelected}
-							indeterminate={someSelected}
-							disabled={shown.length === 0}
-							onSelectAll={() => setSelectedIds(shown.map((row) => row.id))}
-							onClearSelection={() => setSelectedIds([])}
-						/>
-						{selectedIds.length > 0 ? (
-							<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
-								{selectedIds.length} selected
-							</span>
-						) : null}
-
+					<div className="mt-5">
 						<ListSearchBar
 							search={search}
 							onSearch={setSearch}
@@ -378,15 +365,30 @@ export function DocumentTemplatesScreen() {
 						/>
 
 						{selectedIds.length > 0 ? (
-							<div className="ml-auto flex items-center gap-1">
-								<IconAction
-									icon="remove"
-									label="Delete"
-									danger
-									onClick={() => setConfirmRemove(selectedIds)}
-								/>
-							</div>
-						) : null}
+							<SelectionBar
+								count={selectedIds.length}
+								allSelected={allSelected}
+								onSelectAll={() => setSelectedIds((current) => withAll(current, shown.map((row) => row.id)))}
+								onClear={() => setSelectedIds([])}
+								actions={[
+									{
+										id: "remove",
+										icon: "remove",
+										label: "Delete",
+										danger: true,
+										onSelect: () => setConfirmRemove(selectedIds),
+									},
+								]}
+							/>
+						) : (
+							<SelectAllButton
+								checked={false}
+								indeterminate={false}
+								disabled={shown.length === 0}
+								onSelectAll={() => setSelectedIds(shown.map((row) => row.id))}
+								onClearSelection={() => setSelectedIds([])}
+							/>
+						)}
 					</div>
 				) : null}
 			</div>

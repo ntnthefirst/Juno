@@ -1,6 +1,5 @@
-import type { IconName } from "../../components/Icon";
-import { IconAction } from "../../components/IconAction";
 import { SelectAllButton } from "../../components/SelectAllButton";
+import { SelectionBar, type SelectionAction } from "../../components/SelectionBar";
 import { coversAll } from "../../lib/select-all";
 import type { MailFilters } from "./mail-filters";
 import { MailSearchBar } from "./MailSearchBar";
@@ -28,22 +27,15 @@ type ThreadToolbarProps = {
 	heading?: string;
 };
 
-type BulkButton = { action: ThreadAction; icon: IconName; label: string; danger?: boolean };
-
 /**
- * One row above the list: the box that takes or drops the whole page, the
- * count, search, and what can be done to the selection.
+ * The row above the list. At rest it holds the box that takes the whole page,
+ * and in Drafts the heading. Once a thread is held the shared selection bar
+ * takes its place: the count, what can be done to the threads, and Clear.
  *
- * The box is there whether or not anything is selected, because a control
- * that appears once you have already done the thing it does is a control
- * nobody finds. The actions sit at the far right, away from search, so the
- * two do not read as one group.
- *
- * They share a row because search keeps working while something is selected.
- * Picking three threads, searching for a fourth and adding it is the normal
- * way to build a selection, so a bar that pushes search out of the way would
- * be in the way. When the width runs out the actions wrap under search rather
- * than squeezing it.
+ * Search lives in the title bar (`MailSearchBar` puts it there), so it keeps
+ * working while threads are held. Picking three threads, searching for a
+ * fourth and adding it is the normal way to build a selection, which is why
+ * the search is rendered whatever this row shows.
  *
  * Drafts gives a `heading` instead of search: its list also holds messages
  * that are not threads, and a search across the account would leave the folder.
@@ -64,57 +56,44 @@ export function ThreadToolbar({
 }: ThreadToolbarProps) {
 	const hasSelection = selectedIds.length > 0;
 	const allSelected = coversAll(matchingIds ?? visibleIds, selectedIds);
-	const someSelected = hasSelection && !allSelected;
-	const removeAction: ThreadAction = inTrash ? "deleteForever" : "trash";
+	const act = (action: ThreadAction) => () => onAction(action, selectedIds);
 
-	const bulkButtons: BulkButton[] = [
-		{ action: "archive", icon: "archive", label: "Archive" },
-		{ action: "move", icon: "projects", label: "Move to folder" },
-		{ action: "markRead", icon: "read", label: "Mark read" },
-		{ action: "flag", icon: "flag", label: "Flag" },
-		{ action: "junk", icon: "junk", label: "Junk" },
-		{
-			action: removeAction,
-			icon: "remove",
-			label: inTrash ? "Delete forever" : "Move to trash",
-			danger: true,
-		},
+	const actions: SelectionAction[] = [
+		{ id: "archive", icon: "archive", label: "Archive", onSelect: act("archive") },
+		{ id: "move", icon: "projects", label: "Move", description: "Move to folder", onSelect: act("move") },
+		{ id: "markRead", icon: "read", label: "Mark read", onSelect: act("markRead") },
+		{ id: "flag", icon: "flag", label: "Flag", onSelect: act("flag") },
+		{ id: "junk", icon: "junk", label: "Junk", onSelect: act("junk") },
+		inTrash
+			? { id: "deleteForever", icon: "remove", label: "Delete forever", description: "Delete forever", danger: true, onSelect: act("deleteForever") }
+			: { id: "trash", icon: "remove", label: "Trash", description: "Move to trash", danger: true, onSelect: act("trash") },
 	];
 
 	return (
-		<div className="flex flex-wrap items-center gap-2 px-4 pt-6 pb-3">
-			<SelectAllButton
-				checked={allSelected}
-				indeterminate={someSelected}
-				disabled={visibleIds.length === 0}
-				onSelectAll={onSelectAll}
-				onClearSelection={onClearSelection}
-			/>
-			{hasSelection ? (
-				<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
-					{selectedIds.length} selected
-				</span>
-			) : null}
-
-			{heading ? (
-				<h2 className="min-w-0 text-h3 font-[var(--weight-medium)]">{heading}</h2>
-			) : (
+		<div className="px-4 pt-6 pb-3">
+			{heading ? null : (
 				<MailSearchBar search={search} onSearch={onSearch} filters={filters} onFilters={onFilters} />
 			)}
-
 			{hasSelection ? (
-				<div className="ml-auto flex items-center gap-1">
-					{bulkButtons.map((button) => (
-						<IconAction
-							key={button.action}
-							icon={button.icon}
-							label={button.label}
-							danger={button.danger}
-							onClick={() => onAction(button.action, selectedIds)}
-						/>
-					))}
+				<SelectionBar
+					count={selectedIds.length}
+					allSelected={allSelected}
+					onSelectAll={onSelectAll}
+					onClear={onClearSelection}
+					actions={actions}
+				/>
+			) : (
+				<div className="flex items-center gap-2">
+					<SelectAllButton
+						checked={false}
+						indeterminate={false}
+						disabled={visibleIds.length === 0}
+						onSelectAll={onSelectAll}
+						onClearSelection={onClearSelection}
+					/>
+					{heading ? <h2 className="min-w-0 text-h3 font-[var(--weight-medium)]">{heading}</h2> : null}
 				</div>
-			) : null}
+			)}
 		</div>
 	);
 }

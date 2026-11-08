@@ -605,6 +605,30 @@ describe("actions on a selection", () => {
 		expect(await projects.list()).toHaveLength(0);
 	});
 
+	it("puts the note tools in their rows, and parks a bulk note delete naming every note", async () => {
+		expect(permissions.rowOf("notes.duplicate_many")).toBe("change");
+		expect(permissions.rowOf("notes.restore_many")).toBe("change");
+		expect(permissions.rowOf("notes.delete_many")).toBe("delete");
+
+		const notes = await import("../services/notes");
+		const a = await notes.create({ title: "Workshop checklist" });
+		const b = await notes.create({ title: "Delivery planning" });
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "allow", delete: "allow" });
+
+		const parked = (await callTool("notes.delete_many", { note_ids: [a.id, b.id] })) as Parked;
+		expect(parked.status).toBe("pending");
+		expect(parked.summary).toBe("Delete 2 notes");
+		const [pending] = await actions.list({ states: ["pending"] });
+		expect(pending!.preview).toContain("- Workshop checklist\n- Delivery planning");
+
+		// A copy is a change, so at Allow it runs straight away.
+		const copies = (await callTool("notes.duplicate_many", { note_ids: [a.id] })) as { title: string }[];
+		expect(copies.map((copy) => copy.title)).toEqual(["Workshop checklist (copy)"]);
+
+		await actions.approve(parked.actionId);
+		expect((await notes.list()).map((note) => note.title)).toEqual(["Workshop checklist (copy)"]);
+	});
+
 	it("refuses at once a bulk client call that names a client nobody has", async () => {
 		const clients = await import("../services/clients");
 		const real = await clients.create({ name: "Van Damme" });

@@ -3,7 +3,9 @@ import { parseMarkdown, toMarkdown, type Block } from "@shared/blocks";
 import type { Note, NoteHit, ProjectSummary } from "@shared/types";
 import { BlockEditor } from "../../components/BlockEditor";
 import { Button } from "../../components/Button";
+import { Checkbox } from "../../components/Checkbox";
 import { Dialog } from "../../components/Dialog";
+import { SelectionBar } from "../../components/SelectionBar";
 import { EmptyState } from "../../components/EmptyState";
 import { TitleSearch } from "../../app/TitleSearch";
 import { Icon } from "../../components/Icon";
@@ -18,6 +20,7 @@ import { clearPending, peekPending } from "../../lib/open-entity";
 import { useScreenAction } from "../../lib/screen-actions";
 import { useLoaded } from "../../lib/use-loaded";
 import { useRecentTouch } from "../../lib/use-recent-touch";
+import { useRowSelection } from "../../lib/use-row-selection";
 import { editedLabel, groupLabel, noteTitle, notePreview, rowTime } from "./note-format";
 import { listAllNotes } from "../../lib/list-all-notes";
 
@@ -37,7 +40,9 @@ export function NotesScreen() {
 	const [notice, setNotice] = useState<{ message: string; undo?: () => void } | null>(null);
 	const [moving, setMoving] = useState<Note | null>(null);
 	const [focusTitle, setFocusTitle] = useState(false);
-	
+	// A delete of several asks first, and is undone as one.
+	const [confirmingDelete, setConfirmingDelete] = useState<string[] | null>(null);
+
 
 	const reload = notes.reload;
 	const term = search.trim();
@@ -132,14 +137,88 @@ export function NotesScreen() {
 
 	const groups = useMemo(() => (searching ? null : groupByDay(rows, (row) => row.note.updatedAt)), [rows, searching]);
 
+	// The rows in the order they are drawn, which is what select all and a Shift run go by.
+	const orderedIds = useMemo(
+		() => (groups ? groups.flatMap((group) => group.items) : rows).map((row) => row.note.id),
+		[groups, rows],
+	);
+	const selection = useRowSelection(orderedIds);
+	const hasSelection = selection.selectedIds.length > 0;
+
+	async function duplicateSelected(ids: string[]) {
+		try {
+			const copies = await window.juno.notes.duplicateMany(ids);
+			selection.clear();
+			setNotice({ message: copies.length === 1 ? "Note duplicated." : `${copies.length} notes duplicated.` });
+			reload();
+		} catch (cause: unknown) {
+			setNotice({ message: messageOf(cause) });
+		}
+	}
+
+	async function deleteSelected(ids: string[]) {
+		setConfirmingDelete(null);
+		try {
+			const removed = await window.juno.notes.removeMany(ids);
+			selection.clear();
+			if (openId !== null && ids.includes(openId)) setSelectedId(null);
+			const removedIds = removed.map((note) => note.id);
+			setNotice({
+				message: removed.length === 1 ? "Note deleted." : `${removed.length} notes deleted.`,
+				undo: () => {
+					void window.juno.notes
+						.restoreMany(removedIds)
+						.then(reload)
+						.catch((cause: unknown) => setNotice({ message: messageOf(cause) }));
+				},
+			});
+			reload();
+		} catch (cause: unknown) {
+			setNotice({ message: messageOf(cause) });
+		}
+	}
+
+	/**
+	 * A note has no avatar for the tick to stand in for, so the tick comes in
+	 * front of the title: under the pointer, on keyboard focus, and on every row
+	 * once anything is ticked. Once anything is, a click ticks rather than opens.
+	 */
 	function renderRow({ note, preview }: Row) {
 		const open = note.id === openId;
+		const checked = selection.held.has(note.id);
+		return (
+			<div
+				key={note.id}
+				className={[
+					"group flex h-[72px] w-full flex-none items-center gap-[10px] overflow-hidden rounded-[var(--radius-md)] px-3 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+					checked
+						? "bg-[var(--accent-soft)]"
+						: open && !hasSelection
+							? "bg-[var(--hover)]"
+							: "hover:bg-[var(--hover)]/60",
+				].join(" ")}
+			>
+				<label
+					className={`flex-none cursor-pointer items-center ${hasSelection ? "flex" : "hidden group-hover:flex group-focus-within:flex"}`}
+				>
+					<Checkbox
+						checked={checked}
+						onChange={(event) => selection.pick(note.id, (event.nativeEvent as MouseEvent).shiftKey)}
+						aria-label={`Select ${noteTitle(note)}`}
+					/>
+				</label>
+				{renderRowButton(note, preview, open)}
+			</div>
+		);
+	}
+
+	function renderRowButton(note: Note, preview: string, open: boolean) {
 		return (
 			<button
-				key={note.id}
 				type="button"
-				aria-current={open ? "true" : undefined}
-				onClick={() => setSelectedId(note.id)}
+				aria-current={open && !hasSelection ? "true" : undefined}
+				aria-pressed={hasSelection ? selection.held.has(note.id) : undefined}
+				onClick={(event) => (hasSelection ? selection.pick(note.id, event.shiftKey) : setSelectedId(note.id))}
 				onKeyDown={(event) => onRowKey(event, note)}
 				onContextMenu={contextMenuFor(
 					{ kind: "note", id: note.id },
@@ -153,10 +232,7 @@ export function NotesScreen() {
 						failed: (message) => setNotice({ message }),
 					},
 				)}
-				className={[
-					"flex h-[72px] w-full flex-none flex-col items-start gap-[2px] overflow-hidden rounded-[var(--radius-md)] px-3 py-[10px] text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
-					open ? "bg-[var(--hover)]" : "hover:bg-[var(--hover)]/60",
-				].join(" ")}
+				className="flex min-w-0 flex-1 flex-col items-start gap-[2px] self-stretch justify-center overflow-hidden text-left"
 			>
 				<span className="flex w-full items-center gap-1 text-base font-[var(--weight-semibold)] text-[var(--ink)]">
 					<span className="min-w-0 flex-1 truncate">{noteTitle(note)}</span>
@@ -183,6 +259,32 @@ export function NotesScreen() {
 					{all ? <span className="tabular text-base text-[var(--ink-muted)]">{all.length}</span> : null}
 				</div>
 				<TitleSearch value={search} onChange={setSearch} placeholder="Search notes" />
+				{hasSelection ? (
+					<div className="px-3 pb-1">
+						<SelectionBar
+							compact
+							count={selection.selectedIds.length}
+							allSelected={selection.allSelected}
+							onSelectAll={selection.selectAll}
+							onClear={selection.clear}
+							actions={[
+								{
+									id: "duplicate",
+									icon: "copy",
+									label: "Duplicate",
+									onSelect: () => void duplicateSelected(selection.selectedIds),
+								},
+								{
+									id: "delete",
+									icon: "remove",
+									label: "Delete",
+									danger: true,
+									onSelect: () => setConfirmingDelete(selection.selectedIds),
+								},
+							]}
+						/>
+					</div>
+				) : null}
 				<div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
 					{notes.status === "loading" ? <p className="px-4 text-dense text-[var(--ink-muted)]">Loading.</p> : null}
 					{notes.status === "error" ? (
@@ -234,6 +336,25 @@ export function NotesScreen() {
 					}}
 					onError={(message) => setNotice({ message })}
 				/>
+			) : null}
+
+			{confirmingDelete ? (
+				<Dialog
+					title={confirmingDelete.length === 1 ? "Delete 1 note?" : `Delete ${confirmingDelete.length} notes?`}
+					width="narrow"
+					onClose={() => setConfirmingDelete(null)}
+				>
+					<p className="mt-3 text-base">
+						{confirmingDelete.length === 1 ? "The note is" : `${confirmingDelete.length} notes are`} removed from
+						your list. You can undo this straight after.
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setConfirmingDelete(null)}>Cancel</Button>
+						<Button variant="danger" onClick={() => void deleteSelected(confirmingDelete)}>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
 
 			{notice ? (

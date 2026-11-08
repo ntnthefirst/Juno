@@ -177,6 +177,9 @@ const api: JunoApi = {
 		duplicate: (id) => call("notes.duplicate", id),
 		remove: (id) => call("notes.remove", id),
 		restore: (id) => call("notes.restore", id),
+		duplicateMany: (ids) => call("notes.duplicateMany", ids),
+		removeMany: (ids) => call("notes.removeMany", ids),
+		restoreMany: (ids) => call("notes.restoreMany", ids),
 	},
 
 	pages: {

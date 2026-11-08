@@ -432,6 +432,14 @@ export interface JunoApi {
 		duplicate(id: string): Promise<Note>;
 		remove(id: string): Promise<Note>;
 		restore(id: string): Promise<Note>;
+		/**
+		 * Duplicate, delete and restore for a selection, each in one go. An id
+		 * that is not a note refuses the whole call; a note already in that state
+		 * is left out of what comes back. Duplicating returns the copies.
+		 */
+		duplicateMany(ids: string[]): Promise<Note[]>;
+		removeMany(ids: string[]): Promise<Note[]>;
+		restoreMany(ids: string[]): Promise<Note[]>;
 	};
 
 	/** A page is a document of kind `page`. Listing and deleting go through `documents`. */

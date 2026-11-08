@@ -13,8 +13,9 @@
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Note, NoteHit, NoteInput, NotePatch, NoteQuery } from "../../shared/types";
 import { getDb, type Db } from "../db";
-import { now } from "../db/columns";
+import { LOCAL_OWNER_ID, now } from "../db/columns";
 import { clients, notes, projects } from "../db/schema";
+import { cleanIds, requireAll, reviewOf, type BulkReview } from "./bulk";
 import { requireClient } from "./clients";
 import { ftsQuery } from "./mail-threads";
 import { requireProject } from "./projects";
@@ -194,4 +195,111 @@ export async function restore(id: string, db: Db = getDb()): Promise<Note> {
 		.get();
 	if (!row) throw new Error(`No deleted note with id "${id}" to restore.`);
 	return requireNote(id, db);
+}
+
+/* ---------------------------------------------------------------- several */
+
+const NOUN = { one: "note", many: "notes" };
+
+/**
+ * The rows a bulk call names, deleted or not, in the order given. Every id
+ * must be one of this owner's notes or nothing happens (services/bulk.ts).
+ */
+function ownRows(ids: unknown, db: Db): Row[] {
+	const wanted = cleanIds(ids, NOUN);
+	const rows = db
+		.select()
+		.from(notes)
+		.where(and(inArray(notes.id, wanted), eq(notes.ownerId, LOCAL_OWNER_ID)))
+		.all();
+	const byId = new Map(rows.map((row) => [row.id, row]));
+	requireAll(wanted, new Set(byId.keys()), NOUN);
+	return wanted.map((id) => byId.get(id)!);
+}
+
+/**
+ * A copy of each note, in one go, made the way `duplicate` makes one. A deleted
+ * note is left alone. Returns the copies, in the order of the ids.
+ */
+export async function duplicateMany(ids: string[], db: Db = getDb()): Promise<Note[]> {
+	const copies = db.transaction((tx) => {
+		const stamp = now();
+		const made: string[] = [];
+		for (const source of ownRows(ids, tx)) {
+			if (source.deletedAt !== null) continue;
+			checkOwners(source.clientId, source.projectId, tx);
+			const row = tx
+				.insert(notes)
+				.values({
+					title: source.title === "" ? "" : `${source.title} (copy)`.slice(0, MAX_TITLE),
+					body: source.body,
+					clientId: source.clientId,
+					projectId: source.projectId,
+					createdAt: stamp,
+					updatedAt: stamp,
+				})
+				.returning({ id: notes.id })
+				.get();
+			made.push(row.id);
+		}
+		return made;
+	});
+	return copies.map((id) => requireNote(id, db));
+}
+
+/** Soft deletes each note, in one go. One that is already deleted is left alone and not returned. */
+export async function removeMany(ids: string[], db: Db = getDb()): Promise<Note[]> {
+	return db.transaction((tx) => {
+		const stamp = now();
+		const live = ownRows(ids, tx).filter((row) => row.deletedAt === null);
+		if (live.length === 0) return [];
+		return tx
+			.update(notes)
+			.set({ deletedAt: stamp, updatedAt: stamp })
+			.where(inArray(notes.id, live.map((row) => row.id)))
+			.returning()
+			.all()
+			.map((row) => toNote(row, { clientName: null, projectName: null }));
+	});
+}
+
+/** Brings each deleted note back, in one go. One that was never deleted is left alone and not returned. */
+export async function restoreMany(ids: string[], db: Db = getDb()): Promise<Note[]> {
+	const restored = db.transaction((tx) => {
+		const gone = ownRows(ids, tx).filter((row) => row.deletedAt !== null);
+		if (gone.length === 0) return [];
+		return tx
+			.update(notes)
+			.set({ deletedAt: null, updatedAt: now() })
+			.where(inArray(notes.id, gone.map((row) => row.id)))
+			.returning({ id: notes.id })
+			.all();
+	});
+	return restored.map((row) => requireNote(row.id, db));
+}
+
+/**
+ * What a person reads before an agent's bulk call on notes runs: every note
+ * by its title. Refuses a list that names a note nobody has, or one where
+ * there is nothing left to do.
+ */
+export function reviewMany(action: "duplicate" | "delete" | "restore", ids: string[], db: Db = getDb()): BulkReview {
+	const rows = ownRows(ids, db);
+	const named = (row: Row, skipped: boolean) => ({ name: row.title || "Untitled", skipped });
+	if (action === "duplicate") {
+		return reviewOf(
+			{ verb: "Duplicate", noun: NOUN, afterwards: "Each copy is titled as a copy and not pinned.", skippedAs: "Deleted" },
+			rows.map((row) => named(row, row.deletedAt !== null)),
+		);
+	}
+	if (action === "delete") {
+		return reviewOf(
+			{ verb: "Delete", noun: NOUN, afterwards: "Each can be restored afterwards.", skippedAs: "Deleted already" },
+			rows.map((row) => named(row, row.deletedAt !== null)),
+		);
+	}
+	return reviewOf(
+		{ verb: "Restore", noun: NOUN, afterwards: "Each comes back as it was.", skippedAs: "Not deleted" },
+		rows.map((row) => named(row, row.deletedAt === null)),
+	);
 }

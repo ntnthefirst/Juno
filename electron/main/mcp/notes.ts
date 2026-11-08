@@ -14,6 +14,20 @@ const BODY = {
 const CLIENT = { type: ["string", "null"], description: "The id of the client it belongs to, from clients.list. Null for none." } as const;
 const PROJECT = { type: ["string", "null"], description: "The id of the project it belongs to, from projects.list. Null for none." } as const;
 const NOTE_ID = { type: "string", description: "The id of the note, from notes.list." } as const;
+const MANY_IDS: Record<string, unknown> = {
+	type: "object",
+	properties: {
+		note_ids: {
+			type: "array",
+			items: { type: "string" },
+			minItems: 1,
+			maxItems: 500,
+			description: "The notes' ids, from notes.list. At most 500.",
+		},
+	},
+	required: ["note_ids"],
+	additionalProperties: false,
+};
 
 function fields(args: Record<string, unknown>): NoteInput {
 	const input: NoteInput = {};
@@ -168,5 +182,38 @@ export const noteTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: (args) => notes.restore(args.note_id as string),
+	},
+	{
+		name: "notes.duplicate_many",
+		title: "Copy several notes",
+		description:
+			"Make a copy of each note, in one go, each titled as a copy and not pinned. A deleted note is left alone. Every id must be a note's, or nothing is copied. Returns the copies.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: MANY_IDS,
+		prepare: async (args) => notes.reviewMany("duplicate", args.note_ids as string[]),
+		handler: (args) => notes.duplicateMany(args.note_ids as string[]),
+	},
+	{
+		name: "notes.delete_many",
+		title: "Delete several notes",
+		description:
+			"Soft delete each note, in one go, as one request listing every note. A note already deleted is left alone. Every id must be a note's, or nothing changes. Undo with notes.restore_many.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: MANY_IDS,
+		prepare: async (args) => notes.reviewMany("delete", args.note_ids as string[]),
+		handler: (args) => notes.removeMany(args.note_ids as string[]),
+	},
+	{
+		name: "notes.restore_many",
+		title: "Restore several notes",
+		description:
+			"Bring each deleted note back, in one go. A note that is not deleted is left alone. Every id must be a note's, or nothing changes.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: MANY_IDS,
+		prepare: async (args) => notes.reviewMany("restore", args.note_ids as string[]),
+		handler: (args) => notes.restoreMany(args.note_ids as string[]),
 	},
 ];

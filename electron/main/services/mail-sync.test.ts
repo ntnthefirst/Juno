@@ -209,13 +209,13 @@ describe("accounts", () => {
 		const account = (await accounts.get(accountId, db))!;
 		expect(JSON.stringify(account)).not.toContain("secret");
 		expect(account.hasCredential).toBe(true);
-		expect(accounts.connectionFor(accountId, db).password).toBe("secret");
+		expect((await accounts.connectionFor(accountId, db)).password).toBe("secret");
 	});
 
 	it("forgets the password on remove", async () => {
 		await accounts.remove(accountId, db);
 		expect(await accounts.get(accountId, db)).toBeNull();
-		expect(() => accounts.connectionFor(accountId, db)).toThrow(/does not exist/);
+		await expect(accounts.connectionFor(accountId, db)).rejects.toThrow(/does not exist/);
 	});
 
 	it("refuses a cleartext security setting", async () => {

@@ -140,6 +140,9 @@ import type {
 	MailFileResult,
 	MailAccountInput,
 	MailAutoconfig,
+	MailConnectResult,
+	MailProviderId,
+	MailSignInResult,
 	MailAccountPatch,
 	MailConnectionTest,
 	MailPurgeResult,
@@ -979,7 +982,7 @@ export interface JunoApi {
 			 * Server settings for an address, so adding an account is a password
 			 * rather than six fields. Nothing is saved and nothing is fetched.
 			 */
-			guess(email: string): Promise<MailAutoconfig>;
+			guess(email: string, provider?: MailProviderId | null): Promise<MailAutoconfig>;
 			/**
 			 * Asks DNS who handles mail for the domain, which names the provider
 			 * when the domain does not. A network request, so it is a separate
@@ -1023,6 +1026,26 @@ export interface JunoApi {
 				username?: string;
 				password?: string;
 			}): Promise<MailConnectionTest>;
+			/**
+			 * Tries receiving and sending with the settings and the password or
+			 * Microsoft sign-in given, and adds the account only when both work.
+			 */
+			connect(input: MailAccountInput): Promise<MailConnectResult>;
+			/**
+			 * Opens the page where a provider makes app passwords, in the browser.
+			 * Takes the provider, never a URL: the main process looks the page up.
+			 */
+			openProviderPage(provider: MailProviderId): Promise<void>;
+			/**
+			 * Opens Microsoft sign-in in the browser and waits for the person to
+			 * finish there. Returns an id for the sign-in, never a token. There is
+			 * no agent tool for this.
+			 */
+			signInWithMicrosoft(email: string): Promise<MailSignInResult>;
+			/** Stops a sign-in that is waiting on the browser. */
+			cancelSignIn(): Promise<void>;
+			/** Signs a Microsoft account in again after Microsoft stopped renewing it. */
+			signInAgain(id: string): Promise<MailAccount>;
 		};
 		folders: {
 			list(accountId: string): Promise<MailFolder[]>;

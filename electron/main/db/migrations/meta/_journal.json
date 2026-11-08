@@ -211,6 +211,13 @@
       "when": 1794147438773,
       "tag": "0029_reminder_due_time",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1794149320822,
+      "tag": "0030_mail_account_auth_kind",
+      "breakpoints": true
     }
   ]
 }

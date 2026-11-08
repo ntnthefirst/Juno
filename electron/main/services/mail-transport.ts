@@ -13,7 +13,10 @@ export interface SmtpConnection {
 	port: number;
 	security: MailSecurity;
 	username: string;
+	/** Empty for an account that signs in with Microsoft. */
 	password: string;
+	/** A Microsoft access token. When set, SMTP signs in with XOAUTH2. */
+	accessToken?: string;
 	fromAddress: string;
 	fromName: string | null;
 }
@@ -57,7 +60,7 @@ export interface MailTransport {
  * 4 makes to IMAP, kept apart from the read-only source interface on purpose.
  */
 export type SentAppender = (
-	connection: { host: string; port: number; security: MailSecurity; username: string; password: string },
+	connection: { host: string; port: number; security: MailSecurity; username: string; password: string; accessToken?: string },
 	folderPath: string,
 	raw: Buffer,
 	sentAt: string,
@@ -85,7 +88,7 @@ export function sendMessage(connection: SmtpConnection, message: OutgoingMessage
 }
 
 export function appendToSent(
-	connection: { host: string; port: number; security: MailSecurity; username: string; password: string },
+	connection: { host: string; port: number; security: MailSecurity; username: string; password: string; accessToken?: string },
 	folderPath: string,
 	raw: Buffer,
 	sentAt: string,

@@ -106,7 +106,7 @@ async function sendOne(message: outbox.QueuedMessage, db: Db): Promise<void> {
 
 	let connection: { host: string; username: string } = { host: "", username: "" };
 	try {
-		const smtp = accounts.smtpConnectionFor(message.accountId, db);
+		const smtp = await accounts.smtpConnectionFor(message.accountId, db);
 		connection = smtp;
 		const owner = await settings.getOwner();
 		const from: MailAddress = {
@@ -167,7 +167,7 @@ async function sendOne(message: outbox.QueuedMessage, db: Db): Promise<void> {
 			if (!sent) {
 				outbox.markAppended(message.id, "No Sent folder is known for this account yet. Sync it once.", db);
 			} else {
-				const imap = accounts.connectionFor(message.accountId, db);
+				const imap = await accounts.connectionFor(message.accountId, db);
 				await appendToSent(imap, sent.path, result.raw, new Date().toISOString());
 				outbox.markAppended(message.id, null, db);
 			}

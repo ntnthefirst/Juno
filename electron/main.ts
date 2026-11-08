@@ -44,6 +44,7 @@ import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
 import * as documentActions from "./main/services/document-actions";
 import { configureCredentialStore } from "./main/services/mail-credentials";
+import { configureMicrosoftSignIn } from "./main/services/mail-sign-in";
 import { openImapWriter } from "./main/services/mail-imap-write";
 import { openImapSource } from "./main/services/mail-imap";
 import { configureMailboxSource } from "./main/services/mail-source";
@@ -153,6 +154,8 @@ if (!app.requestSingleInstanceLock()) {
 		});
 		// safeStorage is usable now that the app is ready, and not before.
 		configureCredentialStore(safeStorageCredentialStore);
+		// Microsoft sign-in opens the system browser, never a window of Juno's.
+		configureMicrosoftSignIn({ openExternal: (url) => shell.openExternal(url) });
 
 		splashStep("Opening the database");
 		const db = openDb(databasePath());

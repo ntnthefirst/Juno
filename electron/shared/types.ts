@@ -2369,6 +2369,31 @@ export interface ReminderCompletion {
 export type MailSecurity = "tls" | "starttls";
 
 /**
+ * How an account signs in. "password" covers app passwords too: the secret is
+ * typed once and kept by the operating system. "microsoft" signs in through
+ * Microsoft in the browser and keeps a refresh token instead.
+ */
+export type MailAuthKind = "password" | "microsoft";
+
+/** The providers the Add account screen offers as tiles. `shared/mail-providers.ts` holds them. */
+export type MailProviderId =
+	| "gmail"
+	| "outlook"
+	| "m365"
+	| "icloud"
+	| "ovh"
+	| "proximus"
+	| "telenet"
+	| "yahoo"
+	| "combell";
+
+/**
+ * What the sign-in step asks for. "app-password" is a password the provider
+ * makes for one application, with a guide to making it.
+ */
+export type MailSignIn = "password" | "app-password" | "microsoft";
+
+/**
  * An account as the renderer sees it. There is no password field, and there
  * never will be: `hasCredential` is the whole of what the interface learns.
  */
@@ -2393,6 +2418,9 @@ export interface MailAccount extends Standard {
 	smtpUsername: string | null;
 	/** The display name on outgoing mail. Null means the owner's name. */
 	fromName: string | null;
+	authKind: MailAuthKind;
+	/** Microsoft refused to renew the sign-in, so the person has to sign in again. */
+	needsSignIn: boolean;
 }
 
 /**
@@ -2441,8 +2469,19 @@ export interface MailAutoconfig {
 	smtpPort: number;
 	smtpSecurity: MailSecurity;
 	username: string;
+	/**
+	 * The login for sending when it is not `username`, as with iCloud, which
+	 * wants the name alone for IMAP and the whole address for SMTP.
+	 */
+	smtpUsername: string | null;
 	/** What this provider needs that a password alone does not cover. */
 	note: string | null;
+	/** The provider in the catalogue, when the settings came from one. */
+	provider: MailProviderId | null;
+	/** What to call the provider, also for a host Juno knows without a tile. Null when unknown. */
+	providerName: string | null;
+	/** What the sign-in step asks for. */
+	signIn: MailSignIn;
 }
 
 export interface MailAccountInput {
@@ -2452,8 +2491,17 @@ export interface MailAccountInput {
 	imapPort?: number;
 	imapSecurity?: MailSecurity;
 	username?: string;
-	/** Stored in the credential store on the way in. Never read back. */
-	password: string;
+	/**
+	 * Stored in the credential store on the way in. Never read back. Needed
+	 * unless `signInId` is given.
+	 */
+	password?: string;
+	/**
+	 * A Microsoft sign-in that finished in the browser. The account keeps that
+	 * sign-in instead of a password. Only the settings window can start one: no
+	 * agent tool signs in or passes this.
+	 */
+	signInId?: string;
 	horizonDays?: number;
 	syncIntervalMinutes?: number;
 	syncEnabled?: boolean;
@@ -2464,7 +2512,34 @@ export interface MailAccountInput {
 	fromName?: string | null;
 }
 
-export type MailAccountPatch = Partial<MailAccountInput>;
+export type MailAccountPatch = Partial<Omit<MailAccountInput, "signInId">>;
+
+/** One direction of a connection test, as the Ready step shows it. */
+export interface MailDirectionCheck {
+	ok: boolean;
+	/** The host that was asked. */
+	host: string;
+	/** What went wrong and what to do about it, when ok is false. */
+	message: string | null;
+}
+
+/**
+ * Both directions tried, and the account, which exists only when both
+ * passed. A failed check saves nothing.
+ */
+export interface MailConnectResult {
+	receiving: MailDirectionCheck;
+	sending: MailDirectionCheck;
+	account: MailAccount | null;
+}
+
+/** A Microsoft sign-in that finished in the browser and waits to become an account. */
+export interface MailSignInResult {
+	/** Refers to the sign-in kept in the main process. It is not a token. */
+	signInId: string;
+	/** The address Microsoft says was signed in to. */
+	email: string;
+}
 
 export interface MailConnectionTest {
 	ok: boolean;

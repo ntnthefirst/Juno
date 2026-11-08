@@ -53,6 +53,17 @@ export const mailAccounts = sqliteTable(
 		 * sync (or by the migration for an account that already existed).
 		 */
 		rulesSince: text("rules_since"),
+		/**
+		 * How the account signs in: "password" keeps a password (or an app
+		 * password) under `credential_key`, "microsoft" keeps a Microsoft refresh
+		 * token there instead. Either way the secret is in the credential store.
+		 */
+		authKind: text("auth_kind").notNull().default("password"),
+		/**
+		 * Set when Microsoft refused to renew the sign-in, so the list can say
+		 * "Sign in again". Cleared by signing in again. Null for a password account.
+		 */
+		authExpiredAt: text("auth_expired_at"),
 	},
 	(t) => [
 		index("mail_accounts_owner_idx").on(t.ownerId),

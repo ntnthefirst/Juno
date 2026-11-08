@@ -22,6 +22,7 @@ import type {
 	RemoteHeader,
 	RemoteMailbox,
 } from "./mail-source";
+import { imapAuth } from "./mail-source";
 
 /** UIDs per FETCH, so a command line stays short and a failure loses little. */
 const CHUNK = 250;
@@ -119,7 +120,7 @@ export async function openImapSource(connection: MailConnection): Promise<Mailbo
 		host: connection.host,
 		port: connection.port,
 		secure: connection.security === "tls",
-		auth: { user: connection.username, pass: connection.password },
+		auth: imapAuth(connection),
 		logger: false,
 		// The sync runs commands back to back and then logs out; an IDLE between
 		// two of them is two wasted round trips, and there is nothing to wait for.

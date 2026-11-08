@@ -17,7 +17,13 @@ export interface MailConnection {
 	port: number;
 	security: MailSecurity;
 	username: string;
+	/** Empty for an account that signs in with Microsoft. */
 	password: string;
+	/**
+	 * A Microsoft access token. When set, the connection signs in with
+	 * XOAUTH2 instead of the password. Lives in memory only.
+	 */
+	accessToken?: string;
 }
 
 export interface RemoteFolder {
@@ -73,6 +79,16 @@ export interface MailboxSource {
 	close(): Promise<void>;
 }
 
+/**
+ * What imapflow is given to sign in with: the access token for a Microsoft
+ * account (XOAUTH2), the password for every other.
+ */
+export function imapAuth(connection: MailConnection): { user: string; pass: string } | { user: string; accessToken: string } {
+	return connection.accessToken
+		? { user: connection.username, accessToken: connection.accessToken }
+		: { user: connection.username, pass: connection.password };
+}
+
 export type MailboxSourceFactory = (connection: MailConnection) => Promise<MailboxSource>;
 
 let factory: MailboxSourceFactory | null = null;
@@ -91,9 +107,16 @@ export function openMailbox(connection: MailConnection): Promise<MailboxSource> 
  * raw error is kept off the screen: it can contain the server's response text,
  * and a stack trace helps nobody at a settings screen.
  */
-export function describeMailError(error: unknown, connection: { host: string; username: string }): string {
+export function describeMailError(
+	error: unknown,
+	connection: { host: string; username: string; accessToken?: string },
+): string {
 	const e = error as { code?: string; authenticationFailed?: boolean; message?: string };
-	if (e.authenticationFailed) {
+	// nodemailer reports a refused login as EAUTH, imapflow as authenticationFailed.
+	if (connection.accessToken && (e.authenticationFailed || e.code === "EAUTH")) {
+		return `${connection.host} refused the Microsoft sign-in for ${connection.username}. If the mailbox is at work, ask whoever runs it to allow IMAP and SMTP for it; otherwise sign in again.`;
+	}
+	if (e.authenticationFailed || e.code === "EAUTH") {
 		return `The password for ${connection.username} was rejected by ${connection.host}. Update it in account settings.`;
 	}
 	switch (e.code) {

@@ -557,7 +557,7 @@ const api: JunoApi = {
 
 	mail: {
 		accounts: {
-			guess: (email) => call("mail.accounts.guess", email),
+			guess: (email, provider) => call("mail.accounts.guess", email, provider ?? null),
 			lookUp: (email) => call("mail.accounts.lookUp", email),
 			list: () => call("mail.accounts.list"),
 			get: (id) => call("mail.accounts.get", id),
@@ -568,6 +568,11 @@ const api: JunoApi = {
 			purge: (id, confirmEmail) => call("mail.accounts.purge", id, confirmEmail),
 			test: (input) => call("mail.accounts.test", input),
 			testSmtp: (input) => call("mail.accounts.testSmtp", input),
+			connect: (input) => call("mail.accounts.connect", input),
+			openProviderPage: (provider) => call("mail.accounts.openProviderPage", provider),
+			signInWithMicrosoft: (email) => call("mail.accounts.signInWithMicrosoft", email),
+			cancelSignIn: () => call("mail.accounts.cancelSignIn"),
+			signInAgain: (id) => call("mail.accounts.signInAgain", id),
 		},
 		folders: {
 			list: (accountId) => call("mail.folders.list", accountId),

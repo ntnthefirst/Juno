@@ -35,6 +35,8 @@ export interface ReminderRecord {
 	title: string;
 	notes: string | null;
 	dueOn: string;
+	/** `HH:MM` on the machine's clock, or null when it is due on the day. */
+	dueTime: string | null;
 	pattern: RecurrencePattern;
 	interval: number;
 	anchorDay: number | null;
@@ -59,6 +61,8 @@ export interface ReminderRecord {
 export interface ReminderInput {
 	title: string;
 	dueOn: string;
+	/** `HH:MM`, or null for a reminder due on the day rather than at an hour. */
+	dueTime?: string | null;
 	notes?: string | null;
 	pattern?: RecurrencePattern;
 	interval?: number;
@@ -139,6 +143,7 @@ function toRecord(
 		title: row.title,
 		notes: row.notes,
 		dueOn: row.dueOn,
+		dueTime: row.dueTime,
 		pattern: recurrence.pattern,
 		interval: row.interval,
 		anchorDay: row.anchorDay,
@@ -183,7 +188,7 @@ export async function list(
 		.leftJoin(clients, eq(reminders.clientId, clients.id))
 		.leftJoin(projects, eq(reminders.projectId, projects.id))
 		.where(isNull(reminders.deletedAt))
-		.orderBy(asc(reminders.dueOn))
+		.orderBy(asc(reminders.dueOn), asc(reminders.dueTime), asc(reminders.id))
 		.all();
 
 	let records = rows.map((row) =>
@@ -233,12 +238,21 @@ function anchorFor(
 	return Number(dueOn.slice(8, 10));
 }
 
+/** `HH:MM` on a 24-hour clock, 00:00 to 23:59. */
+export function isTimeOfDay(value: string): boolean {
+	const match = /^(\d{2}):(\d{2})$/.exec(value);
+	return match !== null && Number(match[1]) < 24 && Number(match[2]) < 60;
+}
+
 function validate(input: ReminderInput | ReminderPatch): void {
 	if (input.title !== undefined && !input.title.trim()) {
 		throw new Error("A reminder needs a title.");
 	}
 	if (input.dueOn !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueOn)) {
 		throw new Error("A reminder needs a date in YYYY-MM-DD form.");
+	}
+	if (input.dueTime !== undefined && input.dueTime !== null && !isTimeOfDay(input.dueTime)) {
+		throw new Error("A reminder's time has to be HH:MM on a 24-hour clock, or left empty.");
 	}
 	if (input.leadDays !== undefined && (input.leadDays < 0 || input.leadDays > 365)) {
 		throw new Error("Lead days has to be between 0 and 365.");
@@ -259,6 +273,7 @@ export async function create(
 			title: input.title.trim(),
 			notes: input.notes ?? null,
 			dueOn: input.dueOn,
+			dueTime: input.dueTime ?? null,
 			pattern: input.pattern ?? "once",
 			interval: input.interval ?? 1,
 			anchorDay: anchorFor(input.pattern, input.dueOn, input.anchorDay),
@@ -295,6 +310,7 @@ export async function update(
 			...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
 			...(patch.notes !== undefined ? { notes: patch.notes } : {}),
 			...(patch.dueOn !== undefined ? { dueOn: patch.dueOn } : {}),
+			...(patch.dueTime !== undefined ? { dueTime: patch.dueTime } : {}),
 			...(patch.pattern !== undefined ? { pattern: patch.pattern } : {}),
 			...(patch.interval !== undefined ? { interval: patch.interval } : {}),
 			// Recomputed whenever the pattern or the date moves, so an edit cannot

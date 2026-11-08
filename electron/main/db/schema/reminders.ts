@@ -22,6 +22,14 @@ export const reminders = sqliteTable(
 
 		/** `YYYY-MM-DD`. A reminder has a date, not an instant. */
 		dueOn: text("due_on").notNull(),
+		/**
+		 * `HH:MM`, or null for a reminder that is due on the day and not at an
+		 * hour. A time of day on the machine's clock, read together with `dueOn`,
+		 * which is a wall-clock date too: neither is an instant, so a series that
+		 * rolls across a summer time change keeps its hour instead of drifting by
+		 * one.
+		 */
+		dueTime: text("due_time"),
 
 		/** once, days, weeks, months, years, quarter_end. See ../services/recurrence.ts. */
 		pattern: text("pattern").notNull().default("once"),

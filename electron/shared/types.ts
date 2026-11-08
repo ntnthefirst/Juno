@@ -2288,6 +2288,8 @@ export interface Reminder extends Standard {
 	title: string;
 	notes: string | null;
 	dueOn: IsoDate;
+	/** `HH:MM` on the machine's clock, or null when it is due on the day rather than at an hour. */
+	dueTime: string | null;
 	pattern: RecurrencePattern;
 	interval: number;
 	anchorDay: number | null;
@@ -2313,6 +2315,8 @@ export interface Reminder extends Standard {
 export interface ReminderInput {
 	title: string;
 	dueOn: IsoDate;
+	/** `HH:MM`, or null for a reminder due on the day rather than at an hour. */
+	dueTime?: string | null;
 	notes?: string | null;
 	pattern?: RecurrencePattern;
 	interval?: number;

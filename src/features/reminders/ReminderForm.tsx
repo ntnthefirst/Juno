@@ -29,6 +29,8 @@ type Values = {
 	title: string;
 	notes: string;
 	dueOn: string;
+	/** `HH:MM`, or empty for a reminder due on the day. */
+	dueTime: string;
 	category: ReminderCategory;
 	pattern: RecurrencePattern;
 	interval: string;
@@ -42,6 +44,7 @@ function toValues(reminder: Reminder): Values {
 		title: reminder.title,
 		notes: reminder.notes ?? "",
 		dueOn: reminder.dueOn,
+		dueTime: reminder.dueTime ?? "",
 		category: reminder.category,
 		pattern: reminder.pattern,
 		interval: String(reminder.interval),
@@ -139,6 +142,7 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 		const input: ReminderInput = {
 			title,
 			dueOn: values.dueOn,
+			dueTime: values.dueTime || null,
 			notes: values.notes.trim().length > 0 ? values.notes.trim() : null,
 			pattern: values.pattern,
 			interval,
@@ -195,11 +199,13 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 						error={dueError}
 						tabular
 					/>
-					<Select
-						label="Category"
-						value={values.category}
-						onChange={(value) => set("category", value as ReminderCategory)}
-						options={CATEGORIES}
+					<Field
+						label="At"
+						type="time"
+						value={values.dueTime}
+						onChange={(value) => set("dueTime", value)}
+						help="Leave it empty for any time that day."
+						tabular
 					/>
 
 					<Select
@@ -237,7 +243,12 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 						placeholder="0"
 						tabular
 					/>
-					<div />
+					<Select
+						label="Category"
+						value={values.category}
+						onChange={(value) => set("category", value as ReminderCategory)}
+						options={CATEGORIES}
+					/>
 
 					<Select
 						label="Client"

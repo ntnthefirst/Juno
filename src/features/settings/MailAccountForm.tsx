@@ -316,15 +316,22 @@ export function MailAccountForm({ account, onClose, onSaved }: MailAccountFormPr
 								placeholder="hallo@example.be"
 							/>
 						</div>
-						<div className="sm:col-span-2">
-							<Field
-								label={account?.hasCredential ? "Password (set, type to replace)" : "Password"}
-								type="password"
-								value={values.password}
-								onChange={(v) => set("password", v)}
-								required={!account}
-							/>
-						</div>
+						{account?.authKind === "microsoft" ? (
+							<p className="text-sm text-[var(--ink-muted)] sm:col-span-2">
+								This account signs in through Microsoft and has no password here. When Microsoft asks
+								again, Mail accounts shows Sign in again.
+							</p>
+						) : (
+							<div className="sm:col-span-2">
+								<Field
+									label={account?.hasCredential ? "Password (set, type to replace)" : "Password"}
+									type="password"
+									value={values.password}
+									onChange={(v) => set("password", v)}
+									required={!account}
+								/>
+							</div>
+						)}
 						<div className="sm:col-span-2">
 							<Field
 								label="Label"

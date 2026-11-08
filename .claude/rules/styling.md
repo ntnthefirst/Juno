@@ -46,6 +46,12 @@ should appear about twice on a screen.
 - **No `bg-[#28456c]`.** A colour the UI needs and the tokens lack is a token to
   add to `brand/tokens.css` and to the `@theme inline` block, not an arbitrary
   value at the call site. Say so in one line before adding it.
+- **One exception: another company's logo.** The provider marks on the Add
+  account screen and the mail account rows (`src/assets/providers/`, drawn by
+  `features/settings/add-account/ProviderLogo.tsx`, sources in `SOURCES.md`
+  beside them) keep their own colours in both themes. They are bundled image
+  files, not themed icons, so they never go through `Icon.tsx` or the tokens.
+  The tile around them is tokens as usual. Nothing else qualifies.
 - Spacing uses the 4px scale (`--space-1` through `--space-16`). Radius uses
   `--radius-sm` (6px) for inputs and badges, `--radius-md` (8px) for buttons and
   rows, `--radius-lg` (12px) for cards, `--radius-xl` (16px) for modals. `--radius-full` is avatars

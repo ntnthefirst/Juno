@@ -8,6 +8,9 @@ import { PageHeader } from "./PageHeader";
 import type { SettingsPage } from "./pages";
 import { StatusBadge } from "../../components/StatusBadge";
 import { messageOf } from "../../lib/errors";
+import { providerOfAccount } from "@shared/mail-providers";
+import { AddAccountFlow } from "./add-account/AddAccountFlow";
+import { ProviderLogo } from "./add-account/ProviderLogo";
 import { MailAccountForm } from "./MailAccountForm";
 import { MailAccountPage } from "./mail-account/MailAccountPage";
 import { RemovedAccounts } from "./RemovedAccounts";
@@ -24,6 +27,8 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [form, setForm] = useState<{ account: MailAccount | null } | null>(null);
+	// The account being signed in to Microsoft again, while the browser is open.
+	const [signingIn, setSigningIn] = useState<string | null>(null);
 	const [removing, setRemoving] = useState<MailAccount | null>(null);
 	// The account whose page is open: details, rules, history and folders.
 	const [opened, setOpened] = useState<string | null>(null);
@@ -66,6 +71,20 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 		}
 	}
 
+	async function signInAgain(account: MailAccount) {
+		setSigningIn(account.id);
+		setError(null);
+		try {
+			await window.juno.mail.accounts.signInAgain(account.id);
+			onSaved(`${account.label} signed in again.`);
+			refresh();
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+		} finally {
+			setSigningIn(null);
+		}
+	}
+
 	async function toggleSync(account: MailAccount) {
 		try {
 			await window.juno.mail.accounts.update(account.id, { syncEnabled: !account.syncEnabled });
@@ -87,8 +106,24 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 		);
 	}
 
-	// Adding an account is a sequence now, so it takes the settings pane rather
+	// Adding an account is a sequence, so it takes the settings pane rather
 	// than stacking a dialog inside a window that is already a fixed size.
+	if (form && !form.account) {
+		return (
+			<AddAccountFlow
+				onClose={() => {
+					setForm(null);
+					refresh();
+				}}
+				onSaved={(saved) => {
+					setForm(null);
+					onSaved(`${saved.label} added.`);
+					refresh();
+				}}
+			/>
+		);
+	}
+
 	if (form) {
 		return (
 			<MailAccountForm
@@ -96,7 +131,7 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 				onClose={() => setForm(null)}
 				onSaved={(saved) => {
 					setForm(null);
-					onSaved(form.account ? `${saved.label} saved.` : `${saved.label} added.`);
+					onSaved(`${saved.label} saved.`);
 					refresh();
 				}}
 			/>
@@ -131,11 +166,13 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 						<ul className="flex flex-col gap-3">
 							{accounts.map((account) => {
 								const status = accountStatus(account);
+								const provider = providerOfAccount(account);
 								return (
 									<li
 										key={account.id}
 										className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] px-5 py-3.5"
 									>
+										<ProviderLogo provider={provider} name={provider ? null : account.email} />
 										<button
 											type="button"
 											aria-label={`Open ${account.label}`}
@@ -146,17 +183,34 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 											<span className="block truncate text-base font-[var(--weight-medium)]">
 												{account.email}
 											</span>
-											<span className="mt-0.5 block truncate font-mono text-sm text-[var(--ink-muted)]">
-												{account.imapHost}:{account.imapPort}
-												{account.smtpHost ? ` · ${account.smtpHost}:${account.smtpPort}` : " · read only"}
-											</span>
+											{provider ? (
+												<span className="mt-0.5 block truncate text-sm text-[var(--ink-muted)]">
+													{provider.name} · mail
+												</span>
+											) : (
+												<span className="mt-0.5 block truncate font-mono text-sm text-[var(--ink-muted)]">
+													{account.imapHost}:{account.imapPort}
+													{account.smtpHost ? ` · ${account.smtpHost}:${account.smtpPort}` : " · read only"}
+												</span>
+											)}
 											{account.lastSyncError ? (
 												<span className="mt-0.5 block truncate text-sm text-[var(--risk)]">
 													{account.lastSyncError}
 												</span>
 											) : null}
 										</button>
-										<StatusBadge label={status.label} tone={status.tone} />
+										{/* The button says it when Microsoft wants a sign-in, so the badge would repeat it. */}
+										{account.needsSignIn ? null : <StatusBadge label={status.label} tone={status.tone} />}
+										{account.needsSignIn ? (
+											<Button
+												size="dense"
+												variant="primary"
+												disabled={signingIn !== null}
+												onClick={() => void signInAgain(account)}
+											>
+												{signingIn === account.id ? "Waiting for the browser" : "Sign in again"}
+											</Button>
+										) : null}
 										<Button size="dense" onClick={() => void toggleSync(account)}>
 											{account.syncEnabled ? "Pause" : "Resume"}
 										</Button>
@@ -196,6 +250,7 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 
 /** What the badge on an account row says, from what the last sync left behind. */
 function accountStatus(account: MailAccount): { label: string; tone: string } {
+	if (account.needsSignIn) return { label: "Sign in again", tone: "warn" };
 	if (account.lastSyncError) {
 		return /password|auth|credential|login/i.test(account.lastSyncError)
 			? { label: "Password rejected", tone: "risk" }

@@ -356,6 +356,38 @@
 	}
 }
 
+/* The calendar paging, month by month up and down and week by week from the
+ * side, the way a hand would pull the next page in. The spring overshoots a
+ * hair and settles, so a step lands rather than snaps. Transform and opacity
+ * only, and the reduced-motion block in global.css cuts it to nothing. */
+@keyframes juno-page-up {
+	from {
+		transform: translateY(28px);
+		opacity: 0;
+	}
+}
+
+@keyframes juno-page-down {
+	from {
+		transform: translateY(-28px);
+		opacity: 0;
+	}
+}
+
+@keyframes juno-page-left {
+	from {
+		transform: translateX(36px);
+		opacity: 0;
+	}
+}
+
+@keyframes juno-page-right {
+	from {
+		transform: translateX(-36px);
+		opacity: 0;
+	}
+}
+
 /* A surface that was not there a moment ago: a menu, a popover, the list of
  * addresses under a half-typed recipient. It comes up a few pixels and fades,
  * fast enough not to be waited for.
@@ -544,6 +576,10 @@
 	--ease-brand: var(--ease);
 	--animate-page-forward: juno-page-forward var(--duration-base) var(--ease);
 	--animate-page-back: juno-page-back var(--duration-base) var(--ease);
+	--animate-page-up: juno-page-up var(--duration-slow) var(--ease-spring) backwards;
+	--animate-page-down: juno-page-down var(--duration-slow) var(--ease-spring) backwards;
+	--animate-page-left: juno-page-left var(--duration-slow) var(--ease-spring) backwards;
+	--animate-page-right: juno-page-right var(--duration-slow) var(--ease-spring) backwards;
 	--animate-pop: juno-pop var(--duration-fast) var(--ease);
 	--animate-rise: juno-rise var(--duration-slow) var(--ease-smooth) backwards;
 	--animate-screen: juno-screen 300ms var(--ease-smooth) backwards;

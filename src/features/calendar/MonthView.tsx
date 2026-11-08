@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import type { CalendarItem, CalendarReminderItem } from "@shared/types";
+import { Icon } from "../../components/Icon";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { daysBetween, formatTime, weekdayShort } from "./dates";
 import { chipTone, itemTitle, openItemMenu as openChipMenu, type Placed } from "./format";
@@ -25,6 +26,8 @@ type MonthViewProps = {
 	onChanged: () => void;
 	/** A wheel gesture past a step apart, over any part of the grid: page a month. */
 	onStep: (direction: -1 | 1) => void;
+	/** Which way the last step went, so the new month comes up from below or down from above. */
+	direction: -1 | 1;
 };
 
 /**
@@ -64,6 +67,7 @@ export function MonthView({
 	onSnooze,
 	onChanged,
 	onStep,
+	direction,
 }: MonthViewProps) {
 	const [dragging, setDragging] = useState<{ item: CalendarItem; fromDate: string } | null>(null);
 	const [over, setOver] = useState<string | null>(null);
@@ -73,6 +77,7 @@ export function MonthView({
 	const page = useWheelPaging(onStep);
 
 	// The six rows share the height equally, so one measurement covers every cell.
+	// The grid is drawn afresh for each month, so it is watched afresh too.
 	useLayoutEffect(() => {
 		const node = grid.current;
 		if (!node) return;
@@ -81,7 +86,7 @@ export function MonthView({
 		const observer = new ResizeObserver(measure);
 		observer.observe(node);
 		return () => observer.disconnect();
-	}, []);
+	}, [month]);
 
 	// The grid has nothing of its own to scroll, so a wheel anywhere on it pages
 	// the month. No preventDefault is called, so this stays a passive listener.
@@ -124,7 +129,12 @@ export function MonthView({
 				))}
 			</div>
 
-			<div ref={grid} className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
+			<div className="min-h-0 flex-1 overflow-hidden">
+			<div
+				ref={grid}
+				key={month}
+				className={`grid h-full grid-cols-7 grid-rows-6 ${direction > 0 ? "animate-page-up" : "animate-page-down"}`}
+			>
 				{dates.map((date, index) => {
 					const inMonth = date.slice(0, 7) === month;
 					const isToday = date === today;
@@ -161,7 +171,7 @@ export function MonthView({
 								"group flex min-h-0 flex-col gap-1 px-1.5 pb-1.5 pt-2",
 								index % 7 !== 6 ? "border-r border-[var(--line)]" : "",
 								index < 35 ? "border-b border-[var(--line)]" : "",
-								over === date ? "bg-[var(--accent-soft)]" : inMonth ? "" : "bg-[var(--sunken)]",
+								over === date ? "bg-[var(--accent-soft)]" : inMonth ? "" : "bg-[var(--shade)]",
 							].join(" ")}
 						>
 							<div className="flex flex-none items-center justify-between">
@@ -184,9 +194,9 @@ export function MonthView({
 									type="button"
 									onClick={() => onCreateAt(date)}
 									aria-label={`New event on ${date}`}
-									className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] text-[var(--ink-faint)] opacity-0 hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:opacity-100 group-hover:opacity-100"
+									className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--hover)] text-[var(--ink-muted)] opacity-0 transition-[opacity,color] duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--ink)] focus-visible:opacity-100 group-hover:opacity-100"
 								>
-									+
+									<Icon name="add" size={14} strokeWidth={2} />
 								</button>
 							</div>
 
@@ -214,6 +224,7 @@ export function MonthView({
 						</div>
 					);
 				})}
+			</div>
 			</div>
 
 		</div>

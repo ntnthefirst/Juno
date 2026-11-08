@@ -560,6 +560,7 @@ export function CalendarScreen() {
 						onSnooze={(item) => void snooze(item)}
 						onChanged={refresh}
 						onStep={step}
+						direction={direction}
 					/>
 				) : view === "week" ? (
 					<WeekView
@@ -577,6 +578,7 @@ export function CalendarScreen() {
 						onSnooze={(item) => void snooze(item)}
 						onChanged={refresh}
 						onStep={step}
+						direction={direction}
 					/>
 				) : (
 					<AgendaView

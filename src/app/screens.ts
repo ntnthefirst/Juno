@@ -126,8 +126,9 @@ export const NEW_OWN_ICON: Record<string, IconName> = {
 };
 
 /**
- * Screens where New is drawn at the right of the title bar, as a text button
- * beside the screen's own actions. On every other screen it is the plus at the
- * left, beside Search, Recent and Reminders.
+ * Screens where New, the text button at the right of the title bar, makes the
+ * screen's own record at once. On every other screen it opens the New menu.
+ * With a document open the plus at the left takes its place, as the page frame
+ * draws it.
  */
 export const NEW_AT_RIGHT: ScreenId[] = ["notes", "calendar", "clients", "projects", "documents", "reminders"];

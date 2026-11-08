@@ -3201,6 +3201,11 @@ export interface AgentActionView {
 	title: string;
 	entities: AgentEntityRef[];
 	fields: AgentField[];
+	/**
+	 * It sends, signs, files or deletes, so it is read in full on the Agent
+	 * screen before anyone approves it, never answered from a short list.
+	 */
+	review: boolean;
 }
 
 /** The same for a row of the log, which keeps no arguments and so names only what it touched. */

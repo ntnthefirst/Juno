@@ -79,6 +79,15 @@ describe("describeAction", () => {
 			{ role: "Draft", kind: "mailDraft", id: draft!.id, label: "Offerte", detail: "To Laura", gone: false },
 		]);
 		expect(view.fields).toEqual([]);
+		expect(view.review).toBe(true);
+	});
+
+	it("marks only a request that sends, signs, files or deletes for a full review", () => {
+		expect(describeAction(action("reminders.create", { title: "Call" }), titleOf, db).review).toBe(false);
+		expect(describeAction(action("clients.update", { id: "x" }), titleOf, db).review).toBe(false);
+		expect(describeAction(action("clients.delete", { id: "x" }), titleOf, db).review).toBe(true);
+		expect(describeAction(action("mail.file.archive", { id: "x" }), titleOf, db).review).toBe(true);
+		expect(describeAction(action("nobody.knows", {}), titleOf, db).review).toBe(true);
 	});
 
 	it("names every record an argument points at, and reads the rest as labelled values", () => {

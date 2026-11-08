@@ -20,7 +20,9 @@ import type {
 	AgentField,
 	AuditEvent,
 } from "../../shared/types";
+import { isLocked } from "../../shared/agent-permissions";
 import { getDb, type Db } from "../db";
+import { rowOf } from "./agent-permissions";
 import {
 	automations,
 	calendarEvents,
@@ -276,6 +278,15 @@ function render(value: unknown): { text: string; long: boolean } | null {
 	return { text: clip(JSON.stringify(value)), long: true };
 }
 
+/** A tool in a row that can never be Allow, or one nobody classified, is read in full. */
+function needsReview(toolName: string): boolean {
+	try {
+		return isLocked(rowOf(toolName));
+	} catch {
+		return true;
+	}
+}
+
 /** Puts one parked request into words. */
 export function describeAction(action: AgentAction, titleOf: TitleOf, db: Db = getDb()): AgentActionView {
 	const entities: AgentEntityRef[] = [];
@@ -304,7 +315,7 @@ export function describeAction(action: AgentAction, titleOf: TitleOf, db: Db = g
 		if (shown) fields.push({ label: humanise(key.replace(/_?ids?$/, "") || key), value: shown.text, long: shown.long });
 	}
 
-	return { actionId: action.id, title: titleOf(action.toolName), entities, fields };
+	return { actionId: action.id, title: titleOf(action.toolName), entities, fields, review: needsReview(action.toolName) };
 }
 
 export function describeActions(actions: AgentAction[], titleOf: TitleOf, db: Db = getDb()): AgentActionView[] {

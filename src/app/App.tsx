@@ -288,7 +288,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			<div className="flex h-full flex-col bg-[var(--paper)]">
 				<TitleBar
 					back={back}
-					title={trail[trail.length - 1]?.label ?? (screen === "calendar" || screen === "overview" ? "" : SCREEN_LABELS[screen])}
+					title={trail[trail.length - 1]?.label ?? (screen === "calendar" ? "" : SCREEN_LABELS[screen])}
 					screen={screen}
 					onOpenPalette={() => setPaletteOpen(true)}
 					recentOpen={recentOpen}

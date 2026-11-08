@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { MailAccount } from "@shared/types";
+import type { CalendarSubscription, MailAccount } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
@@ -14,6 +14,8 @@ import { ProviderLogo } from "./add-account/ProviderLogo";
 import { MailAccountForm } from "./MailAccountForm";
 import { MailAccountPage } from "./mail-account/MailAccountPage";
 import { RemovedAccounts } from "./RemovedAccounts";
+import { CalendarSubscriptionPage } from "./calendar-subscriptions/CalendarSubscriptionPage";
+import { CalendarSubscriptionsSection } from "./calendar-subscriptions/CalendarSubscriptionsSection";
 import { Section, SectionError } from "./Section";
 import { PAGE_PADDING } from "./section-layout";
 
@@ -34,6 +36,9 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 	const [opened, setOpened] = useState<string | null>(null);
 	// Bumped when an account is removed, so the removed list fetches again.
 	const [removedVersion, setRemovedVersion] = useState(0);
+	// The Add calendar page, or one subscription's, which takes the whole pane like the account form.
+	const [calendarPage, setCalendarPage] = useState<{ subscription: CalendarSubscription | null } | null>(null);
+	const [calendarsVersion, setCalendarsVersion] = useState(0);
 
 	const refresh = useCallback(() => {
 		window.juno.mail.accounts
@@ -92,6 +97,20 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		}
+	}
+
+	if (calendarPage) {
+		return (
+			<CalendarSubscriptionPage
+				subscription={calendarPage.subscription}
+				onClose={() => setCalendarPage(null)}
+				onSaved={(message) => {
+					setCalendarPage(null);
+					setCalendarsVersion((version) => version + 1);
+					onSaved(message);
+				}}
+			/>
+		);
 	}
 
 	const openedAccount = opened ? accounts?.find((account) => account.id === opened) : undefined;
@@ -242,6 +261,10 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 						</Dialog>
 					) : null}
 				</Section>
+				<CalendarSubscriptionsSection
+					refreshKey={calendarsVersion}
+					onOpen={(subscription) => setCalendarPage({ subscription })}
+				/>
 				<RemovedAccounts refreshKey={removedVersion} onDone={onSaved} />
 			</div>
 		</div>

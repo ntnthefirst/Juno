@@ -8,6 +8,7 @@ import { AddressStep, type Lookup } from "./AddressStep";
 import { ByHandPage } from "./ByHandPage";
 import { ProviderPicker } from "./ProviderPicker";
 import { ReadyStep } from "./ReadyStep";
+import { AccountCalendarRow } from "../calendar-subscriptions/AccountCalendarRow";
 import { SignInStep } from "./SignInStep";
 import { EMPTY_SERVERS, inputFrom, serversFrom, type ServerValues } from "./server-values";
 
@@ -320,8 +321,7 @@ export function AddAccountFlow({ onClose, onSaved }: AddAccountFlowProps) {
 					hosts={{ imap: servers.imapHost, smtp: servers.smtpHost }}
 					mail={mail}
 					onMail={(on) => void toggleMail(on)}
-					// Calendar subscriptions add "subscribe to this account's calendar" here
-					// through `calendarSlot`. Not built yet, so nothing is passed.
+					calendarSlot={(account) => <AccountCalendarRow account={account} />}
 					error={readyError}
 				/>
 			)}

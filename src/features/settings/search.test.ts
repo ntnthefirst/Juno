@@ -4,7 +4,7 @@ import { isNear, locationOf, queryWords, SETTING_ENTRIES, searchSettings } from 
 
 // The renderer has no filesystem, so the sources come in through Vite.
 const files = import.meta.glob(
-	["../../app/SettingsWindow.tsx", "../agent/ConnectionPanel.tsx", "../agent/PermissionsPanel.tsx", "../agent/InstructionsPanel.tsx", "./*.tsx", "./mail-account/*.tsx"],
+	["../../app/SettingsWindow.tsx", "../agent/ConnectionPanel.tsx", "../agent/PermissionsPanel.tsx", "../agent/InstructionsPanel.tsx", "./*.tsx", "./mail-account/*.tsx", "./calendar-subscriptions/*.tsx"],
 	{ query: "?raw", import: "default", eager: true },
 ) as Record<string, string>;
 

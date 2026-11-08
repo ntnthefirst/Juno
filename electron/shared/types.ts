@@ -3165,7 +3165,33 @@ export interface CalendarDeadlineItem {
 	dueOn: IsoDate;
 }
 
-export type CalendarItem = CalendarOccurrence | CalendarReminderItem | CalendarDeadlineItem;
+/**
+ * One occurrence of an event from a calendar subscription. Read only: it
+ * cannot be moved, resized, edited or deleted, because the calendar it comes
+ * from is someone else's and the next fetch would put it back.
+ */
+export interface CalendarSubscriptionItem {
+	kind: "subscription";
+	subscriptionId: string;
+	subscriptionName: string;
+	colour: CalendarColour;
+	/** The stored feed event, not a Juno event. calendar.get does not know it. */
+	eventId: string;
+	occurrenceStartLocal: LocalDateTime;
+	title: string;
+	notes: string | null;
+	location: string | null;
+	allDay: boolean;
+	timezone: string;
+	startLocal: LocalDateTime;
+	endLocal: LocalDateTime;
+	startUtc: Iso;
+	endUtc: Iso;
+	isRecurring: boolean;
+	recurrenceLabel: string;
+}
+
+export type CalendarItem = CalendarOccurrence | CalendarReminderItem | CalendarDeadlineItem | CalendarSubscriptionItem;
 
 export interface CalendarRangeQuery {
 	/** First calendar date of the range, inclusive. */
@@ -3176,8 +3202,87 @@ export interface CalendarRangeQuery {
 	timezone?: string;
 	includeReminders?: boolean;
 	includeDeadlines?: boolean;
+	/**
+	 * Overlay the events of the calendar subscriptions that are shown. Left out
+	 * by a query for one client or one project, since a feed belongs to neither.
+	 */
+	includeSubscriptions?: boolean;
 	clientId?: string;
 	projectId?: string;
+}
+
+/**
+ * The colours a subscription can be drawn in, as token names. The renderer
+ * turns each into the pair of tokens a chip uses; nothing stores a hex value.
+ */
+export type CalendarColour =
+	| "accent"
+	| "seal"
+	| "tone-1-ink"
+	| "tone-2-ink"
+	| "tone-3-ink"
+	| "tone-4-ink"
+	| "tone-5-ink"
+	| "tone-6-ink"
+	| "tone-7-ink"
+	| "tone-8-ink";
+
+/** How often Juno fetches a subscription again, in minutes. */
+export type CalendarRefreshMinutes = 15 | 60 | 1440;
+
+/**
+ * A calendar Juno reads from an address and keeps up to date. The address is
+ * never part of this: it is kept by the credential store, like a password,
+ * and only its host is shown.
+ */
+export interface CalendarSubscription extends Standard {
+	name: string;
+	/** Where the address points, `calendar.google.com`. */
+	host: string;
+	colour: CalendarColour;
+	refreshMinutes: CalendarRefreshMinutes;
+	/** Drawn on the calendar. Hidden ones keep their events and keep being fetched. */
+	shown: boolean;
+	lastFetchedAt: Iso | null;
+	lastAttemptAt: Iso | null;
+	/** Why the last fetch failed, in plain words. The events from the last good fetch stay. */
+	lastError: string | null;
+	eventCount: number;
+	mailAccountId: string | null;
+	/** The account's address, while the account exists. */
+	mailAccountEmail: string | null;
+}
+
+export interface CalendarSubscriptionInput {
+	/** https, or webcal which is read as https. */
+	url: string;
+	name: string;
+	/** Left out: the accent. */
+	colour?: CalendarColour;
+	/** Left out: every hour. */
+	refreshMinutes?: CalendarRefreshMinutes;
+	/** The mail account it comes with, when it is added from one. */
+	mailAccountId?: string | null;
+}
+
+export interface CalendarSubscriptionPatch {
+	name?: string;
+	colour?: CalendarColour;
+	refreshMinutes?: CalendarRefreshMinutes;
+	shown?: boolean;
+	/** A new address replaces the stored one and is fetched straight away. */
+	url?: string;
+}
+
+/** What an address holds, read once without saving anything. */
+export interface CalendarSubscriptionPreview {
+	host: string;
+	/** The name the feed gives itself, or null when it gives none. */
+	name: string | null;
+	eventCount: number;
+	/** The next occurrence from now, within a year, or null when there is none. */
+	next: { title: string; startUtc: Iso; allDay: boolean; startLocal: LocalDateTime } | null;
+	warnings: string[];
 }
 
 export interface CalendarImportResult {

@@ -218,6 +218,13 @@
       "when": 1794149320822,
       "tag": "0030_mail_account_auth_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1794151049525,
+      "tag": "0031_calendar_subscriptions",
+      "breakpoints": true
     }
   ]
 }

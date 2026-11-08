@@ -42,6 +42,8 @@ function subtitle(item: CalendarItem): string {
 			return [item.clientName, KIND_LABELS.reminder].filter(Boolean).join(" \u00b7 ");
 		case "deadline":
 			return [item.clientName, KIND_LABELS.deadline].filter(Boolean).join(" \u00b7 ");
+		case "subscription":
+			return [item.allDay ? "All day" : null, item.subscriptionName, item.location].filter(Boolean).join(" \u00b7 ");
 	}
 }
 

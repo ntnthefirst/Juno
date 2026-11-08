@@ -6,6 +6,7 @@ import { SidePanel } from "../../components/SidePanel";
 import { addDays, dateOf, formatDate, formatDateLong, formatTime, localDateOfInstant, machineTimeZone, timeOf } from "./dates";
 import { KIND_LABELS, itemTitle } from "./format";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
+import { CALENDAR_TONES } from "../../lib/calendar-colours";
 
 type EventDetailProps = {
 	item: CalendarItem;
@@ -27,7 +28,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** When the event's zone is not the machine's, both readings are worth showing. */
-function whenOf(item: Extract<CalendarItem, { kind: "event" }>): { line: string; own: string | null } {
+function whenOf(item: Extract<CalendarItem, { kind: "event" | "subscription" }>): { line: string; own: string | null } {
 	if (item.allDay) {
 		const last = addDays(dateOf(item.endLocal), -1);
 		const first = dateOf(item.startLocal);
@@ -55,15 +56,17 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 			subtitle={KIND_LABELS[item.kind]}
 			onClose={onClose}
 			tools={
-				<>
-					<IconButton icon="edit" label={item.kind === "deadline" ? "Edit project" : "Edit"} onClick={onEdit} />
-					<IconButton
-						icon="remove"
-						label={item.kind === "deadline" ? "Clear deadline" : "Delete"}
-						danger
-						onClick={onDelete}
-					/>
-				</>
+				item.kind === "subscription" ? null : (
+					<>
+						<IconButton icon="edit" label={item.kind === "deadline" ? "Edit project" : "Edit"} onClick={onEdit} />
+						<IconButton
+							icon="remove"
+							label={item.kind === "deadline" ? "Clear deadline" : "Delete"}
+							danger
+							onClick={onDelete}
+						/>
+					</>
+				)
 			}
 			actions={
 				item.kind === "reminder" ? (
@@ -112,6 +115,46 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 								<MarkdownNotes text={item.notes} />
 							</Row>
 						) : null}
+					</>
+				) : item.kind === "subscription" ? (
+					<>
+						<Row label="When">
+							<span className="tabular">{whenOf(item).line}</span>
+							{whenOf(item).own ? (
+								<span className="tabular mt-0.5 block text-[var(--ink-muted)]">{whenOf(item).own}</span>
+							) : null}
+						</Row>
+						{item.isRecurring ? <Row label="Repeats">{item.recurrenceLabel}</Row> : null}
+						{item.location ? (
+							<Row label="Where">
+								<span className="block">{item.location}</span>
+								<a
+									href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(item.location)}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="mt-0.5 inline-block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)]"
+								>
+									Open in Maps
+								</a>
+							</Row>
+						) : null}
+						<Row label="Calendar">
+							<span className="inline-flex items-center gap-2">
+								<span aria-hidden className={`h-2.5 w-2.5 rounded-[var(--radius-full)] ${CALENDAR_TONES[item.colour].dot}`} />
+								{item.subscriptionName}
+							</span>
+						</Row>
+						{item.notes ? (
+							// Written by whoever keeps that calendar, so it is shown as text and never as Markdown or links.
+							<Row label="Notes">
+								<span data-selectable className="block whitespace-pre-wrap break-words">
+									{item.notes}
+								</span>
+							</Row>
+						) : null}
+						<p className="mt-3 text-sm text-[var(--ink-muted)]">
+							From the {item.subscriptionName} subscription. It is read only here: change it in the calendar it comes from.
+						</p>
 					</>
 				) : item.kind === "reminder" ? (
 					<>

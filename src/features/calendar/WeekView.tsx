@@ -335,6 +335,8 @@ export function WeekView({
 										const lane = lanes.get(p.key) ?? { lane: 0, lanes: 1 };
 										const item = p.item;
 										const label = item.kind === "event" ? item.title : itemTitle(item);
+										// Read only: no drag, no resize, a click opens it.
+										const fixed = item.kind === "subscription";
 										return (
 											<div
 												key={p.key}
@@ -345,6 +347,7 @@ export function WeekView({
 												onPointerDown={(event) => beginDrag(event, p, "move")}
 												onPointerMove={trackDrag}
 												onPointerUp={endDrag}
+												onClick={fixed ? () => onOpen(item) : undefined}
 												onKeyDown={(event) => {
 													if (event.key === "Enter" || event.key === " ") {
 														event.preventDefault();
@@ -353,7 +356,8 @@ export function WeekView({
 												}}
 												onContextMenu={(event) => openItemMenu(event, item)}
 												className={[
-													"absolute z-[1] flex cursor-grab select-none gap-2 overflow-hidden rounded-[var(--radius-sm)] pr-2",
+													"absolute z-[1] flex select-none gap-2 overflow-hidden rounded-[var(--radius-sm)] pr-2",
+													fixed ? "cursor-pointer" : "cursor-grab",
 													chipTone(item),
 													active ? "opacity-80 shadow-[var(--shadow-popover)]" : "",
 												].join(" ")}

@@ -238,8 +238,9 @@ type ChipProps = {
 
 function Chip({ placed, onOpen, onDragStart, onDragEnd, onContextMenu }: ChipProps) {
 	const { item } = placed;
-	const draggable = true;
-	const time = item.kind === "event" && !item.allDay && !placed.continued ? formatTime(item.startUtc) : null;
+	// A subscription's event is read only, so it opens and never moves.
+	const draggable = item.kind !== "subscription";
+	const time = (item.kind === "event" || item.kind === "subscription") && !item.allDay && !placed.continued ? formatTime(item.startUtc) : null;
 	return (
 		<button
 			type="button"

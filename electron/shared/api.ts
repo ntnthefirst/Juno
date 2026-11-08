@@ -66,6 +66,10 @@ import type {
 	CalendarEventInput,
 	CalendarEventPatch,
 	CalendarImportResult,
+	CalendarSubscription,
+	CalendarSubscriptionInput,
+	CalendarSubscriptionPatch,
+	CalendarSubscriptionPreview,
 	CalendarItem,
 	CalendarRangeQuery,
 	DocumentRecord,
@@ -960,6 +964,22 @@ export interface JunoApi {
 		exportIcs(query: CalendarRangeQuery): Promise<string | null>;
 		/** Asks for a file, reads it in. Null when the person cancels. */
 		importIcs(): Promise<CalendarImportResult | null>;
+		/**
+		 * Calendars read from an address and kept up to date. The address goes in
+		 * and never comes back out: a row shows its host only.
+		 */
+		subscriptions: {
+			list(): Promise<CalendarSubscription[]>;
+			get(id: string): Promise<CalendarSubscription | null>;
+			/** Fetches the address once and says what it holds. Saves nothing. */
+			preview(url: string): Promise<CalendarSubscriptionPreview>;
+			/** Fetches it, and saves nothing when that fails. */
+			create(input: CalendarSubscriptionInput): Promise<CalendarSubscription>;
+			update(id: string, patch: CalendarSubscriptionPatch): Promise<CalendarSubscription>;
+			/** Fetches it again. A failure is written on the row, not thrown. */
+			refresh(id: string): Promise<CalendarSubscription>;
+			remove(id: string): Promise<CalendarSubscription>;
+		};
 	};
 
 	geocoding: {

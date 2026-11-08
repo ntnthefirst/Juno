@@ -29,8 +29,9 @@ export const BLOCK_KINDS = ["intro", "outro"] as const;
  * - `detail`: a project menu opened from the record's own page.
  * - `unread`: the mail list, with a folder open that has unread mail in it.
  * - `reader`: a conversation's own "..." button, which acts on the message in view.
+ * - `subscription`: an event-kind chip from a calendar subscription, which is read only.
  */
-export const MENU_CONTEXTS = ["deadline", "trash", "detail", "unread", "reader"] as const;
+export const MENU_CONTEXTS = ["deadline", "trash", "detail", "unread", "reader", "subscription"] as const;
 export type MenuContext = (typeof MENU_CONTEXTS)[number];
 
 export type MenuRequest = {

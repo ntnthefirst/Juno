@@ -19,6 +19,7 @@ import { BLANK_AREAS, BLOCK_KINDS } from "../../shared/menu";
 import { getDb, type Db } from "../db";
 import { referenceItems } from "../db/schema";
 import * as calendar from "./calendar";
+import * as calendarSubscriptions from "./calendar-subscriptions";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
 import * as documents from "./documents";
@@ -123,6 +124,11 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 					{ id: "edit", label: "Edit project", icon: "edit" },
 					{ id: "delete", label: "Clear deadline", icon: "remove", danger: true, separatorBefore: true },
 				];
+			}
+			// A subscription's event is someone else's calendar, read only: it opens and nothing else.
+			if (context === "subscription") {
+				if (!(await calendarSubscriptions.getEvent(id, db))) return [];
+				return [{ id: "open", label: "Open", icon: "external" }];
 			}
 			if (!(await calendar.get(id, db))) return [];
 			return [

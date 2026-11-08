@@ -638,3 +638,48 @@ describe("actions on a selection", () => {
 		expect(await actions.list({ states: ["pending"] })).toHaveLength(0);
 	});
 });
+
+describe("calendar subscriptions", () => {
+	/** Decision 74: making Juno fetch an address is the owner's call, every time an agent asks. */
+	const FETCHING = [
+		"calendar.subscriptions.create",
+		"calendar.subscriptions.preview",
+		"calendar.subscriptions.refresh",
+		"calendar.subscriptions.update",
+	];
+
+	it("reads without asking, parks every fetch in a row that cannot be Allow, and removes under Delete", () => {
+		for (const name of ["calendar.subscriptions.list", "calendar.subscriptions.get"]) {
+			expect(permissions.rowOf(name)).toBe("read");
+			expect(toolByName(name)).toMatchObject({ readOnly: true, requiresConfirmation: false });
+		}
+		for (const name of FETCHING) {
+			expect(permissions.rowOf(name), name).toBe("send");
+			expect(permissions.isLockedTool(name), name).toBe(true);
+		}
+		expect(permissions.rowOf("calendar.subscriptions.remove")).toBe("delete");
+	});
+
+	it("parks a new subscription even when the file says allow, shows the address, and fetches nothing", async () => {
+		configureCredentialStore(new MemoryCredentialStore());
+		forceSettings({ read: "allow", change: "allow", drafts: "allow", send: "allow", delete: "allow" });
+		const parked = (await callTool("calendar.subscriptions.create", {
+			url: "https://calendar.example.com/feed/basic.ics",
+			name: "Workshop rota",
+		})) as { status: string };
+		expect(parked.status).toBe("pending");
+		expect(await callTool("calendar.subscriptions.list", {})).toEqual([]);
+		const [pending] = await actions.list({ states: ["pending"] });
+		expect(pending!.preview).toContain("https://calendar.example.com/feed/basic.ics");
+		expect(pending!.preview).toContain("standing instruction");
+		expect(pending!.summary).toBe("Subscribe to Workshop rota from calendar.example.com");
+	});
+
+	it("refuses at once an address that could never be fetched, instead of parking a dead request", async () => {
+		await expect(
+			callTool("calendar.subscriptions.create", { url: "http://calendar.example.com/a.ics", name: "Plain" }),
+		).rejects.toThrow(/https/);
+		await expect(callTool("calendar.subscriptions.preview", { url: "not an address" })).rejects.toThrow(/web address/);
+		expect(await actions.list({})).toHaveLength(0);
+	});
+});

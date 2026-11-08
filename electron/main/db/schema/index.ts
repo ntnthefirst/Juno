@@ -12,3 +12,4 @@ export * from "./mail-rules";
 export * from "./mail-suggestions";
 export * from "./time";
 export * from "./notes";
+export * from "./calendar-subscriptions";

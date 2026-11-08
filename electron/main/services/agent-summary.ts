@@ -43,6 +43,7 @@ const NOUNS: [prefix: string, noun: string][] = [
 	["mail.blocks.", "text block"],
 	["mail.rules.", "mailbox rule"],
 	["mail.outbox.", "draft"],
+	["calendar.subscriptions.", "calendar subscription"],
 	["calendar.", "event"],
 	["reminders.", "reminder"],
 	["time.", "time entry"],
@@ -108,6 +109,8 @@ const VERBS: Record<string, string> = {
 	unlink_project: "Unlink the project from",
 	add_file_from_mail: "File a mail attachment in",
 	attach_project_file: "Attach a project file to",
+	refresh: "Fetch again",
+	preview: "Look at a",
 };
 
 function clip(text: string): string {

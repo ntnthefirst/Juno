@@ -61,6 +61,7 @@ import { requireClient } from "./clients";
 import { todayIsoDate } from "./document-context";
 import { addDays } from "./recurrence";
 import * as reminders from "./reminders";
+import * as subscriptions from "./calendar-subscriptions";
 
 type EventRow = typeof calendarEvents.$inferSelect;
 type ExceptionRow = typeof calendarEventExceptions.$inferSelect;
@@ -412,6 +413,13 @@ export async function listRange(
 				isException: occurrence.isException,
 				sortKey: occurrence.startUtc,
 			});
+		}
+	}
+
+	// A feed belongs to no client and no project, so a query for one leaves it out.
+	if (query.includeSubscriptions && !query.clientId && !query.projectId) {
+		for (const item of subscriptions.itemsInRange(fromUtc, toUtc, db)) {
+			items.push({ ...item, sortKey: item.startUtc });
 		}
 	}
 

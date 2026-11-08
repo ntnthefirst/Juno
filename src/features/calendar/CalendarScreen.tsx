@@ -7,6 +7,7 @@ import type {
 	CalendarOccurrence,
 	CalendarReminderItem,
 	CalendarScope,
+	CalendarSubscription,
 	NewRecordPrefill,
 	Project,
 	Reminder,
@@ -89,6 +90,8 @@ export function CalendarScreen() {
 	const [anchor, setAnchor] = useState<string | null>(null);
 	const [showReminders, setShowReminders] = useState(true);
 	const [showDeadlines, setShowDeadlines] = useState(true);
+	// The calendars Juno subscribes to, for the layers in the "..." menu.
+	const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([]);
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [version, setVersion] = useState(0);
 	const [form, setForm] = useState<FormState | null>(null);
@@ -138,6 +141,7 @@ export function CalendarScreen() {
 			to,
 			includeReminders: showReminders,
 			includeDeadlines: showDeadlines,
+			includeSubscriptions: true,
 		});
 	}, [from, to, showReminders, showDeadlines]);
 
@@ -159,6 +163,26 @@ export function CalendarScreen() {
 	const refresh = useCallback(() => setVersion((v) => v + 1), []);
 	// A new-record window saved something, so the grid reads again.
 	useRecordsChanged(refresh);
+	// Settings closing may have added, changed or removed a subscription.
+	useEffect(() => window.juno.window.onChildClosed(() => refresh()), [refresh]);
+
+	useEffect(() => {
+		let cancelled = false;
+		window.juno.calendar.subscriptions
+			.list()
+			.then((rows) => {
+				if (!cancelled) setSubscriptions(rows);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [version]);
+
+	/** Shows or hides one subscription on the calendar. It keeps being fetched either way. */
+	function toggleSubscription(subscription: CalendarSubscription) {
+		void run(() => window.juno.calendar.subscriptions.update(subscription.id, { shown: !subscription.shown }));
+	}
 
 	const placed = useMemo(
 		() =>
@@ -249,6 +273,8 @@ export function CalendarScreen() {
 	/** Edit whatever kind of item this is: an event, a reminder, or the project a deadline belongs to. */
 	async function edit(item: CalendarItem) {
 		if (item.kind === "event") return editEvent(item);
+		// A subscription's event is read only. Nothing offers this, and nothing would happen.
+		if (item.kind === "subscription") return;
 		setDetail(null);
 		try {
 			if (item.kind === "reminder") {
@@ -272,6 +298,7 @@ export function CalendarScreen() {
 	 */
 	function remove(item: CalendarItem) {
 		if (item.kind === "event") return removeEvent(item);
+		if (item.kind === "subscription") return;
 		setDetail(null);
 		if (item.kind === "reminder") {
 			void run(async () => {
@@ -353,6 +380,7 @@ export function CalendarScreen() {
 	/** A drag onto another day. Reminders and deadlines are dates, so only whole days apply. */
 	function move(item: CalendarItem, dayDelta: number, minuteDelta: number) {
 		if (item.kind === "event") return moveEvent(item, dayDelta, minuteDelta);
+		if (item.kind === "subscription") return;
 		const dueOn = addDays(item.dueOn, dayDelta);
 		void run(async () => {
 			if (item.kind === "reminder") await window.juno.reminders.update(item.reminderId, { dueOn });
@@ -501,6 +529,16 @@ export function CalendarScreen() {
 			hint: showDeadlines ? "Shown" : "Hidden",
 			onSelect: () => setShowDeadlines((v) => !v),
 		},
+		...subscriptions.map(
+			(subscription, index): MenuItem => ({
+				id: `subscription-${subscription.id}`,
+				label: subscription.name,
+				icon: "calendar",
+				hint: subscription.shown ? "Shown" : "Hidden",
+				separatorBefore: index === 0,
+				onSelect: () => toggleSubscription(subscription),
+			}),
+		),
 	];
 
 	return (

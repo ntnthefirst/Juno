@@ -548,6 +548,15 @@ const api: JunoApi = {
 		restore: (id) => call("calendar.restore", id),
 		exportIcs: (query) => call("calendar.exportIcs", query),
 		importIcs: () => call("calendar.importIcs"),
+		subscriptions: {
+			list: () => call("calendar.subscriptions.list"),
+			get: (id) => call("calendar.subscriptions.get", id),
+			preview: (url) => call("calendar.subscriptions.preview", url),
+			create: (input) => call("calendar.subscriptions.create", input),
+			update: (id, patch) => call("calendar.subscriptions.update", id, patch),
+			refresh: (id) => call("calendar.subscriptions.refresh", id),
+			remove: (id) => call("calendar.subscriptions.remove", id),
+		},
 	},
 
 	geocoding: {

@@ -62,7 +62,10 @@ export class AgentPermissionError extends Error {
  *   mail server, which is why `mail.file.*` is here and not under change.
  *   Writing a mailbox rule is here too, because a rule files mail by itself on
  *   every new message: it is a standing permission to file, and `mail.rules.*`
- *   cannot be used from an automation at all (decision 64).
+ *   cannot be used from an automation at all (decision 64). So is anything
+ *   that makes Juno fetch an address for a calendar subscription: the owner
+ *   reads the address before Juno goes to it, and a subscription is a standing
+ *   instruction to keep going there (decision 74).
  * - **delete**: anything that removes. Soft deletes count, because to the
  *   owner they are gone.
  */
@@ -81,6 +84,8 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"calendar.export_ics",
 		"calendar.get_event",
 		"calendar.list_events",
+		"calendar.subscriptions.get",
+		"calendar.subscriptions.list",
 		"calendar.upcoming",
 		"clients.addresses.list_for_client",
 		"clients.emails.list_for_client",
@@ -276,6 +281,10 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 	],
 	drafts: ["mail.draft", "mail.outbox.attach_project_file", "mail.reply"],
 	send: [
+		"calendar.subscriptions.create",
+		"calendar.subscriptions.preview",
+		"calendar.subscriptions.refresh",
+		"calendar.subscriptions.update",
 		"mail.file.archive",
 		"mail.file.archive_messages",
 		"mail.file.junk",
@@ -296,6 +305,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 	delete: [
 		"automations.delete",
 		"calendar.remove_event",
+		"calendar.subscriptions.remove",
 		"clients.addresses.delete",
 		"clients.delete",
 		"clients.delete_many",

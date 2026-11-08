@@ -53,6 +53,7 @@ import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
 import * as mailRules from "./main/services/mail-rules";
 import * as mailSync from "./main/services/mail-sync";
+import * as calendarSubscriptions from "./main/services/calendar-subscriptions";
 import { ensureMailBlocksSeeded } from "./main/services/mail-blocks";
 import { adoptRecordValues, ensureMailTemplatesSeeded } from "./main/services/mail-templates";
 import { configureMailTransport } from "./main/services/mail-transport";
@@ -292,6 +293,9 @@ if (!app.requestSingleInstanceLock()) {
 		if (!process.env.JUNO_SMOKE) {
 			notifications.start();
 			mailSync.startScheduler();
+			// Calendar subscriptions: once shortly after launch, then each on its
+			// own interval, and never while locked.
+			calendarSubscriptions.startScheduler(() => lock.isLocked());
 			mailSend.startScheduler();
 			// An automation is exactly the unattended case the lock pauses, so
 			// the scheduler asks before every tick.
@@ -5883,6 +5887,7 @@ if (!app.requestSingleInstanceLock()) {
 		// A dev server left behind by a closed app is a port nobody can explain.
 		projectRunner.stopAll();
 		mailSync.stopScheduler();
+		calendarSubscriptions.stopScheduler();
 		mailSend.stopScheduler();
 		stopAgentSurface();
 		closeDb();

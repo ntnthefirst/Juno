@@ -108,6 +108,7 @@ import type { ComponentType, ReactNode } from "react";
 export type IconName =
 	| "overview"
 	| "today"
+	| "panel"
 	| "recent"
 	| "clients"
 	| "client"
@@ -293,6 +294,13 @@ const DRAWN = {
 		<>
 			<rect x="3" y="7" width="18" height="10" rx="3" />
 			<path d="M8.5 12h7" />
+		</>,
+	),
+	// A window with a column on its right: the conversation beside a message.
+	panel: glyph(
+		<>
+			<rect x="3.5" y="5" width="17" height="14" rx="2" />
+			<path d="M14.5 5v14" />
 		</>,
 	),
 	columns: glyph(
@@ -487,6 +495,7 @@ const ICONS: Record<IconName, Glyph> = {
 	flag: FlagIcon,
 	filter: FunnelIcon,
 	branch: DRAWN.branch,
+	panel: DRAWN.panel,
 	read: EnvelopeOpenIcon,
 	unread: EyeIcon,
 	reply: ArrowUturnLeftIcon,

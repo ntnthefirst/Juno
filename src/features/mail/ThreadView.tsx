@@ -342,23 +342,16 @@ export function ThreadView({
 	return (
 		<div className="flex h-full min-h-0 flex-col animate-fade">
 			<div className="shrink-0 px-6 pt-4">
-				<button
-					type="button"
-					onClick={onBack}
-					className="-ml-1.5 inline-flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
-				>
-					<Icon
-						name="chevron-left"
-						size={12}
-					/>
-					Back
-				</button>
-
-				<div className="mt-2 flex min-h-[52px] items-center justify-between gap-6">
-					<h2 className="min-w-0 text-h2">
-						{summary.subject}
-					</h2>
-					<div className="flex shrink-0 items-center gap-3">
+				<div className="flex h-8 items-center justify-between gap-4">
+					<button
+						type="button"
+						onClick={onBack}
+						className="-ml-1.5 inline-flex h-7 items-center gap-1 rounded-[var(--radius-md)] px-1.5 text-base text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+					>
+						<Icon name="chevron-left" size={14} />
+						Back
+					</button>
+					<div className="flex shrink-0 items-center gap-0.5">
 						{openMessage ? (
 							<>
 								<ToolbarAction
@@ -386,17 +379,13 @@ export function ThreadView({
 								/>
 							</>
 						) : null}
-						<ToolbarAction
-							icon="link"
-							label={overviewOpen ? "Hide the conversation" : "Show the conversation"}
-							pressed={overviewOpen}
-							onClick={toggleOverview}
-						/>
 						{openMessage ? (
 							<>
+								<ToolbarDivider />
 								<ToolbarAction
 									icon="flag"
 									label={openMessage.isFlagged ? "Clear flag" : "Flag"}
+									pressed={openMessage.isFlagged}
 									onClick={() => void markOpen({ flagged: !openMessage.isFlagged })}
 								/>
 								<ToolbarAction
@@ -411,36 +400,52 @@ export function ThreadView({
 							target={{ kind: "mail", id: summary.id, context: "reader" }}
 							handlers={moreHandlers}
 							ariaLabel="More options"
+							size="dense"
+						/>
+						<ToolbarDivider />
+						<ToolbarAction
+							icon="panel"
+							label={overviewOpen ? "Hide the conversation" : "Show the conversation"}
+							pressed={overviewOpen}
+							onClick={toggleOverview}
 						/>
 					</div>
 				</div>
 
-				<div className="flex items-center gap-2 pb-3">
-					{summary.clientName ? (
-						<span className="rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-2 py-1 text-sm text-[var(--accent)]">
-							{summary.clientName}
-							{summary.linkSource === "auto" ? (
-								<span className="text-[var(--ink-muted)]"> (matched)</span>
-							) : null}
-						</span>
-					) : null}
-					{summary.projectId && summary.projectName ? (
-						<button
-							type="button"
-							onClick={() =>
-								requestOpen({ kind: "project", id: summary.projectId!, name: summary.projectName! })
-							}
-							title="Open the project"
-							className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-						>
-							<Icon name="projects" size={12} />
-							{summary.projectName}
-						</button>
-					) : null}
-					<p className="tabular text-base text-[var(--ink-muted)]">
-						{entries.length} {entries.length === 1 ? "message" : "messages"}
-					</p>
-				</div>
+				<h2 className="mt-1 min-w-0 text-h3 text-[var(--ink)]">{summary.subject}</h2>
+
+				{/* What the conversation belongs to, as one quiet line. The link that
+				    matched it on its own and the message count are not repeated here:
+				    the conversation panel already shows both. */}
+				{summary.clientName || (summary.projectId && summary.projectName) ? (
+					<div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-[var(--ink-muted)]">
+						{summary.clientName ? (
+							<span className="inline-flex min-w-0 items-center gap-1.5">
+								<Icon name="client" size={14} className="flex-none" />
+								<span className="truncate">{summary.clientName}</span>
+							</span>
+						) : null}
+						{summary.clientName && summary.projectId && summary.projectName ? (
+							<span aria-hidden className="text-[var(--ink-faint)]">
+								{"\u203a"}
+							</span>
+						) : null}
+						{summary.projectId && summary.projectName ? (
+							<button
+								type="button"
+								onClick={() =>
+									requestOpen({ kind: "project", id: summary.projectId!, name: summary.projectName! })
+								}
+								title="Open the project"
+								className="inline-flex min-w-0 items-center gap-1.5 rounded-[var(--radius-sm)] hover:text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+							>
+								<Icon name="projects" size={14} className="flex-none" />
+								<span className="truncate">{summary.projectName}</span>
+							</button>
+						) : null}
+					</div>
+				) : null}
+				<div className="h-3" />
 			</div>
 
 			<div className="flex min-h-0 flex-1">
@@ -551,8 +556,8 @@ function ToolbarAction({ icon, label, danger = false, pressed, onClick }: Toolba
 			aria-pressed={pressed}
 			onClick={onClick}
 			className={[
-				"inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)]",
-				"transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+				"inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] active:scale-90",
+				"transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)]",
 				danger
 					? "text-[var(--risk)] hover:bg-[var(--risk-soft)]"
 					: pressed
@@ -560,10 +565,12 @@ function ToolbarAction({ icon, label, danger = false, pressed, onClick }: Toolba
 						: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
 			].join(" ")}
 		>
-			<Icon
-				name={icon}
-				size={18}
-			/>
+			<Icon name={icon} size={16} />
 		</button>
 	);
+}
+
+/** A hairline between groups of toolbar buttons, as the reader's top bar draws it. */
+function ToolbarDivider() {
+	return <span aria-hidden className="mx-1 h-4 w-px flex-none bg-[var(--line)]" />;
 }

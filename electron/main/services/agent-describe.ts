@@ -247,6 +247,27 @@ function plain(value: string): string {
 	return value;
 }
 
+/**
+ * One entry of a list of small records (a client's emails, phones, contacts) as
+ * a line: its text values in order, and "primary" when it is flagged. Null when
+ * the entry holds anything but plain values, so a nested one falls back to a count.
+ */
+function recordLine(entry: Record<string, unknown>): string | null {
+	const parts: string[] = [];
+	let primary = false;
+	for (const [key, value] of Object.entries(entry)) {
+		if (value === null || value === undefined || value === "") continue;
+		if (typeof value === "boolean") {
+			if (/primary/i.test(key) && value) primary = true;
+			continue;
+		}
+		if (typeof value !== "string" && typeof value !== "number") return null;
+		parts.push(String(value));
+	}
+	if (parts.length === 0) return null;
+	return primary ? `${parts.join(" / ")} (primary)` : parts.join(" / ");
+}
+
 /** An argument as text a person reads, or null when there is nothing to show. */
 function render(value: unknown): { text: string; long: boolean } | null {
 	if (value === null || value === undefined || value === "") return null;
@@ -266,6 +287,7 @@ function render(value: unknown): { text: string; long: boolean } | null {
 			if (item && typeof item === "object") {
 				const entry = item as { name?: string | null; address?: string };
 				if (typeof entry.address === "string") return entry.name ? `${entry.name} <${entry.address}>` : entry.address;
+				return recordLine(item as Record<string, unknown>);
 			}
 			return null;
 		});

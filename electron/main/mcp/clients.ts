@@ -1,4 +1,5 @@
 import type { ListClientsQuery } from "../../shared/api";
+import { CLIENT_LINK_KINDS } from "../../shared/client-links";
 import type { ClientIntakeInput, ClientPatch } from "../../shared/types";
 import { CLIENT_LANGUAGES } from "../../shared/client-language";
 import * as intake from "../services/client-intake";
@@ -39,6 +40,113 @@ const writableProperties: Record<string, unknown> = {
 		enum: CLIENT_LANGUAGES.map((language) => language.value),
 		description:
 			"What the client is written to in: nl is Dutch with u, nl-je is Dutch with je, fr or en. Defaults to nl.",
+	},
+};
+
+/** Maps the snake_case keys of each entry in a list to the service's names. */
+function entries(list: unknown, keys: Record<string, string>): Record<string, unknown>[] | undefined {
+	if (!Array.isArray(list)) return undefined;
+	return list.map((item) => {
+		const source = (item ?? {}) as Record<string, unknown>;
+		const mapped: Record<string, unknown> = {};
+		for (const [argument, column] of Object.entries(keys)) {
+			if (argument in source) mapped[column] = source[argument];
+		}
+		return mapped;
+	});
+}
+
+const flag = (what: string): Record<string, unknown> => ({
+	type: "boolean",
+	description: `Make this the client's primary ${what}. Only one entry in the list can be primary. If none is marked, the first one is.`,
+});
+
+const label = (example: string): Record<string, unknown> => ({
+	type: ["string", "null"],
+	description: `Free text naming this entry, for example "${example}".`,
+});
+
+const childLists: Record<string, unknown> = {
+	emails: {
+		type: "array",
+		description: "Email addresses. Use this instead of email when there are several.",
+		items: {
+			type: "object",
+			properties: {
+				email: { type: "string", description: "Email address, for example info@hyge.be." },
+				label: label("Facturatie"),
+				is_primary: flag("email address"),
+			},
+			required: ["email"],
+			additionalProperties: false,
+		},
+	},
+	phones: {
+		type: "array",
+		description: "Phone numbers. Use this instead of phone when there are several.",
+		items: {
+			type: "object",
+			properties: {
+				phone: { type: "string", description: "Phone number as typed, for example +32 470 12 34 56." },
+				label: label("Gsm"),
+				is_primary: flag("phone number"),
+			},
+			required: ["phone"],
+			additionalProperties: false,
+		},
+	},
+	addresses: {
+		type: "array",
+		description: "Postal addresses. Use this instead of address when there are several or when the parts are known.",
+		items: {
+			type: "object",
+			properties: {
+				address_line1: { type: "string", description: "Street and number, for example Kerkstraat 1." },
+				address_line2: { type: ["string", "null"], description: "Extra address line, if any." },
+				postal_code: { type: ["string", "null"], description: "Postal code, for example 9000." },
+				city: { type: ["string", "null"], description: "City, for example Gent." },
+				country: { type: ["string", "null"], description: "Country name or ISO code, for example BE." },
+				label: label("Kantoor Leuven"),
+				is_primary: flag("address"),
+			},
+			required: ["address_line1"],
+			additionalProperties: false,
+		},
+	},
+	links: {
+		type: "array",
+		description: "Web addresses: website and social profiles.",
+		items: {
+			type: "object",
+			properties: {
+				url: { type: "string", description: "The address, such as https://www.linkedin.com/company/hyge. A missing https:// is added." },
+				kind: {
+					type: "string",
+					enum: [...CLIENT_LINK_KINDS],
+					description: "What the link is. Left out, it is guessed from the address.",
+				},
+				label: label("Company page"),
+			},
+			required: ["url"],
+			additionalProperties: false,
+		},
+	},
+	contacts: {
+		type: "array",
+		description: "People at the client. Unlike the lists above, the first contact is only primary when is_primary is set.",
+		items: {
+			type: "object",
+			properties: {
+				name: { type: "string", description: "The person's name." },
+				role: { type: ["string", "null"], description: "Job title or role at the client." },
+				email: { type: ["string", "null"], description: "Email address for this person." },
+				phone: { type: ["string", "null"], description: "Telephone number for this person." },
+				notes: { type: ["string", "null"], description: "Free text notes about this person." },
+				is_primary: flag("contact"),
+			},
+			required: ["name"],
+			additionalProperties: false,
+		},
 	},
 };
 
@@ -97,7 +205,7 @@ export const clientTools: ToolDescriptor[] = [
 		name: "clients.create",
 		title: "Create a client",
 		description:
-			"Create a client. Only the name is required; everything else can be filled in later. An email, phone and one-line address given here become the client's primary ones; add more later with the client_emails, client_phones and client_addresses tools.",
+			"Create a client. Only the name is required; everything else can be filled in later. Everything is created in one step: either all of it is saved or none of it. Give several email addresses, phone numbers, addresses, links and contact persons with the emails, phones, addresses, links and contacts lists. The first email, phone and address become primary unless one is marked is_primary. email, phone and address are shortcuts for a single primary entry; do not combine a shortcut with its list.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -108,6 +216,7 @@ export const clientTools: ToolDescriptor[] = [
 				email: { type: ["string", "null"], description: "Primary email address." },
 				phone: { type: ["string", "null"], description: "Primary phone number." },
 				address: { type: ["string", "null"], description: "Primary address on one line, for example 'Kerkstraat 1, 9000 Gent'." },
+				...childLists,
 			},
 			required: ["name"],
 			additionalProperties: false,
@@ -118,6 +227,26 @@ export const clientTools: ToolDescriptor[] = [
 				email: args.email,
 				phone: args.phone,
 				address: args.address,
+				emails: entries(args.emails, { email: "email", label: "label", is_primary: "isPrimary" }),
+				phones: entries(args.phones, { phone: "phone", label: "label", is_primary: "isPrimary" }),
+				addresses: entries(args.addresses, {
+					address_line1: "addressLine1",
+					address_line2: "addressLine2",
+					postal_code: "postalCode",
+					city: "city",
+					country: "country",
+					label: "label",
+					is_primary: "isPrimary",
+				}),
+				links: entries(args.links, { url: "url", kind: "kind", label: "label" }),
+				contacts: entries(args.contacts, {
+					name: "name",
+					role: "role",
+					email: "email",
+					phone: "phone",
+					notes: "notes",
+					is_primary: "isPrimary",
+				}),
 			} as ClientIntakeInput),
 	},
 	{

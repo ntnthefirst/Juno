@@ -154,6 +154,17 @@ export type ClientIntakeInput = ClientInput & {
 	phone?: string | null;
 	/** One line, stored as the first address line. */
 	address?: string | null;
+	/**
+	 * Several of each kind, for a caller that has them all at hand (the agent).
+	 * Each entry is what the matching child record normally takes, without the
+	 * client id. Giving `emails` together with `email` (or the same for phone and
+	 * address) is refused, because it is unclear which one is meant to be first.
+	 */
+	emails?: Array<Omit<ClientEmailInput, "clientId">>;
+	phones?: Array<Omit<ClientPhoneInput, "clientId">>;
+	addresses?: Array<Omit<ClientAddressInput, "clientId">>;
+	links?: Array<Omit<ClientLinkInput, "clientId">>;
+	contacts?: Array<Omit<ContactInput, "clientId">>;
 };
 
 export type ClientPatch = Partial<Omit<Client, keyof Standard | "sortName">>;

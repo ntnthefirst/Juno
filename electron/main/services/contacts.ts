@@ -50,7 +50,8 @@ export async function listForClient(clientId: string, db: Db = getDb()): Promise
 		.all();
 }
 
-export async function create(input: ContactInput, db: Db = getDb()): Promise<Contact> {
+/** The synchronous body of `create`, so a caller can compose it into one transaction. */
+export function insertContact(input: ContactInput, db: Db): Contact {
 	const name = requireName(input.name);
 	const makePrimary = input.isPrimary === true;
 
@@ -64,6 +65,10 @@ export async function create(input: ContactInput, db: Db = getDb()): Promise<Con
 		if (makePrimary) clearPrimaryOnSiblings(tx, row.clientId, row.id);
 		return row;
 	});
+}
+
+export async function create(input: ContactInput, db: Db = getDb()): Promise<Contact> {
+	return insertContact(input, db);
 }
 
 export async function update(

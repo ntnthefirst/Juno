@@ -187,3 +187,20 @@ describe("describeAudit", () => {
 		expect(views[2]!.entity).toBeNull();
 	});
 });
+
+describe("describing a client with its details", () => {
+	it("lists each email and contact in plain words", () => {
+		const view = describeAction(
+			action("clients.create", {
+				name: "Hyge",
+				emails: [{ email: "info@hyge.be", label: "Algemeen", isPrimary: true }, { email: "fact@hyge.be" }],
+				contacts: [{ name: "An Peeters", role: "Zaakvoerder" }],
+			}),
+			titleOf,
+			db,
+		);
+		const value = (label: string) => view.fields.find((field) => field.label === label)?.value;
+		expect(value("Emails")).toBe("info@hyge.be / Algemeen (primary), fact@hyge.be");
+		expect(value("Contacts")).toBe("An Peeters / Zaakvoerder");
+	});
+});

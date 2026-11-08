@@ -5699,11 +5699,11 @@ if (!app.requestSingleInstanceLock()) {
 								for (const [label, file] of [["Reminders", "reminders-menu"], ["Agent", "agent-menu"]] as const) {
 									const menuOpen = (await window.webContents.executeJavaScript(
 										`(async () => {
-											const button = document.querySelector("header button[aria-label^=${JSON.stringify(label)}]");
+											const button = document.querySelector(${JSON.stringify(`header button[aria-label^="${label}"]`)});
 											if (!button) return "no ${label} button";
 											button.click();
 											await new Promise((r) => setTimeout(r, 700));
-											return document.querySelector("[role=dialog][aria-label=${JSON.stringify(label)}]") ? "ok" : "the ${label} menu did not open";
+											return document.querySelector(${JSON.stringify(`[role=dialog][aria-label="${label}"]`)}) ? "ok" : "the ${label} menu did not open";
 										})()`,
 									)) as string;
 									if (menuOpen !== "ok") throw new Error(`Smoke: title bar ${menuOpen}`);

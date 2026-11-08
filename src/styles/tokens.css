@@ -421,6 +421,19 @@
 	}
 }
 
+/* The halo behind an unread conversation's avatar: it widens from the oval's
+ * own width to the design's widest ring (80 to 100px) and back, slowly, so it
+ * is noticed without being watched. Sideways only, because the oval already
+ * fills the row's height. Transform only. */
+@keyframes juno-unread-pulse {
+	0%, 100% {
+		transform: scaleX(0.8);
+	}
+	50% {
+		transform: scale(1);
+	}
+}
+
 @keyframes juno-breathe {
 	0%, 100% {
 		transform: scale(1);
@@ -550,6 +563,7 @@
 	--animate-scale: juno-scale 260ms var(--ease-smooth) backwards;
 	--animate-slide: juno-slide 340ms var(--ease-smooth) backwards;
 	--animate-lift: juno-lift 320ms var(--ease-spring) backwards;
+	--animate-unread-pulse: juno-unread-pulse 2400ms var(--ease) infinite;
 	--animate-fade: juno-fade var(--duration-base) var(--ease);
 	--duration-fast: var(--duration-fast);
 	--duration-base: var(--duration-base);

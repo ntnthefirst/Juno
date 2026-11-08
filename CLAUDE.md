@@ -111,7 +111,11 @@ the main process, and the preload bridge exposes no way to read one back.
 
 Accounts are **runtime data the user types into the app**. Nothing account
 related belongs in `.env`, in `electron-builder`, or in a CI secret. Only the
-code-signing certificate and the update feed URL are build configuration.
+code-signing certificate, the update feed URL and the Microsoft application
+(client) ID in `electron/shared/oauth.ts` are build configuration. The client
+ID is public and committed; there is no client secret (decision 73).
+Outlook.com and Microsoft 365 accounts sign in through Microsoft in the
+browser and keep a refresh token in `safeStorage` instead of a password.
 
 ## The lock
 

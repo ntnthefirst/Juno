@@ -127,12 +127,20 @@ Decision 6 is explicit, and it decides where things belong.
 | Build configuration | Runtime data |
 | --- | --- |
 | Code-signing certificate, update-feed URL | Mail accounts, passwords, tokens |
+| Microsoft application (client) ID | Microsoft refresh and access tokens |
 | App id, product name, icon | Client records, documents, calendar |
 | Nothing else | Everything else |
 
 - **No `.env` with an account in it, no `electron-builder` entry, no CI secret.**
   Accounts are typed in by the user at runtime and stored in `safeStorage`.
 - No test account committed in a fixture, a seed script, a comment or a screenshot.
+- **The Microsoft application (client) ID is public and committed**, in
+  `electron/shared/oauth.ts` (decision 73). It names the application to
+  Microsoft and grants nothing alone. There is no client secret: sign-in is the
+  authorisation code flow with PKCE, in the system browser, back to a one-off
+  listener on 127.0.0.1. A refresh token goes to `safeStorage` through the
+  credential store like a password, and no tool starts a sign-in or returns a
+  token (section 9).
 - The signing certificate lives outside the repo and reaches CI as an encrypted
   secret. It is never a file in the tree.
 

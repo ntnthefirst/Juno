@@ -2417,3 +2417,50 @@ and put New at the right of every screen.
 **What would reverse this:** a screen whose search needs more room than the
 title bar has, or a request kind whose short line cannot say enough to be
 answered from a menu, which would then say Review as well.
+
+## 73. Microsoft accounts sign in through Microsoft, and the application ID is build configuration
+
+Outlook.com and Microsoft 365 no longer accept a password from another
+application, for IMAP or for SMTP. An account there is added by signing in to
+Microsoft, and every other provider still takes a password or an app password.
+
+- **The authorisation code flow with PKCE, as a public client.** There is no
+  client secret, because a desktop application cannot keep one. The person
+  signs in in the system browser, never in a window of Juno's, so Juno never
+  sees the password. The redirect comes back to a one-off listener on
+  127.0.0.1 with a port the operating system picks, which checks `state`,
+  takes the code and closes (`services/microsoft-oauth.ts`). A web address is
+  never the redirect, for the reason in decision 42.
+- **What is asked:** `offline_access`, IMAP.AccessAsUser.All and SMTP.Send on
+  outlook.office.com, and `openid email` so the address signed in to can be
+  checked against the one typed.
+- **Where the secrets go.** The refresh token is kept by the credential store
+  under the account's credential key, like a password (decision 6). The
+  database stores `auth_kind` and nothing else about it. Access tokens live in
+  memory and are renewed a minute before they run out. A refused renewal sets
+  `auth_expired_at`, the account says "Sign in again", and no sync asks
+  Microsoft again until a person has (`services/mail-sign-in.ts`).
+- **No agent signs in.** There is no tool that starts a sign-in, finishes one
+  or returns a token, and `mail.accounts.create` adds password accounts only
+  (security.md section 9).
+- **The application (client) ID is build configuration**, like the update feed
+  URL (decision 6 named only that and the signing certificate). It is public:
+  it names the application to Microsoft and grants nothing on its own, so it
+  is committed, in `electron/shared/oauth.ts`. While it is empty the two
+  Microsoft tiles say sign-in is not set up yet.
+- **Only Microsoft.** Gmail could sign in the same way, but Google's mail
+  scope is restricted, and an application that asks for it needs a paid
+  security assessment every year. Gmail keeps the app password, with a guide
+  and a button to the page that makes one.
+- **The servers are a table with sources.** Every tile on the Add account
+  screen has servers checked against the provider's own help pages, written
+  down in `shared/mail-providers.ts`. That check corrected two: Proximus sends
+  through relay.proximus.be, and Combell through smtp-auth.mailprotect.be.
+- **An account is saved only when both directions work.** The Ready step and
+  "Test and connect" call `mail.accounts.connect`, which tries receiving and
+  sending and adds nothing when either fails.
+
+**What would reverse this:** Microsoft accepting app passwords for IMAP and
+SMTP again, which would make the sign-in a convenience rather than the only
+way in, or Google lifting the assessment, which would bring Gmail onto the
+same flow.

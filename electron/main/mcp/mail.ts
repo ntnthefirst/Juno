@@ -1,4 +1,5 @@
-import type { MailAccountPatch, MailSecurity, MailThreadListQuery } from "../../shared/types";
+import { MAIL_PROVIDERS } from "../../shared/mail-providers";
+import type { MailAccountPatch, MailProviderId, MailSecurity, MailThreadListQuery } from "../../shared/types";
 import * as accounts from "../services/mail-accounts";
 import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
 import * as folders from "../services/mail-folders";
@@ -15,6 +16,10 @@ import type { ToolDescriptor } from "./types";
  * - **No tool returns a password**, masked or otherwise, and there is no
  *   `mail.accounts.get_credential`. `mail.accounts.create` takes one and that
  *   is the only direction it travels.
+ * - **No Microsoft sign-in.** An agent adds password accounts only. Signing
+ *   in to Microsoft happens in a person's browser, started from Settings, and
+ *   no tool starts one, finishes one or hands back a token (security.md
+ *   section 9). `mail.accounts.create` has no way to pass a sign-in.
  * - **No raw HTML.** The body tool returns the text and the sanitised
  *   metadata; the rendered document is served to the reader's frame and to
  *   nothing else.
@@ -42,8 +47,10 @@ export const mailTools: ToolDescriptor[] = [
 		name: "mail.accounts.create",
 		title: "Add a mail account",
 		description:
-			"Adds an IMAP account. The password is stored in the operating system keychain and " +
-			"cannot be read back through any tool. Test the settings first with mail.accounts.test.",
+			"Adds an IMAP account that signs in with a password. The password is stored in the operating " +
+			"system keychain and cannot be read back through any tool. Test the settings first with " +
+			"mail.accounts.test. Outlook.com and Microsoft 365 accept no password: the owner adds those " +
+			"in Settings, Mail accounts, by signing in to Microsoft.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -154,11 +161,19 @@ export const mailTools: ToolDescriptor[] = [
 			type: "object",
 			properties: {
 				email: { type: "string", description: "A full address, for example hallo@example.be" },
+				provider: {
+					type: "string",
+					enum: MAIL_PROVIDERS.map((provider) => provider.id),
+					description:
+						"The provider the mail is at, when the domain does not say so, as for an own domain " +
+						"hosted at OVH or Combell. Leave it out to guess from the address alone.",
+				},
 			},
 			required: ["email"],
 			additionalProperties: false,
 		},
-		handler: async (args) => guessAutoconfig(String(args.email)),
+		handler: async (args) =>
+			guessAutoconfig(String(args.email), args.provider !== undefined ? (String(args.provider) as MailProviderId) : null),
 	},
 	{
 		name: "mail.accounts.look_up",

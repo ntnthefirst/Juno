@@ -47,9 +47,14 @@ May not expose, ever:
   after `safeLinkHref` (https or mailto), the same check the page was saved with.
   `pages.chooseImage` takes no path at all: the file is picked in a dialog in the main
   process and copied into the page's own folder (decision 68). Neither is an MCP tool.
-  The one exception is `mail.templates.loadPicture`, reached only after the person
-  confirms a source in a dialog (`services/mail-pictures.ts`): https only, a public
-  host on every redirect, a size cap, and raster formats only. It is not an MCP tool.
+  There are two exceptions, and both fetch through `services/public-fetch.ts`: https
+  only, a public host on every redirect, a size cap counted as the body arrives, and
+  a time limit. `mail.templates.loadPicture` is reached only after the person
+  confirms a source in a dialog (`services/mail-pictures.ts`), takes raster formats
+  only, and is not an MCP tool. `calendar.subscriptions.preview`, `create` and
+  `update` take the address of a calendar the person pasted (decision 74); their MCP
+  tools park for approval whatever the levels say, and the address is kept in the
+  credential store, never returned.
 
 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`,
 `webSecurity: true`. None of these gets turned off to make an import work. If a
@@ -127,12 +132,20 @@ Decision 6 is explicit, and it decides where things belong.
 | Build configuration | Runtime data |
 | --- | --- |
 | Code-signing certificate, update-feed URL | Mail accounts, passwords, tokens |
+| Microsoft application (client) ID | Microsoft refresh and access tokens |
 | App id, product name, icon | Client records, documents, calendar |
 | Nothing else | Everything else |
 
 - **No `.env` with an account in it, no `electron-builder` entry, no CI secret.**
   Accounts are typed in by the user at runtime and stored in `safeStorage`.
 - No test account committed in a fixture, a seed script, a comment or a screenshot.
+- **The Microsoft application (client) ID is public and committed**, in
+  `electron/shared/oauth.ts` (decision 73). It names the application to
+  Microsoft and grants nothing alone. There is no client secret: sign-in is the
+  authorisation code flow with PKCE, in the system browser, back to a one-off
+  listener on 127.0.0.1. A refresh token goes to `safeStorage` through the
+  credential store like a password, and no tool starts a sign-in or returns a
+  token (section 9).
 - The signing certificate lives outside the repo and reaches CI as an encrypted
   secret. It is never a file in the tree.
 

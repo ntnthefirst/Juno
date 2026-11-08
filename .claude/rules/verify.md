@@ -39,7 +39,9 @@ when a screen is still changing after nine seconds, which is a render loop.
 Compare two runs line by line before and after a change that should be faster. Add
 `JUNO_SMOKE_FRONT=1` to keep the window above every other window for the run;
 without it, a window somebody covers produces stale captures (see the
-`capturePage` trap below).
+`capturePage` trap below). The run gives up after fifteen minutes; on a machine busy with something
+else, `JUNO_SMOKE_MINUTES=25` gives the demo walk more room without changing
+what counts as stuck.
 
 These names are the canonical set. A skill or a script that invents a different
 one (`npm run package`, `npm run dist`) is wrong and should be corrected to match.

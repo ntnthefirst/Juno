@@ -44,6 +44,11 @@ describe("the sentence for a call", () => {
 		expect(summaryFor("mail.file.trash_messages", "Bin mails", { message_ids: ["a", "b", "c"] }, db)).toBe("Move to the bin 3 mails");
 	});
 
+	it("counts the rows of a call on a selection", () => {
+		expect(summaryFor("clients.delete_many", "Delete several clients", { client_ids: ["a", "b", "c"] }, db)).toBe("Delete 3 clients");
+		expect(summaryFor("clients.archive_many", "Archive several clients", { client_ids: ["a"] }, db)).toBe("Archive 1 client");
+	});
+
 	it("falls back to the tool's title for a call it has no sentence for", () => {
 		expect(summaryFor("something.odd", "Do something odd", { a: 1 }, db)).toBe("Do something odd");
 	});

@@ -1,30 +1,41 @@
 /**
  * Mail accounts: the settings row and the credential beside it.
  *
- * The password takes a one-way trip. It arrives in `create` or `update`, goes
- * into the credential store under a key the row remembers, and is read back by
- * exactly one function, `connectionFor`, which only the sync and the connection
- * test call. Nothing returned from this module carries it.
+ * The secret takes a one-way trip. A password arrives in `create` or
+ * `update`; a Microsoft refresh token arrives with a finished sign-in
+ * (`mail-sign-in.ts`). Either goes into the credential store under a key the
+ * row remembers, and is read back by `connectionFor` and `smtpConnectionFor`,
+ * which only the sync, the sender and the connection tests call. Nothing
+ * returned from this module carries it.
  */
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type {
 	MailAccount,
 	MailAccountInput,
 	MailAccountPatch,
+	MailAuthKind,
 	MailConnectionTest,
+	MailConnectResult,
+	MailDirectionCheck,
 	MailSecurity,
 } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now, uuidv7 } from "../db/columns";
 import { mailAccounts } from "../db/schema";
 import { credentialStore } from "./mail-credentials";
+import * as signIns from "./mail-sign-in";
 import { describeMailError, openMailbox, type MailConnection } from "./mail-source";
 import * as settings from "./settings";
 import { verifyTransport, type SmtpConnection } from "./mail-transport";
+import { SignInExpiredError } from "./microsoft-oauth";
 
 type Row = typeof mailAccounts.$inferSelect;
 
 const SECURITIES: MailSecurity[] = ["tls", "starttls"];
+
+function authKindOf(row: Row): MailAuthKind {
+	return row.authKind === "microsoft" ? "microsoft" : "password";
+}
 
 function toRecord(row: Row): MailAccount {
 	return {
@@ -50,6 +61,8 @@ function toRecord(row: Row): MailAccount {
 		smtpSecurity: row.smtpSecurity as MailSecurity,
 		smtpUsername: row.smtpUsername,
 		fromName: row.fromName,
+		authKind: authKindOf(row),
+		needsSignIn: authKindOf(row) === "microsoft" && (row.authExpiredAt !== null || credentialStore().get(row.credentialKey) === null),
 	};
 }
 
@@ -91,12 +104,15 @@ function hostOrNull(value: string | null | undefined): string | null {
 	return trimmed ? trimmed : null;
 }
 
+const KEYCHAIN_UNAVAILABLE =
+	"The operating system keychain is unavailable, so the password cannot be stored. Juno will not keep it anywhere else.";
+
 export async function list(db: Db = getDb()): Promise<MailAccount[]> {
 	return db
 		.select()
 		.from(mailAccounts)
 		.where(isNull(mailAccounts.deletedAt))
-		.orderBy(asc(mailAccounts.createdAt))
+		.orderBy(asc(mailAccounts.createdAt), asc(mailAccounts.id))
 		.all()
 		.map(toRecord);
 }
@@ -120,20 +136,34 @@ function requireRow(id: string, db: Db): Row {
 	return row;
 }
 
+/**
+ * Adds an account. With `password`, it signs in with that password. With
+ * `signInId`, it takes over a Microsoft sign-in that finished in the browser
+ * for the same address, and keeps its refresh token instead.
+ */
 export async function create(input: MailAccountInput, db: Db = getDb()): Promise<MailAccount> {
 	validate(input);
-	if (!input.password) throw new Error("A mail account needs a password.");
-	const store = credentialStore();
-	if (!store.isAvailable()) {
-		throw new Error(
-			"The operating system keychain is unavailable, so the password cannot be stored. Juno will not keep it anywhere else.",
-		);
+	const microsoft = Boolean(input.signInId);
+	if (microsoft && input.password) {
+		throw new Error("An account signs in with a password or with Microsoft, not both.");
 	}
-
+	if (!microsoft && !input.password) throw new Error("A mail account needs a password.");
 	const email = input.email.trim().toLowerCase();
+	if (microsoft) {
+		// Checked before anything is stored, so a mismatch leaves the sign-in waiting.
+		const waiting = signIns.pendingAccess(input.signInId!);
+		if (waiting.email !== email) {
+			throw new Error(`The Microsoft sign-in was for ${waiting.email}, not ${email}. Sign in again with ${email}.`);
+		}
+	}
+	const store = credentialStore();
+	if (!store.isAvailable()) throw new Error(KEYCHAIN_UNAVAILABLE);
+
+	const id = uuidv7();
 	const credentialKey = uuidv7();
 	const stamp = now();
 	const row: typeof mailAccounts.$inferInsert = {
+		id,
 		label: input.label?.trim() || email,
 		email,
 		imapHost: input.imapHost.trim().toLowerCase(),
@@ -149,6 +179,7 @@ export async function create(input: MailAccountInput, db: Db = getDb()): Promise
 		smtpSecurity: input.smtpSecurity ?? "tls",
 		smtpUsername: input.smtpUsername?.trim() || null,
 		fromName: input.fromName?.trim() || null,
+		authKind: microsoft ? "microsoft" : "password",
 		createdAt: stamp,
 		updatedAt: stamp,
 	};
@@ -156,7 +187,8 @@ export async function create(input: MailAccountInput, db: Db = getDb()): Promise
 	// The secret goes in first. If the row insert then fails, an orphaned
 	// credential is harmless; a row with no credential would sync forever with
 	// the wrong error.
-	store.set(credentialKey, input.password);
+	const secret = microsoft ? signIns.takeSignIn(input.signInId!, id).refreshToken : input.password!;
+	store.set(credentialKey, secret);
 	const inserted = db.insert(mailAccounts).values(row).returning().get();
 
 	// An address Juno now reads mail at is one of the owner's own addresses, so
@@ -176,6 +208,9 @@ export async function update(id: string, patch: MailAccountPatch, db: Db = getDb
 	const existing = requireRow(id, db);
 
 	if (patch.password !== undefined) {
+		if (authKindOf(existing) === "microsoft") {
+			throw new Error(`${existing.email} signs in with Microsoft and has no password here. Use Sign in again instead.`);
+		}
 		credentialStore().set(existing.credentialKey, patch.password);
 	}
 
@@ -211,14 +246,15 @@ export async function update(id: string, patch: MailAccountPatch, db: Db = getDb
 }
 
 /**
- * Soft-deletes the account and forgets its password. Its mail stays where it
- * is, folders, threads, messages and attachment files alike, because deleting
- * someone's mail is a separate decision. `mail-purge.ts` makes it, and only
- * after the person has confirmed it.
+ * Soft-deletes the account and forgets its password or sign-in. Its mail stays
+ * where it is, folders, threads, messages and attachment files alike, because
+ * deleting someone's mail is a separate decision. `mail-purge.ts` makes it,
+ * and only after the person has confirmed it.
  */
 export async function remove(id: string, db: Db = getDb()): Promise<MailAccount> {
 	const existing = requireRow(id, db);
 	credentialStore().delete(existing.credentialKey);
+	signIns.forgetAccessToken(id);
 	const stamp = now();
 	const updated = db
 		.update(mailAccounts)
@@ -246,25 +282,100 @@ export async function recordSync(
 		.run();
 }
 
+function signInAgainMessage(email: string): string {
+	return `Microsoft asks ${email} to sign in again. Open Mail accounts in Settings and press Sign in again.`;
+}
+
 /**
- * The connection details including the secret. The one function that reads a
- * password, and it is not exported through any adapter.
+ * The secret for a row, as a connection signs in with it: the password, or a
+ * Microsoft access token renewed from the stored refresh token. A refused
+ * refresh marks the account so the list says "Sign in again", and stops the
+ * next sync from asking Microsoft until a person has.
  */
-export function connectionFor(id: string, db: Db = getDb()): MailConnection {
-	const row = requireRow(id, db);
-	const password = credentialStore().get(row.credentialKey);
-	if (password === null) {
-		throw new Error(
-			`No password is stored for ${row.email}. Enter it again in account settings.`,
-		);
+async function secretFor(row: Row, db: Db): Promise<{ password: string; accessToken?: string }> {
+	const store = credentialStore();
+	const stored = store.get(row.credentialKey);
+	if (authKindOf(row) === "password") {
+		if (stored === null) {
+			throw new Error(`No password is stored for ${row.email}. Enter it again in account settings.`);
+		}
+		return { password: stored };
 	}
+	if (stored === null || row.authExpiredAt) throw new Error(signInAgainMessage(row.email));
+	try {
+		const accessToken = await signIns.accessTokenFor(row.id, stored, (next) => store.set(row.credentialKey, next));
+		return { password: "", accessToken };
+	} catch (error) {
+		if (error instanceof SignInExpiredError) {
+			const stamp = now();
+			db.update(mailAccounts)
+				.set({ authExpiredAt: stamp, lastSyncError: signInAgainMessage(row.email), updatedAt: stamp })
+				.where(eq(mailAccounts.id, row.id))
+				.run();
+			throw new Error(signInAgainMessage(row.email));
+		}
+		throw error;
+	}
+}
+
+/**
+ * The connection details including the secret. With `smtpConnectionFor`, the
+ * only functions that read one, and neither is exported through any adapter.
+ */
+export async function connectionFor(id: string, db: Db = getDb()): Promise<MailConnection> {
+	const row = requireRow(id, db);
+	const secret = await secretFor(row, db);
 	return {
 		host: row.imapHost,
 		port: row.imapPort,
 		security: row.imapSecurity as MailSecurity,
 		username: row.username,
-		password,
+		...secret,
 	};
+}
+
+/**
+ * The SMTP side of the same account, with the same secret. Null host means the
+ * account was set up for reading only, and the error says what to add.
+ */
+export async function smtpConnectionFor(id: string, db: Db = getDb()): Promise<SmtpConnection> {
+	const row = requireRow(id, db);
+	if (!row.smtpHost) {
+		throw new Error(`${row.email} has no outgoing server. Add one in account settings.`);
+	}
+	const secret = await secretFor(row, db);
+	return {
+		host: row.smtpHost,
+		port: row.smtpPort,
+		security: row.smtpSecurity as MailSecurity,
+		// A Microsoft token is for the mailbox, so it signs in as the mailbox for both.
+		username: (secret.accessToken ? null : row.smtpUsername) || row.username,
+		...secret,
+		fromAddress: row.email,
+		fromName: row.fromName,
+	};
+}
+
+async function tryImap(connection: MailConnection): Promise<{ ok: true; folderCount: number } | { ok: false; message: string }> {
+	let source: Awaited<ReturnType<typeof openMailbox>> | null = null;
+	try {
+		source = await openMailbox(connection);
+		const folders = await source.listFolders();
+		return { ok: true, folderCount: folders.length };
+	} catch (error) {
+		return { ok: false, message: describeMailError(error, connection) };
+	} finally {
+		await source?.close();
+	}
+}
+
+async function trySmtp(connection: SmtpConnection): Promise<{ ok: true } | { ok: false; message: string }> {
+	try {
+		await verifyTransport(connection);
+		return { ok: true };
+	} catch (error) {
+		return { ok: false, message: describeMailError(error, connection) };
+	}
 }
 
 /**
@@ -279,13 +390,18 @@ export async function test(
 ): Promise<MailConnectionTest> {
 	let connection: MailConnection;
 	if (input.id && !input.password) {
-		const stored = connectionFor(input.id, db);
+		let stored: MailConnection;
+		try {
+			stored = await connectionFor(input.id, db);
+		} catch (error) {
+			return { ok: false, message: (error as Error).message, folderCount: 0 };
+		}
 		connection = {
+			...stored,
 			host: input.imapHost?.trim().toLowerCase() || stored.host,
 			port: input.imapPort ?? stored.port,
 			security: input.imapSecurity ?? stored.security,
 			username: input.username?.trim() || stored.username,
-			password: stored.password,
 		};
 	} else {
 		if (!input.imapHost || !input.username || !input.password) {
@@ -300,40 +416,10 @@ export async function test(
 		};
 	}
 
-	let source: Awaited<ReturnType<typeof openMailbox>> | null = null;
-	try {
-		source = await openMailbox(connection);
-		const folders = await source.listFolders();
-		return { ok: true, message: null, folderCount: folders.length };
-	} catch (error) {
-		return { ok: false, message: describeMailError(error, connection), folderCount: 0 };
-	} finally {
-		await source?.close();
-	}
-}
-
-/**
- * The SMTP side of the same account, with the same secret. Null host means the
- * account was set up for reading only, and the error says what to add.
- */
-export function smtpConnectionFor(id: string, db: Db = getDb()): SmtpConnection {
-	const row = requireRow(id, db);
-	if (!row.smtpHost) {
-		throw new Error(`${row.email} has no outgoing server. Add one in account settings.`);
-	}
-	const password = credentialStore().get(row.credentialKey);
-	if (password === null) {
-		throw new Error(`No password is stored for ${row.email}. Enter it again in account settings.`);
-	}
-	return {
-		host: row.smtpHost,
-		port: row.smtpPort,
-		security: row.smtpSecurity as MailSecurity,
-		username: row.smtpUsername || row.username,
-		password,
-		fromAddress: row.email,
-		fromName: row.fromName,
-	};
+	const result = await tryImap(connection);
+	return result.ok
+		? { ok: true, message: null, folderCount: result.folderCount }
+		: { ok: false, message: result.message, folderCount: 0 };
 }
 
 /** Tries the outgoing settings without sending anything. */
@@ -344,18 +430,20 @@ export async function testSmtp(
 	let connection: SmtpConnection;
 	if (input.id && !input.password) {
 		const row = requireRow(input.id, db);
-		const password = credentialStore().get(row.credentialKey);
-		if (password === null) {
-			return { ok: false, message: `No password is stored for ${row.email}. Enter it again in account settings.`, folderCount: 0 };
-		}
 		const host = input.smtpHost !== undefined ? hostOrNull(input.smtpHost) : row.smtpHost;
 		if (!host) return { ok: false, message: "An outgoing server is needed to test.", folderCount: 0 };
+		let secret: { password: string; accessToken?: string };
+		try {
+			secret = await secretFor(row, db);
+		} catch (error) {
+			return { ok: false, message: (error as Error).message, folderCount: 0 };
+		}
 		connection = {
 			host,
 			port: input.smtpPort ?? row.smtpPort,
 			security: input.smtpSecurity ?? (row.smtpSecurity as MailSecurity),
 			username: (input.smtpUsername !== undefined ? input.smtpUsername?.trim() : row.smtpUsername) || row.username,
-			password,
+			...secret,
 			fromAddress: row.email,
 			fromName: row.fromName,
 		};
@@ -375,11 +463,99 @@ export async function testSmtp(
 			fromName: null,
 		};
 	}
-	try {
-		await verifyTransport(connection);
-		return { ok: true, message: null, folderCount: 0 };
-	} catch (error) {
-		return { ok: false, message: describeMailError(error, connection), folderCount: 0 };
-	}
+	const result = await trySmtp(connection);
+	return result.ok ? { ok: true, message: null, folderCount: 0 } : { ok: false, message: result.message, folderCount: 0 };
 }
 
+/**
+ * The connection errors point at account settings, which an account being
+ * added does not have yet. While adding, the same fields are the password and
+ * Server settings on the screen the person is looking at.
+ */
+function whileAdding(message: string): string {
+	return message
+		.replace(/ Update it in account settings\.$/, " Check it, then go back and connect again.")
+		.replace(/ in account settings\.$/, " under Server settings.");
+}
+
+/**
+ * Tries both directions with the settings and the secret given, and adds the
+ * account only when both work. This is what the Add account screen's Ready
+ * step and "Test and connect" call: an account that cannot receive or cannot
+ * send is not saved, so the list never holds one that fails on its first sync.
+ *
+ * The secret is the password typed, or the Microsoft sign-in waiting under
+ * `signInId`. Nothing is stored when either check fails.
+ */
+export async function connect(input: MailAccountInput, db: Db = getDb()): Promise<MailConnectResult> {
+	validate(input);
+	const email = input.email.trim().toLowerCase();
+	const imapHost = input.imapHost.trim().toLowerCase();
+	const smtpHost = hostOrNull(input.smtpHost);
+	if (!smtpHost) throw new Error("An outgoing server is needed. Juno sends from every account it reads.");
+
+	let secret: { password: string; accessToken?: string };
+	if (input.signInId) {
+		secret = { password: "", accessToken: signIns.pendingAccess(input.signInId).accessToken };
+	} else {
+		if (!input.password) throw new Error("Enter the password first.");
+		secret = { password: input.password };
+	}
+
+	const username = input.username?.trim() || email;
+	const imap: MailConnection = {
+		host: imapHost,
+		port: input.imapPort ?? (input.imapSecurity === "starttls" ? 143 : 993),
+		security: input.imapSecurity ?? "tls",
+		username,
+		...secret,
+	};
+	const smtp: SmtpConnection = {
+		host: smtpHost,
+		port: input.smtpPort ?? (input.smtpSecurity === "starttls" ? 587 : 465),
+		security: input.smtpSecurity ?? "tls",
+		username: (secret.accessToken ? null : input.smtpUsername?.trim()) || username,
+		...secret,
+		fromAddress: email,
+		fromName: null,
+	};
+
+	const [incoming, outgoing] = await Promise.all([tryImap(imap), trySmtp(smtp)]);
+	const receiving: MailDirectionCheck = {
+		ok: incoming.ok,
+		host: imapHost,
+		message: incoming.ok ? null : whileAdding(incoming.message),
+	};
+	const sending: MailDirectionCheck = {
+		ok: outgoing.ok,
+		host: smtpHost,
+		message: outgoing.ok ? null : whileAdding(outgoing.message),
+	};
+	if (!receiving.ok || !sending.ok) return { receiving, sending, account: null };
+
+	const account = await create({ ...input, email, imapHost, smtpHost }, db);
+	return { receiving, sending, account };
+}
+
+/**
+ * Signs a Microsoft account in again after Microsoft stopped renewing it, in
+ * the browser like the first time. Over IPC only: a person does this.
+ */
+export async function signInAgain(id: string, db: Db = getDb()): Promise<MailAccount> {
+	const row = requireRow(id, db);
+	if (authKindOf(row) !== "microsoft") {
+		throw new Error(`${row.email} signs in with a password. Change it in account settings instead.`);
+	}
+	const store = credentialStore();
+	if (!store.isAvailable()) throw new Error(KEYCHAIN_UNAVAILABLE);
+	const refreshToken = await signIns.signInAgain(row.id, row.email);
+	store.set(row.credentialKey, refreshToken);
+	const stamp = now();
+	const updated = db
+		.update(mailAccounts)
+		.set({ authExpiredAt: null, lastSyncError: null, updatedAt: stamp })
+		.where(eq(mailAccounts.id, id))
+		.returning()
+		.get()!;
+	return toRecord(updated);
+}

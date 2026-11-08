@@ -11,6 +11,7 @@ import { registerAgentIpc } from "./agent";
 import { registerAppIpc } from "./app";
 import { registerBackupIpc } from "./backup";
 import { registerCalendarIpc } from "./calendar";
+import { registerCalendarSubscriptionsIpc } from "./calendar-subscriptions";
 import { registerClientAddressesIpc } from "./client-addresses";
 import { registerClientEmailsIpc } from "./client-emails";
 import { registerClientLinksIpc } from "./client-links";
@@ -68,6 +69,7 @@ export function registerAllIpc(): void {
 	registerMenuIpc();
 	registerSuggestionsIpc();
 	registerCalendarIpc();
+	registerCalendarSubscriptionsIpc();
 	registerGeocodingIpc();
 	registerAgentIpc();
 }

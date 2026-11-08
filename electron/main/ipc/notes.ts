@@ -13,6 +13,9 @@ export function registerNotesIpc(): void {
 	ipcMain.handle("notes.duplicate", (_event, id: string) => notes.duplicate(id));
 	ipcMain.handle("notes.remove", (_event, id: string) => notes.remove(id));
 	ipcMain.handle("notes.restore", (_event, id: string) => notes.restore(id));
+	ipcMain.handle("notes.duplicateMany", (_event, ids: string[]) => notes.duplicateMany(ids));
+	ipcMain.handle("notes.removeMany", (_event, ids: string[]) => notes.removeMany(ids));
+	ipcMain.handle("notes.restoreMany", (_event, ids: string[]) => notes.restoreMany(ids));
 
 	ipcMain.handle("pages.get", (_event, id: string) => pages.get(id));
 	ipcMain.handle("pages.create", (_event, input?: PageInput) => pages.create(input));

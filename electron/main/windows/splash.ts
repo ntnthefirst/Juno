@@ -23,11 +23,11 @@ const HEIGHT = 300;
 function document_(dark: boolean): string {
 	// The values of --paper, --ink, --ink-muted, --accent and --line in brand/tokens.css:
 	// this document cannot load the stylesheet, so it carries them.
-	const paper = dark ? "#101013" : "#f5f5f7";
-	const ink = dark ? "#f0f0f4" : "#17171c";
-	const muted = dark ? "#a2a3ae" : "#5b5c66";
+	const paper = dark ? "#0d0d10" : "#f1f1f4";
+	const ink = dark ? "#f4f4f7" : "#111116";
+	const muted = dark ? "#b1b2bc" : "#4d4e58";
 	const accent = dark ? "#a79df0" : "#4a3fa0";
-	const line = dark ? "#27272d" : "#ececf1";
+	const line = dark ? "#2e2e35" : "#e2e2e8";
 
 	return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -84,7 +84,7 @@ export function showSplash(): BrowserWindow {
 		alwaysOnTop: true,
 		show: false,
 		icon: windowIcon(),
-		backgroundColor: nativeTheme.shouldUseDarkColors ? "#101013" : "#f5f5f7",
+		backgroundColor: nativeTheme.shouldUseDarkColors ? "#0d0d10" : "#f1f1f4",
 		webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
 	});
 

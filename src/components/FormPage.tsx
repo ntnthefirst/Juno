@@ -22,6 +22,11 @@ type FormPageProps = {
 	/** Jump to an earlier step. Later ones are not offered: they are not filled in yet. */
 	onStep?: (index: number) => void;
 	/**
+	 * Also draw the steps still to come, muted and joined by a rule, as the
+	 * Add account frames do. They are drawn, not offered: nothing reaches them.
+	 */
+	stepsAhead?: boolean;
+	/**
 	 * "form" is a reading measure for a column of fields, because a text input
 	 * stretched across a wide window is unpleasant to fill in and hard to scan.
 	 * "wide" is for a form that carries a table, a preview or two panes.
@@ -54,6 +59,7 @@ export function FormPage({
 	steps,
 	step = 0,
 	onStep,
+	stepsAhead = false,
 	width = "form",
 	actions,
 	children,
@@ -92,7 +98,7 @@ export function FormPage({
 						{description ? <div className="max-w-[62ch] text-base text-[var(--ink-muted)]">{description}</div> : null}
 					</header>
 
-					{sequence ? <StepRail steps={steps} step={step} onStep={onStep} /> : null}
+					{sequence ? <StepRail steps={steps} step={step} onStep={onStep} ahead={stepsAhead} /> : null}
 
 					{current?.hint ? (
 						<p className="mb-5 max-w-[62ch] text-[var(--ink-muted)]">{current.hint}</p>
@@ -117,6 +123,7 @@ type StepRailProps = {
 	steps: FormStep[];
 	step: number;
 	onStep?: (index: number) => void;
+	ahead: boolean;
 };
 
 /**
@@ -124,14 +131,14 @@ type StepRailProps = {
  * clickable, because going back to change an answer is normal. Steps ahead are
  * not drawn at all, as the design has it: they are not filled in yet.
  */
-function StepRail({ steps, step, onStep }: StepRailProps) {
+function StepRail({ steps, step, onStep, ahead }: StepRailProps) {
 	return (
-		<ol className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+		<ol className={`mb-4 flex flex-wrap items-center gap-y-1 ${ahead ? "gap-x-2" : "gap-x-4"}`}>
 			{steps.slice(0, step + 1).map((entry, index) => {
 				const current = index === step;
 				const reachable = !current && onStep !== undefined;
 				return (
-					<li key={entry.label}>
+					<li key={entry.label} className="flex items-center gap-2">
 						<button
 							type="button"
 							disabled={!reachable}
@@ -154,9 +161,34 @@ function StepRail({ steps, step, onStep }: StepRailProps) {
 							</span>
 							{entry.label}
 						</button>
+						{ahead && index < steps.length - 1 ? <StepJoin /> : null}
 					</li>
 				);
 			})}
+			{ahead
+				? steps.slice(step + 1).map((entry, offset) => {
+						const index = step + 1 + offset;
+						return (
+							<li key={entry.label} className="flex items-center gap-2">
+								<span className="flex items-center gap-3 py-2 text-base text-[var(--ink-muted)]">
+									<span
+										aria-hidden
+										className="tabular flex h-6 w-6 flex-none items-center justify-center rounded-[var(--radius-full)] border border-[var(--line-strong)] text-sm font-[var(--weight-medium)]"
+									>
+										{index + 1}
+									</span>
+									{entry.label}
+								</span>
+								{index < steps.length - 1 ? <StepJoin /> : null}
+							</li>
+						);
+					})
+				: null}
 		</ol>
 	);
+}
+
+/** The short rule between two steps when the ones ahead are drawn. */
+function StepJoin() {
+	return <span aria-hidden className="h-px w-6 flex-none bg-[var(--line)]" />;
 }

@@ -121,6 +121,7 @@ function PageEditor({ initial, onDeleted, onChanged, onTitleChange }: PageEditor
 
 	const find = useFind(area, query, finding, blocks);
 
+	// On the document, which hears Ctrl F before the title bar search does.
 	useEffect(() => {
 		function onKey(event: KeyboardEvent) {
 			if (matchesCombo(event, COMBOS.find)) {
@@ -128,8 +129,8 @@ function PageEditor({ initial, onDeleted, onChanged, onTitleChange }: PageEditor
 				setFinding(true);
 			}
 		}
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
+		document.addEventListener("keydown", onKey);
+		return () => document.removeEventListener("keydown", onKey);
 	}, []);
 
 	async function relink(next: DocumentOwnerChoice) {

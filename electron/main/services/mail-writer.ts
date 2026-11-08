@@ -133,7 +133,7 @@ export async function withWriter<T>(
 	db: Db,
 	work: (writer: MailboxWriter) => Promise<T>,
 ): Promise<T> {
-	const connection = connectionFor(accountId, db);
+	const connection = await connectionFor(accountId, db);
 	let writer: MailboxWriter | null = null;
 	try {
 		writer = await connectWithRetry(connection);

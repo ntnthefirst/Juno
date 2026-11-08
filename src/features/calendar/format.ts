@@ -1,6 +1,7 @@
 import type { CalendarItem, CalendarOccurrence, CalendarReminderItem } from "@shared/types";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { contextMenuFor, type MenuHandlers, type MenuTarget } from "../../lib/native-menu";
+import { CALENDAR_TONES } from "../../lib/calendar-colours";
 import { addDays, dateOf, daysBetween, localDateOfInstant, localMinuteOfInstant } from "./dates";
 
 /** Something drawn on one day of the grid. A multi-day item is placed once per day. */
@@ -27,6 +28,8 @@ export function itemKey(item: CalendarItem): string {
 			return `reminder|${item.reminderId}`;
 		case "deadline":
 			return `deadline|${item.projectId}`;
+		case "subscription":
+			return `subscription|${item.eventId}|${item.occurrenceStartLocal}`;
 	}
 }
 
@@ -56,7 +59,7 @@ export function placeItems(items: CalendarItem[], from: string, to: string): Map
 
 	for (const item of items) {
 		const key = itemKey(item);
-		if (item.kind !== "event") {
+		if (item.kind === "reminder" || item.kind === "deadline") {
 			put({ key, item, date: item.dueOn, dated: true, startMinute: 0, endMinute: 1440, continued: false, continues: false });
 			continue;
 		}
@@ -125,6 +128,8 @@ export function chipTone(item: CalendarItem): string {
 				: "bg-[var(--warn-soft)] text-[var(--warn)]";
 		case "deadline":
 			return "bg-[var(--seal-soft)] text-[var(--seal)]";
+		case "subscription":
+			return CALENDAR_TONES[item.colour].chip;
 	}
 }
 
@@ -137,6 +142,8 @@ export function dotTone(item: CalendarItem): string {
 			return item.bucket === "overdue" ? "bg-[var(--risk)]" : "bg-[var(--warn)]";
 		case "deadline":
 			return "bg-[var(--seal)]";
+		case "subscription":
+			return CALENDAR_TONES[item.colour].dot;
 	}
 }
 
@@ -154,8 +161,8 @@ export type ItemActions = {
  * The right-click menu for a chip on the grid, in Month, Week or Agenda.
  *
  * The items are chosen in the main process from the record (decision 59), and
- * this says what each one does here. Every kind of item can be opened, edited
- * and removed. What "delete" means differs by kind and the menu labels it: an
+ * this says what each one does here. Every kind of item can be opened. Juno's
+ * own can be edited and removed; an event from a subscription is read only. What "delete" means differs by kind and the menu labels it: an
  * event is deleted, a reminder is deleted, and a project deadline is cleared,
  * which leaves the project and only takes its date away.
  */
@@ -171,6 +178,12 @@ export function itemMenu(item: CalendarItem, actions: ItemActions): { target: Me
 			return { target: { kind: "event", id: item.eventId }, handlers: common };
 		case "deadline":
 			return { target: { kind: "event", id: item.projectId, context: "deadline" }, handlers: common };
+		case "subscription":
+			// Someone else's calendar: it opens, and there is nothing to edit or delete.
+			return {
+				target: { kind: "event", id: item.eventId, context: "subscription" },
+				handlers: { open: () => actions.onOpen(item) },
+			};
 		case "reminder":
 			return {
 				target: { kind: "reminder", id: item.reminderId },
@@ -196,6 +209,7 @@ export const KIND_LABELS: Record<CalendarItem["kind"], string> = {
 	event: "Event",
 	reminder: "Reminder",
 	deadline: "Project deadline",
+	subscription: "Calendar subscription",
 };
 
 /**

@@ -242,3 +242,44 @@ describe("anchor day", () => {
 		expect(moved.anchorDay).toBe(31);
 	});
 });
+
+describe("due time", () => {
+	it("is empty unless one is given", async () => {
+		const made = await create({ title: "On the day", dueOn: "2026-05-10" }, db, "2026-05-10");
+		expect(made.dueTime).toBeNull();
+	});
+
+	it("keeps an hour, and an edit can take it off again", async () => {
+		const made = await create({ title: "Call", dueOn: "2026-05-10", dueTime: "10:30" }, db, "2026-05-10");
+		expect(made.dueTime).toBe("10:30");
+
+		const cleared = await update(made.id, { dueTime: null }, db, "2026-05-10");
+		expect(cleared.dueTime).toBeNull();
+		const untouched = await update(made.id, { title: "Call back" }, db, "2026-05-10");
+		expect(untouched.dueTime).toBeNull();
+	});
+
+	it("refuses a time that is not on a 24-hour clock", async () => {
+		await expect(create({ title: "Call", dueOn: "2026-05-10", dueTime: "25:00" }, db)).rejects.toThrow(/HH:MM/);
+		await expect(create({ title: "Call", dueOn: "2026-05-10", dueTime: "9:00" }, db)).rejects.toThrow(/HH:MM/);
+	});
+
+	it("keeps its hour when a recurring reminder rolls forward", async () => {
+		const made = await create(
+			{ title: "Weekly call", dueOn: "2026-03-23", dueTime: "09:00", pattern: "weeks", interval: 1 },
+			db,
+			"2026-03-23",
+		);
+		const next = await complete(made.id, {}, db, "2026-03-23");
+		expect(next.dueOn).toBe("2026-03-30");
+		expect(next.dueTime).toBe("09:00");
+	});
+
+	it("orders a day's reminders by their time, the ones without a time first", async () => {
+		await create({ title: "Afternoon", dueOn: "2026-05-10", dueTime: "15:00" }, db, "2026-05-10");
+		await create({ title: "Morning", dueOn: "2026-05-10", dueTime: "08:15" }, db, "2026-05-10");
+		await create({ title: "Any time", dueOn: "2026-05-10" }, db, "2026-05-10");
+		const titles = (await list({}, db, "2026-05-10")).map((reminder) => reminder.title);
+		expect(titles).toEqual(["Any time", "Morning", "Afternoon"]);
+	});
+});

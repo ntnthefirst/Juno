@@ -62,7 +62,10 @@ export class AgentPermissionError extends Error {
  *   mail server, which is why `mail.file.*` is here and not under change.
  *   Writing a mailbox rule is here too, because a rule files mail by itself on
  *   every new message: it is a standing permission to file, and `mail.rules.*`
- *   cannot be used from an automation at all (decision 64).
+ *   cannot be used from an automation at all (decision 64). So is anything
+ *   that makes Juno fetch an address for a calendar subscription: the owner
+ *   reads the address before Juno goes to it, and a subscription is a standing
+ *   instruction to keep going there (decision 74).
  * - **delete**: anything that removes. Soft deletes count, because to the
  *   owner they are gone.
  */
@@ -81,6 +84,8 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"calendar.export_ics",
 		"calendar.get_event",
 		"calendar.list_events",
+		"calendar.subscriptions.get",
+		"calendar.subscriptions.list",
 		"calendar.upcoming",
 		"clients.addresses.list_for_client",
 		"clients.emails.list_for_client",
@@ -173,6 +178,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"clients.addresses.restore",
 		"clients.addresses.set_primary",
 		"clients.addresses.update",
+		"clients.archive_many",
 		"clients.create",
 		"clients.emails.create",
 		"clients.emails.restore",
@@ -189,6 +195,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"clients.phones.set_primary",
 		"clients.phones.update",
 		"clients.restore",
+		"clients.restore_many",
 		"clients.update",
 		"contacts.create",
 		"contacts.restore",
@@ -218,15 +225,19 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"mail.threads.unlink_project",
 		"notes.create",
 		"notes.duplicate",
+		"notes.duplicate_many",
 		"notes.restore",
+		"notes.restore_many",
 		"notes.update",
 		"pages.create",
 		"pages.update",
 		"projects.add_file_from_mail",
 		"projects.archive",
+		"projects.archive_many",
 		"projects.create",
 		"projects.create_link",
 		"projects.restore",
+		"projects.restore_many",
 		"projects.set_cover",
 		"projects.update",
 		"projects.update_asset",
@@ -270,6 +281,10 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 	],
 	drafts: ["mail.draft", "mail.outbox.attach_project_file", "mail.reply"],
 	send: [
+		"calendar.subscriptions.create",
+		"calendar.subscriptions.preview",
+		"calendar.subscriptions.refresh",
+		"calendar.subscriptions.update",
 		"mail.file.archive",
 		"mail.file.archive_messages",
 		"mail.file.junk",
@@ -290,8 +305,10 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 	delete: [
 		"automations.delete",
 		"calendar.remove_event",
+		"calendar.subscriptions.remove",
 		"clients.addresses.delete",
 		"clients.delete",
+		"clients.delete_many",
 		"clients.emails.delete",
 		"clients.links.delete",
 		"clients.notes.delete",
@@ -307,9 +324,11 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"mail.folders.remove",
 		"mail.rules.delete",
 		"notes.delete",
+		"notes.delete_many",
 		"projects.delete",
 		"projects.delete_asset",
 		"projects.delete_link",
+		"projects.delete_many",
 		"reminders.remove",
 		"templates.components.delete",
 	],

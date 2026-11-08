@@ -7,6 +7,7 @@ import type {
 	CalendarOccurrence,
 	CalendarReminderItem,
 	CalendarScope,
+	CalendarSubscription,
 	NewRecordPrefill,
 	Project,
 	Reminder,
@@ -48,7 +49,9 @@ import { WeekView } from "./WeekView";
 
 type Load =
 	| { status: "loading" }
-	| { status: "ready"; items: CalendarItem[] }
+	// The range the items were read for travels with them, so the grid never
+	// draws new dates over old items, or old dates while the new ones load.
+	| { status: "ready"; items: CalendarItem[]; view: ViewKind; anchor: string; dates: string[] }
 	| { status: "error"; message: string };
 
 type FormState = {
@@ -87,6 +90,8 @@ export function CalendarScreen() {
 	const [anchor, setAnchor] = useState<string | null>(null);
 	const [showReminders, setShowReminders] = useState(true);
 	const [showDeadlines, setShowDeadlines] = useState(true);
+	// The calendars Juno subscribes to, for the layers in the "..." menu.
+	const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([]);
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [version, setVersion] = useState(0);
 	const [form, setForm] = useState<FormState | null>(null);
@@ -136,15 +141,16 @@ export function CalendarScreen() {
 			to,
 			includeReminders: showReminders,
 			includeDeadlines: showDeadlines,
+			includeSubscriptions: true,
 		});
 	}, [from, to, showReminders, showDeadlines]);
 
 	useEffect(() => {
-		if (!from) return;
+		if (!from || !anchor) return;
 		let cancelled = false;
 		fetchItems()
 			.then((items) => {
-				if (!cancelled) setLoad({ status: "ready", items });
+				if (!cancelled) setLoad({ status: "ready", items, view, anchor, dates });
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setLoad({ status: "error", message: messageOf(cause) });
@@ -152,15 +158,38 @@ export function CalendarScreen() {
 		return () => {
 			cancelled = true;
 		};
-	}, [fetchItems, from, version]);
+	}, [fetchItems, from, version, view, anchor, dates]);
 
 	const refresh = useCallback(() => setVersion((v) => v + 1), []);
 	// A new-record window saved something, so the grid reads again.
 	useRecordsChanged(refresh);
+	// Settings closing may have added, changed or removed a subscription.
+	useEffect(() => window.juno.window.onChildClosed(() => refresh()), [refresh]);
+
+	useEffect(() => {
+		let cancelled = false;
+		window.juno.calendar.subscriptions
+			.list()
+			.then((rows) => {
+				if (!cancelled) setSubscriptions(rows);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [version]);
+
+	/** Shows or hides one subscription on the calendar. It keeps being fetched either way. */
+	function toggleSubscription(subscription: CalendarSubscription) {
+		void run(() => window.juno.calendar.subscriptions.update(subscription.id, { shown: !subscription.shown }));
+	}
 
 	const placed = useMemo(
-		() => (load.status === "ready" && from && to ? placeItems(load.items, from, to) : new Map()),
-		[load, from, to],
+		() =>
+			load.status === "ready" && load.dates.length > 0
+				? placeItems(load.items, load.dates[0], load.dates[load.dates.length - 1])
+				: new Map(),
+		[load],
 	);
 
 	function step(towards: -1 | 1) {
@@ -244,6 +273,8 @@ export function CalendarScreen() {
 	/** Edit whatever kind of item this is: an event, a reminder, or the project a deadline belongs to. */
 	async function edit(item: CalendarItem) {
 		if (item.kind === "event") return editEvent(item);
+		// A subscription's event is read only. Nothing offers this, and nothing would happen.
+		if (item.kind === "subscription") return;
 		setDetail(null);
 		try {
 			if (item.kind === "reminder") {
@@ -267,6 +298,7 @@ export function CalendarScreen() {
 	 */
 	function remove(item: CalendarItem) {
 		if (item.kind === "event") return removeEvent(item);
+		if (item.kind === "subscription") return;
 		setDetail(null);
 		if (item.kind === "reminder") {
 			void run(async () => {
@@ -348,6 +380,7 @@ export function CalendarScreen() {
 	/** A drag onto another day. Reminders and deadlines are dates, so only whole days apply. */
 	function move(item: CalendarItem, dayDelta: number, minuteDelta: number) {
 		if (item.kind === "event") return moveEvent(item, dayDelta, minuteDelta);
+		if (item.kind === "subscription") return;
 		const dueOn = addDays(item.dueOn, dayDelta);
 		void run(async () => {
 			if (item.kind === "reminder") await window.juno.reminders.update(item.reminderId, { dueOn });
@@ -496,6 +529,16 @@ export function CalendarScreen() {
 			hint: showDeadlines ? "Shown" : "Hidden",
 			onSelect: () => setShowDeadlines((v) => !v),
 		},
+		...subscriptions.map(
+			(subscription, index): MenuItem => ({
+				id: `subscription-${subscription.id}`,
+				label: subscription.name,
+				icon: "calendar",
+				hint: subscription.shown ? "Shown" : "Hidden",
+				separatorBefore: index === 0,
+				onSelect: () => toggleSubscription(subscription),
+			}),
+		),
 	];
 
 	return (
@@ -540,10 +583,10 @@ export function CalendarScreen() {
 							{load.message}
 						</p>
 					</div>
-				) : !anchor || !today ? null : view === "month" ? (
+				) : load.status !== "ready" || !today ? null : load.view === "month" ? (
 					<MonthView
-						dates={dates}
-						month={anchor.slice(0, 7)}
+						dates={load.dates}
+						month={load.anchor.slice(0, 7)}
 						today={today}
 						placed={placed}
 						onOpen={setDetail}
@@ -560,10 +603,11 @@ export function CalendarScreen() {
 						onSnooze={(item) => void snooze(item)}
 						onChanged={refresh}
 						onStep={step}
+						direction={direction}
 					/>
-				) : view === "week" ? (
+				) : load.view === "week" ? (
 					<WeekView
-						dates={dates}
+						dates={load.dates}
 						today={today}
 						placed={placed}
 						nowMinute={nowMinute}
@@ -577,11 +621,12 @@ export function CalendarScreen() {
 						onSnooze={(item) => void snooze(item)}
 						onChanged={refresh}
 						onStep={step}
+						direction={direction}
 					/>
 				) : (
 					<AgendaView
 						direction={direction}
-						dates={dates}
+						dates={load.dates}
 						today={today}
 						placed={placed}
 						onOpen={setDetail}

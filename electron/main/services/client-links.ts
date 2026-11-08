@@ -71,7 +71,8 @@ export async function get(id: string, db: Db = getDb()): Promise<ClientLink> {
 	return liveLink(id, db);
 }
 
-export async function create(input: ClientLinkInput, db: Db = getDb()): Promise<ClientLink> {
+/** The synchronous body of `create`, so a caller can compose it into one transaction. */
+export function insertLink(input: ClientLinkInput, db: Db): ClientLink {
 	const url = normaliseUrl(input.url);
 	const kind = input.kind === undefined ? guessClientLinkKind(url) : requireKind(input.kind);
 	requireClient(input.clientId, db);
@@ -80,6 +81,10 @@ export async function create(input: ClientLinkInput, db: Db = getDb()): Promise<
 		.values({ clientId: input.clientId, url, kind, label: cleanLabel(input.label) })
 		.returning()
 		.get();
+}
+
+export async function create(input: ClientLinkInput, db: Db = getDb()): Promise<ClientLink> {
+	return insertLink(input, db);
 }
 
 export async function update(id: string, patch: ClientLinkPatch, db: Db = getDb()): Promise<ClientLink> {

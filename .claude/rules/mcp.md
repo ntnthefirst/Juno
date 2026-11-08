@@ -111,6 +111,12 @@ change, reorder or remove a rule only through this gate: `mail.rules.create`,
 park whatever the levels say, and the owner reads the whole rule in plain words
 before approving. No other tool, and no automation, gains the right to file.
 
+**Making Juno fetch an address is the same kind of decision (decision 74).**
+`calendar.subscriptions.preview`, `create`, `update` and `refresh` are in the
+Send row, so they park whatever the levels say and the owner reads the address
+before Juno goes to it. A subscription is a standing instruction to keep
+fetching, and the address can be a secret.
+
 Writes that only touch local records (`clients.update`, `reminders.complete`,
 `time.*`, `mail.blocks.*`) and mail drafts are the rows the owner may set to Allow
 under Settings > MCP > Permissions (decision 57). At Allow they execute directly;

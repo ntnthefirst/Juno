@@ -41,21 +41,39 @@ jobs:
   # same moment and each creates its own draft, so half the assets land on a
   # release nobody looks at. Creating the release once, up front, means both
   # platform jobs find it already there and upload into it instead.
+  #
+  # The release page gets the version's entry from build/release-notes.md, the
+  # same text the update feed carries, so the page and the app never disagree.
+  # The heading is left off because the release title already names the version.
+  # The script fails when the version has no entry, which stops the release here.
   create-release:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Write the notes for this version
+        run: |
+          node scripts/release-notes.mjs
+          tail -n +2 build/release-notes-latest.md | sed '1{/^$/d}' > release-body.md
+
       - name: Create draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          gh release create "$TAG" \
-            --repo "${{ github.repository }}" \
-            --title "$TAG" \
-            --draft \
-            --notes "" \
-            || echo "Release for $TAG already exists, reusing it."
+          if gh release view "$TAG" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "Release for $TAG already exists, reusing it and updating its notes."
+            gh release edit "$TAG" --repo "${{ github.repository }}" --notes-file release-body.md
+          else
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --title "$TAG" \
+              --draft \
+              --notes-file release-body.md
+          fi
 
   build:
     needs: create-release

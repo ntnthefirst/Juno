@@ -6,9 +6,10 @@ import { InlineAdd } from "../../components/InlineAdd";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { FilterToggle, ListSearchBar } from "../../components/ListSearchBar";
-import { IconAction } from "../../components/IconAction";
 import { Icon } from "../../components/Icon";
 import { SelectAllButton } from "../../components/SelectAllButton";
+import { SelectionBar } from "../../components/SelectionBar";
+import { withAll } from "../../lib/select-all";
 import { emptyLayout } from "./mail/canvas/canvas-actions";
 import { messageOf } from "../../lib/errors";
 import { clearPending, peekPending, requestOpen } from "../../lib/open-entity";
@@ -107,7 +108,6 @@ export function MailTemplatesScreen() {
 		return list;
 	}, [rows, needle, filters]);
 	const allSelected = shown.length > 0 && shown.every((row) => selectedIds.includes(row.id));
-	const someSelected = selectedIds.length > 0 && !allSelected;
 
 	const byId = useCallback((id: string) => rows.find((row) => row.id === id) ?? null, [rows]);
 	const viewing = view.mode === "view" ? byId(view.id) : null;
@@ -272,20 +272,7 @@ export function MailTemplatesScreen() {
 						The emails you send again and again. Mark one as reviewed once you have read its text.
 					</p>
 
-					<div className="mt-5 flex items-center gap-2">
-						<SelectAllButton
-							checked={allSelected}
-							indeterminate={someSelected}
-							disabled={shown.length === 0}
-							onSelectAll={() => setSelectedIds(shown.map((row) => row.id))}
-							onClearSelection={() => setSelectedIds([])}
-						/>
-						{selectedIds.length > 0 ? (
-							<span className="tabular shrink-0 text-sm font-[var(--weight-medium)]">
-								{selectedIds.length} selected
-							</span>
-						) : null}
-
+					<div className="mt-5">
 						<ListSearchBar
 							search={search}
 							onSearch={setSearch}
@@ -328,17 +315,32 @@ export function MailTemplatesScreen() {
 						/>
 
 						{selectedIds.length > 0 ? (
-							<div className="ml-auto flex items-center gap-1">
-								<IconAction icon="copy" label="Duplicate" onClick={() => onAction("duplicate", selectedIds)} />
-								<IconAction icon="archive" label="Hide" onClick={() => onAction("hide", selectedIds)} />
-								<IconAction
-									icon="remove"
-									label="Delete"
-									danger
-									onClick={() => onAction("remove", selectedIds)}
-								/>
-							</div>
-						) : null}
+							<SelectionBar
+								count={selectedIds.length}
+								allSelected={allSelected}
+								onSelectAll={() => setSelectedIds((current) => withAll(current, shown.map((row) => row.id)))}
+								onClear={() => setSelectedIds([])}
+								actions={[
+									{ id: "duplicate", icon: "copy", label: "Duplicate", onSelect: () => onAction("duplicate", selectedIds) },
+									{ id: "hide", icon: "archive", label: "Hide", onSelect: () => onAction("hide", selectedIds) },
+									{
+										id: "remove",
+										icon: "remove",
+										label: "Delete",
+										danger: true,
+										onSelect: () => onAction("remove", selectedIds),
+									},
+								]}
+							/>
+						) : (
+							<SelectAllButton
+								checked={false}
+								indeterminate={false}
+								disabled={shown.length === 0}
+								onSelectAll={() => setSelectedIds(shown.map((row) => row.id))}
+								onClearSelection={() => setSelectedIds([])}
+							/>
+						)}
 					</div>
 
 					{error ? (

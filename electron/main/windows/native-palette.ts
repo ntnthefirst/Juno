@@ -17,8 +17,8 @@ export interface NativePalette {
 	symbol: string;
 }
 
-const LIGHT: NativePalette = { paper: "#f5f5f7", symbol: "#5b5c66" };
-const DARK: NativePalette = { paper: "#101013", symbol: "#a2a3ae" };
+const LIGHT: NativePalette = { paper: "#f1f1f4", symbol: "#4d4e58" };
+const DARK: NativePalette = { paper: "#0d0d10", symbol: "#b1b2bc" };
 
 export function nativePalette(dark: boolean): NativePalette {
 	return dark ? DARK : LIGHT;

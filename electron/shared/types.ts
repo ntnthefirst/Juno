@@ -154,6 +154,17 @@ export type ClientIntakeInput = ClientInput & {
 	phone?: string | null;
 	/** One line, stored as the first address line. */
 	address?: string | null;
+	/**
+	 * Several of each kind, for a caller that has them all at hand (the agent).
+	 * Each entry is what the matching child record normally takes, without the
+	 * client id. Giving `emails` together with `email` (or the same for phone and
+	 * address) is refused, because it is unclear which one is meant to be first.
+	 */
+	emails?: Array<Omit<ClientEmailInput, "clientId">>;
+	phones?: Array<Omit<ClientPhoneInput, "clientId">>;
+	addresses?: Array<Omit<ClientAddressInput, "clientId">>;
+	links?: Array<Omit<ClientLinkInput, "clientId">>;
+	contacts?: Array<Omit<ContactInput, "clientId">>;
 };
 
 export type ClientPatch = Partial<Omit<Client, keyof Standard | "sortName">>;
@@ -2277,6 +2288,8 @@ export interface Reminder extends Standard {
 	title: string;
 	notes: string | null;
 	dueOn: IsoDate;
+	/** `HH:MM` on the machine's clock, or null when it is due on the day rather than at an hour. */
+	dueTime: string | null;
 	pattern: RecurrencePattern;
 	interval: number;
 	anchorDay: number | null;
@@ -2302,6 +2315,8 @@ export interface Reminder extends Standard {
 export interface ReminderInput {
 	title: string;
 	dueOn: IsoDate;
+	/** `HH:MM`, or null for a reminder due on the day rather than at an hour. */
+	dueTime?: string | null;
 	notes?: string | null;
 	pattern?: RecurrencePattern;
 	interval?: number;
@@ -2354,6 +2369,31 @@ export interface ReminderCompletion {
 export type MailSecurity = "tls" | "starttls";
 
 /**
+ * How an account signs in. "password" covers app passwords too: the secret is
+ * typed once and kept by the operating system. "microsoft" signs in through
+ * Microsoft in the browser and keeps a refresh token instead.
+ */
+export type MailAuthKind = "password" | "microsoft";
+
+/** The providers the Add account screen offers as tiles. `shared/mail-providers.ts` holds them. */
+export type MailProviderId =
+	| "gmail"
+	| "outlook"
+	| "m365"
+	| "icloud"
+	| "ovh"
+	| "proximus"
+	| "telenet"
+	| "yahoo"
+	| "combell";
+
+/**
+ * What the sign-in step asks for. "app-password" is a password the provider
+ * makes for one application, with a guide to making it.
+ */
+export type MailSignIn = "password" | "app-password" | "microsoft";
+
+/**
  * An account as the renderer sees it. There is no password field, and there
  * never will be: `hasCredential` is the whole of what the interface learns.
  */
@@ -2378,6 +2418,9 @@ export interface MailAccount extends Standard {
 	smtpUsername: string | null;
 	/** The display name on outgoing mail. Null means the owner's name. */
 	fromName: string | null;
+	authKind: MailAuthKind;
+	/** Microsoft refused to renew the sign-in, so the person has to sign in again. */
+	needsSignIn: boolean;
 }
 
 /**
@@ -2426,8 +2469,19 @@ export interface MailAutoconfig {
 	smtpPort: number;
 	smtpSecurity: MailSecurity;
 	username: string;
+	/**
+	 * The login for sending when it is not `username`, as with iCloud, which
+	 * wants the name alone for IMAP and the whole address for SMTP.
+	 */
+	smtpUsername: string | null;
 	/** What this provider needs that a password alone does not cover. */
 	note: string | null;
+	/** The provider in the catalogue, when the settings came from one. */
+	provider: MailProviderId | null;
+	/** What to call the provider, also for a host Juno knows without a tile. Null when unknown. */
+	providerName: string | null;
+	/** What the sign-in step asks for. */
+	signIn: MailSignIn;
 }
 
 export interface MailAccountInput {
@@ -2437,8 +2491,17 @@ export interface MailAccountInput {
 	imapPort?: number;
 	imapSecurity?: MailSecurity;
 	username?: string;
-	/** Stored in the credential store on the way in. Never read back. */
-	password: string;
+	/**
+	 * Stored in the credential store on the way in. Never read back. Needed
+	 * unless `signInId` is given.
+	 */
+	password?: string;
+	/**
+	 * A Microsoft sign-in that finished in the browser. The account keeps that
+	 * sign-in instead of a password. Only the settings window can start one: no
+	 * agent tool signs in or passes this.
+	 */
+	signInId?: string;
 	horizonDays?: number;
 	syncIntervalMinutes?: number;
 	syncEnabled?: boolean;
@@ -2449,7 +2512,34 @@ export interface MailAccountInput {
 	fromName?: string | null;
 }
 
-export type MailAccountPatch = Partial<MailAccountInput>;
+export type MailAccountPatch = Partial<Omit<MailAccountInput, "signInId">>;
+
+/** One direction of a connection test, as the Ready step shows it. */
+export interface MailDirectionCheck {
+	ok: boolean;
+	/** The host that was asked. */
+	host: string;
+	/** What went wrong and what to do about it, when ok is false. */
+	message: string | null;
+}
+
+/**
+ * Both directions tried, and the account, which exists only when both
+ * passed. A failed check saves nothing.
+ */
+export interface MailConnectResult {
+	receiving: MailDirectionCheck;
+	sending: MailDirectionCheck;
+	account: MailAccount | null;
+}
+
+/** A Microsoft sign-in that finished in the browser and waits to become an account. */
+export interface MailSignInResult {
+	/** Refers to the sign-in kept in the main process. It is not a token. */
+	signInId: string;
+	/** The address Microsoft says was signed in to. */
+	email: string;
+}
 
 export interface MailConnectionTest {
 	ok: boolean;
@@ -3075,7 +3165,33 @@ export interface CalendarDeadlineItem {
 	dueOn: IsoDate;
 }
 
-export type CalendarItem = CalendarOccurrence | CalendarReminderItem | CalendarDeadlineItem;
+/**
+ * One occurrence of an event from a calendar subscription. Read only: it
+ * cannot be moved, resized, edited or deleted, because the calendar it comes
+ * from is someone else's and the next fetch would put it back.
+ */
+export interface CalendarSubscriptionItem {
+	kind: "subscription";
+	subscriptionId: string;
+	subscriptionName: string;
+	colour: CalendarColour;
+	/** The stored feed event, not a Juno event. calendar.get does not know it. */
+	eventId: string;
+	occurrenceStartLocal: LocalDateTime;
+	title: string;
+	notes: string | null;
+	location: string | null;
+	allDay: boolean;
+	timezone: string;
+	startLocal: LocalDateTime;
+	endLocal: LocalDateTime;
+	startUtc: Iso;
+	endUtc: Iso;
+	isRecurring: boolean;
+	recurrenceLabel: string;
+}
+
+export type CalendarItem = CalendarOccurrence | CalendarReminderItem | CalendarDeadlineItem | CalendarSubscriptionItem;
 
 export interface CalendarRangeQuery {
 	/** First calendar date of the range, inclusive. */
@@ -3086,8 +3202,87 @@ export interface CalendarRangeQuery {
 	timezone?: string;
 	includeReminders?: boolean;
 	includeDeadlines?: boolean;
+	/**
+	 * Overlay the events of the calendar subscriptions that are shown. Left out
+	 * by a query for one client or one project, since a feed belongs to neither.
+	 */
+	includeSubscriptions?: boolean;
 	clientId?: string;
 	projectId?: string;
+}
+
+/**
+ * The colours a subscription can be drawn in, as token names. The renderer
+ * turns each into the pair of tokens a chip uses; nothing stores a hex value.
+ */
+export type CalendarColour =
+	| "accent"
+	| "seal"
+	| "tone-1-ink"
+	| "tone-2-ink"
+	| "tone-3-ink"
+	| "tone-4-ink"
+	| "tone-5-ink"
+	| "tone-6-ink"
+	| "tone-7-ink"
+	| "tone-8-ink";
+
+/** How often Juno fetches a subscription again, in minutes. */
+export type CalendarRefreshMinutes = 15 | 60 | 1440;
+
+/**
+ * A calendar Juno reads from an address and keeps up to date. The address is
+ * never part of this: it is kept by the credential store, like a password,
+ * and only its host is shown.
+ */
+export interface CalendarSubscription extends Standard {
+	name: string;
+	/** Where the address points, `calendar.google.com`. */
+	host: string;
+	colour: CalendarColour;
+	refreshMinutes: CalendarRefreshMinutes;
+	/** Drawn on the calendar. Hidden ones keep their events and keep being fetched. */
+	shown: boolean;
+	lastFetchedAt: Iso | null;
+	lastAttemptAt: Iso | null;
+	/** Why the last fetch failed, in plain words. The events from the last good fetch stay. */
+	lastError: string | null;
+	eventCount: number;
+	mailAccountId: string | null;
+	/** The account's address, while the account exists. */
+	mailAccountEmail: string | null;
+}
+
+export interface CalendarSubscriptionInput {
+	/** https, or webcal which is read as https. */
+	url: string;
+	name: string;
+	/** Left out: the accent. */
+	colour?: CalendarColour;
+	/** Left out: every hour. */
+	refreshMinutes?: CalendarRefreshMinutes;
+	/** The mail account it comes with, when it is added from one. */
+	mailAccountId?: string | null;
+}
+
+export interface CalendarSubscriptionPatch {
+	name?: string;
+	colour?: CalendarColour;
+	refreshMinutes?: CalendarRefreshMinutes;
+	shown?: boolean;
+	/** A new address replaces the stored one and is fetched straight away. */
+	url?: string;
+}
+
+/** What an address holds, read once without saving anything. */
+export interface CalendarSubscriptionPreview {
+	host: string;
+	/** The name the feed gives itself, or null when it gives none. */
+	name: string | null;
+	eventCount: number;
+	/** The next occurrence from now, within a year, or null when there is none. */
+	next: { title: string; startUtc: Iso; allDay: boolean; startLocal: LocalDateTime } | null;
+	warnings: string[];
 }
 
 export interface CalendarImportResult {
@@ -3201,6 +3396,11 @@ export interface AgentActionView {
 	title: string;
 	entities: AgentEntityRef[];
 	fields: AgentField[];
+	/**
+	 * It sends, signs, files or deletes, so it is read in full on the Agent
+	 * screen before anyone approves it, never answered from a short list.
+	 */
+	review: boolean;
 }
 
 /** The same for a row of the log, which keeps no arguments and so names only what it touched. */

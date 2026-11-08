@@ -45,7 +45,7 @@ export function useShortcuts(handlers: ShortcutHandlers): void {
 			};
 			const h = latest.current;
 
-			if (matchesCombo(event, COMBOS.palette)) {
+			if (matchesCombo(event, COMBOS.palette) || matchesCombo(event, COMBOS.searchEverywhere)) {
 				// Another dialog is a question waiting; the palette is not allowed over it.
 				if (document.querySelector("[role='dialog']:not([data-palette])")) return;
 				act(h.palette);

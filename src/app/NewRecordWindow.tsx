@@ -2,7 +2,6 @@ import type { NewRecordKind, NewRecordPrefill } from "@shared/types";
 import { NewClientWindow } from "../features/new-record/NewClientWindow";
 import { NewEventWindow } from "../features/new-record/NewEventWindow";
 import { NewProjectWindow } from "../features/new-record/NewProjectWindow";
-import { NewReminderWindow } from "../features/new-record/NewReminderWindow";
 import { useThemeSync } from "../lib/theme";
 
 type NewRecordWindowProps = {
@@ -21,12 +20,12 @@ export function NewRecordWindow({ record, prefill }: NewRecordWindowProps) {
 	useThemeSync();
 	switch (record) {
 		case "event":
-			return <NewEventWindow prefill={prefill} />;
+		case "reminder":
+			// One window with a switch between the two (frames 175:12676 and 184:399).
+			return <NewEventWindow kind={record} prefill={prefill} />;
 		case "client":
 			return <NewClientWindow />;
 		case "project":
 			return <NewProjectWindow prefill={prefill} />;
-		case "reminder":
-			return <NewReminderWindow prefill={prefill} />;
 	}
 }

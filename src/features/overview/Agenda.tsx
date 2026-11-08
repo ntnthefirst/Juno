@@ -89,7 +89,7 @@ function dayLabel(date: string, today: string): { title: string; sub: string } {
 }
 
 function whenOf(item: CalendarItem): { date: string; time: string } {
-	if (item.kind === "event") {
+	if (item.kind === "event" || item.kind === "subscription") {
 		return { date: item.startLocal.slice(0, 10), time: item.allDay ? "" : item.startLocal.slice(11, 16) };
 	}
 	return { date: item.dueOn, time: "" };
@@ -100,6 +100,7 @@ function metaOf(item: CalendarItem): string {
 	if (item.kind === "event") {
 		return [item.allDay ? "All day" : "", item.location, item.clientName].filter(Boolean).join(" · ");
 	}
+	if (item.kind === "subscription") return item.subscriptionName;
 	return item.clientName ?? "";
 }
 
@@ -195,7 +196,9 @@ export function Agenda({
 		}
 		const scheduled =
 			calendar.status === "ready"
-				? calendar.value.filter((item) => item.kind !== "reminder").map((item) => ({ item, ...whenOf(item) }))
+				? calendar.value
+						.filter((item): item is Extract<CalendarItem, { kind: "event" | "deadline" }> => item.kind === "event" || item.kind === "deadline")
+						.map((item) => ({ item, ...whenOf(item) }))
 				: [];
 		for (const { item, date, time } of scheduled) {
 			if (date < today) continue;

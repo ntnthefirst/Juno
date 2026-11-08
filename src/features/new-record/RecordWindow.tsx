@@ -9,12 +9,18 @@ type RecordWindowProps = {
 	/** What went wrong with the save, in the two clauses `writing.md` asks for. */
 	error: string | null;
 	onSubmit: () => void;
+	/**
+	 * Something was saved from inside the form before the window closes, such as
+	 * a client made from the client picker, so the screen behind reads again
+	 * even when the record itself is cancelled.
+	 */
+	madeAlongside?: boolean;
 	children: ReactNode;
 };
 
-/** Cancel is the one way out that saves nothing. */
-export function cancelNewRecord(): void {
-	void window.juno.window.closeNewRecord(false);
+/** Cancel is the one way out that saves nothing of its own. */
+export function cancelNewRecord(madeAlongside = false): void {
+	void window.juno.window.closeNewRecord(madeAlongside);
 }
 
 /**
@@ -23,15 +29,15 @@ export function cancelNewRecord(): void {
  * 90:9368 and 90:9426). The window is modal and fixed, so the form scrolls
  * inside it rather than the window growing.
  */
-export function RecordWindow({ title, saveLabel, busy, error, onSubmit, children }: RecordWindowProps) {
+export function RecordWindow({ title, saveLabel, busy, error, onSubmit, madeAlongside = false, children }: RecordWindowProps) {
 	// Escape closes a modal window, and this one is one.
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && !event.defaultPrevented) cancelNewRecord();
+			if (event.key === "Escape" && !event.defaultPrevented) cancelNewRecord(madeAlongside);
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, []);
+	}, [madeAlongside]);
 
 	function submit(event: FormEvent) {
 		event.preventDefault();
@@ -65,7 +71,7 @@ export function RecordWindow({ title, saveLabel, busy, error, onSubmit, children
 			</div>
 
 			<footer className="flex flex-none items-center justify-end gap-2 border-t border-[var(--line)] px-8 py-4">
-				<Button onClick={cancelNewRecord}>Cancel</Button>
+				<Button onClick={() => cancelNewRecord(madeAlongside)}>Cancel</Button>
 				<Button type="submit" variant="primary" disabled={busy}>
 					{busy ? "Saving" : saveLabel}
 				</Button>

@@ -20,7 +20,9 @@ import type {
 	AgentField,
 	AuditEvent,
 } from "../../shared/types";
+import { isLocked } from "../../shared/agent-permissions";
 import { getDb, type Db } from "../db";
+import { rowOf } from "./agent-permissions";
 import {
 	automations,
 	calendarEvents,
@@ -65,8 +67,10 @@ const ROLES: Record<AgentEntityKind, string> = {
 /** The argument names that always mean one kind of record. */
 const KEY_KINDS: Record<string, AgentEntityKind> = {
 	client_id: "client",
+	client_ids: "client",
 	contact_id: "contact",
 	project_id: "project",
+	project_ids: "project",
 	account_id: "mailAccount",
 	folder_id: "mailFolder",
 	thread_id: "mailThread",
@@ -245,6 +249,27 @@ function plain(value: string): string {
 	return value;
 }
 
+/**
+ * One entry of a list of small records (a client's emails, phones, contacts) as
+ * a line: its text values in order, and "primary" when it is flagged. Null when
+ * the entry holds anything but plain values, so a nested one falls back to a count.
+ */
+function recordLine(entry: Record<string, unknown>): string | null {
+	const parts: string[] = [];
+	let primary = false;
+	for (const [key, value] of Object.entries(entry)) {
+		if (value === null || value === undefined || value === "") continue;
+		if (typeof value === "boolean") {
+			if (/primary/i.test(key) && value) primary = true;
+			continue;
+		}
+		if (typeof value !== "string" && typeof value !== "number") return null;
+		parts.push(String(value));
+	}
+	if (parts.length === 0) return null;
+	return primary ? `${parts.join(" / ")} (primary)` : parts.join(" / ");
+}
+
 /** An argument as text a person reads, or null when there is nothing to show. */
 function render(value: unknown): { text: string; long: boolean } | null {
 	if (value === null || value === undefined || value === "") return null;
@@ -264,6 +289,7 @@ function render(value: unknown): { text: string; long: boolean } | null {
 			if (item && typeof item === "object") {
 				const entry = item as { name?: string | null; address?: string };
 				if (typeof entry.address === "string") return entry.name ? `${entry.name} <${entry.address}>` : entry.address;
+				return recordLine(item as Record<string, unknown>);
 			}
 			return null;
 		});
@@ -274,6 +300,15 @@ function render(value: unknown): { text: string; long: boolean } | null {
 		return { text: `${value.length} ${value.length === 1 ? "item" : "items"}`, long: false };
 	}
 	return { text: clip(JSON.stringify(value)), long: true };
+}
+
+/** A tool in a row that can never be Allow, or one nobody classified, is read in full. */
+function needsReview(toolName: string): boolean {
+	try {
+		return isLocked(rowOf(toolName));
+	} catch {
+		return true;
+	}
 }
 
 /** Puts one parked request into words. */
@@ -304,7 +339,7 @@ export function describeAction(action: AgentAction, titleOf: TitleOf, db: Db = g
 		if (shown) fields.push({ label: humanise(key.replace(/_?ids?$/, "") || key), value: shown.text, long: shown.long });
 	}
 
-	return { actionId: action.id, title: titleOf(action.toolName), entities, fields };
+	return { actionId: action.id, title: titleOf(action.toolName), entities, fields, review: needsReview(action.toolName) };
 }
 
 export function describeActions(actions: AgentAction[], titleOf: TitleOf, db: Db = getDb()): AgentActionView[] {

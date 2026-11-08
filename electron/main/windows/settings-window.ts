@@ -34,7 +34,7 @@ export function createSettingsWindow(
 		fullscreenable: false,
 		show: false,
 		icon: windowIcon(),
-		backgroundColor: "#f5f5f7",
+		backgroundColor: "#f1f1f4",
 		...titleBarOptions(),
 		webPreferences: {
 			// dist-electron/main/windows -> dist-electron/preload.js

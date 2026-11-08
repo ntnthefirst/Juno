@@ -25,6 +25,21 @@ import * as timeline from "../services/project-timeline";
 import * as projects from "../services/projects";
 import type { ToolDescriptor } from "./types";
 
+const manyIds: Record<string, unknown> = {
+	type: "object",
+	properties: {
+		project_ids: {
+			type: "array",
+			items: { type: "string" },
+			minItems: 1,
+			maxItems: 500,
+			description: "The projects' ids, from projects.list. At most 500.",
+		},
+	},
+	required: ["project_ids"],
+	additionalProperties: false,
+};
+
 const FIELDS = {
 	name: "name",
 	client_id: "clientId",
@@ -237,6 +252,39 @@ export const projectTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: (args) => projects.archive(args.project_id as string),
+	},
+	{
+		name: "projects.archive_many",
+		title: "Archive several projects",
+		description:
+			"Set each project's status to Archived, in one go, adding that status the first time. A deleted project is left alone. Every id must be a project's, or nothing changes. Returns the projects it archived.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: manyIds,
+		prepare: async (args) => projects.reviewMany("archive", args.project_ids as string[]),
+		handler: (args) => projects.archiveMany(args.project_ids as string[]),
+	},
+	{
+		name: "projects.delete_many",
+		title: "Delete several projects",
+		description:
+			"Soft delete each project, in one go, as one request listing every project. A project already deleted is left alone. Every id must be a project's, or nothing changes. Undo with projects.restore_many.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: manyIds,
+		prepare: async (args) => projects.reviewMany("delete", args.project_ids as string[]),
+		handler: (args) => projects.removeMany(args.project_ids as string[]),
+	},
+	{
+		name: "projects.restore_many",
+		title: "Restore several projects",
+		description:
+			"Bring each soft-deleted project back, in one go. A project that is not deleted is left alone. Every id must be a project's, or nothing changes.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: manyIds,
+		prepare: async (args) => projects.reviewMany("restore", args.project_ids as string[]),
+		handler: (args) => projects.restoreMany(args.project_ids as string[]),
 	},
 	{
 		name: "projects.get_storage",

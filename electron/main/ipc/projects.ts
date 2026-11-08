@@ -29,6 +29,9 @@ export function registerProjectsIpc(): void {
 	ipcMain.handle("projects.remove", (_event, id: string) => projects.remove(id));
 	ipcMain.handle("projects.restore", (_event, id: string) => projects.restore(id));
 	ipcMain.handle("projects.archive", (_event, id: string) => projects.archive(id));
+	ipcMain.handle("projects.archiveMany", (_event, ids: string[]) => projects.archiveMany(ids));
+	ipcMain.handle("projects.removeMany", (_event, ids: string[]) => projects.removeMany(ids));
+	ipcMain.handle("projects.restoreMany", (_event, ids: string[]) => projects.restoreMany(ids));
 	ipcMain.handle("projects.timeline", (_event, query: ProjectTimelineQuery) =>
 		timeline.timeline(query),
 	);

@@ -1,5 +1,6 @@
 import { resolveMx } from "node:dns/promises";
-import type { MailAutoconfig, MailSecurity } from "../../shared/types";
+import { MAIL_PROVIDERS, mailProvider, type MailProvider } from "../../shared/mail-providers";
+import type { MailAutoconfig, MailProviderId, MailSecurity, MailSignIn } from "../../shared/types";
 
 /**
  * Server settings guessed from an address, so that adding an account is one
@@ -10,31 +11,38 @@ import type { MailAutoconfig, MailSecurity } from "../../shared/types";
  * autoconfig endpoint is a request to a third party announcing which mail
  * provider this person uses, sent before they have agreed to anything.
  *
- * The table only answers for addresses *at* a provider's own domain. Most
- * businesses are not: they have their own domain hosted somewhere, and for
- * those `guess` falls back to imap./smtp., which a good share of hosts do not
- * use. OVH is the example that started this, where info@<customer domain>
- * lives on imap.mail.ovh.net and nothing about the domain says so.
+ * The table only answers for addresses *at* a provider's own domain, or for a
+ * provider the person picked from the tiles. Most businesses are neither: they
+ * have their own domain hosted somewhere, and for those `guess` falls back to
+ * imap./smtp., which a good share of hosts do not use. OVH is the example that
+ * started this, where info@<customer domain> lives on imap.mail.ovh.net and
+ * nothing about the domain says so.
  *
  * `resolveByMx` is the answer to that, and it is a separate call on purpose.
  * It asks DNS who handles mail for the domain, which is a network request, so
- * it happens when a person asks for it rather than behind their back. The MX
- * host names the provider even when the domain does not.
+ * it happens when a person presses Next on an address the table does not know,
+ * rather than behind their back. The MX host names the provider even when the
+ * domain does not.
  *
  * No guess is ever saved on its own. It fills the form in, the hosts stay
  * visible, and the connection test is what decides whether it was right.
  */
 
-type Provider = {
-	/** Domains this entry answers for, lowercase, without the @. */
-	domains: string[];
+type Servers = {
 	imapHost: string;
 	imapPort: number;
 	imapSecurity: MailSecurity;
 	smtpHost: string;
 	smtpPort: number;
 	smtpSecurity: MailSecurity;
-	/** Shown when the provider needs something other than the login password. */
+};
+
+/** A host Juno knows the servers of but offers no tile for. */
+type Extra = Servers & {
+	name: string;
+	domains: string[];
+	mxSuffixes: string[];
+	signIn: MailSignIn;
 	note?: string;
 };
 
@@ -44,177 +52,95 @@ const STARTTLS: MailSecurity = "starttls";
 const APP_PASSWORD_NOTE =
 	"This provider rejects your normal password from other applications. Make an app password in your account's security settings and use that here.";
 
-const PROVIDERS: Provider[] = [
+const MICROSOFT_NOTE =
+	"Microsoft no longer accepts a password from other applications. You sign in through Microsoft in your browser instead.";
+
+const EXTRAS: Extra[] = [
 	{
-		domains: ["gmail.com", "googlemail.com"],
-		imapHost: "imap.gmail.com",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.gmail.com",
-		smtpPort: 465,
-		smtpSecurity: TLS,
-		note: APP_PASSWORD_NOTE,
-	},
-	{
-		domains: ["outlook.com", "hotmail.com", "live.com", "live.be", "msn.com", "office365.com"],
-		imapHost: "outlook.office365.com",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.office365.com",
-		smtpPort: 587,
-		smtpSecurity: STARTTLS,
-		note: APP_PASSWORD_NOTE,
-	},
-	{
-		domains: ["icloud.com", "me.com", "mac.com"],
-		imapHost: "imap.mail.me.com",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.mail.me.com",
-		smtpPort: 587,
-		smtpSecurity: STARTTLS,
-		note: APP_PASSWORD_NOTE,
-	},
-	{
-		domains: ["yahoo.com", "yahoo.co.uk", "ymail.com"],
-		imapHost: "imap.mail.yahoo.com",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.mail.yahoo.com",
-		smtpPort: 465,
-		smtpSecurity: TLS,
-		note: APP_PASSWORD_NOTE,
-	},
-	// The Belgian providers a small business here is most likely to be on.
-	{
-		domains: ["telenet.be"],
-		imapHost: "imap.telenet.be",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.telenet.be",
-		smtpPort: 587,
-		smtpSecurity: STARTTLS,
-	},
-	{
-		domains: ["skynet.be", "proximus.be", "belgacom.net"],
-		imapHost: "imap.proximus.be",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.proximus.be",
-		smtpPort: 587,
-		smtpSecurity: STARTTLS,
-	},
-	{
+		name: "Scarlet",
 		domains: ["scarlet.be"],
+		mxSuffixes: [],
 		imapHost: "imap.scarlet.be",
 		imapPort: 993,
 		imapSecurity: TLS,
 		smtpHost: "smtp.scarlet.be",
 		smtpPort: 587,
 		smtpSecurity: STARTTLS,
+		signIn: "password",
 	},
 	{
+		name: "VOO",
 		domains: ["voo.be", "edpnet.be"],
+		mxSuffixes: [],
 		imapHost: "imap.voo.be",
 		imapPort: 993,
 		imapSecurity: TLS,
 		smtpHost: "smtp.voo.be",
 		smtpPort: 587,
 		smtpSecurity: STARTTLS,
+		signIn: "password",
 	},
 	{
+		name: "Proton",
 		domains: ["protonmail.com", "proton.me", "pm.me"],
+		mxSuffixes: [],
 		imapHost: "127.0.0.1",
 		imapPort: 1143,
 		imapSecurity: STARTTLS,
 		smtpHost: "127.0.0.1",
 		smtpPort: 1025,
 		smtpSecurity: STARTTLS,
+		signIn: "password",
 		note: "Proton only speaks IMAP through Proton Mail Bridge, running on this machine. Start the bridge and use the password it shows you, not your Proton password.",
 	},
-];
-
-/**
- * Mail hosts, by the suffix their MX records use.
- *
- * Longest suffix wins, so a more specific entry can sit in front of a general
- * one. Matched on a dot boundary: "ovh.net" must not match "notovh.net".
- */
-const MX_HOSTS: { suffix: string; imapHost: string; imapPort: number; imapSecurity: MailSecurity; smtpHost: string; smtpPort: number; smtpSecurity: MailSecurity; note?: string }[] = [
 	{
-		suffix: "ovh.net",
-		imapHost: "imap.mail.ovh.net",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.mail.ovh.net",
-		smtpPort: 465,
-		smtpSecurity: TLS,
-	},
-	{
-		suffix: "mailprotect.be",
-		imapHost: "imap.mailprotect.be",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.mailprotect.be",
-		smtpPort: 465,
-		smtpSecurity: TLS,
-	},
-	{
-		suffix: "one.com",
+		name: "one.com",
+		domains: [],
+		mxSuffixes: ["one.com"],
 		imapHost: "imap.one.com",
 		imapPort: 993,
 		imapSecurity: TLS,
 		smtpHost: "send.one.com",
 		smtpPort: 465,
 		smtpSecurity: TLS,
+		signIn: "password",
 	},
 	{
-		suffix: "transip.email",
+		name: "TransIP",
+		domains: [],
+		mxSuffixes: ["transip.email"],
 		imapHost: "imap.transip.email",
 		imapPort: 993,
 		imapSecurity: TLS,
 		smtpHost: "smtp.transip.email",
 		smtpPort: 465,
 		smtpSecurity: TLS,
+		signIn: "password",
 	},
 	{
-		suffix: "zoho.eu",
+		name: "Zoho",
+		domains: [],
+		mxSuffixes: ["zoho.eu"],
 		imapHost: "imap.zoho.eu",
 		imapPort: 993,
 		imapSecurity: TLS,
 		smtpHost: "smtp.zoho.eu",
 		smtpPort: 465,
 		smtpSecurity: TLS,
+		signIn: "password",
 	},
 	{
-		suffix: "google.com",
-		imapHost: "imap.gmail.com",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.gmail.com",
-		smtpPort: 465,
-		smtpSecurity: TLS,
-		note: APP_PASSWORD_NOTE,
-	},
-	{
-		suffix: "outlook.com",
+		// Personal Outlook.com mail on a domain of its own. The tile is Outlook.com.
+		name: "Outlook.com",
+		domains: [],
+		mxSuffixes: ["olc.protection.outlook.com"],
 		imapHost: "outlook.office365.com",
 		imapPort: 993,
 		imapSecurity: TLS,
-		smtpHost: "smtp.office365.com",
+		smtpHost: "smtp-mail.outlook.com",
 		smtpPort: 587,
 		smtpSecurity: STARTTLS,
-		note: APP_PASSWORD_NOTE,
-	},
-	{
-		suffix: "yahoodns.net",
-		imapHost: "imap.mail.yahoo.com",
-		imapPort: 993,
-		imapSecurity: TLS,
-		smtpHost: "smtp.mail.yahoo.com",
-		smtpPort: 465,
-		smtpSecurity: TLS,
-		note: APP_PASSWORD_NOTE,
+		signIn: "microsoft",
 	},
 ];
 
@@ -225,32 +151,86 @@ export function domainOf(email: string): string {
 	return parts[1] ?? "";
 }
 
+function noteFor(signIn: MailSignIn, own?: string): string | null {
+	if (own) return own;
+	if (signIn === "app-password") return APP_PASSWORD_NOTE;
+	if (signIn === "microsoft") return MICROSOFT_NOTE;
+	return null;
+}
+
+function fromProvider(
+	provider: MailProvider,
+	email: string,
+	domain: string,
+	source: MailAutoconfig["source"],
+): MailAutoconfig {
+	const address = email.trim();
+	const local = address.split("@")[0] ?? address;
+	return {
+		source,
+		domain,
+		imapHost: provider.imapHost,
+		imapPort: provider.imapPort,
+		imapSecurity: provider.imapSecurity,
+		smtpHost: provider.smtpHost,
+		smtpPort: provider.smtpPort,
+		smtpSecurity: provider.smtpSecurity,
+		username: provider.imapLogin === "local" ? local : address,
+		smtpUsername: provider.imapLogin === "local" ? address : null,
+		note: noteFor(provider.signIn),
+		provider: provider.id,
+		providerName: provider.name,
+		signIn: provider.signIn,
+	};
+}
+
+function fromExtra(extra: Extra, email: string, domain: string, source: MailAutoconfig["source"]): MailAutoconfig {
+	// The Outlook.com extra is the Outlook.com tile reached through DNS.
+	const tile = extra.signIn === "microsoft" ? mailProvider("outlook") : null;
+	return {
+		source,
+		domain,
+		imapHost: extra.imapHost,
+		imapPort: extra.imapPort,
+		imapSecurity: extra.imapSecurity,
+		smtpHost: extra.smtpHost,
+		smtpPort: extra.smtpPort,
+		smtpSecurity: extra.smtpSecurity,
+		username: email.trim(),
+		smtpUsername: null,
+		note: noteFor(extra.signIn, extra.note),
+		provider: tile?.id ?? null,
+		providerName: extra.name,
+		signIn: extra.signIn,
+	};
+}
+
 /**
  * Settings for an address. Always returns something: a domain nobody has heard
  * of still gets imap./smtp. in front of it, which is the convention most small
- * hosts follow, and the test button is what confirms it.
+ * hosts follow, and the test is what confirms it.
+ *
+ * With `provider`, the person picked a tile, so that provider's servers are
+ * used whatever the domain is. That is how info@<own domain> reaches OVH or
+ * Combell without a lookup.
  */
-export function guess(email: string): MailAutoconfig {
+export function guess(email: string, provider?: MailProviderId | null): MailAutoconfig {
 	const domain = domainOf(email);
 	if (domain.length === 0) {
 		throw new Error("Enter a full email address, for example hallo@example.be.");
 	}
 
-	const known = PROVIDERS.find((provider) => provider.domains.includes(domain));
-	if (known) {
-		return {
-			source: "known",
-			domain,
-			imapHost: known.imapHost,
-			imapPort: known.imapPort,
-			imapSecurity: known.imapSecurity,
-			smtpHost: known.smtpHost,
-			smtpPort: known.smtpPort,
-			smtpSecurity: known.smtpSecurity,
-			username: email.trim(),
-			note: known.note ?? null,
-		};
+	if (provider) {
+		const chosen = mailProvider(provider);
+		if (!chosen) throw new Error(`Juno does not know a provider called ${provider}.`);
+		return fromProvider(chosen, email, domain, "known");
 	}
+
+	const known = MAIL_PROVIDERS.find((entry) => entry.domains.includes(domain));
+	if (known) return fromProvider(known, email, domain, "known");
+
+	const extra = EXTRAS.find((entry) => entry.domains.includes(domain));
+	if (extra) return fromExtra(extra, email, domain, "known");
 
 	return {
 		source: "convention",
@@ -262,7 +242,11 @@ export function guess(email: string): MailAutoconfig {
 		smtpPort: 587,
 		smtpSecurity: STARTTLS,
 		username: email.trim(),
+		smtpUsername: null,
 		note: null,
+		provider: null,
+		providerName: null,
+		signIn: "password",
 	};
 }
 
@@ -273,6 +257,16 @@ function hostMatches(exchange: string, suffix: string): boolean {
 	const host = exchange.toLowerCase().replace(/\.$/, "");
 	return host === suffix || host.endsWith(`.${suffix}`);
 }
+
+type MxEntry = { suffix: string; provider: MailProvider | null; extra: Extra | null };
+
+/** Longest suffix first, so a specific entry beats a general one. */
+const MX_ENTRIES: MxEntry[] = [
+	...MAIL_PROVIDERS.flatMap((provider) =>
+		provider.mxSuffixes.map((suffix) => ({ suffix, provider, extra: null })),
+	),
+	...EXTRAS.flatMap((extra) => extra.mxSuffixes.map((suffix) => ({ suffix, provider: null, extra }))),
+].sort((a, b) => b.suffix.length - a.suffix.length);
 
 /**
  * Settings worked out from the domain's MX records.
@@ -309,22 +303,10 @@ export async function resolveByMx(
 	const ordered = [...records].sort((a, b) => a.priority - b.priority);
 
 	for (const record of ordered) {
-		// Longest suffix first, so a specific entry beats a general one.
-		const hosts = [...MX_HOSTS].sort((a, b) => b.suffix.length - a.suffix.length);
-		const match = hosts.find((host) => hostMatches(record.exchange, host.suffix));
+		const match = MX_ENTRIES.find((entry) => hostMatches(record.exchange, entry.suffix));
 		if (!match) continue;
-		return {
-			source: "mx",
-			domain,
-			imapHost: match.imapHost,
-			imapPort: match.imapPort,
-			imapSecurity: match.imapSecurity,
-			smtpHost: match.smtpHost,
-			smtpPort: match.smtpPort,
-			smtpSecurity: match.smtpSecurity,
-			username: email.trim(),
-			note: match.note ?? null,
-		};
+		if (match.provider) return fromProvider(match.provider, email, domain, "mx");
+		if (match.extra) return fromExtra(match.extra, email, domain, "mx");
 	}
 
 	return null;

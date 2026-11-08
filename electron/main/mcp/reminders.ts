@@ -112,6 +112,11 @@ export const reminderTools: ToolDescriptor[] = [
 			properties: {
 				title: { type: "string" },
 				due_on: { type: "string", description: "YYYY-MM-DD." },
+				due_time: {
+					type: ["string", "null"],
+					description:
+						"HH:MM on a 24-hour clock, on the computer's local time. Leave it out or null for a reminder due on the day rather than at an hour.",
+				},
 				notes: { type: ["string", "null"] },
 				pattern: { type: "string", enum: PATTERNS },
 				interval: { type: "integer", minimum: 1, description: "Ignored by once and quarter_end." },
@@ -142,6 +147,7 @@ export const reminderTools: ToolDescriptor[] = [
 			reminders.create({
 				title: String(args.title),
 				dueOn: String(args.due_on),
+				dueTime: (args.due_time as string | null | undefined) ?? null,
 				notes: (args.notes as string | null) ?? null,
 				...(args.pattern ? { pattern: args.pattern as RecurrencePattern } : {}),
 				...(args.interval !== undefined ? { interval: Number(args.interval) } : {}),
@@ -165,7 +171,11 @@ export const reminderTools: ToolDescriptor[] = [
 			properties: {
 				id: { type: "string" },
 				title: { type: "string" },
-				due_on: { type: "string" },
+				due_on: { type: "string", description: "YYYY-MM-DD." },
+				due_time: {
+					type: ["string", "null"],
+					description: "HH:MM on a 24-hour clock, on the computer's local time. Null makes it due on the day.",
+				},
 				notes: { type: ["string", "null"] },
 				pattern: { type: "string", enum: PATTERNS },
 				interval: { type: "integer", minimum: 1 },
@@ -179,6 +189,7 @@ export const reminderTools: ToolDescriptor[] = [
 			const patch: ReminderPatch = {
 				...(args.title !== undefined ? { title: String(args.title) } : {}),
 				...(args.due_on !== undefined ? { dueOn: String(args.due_on) } : {}),
+				...(args.due_time !== undefined ? { dueTime: args.due_time as string | null } : {}),
 				...(args.notes !== undefined ? { notes: args.notes as string | null } : {}),
 				...(args.pattern !== undefined ? { pattern: args.pattern as RecurrencePattern } : {}),
 				...(args.interval !== undefined ? { interval: Number(args.interval) } : {}),

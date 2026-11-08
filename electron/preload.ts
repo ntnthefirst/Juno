@@ -89,6 +89,9 @@ const api: JunoApi = {
 		update: (id, patch) => call("clients.update", id, patch),
 		remove: (id) => call("clients.remove", id),
 		restore: (id) => call("clients.restore", id),
+		archiveMany: (ids) => call("clients.archiveMany", ids),
+		removeMany: (ids) => call("clients.removeMany", ids),
+		restoreMany: (ids) => call("clients.restoreMany", ids),
 		timeline: (query) => call("clients.timeline", query),
 		timelineCounts: (clientId) => call("clients.timelineCounts", clientId),
 	},
@@ -174,6 +177,9 @@ const api: JunoApi = {
 		duplicate: (id) => call("notes.duplicate", id),
 		remove: (id) => call("notes.remove", id),
 		restore: (id) => call("notes.restore", id),
+		duplicateMany: (ids) => call("notes.duplicateMany", ids),
+		removeMany: (ids) => call("notes.removeMany", ids),
+		restoreMany: (ids) => call("notes.restoreMany", ids),
 	},
 
 	pages: {
@@ -192,6 +198,9 @@ const api: JunoApi = {
 		remove: (id) => call("projects.remove", id),
 		restore: (id) => call("projects.restore", id),
 		archive: (id) => call("projects.archive", id),
+		archiveMany: (ids) => call("projects.archiveMany", ids),
+		removeMany: (ids) => call("projects.removeMany", ids),
+		restoreMany: (ids) => call("projects.restoreMany", ids),
 		timeline: (query) => call("projects.timeline", query),
 		storage: (id) => call("projects.storage", id),
 		setStorage: (id, choice) => call("projects.setStorage", id, choice),
@@ -539,6 +548,15 @@ const api: JunoApi = {
 		restore: (id) => call("calendar.restore", id),
 		exportIcs: (query) => call("calendar.exportIcs", query),
 		importIcs: () => call("calendar.importIcs"),
+		subscriptions: {
+			list: () => call("calendar.subscriptions.list"),
+			get: (id) => call("calendar.subscriptions.get", id),
+			preview: (url) => call("calendar.subscriptions.preview", url),
+			create: (input) => call("calendar.subscriptions.create", input),
+			update: (id, patch) => call("calendar.subscriptions.update", id, patch),
+			refresh: (id) => call("calendar.subscriptions.refresh", id),
+			remove: (id) => call("calendar.subscriptions.remove", id),
+		},
 	},
 
 	geocoding: {
@@ -548,7 +566,7 @@ const api: JunoApi = {
 
 	mail: {
 		accounts: {
-			guess: (email) => call("mail.accounts.guess", email),
+			guess: (email, provider) => call("mail.accounts.guess", email, provider ?? null),
 			lookUp: (email) => call("mail.accounts.lookUp", email),
 			list: () => call("mail.accounts.list"),
 			get: (id) => call("mail.accounts.get", id),
@@ -559,6 +577,11 @@ const api: JunoApi = {
 			purge: (id, confirmEmail) => call("mail.accounts.purge", id, confirmEmail),
 			test: (input) => call("mail.accounts.test", input),
 			testSmtp: (input) => call("mail.accounts.testSmtp", input),
+			connect: (input) => call("mail.accounts.connect", input),
+			openProviderPage: (provider) => call("mail.accounts.openProviderPage", provider),
+			signInWithMicrosoft: (email) => call("mail.accounts.signInWithMicrosoft", email),
+			cancelSignIn: () => call("mail.accounts.cancelSignIn"),
+			signInAgain: (id) => call("mail.accounts.signInAgain", id),
 		},
 		folders: {
 			list: (accountId) => call("mail.folders.list", accountId),

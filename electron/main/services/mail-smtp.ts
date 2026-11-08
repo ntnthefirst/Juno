@@ -15,6 +15,7 @@ import { createTransport, type Transporter } from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import type { MailAddress } from "../../shared/types";
+import { imapAuth } from "./mail-source";
 import type { MailTransport, OutgoingMessage, SentAppender, SmtpConnection } from "./mail-transport";
 
 const CONNECT_TIMEOUT_MS = 30_000;
@@ -31,7 +32,9 @@ function transportFor(connection: SmtpConnection): Transporter<SMTPTransport.Sen
 		secure: connection.security === "tls",
 		// starttls means upgrade or fail. A password never travels in the clear.
 		requireTLS: connection.security === "starttls",
-		auth: { user: connection.username, pass: connection.password },
+		auth: connection.accessToken
+			? { type: "OAuth2", user: connection.username, accessToken: connection.accessToken }
+			: { user: connection.username, pass: connection.password },
 		connectionTimeout: CONNECT_TIMEOUT_MS,
 		greetingTimeout: CONNECT_TIMEOUT_MS,
 		logger: false,
@@ -109,7 +112,7 @@ export const imapSentAppender: SentAppender = async (connection, folderPath, raw
 		host: connection.host,
 		port: connection.port,
 		secure: connection.security === "tls",
-		auth: { user: connection.username, pass: connection.password },
+		auth: imapAuth(connection),
 		logger: false,
 		disableAutoIdle: true,
 		connectionTimeout: CONNECT_TIMEOUT_MS,

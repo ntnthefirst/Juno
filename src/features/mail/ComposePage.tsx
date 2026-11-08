@@ -33,6 +33,8 @@ export type ComposeSeed = {
 	accountId?: string;
 	to?: MailAddress[];
 	cc?: MailAddress[];
+	/** Copies nobody else on the message sees, for a mail to several clients at once. */
+	bcc?: MailAddress[];
 	subject?: string;
 	bodyText?: string;
 	/** The same body as markup, for a reply that quotes the original in a blockquote. */
@@ -81,9 +83,9 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 	const [accountId, setAccountId] = useState(seed.draft?.accountId ?? seed.accountId ?? "");
 	const [to, setTo] = useState<MailAddress[]>(seed.draft?.to ?? seed.to ?? []);
 	const [cc, setCc] = useState<MailAddress[]>(seed.draft?.cc ?? seed.cc ?? []);
-	const [bcc, setBcc] = useState<MailAddress[]>(seed.draft?.bcc ?? []);
+	const [bcc, setBcc] = useState<MailAddress[]>(seed.draft?.bcc ?? seed.bcc ?? []);
 	const [showCopies, setShowCopies] = useState(
-		(seed.draft?.cc ?? seed.cc ?? []).length > 0 || (seed.draft?.bcc ?? []).length > 0,
+		(seed.draft?.cc ?? seed.cc ?? []).length > 0 || (seed.draft?.bcc ?? seed.bcc ?? []).length > 0,
 	);
 	const [subject, setSubject] = useState(seed.draft?.subject ?? seed.subject ?? "");
 	const [bodyText, setBodyText] = useState(seed.draft?.bodyText ?? seed.bodyText ?? "");

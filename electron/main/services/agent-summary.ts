@@ -43,6 +43,7 @@ const NOUNS: [prefix: string, noun: string][] = [
 	["mail.blocks.", "text block"],
 	["mail.rules.", "mailbox rule"],
 	["mail.outbox.", "draft"],
+	["calendar.subscriptions.", "calendar subscription"],
 	["calendar.", "event"],
 	["reminders.", "reminder"],
 	["time.", "time entry"],
@@ -108,6 +109,8 @@ const VERBS: Record<string, string> = {
 	unlink_project: "Unlink the project from",
 	add_file_from_mail: "File a mail attachment in",
 	attach_project_file: "Attach a project file to",
+	refresh: "Fetch again",
+	preview: "Look at a",
 };
 
 function clip(text: string): string {
@@ -180,6 +183,13 @@ function special(toolName: string, args: Record<string, unknown>, db: Db): strin
 			return named ? `Mark every mail in "${named}" as read` : "Mark every mail in a folder as read";
 		case "mail.file.empty_folder":
 			return named ? `Empty the folder "${named}"` : "Empty a mail folder";
+	}
+	// A call on a selection says how many: "Delete 3 clients".
+	if (toolName.endsWith("_many")) {
+		const verb = VERBS[(toolName.split(".").pop() ?? "").replace(/_many$/, "")];
+		const noun = nounOf(toolName);
+		const list = Object.entries(args).find(([key, value]) => key.endsWith("_ids") && Array.isArray(value));
+		if (verb && noun) return list ? `${verb} ${plural(count(list[1]), noun, `${noun}s`)}` : `${verb} several ${noun}s`;
 	}
 	if (toolName.startsWith("mail.file.")) {
 		const verb = toolName.slice("mail.file.".length).replace(/_messages$/, "");

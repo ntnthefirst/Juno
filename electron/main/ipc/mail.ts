@@ -16,6 +16,7 @@ import type {
 	MailAccountInput,
 	MailBlockConversion,
 	MailAccountPatch,
+	MailProviderId,
 	MailDraftInput,
 	MailDraftPatch,
 	MailOutboxListQuery,
@@ -33,6 +34,8 @@ import type {
 import * as actions from "../services/mail-actions";
 import * as accounts from "../services/mail-accounts";
 import { guess as guessAutoconfig, resolveByMx } from "../services/mail-autoconfig";
+import { openProviderPage } from "../services/mail-provider-pages";
+import * as signIns from "../services/mail-sign-in";
 import * as blocks from "../services/mail-blocks";
 import * as folders from "../services/mail-folders";
 import * as fonts from "../services/mail-fonts";
@@ -51,7 +54,9 @@ import * as templates from "../services/mail-templates";
 import * as threads from "../services/mail-threads";
 
 export function registerMailIpc(): void {
-	ipcMain.handle("mail.accounts.guess", (_event, email: string) => guessAutoconfig(email));
+	ipcMain.handle("mail.accounts.guess", (_event, email: string, provider: MailProviderId | null) =>
+		guessAutoconfig(email, provider),
+	);
 	ipcMain.handle("mail.accounts.lookUp", (_event, email: string) => resolveByMx(email));
 	ipcMain.handle("mail.accounts.list", () => accounts.list());
 	ipcMain.handle("mail.accounts.get", (_event, id: string) => accounts.get(id));
@@ -70,6 +75,13 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.accounts.testSmtp", (_event, input: Parameters<typeof accounts.testSmtp>[0]) =>
 		accounts.testSmtp(input),
 	);
+	ipcMain.handle("mail.accounts.connect", (_event, input: MailAccountInput) => accounts.connect(input));
+	ipcMain.handle("mail.accounts.openProviderPage", (_event, provider: MailProviderId) => openProviderPage(provider));
+	// Signing in is a person in their own browser, so these three are IPC only.
+	// No MCP tool starts a sign-in or sees a token (security.md section 9).
+	ipcMain.handle("mail.accounts.signInWithMicrosoft", (_event, email: string) => signIns.signIn(email));
+	ipcMain.handle("mail.accounts.cancelSignIn", () => signIns.cancelSignIn());
+	ipcMain.handle("mail.accounts.signInAgain", (_event, id: string) => accounts.signInAgain(id));
 
 	ipcMain.handle("mail.folders.list", (_event, accountId: string) => folders.list(accountId));
 	ipcMain.handle("mail.folders.setSyncEnabled", (_event, id: string, enabled: boolean) =>

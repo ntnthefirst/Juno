@@ -27,9 +27,9 @@ const RULE = {
 const BODY = {
 	type: "string",
 	description:
-		"The text a client reads, in Dutch (Belgium). Line breaks are kept. Variables are written " +
-		"{{client_name}}, {{first_name}}, {{project}}, {{date}} and {{my_name}}. A block that uses " +
-		"a variable with no value for a message is not added to it automatically.",
+		"The text a client reads, in Dutch (Belgium), as plain text: \"Dag,\" or \"Met vriendelijke " +
+		"groeten,\". Line breaks are kept. Do not write {{variable}} tokens; an older block may still " +
+		"hold one, and it is filled in when the block is added to a message.",
 };
 
 export const mailBlockTools: ToolDescriptor[] = [
@@ -38,7 +38,7 @@ export const mailBlockTools: ToolDescriptor[] = [
 		title: "List intros and outros",
 		description:
 			"Every intro and outro, intros first, each in the order that decides which one wins when " +
-			"two match. Each has an id, a name, its text with {{variable}} tokens and its rule.",
+			"two match. Each has an id, a name, its plain text and its rule.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {

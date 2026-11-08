@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
 import { installMenuIcons } from "../lib/menu-icons";
 import { LockScreen } from "../components/LockScreen";
@@ -146,6 +146,17 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	const [slot, setSlot] = useState<HTMLDivElement | null>(null);
 	const [rightSlot, setRightSlot] = useState<HTMLDivElement | null>(null);
 	const [overflowSlot, setOverflowSlot] = useState<HTMLDivElement | null>(null);
+	// How many mounted slots stand in for New (TitleBarSlot `replacesNew`).
+	const [newHidden, setNewHidden] = useState(0);
+	const hideNew = useCallback(() => {
+		setNewHidden((count) => count + 1);
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			setNewHidden((count) => count - 1);
+		};
+	}, []);
 	const [recentOpen, setRecentOpen] = useState(false);
 	const [agentPending, setAgentPending] = useState(0);
 
@@ -284,11 +295,11 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	);
 
 	return (
-		<TitleBarSlotContext.Provider value={{ left: slot, right: rightSlot, overflow: overflowSlot }}>
+		<TitleBarSlotContext.Provider value={{ left: slot, right: rightSlot, overflow: overflowSlot, hideNew }}>
 			<div className="flex h-full flex-col bg-[var(--paper)]">
 				<TitleBar
 					back={back}
-					title={trail[trail.length - 1]?.label ?? (screen === "calendar" || screen === "overview" ? "" : SCREEN_LABELS[screen])}
+					title={trail[trail.length - 1]?.label ?? (screen === "calendar" ? "" : SCREEN_LABELS[screen])}
 					screen={screen}
 					onOpenPalette={() => setPaletteOpen(true)}
 					recentOpen={recentOpen}
@@ -302,6 +313,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					slotRef={setSlot}
 					rightSlotRef={setRightSlot}
 					overflowSlotRef={setOverflowSlot}
+					newHidden={newHidden > 0}
 				/>
 				<div className="relative flex min-h-0 flex-1">
 					<Sidebar

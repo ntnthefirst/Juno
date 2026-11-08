@@ -156,6 +156,7 @@ export function ReminderRow({
 							: today
 								? describeDue(reminder.dueOn, today)
 								: formatDate(reminder.dueOn)}
+						{agenda && trailing !== undefined ? null : reminder.dueTime ? `, ${reminder.dueTime}` : null}
 					</span>
 
 					<span className={`${agenda ? "absolute right-0 top-1/2 -translate-y-1/2 bg-surface" : ""} flex-none opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100`}>

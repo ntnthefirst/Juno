@@ -108,7 +108,9 @@ import type { ComponentType, ReactNode } from "react";
 export type IconName =
 	| "overview"
 	| "today"
+	| "panel"
 	| "recent"
+	| "time"
 	| "clients"
 	| "client"
 	| "projects"
@@ -295,6 +297,13 @@ const DRAWN = {
 			<path d="M8.5 12h7" />
 		</>,
 	),
+	// A window with a column on its right: the conversation beside a message.
+	panel: glyph(
+		<>
+			<rect x="3.5" y="5" width="17" height="14" rx="2" />
+			<path d="M14.5 5v14" />
+		</>,
+	),
 	columns: glyph(
 		<>
 			<rect x="3.5" y="5" width="7.5" height="14" rx="1.5" />
@@ -454,6 +463,7 @@ const ICONS: Record<IconName, Glyph> = {
 	overview: HomeIcon,
 	today: ClockIcon,
 	recent: ClockIcon,
+	time: ClockIcon,
 	clients: UsersIcon,
 	client: BuildingOffice2Icon,
 	projects: FolderIcon,
@@ -487,6 +497,7 @@ const ICONS: Record<IconName, Glyph> = {
 	flag: FlagIcon,
 	filter: FunnelIcon,
 	branch: DRAWN.branch,
+	panel: DRAWN.panel,
 	read: EnvelopeOpenIcon,
 	unread: EyeIcon,
 	reply: ArrowUturnLeftIcon,

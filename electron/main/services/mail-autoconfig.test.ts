@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { MAIL_PROVIDERS, providerOfAccount } from "../../shared/mail-providers";
+import type { MailProviderId } from "../../shared/types";
 import { domainOf, guess, resolveByMx } from "./mail-autoconfig";
 
 describe("mail autoconfig", () => {
@@ -100,5 +102,98 @@ describe("mail autoconfig by MX", () => {
 	it("carries the app-password warning through an MX match", async () => {
 		const google = async () => [{ exchange: "aspmx.l.google.com", priority: 1 }];
 		expect((await resolveByMx("info@example.be", google))?.note).toContain("app password");
+	});
+});
+
+/**
+ * Every tile on the Add account screen, against the servers its provider
+ * publishes. A tile that guesses wrong is worse than no tile: the person did
+ * everything right and the test fails anyway. The values are the ones checked
+ * against each provider's help pages; see shared/mail-providers.ts.
+ */
+describe("the provider tiles", () => {
+	const published: Record<string, [string, number, string, string, number, string, string]> = {
+		gmail: ["imap.gmail.com", 993, "tls", "smtp.gmail.com", 465, "tls", "app-password"],
+		outlook: ["outlook.office365.com", 993, "tls", "smtp-mail.outlook.com", 587, "starttls", "microsoft"],
+		m365: ["outlook.office365.com", 993, "tls", "smtp.office365.com", 587, "starttls", "microsoft"],
+		icloud: ["imap.mail.me.com", 993, "tls", "smtp.mail.me.com", 587, "starttls", "app-password"],
+		ovh: ["imap.mail.ovh.net", 993, "tls", "smtp.mail.ovh.net", 465, "tls", "password"],
+		proximus: ["imap.proximus.be", 993, "tls", "relay.proximus.be", 587, "starttls", "password"],
+		telenet: ["imap.telenet.be", 993, "tls", "smtp.telenet.be", 587, "starttls", "password"],
+		yahoo: ["imap.mail.yahoo.com", 993, "tls", "smtp.mail.yahoo.com", 465, "tls", "app-password"],
+		combell: ["imap.mailprotect.be", 993, "tls", "smtp-auth.mailprotect.be", 465, "tls", "password"],
+	};
+
+	it("draws nine tiles, in the frame's order", () => {
+		expect(MAIL_PROVIDERS.map((provider) => provider.id)).toEqual(Object.keys(published));
+	});
+
+	for (const [id, [imapHost, imapPort, imapSecurity, smtpHost, smtpPort, smtpSecurity, signIn]] of Object.entries(published)) {
+		it(`uses ${id}'s published servers whatever the domain, once its tile is picked`, () => {
+			expect(guess("info@vandamme.be", id as MailProviderId)).toMatchObject({
+				source: "known",
+				provider: id,
+				imapHost,
+				imapPort,
+				imapSecurity,
+				smtpHost,
+				smtpPort,
+				smtpSecurity,
+				signIn,
+			});
+		});
+	}
+
+	it("gives every app-password provider a guide and an https page to open", () => {
+		for (const provider of MAIL_PROVIDERS.filter((entry) => entry.signIn === "app-password")) {
+			expect(provider.appPassword?.steps.length).toBeGreaterThan(0);
+			expect(new URL(provider.appPassword!.url).protocol).toBe("https:");
+		}
+		for (const provider of MAIL_PROVIDERS.filter((entry) => entry.signIn !== "app-password")) {
+			expect(provider.appPassword).toBeUndefined();
+		}
+	});
+
+	it("recognises an address at a provider's own domain without being told", () => {
+		expect(guess("jan@hotmail.be")).toMatchObject({ provider: "outlook", signIn: "microsoft" });
+		expect(guess("jan@skynet.be")).toMatchObject({ provider: "proximus", smtpHost: "relay.proximus.be" });
+		expect(guess("jan@yahoo.com")).toMatchObject({ provider: "yahoo", providerName: "Yahoo" });
+	});
+
+	it("signs in to iCloud with the name for IMAP and the whole address for SMTP", () => {
+		expect(guess("jan.peeters@icloud.com")).toMatchObject({
+			username: "jan.peeters",
+			smtpUsername: "jan.peeters@icloud.com",
+		});
+		expect(guess("jan@gmail.com").smtpUsername).toBeNull();
+	});
+
+	it("refuses a provider it does not have", () => {
+		expect(() => guess("a@b.be", "aol" as MailProviderId)).toThrow(/does not know/);
+	});
+
+	it("leaves an unknown domain with the convention and the password route", () => {
+		expect(guess("info@vandamme.be")).toMatchObject({ source: "convention", provider: null, signIn: "password" });
+	});
+
+	it("names the provider behind an own domain from its MX", async () => {
+		const combell = async () => [{ exchange: "mx.mailprotect.be", priority: 10 }];
+		expect(await resolveByMx("info@vandamme.be", combell)).toMatchObject({
+			source: "mx",
+			provider: "combell",
+			providerName: "Combell",
+			smtpHost: "smtp-auth.mailprotect.be",
+		});
+		const office = async () => [{ exchange: "vandamme-be.mail.protection.outlook.com", priority: 0 }];
+		expect(await resolveByMx("info@vandamme.be", office)).toMatchObject({ provider: "m365", signIn: "microsoft" });
+		const transip = async () => [{ exchange: "mx.transip.email", priority: 0 }];
+		expect(await resolveByMx("info@vandamme.be", transip)).toMatchObject({ provider: null, providerName: "TransIP" });
+	});
+
+	it("matches an account row to its tile by the servers it uses", () => {
+		expect(providerOfAccount({ email: "a@vandamme.be", imapHost: "imap.mail.ovh.net", smtpHost: "smtp.mail.ovh.net" })?.id).toBe("ovh");
+		expect(providerOfAccount({ email: "a@hotmail.com", imapHost: "outlook.office365.com", smtpHost: "smtp-mail.outlook.com" })?.id).toBe("outlook");
+		expect(providerOfAccount({ email: "a@vandamme.be", imapHost: "outlook.office365.com", smtpHost: "smtp.office365.com" })?.id).toBe("m365");
+		expect(providerOfAccount({ email: "a@vandamme.be", imapHost: "imap.vandamme.be", smtpHost: null })).toBeNull();
 	});
 });

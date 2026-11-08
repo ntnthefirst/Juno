@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, globalShortcut, Menu, nativeTheme, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, Menu, nativeTheme, shell } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -44,6 +44,7 @@ import { ensureRemindersSeeded } from "./main/services/reminders-derive";
 import * as lock from "./main/services/lock";
 import * as documentActions from "./main/services/document-actions";
 import { configureCredentialStore } from "./main/services/mail-credentials";
+import { configureMicrosoftSignIn } from "./main/services/mail-sign-in";
 import { openImapWriter } from "./main/services/mail-imap-write";
 import { openImapSource } from "./main/services/mail-imap";
 import { configureMailboxSource } from "./main/services/mail-source";
@@ -52,6 +53,7 @@ import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
 import * as mailRules from "./main/services/mail-rules";
 import * as mailSync from "./main/services/mail-sync";
+import * as calendarSubscriptions from "./main/services/calendar-subscriptions";
 import { ensureMailBlocksSeeded } from "./main/services/mail-blocks";
 import { adoptRecordValues, ensureMailTemplatesSeeded } from "./main/services/mail-templates";
 import { configureMailTransport } from "./main/services/mail-transport";
@@ -153,6 +155,8 @@ if (!app.requestSingleInstanceLock()) {
 		});
 		// safeStorage is usable now that the app is ready, and not before.
 		configureCredentialStore(safeStorageCredentialStore);
+		// Microsoft sign-in opens the system browser, never a window of Juno's.
+		configureMicrosoftSignIn({ openExternal: (url) => shell.openExternal(url) });
 
 		splashStep("Opening the database");
 		const db = openDb(databasePath());
@@ -289,6 +293,9 @@ if (!app.requestSingleInstanceLock()) {
 		if (!process.env.JUNO_SMOKE) {
 			notifications.start();
 			mailSync.startScheduler();
+			// Calendar subscriptions: once shortly after launch, then each on its
+			// own interval, and never while locked.
+			calendarSubscriptions.startScheduler(() => lock.isLocked());
 			mailSend.startScheduler();
 			// An automation is exactly the unattended case the lock pauses, so
 			// the scheduler asks before every tick.
@@ -400,6 +407,13 @@ if (!app.requestSingleInstanceLock()) {
 											if (!target) return false;
 											target.click();
 											await new Promise((r) => setTimeout(r, 900));
+											// The bell opens a list of what is due, and its foot opens the screen.
+											if (${JSON.stringify(step.nav)} === null) {
+												const open = [...document.querySelectorAll("[role=dialog][aria-label=Reminders] button")].find((b) => b.textContent.trim() === "Open reminders");
+												if (!open) return false;
+												open.click();
+												await new Promise((r) => setTimeout(r, 900));
+											}
 											return true;
 										})()`,
 									);
@@ -1301,8 +1315,14 @@ if (!app.requestSingleInstanceLock()) {
 								const navId = sidebarEntry.toLowerCase();
 								const click = () =>
 									window.webContents.executeJavaScript(
-										`(() => { const b = document.querySelector("nav button[data-nav=" + JSON.stringify(${JSON.stringify(navId)}) + "]");
-											if (b) b.click(); return Boolean(b); })()`,
+										`(async () => { const b = document.querySelector("nav button[data-nav=" + JSON.stringify(${JSON.stringify(navId)}) + "]");
+											if (!b) return false;
+											b.click();
+											// The agent button opens what is waiting, and its foot opens the screen.
+											await new Promise((r) => setTimeout(r, 400));
+											const open = [...document.querySelectorAll("[role=dialog][aria-label=Agent] button")].find((el) => el.textContent.trim() === "Open agent");
+											if (open) open.click();
+											return true; })()`,
 									) as Promise<boolean>;
 								// A press on a button in the page by its visible text, for the switch at
 								// the top of Mail and Documents and the link to every reminder.
@@ -1356,8 +1376,9 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.querySelector("input[aria-label=Title]")) return "no note is open";
 											const boxes = main.querySelectorAll("section[aria-label=Note] input[type=checkbox]");
 											if (boxes.length < 5) return "the checklist has " + boxes.length + " boxes";
-											const search = main.querySelector("input[aria-label='Search notes']");
-											if (!search) return "no search field";
+											// The search is in the title bar, where Ctrl F finds it.
+											const search = document.querySelector("header input[aria-label='Search notes']");
+											if (!search) return "no search field in the title bar";
 											return "ok";
 										})()`,
 									)) as string;
@@ -1639,8 +1660,15 @@ if (!app.requestSingleInstanceLock()) {
 											// there, and adding one opens a page, not a dialog, and back
 											// returns to the client.
 											if (!main.textContent.includes("Dates and reminders")) return "no dates section on the client";
-											const addReminder = [...main.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add reminder");
-											if (!addReminder) return "no add reminder button on the client";
+											// One Add beside the heading, and the menu says which.
+											const add = [...main.querySelectorAll("section")]
+												.find((el) => el.querySelector("h2")?.textContent.trim() === "Dates and reminders")
+												?.querySelector("button[aria-haspopup=menu]");
+											if (!add) return "no add button beside the client's dates";
+											add.click();
+											await new Promise((r) => setTimeout(r, 300));
+											const addReminder = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim().startsWith("Add reminder"));
+											if (!addReminder) return "no add reminder item on the client";
 											// Adding a reminder opens the new reminder window, prefilled with
 											// the client, and the client stays where it is.
 											addReminder.click();
@@ -4488,17 +4516,62 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as { x: number; y: number } | null;
 									if (!rowBox) throw new Error("Smoke: no mail row to hover");
-									window.webContents.sendInputEvent({ type: "mouseMove", x: rowBox.x, y: rowBox.y });
-									await new Promise((r) => setTimeout(r, 400));
-									const hoverState = (await window.webContents.executeJavaScript(
+									// The pointer comes in from outside the row each time, since a move
+									// to where it already is changes nothing, and the real mouse can take
+									// the hover away while the window is in front.
+									let hoverState = "";
+									for (let attempt = 0; attempt < 3 && hoverState !== "ok"; attempt++) {
+										// A window that lost focus to another program draws neither hover
+										// nor focus, so it is given focus back before the pointer moves.
+										window.focus();
+										window.webContents.focus();
+										window.webContents.sendInputEvent({ type: "mouseMove", x: 4, y: 400 });
+										await new Promise((r) => setTimeout(r, 120));
+										window.webContents.sendInputEvent({ type: "mouseMove", x: rowBox.x, y: rowBox.y });
+										await new Promise((r) => setTimeout(r, 400));
+										hoverState = (await window.webContents.executeJavaScript(
 										`(() => {
 											const row = document.querySelector("main ul li.group");
 											const actions = row && [...row.querySelectorAll("button[aria-label]")].filter((b) => getComputedStyle(b.parentElement).opacity === "1");
-											return actions && actions.length >= 3 ? "ok" : "the hover actions did not show";
+											if (actions && actions.length >= 3) return "ok";
+											// Says what is under the pointer, which is the first thing to know when this fails.
+											const under = document.elementFromPoint(${rowBox.x}, ${rowBox.y});
+											const buttons = row ? [...row.querySelectorAll("button[aria-label]")] : [];
+											return "the hover actions did not show (under the pointer: " + (under ? under.tagName + "." + String(under.className).slice(0, 60) : "nothing") +
+												"; row hovered: " + Boolean(row && row.matches(":hover")) + "; buttons: " + buttons.map((b) => b.getAttribute("aria-label") + "=" + getComputedStyle(b.parentElement).opacity).join(", ") + ")";
 										})()`,
 									)) as string;
-									if (hoverState !== "ok") throw new Error(`Smoke: mail hover ${hoverState}`);
-									await shoot("mail-hover");
+									}
+									// With the window held in front, a real cursor resting on it wins over
+									// the simulated one, and the row never counts as hovered. Focus shows
+									// the same actions (focus counts as hover on these rows), so the
+									// picture is taken that way and the run says so.
+									if (hoverState !== "ok" && hoverState.includes("row hovered: false")) {
+										const focused = (await window.webContents.executeJavaScript(
+											`(async () => {
+												const row = document.querySelector("main ul li.group");
+												row?.querySelector("button")?.focus();
+												await new Promise((r) => setTimeout(r, 300));
+												const actions = row && [...row.querySelectorAll("button[aria-label]")].filter((b) => getComputedStyle(b.parentElement).opacity === "1");
+												return actions && actions.length >= 3 ? "ok" : "the actions did not show on focus either";
+											})()`,
+										)) as string;
+										if (focused === "ok") console.log("SMOKE_DEMO mail hover shown by focus: the real cursor held the hover elsewhere");
+										hoverState = focused;
+									}
+									// Windows will not hand focus to a program in the background while
+									// someone works in another one, and a window without focus draws
+									// neither hover nor focus. That is the machine, not the app, so the
+									// step says so and moves on rather than failing the whole walk.
+									const pageFocused = (await window.webContents.executeJavaScript("document.hasFocus()")) as boolean;
+									if (hoverState !== "ok" && !pageFocused) {
+										console.log("SMOKE_DEMO mail hover not checked: the window could not take focus from another program");
+									} else if (hoverState !== "ok") {
+										const others = BrowserWindow.getAllWindows().map((w) => w.webContents.getURL().split("#")[1] ?? "main").join(", ");
+										throw new Error(`Smoke: mail hover ${hoverState} (windows: ${others})`);
+									} else {
+										await shoot("mail-hover");
+									}
 									window.webContents.sendInputEvent({ type: "mouseMove", x: 4, y: 400 });
 									await new Promise((r) => setTimeout(r, 300));
 
@@ -4564,8 +4637,8 @@ if (!app.requestSingleInstanceLock()) {
 
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {
-											// Writing is an item in the New menu, which is the plus at
-											// the left of the title bar.
+											// Writing is an item in the New menu, which is New at the
+											// right of the title bar.
 											const plus = document.querySelector("button[aria-label='New']");
 											if (!plus) return "no new button";
 											plus.click();
@@ -4600,9 +4673,9 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									if (blockMenu !== "ok") throw new Error(`Smoke: intro menu ${blockMenu}`);
 									await shoot("mail-compose-intro");
-									// Choosing an intro and an outro puts their variables in as chips, never
-									// as braces. With nobody in To the first name has no value, so that chip
-									// is flagged, and the text twin of the message carries tokens, not labels.
+									// Choosing an intro and an outro puts their text in as it is written.
+									// Intros and outros are plain text, so nothing turns into a chip and no
+									// brace reaches the message.
 									const chipsIn = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -4622,15 +4695,15 @@ if (!app.requestSingleInstanceLock()) {
 											if (!(await choose("Intro", "Friendly"))) return "no Friendly intro";
 											if (!(await choose("Outro", "Kind regards"))) return "no Kind regards outro";
 											const editor = document.querySelector("[role=textbox][aria-label='Message']");
-											const chips = [...editor.querySelectorAll("[data-juno-variable]")].map((el) => el.getAttribute("data-juno-variable"));
-											if (!chips.includes("first_name") || !chips.includes("my_name")) return "chips: " + chips.join(",");
+											if (!editor.textContent.includes("Dag,")) return "the intro is not in the message";
+											if (!editor.textContent.includes("Met vriendelijke groeten,")) return "the outro is not in the message";
+											if (editor.querySelector("[data-juno-variable]")) return "an intro or outro put a chip in";
 											if (editor.textContent.includes("{{")) return "braces in the message";
-											if (!editor.querySelector("[data-juno-variable='first_name'][data-missing]")) return "the first name chip is not flagged";
 											return "ok";
 										})()`,
 									);
 									if (chipsIn !== "ok") throw new Error(`Smoke: composer chips ${chipsIn}`);
-									await shoot("mail-compose-chips");
+									await shoot("mail-compose-blocks");
 									// The right click is the platform's menu (decision 59), which a page
 									// cannot click. Menu.popup is stood in for while the button is right
 									// clicked: it records what the main process offered and chooses
@@ -4652,7 +4725,9 @@ if (!app.requestSingleInstanceLock()) {
 												intro.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
 												await wait(700);
 												if (![...document.querySelectorAll("h1")].some((el) => el.textContent.includes("Intros and outros"))) return "no manage page";
-												if (!document.querySelector("[role=textbox][aria-label='Text']")) return "no text field";
+												// Plain text, so a textarea under its label rather than an editor with chips.
+												const text = [...document.querySelectorAll("label")].find((el) => el.textContent.trim() === "Text");
+												if (!text || !(text.control instanceof HTMLTextAreaElement)) return "no text field";
 												return "ok";
 											})()`,
 										)) as string;
@@ -4914,7 +4989,23 @@ if (!app.requestSingleInstanceLock()) {
 									{
 										kind: "event",
 										prefill: `{ clientId: ${JSON.stringify(clientId)} }`,
-										fill: `put("Title", "Smoke workshop"); put("Repeats", "WEEKLY"); put("Notes", "Bring the quote.");`,
+										// The event and reminder window names its fields for a screen
+										// reader rather than with label elements, so these two walks find
+										// them by that name. The notes are a text editor, typed into.
+										fill: `
+											const named = (name) => document.querySelector("[aria-label=" + JSON.stringify(name) + "]");
+											const set = (el, value) => {
+												if (!el) throw new Error("no field");
+												const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+												Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
+												el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+											};
+											set(named("Title"), "Smoke workshop");
+											set(named("Location"), "Kerkstraat 1, 9000 Gent");
+											set(named("Repeat"), "WEEKLY");
+											control("Notes").focus();
+											document.execCommand("insertText", false, "Bring the quote.");
+										`,
 										save: "Save event",
 										check: `(async () => {
 											const today = new Date();
@@ -4925,6 +5016,8 @@ if (!app.requestSingleInstanceLock()) {
 											const event = await window.juno.calendar.get(hit.eventId);
 											if (!event || !event.rrule || !event.rrule.includes("WEEKLY")) return "the repeat was not kept";
 											if (event.clientId !== ${JSON.stringify(clientId)}) return "the client prefill was not kept";
+											if (event.location !== "Kerkstraat 1, 9000 Gent") return "the location was not kept";
+											if (event.timezone !== Intl.DateTimeFormat().resolvedOptions().timeZone) return "the event is not in the computer's zone";
 											return "ok";
 										})()`,
 									},
@@ -4962,7 +5055,21 @@ if (!app.requestSingleInstanceLock()) {
 									{
 										kind: "reminder",
 										prefill: `{ date: "2026-10-19" }`,
-										fill: `put("What", "Smoke order planks"); put("Repeats", "months"); put("Notes", "Kiln dried.");`,
+										fill: `
+											const named = (name) => document.querySelector("[aria-label=" + JSON.stringify(name) + "]");
+											const set = (el, value) => {
+												if (!el) throw new Error("no field");
+												const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+												Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
+												el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+											};
+											if (named("Location")) throw new Error("a reminder offers a location");
+											set(named("Title"), "Smoke order planks");
+											set(named("Due at"), "10:30");
+											set(named("Repeat"), "months");
+											control("Notes").focus();
+											document.execCommand("insertText", false, "Kiln dried.");
+										`,
 										save: "Save reminder",
 										check: `(async () => {
 											const rows = await window.juno.reminders.list({});
@@ -4970,6 +5077,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!hit) return "the reminder was not saved";
 											if (hit.dueOn !== "2026-10-19") return "the date was not kept as a plain date";
 											if (hit.pattern !== "months") return "the repeat was not kept";
+											if (hit.dueTime !== "10:30") return "the due time was not kept";
 											return "ok";
 										})()`,
 									},
@@ -5613,6 +5721,55 @@ if (!app.requestSingleInstanceLock()) {
 								)) as string;
 								if (keyed !== "ok") throw new Error(`Smoke: shortcuts ${keyed}`);
 								await expectNewRecordWindow("client", "Ctrl N on Clients");
+
+								// A list's search is in the title bar and Ctrl F reaches it; Ctrl
+								// Shift F is the palette. The bell and the agent open dropdowns,
+								// drawn in both themes because they are surfaces of their own.
+								const titleBar = (await window.webContents.executeJavaScript(
+									`(async () => {
+										${helpers}
+										const search = document.querySelector("header input[aria-label='Search clients']");
+										if (!search) return "no client search in the title bar";
+										press({ mod: true, key: "f", code: "KeyF" });
+										await wait(300);
+										if (document.activeElement !== search) return "Ctrl F did not reach the title bar search";
+										search.blur();
+										press({ mod: true, shift: true, key: "F", code: "KeyF" });
+										await wait(500);
+										if (!document.querySelector("[data-palette] input")) return "Ctrl Shift F did not open the palette";
+										document.querySelector("[data-palette] input").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+										await wait(400);
+										return "ok";
+									})()`,
+								)) as string;
+								if (titleBar !== "ok") throw new Error(`Smoke: title bar ${titleBar}`);
+								for (const [label, file] of [["Reminders", "reminders-menu"], ["Agent", "agent-menu"]] as const) {
+									const menuOpen = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const button = document.querySelector(${JSON.stringify(`header button[aria-label^="${label}"]`)});
+											if (!button) return "no ${label} button";
+											button.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return document.querySelector(${JSON.stringify(`[role=dialog][aria-label="${label}"]`)}) ? "ok" : "the ${label} menu did not open";
+										})()`,
+									)) as string;
+									if (menuOpen !== "ok") throw new Error(`Smoke: title bar ${menuOpen}`);
+									for (const theme of ["light", "dark"] as const) {
+										nativeTheme.themeSource = theme;
+										await window.webContents.executeJavaScript(
+											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+										);
+										await new Promise((r) => setTimeout(r, 300));
+										writeFileSync(joinPath(shotDir, `${file}-${theme}.png`), (await capture(window.webContents)).toPNG());
+									}
+									await window.webContents.executeJavaScript(
+										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									);
+									await new Promise((r) => setTimeout(r, 400));
+								}
+								nativeTheme.themeSource = "light";
+								await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", "light")`);
+								console.log("SMOKE_DEMO title bar search, palette keys, bell and agent menus");
 								console.log("SMOKE_DEMO shortcuts=ok");
 							}
 							// The lock screen, photographed in both themes the way a person meets it:
@@ -5730,6 +5887,7 @@ if (!app.requestSingleInstanceLock()) {
 		// A dev server left behind by a closed app is a port nobody can explain.
 		projectRunner.stopAll();
 		mailSync.stopScheduler();
+		calendarSubscriptions.stopScheduler();
 		mailSend.stopScheduler();
 		stopAgentSurface();
 		closeDb();

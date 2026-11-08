@@ -3,8 +3,10 @@
  * migrations, so the FTS5 table and its triggers are the real ones.
  */
 import { resolve } from "node:path";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDrizzle, type Db } from "../db";
+import { notes as notesTable } from "../db/schema";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import * as clients from "./clients";
@@ -130,6 +132,62 @@ describe("notes", () => {
 		const copy = await notes.duplicate(note.id, db);
 		expect(copy).toMatchObject({ title: "Prices (copy)", body: "Hourly", pinnedAt: null });
 		expect(copy.id).not.toBe(note.id);
+	});
+});
+
+describe("several notes at once", () => {
+	it("copies every note in one call, in the order asked, with its owner's name", async () => {
+		const db = freshDb();
+		const client = await clients.create({ name: "Peeters" }, db);
+		const a = await notes.create({ title: "Prices", body: "Hourly", clientId: client.id }, db);
+		const b = await notes.create({ title: "", body: "Untitled thought" }, db);
+		const gone = await notes.create({ title: "Old" }, db);
+		await notes.remove(gone.id, db);
+
+		const copies = await notes.duplicateMany([b.id, a.id, gone.id], db);
+		expect(copies.map((copy) => copy.title)).toEqual(["", "Prices (copy)"]);
+		expect(copies[1]).toMatchObject({ body: "Hourly", clientName: "Peeters", pinnedAt: null });
+		expect(await notes.list({}, db)).toHaveLength(4);
+		expect((await notes.search("hourly", {}, db)).length).toBe(2);
+	});
+
+	it("soft deletes and restores in one call each, leaving out a note already there", async () => {
+		const db = freshDb();
+		const a = await notes.create({ title: "Prices" }, db);
+		const b = await notes.create({ title: "Ideas" }, db);
+		await notes.remove(b.id, db);
+
+		const removed = await notes.removeMany([a.id, b.id, a.id], db);
+		expect(removed.map((note) => note.id)).toEqual([a.id]);
+		expect(removed[0]!.deletedAt).not.toBeNull();
+		expect(await notes.list({}, db)).toHaveLength(0);
+
+		const restored = await notes.restoreMany([a.id, b.id], db);
+		expect(restored.map((note) => note.id).sort()).toEqual([a.id, b.id].sort());
+		expect(await notes.restoreMany([a.id], db)).toEqual([]);
+	});
+
+	it("refuses the whole call for an id nobody has or another owner's, and changes nothing", async () => {
+		const db = freshDb();
+		const mine = await notes.create({ title: "Prices" }, db);
+		const theirs = db.insert(notesTable).values({ title: "Elders", body: "", ownerId: "someone-else" }).returning().get();
+
+		await expect(notes.removeMany([mine.id, "missing"], db)).rejects.toThrow(/No note with id "missing"/);
+		await expect(notes.duplicateMany([mine.id, theirs.id], db)).rejects.toThrow(/No note with id/);
+		await expect(notes.removeMany([], db)).rejects.toThrow(/at least one note/);
+		expect((await notes.get(mine.id, db))?.deletedAt).toBeNull();
+		expect(db.select().from(notesTable).where(eq(notesTable.title, "Elders (copy)")).all()).toEqual([]);
+		expect(db.select().from(notesTable).where(eq(notesTable.id, theirs.id)).get()?.deletedAt).toBeNull();
+	});
+
+	it("names every note in what an agent's request shows", async () => {
+		const db = freshDb();
+		const a = await notes.create({ title: "Prices" }, db);
+		const b = await notes.create({ title: "" }, db);
+		const review = notes.reviewMany("delete", [a.id, b.id], db);
+		expect(review.summary).toBe("Delete 2 notes");
+		expect(review.preview).toContain("- Prices\n- Untitled");
+		expect(() => notes.reviewMany("restore", [a.id], db)).toThrow(/nothing to do/);
 	});
 });
 

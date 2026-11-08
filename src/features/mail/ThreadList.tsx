@@ -6,7 +6,6 @@ import { EmptyState } from "../../components/EmptyState";
 import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { GroupHeader } from "../../components/GroupHeader";
-import { UnreadDot } from "../../components/UnreadDot";
 import { groupByDay } from "../../lib/day-groups";
 import { stagger } from "../../lib/motion";
 import { contextMenuFor } from "../../lib/native-menu";
@@ -286,19 +285,29 @@ export function ThreadList({
 								>
 									<div
 										className={[
-											"flex min-h-16 items-center gap-3 rounded-[var(--radius-md)] py-2 pr-4 pl-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
+											"relative flex min-h-16 items-center gap-3 overflow-hidden rounded-[var(--radius-md)] py-2 pr-4 pl-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)]",
 											active || checked ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]",
 										].join(" ")}
 									>
-										{/* An unread row starts with the dot, then the avatar, as the design draws it. */}
-										{unread ? <UnreadDot /> : null}
+										{/*
+											Unread is an iris oval behind the avatar, 80 by 50, its centre 20px
+											left of the avatar's so the row's own edge cuts it, with a faint
+											ring that breathes out sideways to 100px (Thread Row, Unread, in
+											the design). Every avatar stays in the same place, read or not.
+										*/}
+										{unread ? (
+											<span aria-hidden className="pointer-events-none absolute top-1/2 left-[5px] h-0 w-0">
+												<span className="animate-unread-pulse absolute -top-[25px] -left-[48px] h-[51px] w-[100px] rounded-[50%] bg-[var(--accent)]/20" />
+												<span className="absolute -top-[25px] -left-10 h-[50px] w-20 rounded-[50%] bg-[var(--accent)]" />
+											</span>
+										) : null}
 										{/*
 											The avatar doubles as the row's selector: hovering it, focusing
 											it with the keyboard, or selecting anything else in the list turns
 											it into a checkbox, so the list stays free of checkboxes until
 											somebody wants them.
 										*/}
-										<span className="relative flex h-[34px] w-[34px] flex-none items-center justify-center">
+										<span className="relative z-[1] flex h-[34px] w-[34px] flex-none items-center justify-center">
 											<span
 												className={
 													hasSelection ? "invisible" : "group-hover:invisible group-focus-within:invisible"
@@ -306,20 +315,24 @@ export function ThreadList({
 											>
 												<Avatar name={lead} size={34} />
 											</span>
-											<Checkbox
-												checked={checked}
-												onChange={(event) =>
-													onToggleSelect(thread.id, (event.nativeEvent as MouseEvent).shiftKey)
-												}
+											{/* The whole avatar is the hit area, so the tick is where the face was. */}
+											<label
 												onClick={(event) => event.stopPropagation()}
-												aria-label={`Select ${participantsLine(thread.participants, "Me")}`}
 												className={[
-													"absolute",
+													"absolute inset-0 flex cursor-pointer items-center justify-center rounded-[var(--radius-full)]",
 													hasSelection
 														? "opacity-100"
 														: "opacity-0 has-[:focus-visible]:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100",
 												].join(" ")}
-											/>
+											>
+												<Checkbox
+													checked={checked}
+													onChange={(event) =>
+														onToggleSelect(thread.id, (event.nativeEvent as MouseEvent).shiftKey)
+													}
+													aria-label={`Select ${participantsLine(thread.participants, "Me")}`}
+												/>
+											</label>
 										</span>
 										<button
 											type="button"
@@ -333,7 +346,7 @@ export function ThreadList({
 											}}
 											aria-current={active && !hasSelection ? "true" : undefined}
 											aria-pressed={hasSelection ? checked : undefined}
-											className={`min-w-0 flex-1 text-left ${hasSelection ? "" : "group-focus-within:pr-[140px] group-hover:pr-[140px]"}`}
+											className={`relative z-[1] min-w-0 flex-1 text-left ${hasSelection ? "" : "group-focus-within:pr-[140px] group-hover:pr-[140px]"}`}
 										>
 											<div className="flex items-baseline gap-2">
 												<span

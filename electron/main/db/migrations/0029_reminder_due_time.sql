@@ -1,0 +1,1 @@
+ALTER TABLE `reminders` ADD `due_time` text;

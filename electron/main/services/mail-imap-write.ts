@@ -12,7 +12,7 @@
  * - starttls means upgrade, never "plain if the server will not".
  */
 import { ImapFlow } from "imapflow";
-import type { MailConnection } from "./mail-source";
+import { imapAuth, type MailConnection } from "./mail-source";
 import type { MailboxWriter } from "./mail-writer";
 
 const CONNECT_TIMEOUT_MS = 30_000;
@@ -22,7 +22,7 @@ export async function openImapWriter(connection: MailConnection): Promise<Mailbo
 		host: connection.host,
 		port: connection.port,
 		secure: connection.security === "tls",
-		auth: { user: connection.username, pass: connection.password },
+		auth: imapAuth(connection),
 		logger: false,
 		disableAutoIdle: true,
 		connectionTimeout: CONNECT_TIMEOUT_MS,

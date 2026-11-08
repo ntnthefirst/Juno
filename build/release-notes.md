@@ -2,6 +2,34 @@
 
 Newest first. The rules for writing an entry are in `.claude/rules/release-notes.md`.
 
+## 1.2.0
+Released: 2026-11-08
+
+Adding a mail account takes a few clicks, calendars can be subscribed to, and every list can select rows together.
+
+### New
+- Adding a mail account starts from a list of providers, finds the servers from your address and tests both directions before saving.
+- Settings, Mail accounts can subscribe to a calendar by its address, such as Google's secret iCal address, and shows it read only.
+- Clients, projects and notes can be selected together to mail, archive, duplicate or delete them at once.
+- A new event or reminder opens in one window with a switch between the two, a client and project picker, and formatted notes.
+- Reminders can have a time of day as well as a date.
+- A client's details are edited in place on its page: double-click a value to change it, and notes save as you type.
+- Each list's search is in the title bar, and Ctrl F puts the cursor in it.
+
+### Improvements
+- The title bar shows the page title on the left, and the bell and the agent open a dropdown instead of a screen.
+- The calendar slides whole months and weeks into place like a scroll, without a flash.
+- Unread mail is marked by an iris shape behind the sender's picture, and every picture lines up.
+- A client's page has Send mail, Log call and New project in the title bar.
+- The mail reader's top bar is smaller, with reply, forward, flag and trash side by side.
+- Intros and outros are plain text, written as you want them to read.
+- Colours have more contrast, and weekends and days outside the month stand out in the calendar.
+- Events are saved in your computer's time zone, so the time zone field is gone.
+
+### Fixes
+- Tooltips near the edge of the window used to be cut off.
+- The tick for selecting a mail used to sit beside its picture instead of on it.
+
 ## 1.1.0
 Released: 2026-11-08
 

@@ -8,6 +8,7 @@
 import type { ToolSummary } from "../../shared/types";
 import { agentTools } from "./agent";
 import { calendarTools } from "./calendar";
+import { calendarSubscriptionTools } from "./calendar-subscriptions";
 import { clientAddressTools } from "./client-addresses";
 import { clientEmailTools } from "./client-emails";
 import { clientLinkTools } from "./client-links";
@@ -64,6 +65,7 @@ const lists: ToolDescriptor[][] = [
 	mailOutboxTools,
 	suggestionTools,
 	calendarTools,
+	calendarSubscriptionTools,
 	geocodingTools,
 	agentTools,
 ];

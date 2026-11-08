@@ -158,7 +158,8 @@ export function MessageView({
 		tellFrame("clear");
 	}
 
-	// Ctrl F finds in the message that is open, and nowhere else.
+	// Ctrl F finds in the message that is open, and nowhere else. It listens on
+	// the document, which hears the key before the title bar search does.
 	useEffect(() => {
 		if (!open) return;
 		function onKey(event: KeyboardEvent) {
@@ -167,8 +168,8 @@ export function MessageView({
 			event.preventDefault();
 			setFindOpen(true);
 		}
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
+		document.addEventListener("keydown", onKey);
+		return () => document.removeEventListener("keydown", onKey);
 	}, [open]);
 
 	// The match list is the frame's, so a new query, or a frame that has just

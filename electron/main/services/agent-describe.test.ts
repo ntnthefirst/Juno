@@ -79,6 +79,15 @@ describe("describeAction", () => {
 			{ role: "Draft", kind: "mailDraft", id: draft!.id, label: "Offerte", detail: "To Laura", gone: false },
 		]);
 		expect(view.fields).toEqual([]);
+		expect(view.review).toBe(true);
+	});
+
+	it("marks only a request that sends, signs, files or deletes for a full review", () => {
+		expect(describeAction(action("reminders.create", { title: "Call" }), titleOf, db).review).toBe(false);
+		expect(describeAction(action("clients.update", { id: "x" }), titleOf, db).review).toBe(false);
+		expect(describeAction(action("clients.delete", { id: "x" }), titleOf, db).review).toBe(true);
+		expect(describeAction(action("mail.file.archive", { id: "x" }), titleOf, db).review).toBe(true);
+		expect(describeAction(action("nobody.knows", {}), titleOf, db).review).toBe(true);
 	});
 
 	it("names every record an argument points at, and reads the rest as labelled values", () => {
@@ -176,5 +185,22 @@ describe("describeAudit", () => {
 		expect(views[0]!.entity).toMatchObject({ kind: "client", label: "Obet" });
 		expect(views[1]!.entity).toBeNull();
 		expect(views[2]!.entity).toBeNull();
+	});
+});
+
+describe("describing a client with its details", () => {
+	it("lists each email and contact in plain words", () => {
+		const view = describeAction(
+			action("clients.create", {
+				name: "Hyge",
+				emails: [{ email: "info@hyge.be", label: "Algemeen", isPrimary: true }, { email: "fact@hyge.be" }],
+				contacts: [{ name: "An Peeters", role: "Zaakvoerder" }],
+			}),
+			titleOf,
+			db,
+		);
+		const value = (label: string) => view.fields.find((field) => field.label === label)?.value;
+		expect(value("Emails")).toBe("info@hyge.be / Algemeen (primary), fact@hyge.be");
+		expect(value("Contacts")).toBe("An Peeters / Zaakvoerder");
 	});
 });

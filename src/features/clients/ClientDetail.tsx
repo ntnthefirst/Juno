@@ -3,7 +3,6 @@ import { Tabs, type TabItem } from "../../components/Tabs";
 import { ScheduleSection } from "../calendar/ScheduleSection";
 import type { ScheduleForm } from "../calendar/schedule-form";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CLIENT_LINK_KIND_LABELS, isClientLinkKind } from "@shared/client-links";
 import type {
 	Client,
 	ClientAddress,
@@ -19,17 +18,18 @@ import type {
 	ProjectSummary,
 	ReferenceItem,
 } from "@shared/types";
+import { TitleBarAction } from "../../app/TitleBarAction";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { ActionMenu } from "../../components/ActionMenu";
 import { Avatar } from "../../components/Avatar";
+import { ClientDetails, type DetailRemoval } from "./ClientDetails";
 import { ClientMail } from "./ClientMail";
 import { isOpenProjectStatus } from "@shared/project-status";
-import { clientLanguageLabel } from "@shared/client-language";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon, type IconName } from "../../components/Icon";
-import { MarkdownNotes } from "../../components/MarkdownNotes";
+import { InlineNotes } from "../../components/InlineNotes";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
@@ -112,12 +112,6 @@ function StatusName({ name }: StatusNameProps) {
 	return <span className={statusTextClass(name?.tone ?? null)}>{name?.label ?? "No status"}</span>;
 }
 
-/** A website is shown as typed but only ever opened over https, per the app's
- *  navigation policy in electron/main/windows/chrome.ts. */
-function websiteHref(website: string): string {
-	return /^https?:\/\//i.test(website) ? website.replace(/^http:\/\//i, "https://") : `https://${website}`;
-}
-
 function messageOf(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
@@ -143,7 +137,7 @@ type Load =
 	| { status: "ready"; detail: Detail }
 	| { status: "error"; message: string };
 
-type DetailKind = "contact" | "project" | "email" | "phone" | "address" | "link" | "note";
+type DetailKind = "contact" | "project" | "note" | DetailRemoval["kind"];
 type Pending = { kind: DetailKind; id: string; name: string };
 
 const REMOVE_TITLES: Record<DetailKind, string> = {
@@ -153,6 +147,7 @@ const REMOVE_TITLES: Record<DetailKind, string> = {
 	phone: "Remove phone number",
 	address: "Remove address",
 	link: "Remove link",
+	website: "Remove website",
 	note: "Remove note",
 };
 
@@ -278,15 +273,32 @@ export function ClientDetail({
 
 	// Refreshing after a mutation replaces the value in place, so the pane does not
 	// drop back to the loading state on every edit.
-	const refresh = useCallback(() => {
-		fetchDetail()
-			.then((detail) => {
-				if (detail) setLoad({ status: "ready", detail });
-			})
-			.catch((cause: unknown) => {
-				setLoad({ status: "error", message: messageOf(cause) });
-			});
-	}, [fetchDetail]);
+	const refresh = useCallback(
+		(): Promise<void> =>
+			fetchDetail()
+				.then((detail) => {
+					if (detail) setLoad({ status: "ready", detail });
+				})
+				.catch((cause: unknown) => {
+					setLoad({ status: "error", message: messageOf(cause) });
+				}),
+		[fetchDetail],
+	);
+
+	// The notes are written as they are typed, so the copy held here is brought
+	// up to date without reading the record again: a reload would put the stored
+	// text back under the cursor, and the tab coming back must show what was typed.
+	const saveNotes = useCallback(
+		async (notes: string | null) => {
+			await window.juno.clients.update(clientId, { notes });
+			setLoad((current) =>
+				current.status === "ready"
+					? { status: "ready", detail: { ...current.detail, client: { ...current.detail.client, notes } } }
+					: current,
+			);
+		},
+		[clientId],
+	);
 
 	async function confirmRemove() {
 		if (!pending || busy) return;
@@ -298,9 +310,10 @@ export function ClientDetail({
 			else if (pending.kind === "phone") await window.juno.clientPhones.remove(pending.id);
 			else if (pending.kind === "address") await window.juno.clientAddresses.remove(pending.id);
 			else if (pending.kind === "link") await window.juno.clientLinks.remove(pending.id);
+			else if (pending.kind === "website") await window.juno.clients.update(clientId, { website: null });
 			else await window.juno.clientNotes.remove(pending.id);
 			setPending(null);
-			refresh();
+			void refresh();
 		} catch (cause: unknown) {
 			setPending(null);
 			setLoad({ status: "error", message: messageOf(cause) });
@@ -312,7 +325,7 @@ export function ClientDetail({
 	async function changeStatus(statusId: string | null) {
 		try {
 			await window.juno.clients.update(clientId, { statusId });
-			refresh();
+			void refresh();
 		} catch (cause: unknown) {
 			setLoad({ status: "error", message: messageOf(cause) });
 		}
@@ -321,34 +334,7 @@ export function ClientDetail({
 	async function makeContactPrimary(id: string) {
 		try {
 			await window.juno.contacts.setPrimary(id);
-			refresh();
-		} catch (cause: unknown) {
-			setLoad({ status: "error", message: messageOf(cause) });
-		}
-	}
-
-	async function makeEmailPrimary(id: string) {
-		try {
-			await window.juno.clientEmails.setPrimary(id);
-			refresh();
-		} catch (cause: unknown) {
-			setLoad({ status: "error", message: messageOf(cause) });
-		}
-	}
-
-	async function makePhonePrimary(id: string) {
-		try {
-			await window.juno.clientPhones.setPrimary(id);
-			refresh();
-		} catch (cause: unknown) {
-			setLoad({ status: "error", message: messageOf(cause) });
-		}
-	}
-
-	async function makeAddressPrimary(id: string) {
-		try {
-			await window.juno.clientAddresses.setPrimary(id);
-			refresh();
+			void refresh();
 		} catch (cause: unknown) {
 			setLoad({ status: "error", message: messageOf(cause) });
 		}
@@ -472,6 +458,16 @@ export function ClientDetail({
 									onChange={(statusId) => void changeStatus(statusId)}
 								/>
 							</div>
+							{/* The client's own ways to start something stand in for New (frame 170:12408). */}
+							<TitleBarSlot side="right" replacesNew>
+								<TitleBarAction icon="mail" label="Send mail" onClick={() => onSendMail(client)} />
+								<TitleBarAction icon="phone" label="Log call" opensPanel onClick={() => onEditNote(null, "call")} />
+								<TitleBarAction
+									icon="projects"
+									label="New project"
+									onClick={() => openNewRecord("project", { clientId: client.id })}
+								/>
+							</TitleBarSlot>
 							<TitleBarSlot side="overflow">
 								<ActionMenu
 									target={{ kind: "client", id: client.id, context: "detail" }}
@@ -504,6 +500,14 @@ export function ClientDetail({
 									</a>
 								</div>
 							) : null}
+							{primaryPhone ? (
+								<div className="flex min-w-0 items-center gap-2">
+									<Icon name="phone" className="shrink-0 text-[var(--ink-muted)]" />
+									<span data-selectable className="tabular min-w-0 truncate">
+										{primaryPhone.phone}
+									</span>
+								</div>
+							) : null}
 							{primaryAddress?.city ? (
 								<div className="flex min-w-0 items-center gap-2">
 									<Icon name="address" className="shrink-0 text-[var(--ink-muted)]" />
@@ -531,149 +535,76 @@ export function ClientDetail({
 
 			<div className="mt-6">
 				{tab === "overview" ? (
-					<div className="flex flex-col gap-10">
-						<div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_420px]">
-							<section>
-								<h3 className="mb-2 text-h3">Details</h3>
-								<dl>
-									{[
-										{ label: "Email", value: primaryEmail?.email ?? null },
-										{ label: "Phone", value: primaryPhone?.phone ?? null },
-										{
-											label: "Address",
-											value: primaryAddress
-												? [primaryAddress.addressLine1, [primaryAddress.postalCode, primaryAddress.city].filter(Boolean).join(" ")]
-														.filter(Boolean)
-														.join(", ")
-												: null,
-										},
-										{ label: "Website", value: client.website, href: client.website ? websiteHref(client.website) : undefined },
-										{ label: "VAT number", value: client.vatNumber },
-										{ label: "Language", value: clientLanguageLabel(client.language) },
-									].map((row) => (
-										<div key={row.label} className="flex min-h-14 items-center gap-6 border-b border-[var(--line)]">
-											<dt className="w-32 flex-none text-base text-[var(--ink-muted)]">{row.label}</dt>
-											<dd data-selectable className="tabular min-w-0 flex-1 truncate text-base">
-												{row.value && row.value.length > 0 ? (
-													"href" in row && row.href ? (
-														<a
-															href={row.href}
-															target="_blank"
-															rel="noopener noreferrer"
-															className="text-[var(--accent)] hover:text-[var(--accent-hover)]"
-														>
-															{row.value}
-														</a>
-													) : (
-														row.value
-													)
-												) : (
-													"Not set"
-												)}
-											</dd>
-										</div>
-									))}
-								</dl>
-							</section>
-							<div className="flex flex-col gap-8">
-								<section>
-									<div className="mb-4 flex items-center justify-between gap-4">
-										<h3 className="text-h3">Open work</h3>
-										<button
-											type="button"
-											onClick={() => changeTab("projects")}
-											className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-										>
-											Projects
-										</button>
-									</div>
-									{openProjects.length === 0 ? (
-										<p className="text-base text-[var(--ink-muted)]">Nothing open for this client.</p>
-									) : (
-										<ul className="flex flex-col gap-3">
-											{openProjects.map((project) => (
-												<li key={project.id} className="flex items-center gap-3">
-													<Avatar name={project.name} size={24} shape="square" />
-													<button
-														type="button"
-														onClick={() => requestOpen({ kind: "project", id: project.id, name: project.name })}
-														className="min-w-0 flex-1 text-left"
-													>
-														<span className="block truncate text-base font-[var(--weight-medium)]">{project.name}</span>
-														{project.dueOn ? (
-															<span className="tabular block text-sm text-[var(--ink-muted)]">Due {formatDate(project.dueOn)}</span>
-														) : null}
-													</button>
-													{project.status ? <StatusBadge label={project.status.label} tone={project.status.tone} /> : null}
-												</li>
-											))}
-										</ul>
-									)}
-								</section>
-								<section>
-									<div className="mb-4 flex items-center justify-between gap-4">
-										<h3 className="text-h3">Notes</h3>
-										<span data-opens-panel>
-											<button
-												type="button"
-												onClick={() => onEditNote(null)}
-												className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-											>
-												New note
-											</button>
-										</span>
-									</div>
-									{client.notes && client.notes.trim().length > 0 ? (
-										<div className="text-document">
-											<MarkdownNotes text={client.notes} />
-										</div>
-									) : (
-										<p className="text-base text-[var(--ink-muted)]">No notes yet.</p>
-									)}
-								</section>
-							</div>
+					<div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_420px]">
+						<div className="flex min-w-0 flex-col gap-8">
+							<ClientDetails
+								client={client}
+								emails={emails}
+								phones={phones}
+								addresses={addresses}
+								links={links}
+								onChanged={refresh}
+								onEditAddress={onEditAddress}
+								onEditEmail={onEditEmail}
+								onEditPhone={onEditPhone}
+								onEditLink={onEditLink}
+								onRemove={setPending}
+							/>
+							<ContactsSection
+								contacts={contacts}
+								onAdd={() => onEditContact(null)}
+								onEdit={onEditContact}
+								onMakePrimary={(id) => void makeContactPrimary(id)}
+								onRemove={(contact) => setPending({ kind: "contact", id: contact.id, name: contact.name })}
+							/>
 						</div>
-
-						<ScheduleSection clientId={clientId} showProject onOpenForm={onSchedule} />
-
-						<EmailsSection
-							emails={emails}
-							onAdd={() => onEditEmail(null)}
-							onEdit={onEditEmail}
-							onMakePrimary={(id) => void makeEmailPrimary(id)}
-							onRemove={(email) => setPending({ kind: "email", id: email.id, name: email.email })}
-						/>
-
-						<PhonesSection
-							phones={phones}
-							onAdd={() => onEditPhone(null)}
-							onEdit={onEditPhone}
-							onMakePrimary={(id) => void makePhonePrimary(id)}
-							onRemove={(phone) => setPending({ kind: "phone", id: phone.id, name: phone.phone })}
-						/>
-
-						<AddressesSection
-							addresses={addresses}
-							onAdd={() => onEditAddress(null)}
-							onEdit={onEditAddress}
-							onMakePrimary={(id) => void makeAddressPrimary(id)}
-							onRemove={(address, line) => setPending({ kind: "address", id: address.id, name: address.label ?? line })}
-						/>
-
-						<LinksSection
-							links={links}
-							onAdd={() => onEditLink(null)}
-							onEdit={onEditLink}
-							onRemove={(link) => setPending({ kind: "link", id: link.id, name: link.label ?? link.url })}
-						/>
-
-						<ContactsSection
-							contacts={contacts}
-							onAdd={() => onEditContact(null)}
-							onEdit={onEditContact}
-							onMakePrimary={(id) => void makeContactPrimary(id)}
-							onRemove={(contact) => setPending({ kind: "contact", id: contact.id, name: contact.name })}
-						/>
+						<div className="flex min-w-0 flex-col gap-8">
+							<InlineNotes
+								key={clientId}
+								title="Notes"
+								notes={client.notes}
+								save={saveNotes}
+								toolbar
+								rows={6}
+								ariaLabel="Client notes"
+								placeholder="Anything worth keeping about this client. Headings, lists and links work as you type."
+							/>
+							<section>
+								<div className="mb-2 flex items-center justify-between gap-4">
+									<h3 className="text-h3">Open work</h3>
+									<button
+										type="button"
+										onClick={() => changeTab("projects")}
+										className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+									>
+										Projects
+									</button>
+								</div>
+								{openProjects.length === 0 ? (
+									<p className="text-base text-[var(--ink-muted)]">Nothing open for this client.</p>
+								) : (
+									<ul className="flex flex-col gap-3">
+										{openProjects.map((project) => (
+											<li key={project.id} className="flex items-center gap-3">
+												<Avatar name={project.name} size={28} shape="square" />
+												<button
+													type="button"
+													onClick={() => requestOpen({ kind: "project", id: project.id, name: project.name })}
+													className="min-w-0 flex-1 text-left"
+												>
+													<span className="block truncate text-base font-[var(--weight-medium)]">{project.name}</span>
+													{project.dueOn ? (
+														<span className="tabular block text-sm text-[var(--ink-muted)]">Due {formatDate(project.dueOn)}</span>
+													) : null}
+												</button>
+												{project.status ? <StatusBadge label={project.status.label} tone={project.status.tone} /> : null}
+											</li>
+										))}
+									</ul>
+								)}
+							</section>
+							<ScheduleSection clientId={clientId} showProject onOpenForm={onSchedule} />
+						</div>
 					</div>
 				) : tab === "timeline" ? (
 					<TimelineTab
@@ -804,271 +735,6 @@ function StatusMenuButton({ clientName, status, options, onChange }: StatusMenuB
 	);
 }
 
-type EmailsSectionProps = {
-	emails: ClientEmail[];
-	onAdd: () => void;
-	onEdit: (email: ClientEmail) => void;
-	onMakePrimary: (id: string) => void;
-	onRemove: (email: ClientEmail) => void;
-};
-
-function EmailsSection({ emails, onAdd, onEdit, onMakePrimary, onRemove }: EmailsSectionProps) {
-	return (
-		<section>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3 font-[var(--weight-medium)]">Emails</h3>
-				<Button size="dense" data-opens-panel onClick={onAdd}>
-					Add email
-				</Button>
-			</div>
-
-			{emails.length === 0 ? (
-				<p className="text-dense text-[var(--ink-muted)]">
-					No email addresses for this client yet.
-				</p>
-			) : (
-				<ul>
-					{emails.map((email) => (
-						<li
-							key={email.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
-						>
-							<div className="min-w-0">
-								<div className="flex items-center gap-2">
-									<span data-selectable className="truncate">
-										{email.email}
-									</span>
-									{email.isPrimary ? <StatusBadge label="Primary" tone="accent" /> : null}
-								</div>
-								{email.label ? (
-									<div className="mt-0.5 truncate text-[var(--ink-muted)]">{email.label}</div>
-								) : null}
-							</div>
-							<span className="flex shrink-0 gap-1">
-								{email.isPrimary ? null : (
-									<Button size="dense" onClick={() => onMakePrimary(email.id)}>
-										Make primary
-									</Button>
-								)}
-								<IconButton icon="edit" label="Edit" opensPanel onClick={() => onEdit(email)} />
-								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(email)} />
-							</span>
-						</li>
-					))}
-				</ul>
-			)}
-		</section>
-	);
-}
-
-type PhonesSectionProps = {
-	phones: ClientPhone[];
-	onAdd: () => void;
-	onEdit: (phone: ClientPhone) => void;
-	onMakePrimary: (id: string) => void;
-	onRemove: (phone: ClientPhone) => void;
-};
-
-function PhonesSection({ phones, onAdd, onEdit, onMakePrimary, onRemove }: PhonesSectionProps) {
-	return (
-		<section>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3 font-[var(--weight-medium)]">Phone numbers</h3>
-				<Button size="dense" data-opens-panel onClick={onAdd}>
-					Add phone number
-				</Button>
-			</div>
-
-			{phones.length === 0 ? (
-				<p className="text-dense text-[var(--ink-muted)]">
-					No phone numbers for this client yet.
-				</p>
-			) : (
-				<ul>
-					{phones.map((phone) => (
-						<li
-							key={phone.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
-						>
-							<div className="min-w-0">
-								<div className="flex items-center gap-2">
-									<span data-selectable className="tabular truncate">
-										{phone.phone}
-									</span>
-									{phone.isPrimary ? <StatusBadge label="Primary" tone="accent" /> : null}
-								</div>
-								{phone.label ? (
-									<div className="mt-0.5 truncate text-[var(--ink-muted)]">{phone.label}</div>
-								) : null}
-							</div>
-							<span className="flex shrink-0 gap-1">
-								{phone.isPrimary ? null : (
-									<Button size="dense" onClick={() => onMakePrimary(phone.id)}>
-										Make primary
-									</Button>
-								)}
-								<IconButton icon="edit" label="Edit" opensPanel onClick={() => onEdit(phone)} />
-								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(phone)} />
-							</span>
-						</li>
-					))}
-				</ul>
-			)}
-		</section>
-	);
-}
-
-type LinksSectionProps = {
-	links: ClientLink[];
-	onAdd: () => void;
-	onEdit: (link: ClientLink) => void;
-	onRemove: (link: ClientLink) => void;
-};
-
-function linkTitle(link: ClientLink): string {
-	return link.label ?? (isClientLinkKind(link.kind) ? CLIENT_LINK_KIND_LABELS[link.kind] : link.url);
-}
-
-/** What to show under a link's title: the address without its scheme or trailing slash. */
-function shortUrl(url: string): string {
-	return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
-}
-
-function LinksSection({ links, onAdd, onEdit, onRemove }: LinksSectionProps) {
-	const [problem, setProblem] = useState<string | null>(null);
-
-	async function open(id: string) {
-		setProblem(null);
-		try {
-			await window.juno.clientLinks.open(id);
-		} catch (cause: unknown) {
-			setProblem(messageOf(cause));
-		}
-	}
-
-	return (
-		<section>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3 font-[var(--weight-medium)]">Links</h3>
-				<Button size="dense" data-opens-panel onClick={onAdd}>
-					Add link
-				</Button>
-			</div>
-
-			{links.length === 0 ? (
-				<p className="text-dense text-[var(--ink-muted)]">
-					No website or profiles for this client yet.
-				</p>
-			) : (
-				<ul>
-					{links.map((link) => (
-						<li
-							key={link.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
-						>
-							<div className="flex min-w-0 items-start gap-3">
-								<Icon
-									name={link.kind === "website" ? "web" : "link"}
-									className="mt-0.5 shrink-0 text-[var(--ink-muted)]"
-								/>
-								<div className="min-w-0">
-									<div className="flex items-center gap-2">
-										<span className="truncate font-[var(--weight-medium)]">{linkTitle(link)}</span>
-										{link.label && isClientLinkKind(link.kind) ? (
-											<span className="text-sm text-[var(--ink-muted)]">
-												{CLIENT_LINK_KIND_LABELS[link.kind]}
-											</span>
-										) : null}
-									</div>
-									<div data-selectable className="mt-0.5 truncate text-[var(--ink-muted)]">
-										{shortUrl(link.url)}
-									</div>
-								</div>
-							</div>
-							<span className="flex shrink-0 gap-1">
-								<Button size="dense" onClick={() => void open(link.id)}>
-									Open
-								</Button>
-								<IconButton icon="edit" label="Edit" opensPanel onClick={() => onEdit(link)} />
-								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(link)} />
-							</span>
-						</li>
-					))}
-				</ul>
-			)}
-			{problem ? (
-				<p role="alert" data-selectable className="mt-2 text-sm text-[var(--risk)]">
-					{problem}
-				</p>
-			) : null}
-		</section>
-	);
-}
-
-type AddressesSectionProps = {
-	addresses: ClientAddress[];
-	onAdd: () => void;
-	onEdit: (address: ClientAddress) => void;
-	onMakePrimary: (id: string) => void;
-	onRemove: (address: ClientAddress, line: string) => void;
-};
-
-function AddressesSection({ addresses, onAdd, onEdit, onMakePrimary, onRemove }: AddressesSectionProps) {
-	return (
-		<section>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3 font-[var(--weight-medium)]">Addresses</h3>
-				<Button size="dense" data-opens-panel onClick={onAdd}>
-					Add address
-				</Button>
-			</div>
-
-			{addresses.length === 0 ? (
-				<p className="text-dense text-[var(--ink-muted)]">
-					No addresses for this client yet.
-				</p>
-			) : (
-				<ul>
-					{addresses.map((address) => {
-						const line = [address.addressLine1, address.postalCode, address.city]
-							.filter(Boolean)
-							.join(", ");
-						return (
-							<li
-								key={address.id}
-								className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
-							>
-								<div className="min-w-0">
-									<div className="flex items-center gap-2">
-										<span data-selectable className="truncate font-[var(--weight-medium)]">
-											{address.label ?? line}
-										</span>
-										{address.isPrimary ? <StatusBadge label="Primary" tone="accent" /> : null}
-									</div>
-									{address.label ? (
-										<div data-selectable className="mt-0.5 truncate text-[var(--ink-muted)]">
-											{line}
-										</div>
-									) : null}
-								</div>
-								<span className="flex shrink-0 gap-1">
-									{address.isPrimary ? null : (
-										<Button size="dense" onClick={() => onMakePrimary(address.id)}>
-											Make primary
-										</Button>
-									)}
-									<IconButton icon="edit" label="Edit" opensPanel onClick={() => onEdit(address)} />
-									<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(address, line)} />
-								</span>
-							</li>
-						);
-					})}
-				</ul>
-			)}
-		</section>
-	);
-}
-
 type ContactsSectionProps = {
 	contacts: Contact[];
 	onAdd: () => void;
@@ -1077,54 +743,65 @@ type ContactsSectionProps = {
 	onRemove: (contact: Contact) => void;
 };
 
+/**
+ * The people at this client, under the details: a round avatar, the name, and
+ * role, email and phone under it. A click opens the contact's form; hovering
+ * offers Make primary and remove, as the values above do.
+ */
 function ContactsSection({ contacts, onAdd, onEdit, onMakePrimary, onRemove }: ContactsSectionProps) {
 	return (
 		<section>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3 font-[var(--weight-medium)]">Contacts</h3>
-				<Button size="dense" onClick={onAdd}>
+			<div className="mb-2 flex items-center justify-between gap-4">
+				<h3 className="text-h3">Contacts</h3>
+				<button
+					type="button"
+					onClick={onAdd}
+					className="rounded-[var(--radius-sm)] text-base text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				>
 					Add contact
-				</Button>
+				</button>
 			</div>
 
 			{contacts.length === 0 ? (
-				<p className="text-dense text-[var(--ink-muted)]">
-					No contacts for this client yet.
-				</p>
+				<p className="text-base text-[var(--ink-muted)]">No contacts for this client yet.</p>
 			) : (
 				<ul>
-					{contacts.map((contact) => (
-						<li
-							key={contact.id}
-							className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-2 text-dense"
-						>
-							{/* Two lines rather than columns. Fixed-width columns reserved space
-							    for fields most contacts do not have, which squeezed the name to
-							    a few characters even in a wide pane. */}
-							<div className="min-w-0">
-								<div className="flex items-center gap-2">
-									<span data-selectable className="truncate font-[var(--weight-medium)]">
-										{contact.name}
+					{contacts.map((contact) => {
+						const meta = [contact.role, contact.email, contact.phone].filter(Boolean).join(" · ");
+						return (
+							<li key={contact.id} className="group flex items-center gap-2">
+								<button
+									type="button"
+									onClick={() => onEdit(contact)}
+									className="-mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-sm)] px-2 py-1.5 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+								>
+									<Avatar name={contact.name} size={32} />
+									<span className="min-w-0 flex-1">
+										<span className="flex items-center gap-2">
+											<span data-selectable className="truncate text-base font-[var(--weight-medium)]">
+												{contact.name}
+											</span>
+											{/* Primary only says something once there is a second contact. */}
+											{contact.isPrimary && contacts.length > 1 ? <StatusBadge label="Primary" tone="accent" /> : null}
+										</span>
+										{meta ? (
+											<span data-selectable className="block truncate text-sm text-[var(--ink-muted)]">
+												{meta}
+											</span>
+										) : null}
 									</span>
-									{contact.isPrimary ? <StatusBadge label="Primary" tone="accent" /> : null}
-								</div>
-								{[contact.role, contact.email, contact.phone].some(Boolean) ? (
-									<div data-selectable className="mt-0.5 truncate text-[var(--ink-muted)]">
-										{[contact.role, contact.email, contact.phone].filter(Boolean).join("  ·  ")}
-									</div>
-								) : null}
-							</div>
-							<span className="flex shrink-0 gap-1">
-								{contact.isPrimary ? null : (
-									<Button size="dense" onClick={() => onMakePrimary(contact.id)}>
-										Make primary
-									</Button>
-								)}
-								<IconButton icon="edit" label="Edit" onClick={() => onEdit(contact)} />
-								<IconButton icon="remove" label="Remove" danger onClick={() => onRemove(contact)} />
-							</span>
-						</li>
-					))}
+								</button>
+								<span className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-[var(--duration-fast)] ease-[var(--ease)] group-hover:opacity-100 focus-within:opacity-100">
+									{contact.isPrimary ? null : (
+										<Button size="dense" onClick={() => onMakePrimary(contact.id)}>
+											Make primary
+										</Button>
+									)}
+									<IconButton icon="remove" label={`Remove ${contact.name}`} danger onClick={() => onRemove(contact)} />
+								</span>
+							</li>
+						);
+					})}
 				</ul>
 			)}
 		</section>

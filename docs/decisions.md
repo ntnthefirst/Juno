@@ -2390,3 +2390,124 @@ update that is waiting, and to an agent.
 **What would reverse this:** a release rhythm fast enough that writing notes by
 hand is skipped, in which case drafts are generated from the log and still edited
 by a person.
+
+## 72. The title bar reads left to right, holds a list's search, and its buttons open dropdowns
+
+Amends decision 54. The Title Bar frames moved the page title from the middle
+of the window to the left, after a divider beside Search, Recent and Reminders,
+and put New at the right of every screen.
+
+- **The title sits at the left**, after the divider, or after the way back and
+  a slash while a record is open. Calendar keeps the left slot for its toolbar.
+- **New is a text button at the right everywhere.** Where the screen makes one
+  kind of record it makes that at once; elsewhere it opens the New menu. With a
+  document open the plus at the left stays, as the page frame draws it.
+- **A list's search is in the title bar** (`app/TitleSearch.tsx`), on every
+  screen that filters a list. Ctrl or Cmd F focuses it, an open message or page
+  keeps the same keys for its own find, and Ctrl or Cmd Shift F opens the
+  palette.
+- **The bell and the agent open dropdowns**, the shape Recent already had. The
+  bell lists what is overdue, due today and due soon. The agent lists what is
+  waiting and what it did lately, and offers Approve and Reject only for a
+  request that changes a record here. One that sends, signs, files or deletes
+  says Review and opens the Agent screen, where its payload is shown in full
+  first (decision 44). The service decides which is which, and approving goes
+  through the same gate either way.
+
+**What would reverse this:** a screen whose search needs more room than the
+title bar has, or a request kind whose short line cannot say enough to be
+answered from a menu, which would then say Review as well.
+
+## 73. Microsoft accounts sign in through Microsoft, and the application ID is build configuration
+
+Outlook.com and Microsoft 365 no longer accept a password from another
+application, for IMAP or for SMTP. An account there is added by signing in to
+Microsoft, and every other provider still takes a password or an app password.
+
+- **The authorisation code flow with PKCE, as a public client.** There is no
+  client secret, because a desktop application cannot keep one. The person
+  signs in in the system browser, never in a window of Juno's, so Juno never
+  sees the password. The redirect comes back to a one-off listener on
+  127.0.0.1 with a port the operating system picks, which checks `state`,
+  takes the code and closes (`services/microsoft-oauth.ts`). A web address is
+  never the redirect, for the reason in decision 42.
+- **What is asked:** `offline_access`, IMAP.AccessAsUser.All and SMTP.Send on
+  outlook.office.com, and `openid email` so the address signed in to can be
+  checked against the one typed.
+- **Where the secrets go.** The refresh token is kept by the credential store
+  under the account's credential key, like a password (decision 6). The
+  database stores `auth_kind` and nothing else about it. Access tokens live in
+  memory and are renewed a minute before they run out. A refused renewal sets
+  `auth_expired_at`, the account says "Sign in again", and no sync asks
+  Microsoft again until a person has (`services/mail-sign-in.ts`).
+- **No agent signs in.** There is no tool that starts a sign-in, finishes one
+  or returns a token, and `mail.accounts.create` adds password accounts only
+  (security.md section 9).
+- **The application (client) ID is build configuration**, like the update feed
+  URL (decision 6 named only that and the signing certificate). It is public:
+  it names the application to Microsoft and grants nothing on its own, so it
+  is committed, in `electron/shared/oauth.ts`. While it is empty the two
+  Microsoft tiles say "Coming soon" and cannot be picked.
+- **Only Microsoft.** Gmail could sign in the same way, but Google's mail
+  scope is restricted, and an application that asks for it needs a paid
+  security assessment every year. Gmail keeps the app password, with a guide
+  and a button to the page that makes one.
+- **The servers are a table with sources.** Every tile on the Add account
+  screen has servers checked against the provider's own help pages, written
+  down in `shared/mail-providers.ts`. That check corrected two: Proximus sends
+  through relay.proximus.be, and Combell through smtp-auth.mailprotect.be.
+- **An account is saved only when both directions work.** The Ready step and
+  "Test and connect" call `mail.accounts.connect`, which tries receiving and
+  sending and adds nothing when either fails.
+
+**What would reverse this:** Microsoft accepting app passwords for IMAP and
+SMTP again, which would make the sign-in a convenience rather than the only
+way in, or Google lifting the assessment, which would bring Gmail onto the
+same flow.
+
+## 74. A calendar subscription is read only, and its address is a secret
+
+Juno subscribes to calendars it reads from an https address and keeps up to
+date by itself: Google's secret address in iCal format, an Outlook published
+calendar, public holidays, a booking tool. Settings > Mail accounts lists them
+under the accounts (frames `190:628` and `190:797`), and the add-account flow
+offers one for a Google account (`190:473`). Decision 11 said import comes
+before sync; this is a third thing, reading someone else's calendar on a
+schedule, and CalDAV is still a later phase.
+
+- **Read only.** Its events are drawn in its colour and cannot be moved,
+  resized, edited or deleted; a click shows one with a line saying where it
+  comes from. The next fetch would put back anything changed here.
+- **Its own tables.** `calendar_subscriptions` and
+  `calendar_subscription_events`, not rows in `calendar_events` with a flag.
+  Every query, edit, export, agent tool and right-click menu written for
+  Juno's own events stays as it is and cannot reach a feed's event by
+  forgetting a filter. The range query takes `includeSubscriptions` and adds
+  them as items of their own kind, which the views must handle and the type
+  checker makes them. A client's or a project's schedule leaves them out.
+  Exceptions are JSON on the row, because nothing edits them.
+- **The address is kept like a password.** Anyone holding a Google secret
+  address reads the calendar, so it goes to the credential store, keyed by
+  the subscription, and the row keeps the host and a hash (security.md
+  section 1). No IPC channel and no tool returns it, an error names the host
+  only, and removing a subscription forgets it.
+- **Fetching is the main process's, under the guard pictures already use**
+  (`services/public-fetch.ts`): https only, a public host on every redirect, a
+  10 MB cap counted as the body arrives, 20 seconds, and If-None-Match and
+  If-Modified-Since. The feed is hostile input (`services/calendar-feed.ts`):
+  at most 10,000 events, text cleaned and cut short, a COUNT cut to 2,000,
+  and an hourly rule dropped, as an import drops it.
+- **A failed fetch keeps the last good events** and the reason is on the row
+  in plain words. It is fetched once shortly after launch, then on its
+  interval (15 minutes, an hour or a day) while Juno runs and is unlocked,
+  and on demand from the row.
+- **Asking Juno to fetch an address is the owner's decision.**
+  `calendar.subscriptions.preview`, `create`, `update` and `refresh` are in
+  the Send and file row, so they park whatever the levels say, and the owner
+  reads the address before Juno goes to it. `remove` is in the Delete row.
+  Reading the list is in the Read row, and `calendar.list_events` takes
+  `include_subscriptions`.
+
+**What would reverse this:** two-way sync with a calendar server, which would
+make these events editable and their server the owner of them, as decision 23
+already foresees for CalDAV.

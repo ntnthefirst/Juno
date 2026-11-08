@@ -67,6 +67,11 @@ export const calendarTools: ToolDescriptor[] = [
 				},
 				include_reminders: { type: "boolean", description: "Overlay open reminders due in the range." },
 				include_deadlines: { type: "boolean", description: "Overlay project due dates in the range." },
+				include_subscriptions: {
+					type: "boolean",
+					description:
+						"Overlay the events of the calendar subscriptions that are shown, as read-only items of kind subscription. Left out when client_id or project_id is given.",
+				},
 				client_id: { type: "string" },
 				project_id: { type: "string" },
 			},
@@ -80,6 +85,7 @@ export const calendarTools: ToolDescriptor[] = [
 				...(args.timezone ? { timezone: String(args.timezone) } : {}),
 				includeReminders: args.include_reminders === true,
 				includeDeadlines: args.include_deadlines === true,
+				includeSubscriptions: args.include_subscriptions === true,
 				...(args.client_id ? { clientId: String(args.client_id) } : {}),
 				...(args.project_id ? { projectId: String(args.project_id) } : {}),
 			}),

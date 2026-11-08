@@ -22,6 +22,9 @@ export function registerClientsIpc(): void {
 	);
 	ipcMain.handle("clients.remove", (_event, id: string) => clients.remove(id));
 	ipcMain.handle("clients.restore", (_event, id: string) => clients.restore(id));
+	ipcMain.handle("clients.archiveMany", (_event, ids: string[]) => clients.archiveMany(ids));
+	ipcMain.handle("clients.removeMany", (_event, ids: string[]) => clients.removeMany(ids));
+	ipcMain.handle("clients.restoreMany", (_event, ids: string[]) => clients.restoreMany(ids));
 
 	ipcMain.handle("clients.timeline", (_event, query: ClientTimelineQuery) => timeline.timeline(query));
 	ipcMain.handle("clients.timelineCounts", (_event, clientId: string) =>

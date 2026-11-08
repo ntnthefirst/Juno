@@ -315,7 +315,7 @@ export async function syncAccount(accountId: string, db: Db = getDb()): Promise<
 	let source: MailboxSource | null = null;
 	let connection: { host: string; username: string } = { host: account.imapHost, username: account.username };
 	try {
-		const details = accounts.connectionFor(accountId, db);
+		const details = await accounts.connectionFor(accountId, db);
 		connection = { host: details.host, username: details.username };
 		source = await openMailbox(details);
 
@@ -381,7 +381,7 @@ export async function syncOneFolder(accountId: string, folderId: string, db: Db 
 	const progress: MailSyncStatus = { ...idle(accountId), phase: "headers", startedAt: now() };
 	let source: MailboxSource | null = null;
 	try {
-		const details = accounts.connectionFor(accountId, db);
+		const details = await accounts.connectionFor(accountId, db);
 		source = await openMailbox(details);
 		await syncFolder(db, source, account, folder, progress);
 		publish({ ...progress, phase: "done", folderPath: null, finishedAt: now() });

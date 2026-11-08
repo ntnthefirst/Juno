@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { ComposeBlock, ComposeBlockKind, ComposeBlockRule, ComposeBlockVariable } from "@shared/types";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import type { ComposeBlock, ComposeBlockKind, ComposeBlockRule } from "@shared/types";
 import { Button } from "../../../components/Button";
 import { Dialog } from "../../../components/Dialog";
 import { Field } from "../../../components/Field";
@@ -15,11 +15,7 @@ import {
 	moveBy,
 	RULE_CHOICES,
 	RULE_DESCRIPTION,
-	splitTokens,
-	VARIABLE_LABEL,
-	VARIABLE_ORDER,
 } from "./block-text";
-import { VariableEditor, type VariableEditorHandle } from "./VariableEditor";
 
 type BlocksPageProps = {
 	/** What was asked for: a block, a new one of a kind, or just the list. */
@@ -215,23 +211,7 @@ function BlockEditor({ block, newKind, onSaved, onDeleted }: BlockEditorProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
-	const [owner, setOwner] = useState("");
-	const editor = useRef<VariableEditorHandle>(null);
-	const previewLabel = useId();
-
-	useEffect(() => {
-		let cancelled = false;
-		window.juno.settings
-			.getOwner()
-			.then((profile) => {
-				const person = `${profile.firstName} ${profile.lastName}`.trim() || profile.businessName.trim();
-				if (!cancelled) setOwner(person);
-			})
-			.catch(() => undefined);
-		return () => {
-			cancelled = true;
-		};
-	}, []);
+	const textId = useId();
 
 	const dirty = block
 		? name !== block.name || body !== block.body || rule !== block.rule
@@ -269,18 +249,6 @@ function BlockEditor({ block, newKind, onSaved, onDeleted }: BlockEditorProps) {
 		}
 	}
 
-	const samples: Record<ComposeBlockVariable, string> = {
-		client_name: "Janssens",
-		first_name: "Anna",
-		project: "Kitchen cabinets",
-		date: new Date().toLocaleDateString("nl-BE", { day: "numeric", month: "long", year: "numeric" }),
-		my_name: owner || "Your name",
-	};
-	const preview = splitTokens(body)
-		.map((part) => (part.kind === "text" ? part.text : samples[part.name]))
-		.join("");
-	const usesVariable = splitTokens(body).some((part) => part.kind === "variable");
-
 	return (
 		<>
 			<div className="flex flex-col gap-5">
@@ -302,23 +270,18 @@ function BlockEditor({ block, newKind, onSaved, onDeleted }: BlockEditorProps) {
 				<Field label="Name" value={name} onChange={setName} />
 
 				<div>
-					<span className={OVERLINE}>Text</span>
-					<VariableEditor ref={editor} value={body} onChange={setBody} ariaLabel="Text" />
-					<div className="mt-2 flex flex-wrap items-center gap-1.5">
-						<span className="text-sm text-[var(--ink-muted)]">Add a variable</span>
-						{VARIABLE_ORDER.map((variable) => (
-							<button
-								key={variable}
-								type="button"
-								// Keeps the caret in the text while the chip goes in.
-								onMouseDown={(event) => event.preventDefault()}
-								onClick={() => editor.current?.insert(variable)}
-								className="inline-flex h-[22px] items-center rounded-[var(--radius-sm)] bg-[var(--accent-soft)] px-1.5 text-sm font-[var(--weight-medium)] text-[var(--accent)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-							>
-								{VARIABLE_LABEL[variable]}
-							</button>
-						))}
-					</div>
+					<label htmlFor={textId} className={OVERLINE}>
+						Text
+					</label>
+					{/* Plain text, as the client reads it. An older block may still hold a
+					    {{name}} token from when blocks had variables; it is filled in as before. */}
+					<textarea
+						id={textId}
+						value={body}
+						rows={1}
+						onChange={(event) => setBody(event.target.value)}
+						className="min-h-10 w-full resize-none rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-3 py-2 text-base text-[var(--ink)] [field-sizing:content] focus:border-[var(--focus)] focus:shadow-[inset_0_0_0_1px_var(--focus)]"
+					/>
 				</div>
 
 				<div>
@@ -350,24 +313,6 @@ function BlockEditor({ block, newKind, onSaved, onDeleted }: BlockEditorProps) {
 					</div>
 					<p className="mt-2 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 						You can still change or remove it in the mail. An intro or outro never sends anything by itself.
-					</p>
-					{rule !== "manual" && usesVariable ? (
-						<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
-							When a variable has no value for a mail, such as a first name for someone with no name, this
-							block is not added on its own.
-						</p>
-					) : null}
-				</div>
-
-				<div>
-					<span id={previewLabel} className={OVERLINE}>
-						Preview
-					</span>
-					<p
-						aria-labelledby={previewLabel}
-						className="min-h-12 rounded-[var(--radius-md)] bg-[var(--sunken)] px-3 py-3 text-lg whitespace-pre-wrap"
-					>
-						{preview}
 					</p>
 				</div>
 

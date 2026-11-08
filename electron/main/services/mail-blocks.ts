@@ -368,12 +368,14 @@ export async function resolve(
 
 /* ------------------------------------------------------------------ seed */
 
+// Plain text: intros and outros no longer offer variables. The signature carries the name.
+
 const EXAMPLES: ComposeBlockInput[] = [
-	{ kind: "intro", name: "Formal", body: "Geachte {{client_name}},", rule: "client" },
-	{ kind: "intro", name: "Friendly", body: "Dag {{first_name}},", rule: "new_contact" },
-	{ kind: "intro", name: "Short", body: "Dag,", rule: "reply" },
-	{ kind: "outro", name: "Kind regards", body: "Met vriendelijke groeten,\n{{my_name}}", rule: "client" },
-	{ kind: "outro", name: "Best wishes", body: "Hartelijke groeten,\n{{my_name}}", rule: "manual" },
+	{ kind: "intro", name: "Formal", body: "Geachte heer, mevrouw,", rule: "client" },
+	{ kind: "intro", name: "Friendly", body: "Dag,", rule: "new_contact" },
+	{ kind: "intro", name: "Short", body: "Hallo,", rule: "reply" },
+	{ kind: "outro", name: "Kind regards", body: "Met vriendelijke groeten,", rule: "client" },
+	{ kind: "outro", name: "Best wishes", body: "Hartelijke groeten,", rule: "manual" },
 ];
 
 /**

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { COMBOS, formatCombo, matchesCombo } from "../lib/shortcuts";
 import { TitleBarSlot } from "./TitleBarSlot";
@@ -8,6 +8,8 @@ type TitleSearchProps = {
 	onChange: (value: string) => void;
 	/** "Search clients". Also the field's accessible name. */
 	placeholder: string;
+	/** Drawn right after the field, in the title bar: the list's filter button. */
+	trailing?: ReactNode;
 };
 
 /**
@@ -20,7 +22,7 @@ type TitleSearchProps = {
  * before the window does, and mark the event handled, so this one stands back.
  * Escape empties the field, and a second Escape leaves it.
  */
-export function TitleSearch({ value, onChange, placeholder }: TitleSearchProps) {
+export function TitleSearch({ value, onChange, placeholder, trailing }: TitleSearchProps) {
 	const input = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -70,6 +72,7 @@ export function TitleSearch({ value, onChange, placeholder }: TitleSearchProps) 
 					<kbd className="flex-none font-sans text-micro text-[var(--ink-faint)]">{formatCombo(COMBOS.find).join(" ")}</kbd>
 				)}
 			</label>
+			{trailing}
 		</TitleBarSlot>
 	);
 }

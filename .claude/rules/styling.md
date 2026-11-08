@@ -185,8 +185,9 @@ right slot, on every screen that filters a list: Clients, Projects, Mail,
 Notes, Documents and both template screens. Ctrl or Cmd F puts the cursor in
 it; an open message or page finds inside itself with the same keys instead, by
 listening on the document, which hears the key first. Ctrl or Cmd Shift F
-opens the palette, like Ctrl or Cmd K. A list's filters stay on the page,
-behind the funnel. **The lock has no button**: no frame draws one, so it is the
+opens the palette, like Ctrl or Cmd K. A list's filters are behind the funnel
+right of the search (`components/ListSearchBar.tsx`), and the popover hangs
+under it over the page. **The lock has no button**: no frame draws one, so it is the
 palette command and Ctrl or Cmd Shift L.
 
 ## 5b. The sidebar is a rail, and it never opens

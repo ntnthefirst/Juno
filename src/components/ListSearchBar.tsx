@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./Button";
 import { TitleSearch } from "../app/TitleSearch";
 import { Icon, type IconName } from "./Icon";
@@ -18,11 +19,15 @@ type ListSearchBarProps = {
 	onClearFilters?: () => void;
 };
 
+/** The popover's width, fixed so it can be held inside the window without measuring it. */
+const POPOVER_WIDTH = 320;
+
 /**
- * A list's search and its filters. The search is in the title bar
- * (`TitleSearch`), where Ctrl F finds it on every list screen, and what stays
- * on the page is the funnel, which opens a popover and closes on a click
- * outside or Escape.
+ * A list's search and its filters, both in the title bar: the search
+ * (`TitleSearch`), where Ctrl F finds it on every list screen, and the funnel
+ * right after it, which opens a popover under itself and closes on a click
+ * outside or Escape. The popover is drawn over the page, not inside the bar,
+ * so the bar's drag region and height do not touch it.
  *
  * The mail list (`MailSearchBar.tsx`) had this shape first. Every list of
  * templates, documents or records that needs a search and a handful of
@@ -38,8 +43,11 @@ export function ListSearchBar({
 	filterCount = 0,
 	onClearFilters,
 }: ListSearchBarProps) {
-	const [open, setOpen] = useState(false);
-	const wrapper = useRef<HTMLDivElement>(null);
+	// Where the popover hangs, read from the funnel when it opens; null is closed.
+	const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+	const open = at !== null;
+	const funnel = useRef<HTMLButtonElement>(null);
+	const popover = useRef<HTMLDivElement>(null);
 	const label = ariaLabel ?? placeholder;
 
 	// Closes on a click anywhere else and on Escape, like any popover.
@@ -47,11 +55,11 @@ export function ListSearchBar({
 		if (!open) return;
 		const onDown = (event: MouseEvent) => {
 			if (!(event.target instanceof Node)) return;
-			if (wrapper.current?.contains(event.target)) return;
-			setOpen(false);
+			if (funnel.current?.contains(event.target) || popover.current?.contains(event.target)) return;
+			setAt(null);
 		};
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setOpen(false);
+			if (event.key === "Escape") setAt(null);
 		};
 		document.addEventListener("mousedown", onDown);
 		document.addEventListener("keydown", onKey);
@@ -61,48 +69,69 @@ export function ListSearchBar({
 		};
 	}, [open]);
 
-	return (
-		<div ref={wrapper} className="relative flex items-center">
-			<TitleSearch value={search} onChange={onSearch} placeholder={label} />
-			{filters ? (
-				<button
-					type="button"
-					aria-label="Filters"
-					title="Filters"
-					aria-expanded={open}
-					onClick={() => setOpen((current) => !current)}
-					className={[
-						"inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-[var(--radius-md)] px-1.5",
-						filterCount > 0 || open
-							? "bg-[var(--accent-soft)] text-[var(--accent)]"
-							: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
-					].join(" ")}
-				>
-					<Icon name="filter" size={14} />
-					{filterCount > 0 ? (
-						<span className="tabular text-micro">{filterCount}</span>
-					) : null}
-				</button>
-			) : null}
+	function toggle() {
+		if (open) {
+			setAt(null);
+			return;
+		}
+		const rect = funnel.current?.getBoundingClientRect();
+		if (!rect) return;
+		// Hung from the funnel's right edge, so it opens towards the page, and kept inside the window.
+		const left = Math.max(8, Math.min(rect.right - POPOVER_WIDTH, window.innerWidth - 8 - POPOVER_WIDTH));
+		setAt({ top: rect.bottom + 4, left });
+	}
 
-			{open && filters ? (
-				<div
-					role="group"
-					aria-label={filtersAriaLabel ?? `${label} filters`}
-					className="animate-pop absolute top-full left-0 z-20 mt-1 w-[320px] rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-popover)]"
-				>
-					{filters}
-					<div className="mt-3 flex justify-between">
-						<Button size="dense" disabled={filterCount === 0} onClick={() => onClearFilters?.()}>
-							Clear filters
-						</Button>
-						<Button size="dense" onClick={() => setOpen(false)}>
-							Done
-						</Button>
-					</div>
-				</div>
-			) : null}
-		</div>
+	return (
+		<TitleSearch
+			value={search}
+			onChange={onSearch}
+			placeholder={label}
+			trailing={
+				filters ? (
+					<>
+						<button
+							ref={funnel}
+							type="button"
+							aria-label="Filters"
+							title="Filters"
+							aria-expanded={open}
+							onClick={toggle}
+							className={[
+								"inline-flex h-7 min-w-7 shrink-0 items-center justify-center gap-1 rounded-[var(--radius-md)] px-1.5",
+								filterCount > 0 || open
+									? "bg-[var(--accent-soft)] text-[var(--accent)]"
+									: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
+							].join(" ")}
+						>
+							<Icon name="filter" size={14} />
+							{filterCount > 0 ? <span className="tabular text-micro">{filterCount}</span> : null}
+						</button>
+						{at
+							? createPortal(
+									<div
+										ref={popover}
+										role="group"
+										aria-label={filtersAriaLabel ?? `${label} filters`}
+										className="animate-pop fixed z-[60] rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-popover)]"
+										style={{ top: at.top, left: at.left, width: POPOVER_WIDTH }}
+									>
+										{filters}
+										<div className="mt-3 flex justify-between">
+											<Button size="dense" disabled={filterCount === 0} onClick={() => onClearFilters?.()}>
+												Clear filters
+											</Button>
+											<Button size="dense" onClick={() => setAt(null)}>
+												Done
+											</Button>
+										</div>
+									</div>,
+									document.body,
+								)
+							: null}
+					</>
+				) : undefined
+			}
+		/>
 	);
 }
 

@@ -19,19 +19,23 @@
 
 :root {
 	/* ---- Surfaces: cool porcelain, not clinical white ---- */
-	--paper: #f5f5f7; /* window background */
+	--paper: #f1f1f4; /* window background */
 	--surface: #ffffff; /* cards, rows, panels sitting on paper */
-	--sunken: #eeeef1; /* wells, inset areas, table headers */
-	--hover: #ebebef; /* row and control hover. Not a selected state */
+	--sunken: #ebebef; /* wells, inset areas, table headers */
+	--hover: #e7e7ec; /* row and control hover. Not a selected state */
+	/* Days outside the range in view: the weekend in a week, other months in a
+	 * month. Lighter than --sunken on purpose, so the grid lines over it stay
+	 * visible; on --sunken a --line rule disappears. */
+	--shade: #f6f6f8;
 
 	/* ---- Ink ---- */
-	--ink: #17171c; /* primary text */
-	--ink-muted: #5b5c66; /* secondary text, labels, passes AA */
-	--ink-faint: #868791; /* meta and large text only, NOT body copy. Clears 3:1 on every light surface including --hover */
+	--ink: #111116; /* primary text */
+	--ink-muted: #4d4e58; /* secondary text, labels, passes AA */
+	--ink-faint: #767782; /* meta and large text only, NOT body copy. Clears 3:1 on every light surface including --hover */
 
 	/* ---- Lines ---- */
-	--line: #ececf1; /* default border, dividers */
-	--line-strong: #cdcdd5; /* input borders, emphasised dividers */
+	--line: #e2e2e8; /* default border, dividers */
+	--line-strong: #c2c2cc; /* input borders, emphasised dividers */
 
 	/* ---- Accent: iris ---- */
 	--accent: #4a3fa0;
@@ -183,14 +187,14 @@
 	 * fixed literals and are deliberately NOT redefined in either dark block.
 	 * They are the only colours in this file that do not follow the theme, and
 	 * they mirror --paper, --surface, --line and --line-strong in each mode. */
-	--swatch-light-paper: #f5f5f7;
+	--swatch-light-paper: #f1f1f4;
 	--swatch-light-surface: #ffffff;
-	--swatch-light-line: #ececf1;
-	--swatch-light-mark: #cdcdd5;
-	--swatch-dark-paper: #101013;
-	--swatch-dark-surface: #18181c;
-	--swatch-dark-line: #27272d;
-	--swatch-dark-mark: #393941;
+	--swatch-light-line: #e2e2e8;
+	--swatch-light-mark: #c2c2cc;
+	--swatch-dark-paper: #0d0d10;
+	--swatch-dark-surface: #19191e;
+	--swatch-dark-line: #2e2e35;
+	--swatch-dark-mark: #45454e;
 
 	/* ---- Canvas paper ----
 	 * The document page editor draws a sheet of A4 on screen, and the mail
@@ -212,17 +216,18 @@
 
 :root:not([data-theme="light"]) {
 	@media (prefers-color-scheme: dark) {
-		--paper: #101013;
-		--surface: #18181c;
+		--paper: #0d0d10;
+		--surface: #19191e;
 		--sunken: #0a0a0d;
-		--hover: #222227;
+		--hover: #26262c;
+		--shade: #141418;
 
-		--ink: #f0f0f4;
-		--ink-muted: #a2a3ae;
-		--ink-faint: #74757f;
+		--ink: #f4f4f7;
+		--ink-muted: #b1b2bc;
+		--ink-faint: #82838d;
 
-		--line: #27272d;
-		--line-strong: #393941;
+		--line: #2e2e35;
+		--line-strong: #45454e;
 
 		--accent: #a79df0;
 		--accent-hover: #c0b9f8;
@@ -270,17 +275,18 @@
 }
 
 :root[data-theme="dark"] {
-	--paper: #101013;
-	--surface: #18181c;
+	--paper: #0d0d10;
+	--surface: #19191e;
 	--sunken: #0a0a0d;
-	--hover: #222227;
+	--hover: #26262c;
+	--shade: #141418;
 
-	--ink: #f0f0f4;
-	--ink-muted: #a2a3ae;
-	--ink-faint: #74757f;
+	--ink: #f4f4f7;
+	--ink-muted: #b1b2bc;
+	--ink-faint: #82838d;
 
-	--line: #27272d;
-	--line-strong: #393941;
+	--line: #2e2e35;
+	--line-strong: #45454e;
 
 	--accent: #a79df0;
 	--accent-hover: #c0b9f8;
@@ -434,6 +440,7 @@
 	--color-surface: var(--surface);
 	--color-sunken: var(--sunken);
 	--color-hover: var(--hover);
+	--color-shade: var(--shade);
 	--color-ink: var(--ink);
 	--color-ink-muted: var(--ink-muted);
 	--color-ink-faint: var(--ink-faint);

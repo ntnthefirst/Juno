@@ -40,6 +40,11 @@ type TitleBarProps = {
 	rightSlotRef: (element: HTMLDivElement | null) => void;
 	/** Where a record draws its "..." menu, after New (TitleBarSlot side="overflow"). */
 	overflowSlotRef: (element: HTMLDivElement | null) => void;
+	/**
+	 * A screen has put its own ways to start something in the right slot and
+	 * asked for New to go (TitleBarSlot `replacesNew`), so the bar leaves it out.
+	 */
+	newHidden?: boolean;
 };
 
 type TitleButtonProps = {
@@ -91,7 +96,8 @@ function Divider() {
  * Left to right: Search, Recent and Reminders, a divider, then the page title,
  * or the way back, a slash and the record's name, and whatever the screen puts
  * beside it. At the right are the screen's own actions (a list's search is the
- * first), New, the record's "...", a divider and the agent.
+ * first), New, the record's "...", a divider and the agent. A record that
+ * draws its own actions there instead may ask for New to go (`newHidden`).
  * The lock has no button here: it is in the palette and has its shortcut.
  *
  * Everything here is inside the drag region except the controls, which opt out
@@ -113,6 +119,7 @@ export function TitleBar({
 	slotRef,
 	rightSlotRef,
 	overflowSlotRef,
+	newHidden = false,
 }: TitleBarProps) {
 	const agentName = agentPending > 0 ? `Agent, ${agentPending} waiting for you` : "Agent";
 	const recentButton = useRef<HTMLButtonElement>(null);
@@ -244,7 +251,7 @@ export function TitleBar({
 			<nav aria-label="Window" className="flex flex-none items-center justify-end gap-0.5">
 				<TimerPill />
 				<div ref={rightSlotRef} className="flex min-w-0 items-center" />
-				{openDocument ? null : (
+				{openDocument || newHidden ? null : (
 					<Tooltip label={newDirect ? newDirect.label : "New"} keys={formatCombo(COMBOS.newItem)} side="bottom" className="no-drag flex">
 						<button
 							ref={newButton}

@@ -159,6 +159,15 @@ New, where a record keeps its menu (a client, a project, a page, a document). Th
 there too, from any screen, by `app/TimerPill.tsx` (decision 56): a clock, the
 project name and a stop button, and nothing while no timer runs.
 
+**A record may stand in for New.** `<TitleBarSlot side="right" replacesNew>`
+takes New out of the bar for as long as that slot is mounted, because the
+record's own actions are the ways to start something from it. A client is the
+one record that does (frame `170:12408`): Send mail, Log call and New project as
+quiet text buttons with their icons, then its "...". The slot counts each
+request through `hideNew` in `app/titlebar-slot-context.ts`, so New comes back
+when the last one unmounts. Ctrl or Cmd N still works there; only the button
+goes.
+
 Calendar is the one screen that fills the left slot with its own toolbar: the month heading, previous, Today, next and the view switch, with the page title left empty, as the month, week and agenda frames draw it.
 
 What the bar holds, from the Title Bar component (`14:221`) and its variants:

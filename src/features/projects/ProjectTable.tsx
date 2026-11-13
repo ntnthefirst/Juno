@@ -1,8 +1,10 @@
 import type { ProjectSummary } from "@shared/types";
 import { Checkbox } from "../../components/Checkbox";
 import { Icon } from "../../components/Icon";
+import { RecordLink } from "../../components/RecordLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { contextMenuFor } from "../../lib/native-menu";
+import { requestOpenClient } from "../../lib/open-client";
 import { formatCents, formatDate, LINK_ICONS, LINK_LABELS } from "./format";
 import { ProjectCover } from "./ProjectCover";
 
@@ -143,7 +145,14 @@ export function ProjectTable({ rows, dense, held, onPick, onOpen, onRemove, onFa
 									</div>
 								</td>
 								<td className="border-b border-[var(--line)] px-3 text-dense text-[var(--ink-muted)]">
-									<span className="block truncate">{row.clientName ?? "Your own work"}</span>
+									{row.clientId && row.clientName && !hasSelection ? (
+										// The client opens on its own; the rest of the row still opens the project.
+										<RecordLink tone="quiet" onOpen={() => requestOpenClient(row.clientId!, row.clientName!)}>
+											{row.clientName}
+										</RecordLink>
+									) : (
+										<span className="block truncate">{row.clientName ?? "Your own work"}</span>
+									)}
 								</td>
 								<td className="border-b border-[var(--line)] px-3 text-dense">
 									{row.status ? (

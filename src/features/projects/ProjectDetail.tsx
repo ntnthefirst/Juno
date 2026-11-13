@@ -21,11 +21,13 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Tabs, type TabItem } from "../../components/Tabs";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { RecordLink } from "../../components/RecordLink";
+import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
 import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { addDays, todayIso } from "../calendar/dates";
 import { openNewRecord } from "../../lib/new-record";
-import type { ScheduleForm } from "../calendar/schedule-form";
+import { editScheduleForm, type ScheduleForm } from "../calendar/schedule-form";
 import { scheduleRows, type ScheduleRow } from "../calendar/schedule-rows";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
 import { LinkedNotes } from "../notes/LinkedNotes";
@@ -228,6 +230,13 @@ export function ProjectDetail({
 		void opening.catch((cause: unknown) => setNotice(messageOf(cause)));
 	}
 
+	/** An event linked to the project opens in the same form page its Calendar tab uses. */
+	function openEvent(id: string) {
+		editScheduleForm({ kind: "event", id })
+			.then(onSchedule)
+			.catch((cause: unknown) => setNotice(messageOf(cause)));
+	}
+
 	function removeProject() {
 		if (!data) return;
 		const { project: row, client, status, assets, commands } = data;
@@ -296,7 +305,7 @@ export function ProjectDetail({
 	const project = current;
 	const firstCommand = commands[0] ?? null;
 	const runOf = (commandId: string) => runs.find((one) => one.commandId === commandId) ?? null;
-	const nextEvent = upcoming.find((row) => row.kind === "event") ?? null;
+	const nextEvent = upcoming.find((row): row is Extract<ScheduleRow, { kind: "event" }> => row.kind === "event") ?? null;
 
 	const tabs: TabItem<ProjectTab>[] = [
 		{ id: "notes", label: "Notes" },
@@ -351,9 +360,7 @@ export function ProjectDetail({
 		failed: (message) => setNotice(message),
 	};
 
-	const subtitle = [client ? client.name : "Your own work", current.dueOn ? `due ${formatDate(current.dueOn)}` : null]
-		.filter(Boolean)
-		.join(" · ");
+	const due = current.dueOn ? `due ${formatDate(current.dueOn)}` : null;
 
 	return (
 		<div className="relative h-full overflow-y-auto">
@@ -365,7 +372,16 @@ export function ProjectDetail({
 							<h1 className="text-h2">{current.name}</h1>
 							{status ? <StatusBadge label={status.label} tone={status.tone} /> : null}
 						</div>
-						<p className="mt-1 text-base text-[var(--ink-muted)]">{subtitle}</p>
+						<p className="mt-1 text-base text-[var(--ink-muted)]">
+							{client ? (
+								<RecordLink tone="quiet" onOpen={() => requestOpenClient(client.id, client.name)}>
+									{client.name}
+								</RecordLink>
+							) : (
+								"Your own work"
+							)}
+							{due ? ` · ${due}` : null}
+						</p>
 					</div>
 					<div className="flex flex-none items-center gap-1">
 						<ActionMenu target={{ kind: "add", id: current.id }} handlers={addHandlers} ariaLabel="Add to this project" label="Add" icon="add" />
@@ -388,7 +404,12 @@ export function ProjectDetail({
 						onChanged={() => reload()}
 					/>
 				) : tab === "timeline" ? (
-					<ProjectTimeline projectId={current.id} version={tick} />
+					<ProjectTimeline
+						projectId={current.id}
+						version={tick}
+						onOpenTime={() => onTabChange("time")}
+						onOpenFolder={openFolder}
+					/>
 				) : tab === "time" ? (
 					<ProjectTime
 						projectId={current.id}
@@ -429,7 +450,11 @@ export function ProjectDetail({
 									</button>
 								</div>
 								<dl className="mt-3 flex flex-col gap-4">
-									<Detail label="Client" value={client ? client.name : "Your own work"} />
+									<Detail
+										label="Client"
+										value={client ? client.name : "Your own work"}
+										onOpen={client ? () => requestOpenClient(client.id, client.name) : undefined}
+									/>
 									<Detail label="Status" value={status ? status.label : "No status"} />
 									<Detail label="Due date" value={current.dueOn ? formatDate(current.dueOn) : "Not set"} />
 									{current.agreedValueCents !== null ? (
@@ -439,13 +464,19 @@ export function ProjectDetail({
 										<Detail
 											label="Mail"
 											value={threadCount === 0 ? "Nothing linked" : `${threadCount} ${threadCount === 1 ? "thread" : "threads"} linked`}
+											onOpen={threadCount === 0 ? undefined : () => onTabChange("mail")}
 										/>
 									</div>
 									<Detail
 										label="Next event"
 										value={nextEvent ? `${dayLabel(nextEvent.date)}, ${nextEvent.item.title}` : "Nothing planned"}
+										onOpen={nextEvent ? () => openEvent(nextEvent.item.eventId) : undefined}
 									/>
-									<Detail label="Time logged" value={formatDuration(loggedMinutes)} />
+									<Detail
+										label="Time logged"
+										value={formatDuration(loggedMinutes)}
+										onOpen={loggedMinutes > 0 ? () => onTabChange("time") : undefined}
+									/>
 								</dl>
 							</aside>
 						</div>
@@ -517,7 +548,7 @@ export function ProjectDetail({
 												setNotice(messageOf(cause));
 											})
 										}
-										className="min-w-0 flex-1 truncate text-left text-dense"
+										className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] text-left text-dense text-[var(--accent)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 										title={link.target}
 									>
 										{link.label}
@@ -813,15 +844,17 @@ function move<T extends { id: string }>(
 type DetailProps = {
 	label: string;
 	value: string;
+	/** Where the value leads: the client, the tab that lists what it counts, the event it names. */
+	onOpen?: () => void;
 };
 
 /** One line of the Details column: a small caps label over its value. */
-function Detail({ label, value }: DetailProps) {
+function Detail({ label, value, onOpen }: DetailProps) {
 	return (
 		<div>
 			<dt className="text-overline uppercase text-[var(--ink-muted)]">{label}</dt>
-			<dd data-selectable className="mt-1 text-base">
-				{value}
+			<dd data-selectable={onOpen ? undefined : true} className="mt-1 text-base">
+				{onOpen ? <RecordLink onOpen={onOpen}>{value}</RecordLink> : value}
 			</dd>
 		</div>
 	);

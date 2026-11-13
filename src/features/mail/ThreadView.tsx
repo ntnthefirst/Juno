@@ -7,6 +7,7 @@ import { ActionMenu } from "../../components/ActionMenu";
 import type { MenuHandlers } from "../../lib/native-menu";
 import { messageOf } from "../../lib/errors";
 import { describeMailFileResult } from "./format";
+import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { LinkProjectDialog } from "./LinkProjectDialog";
@@ -419,7 +420,17 @@ export function ThreadView({
 				    the conversation panel already shows both. */}
 				{summary.clientName || (summary.projectId && summary.projectName) ? (
 					<div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-[var(--ink-muted)]">
-						{summary.clientName ? (
+						{summary.clientId && summary.clientName ? (
+							<button
+								type="button"
+								onClick={() => requestOpenClient(summary.clientId!, summary.clientName!)}
+								title="Open the client"
+								className="inline-flex min-w-0 items-center gap-1.5 rounded-[var(--radius-sm)] hover:text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+							>
+								<Icon name="client" size={14} className="flex-none" />
+								<span className="truncate">{summary.clientName}</span>
+							</button>
+						) : summary.clientName ? (
 							<span className="inline-flex min-w-0 items-center gap-1.5">
 								<Icon name="client" size={14} className="flex-none" />
 								<span className="truncate">{summary.clientName}</span>

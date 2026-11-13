@@ -24,6 +24,7 @@ import { Dialog } from "../../components/Dialog";
 import { SelectionBar } from "../../components/SelectionBar";
 import { MenuButton } from "../../components/Menu";
 import { EmptyState } from "../../components/EmptyState";
+import { RecordLink } from "../../components/RecordLink";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { clearPendingClient, peekPendingClient } from "../../lib/open-client";
@@ -170,8 +171,8 @@ export function ClientsScreen() {
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 
-	function selectRow(row: ClientSummary) {
-		setDetailTab("overview");
+	function selectRow(row: ClientSummary, tab: TabId = "overview") {
+		setDetailTab(tab);
 		setSelectedId(row.id);
 		setSelectedName(row.name);
 	}
@@ -515,6 +516,7 @@ export function ClientsScreen() {
 							onEdit={(client) => setForm({ client })}
 							onDelete={(client) => void remove(client)}
 							onSendMail={(client) => void startMail(client.id)}
+							onMailTo={(address) => setCompose({ clientId: selectedId, to: [{ name: null, address }] })}
 							onChanged={(message) => {
 								if (message) setNotice(message);
 								refreshList();
@@ -754,7 +756,8 @@ type ClientTableProps = {
 	view: ClientView;
 	onView: (view: ClientView) => void;
 	selectedId: string | null;
-	onSelect: (row: ClientSummary) => void;
+	/** Opens the client, on its overview unless a tab is named. */
+	onSelect: (row: ClientSummary, tab?: TabId) => void;
 	onEdit: (row: ClientSummary) => void;
 	onAddNote: (row: ClientSummary) => void;
 	onDelete: (row: ClientSummary) => void;
@@ -949,7 +952,18 @@ function ClientTable({
 									{row.city ?? ""}
 								</td>
 								<td className="tabular border-b border-[var(--line)]/60 px-3 text-right text-dense text-[var(--ink-muted)]">
-									{row.openProjectCount} / {row.projectCount}
+									{hasSelection || row.projectCount === 0 ? (
+										`${row.openProjectCount} / ${row.projectCount}`
+									) : (
+										// The count is a way to the client's projects, as the tab that lists them.
+										<RecordLink
+											tone="quiet"
+											label={`Projects for ${row.name}`}
+											onOpen={() => onSelect(row, "projects")}
+										>
+											{row.openProjectCount} / {row.projectCount}
+										</RecordLink>
+									)}
 								</td>
 							</tr>
 						);

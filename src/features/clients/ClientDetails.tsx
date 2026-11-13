@@ -25,6 +25,8 @@ type ClientDetailsProps = {
 	onEditEmail: (email: ClientEmail) => void;
 	onEditPhone: (phone: ClientPhone) => void;
 	onEditLink: (link: ClientLink) => void;
+	/** A new message to one of the addresses, in Juno's own composer. */
+	onMailTo: (address: string) => void;
 	/** Asks before anything goes, with the existing dialog. */
 	onRemove: (removal: DetailRemoval) => void;
 };
@@ -68,6 +70,7 @@ export function ClientDetails({
 	onEditEmail,
 	onEditPhone,
 	onEditLink,
+	onMailTo,
 	onRemove,
 }: ClientDetailsProps) {
 	// What failed outside a field (Make primary, opening a link), said under the list.
@@ -160,9 +163,17 @@ export function ClientDetails({
 							{ label: "Edit label", open: () => onEditEmail(email) },
 						)}
 					>
-						<span data-selectable className="min-w-0 truncate text-base">
+						<button
+							type="button"
+							title={`Write to ${email.email}`}
+							// A double click edits the value, so only the first click starts a message.
+							onClick={(event) => {
+								if (event.detail <= 1) onMailTo(email.email);
+							}}
+							className={LINK_CLASS}
+						>
 							{email.email}
-						</span>
+						</button>
 						{primaryOrLabel(email.isPrimary, email.label)}
 					</DetailValue>
 				))}

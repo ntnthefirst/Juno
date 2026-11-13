@@ -1,7 +1,7 @@
 import { IconButton } from "../../components/IconButton";
 import { Tabs, type TabItem } from "../../components/Tabs";
 import { ScheduleSection } from "../calendar/ScheduleSection";
-import type { ScheduleForm } from "../calendar/schedule-form";
+import { editScheduleForm, type ScheduleForm } from "../calendar/schedule-form";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Client,
@@ -30,6 +30,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon, type IconName } from "../../components/Icon";
 import { InlineNotes } from "../../components/InlineNotes";
+import { RecordLink } from "../../components/RecordLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
@@ -162,6 +163,8 @@ type ClientDetailProps = {
 	onDelete: (client: Client) => void;
 	/** Opens the composer addressed to this client. */
 	onSendMail: (client: Client) => void;
+	/** Opens the composer addressed to one of the client's addresses. */
+	onMailTo: (address: string) => void;
 	/** The main process changed the client (archived it), so what is on screen is stale. */
 	onChanged: (message: string | undefined) => void;
 	/**
@@ -198,6 +201,7 @@ export function ClientDetail({
 	onEdit,
 	onDelete,
 	onSendMail,
+	onMailTo,
 	onChanged,
 	onEditContact,
 	onEditProject,
@@ -358,6 +362,38 @@ export function ClientDetail({
 		}
 	}
 
+	/**
+	 * A timeline entry opens what it stands for, the same way it opens anywhere
+	 * else: a date or a reminder in the form page the schedule list uses, a note
+	 * in its panel, the rest on their own screens.
+	 */
+	async function openEntry(entry: ClientTimelineEntry) {
+		try {
+			switch (entry.kind) {
+				case "project":
+					requestOpen({ kind: "project", id: entry.entityId, name: entry.title });
+					return;
+				case "document":
+					onOpenDocument(entry.entityId, entry.title);
+					return;
+				case "mail":
+					requestOpen({ kind: "thread", id: entry.entityId, messageId: null });
+					return;
+				case "event":
+				case "reminder":
+					onSchedule(await editScheduleForm({ kind: entry.kind, id: entry.entityId }));
+					return;
+				case "note":
+					await editNoteEntry(entry);
+					return;
+				case "status":
+					return;
+			}
+		} catch (cause: unknown) {
+			setLoad({ status: "error", message: messageOf(cause) });
+		}
+	}
+
 	async function loadMoreEntries() {
 		if (load.status !== "ready" || loadingMore) return;
 		const oldest = load.detail.entries[load.detail.entries.length - 1];
@@ -489,15 +525,10 @@ export function ClientDetail({
 							{primaryEmail ? (
 								<div className="flex min-w-0 items-center gap-2">
 									<Icon name="mail" className="shrink-0 text-[var(--ink-muted)]" />
-									<a
-										data-selectable
-										href={`mailto:${primaryEmail.email}`}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="min-w-0 truncate text-[var(--accent)] hover:text-[var(--accent-hover)]"
-									>
+									{/* A new message from Juno, not the system's mail program. */}
+									<RecordLink label={`Write to ${primaryEmail.email}`} onOpen={() => onMailTo(primaryEmail.email)}>
 										{primaryEmail.email}
-									</a>
+									</RecordLink>
 								</div>
 							) : null}
 							{primaryPhone ? (
@@ -548,6 +579,7 @@ export function ClientDetail({
 								onEditEmail={onEditEmail}
 								onEditPhone={onEditPhone}
 								onEditLink={onEditLink}
+								onMailTo={onMailTo}
 								onRemove={setPending}
 							/>
 							<ContactsSection
@@ -590,9 +622,11 @@ export function ClientDetail({
 												<button
 													type="button"
 													onClick={() => requestOpen({ kind: "project", id: project.id, name: project.name })}
-													className="min-w-0 flex-1 text-left"
+													className="group min-w-0 flex-1 rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 												>
-													<span className="block truncate text-base font-[var(--weight-medium)]">{project.name}</span>
+													<span className="block truncate text-base font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] group-hover:text-[var(--accent)]">
+														{project.name}
+													</span>
 													{project.dueOn ? (
 														<span className="tabular block text-sm text-[var(--ink-muted)]">Due {formatDate(project.dueOn)}</span>
 													) : null}
@@ -616,6 +650,7 @@ export function ClientDetail({
 						onAddNote={() => onEditNote(null)}
 						onEditNote={(entry) => void editNoteEntry(entry)}
 						onRemoveNote={(entry) => setPending({ kind: "note", id: entry.entityId, name: entry.title })}
+						onOpen={(entry) => void openEntry(entry)}
 					/>
 				) : tab === "projects" ? (
 					<ProjectsSection
@@ -901,6 +936,8 @@ type TimelineTabProps = {
 	onAddNote: () => void;
 	onEditNote: (entry: ClientTimelineEntry) => void;
 	onRemoveNote: (entry: ClientTimelineEntry) => void;
+	/** Opens the record an entry stands for: its project, document, conversation, date, reminder or note. */
+	onOpen: (entry: ClientTimelineEntry) => void;
 };
 
 /**
@@ -918,6 +955,7 @@ function TimelineTab({
 	onAddNote,
 	onEditNote,
 	onRemoveNote,
+	onOpen,
 }: TimelineTabProps) {
 	const { at, open, close } = useContextMenu();
 	const [menuEntry, setMenuEntry] = useState<ClientTimelineEntry | null>(null);
@@ -1012,16 +1050,22 @@ function TimelineTab({
 									/>
 								</div>
 								<div className="min-w-0 flex-1 pt-2 pb-4">
-									<span data-selectable className="block truncate text-lg">
-										{entry.kind === "status" ? (
-											<>
-												Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
-												<StatusName name={entry.statusChange?.to ?? null} />
-											</>
-										) : (
-											entry.title
-										)}
-									</span>
+									{entry.kind === "status" ? (
+										<span data-selectable className="block truncate text-lg">
+											Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
+											<StatusName name={entry.statusChange?.to ?? null} />
+										</span>
+									) : (
+										// Every other entry is a record of its own, and its title opens it.
+										<button
+											type="button"
+											data-opens-panel={entry.kind === "note" ? "" : undefined}
+											onClick={() => onOpen(entry)}
+											className="block max-w-full truncate rounded-[var(--radius-sm)] text-left text-lg transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+										>
+											{entry.title}
+										</button>
+									)}
 									{entry.detail ? (
 										<span data-selectable className="mt-0.5 block truncate text-base text-[var(--ink-muted)]">
 											{entry.detail}

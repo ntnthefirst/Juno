@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import { IconButton } from "../../components/IconButton";
 import { ContextMenu } from "../../components/Menu";
+import { RecordLink } from "../../components/RecordLink";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
+import { requestOpen } from "../../lib/open-entity";
 import { addDays, formatDate, formatTime, todayIso } from "./dates";
 import { scheduleRows, type ScheduleRow } from "./schedule-rows";
 import type { ScheduleForm } from "./schedule-form";
@@ -247,17 +249,12 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 		row.kind === "event" && !row.item.allDay
 			? `${formatDate(row.date)} ${formatTime(row.item.startUtc)}`
 			: formatDate(row.date);
-	const detail = [
-		showProject ? item.projectName : null,
-		repeatLabel(row),
-		row.kind === "event" ? row.item.location : null,
-	]
-		.filter(Boolean)
-		.join(" / ");
+	const project = showProject && item.projectId && item.projectName ? { id: item.projectId, name: item.projectName } : null;
+	const detail = [repeatLabel(row), row.kind === "event" ? row.item.location : null].filter(Boolean).join(" / ");
 
 	return (
 		<li
-			className="group flex items-center gap-3 border-b border-[var(--line)] px-2"
+			className="group flex items-center gap-3 border-b border-[var(--line)] px-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-within:bg-[var(--accent-soft)]"
 			style={{ height: "var(--row-height)" }}
 		>
 			<span
@@ -266,9 +263,25 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 					row.kind === "event" ? "bg-[var(--accent)]" : overdue ? "bg-[var(--risk)]" : "bg-[var(--warn)]"
 				}`}
 			/>
-			<span className="min-w-0 flex-1 truncate text-dense">
-				{item.title}
-				{detail ? <span className="ml-2 text-sm text-[var(--ink-muted)]">{detail}</span> : null}
+			<span className="flex min-w-0 flex-1 items-baseline gap-2 text-dense">
+				{/* The title opens the same form page as the pencil. */}
+				<button
+					type="button"
+					onClick={onEdit}
+					className="min-w-0 shrink truncate rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				>
+					{item.title}
+				</button>
+				{project ? (
+					<RecordLink
+						tone="quiet"
+						className="shrink-0 text-sm text-[var(--ink-muted)]"
+						onOpen={() => requestOpen({ kind: "project", ...project })}
+					>
+						{project.name}
+					</RecordLink>
+				) : null}
+				{detail ? <span className="min-w-0 truncate text-sm text-[var(--ink-muted)]">{detail}</span> : null}
 			</span>
 			<span
 				className={`tabular flex-none text-sm ${overdue ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}

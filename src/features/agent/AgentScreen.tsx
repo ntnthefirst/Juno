@@ -179,7 +179,8 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 							const view = views.get(row.id) ?? null;
 							const outcome = logOutcome(row);
 							return (
-								<tr key={row.id} className="h-[52px] border-b border-[var(--line)] align-middle hover:bg-[var(--hover)]">
+								// A log line is read, not pressed: only the record chip in it opens anything.
+								<tr key={row.id} className="h-[52px] border-b border-[var(--line)] align-middle">
 									<td className="tabular py-2 pr-4 text-dense text-[var(--ink-muted)]">{formatLogWhen(row.createdAt)}</td>
 									<td className="py-2 pr-4">
 										<span className={`font-mono text-sm ${row.result === "read" ? "text-[var(--ink-muted)]" : ""}`}>{row.toolName}</span>

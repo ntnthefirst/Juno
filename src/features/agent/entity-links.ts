@@ -26,10 +26,7 @@ const KIND_SCREENS: Partial<Record<AgentEntityKind, Extract<OpenTarget, { kind: 
 	contact: "clients",
 	mailAccount: "mail",
 	mailFolder: "mail",
-	mailTemplate: "mail-templates",
 	documentTemplate: "document-templates",
-	reminder: "reminders",
-	event: "calendar",
 };
 
 /** Whether a record can be opened from here at all. A deleted one cannot. */
@@ -40,11 +37,20 @@ export function isOpenable(entity: AgentEntityRef): boolean {
 
 /**
  * Opens the record a request names, as far as that is possible: the record
- * itself for a client, a project, a document, a conversation or a draft, and
- * otherwise the screen it lives on.
+ * itself for a client, a project, a document, a conversation, a draft, an
+ * event, a reminder or a styled mail, and otherwise the screen it lives on.
  */
 export async function openEntity(entity: AgentEntityRef): Promise<void> {
 	switch (entity.kind) {
+		case "event":
+			requestOpen({ kind: "event", id: entity.id });
+			return;
+		case "reminder":
+			requestOpen({ kind: "reminder", id: entity.id });
+			return;
+		case "mailTemplate":
+			requestOpen({ kind: "mail-template", id: entity.id, mode: "view" });
+			return;
 		case "client":
 			requestOpenClient(entity.id, entity.label ?? "Client");
 			return;

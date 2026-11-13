@@ -2511,3 +2511,112 @@ schedule, and CalDAV is still a later phase.
 **What would reverse this:** two-way sync with a calendar server, which would
 make these events editable and their server the owner of them, as decision 23
 already foresees for CalDAV.
+
+## 75. Documents is a file explorer, and a template is a file in it
+
+Amends decisions 19, 41, 49 and 62. Documents held PDFs made from a template
+or imported, with Templates as a second screen behind a switch. The owner
+wants one place that behaves like storage: any kind of file, kept under a
+client, a project or nothing, opened, previewed, copied and signed from the
+same list.
+
+- **A document is any file.** `documents` keeps its rows, its versions and
+  its owner rule (decision 48), and a version is now a file of any type with
+  its own name and media type, not only a PDF. `pdf_path` stays the newest
+  version's path, whatever the type, so everything that opens, sends or
+  attaches "the document" keeps working.
+- **The list is a folder tree.** The root holds a folder per client, a client
+  holds a folder per project, and Unfiled holds what belongs to nobody. Those
+  folders are the owner rule drawn, not rows. The owner may add folders of
+  their own inside any of them (`document_folders`, five standard columns,
+  soft deleted, a document holds a nullable `folder_id`). Moving a document
+  between client and project folders is `documents.link`, so the rule in
+  `document-owner.ts` still decides it.
+- **Files stay in Juno's documents folder** (decision 39 and the folder
+  setting), named by Juno, not mirrored as a tree on disk. Show in folder
+  opens the file's real place. Mirroring the tree on disk would make a rename
+  in Explorer and a rename in Juno two truths.
+- **A click previews and a double click opens.** One click selects and shows
+  the preview, Space or Enter on a selection opens it full screen, a double
+  click opens the file in the default app of the operating system. The same
+  holds for a mail attachment and a project's file.
+- **An edit made in another app is a new version.** A version's file is never
+  written to after it is kept. Opening the newest version in its default app
+  opens a working copy beside it; when Juno sees that copy's bytes differ from
+  the newest version (on focus and when the document is opened), it keeps them
+  as a new version, from "Edited outside Juno". A signed version is opened
+  read only.
+- **Copy, duplicate, rename, move, delete.** Duplicate makes a new document
+  from the newest version in the same place. Copy to puts a duplicate in
+  another client, project or folder. Rename changes the title and not the
+  files. Delete is the soft delete it was, and still parks for an agent.
+- **Adding is one step.** Drop files anywhere on the screen, or Add, and they
+  land in the folder that is open. When a file looks like one already there
+  (decision 39's text match, or the same name), the two are shown side by
+  side and the person picks: a new version of that one, or a document of its
+  own. Nothing is filed as a version on a guess.
+- **Templates are files in a Templates folder.** The Templates screen and the
+  Documents | Templates switch are gone. Each document template is listed in
+  a Templates folder at the root; opening one opens the canvas editor it
+  always had, and Use makes a document from it the way the template screen
+  did, inputs first, then the place. Components stay reachable from the
+  editor. The template tables, services and tools stay as they are, so
+  nothing an agent or an older document relies on moves. Styled mail stays in
+  Mail.
+- **Pages stay documents** (decision 62) and open in the page view.
+
+**What would reverse this:** wanting the tree in Explorer as well, which is a
+sync of a folder on disk with its own decision about who wins a rename.
+
+## 76. Every file has a preview, made in the main process and shown from its own origin
+
+The preview is decided by the file's type, in the main process
+(`services/file-preview.ts`), and handed to the window as something to draw,
+never as a path:
+
+- **PDF** in the existing viewer.
+- **Images** (PNG, JPEG, GIF, WebP, BMP, ICO, AVIF) and **SVG** as an image.
+  An SVG is drawn by `<img>` only, which runs no script in it.
+- **Word** (`.docx`) through Mammoth to HTML, **spreadsheets** (`.xlsx`,
+  `.csv`) through ExcelJS to a table per sheet, **text, Markdown, JSON and
+  code** as text. HTML made from a file is sanitised like a mail body and
+  served from `app://preview/` with its own policy, in an empty sandbox,
+  as decision 20 does for mail.
+- **Apple iWork** (`.pages`, `.numbers`, `.key`) by the preview picture the
+  file carries inside its zip.
+- **Anything else** by the thumbnail Windows makes for it
+  (`nativeImage.createThumbnailFromPath`), with the file's name, size and
+  type. A file with no preview at all says so and offers Open.
+
+Large files are cut: the first sheets and rows of a spreadsheet, the first
+part of a text file, with a line saying what was left out.
+
+## 77. A file becomes a PDF through Word when Word is there, and through Juno when it is not
+
+Signing and Convert to PDF need a PDF. Decision 19 kept a Word converter out
+of the path to a signature because it would be a dependency to install. It
+still is not one: when Microsoft Word is installed, Juno asks it to save the
+file as PDF, which keeps the layout exactly; when it is not, Juno converts the
+file itself, through Mammoth and `printToPDF`, and says that the layout may
+differ. Spreadsheets convert through the table preview, images and SVG are
+placed on a page. The PDF is kept as a new version of the same document, so
+the original stays, and signing then works as decision 38 describes. A
+document from an unreviewed template is still a specimen and still cannot be
+signed.
+
+Word is driven from the main process with a script whose paths come from the
+service, never from the window or an agent, and the run has a time limit.
+
+**What would reverse this:** a converter that ships inside the app and keeps
+Word's layout, which would replace both paths.
+
+## 78. A message that has not gone out is edited or deleted, never cancelled
+
+The outbox had a Cancel that left a message in a fourth state, neither a draft
+nor gone. A draft is now edited or deleted. A message waiting for approval or
+in the queue is taken back to a draft by Edit, which opens it in the composer,
+or deleted. `mail.outbox.cancel` is gone; `mail.outbox.update` changes a
+draft's recipients, subject or body (the Change records row, like the drafts
+it edits) and `mail.outbox.delete` deletes one (the Delete row, so it parks).
+Messages already cancelled became drafts in the migration that removed the
+state.

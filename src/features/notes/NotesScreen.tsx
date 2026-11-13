@@ -16,7 +16,9 @@ import { groupByDay } from "../../lib/day-groups";
 import { messageOf } from "../../lib/errors";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { contextMenuFor } from "../../lib/native-menu";
-import { clearPending, peekPending } from "../../lib/open-entity";
+import { RecordLink } from "../../components/RecordLink";
+import { requestOpenClient } from "../../lib/open-client";
+import { clearPending, peekPending, requestOpen } from "../../lib/open-entity";
 import { useScreenAction } from "../../lib/screen-actions";
 import { useLoaded } from "../../lib/use-loaded";
 import { useRecentTouch } from "../../lib/use-recent-touch";
@@ -435,7 +437,7 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 		schedule({ title: next, body: toMarkdown(blocks) });
 	}
 
-	const owner = [note.clientName, note.projectName].filter(Boolean).join(" · ");
+	const { clientId, clientName, projectId, projectName } = note;
 
 	return (
 		<div className="mx-auto w-full max-w-[860px] px-14 pt-16 pb-24">
@@ -455,7 +457,23 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 			/>
 			<p className="mt-2 mb-6 text-sm text-[var(--ink-muted)]">
 				<span className="tabular">{editedLabel(note.updatedAt)}</span>
-				{owner ? ` · ${owner}` : ""}
+				{/* What the note is filed under, each a way to that record. */}
+				{clientName ? " · " : null}
+				{clientId && clientName ? (
+					<RecordLink tone="quiet" onOpen={() => requestOpenClient(clientId, clientName)}>
+						{clientName}
+					</RecordLink>
+				) : (
+					clientName
+				)}
+				{projectName ? " · " : null}
+				{projectId && projectName ? (
+					<RecordLink tone="quiet" onOpen={() => requestOpen({ kind: "project", id: projectId, name: projectName })}>
+						{projectName}
+					</RecordLink>
+				) : (
+					projectName
+				)}
 			</p>
 			<BlockEditor blocks={blocks} onChange={changeBlocks} variant="note" containerRef={area} />
 		</div>

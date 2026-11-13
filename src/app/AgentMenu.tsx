@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import type { AgentAction, AgentActionView, AgentAuditView, AuditEvent } from "@shared/types";
+import type { AgentAction, AgentActionView, AgentAuditView, AgentEntityRef, AuditEvent } from "@shared/types";
 import { Button } from "../components/Button";
 import { Icon } from "../components/Icon";
 import { messageOf } from "../lib/errors";
+import { isOpenable, openEntity } from "../features/agent/entity-links";
 import { logOutcome, timeAgo } from "../features/agent/format";
 import { toolVisual } from "../features/agent/tool-visual";
 import { TitleMenu, TitleMenuHeading } from "./TitleMenu";
@@ -98,6 +99,14 @@ export function AgentMenu({ at, onClose, onOpenScreen }: AgentMenuProps) {
 		onOpenScreen();
 	}
 
+	function openRecord(entity: AgentEntityRef) {
+		onClose();
+		// After the menu has gone, so what opens lands on a screen with nothing over it.
+		window.setTimeout(() => {
+			openEntity(entity).catch(() => onOpenScreen());
+		}, 0);
+	}
+
 	return (
 		<TitleMenu at={at} label="Agent" width={360} onClose={onClose} footer={{ label: "Open agent", onSelect: onOpenScreen }}>
 			{error ? (
@@ -154,11 +163,13 @@ export function AgentMenu({ at, onClose, onOpenScreen }: AgentMenuProps) {
 							{load.lately.map((event) => {
 								const view = load.lateViews.get(event.id);
 								const title = view ? (view.entity?.label ? `${view.title}: ${view.entity.label}` : view.title) : event.summary;
+								// What the agent did opens the record it did it to, when that is still here.
+								const entity = view?.entity && isOpenable(view.entity) ? view.entity : null;
 								return (
 									<button
 										key={event.id}
 										type="button"
-										onClick={openScreen}
+										onClick={() => (entity ? openRecord(entity) : openScreen())}
 										className="flex w-full items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)]"
 									>
 										<Icon name={toolVisual(event.toolName).domain} size={16} className="flex-none text-[var(--ink-muted)]" />

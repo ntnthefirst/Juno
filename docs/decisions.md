@@ -2616,7 +2616,7 @@ The outbox had a Cancel that left a message in a fourth state, neither a draft
 nor gone. A draft is now edited or deleted. A message waiting for approval or
 in the queue is taken back to a draft by Edit, which opens it in the composer,
 or deleted. `mail.outbox.cancel` is gone; `mail.outbox.update` changes a
-draft's recipients, subject or body (the Change records row, like the drafts
+draft's recipients, subject or body (the Write mail drafts row, like the drafts
 it edits) and `mail.outbox.delete` deletes one (the Delete row, so it parks).
 Messages already cancelled became drafts in the migration that removed the
 state.

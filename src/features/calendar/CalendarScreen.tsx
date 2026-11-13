@@ -1,6 +1,6 @@
 import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { Segmented } from "../../components/Segmented";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	CalendarEvent,
 	CalendarItem,
@@ -19,6 +19,7 @@ import { MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
+import { clearPending, peekPending } from "../../lib/open-entity";
 import { ProjectForm } from "../projects/ProjectForm";
 import { ReminderForm } from "../reminders/ReminderForm";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
@@ -87,7 +88,16 @@ export function CalendarScreen() {
 	const [today, setToday] = useState<string | null>(null);
 	const [nowMinute, setNowMinute] = useState<number | null>(null);
 	const [view, setView] = useState<ViewKind>("month");
-	const [anchor, setAnchor] = useState<string | null>(null);
+	// An event pressed somewhere else (the overview, a client's timeline, an
+	// agent's request) arrives as a request, read once as this screen mounts.
+	// The calendar opens on its day and shows it in the panel once it has read
+	// that range.
+	const [requested] = useState(() => peekPending("event"));
+	useEffect(() => clearPending, []);
+	const focus = useRef<{ id: string; date: string | null } | null>(
+		requested ? { id: requested.id, date: requested.date ?? null } : null,
+	);
+	const [anchor, setAnchor] = useState<string | null>(() => requested?.date ?? null);
 	const [showReminders, setShowReminders] = useState(true);
 	const [showDeadlines, setShowDeadlines] = useState(true);
 	// The calendars Juno subscribes to, for the layers in the "..." menu.
@@ -150,7 +160,18 @@ export function CalendarScreen() {
 		let cancelled = false;
 		fetchItems()
 			.then((items) => {
-				if (!cancelled) setLoad({ status: "ready", items, view, anchor, dates });
+				if (cancelled) return;
+				setLoad({ status: "ready", items, view, anchor, dates });
+				// The event asked for, once a range that holds its day has been read.
+				const wanted = focus.current;
+				if (wanted?.date && dates.includes(wanted.date)) {
+					focus.current = null;
+					const matches = items.filter(
+						(item): item is CalendarOccurrence => item.kind === "event" && item.eventId === wanted.id,
+					);
+					const hit = matches.find((item) => item.startLocal.slice(0, 10) === wanted.date) ?? matches[0];
+					if (hit) setDetail(hit);
+				}
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setLoad({ status: "error", message: messageOf(cause) });
@@ -159,6 +180,34 @@ export function CalendarScreen() {
 			cancelled = true;
 		};
 	}, [fetchItems, from, version, view, anchor, dates]);
+
+	// A request that named the event without its day: the day is the event's own start.
+	useEffect(() => {
+		if (!requested || requested.date) return;
+		let cancelled = false;
+		window.juno.calendar
+			.get(requested.id)
+			.then((event) => {
+				if (cancelled) return;
+				if (!event) {
+					focus.current = null;
+					setNotice("That event is no longer on the calendar.");
+					return;
+				}
+				const date = event.startLocal.slice(0, 10);
+				focus.current = { id: event.id, date };
+				setAnchor(date);
+				// Read again even when the calendar already shows that day, since
+				// the first read finished before the day was known.
+				setVersion((v) => v + 1);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setNotice(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [requested]);
 
 	const refresh = useCallback(() => setVersion((v) => v + 1), []);
 	// A new-record window saved something, so the grid reads again.

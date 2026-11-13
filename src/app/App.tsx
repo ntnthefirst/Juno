@@ -18,7 +18,7 @@ import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { OverviewScreen } from "../features/overview/OverviewScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
-import { currentRequest, onOpenRequest, requestOpen } from "../lib/open-entity";
+import { currentRequest, onOpenRequest, requestOpen, screenFor } from "../lib/open-entity";
 import { announceRecordsChanged } from "../lib/new-record";
 import { currentScreenAction, onScreenActionRequest, requestScreenAction, type ScreenAction } from "../lib/screen-actions";
 import { useThemeSync } from "../lib/theme";
@@ -234,27 +234,24 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 		[],
 	);
 
-	// A link in the Agent tab. The screen it names is brought up fresh, and reads
-	// the request when it mounts.
+	// The screen on show, for a request that has to know where it lands.
+	const screenRef = useRef(screen);
+	useEffect(() => {
+		screenRef.current = screen;
+	});
+
+	// A link to a record. The screen it names is brought up fresh, and reads the
+	// request when it mounts. A new message asked for from Mail itself is the
+	// exception: Mail opens the composer where it is, so the conversation being
+	// read is still there to come back to.
 	useEffect(
 		() =>
 			onOpenRequest(() => {
 				const target = currentRequest();
 				if (!target) return;
-				const next: ScreenId =
-					target.kind === "project"
-						? "projects"
-						: target.kind === "document"
-							? "documents"
-							: target.kind === "note"
-								? "notes"
-							: target.kind === "thread"
-								? "mail"
-								: target.kind === "mail-template"
-									? "mail-templates"
-									: target.screen;
+				if (target.kind === "compose" && screenRef.current === "mail") return;
 				setVisit((count) => count + 1);
-				setScreen(next);
+				setScreen(screenFor(target));
 			}),
 		[],
 	);

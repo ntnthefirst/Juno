@@ -30,7 +30,7 @@ import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
 import { describeMailFileResult } from "./format";
 import { onDraftOffered, takeOfferedDraft } from "../../lib/open-draft";
-import { clearPending, peekPending } from "../../lib/open-entity";
+import { clearPending, onOpenRequest, peekPending, type OpenTarget } from "../../lib/open-entity";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { NO_FILTERS, type MailFilters } from "./mail-filters";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
@@ -61,6 +61,12 @@ type Opened =
 			opens: number;
 	  }
 	| { kind: "outbox"; id: string };
+
+/** What the composer starts from when a new message to an address was asked for elsewhere. */
+function composeSeedOf(request: Extract<OpenTarget, { kind: "compose" }> | null): ComposeSeed | null {
+	if (!request) return null;
+	return { to: request.to, clientId: request.clientId ?? null, projectId: request.projectId ?? null };
+}
 
 /** The widest horizon mail-accounts.ts accepts, which is ten years of mail. */
 const EVERYTHING_DAYS = 3650;
@@ -126,7 +132,8 @@ export function MailScreen() {
 	);
 	const [online, setOnline] = useState(() => navigator.onLine);
 	const [outboxCounts, setOutboxCounts] = useState<MailOutboxCounts | null>(null);
-	const [compose, setCompose] = useState<ComposeSeed | null>(null);
+	// An address pressed anywhere else arrives as a request for a new message to it.
+	const [compose, setCompose] = useState<ComposeSeed | null>(() => composeSeedOf(peekPending("compose")));
 	// The page for intros and outros, and what to reopen when it is left.
 	const [blocksPage, setBlocksPage] = useState<{ target: ManageTarget; returnTo: ComposeSeed | null } | null>(null);
 	useScreenAction("mail", () => setCompose({}));
@@ -166,6 +173,23 @@ export function MailScreen() {
 	useEffect(() => {
 		composeOpen.current = compose !== null;
 	}, [compose]);
+
+	// A new message asked for while Mail is already open: the shell leaves the
+	// screen as it is, so the conversation being read is still there afterwards.
+	useEffect(
+		() =>
+			onOpenRequest(() => {
+				const seed = composeSeedOf(peekPending("compose"));
+				if (!seed) return;
+				clearPending();
+				if (composeOpen.current) {
+					setNotice("Finish or close the message you are writing first.");
+					return;
+				}
+				setCompose(seed);
+			}),
+		[setNotice],
+	);
 
 	// A draft an agent wrote opens in the editor, like one a person started. If
 	// a message is already being written it is left alone, since the draft is

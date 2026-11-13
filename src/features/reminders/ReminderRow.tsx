@@ -2,7 +2,10 @@ import { useState } from "react";
 import type { Reminder } from "@shared/types";
 import { Checkbox } from "../../components/Checkbox";
 import { ActionMenu } from "../../components/ActionMenu";
+import { RecordLink } from "../../components/RecordLink";
 import { messageOf } from "../../lib/errors";
+import { requestOpenClient } from "../../lib/open-client";
+import { requestOpen } from "../../lib/open-entity";
 import { prefersReducedMotion } from "../../lib/motion";
 import { contextMenuFor, type MenuHandlers } from "../../lib/native-menu";
 import { describeDue, formatDate } from "./format";
@@ -80,6 +83,10 @@ export function ReminderRow({
 	}
 
 	const belongsTo = [reminder.clientName, reminder.projectName].filter(Boolean).join(" / ");
+	// Each name in the meta line opens its own record.
+	const client = reminder.clientId && reminder.clientName ? { id: reminder.clientId, name: reminder.clientName } : null;
+	const project =
+		reminder.projectId && reminder.projectName ? { id: reminder.projectId, name: reminder.projectName } : null;
 	const meta = [belongsTo, reminder.recurrenceLabel].filter(Boolean).join(" · ");
 	const done = reminder.bucket === "done";
 	const overdue = reminder.bucket === "overdue";
@@ -135,13 +142,33 @@ export function ReminderRow({
 					</span>
 
 					<div className={agenda ? "min-w-0 flex-1" : "min-w-0 flex-1 py-2 pl-1"}>
-						<p
-							className={`truncate text-base ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
+						<button
+							type="button"
+							onClick={() => onEdit(reminder)}
+							className={`block max-w-full truncate rounded-[var(--radius-sm)] text-left text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
 						>
 							{reminder.title}
-						</p>
+						</button>
 						{meta ? (
-							<p className="truncate text-sm text-[var(--ink-muted)]">{meta}</p>
+							<p className="truncate text-sm text-[var(--ink-muted)]">
+								{client ? (
+									<RecordLink tone="quiet" onOpen={() => requestOpenClient(client.id, client.name)}>
+										{client.name}
+									</RecordLink>
+								) : (
+									reminder.clientName
+								)}
+								{reminder.clientName && reminder.projectName ? " / " : null}
+								{project ? (
+									<RecordLink tone="quiet" onOpen={() => requestOpen({ kind: "project", ...project })}>
+										{project.name}
+									</RecordLink>
+								) : (
+									reminder.projectName
+								)}
+								{belongsTo && reminder.recurrenceLabel ? " · " : null}
+								{reminder.recurrenceLabel}
+							</p>
 						) : null}
 					</div>
 

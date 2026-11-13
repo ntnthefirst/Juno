@@ -77,7 +77,6 @@ export const MENU_ACTIONS = [
 	"new-message",
 	"send-mail",
 	"retry",
-	"cancel-send",
 	"use-template",
 	"show-wide",
 	"open-template",

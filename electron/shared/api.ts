@@ -1224,7 +1224,8 @@ export interface JunoApi {
 			replySeedOutgoing(outboxId: string, mode: MailReplyMode): Promise<MailReplySeed>;
 			/** The person's press. Queues the message; the sender picks it up at once. */
 			send(id: string): Promise<MailOutboxMessage>;
-			cancel(id: string): Promise<MailOutboxMessage>;
+			/** Takes a message that has not gone out back to a draft, so it can be edited. */
+			returnToDraft(id: string): Promise<MailOutboxMessage>;
 			retry(id: string): Promise<MailOutboxMessage>;
 			remove(id: string): Promise<MailOutboxMessage>;
 			/**

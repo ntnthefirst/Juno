@@ -690,7 +690,7 @@ const api: JunoApi = {
 			replySeed: (messageId, mode) => call("mail.outbox.replySeed", messageId, mode),
 			replySeedOutgoing: (outboxId, mode) => call("mail.outbox.replySeedOutgoing", outboxId, mode),
 			send: (id) => call("mail.outbox.send", id),
-			cancel: (id) => call("mail.outbox.cancel", id),
+			returnToDraft: (id) => call("mail.outbox.returnToDraft", id),
 			retry: (id) => call("mail.outbox.retry", id),
 			remove: (id) => call("mail.outbox.remove", id),
 			files: {

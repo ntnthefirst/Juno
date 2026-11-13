@@ -11,8 +11,10 @@ type OutboxRowProps = {
 	buttonRef: (element: HTMLButtonElement | null) => void;
 	/** Sends a failed message again. */
 	onRetry?: (id: string) => void;
-	/** Stops a message that is queued or waiting for approval. */
-	onCancel?: (id: string) => void;
+	/** Opens the message in the editor, taking it back to a draft first when it is waiting or failed. */
+	onEdit?: (id: string) => void;
+	/** Asks to delete a message that has not gone out. */
+	onDelete?: (id: string) => void;
 };
 
 /**
@@ -20,14 +22,15 @@ type OutboxRowProps = {
  * state as a badge, because a draft, a request waiting for you and a failed
  * send all live in the same place.
  */
-export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onCancel }: OutboxRowProps) {
+export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onEdit, onDelete }: OutboxRowProps) {
 	// The platform's menu for an unsent message (decision 59).
 	const onContextMenu = contextMenuFor(
 		{ kind: "outbox", id: message.id },
 		{
 			open: () => onSelect(message.id),
 			retry: () => onRetry?.(message.id),
-			"cancel-send": () => onCancel?.(message.id),
+			edit: () => onEdit?.(message.id),
+			delete: () => onDelete?.(message.id),
 		},
 	);
 

@@ -38,7 +38,10 @@ export type ThreadListOutbox = {
 	selectedId: string | null;
 	onSelect: (id: string) => void;
 	onRetry?: (id: string) => void;
-	onCancel?: (id: string) => void;
+	/** Opens a message in the editor, taking it back to a draft first when it is waiting or failed. */
+	onEdit?: (id: string) => void;
+	/** Asks to delete a message that has not gone out. */
+	onDelete?: (id: string) => void;
 };
 
 type ThreadListProps = {
@@ -256,7 +259,8 @@ export function ThreadList({
 										active={entry.id === outbox?.selectedId}
 										onSelect={(id) => outbox?.onSelect(id)}
 										onRetry={outbox?.onRetry}
-										onCancel={outbox?.onCancel}
+										onEdit={outbox?.onEdit}
+										onDelete={outbox?.onDelete}
 										buttonRef={(element) => {
 											if (element) rows.current.set(entry.id, element);
 											else rows.current.delete(entry.id);

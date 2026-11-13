@@ -27,7 +27,6 @@ const OUTBOX_STATES: MailOutboxState[] = [
 	"sending",
 	"sent",
 	"failed",
-	"cancelled",
 ];
 
 const ADDRESS_LIST = {
@@ -318,7 +317,7 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		title: "List the outbox",
 		description:
 			"Every composed message with its state: draft, pending (waiting for a person), queued, " +
-			"sending, sent, failed or cancelled, newest change first.",
+			"sending, sent or failed, newest change first.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {
@@ -505,19 +504,59 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		handler: async (args) => outbox.requestSend(String(args.id)),
 	},
 	{
-		name: "mail.outbox.cancel",
-		title: "Cancel an outbox message",
+		name: "mail.outbox.update",
+		title: "Edit a draft",
 		description:
-			"Withdraws a draft, a pending, a queued or a failed message. A sent one cannot be unsent.",
+			"Changes a draft that has not been sent: its recipients, subject or body. Only the fields you pass " +
+			"change, and a list you pass replaces the whole list. body_text is plain text and is turned into HTML " +
+			"in the house style. A message that is queued, sending or sent is refused: it has to be a draft. " +
+			"Nothing is sent; to send it ask with mail.send. Find the id with mail.outbox.list.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
 			type: "object",
-			properties: { id: { type: "string" } },
+			properties: {
+				id: { type: "string", description: "A draft's id, from mail.draft or mail.outbox.list." },
+				to: ADDRESS_LIST,
+				cc: ADDRESS_LIST,
+				bcc: ADDRESS_LIST,
+				subject: { type: "string" },
+				body_text: { type: "string" },
+				client_id: { type: ["string", "null"] },
+				project_id: { type: ["string", "null"] },
+				document_ids: { type: "array", items: { type: "string" }, description: "Replaces the attached documents." },
+			},
 			required: ["id"],
 			additionalProperties: false,
 		},
-		handler: async (args) => outbox.cancel(String(args.id)),
+		handler: async (args) =>
+			outbox.updateDraft(String(args.id), {
+				...(args.to !== undefined ? { to: addresses(args.to) } : {}),
+				...(args.cc !== undefined ? { cc: addresses(args.cc) } : {}),
+				...(args.bcc !== undefined ? { bcc: addresses(args.bcc) } : {}),
+				...(args.subject !== undefined ? { subject: String(args.subject) } : {}),
+				...(args.body_text !== undefined ? { bodyText: String(args.body_text) } : {}),
+				...(args.client_id !== undefined ? { clientId: args.client_id as string | null } : {}),
+				...(args.project_id !== undefined ? { projectId: args.project_id as string | null } : {}),
+				...(Array.isArray(args.document_ids) ? { documentIds: args.document_ids.map(String) } : {}),
+			}),
+	},
+	{
+		name: "mail.outbox.delete",
+		title: "Delete an outbox message",
+		description:
+			"Deletes a draft, or a message that is waiting or has failed, so it will not be sent. A message " +
+			"that is being sent or has been sent stays as a record and is refused. A person approves the " +
+			"deletion in the app first.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string", description: "A message id, from mail.outbox.list." } },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => outbox.remove(String(args.id)),
 	},
 	{
 		name: "mail.outbox.attach_project_file",

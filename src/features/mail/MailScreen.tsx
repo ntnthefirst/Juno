@@ -141,6 +141,9 @@ export function MailScreen() {
 	const [folderDelete, setFolderDelete] = useState<MailFolder | null>(null);
 	const [folderEmpty, setFolderEmpty] = useState<MailFolder | null>(null);
 	const [folderBusy, setFolderBusy] = useState(false);
+	// An unsent message waiting for a yes to its deletion, from the list or the detail.
+	const [outboxDelete, setOutboxDelete] = useState<MailOutboxMessage | null>(null);
+	const [outboxDeleteBusy, setOutboxDeleteBusy] = useState(false);
 	// A right click on the list where there is no row: what the list as a whole can do.
 	// The styled mail column on the right. Remembered for the session, so coming
 	// back to Mail finds it the way it was left.
@@ -391,7 +394,7 @@ export function MailScreen() {
 				// Everything not sent yet. A sent message already has its place in
 				// Sent once it syncs, so it drops out of this list rather than
 				// doubling up.
-				states: ["draft", "pending", "queued", "sending", "failed", "cancelled"],
+				states: ["draft", "pending", "queued", "sending", "failed"],
 				limit: 200,
 			})
 			.then((rows) => {
@@ -805,14 +808,41 @@ export function MailScreen() {
 		}
 	}
 
-	/** Sends a failed message again, or stops one that has not gone yet. */
-	async function outboxStep(step: "retry" | "cancel", id: string) {
+	/** Sends a failed message again. */
+	async function retryOutbox(id: string) {
 		try {
-			await window.juno.mail.outbox[step](id);
+			await window.juno.mail.outbox.retry(id);
 			setOutboxVersion((v) => v + 1);
-			say(step === "retry" ? "Sending again." : "Sending cancelled.");
+			say("Sending again.");
 		} catch (cause: unknown) {
 			say(messageOf(cause));
+		}
+	}
+
+	/** Opens a message in the editor. One that is waiting or failed goes back to a draft first. */
+	async function editOutbox(message: MailOutboxMessage) {
+		try {
+			const draft = message.state === "draft" ? message : await window.juno.mail.outbox.returnToDraft(message.id);
+			setOutboxVersion((v) => v + 1);
+			setCompose({ draft });
+		} catch (cause: unknown) {
+			say(messageOf(cause));
+		}
+	}
+
+	async function confirmOutboxDelete() {
+		if (!outboxDelete) return;
+		setOutboxDeleteBusy(true);
+		try {
+			await window.juno.mail.outbox.remove(outboxDelete.id);
+			setOpened(null);
+			setOutboxVersion((v) => v + 1);
+			say("Message deleted.");
+		} catch (cause: unknown) {
+			say(messageOf(cause));
+		} finally {
+			setOutboxDeleteBusy(false);
+			setOutboxDelete(null);
 		}
 	}
 
@@ -1041,7 +1071,8 @@ export function MailScreen() {
 					<OutboxDetail
 						key={`${selectedOutbox.id}:${selectedOutbox.updatedAt}`}
 						message={selectedOutbox}
-						onEdit={(draft) => setCompose({ draft })}
+						onEdit={(message) => void editOutbox(message)}
+						onDelete={setOutboxDelete}
 						onChanged={() => setOutboxVersion((v) => v + 1)}
 						onNotice={setNotice}
 					/>
@@ -1098,8 +1129,15 @@ export function MailScreen() {
 													if (row?.state === "draft" || row?.state === "pending") setCompose({ draft: row });
 													else setOpened({ kind: "outbox", id });
 												},
-												onRetry: (id: string) => void outboxStep("retry", id),
-												onCancel: (id: string) => void outboxStep("cancel", id),
+												onRetry: (id: string) => void retryOutbox(id),
+												onEdit: (id: string) => {
+													const row = outboxRows?.find((m) => m.id === id);
+													if (row) void editOutbox(row);
+												},
+												onDelete: (id: string) => {
+													const row = outboxRows?.find((m) => m.id === id);
+													if (row) setOutboxDelete(row);
+												},
 											},
 										}
 									: {})}
@@ -1147,6 +1185,24 @@ export function MailScreen() {
 						setOutboxVersion((v) => v + 1);
 					}}
 				/>
+			) : null}
+
+			{outboxDelete ? (
+				<Dialog
+					title="Delete message"
+					onClose={() => (!outboxDeleteBusy ? setOutboxDelete(null) : undefined)}
+					width="narrow"
+				>
+					<p className="mt-4 text-[var(--ink-muted)]">Delete this message? It will not be sent.</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button disabled={outboxDeleteBusy} onClick={() => setOutboxDelete(null)}>
+							Keep
+						</Button>
+						<Button variant="danger" disabled={outboxDeleteBusy} onClick={() => void confirmOutboxDelete()}>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
 
 			{deleteConfirm ? (

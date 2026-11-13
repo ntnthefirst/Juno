@@ -2874,7 +2874,7 @@ export interface MailTemplateRender {
 	missing: string[];
 }
 
-export type MailOutboxState = "draft" | "pending" | "queued" | "sending" | "sent" | "failed" | "cancelled";
+export type MailOutboxState = "draft" | "pending" | "queued" | "sending" | "sent" | "failed";
 
 export interface MailOutboxAttachment {
 	id: string;

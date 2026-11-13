@@ -5,11 +5,12 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
-import { documentSignatures } from "../db/schema";
+import { documentSignatures, mailOutbox } from "../db/schema";
 import * as clientsService from "./clients";
 import { addVersion, importFile } from "./document-import";
 import * as documents from "./documents";
@@ -107,7 +108,7 @@ describe("files from this machine", () => {
 	it("refuses an empty file, and a file on a message that has gone", async () => {
 		const message = await draft();
 		await expect(files.add(message.id, { fileName: "a.txt", data: new Uint8Array() }, db)).rejects.toThrow(/empty/);
-		await outbox.cancel(message.id, db);
+		db.update(mailOutbox).set({ state: "sent" }).where(eq(mailOutbox.id, message.id)).run();
 		await expect(files.add(message.id, { fileName: "a.txt", data: bytes("x") }, db)).rejects.toThrow(
 			/cannot be changed/,
 		);

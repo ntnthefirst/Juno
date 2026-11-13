@@ -3,7 +3,6 @@ import { useState } from "react";
 import type { MailOutboxMessage } from "@shared/types";
 import { tokensToLabels } from "@shared/mail-variables";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
 import { framed } from "../../lib/framed-preview";
 import { formatFull } from "./format";
@@ -11,19 +10,21 @@ import { STATE_LABELS, STATE_TONES } from "./outbox-format";
 
 type OutboxDetailProps = {
 	message: MailOutboxMessage;
+	/** Opens the message in the editor, taking it back to a draft first when it is waiting or failed. */
 	onEdit: (message: MailOutboxMessage) => void;
+	/** Asks, in a dialog, whether to delete it. */
+	onDelete: (message: MailOutboxMessage) => void;
 	onChanged: () => void;
 	onNotice: (message: string) => void;
 };
 
 /**
  * A composed message that is not a draft, and what can be done with it: where
- * it is in the queue, why it failed, and retrying or deleting it. A draft opens
+ * it is in the queue, why it failed, and retrying, editing or deleting it. A draft opens
  * in the editor instead, so there is nothing to read first.
  */
-export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDetailProps) {
+export function OutboxDetail({ message, onEdit, onDelete, onChanged, onNotice }: OutboxDetailProps) {
 	const [busy, setBusy] = useState(false);
-	const [confirmingCancel, setConfirmingCancel] = useState(false);
 	// The window fetches no picture or stylesheet from an address, so the frame
 	// shows a box where each remote picture goes (lib/framed-preview.ts).
 	const preview = message.bodyHtml ? framed(message.bodyHtml, "") : null;
@@ -41,7 +42,8 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 		}
 	}
 
-	const editable = message.state === "draft" || message.state === "pending" || message.state === "failed";
+	// Anything that has not gone out is edited or deleted (decision 78).
+	const editable = message.state !== "sending" && message.state !== "sent";
 
 	return (
 		<div className="px-8 py-6">
@@ -108,19 +110,8 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 					</Button>
 				) : null}
 				{editable ? <IconButton icon="edit" label="Edit" disabled={busy} onClick={() => onEdit(message)} /> : null}
-				{message.state === "queued" ? (
-					<Button variant="danger" disabled={busy} onClick={() => setConfirmingCancel(true)}>
-						Cancel sending
-					</Button>
-				) : null}
-				{message.state === "cancelled" || message.state === "draft" || message.state === "failed" ? (
-					<IconButton
-						icon="remove"
-						label="Delete"
-						danger
-						disabled={busy}
-						onClick={() => void run(() => window.juno.mail.outbox.remove(message.id), "Removed.")}
-					/>
+				{editable ? (
+					<IconButton icon="remove" label="Delete" danger disabled={busy} onClick={() => onDelete(message)} />
 				) : null}
 			</div>
 
@@ -139,26 +130,6 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 					{tokensToLabels(message.bodyText)}
 				</pre>
 			)}
-
-			{confirmingCancel ? (
-				<Dialog title="Cancel sending" onClose={() => setConfirmingCancel(false)} width="narrow">
-					<p className="mt-4 text-[var(--ink-muted)]">
-						Stop sending this message to {message.to.map((a) => a.address).join(", ")}? It stays in the outbox as cancelled.
-					</p>
-					<div className="mt-6 flex justify-end gap-2">
-						<Button onClick={() => setConfirmingCancel(false)}>Keep</Button>
-						<Button
-							variant="danger"
-							onClick={() => {
-								setConfirmingCancel(false);
-								void run(() => window.juno.mail.outbox.cancel(message.id), "Message cancelled.");
-							}}
-						>
-							Cancel message
-						</Button>
-					</div>
-				</Dialog>
-			) : null}
 		</div>
 	);
 }

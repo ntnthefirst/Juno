@@ -75,7 +75,7 @@ describe("migration 0031", () => {
 		});
 
 		const result = runMigrations(connection, MIGRATIONS);
-		expect(result.applied).toEqual(["0031_calendar_subscriptions.sql"]);
+		expect(result.applied[0]).toBe("0031_calendar_subscriptions.sql");
 		expect(count(connection, "calendar_events")).toBe(1);
 		expect(count(connection, "mail_accounts")).toBe(1);
 

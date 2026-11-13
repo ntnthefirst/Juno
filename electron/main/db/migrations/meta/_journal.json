@@ -225,6 +225,13 @@
       "when": 1794151049525,
       "tag": "0031_calendar_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1794612240733,
+      "tag": "0032_outbox_cancelled_to_draft",
+      "breakpoints": true
     }
   ]
 }

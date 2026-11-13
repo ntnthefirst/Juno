@@ -271,13 +271,14 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 		case "outbox": {
 			const message = await outbox.get(id, db);
 			if (!message) return [];
-			const editable = message.state === "draft" || message.state === "pending";
+			// Anything that has not gone out is edited or deleted (decision 78).
+			const open = message.state === "sending" || message.state === "sent";
 			return [
-				{ id: "open", label: editable ? "Edit" : "Open", icon: editable ? "edit" : "mail" },
+				open
+					? { id: "open", label: "Open", icon: "mail" }
+					: { id: "edit", label: "Edit", icon: "edit" },
 				...(message.state === "failed" ? [{ id: "retry", label: "Try again", icon: "sync", separatorBefore: true } as const] : []),
-				...(message.state === "queued" || message.state === "pending"
-					? [{ id: "cancel-send", label: "Cancel sending", icon: "stop", separatorBefore: true } as const]
-					: []),
+				...(open ? [] : [REMOVE]),
 			];
 		}
 

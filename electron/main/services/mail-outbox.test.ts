@@ -152,7 +152,7 @@ describe("drafts", () => {
 });
 
 describe("change notifications", () => {
-	it("fires onChange for a draft created, edited, cancelled and removed", async () => {
+	it("fires onChange for a draft created, edited and removed", async () => {
 		const seen: string[] = [];
 		const unsubscribe = outbox.onChange((message) => seen.push(`${message.state}:${message.id}`));
 		try {
@@ -161,14 +161,12 @@ describe("change notifications", () => {
 				db,
 			);
 			const updated = await outbox.updateDraft(created.id, { subject: "Herziene offerte" }, db);
-			const cancelled = await outbox.cancel(updated.id, db);
-			const removed = await outbox.remove(cancelled.id, db);
+			const removed = await outbox.remove(updated.id, db);
 
 			expect(seen).toEqual([
 				`draft:${created.id}`,
 				`draft:${updated.id}`,
-				`cancelled:${cancelled.id}`,
-				`cancelled:${removed.id}`,
+				`draft:${removed.id}`,
 			]);
 		} finally {
 			unsubscribe();
@@ -361,14 +359,74 @@ describe("the gate", () => {
 		expect((await outbox.get(made.id, db))!.state).toBe("draft");
 	});
 
-	it("cancels anything that has not gone out, and nothing that has", async () => {
-		const id = await draft();
-		expect((await outbox.cancel(id, db)).state).toBe("cancelled");
+	function setState(id: string, state: string): void {
+		db.update(mailOutbox).set({ state }).where(eq(mailOutbox.id, id)).run();
+	}
 
-		const other = await draft();
-		await outbox.requestSend(other, db);
+	it("takes a waiting, queued or failed message back to a draft, and leaves a draft alone", async () => {
+		const stateOf = async (id: string) => (await outbox.get(id, db))!.state;
+
+		const queued = await draft();
+		await outbox.requestSend(queued, db);
+		const back = await outbox.returnToDraft(queued, db);
+		expect(back.state).toBe("draft");
+		expect(back.approvedAt).toBeNull();
+		expect(back.requestedBy).toBe("user");
+
+		const failed = await draft();
+		setState(failed, "failed");
+		db.update(mailOutbox).set({ lastError: "refused" }).where(eq(mailOutbox.id, failed)).run();
+		const retried = await outbox.returnToDraft(failed, db);
+		expect(retried.state).toBe("draft");
+		expect(retried.lastError).toBeNull();
+
+		const waiting = await draft();
+		setState(waiting, "pending");
+		expect((await outbox.returnToDraft(waiting, db)).state).toBe("draft");
+
+		const plain = await draft();
+		expect((await outbox.returnToDraft(plain, db)).state).toBe("draft");
+		expect(await stateOf(plain)).toBe("draft");
+	});
+
+	it("does not take back a message the sender holds or has sent", async () => {
+		const sending = await draft();
+		setState(sending, "sending");
+		await expect(outbox.returnToDraft(sending, db)).rejects.toThrow(/being sent right now/);
+		expect((await outbox.get(sending, db))!.state).toBe("sending");
+
+		const sent = await draft();
+		await outbox.requestSend(sent, db);
 		await sender.processQueue(db);
-		await expect(outbox.cancel(other, db)).rejects.toThrow(/cannot be cancelled/);
+		await expect(outbox.returnToDraft(sent, db)).rejects.toThrow(/already been sent/);
+	});
+
+	it("refuses an approval of what a message said before it was taken back", async () => {
+		const id = await draft();
+		const review = await outbox.reviewForSend(id, db);
+		await outbox.requestSend(id, db);
+		await outbox.returnToDraft(id, db);
+		await expect(outbox.verifyDraftUnchanged(id, review.seal, db)).rejects.toThrow(/was changed after it was asked for/);
+	});
+
+	it("deletes a draft, a waiting, a queued or a failed message, and nothing that is going or has gone", async () => {
+		for (const state of ["draft", "pending", "queued", "failed"]) {
+			const id = await draft();
+			setState(id, state);
+			const removed = await outbox.remove(id, db);
+			expect(removed.id).toBe(id);
+			expect(await outbox.get(id, db)).toBeNull();
+		}
+
+		const sending = await draft();
+		setState(sending, "sending");
+		await expect(outbox.remove(sending, db)).rejects.toThrow(/being sent right now/);
+
+		const sent = await draft();
+		await outbox.requestSend(sent, db);
+		await sender.processQueue(db);
+		await expect(outbox.remove(sent, db)).rejects.toThrow(/stays in the outbox as a record/);
+		expect((await outbox.get(sent, db))!.state).toBe("sent");
 	});
 
 	it("retries a connection failure on its own and a refusal only when asked", async () => {
@@ -792,7 +850,7 @@ describe("a sent reply in its thread", () => {
 		expect(thread.outgoing).toEqual([]);
 	});
 
-	it("lists drafts, waiting and failed messages, and leaves out cancelled and deleted ones", async () => {
+	it("lists drafts, waiting and failed messages, and leaves out deleted ones", async () => {
 		const originalId = storeOriginal(db);
 		const threadId = threadOf(originalId);
 		const make = () =>
@@ -802,9 +860,9 @@ describe("a sent reply in its thread", () => {
 			);
 		const draft = await make();
 		const failed = await make();
-		const cancelled = await make();
+		const removed = await make();
 		db.update(mailOutbox).set({ state: "failed" }).where(eq(mailOutbox.id, failed.id)).run();
-		await outbox.cancel(cancelled.id, db);
+		await outbox.remove(removed.id, db);
 		const shown = (await threads.getThread(threadId, db))!.outgoing;
 		expect(shown.map((o) => [o.id, o.state])).toEqual(
 			expect.arrayContaining([
@@ -812,7 +870,7 @@ describe("a sent reply in its thread", () => {
 				[failed.id, "failed"],
 			]),
 		);
-		expect(shown.some((o) => o.id === cancelled.id)).toBe(false);
+		expect(shown.some((o) => o.id === removed.id)).toBe(false);
 
 		const gone = await sentReply(originalId);
 		expect((await threads.getThread(threadId, db))!.outgoing.some((o) => o.id === gone.id)).toBe(true);

@@ -6,7 +6,10 @@ import { SidePanel } from "../../components/SidePanel";
 import { addDays, dateOf, formatDate, formatDateLong, formatTime, localDateOfInstant, machineTimeZone, timeOf } from "./dates";
 import { KIND_LABELS, itemTitle } from "./format";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
+import { RecordLink } from "../../components/RecordLink";
 import { CALENDAR_TONES } from "../../lib/calendar-colours";
+import { requestOpenClient } from "../../lib/open-client";
+import { requestOpen } from "../../lib/open-entity";
 
 type EventDetailProps = {
 	item: CalendarItem;
@@ -24,6 +27,26 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 			<span className="w-24 shrink-0 text-[var(--ink-muted)]">{label}</span>
 			<span className="min-w-0 flex-1">{children}</span>
 		</div>
+	);
+}
+
+/** The client and the project an item belongs to, each opening its own record. */
+function belongsTo(item: { clientId: string | null; clientName: string | null; projectId: string | null; projectName: string | null }): ReactNode {
+	const { clientId, clientName, projectId, projectName } = item;
+	return (
+		<>
+			{clientId && clientName ? (
+				<RecordLink onOpen={() => requestOpenClient(clientId, clientName)}>{clientName}</RecordLink>
+			) : (
+				clientName
+			)}
+			{clientName && projectName ? " / " : null}
+			{projectId && projectName ? (
+				<RecordLink onOpen={() => requestOpen({ kind: "project", id: projectId, name: projectName })}>{projectName}</RecordLink>
+			) : (
+				projectName
+			)}
+		</>
 	);
 }
 
@@ -107,8 +130,8 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 								</a>
 							</Row>
 						) : null}
-						{item.clientName ? (
-							<Row label="Client">{[item.clientName, item.projectName].filter(Boolean).join(" / ")}</Row>
+						{item.clientName || item.projectName ? (
+							<Row label={item.clientName ? "Client" : "Project"}>{belongsTo(item)}</Row>
 						) : null}
 						{item.notes ? (
 							<Row label="Notes">
@@ -164,8 +187,8 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 						{item.recurrenceLabel && item.recurrenceLabel !== "Once" ? (
 							<Row label="Repeats">{item.recurrenceLabel}</Row>
 						) : null}
-						{item.clientName ? (
-							<Row label="Client">{[item.clientName, item.projectName].filter(Boolean).join(" / ")}</Row>
+						{item.clientName || item.projectName ? (
+							<Row label={item.clientName ? "Client" : "Project"}>{belongsTo(item)}</Row>
 						) : null}
 						{item.notes ? (
 							<Row label="Notes">
@@ -178,7 +201,14 @@ export function EventDetail({ item, onEdit, onDelete, onComplete, onSnooze, onCl
 						<Row label="Due">
 							<span className="tabular">{formatDateLong(item.dueOn)}</span>
 						</Row>
-						{item.clientName ? <Row label="Client">{item.clientName}</Row> : null}
+						<Row label="Project">
+							<RecordLink onOpen={() => requestOpen({ kind: "project", id: item.projectId, name: item.projectName })}>
+								{item.projectName}
+							</RecordLink>
+						</Row>
+						{item.clientId && item.clientName ? (
+							<Row label="Client">{belongsTo({ ...item, projectId: null, projectName: null })}</Row>
+						) : null}
 						<p className="mt-3 text-sm text-[var(--ink-muted)]">
 							This is the project's own due date. Clearing it keeps the project.
 						</p>

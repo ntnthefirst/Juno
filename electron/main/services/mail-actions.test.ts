@@ -508,21 +508,64 @@ describe("flags", () => {
 		const { messageId } = await syncedThread();
 
 		await actions.setSeen([messageId], true, db);
+		await actions.settledForTests();
 
 		expect(box.messages.get("INBOX")![0]!.flags).toContain("\\Seen");
 		expect(liveMessage(messageId)?.isSeen).toBe(true);
+		expect(liveMessage(messageId)?.seenPending).toBeNull();
 
 		await actions.setSeen([messageId], false, db);
+		await actions.settledForTests();
 
 		expect(box.messages.get("INBOX")![0]!.flags).not.toContain("\\Seen");
 		expect(liveMessage(messageId)?.isSeen).toBe(false);
 	});
 
-	it("refuses to act on a folder the server has renumbered", async () => {
+	it("marks a message read here while the server is out of reach, and tells it at the next sync", async () => {
+		sync.configureMailSync({ mailDir, afterPass: (id, store) => actions.pushPendingSeen(id, store) });
+		const { messageId } = await syncedThread();
+		box.failWrites = new Error("connection lost");
+
+		await expect(actions.setSeen([messageId], true, db)).resolves.toBe(1);
+		await actions.settledForTests();
+
+		expect(liveMessage(messageId)?.isSeen).toBe(true);
+		expect(liveMessage(messageId)?.seenPending).toBe(true);
+		expect(box.messages.get("INBOX")![0]!.flags).not.toContain("\\Seen");
+
+		// A sync that reads the old flags from the server keeps what was set here.
+		await sync.syncAccount(accountId, db);
+		expect(liveMessage(messageId)?.isSeen).toBe(true);
+		expect(liveMessage(messageId)?.seenPending).toBe(true);
+
+		box.failWrites = null;
+		await sync.syncAccount(accountId, db);
+
+		expect(box.messages.get("INBOX")![0]!.flags).toContain("\\Seen");
+		expect(liveMessage(messageId)?.isSeen).toBe(true);
+		expect(liveMessage(messageId)?.seenPending).toBeNull();
+	});
+
+	it("drops a pending read state when the server has renumbered the folder", async () => {
 		const { messageId } = await syncedThread();
 		box.uidValidity.set("INBOX", "2");
 
-		await expect(actions.setSeen([messageId], true, db)).rejects.toThrow(/renumbered/i);
+		await actions.setSeen([messageId], true, db);
+		await actions.settledForTests();
+
+		expect(box.messages.get("INBOX")![0]!.flags).not.toContain("\\Seen");
+		expect(liveMessage(messageId)?.seenPending).toBe(true);
+
+		await sync.syncAccount(accountId, db);
+		await expect(actions.pushPendingSeen(accountId, db)).resolves.toBe(0);
+		expect(box.messages.get("INBOX")![0]!.flags).not.toContain("\\Seen");
+	});
+
+	it("refuses to write to a folder the server has renumbered when it must reach the server", async () => {
+		const { messageId } = await syncedThread();
+		box.uidValidity.set("INBOX", "2");
+
+		await expect(actions.setSeenOnServer([messageId], true, db)).rejects.toThrow(/renumbered/i);
 		expect(box.messages.get("INBOX")![0]!.flags).not.toContain("\\Seen");
 	});
 });

@@ -122,7 +122,9 @@ function retireMessages(db: Db, folderId: string, uids: number[] | null): number
 	const goneUids = gone.map((r) => r.uid);
 	for (let i = 0; i < goneUids.length; i += 500) {
 		db.update(mailMessages)
-			.set({ deletedAt: stamp, updatedAt: stamp })
+			// A read state still waiting for the server goes with the row: a uid
+			// that comes back after a renumbering is a different message.
+			.set({ deletedAt: stamp, updatedAt: stamp, seenPending: null })
 			.where(and(eq(mailMessages.folderId, folderId), inArray(mailMessages.uid, goneUids.slice(i, i + 500))))
 			.run();
 	}
@@ -412,6 +414,15 @@ const FLAG_SEEN = "\\Seen";
 const FLAG_FLAGGED = "\\Flagged";
 const FLAG_ANSWERED = "\\Answered";
 
+/**
+ * The read state the server reports, unless one set here is still waiting to
+ * be written to it. A sync that ran before that write would otherwise put the
+ * old state back on a message read offline.
+ */
+function seenUnlessPending(remoteSeen: boolean) {
+	return sql<boolean>`coalesce(${mailMessages.seenPending}, ${remoteSeen ? 1 : 0})`;
+}
+
 export interface StoredHeader {
 	id: string;
 	threadId: string;
@@ -448,7 +459,7 @@ export function storeHeader(
 	if (existing) {
 		db.update(mailMessages)
 			.set({
-				isSeen: flags.has(FLAG_SEEN),
+				isSeen: seenUnlessPending(flags.has(FLAG_SEEN)),
 				isFlagged: flags.has(FLAG_FLAGGED),
 				isAnswered: flags.has(FLAG_ANSWERED),
 				deletedAt: null,
@@ -517,7 +528,7 @@ export function applyFlags(db: Db, folderId: string, flags: RemoteFlags[]): numb
 		const result = db
 			.update(mailMessages)
 			.set({
-				isSeen: set.has(FLAG_SEEN),
+				isSeen: seenUnlessPending(set.has(FLAG_SEEN)),
 				isFlagged: set.has(FLAG_FLAGGED),
 				isAnswered: set.has(FLAG_ANSWERED),
 				updatedAt: stamp,
@@ -528,7 +539,7 @@ export function applyFlags(db: Db, folderId: string, flags: RemoteFlags[]): numb
 					eq(mailMessages.uid, entry.uid),
 					isNull(mailMessages.deletedAt),
 					or(
-						sql`${mailMessages.isSeen} != ${set.has(FLAG_SEEN) ? 1 : 0}`,
+						sql`${mailMessages.isSeen} != ${seenUnlessPending(set.has(FLAG_SEEN))}`,
 						sql`${mailMessages.isFlagged} != ${set.has(FLAG_FLAGGED) ? 1 : 0}`,
 						sql`${mailMessages.isAnswered} != ${set.has(FLAG_ANSWERED) ? 1 : 0}`,
 					),

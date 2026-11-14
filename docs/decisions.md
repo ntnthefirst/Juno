@@ -1921,8 +1921,9 @@ The mail reader's "..." (`reader` context), an unsent message in the list
 too. The drawn `ContextMenu` stays for menus that are not one record's: the New
 menu, filters, view options and overflow lists, a folder or account in the mail
 tree (they depend on expand and sync state only the tree holds), a timeline
-entry or attachment, an automation or request row, the template list (it acts on
-a selection, with counts in the labels) and the text edit fallback.
+entry, an automation or request row, the template list (it acts on
+a selection, with counts in the labels) and the text edit fallback. A mail
+attachment in the reader became native with decision 79 (`attachment`).
 
 ## 60. Making an event, client, project or reminder happens in a small window
 
@@ -2643,3 +2644,44 @@ draft's recipients, subject or body (the Write mail drafts row, like the drafts
 it edits) and `mail.outbox.delete` deletes one (the Delete row, so it parks).
 Messages already cancelled became drafts in the migration that removed the
 state.
+
+## 79. A conversation's attachments go to its project in one click
+
+Docs a company sends belong to the job they are about. Saving one used to be
+a preview, a column of pickers and a comparison every time. Now a
+conversation filed under a project saves its attachments there in one
+click, one filed under a client only under the client, and the place picker
+is one step away (Save to...) for anything else.
+
+- **One service, `services/document-mail.ts`.** `forThread` lists a
+  conversation's attachments, each with the document it already is, and
+  where a one-click save puts the rest; `saveFromThread` saves some or all of
+  them. Both adapters call them: `documents.threadAttachments` and
+  `documents.saveThreadAttachments` over IPC, `documents.list_from_thread`
+  and `documents.import_from_thread` for an agent. The save is in the Change
+  records row like `documents.import_from_mail`, and when it parks the
+  request lists every file it would save.
+- **Each file is checked the way a drop is.** The same bytes as a version
+  already kept are skipped and said so; a file that looks like a document
+  already kept (its words, or its name in that place) is held back and the
+  window opens the comparison (decision 39); anything else is saved straight
+  away, and the toast has Show, which opens it in the explorer.
+- **Already kept is decided by bytes, in the service.** A version recorded
+  from that attachment, or one with the same hash, makes the attachment show
+  "In documents" and open that document instead of offering a second save.
+  The reader, the menu and an agent ask the same function.
+- **A conversation filed under nothing asks where**, starting from the
+  project the mail suggestions would offer (`suggestions.projectForThread`,
+  under the same switch and the same Not now), and offers to file the
+  conversation there in the same call. A link that cannot be made (a project
+  of another client) saves nothing.
+- **The project alone decides the place** when the conversation has one,
+  because a project brings its own client and the conversation's client may
+  be a supplier writing about it.
+- **An attachment's menu is the platform's now** (amends decision 59): the
+  `attachment` kind, with the `untrusted` context leaving Open out for a
+  sender who is not trusted.
+
+**What would reverse this:** a business whose mail about one job routinely
+carries files for another, where the one-click save would file in the wrong
+place more often than the picker costs.

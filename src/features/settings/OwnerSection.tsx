@@ -39,6 +39,8 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 	const [profile, setProfile] = useState<OwnerProfile | null>(null);
 	const [mailAccounts, setMailAccounts] = useState<MailAccount[] | null>(null);
 	const [detailsError, setDetailsError] = useState<string | null>(null);
+	// A first read that failed, said on whichever page is open instead of a skeleton that never resolves.
+	const [loadError, setLoadError] = useState<string | null>(null);
 	const [emailsError, setEmailsError] = useState<string | null>(null);
 	const [phonesError, setPhonesError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -51,7 +53,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 				if (!cancelled) setProfile(value);
 			})
 			.catch((cause: unknown) => {
-				if (!cancelled) setDetailsError(messageOf(cause));
+				if (!cancelled) setLoadError(messageOf(cause));
 			});
 		// A mail account this address matches is shown as a quiet hint below. If
 		// this fails to load, the hint is just missing; it is not worth its own
@@ -127,7 +129,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 					}
 				>
 					{profile === null ? (
-						<CardSkeleton lines={3} framed={false} />
+						loadError ? null : <CardSkeleton lines={3} framed={false} />
 					) : (
 						<div className="grid max-w-[720px] grid-cols-1 gap-4 sm:grid-cols-6">
 							{FIELDS.map((field) => (
@@ -142,7 +144,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 							))}
 						</div>
 					)}
-					<SectionError message={detailsError} />
+					<SectionError message={detailsError ?? loadError} />
 				</Section>
 			) : null}
 
@@ -154,7 +156,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 						description="Documents print the primary one."
 					>
 						{profile === null ? (
-							<CardSkeleton lines={3} framed={false} />
+							loadError ? null : <CardSkeleton lines={3} framed={false} />
 						) : (
 							<OwnerContactList<OwnerEmail>
 								items={profile.emails}
@@ -183,7 +185,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 								}
 							/>
 						)}
-						<SectionError message={emailsError} />
+						<SectionError message={emailsError ?? loadError} />
 					</Section>
 
 					<Section
@@ -192,7 +194,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 						description="Documents print the primary one."
 					>
 						{profile === null ? (
-							<CardSkeleton lines={3} framed={false} />
+							loadError ? null : <CardSkeleton lines={3} framed={false} />
 						) : (
 							<OwnerContactList<OwnerPhone>
 								items={profile.phones}
@@ -219,7 +221,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 								}
 							/>
 						)}
-						<SectionError message={phonesError} />
+						<SectionError message={phonesError ?? loadError} />
 					</Section>
 				</>
 			) : null}

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { TitleSearch } from "../../app/TitleSearch";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
+import { ListSearchBar } from "../../components/ListSearchBar";
+import { Select } from "../../components/Select";
 import { SelectionBar } from "../../components/SelectionBar";
 import { Toast } from "../../components/Toast";
 import { useRowSelection } from "../../lib/use-row-selection";
@@ -353,29 +354,29 @@ export function ProjectsScreen() {
 
 	return (
 		<div className="flex h-full flex-col px-6 py-8 lg:px-8 xl:px-10">
-			<TitleSearch value={term} onChange={setTerm} placeholder="Search projects" />
+			<ListSearchBar
+				search={term}
+				onSearch={setTerm}
+				placeholder="Search projects"
+				filtersAriaLabel="Project filters"
+				filterCount={statusFilter ? 1 : 0}
+				onClearFilters={() => setStatusFilter("")}
+				filters={
+					rows && rows.projects.length > 0 ? (
+						<Select
+							label="Status"
+							value={statusFilter}
+							onChange={setStatusFilter}
+							placeholder="Any status"
+							options={rows.statuses
+								.filter((item) => item.hiddenAt === null)
+								.map((item) => ({ value: item.id, label: item.label }))}
+						/>
+					) : undefined
+				}
+			/>
 			<div className="mb-6 flex w-full flex-col gap-4">
 				{view ? <ViewControls view={view} onChange={changeView} /> : null}
-
-				{rows && rows.projects.length > 0 ? (
-					<div className="flex items-center gap-2">
-						<select
-							value={statusFilter}
-							onChange={(event) => setStatusFilter(event.target.value)}
-							aria-label="Filter by status"
-							className="h-[36px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 text-dense text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-						>
-							<option value="">Every status</option>
-							{rows.statuses
-								.filter((item) => item.hiddenAt === null)
-								.map((item) => (
-									<option key={item.id} value={item.id}>
-										{item.label}
-									</option>
-								))}
-						</select>
-					</div>
-				) : null}
 			</div>
 
 			{selection.selectedIds.length > 0 && shown.length > 0 ? (

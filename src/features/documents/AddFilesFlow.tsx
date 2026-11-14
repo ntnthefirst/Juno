@@ -153,7 +153,9 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 		if (!drawn) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
-			if (document.querySelector("[role='dialog']")) return;
+			if (document.querySelector("[role='dialog'], [role='menu']")) return;
+			// An open list under a field closes on its own Escape and leaves the flow alone.
+			if (event.target instanceof HTMLElement && event.target.getAttribute("aria-expanded") === "true") return;
 			event.preventDefault();
 			if (asking) finish();
 			else if (reading) requestStop();

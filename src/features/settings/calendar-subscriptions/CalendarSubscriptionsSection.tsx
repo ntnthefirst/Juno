@@ -79,7 +79,8 @@ export function CalendarSubscriptionsSection({ onOpen, refreshKey }: CalendarSub
 
 			<div className="mt-4">
 				{rows === null ? (
-					<RowsSkeleton rows={2} />
+					// A first read that failed says so below, instead of a skeleton that never resolves.
+					error ? null : <RowsSkeleton rows={2} />
 				) : rows.length === 0 ? (
 					<p className="text-[var(--ink-muted)]">No calendars yet. Add one with its address in iCal format.</p>
 				) : (

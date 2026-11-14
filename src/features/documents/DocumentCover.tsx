@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DocumentRecord } from "@shared/types";
 import { usePublishBreadcrumb, type Crumb } from "../../app/breadcrumb-context";
+import { Button } from "../../components/Button";
 import { PreviewSkeleton } from "../../components/PreviewSkeleton";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
@@ -39,6 +40,7 @@ export function DocumentCover({ documentId, label, onReturn }: DocumentCoverProp
 	const [notice, setNotice] = useState<string | null>(null);
 	const [details, setDetails] = useState(true);
 	const [revision, setRevision] = useState(0);
+	const [gone, setGone] = useState<DocumentRecord | null>(null);
 
 	useRecentTouch("document", documentId);
 
@@ -110,15 +112,51 @@ export function DocumentCover({ documentId, label, onReturn }: DocumentCoverProp
 		}
 	}
 
+	async function undoDelete(record: DocumentRecord) {
+		try {
+			await window.juno.documents.restore(record.id);
+			announceDocumentsChanged();
+			setGone(null);
+			setRevision(Date.now());
+			if (record.sourceKind === "page") setTakeover({ kind: "page", record });
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	// Deleted from here: the screen underneath has no undo to offer, so the cover keeps it.
+	if (gone) {
+		return (
+			<div className="flex h-full items-center justify-center p-10">
+				<div className="w-full max-w-[420px] text-center">
+					<p className="text-lg font-[var(--weight-medium)]">{gone.title} deleted.</p>
+					<p className="mt-1 text-sm text-[var(--ink-muted)]">It can come back while this is open.</p>
+					<div className="mt-6 flex justify-center gap-2">
+						<Button onClick={onReturn}>Back to {label}</Button>
+						<Button variant="primary" onClick={() => void undoDelete(gone)}>
+							Undo
+						</Button>
+					</div>
+					{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
+				</div>
+			</div>
+		);
+	}
+
 	if (takeover) {
 		return (
 			<DocumentTakeover
 				request={takeover}
 				onTitleChange={setTitle}
 				onClose={(sentence, gone) => {
+					if (gone) {
+						announceDocumentsChanged();
+						setTakeover(null);
+						setGone(gone);
+						return;
+					}
 					// A page has nothing under it here: closing it is closing the cover.
-					if (page || gone) {
-						if (gone) announceDocumentsChanged();
+					if (page) {
 						onReturn();
 						return;
 					}
@@ -155,9 +193,9 @@ export function DocumentCover({ documentId, label, onReturn }: DocumentCoverProp
 					revision={revision}
 					details={details}
 					onToggleDetails={() => setDetails((value) => !value)}
-					onDeleted={() => {
+					onDeleted={(record) => {
 						announceDocumentsChanged();
-						onReturn();
+						setGone(record);
 					}}
 					onChanged={() => announceDocumentsChanged()}
 					onSign={(record) => void signFrom(record)}

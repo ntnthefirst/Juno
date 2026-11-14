@@ -190,9 +190,8 @@ else** (frames in section 22). Where a screen starts one kind of record
 (`NEW_AT_RIGHT` in `app/screens.ts`: Notes, Clients, Projects, Reminders) it
 makes that at once. Where it starts several it opens that screen's own menu
 from `NEW_MENUS`: Mail (New message, Styled mail, then New folder, New mailbox
-rule, New intro or outro), Calendar (New event, New reminder, then Subscribe to
-a calendar, Import a calendar file) and Documents (New page, New from a
-template, then Import a file). Overview, which belongs to no one record, keeps
+rule, New intro or outro) and Calendar (New event, New reminder, then Subscribe
+to a calendar, Import a calendar file). Overview, which belongs to no one record, keeps
 the whole menu (`NEW_MENU`). An item reaches its screen through
 `requestScreenAction`; a screen on show takes it where it is
 (`useLiveScreenAction`), so the message being read stays open, and New mailbox

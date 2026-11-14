@@ -5,7 +5,7 @@
  */
 import { execFile } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { WORD_SCRIPT } from "./word-convert";
+import { WORD_SCRIPT, wordsToStop } from "./word-convert";
 
 describe("the Word script", () => {
 	it("forces macros off before the file opens, and puts the setting back", () => {
@@ -20,6 +20,18 @@ describe("the Word script", () => {
 		expect(WORD_SCRIPT).toMatch(
 			/Documents\.Open\(\$env:JUNO_WORD_INPUT, \$false, \$true, \$false, \$nopass, \$nopass, \$false, \$nopass, \$nopass,/,
 		);
+	});
+
+	it("stops only a Word started for a program after the run began, never the person's own", () => {
+		const word = '"C:\\Program Files\\Microsoft Office\\Root\\Office16\\WINWORD.EXE"';
+		const running = [
+			{ pid: 10, commandLine: `${word} /Automation -Embedding` },
+			{ pid: 20, commandLine: `${word} /Automation -Embedding` },
+			{ pid: 30, commandLine: word },
+			{ pid: 40, commandLine: `${word} "C:\\Users\\An\\Offerte.docx"` },
+		];
+		expect(wordsToStop(new Set([10]), running)).toEqual([20]);
+		expect(wordsToStop(new Set(), [{ pid: 50, commandLine: `${word} /n` }])).toEqual([]);
 	});
 
 	it.runIf(process.platform === "win32")(

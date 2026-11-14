@@ -7,7 +7,8 @@
  * the script, so a file name with a quote or a `$` in it is only ever a name.
  * Both paths are built by the conversion service under the documents folder;
  * nothing from the window or an agent reaches here. Word is closed in a
- * `finally`, and the run is stopped after a minute.
+ * `finally`, and the run is stopped after a minute, together with the Word it
+ * started, which a stopped script no longer closes.
  *
  * No Electron import. Only `child_process`, so a test can ask whether Word is
  * there and skip the Word path when it is not.
@@ -96,8 +97,62 @@ export function wordInstalled(): Promise<boolean> {
 	return detected;
 }
 
+export interface RunningWord {
+	pid: number;
+	commandLine: string;
+}
+
+/**
+ * The Words to stop after a run was stopped: started for a program (COM
+ * starts Word with `/Automation`), and not running before the run began. A
+ * Word the person opened has no `/Automation` and is never one of them.
+ */
+export function wordsToStop(before: ReadonlySet<number>, running: RunningWord[]): number[] {
+	return running
+		.filter((word) => !before.has(word.pid) && /(^|\s)[/-]automation(\s|$)/i.test(word.commandLine))
+		.map((word) => word.pid);
+}
+
+/** Every WINWORD with its command line. Empty when there is none or the list cannot be read. */
+async function runningWords(): Promise<RunningWord[]> {
+	const list =
+		"Get-CimInstance Win32_Process -Filter \"Name='WINWORD.EXE'\" | ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }";
+	try {
+		const out = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", list], { timeout: 15_000 });
+		return out
+			.split(/\r?\n/)
+			.map((line) => {
+				const [pid, ...rest] = line.split("\t");
+				return { pid: Number.parseInt(pid ?? "", 10), commandLine: rest.join("\t") };
+			})
+			.filter((word) => Number.isInteger(word.pid) && word.pid > 0);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Stops the Word a stopped run left behind. Stopping PowerShell does not stop
+ * the Word it asked COM for, which then sits hidden, often in front of a
+ * question nobody can see, until the machine restarts. Looked for twice,
+ * because a Word still starting when the run stopped appears a moment later.
+ */
+async function stopLeftoverWord(before: ReadonlySet<number>): Promise<void> {
+	for (const wait of [0, 3000]) {
+		if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+		for (const pid of wordsToStop(before, await runningWords())) {
+			try {
+				process.kill(pid);
+			} catch {
+				// Already gone.
+			}
+		}
+	}
+}
+
 /** Converts one file to PDF through Word. Throws a sentence when Word fails or takes too long. */
 export async function convertWithWord(inputPath: string, outputPath: string): Promise<void> {
+	const before = new Set((await runningWords()).map((word) => word.pid));
 	try {
 		await run(
 			"powershell.exe",
@@ -109,9 +164,10 @@ export async function convertWithWord(inputPath: string, outputPath: string): Pr
 		);
 	} catch (cause) {
 		const timedOut = (cause as { killed?: boolean }).killed === true;
+		if (timedOut) await stopLeftoverWord(before);
 		throw new Error(
 			timedOut
-				? "Word took longer than a minute to make the PDF. Close any Word window that is asking something, then try again."
+				? "Word took longer than a minute to make the PDF, so Juno stopped it. Open the file in Word to check it opens without a question, then try again."
 				: "Word could not make a PDF of this file. Open it in Word to check it opens, then try again.",
 		);
 	}

@@ -145,20 +145,17 @@ export function MessageView({
 	const [findQuery, setFindQuery] = useState("");
 	const [findResult, setFindResult] = useState({ count: 0, current: -1 });
 	const frame = useRef<HTMLIFrameElement>(null);
-	const attachmentClicks = useClickGate<string>({
-		single: (id) => {
-			const at = message.attachments.filter((a) => !a.isInline).findIndex((a) => a.id === id);
-			if (at >= 0) setPreviewAt(at);
-		},
-		double: (id) => {
-			const attachment = message.attachments.find((a) => a.id === id);
-			if (attachment && canOpenHere && isOpenableAttachment(attachment.filename)) void openFile(id);
-			else {
-				const at = message.attachments.filter((a) => !a.isInline).findIndex((a) => a.id === id);
-				if (at >= 0) setPreviewAt(at);
-			}
-		},
-	});
+	const previewAttachment = (id: string) => {
+		const at = message.attachments.filter((a) => !a.isInline).findIndex((a) => a.id === id);
+		if (at >= 0) setPreviewAt(at);
+	};
+	// Opening in the default app where the sender is trusted and the file may be opened; a preview otherwise.
+	const openAttachment = (id: string) => {
+		const attachment = message.attachments.find((a) => a.id === id);
+		if (attachment && canOpenHere && isOpenableAttachment(attachment.filename)) void openFile(id);
+		else previewAttachment(id);
+	};
+	const attachmentClicks = useClickGate<string>({ single: previewAttachment, double: openAttachment });
 	const menu = useContextMenu();
 
 	useEffect(() => {
@@ -221,7 +218,8 @@ export function MessageView({
 		if (!open) return;
 		function onKey(event: KeyboardEvent) {
 			if (!matchesCombo(event, COMBOS.find)) return;
-			if (document.querySelector("[role='dialog']")) return;
+			// A preview or a save page over the message is what is being read, not the message.
+			if (document.querySelector("[role='dialog'], [data-add-files], [data-full-preview]")) return;
 			event.preventDefault();
 			setFindOpen(true);
 		}
@@ -832,6 +830,15 @@ export function MessageView({
 											<button
 												type="button"
 												onClick={(event) => attachmentClicks.click(attachment.id, event.detail)}
+												// Space previews and Enter opens, as in Documents (decision 75), with no wait for a second press.
+												onKeyDown={(event) => {
+													if (event.ctrlKey || event.metaKey || event.altKey) return;
+													if (event.key !== " " && event.key !== "Enter") return;
+													event.preventDefault();
+													attachmentClicks.cancel();
+													if (event.key === "Enter") openAttachment(attachment.id);
+													else previewAttachment(attachment.id);
+												}}
 												title={`Preview ${attachment.filename}`}
 												className="flex min-w-0 items-center gap-2 rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 											>

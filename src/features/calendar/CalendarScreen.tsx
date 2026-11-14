@@ -664,7 +664,7 @@ export function CalendarScreen() {
 						dates={load.dates}
 						today={today}
 						placed={placed}
-						nowMinute={nowMinute}
+						nowMinute={load.dates.includes(today) ? nowMinute : null}
 						onOpen={setDetail}
 						onCreateAt={createAt}
 						onMove={move}

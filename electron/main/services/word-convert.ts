@@ -47,7 +47,13 @@ export const WORD_SCRIPT = [
 	// msoAutomationSecurityForceDisable.
 	"  $security = $word.AutomationSecurity",
 	"  $word.AutomationSecurity = 3",
-	"  $doc = $word.Documents.Open($env:JUNO_WORD_INPUT, $false, $true, $false)",
+	// A password the file does not have, for opening and for writing: Word
+	// ignores it on a file without one, and on a protected file it fails at
+	// once instead of asking in a window nobody can see. Then the format is
+	// worked out by Word, the document is not shown, and no encoding is asked.
+	"  $nopass = 'juno-no-password'",
+	"  $missing = [System.Type]::Missing",
+	"  $doc = $word.Documents.Open($env:JUNO_WORD_INPUT, $false, $true, $false, $nopass, $nopass, $false, $nopass, $nopass, 0, $missing, $false, $false, $missing, $true)",
 	"  $doc.SaveAs2($env:JUNO_WORD_OUTPUT, 17)",
 	"} finally {",
 	// Opened read only and never changed, so closing asks nothing. A number

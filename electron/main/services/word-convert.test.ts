@@ -16,6 +16,12 @@ describe("the Word script", () => {
 		expect(WORD_SCRIPT.indexOf("$word.AutomationSecurity = $security")).toBeGreaterThan(open);
 	});
 
+	it("gives Word a password to fail on, so a protected file never waits on a hidden prompt", () => {
+		expect(WORD_SCRIPT).toMatch(
+			/Documents\.Open\(\$env:JUNO_WORD_INPUT, \$false, \$true, \$false, \$nopass, \$nopass, \$false, \$nopass, \$nopass,/,
+		);
+	});
+
 	it.runIf(process.platform === "win32")(
 		"is a script PowerShell parses without an error",
 		async () => {

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, CSSProperties, Ref } from "react";
+import { useState, type CSSProperties, type HTMLAttributes } from "react";
 import { FileName } from "../../components/FileName";
 import { formatBytes } from "../projects/format";
 import { SpecimenMark } from "./SpecimenMark";
@@ -6,11 +6,12 @@ import { countWithin } from "./explorer-tree";
 import { nameOf, sizeOf, typeOf, type ExplorerItem } from "./explorer-items";
 import { STATUS_TONES, statusOf } from "./item-status";
 import { RenameField } from "./RenameField";
+import { RowShell } from "./RowShell";
 import { TileThumb } from "./TileThumb";
 
 type ExplorerTileProps = {
 	item: ExplorerItem;
-	bind: ButtonHTMLAttributes<HTMLButtonElement> & { ref: Ref<HTMLButtonElement> };
+	bind: HTMLAttributes<HTMLElement> & { ref: (element: HTMLElement | null) => void; draggable?: boolean };
 	selected: boolean;
 	cut: boolean;
 	dropping: boolean;
@@ -37,12 +38,18 @@ function metaOf(item: ExplorerItem): string {
 /** A file as a tile: a picture of it, its name and one line of what it is. */
 export function ExplorerTile({ item, bind, selected, cut, dropping, renaming, onRename, onRenameEnd, statusLabels, style, eager }: ExplorerTileProps) {
 	const status = statusOf(item, statusLabels);
+	// A rename draws the tile as another element, which would rise in again;
+	// once it has arrived it stays where it is.
+	const [arrived, setArrived] = useState(false);
 	return (
-		<button
-			type="button"
+		<RowShell
+			asButton={!renaming}
 			{...bind}
 			style={style}
-			className={`animate-rise flex w-full min-w-0 cursor-default flex-col gap-2 rounded-[var(--radius-lg)] border p-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] ${
+			onAnimationEnd={(event) => {
+				if (event.target === event.currentTarget) setArrived(true);
+			}}
+			className={`${arrived ? "" : "animate-rise"} flex w-full min-w-0 cursor-default flex-col gap-2 rounded-[var(--radius-lg)] border p-2 text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] ${
 				dropping
 					? "border-[var(--accent)] bg-[var(--accent-soft)]"
 					: selected
@@ -70,6 +77,6 @@ export function ExplorerTile({ item, bind, selected, cut, dropping, renaming, on
 					) : null}
 				</span>
 			</span>
-		</button>
+		</RowShell>
 	);
 }

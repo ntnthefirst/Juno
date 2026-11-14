@@ -8,6 +8,7 @@ import { DRAG_TYPE, encodeDrag, type DragPayload } from "./drop-routing";
 import { countWithin, parentOf, ROOT_KEY, TEMPLATES_KEY, visibleRows } from "./explorer-tree";
 import { OFFSCREEN_ROW } from "./offscreen-row";
 import { RenameField } from "./RenameField";
+import { RowShell } from "./RowShell";
 
 type FolderTreeProps = {
 	roots: DocumentTreeNode[];
@@ -67,7 +68,7 @@ export function FolderTree({
 	onDrop,
 }: FolderTreeProps) {
 	const rows = useMemo(() => visibleRows(roots, expanded, 1), [roots, expanded]);
-	const items = useRef(new Map<string, HTMLButtonElement>());
+	const items = useRef(new Map<string, HTMLElement>());
 	const [dropKey, setDropKey] = useState<string | null>(null);
 	const moved = useRef(false);
 
@@ -133,18 +134,18 @@ export function FolderTree({
 			return types.includes(DRAG_TYPE) || types.includes("Files");
 		};
 		return {
-			onDragOver: (event: DragEvent<HTMLButtonElement>) => {
+			onDragOver: (event: DragEvent<HTMLElement>) => {
 				if (!carries(event)) return;
 				event.preventDefault();
 				event.stopPropagation();
 				event.dataTransfer.dropEffect = Array.from(event.dataTransfer.types).includes("Files") ? "copy" : "move";
 				setDropKey(key);
 			},
-			onDragLeave: (event: DragEvent<HTMLButtonElement>) => {
+			onDragLeave: (event: DragEvent<HTMLElement>) => {
 				if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
 				setDropKey((current) => (current === key ? null : current));
 			},
-			onDrop: (event: DragEvent<HTMLButtonElement>) => {
+			onDrop: (event: DragEvent<HTMLElement>) => {
 				if (!carries(event)) return;
 				event.preventDefault();
 				event.stopPropagation();
@@ -200,13 +201,13 @@ export function FolderTree({
 						? { kind: "folder", key: node.key, folderId: node.folderId }
 						: null;
 				return (
-					<button
+					<RowShell
 						key={node.key}
+						asButton={renamingKey !== node.key}
 						ref={(element) => {
 							if (element) items.current.set(node.key, element);
 							else items.current.delete(node.key);
 						}}
-						type="button"
 						role="treeitem"
 						aria-level={depth + 1}
 						aria-selected={openKey === node.key}
@@ -267,7 +268,7 @@ export function FolderTree({
 						{count > 0 && renamingKey !== node.key ? (
 							<span className="tabular flex-none text-micro text-[var(--ink-muted)]">{count}</span>
 						) : null}
-					</button>
+					</RowShell>
 				);
 			})}
 		</div>

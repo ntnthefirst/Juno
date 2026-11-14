@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, Ref } from "react";
+import type { HTMLAttributes } from "react";
 import { FileName } from "../../components/FileName";
 import { modifiedLabel } from "../../lib/modified-label";
 import { formatBytes } from "../projects/format";
@@ -9,11 +9,12 @@ import { ExplorerIcon } from "./ExplorerIcon";
 import { STATUS_TONES, statusOf } from "./item-status";
 import { OFFSCREEN_ROW } from "./offscreen-row";
 import { RenameField } from "./RenameField";
+import { RowShell } from "./RowShell";
 
 type ExplorerRowProps = {
 	item: ExplorerItem;
-	/** The button's own handlers and state, from the list that owns the selection. */
-	bind: ButtonHTMLAttributes<HTMLButtonElement> & { ref: Ref<HTMLButtonElement> };
+	/** The row's own handlers and state, from the list that owns the selection. */
+	bind: HTMLAttributes<HTMLElement> & { ref: (element: HTMLElement | null) => void; draggable?: boolean };
 	columns: string;
 	selected: boolean;
 	/** Cut and waiting for a paste: drawn faded, as a file manager does. */
@@ -55,8 +56,8 @@ export function ExplorerRow({
 	const versions = item.kind === "document" && item.record.sourceKind !== "page" ? item.record.versionCount : null;
 
 	return (
-		<button
-			type="button"
+		<RowShell
+			asButton={!renaming}
 			{...bind}
 			style={{ gridTemplateColumns: columns, height: "var(--row-height)", ...OFFSCREEN_ROW }}
 			className={`grid w-full cursor-default items-center gap-3 rounded-[var(--radius-md)] px-3 text-left text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus)] ${
@@ -84,6 +85,6 @@ export function ExplorerRow({
 			<span className="tabular truncate text-[var(--ink-muted)]">{modifiedLabel(modifiedOf(item))}</span>
 			<span className={`min-w-0 truncate ${status ? STATUS_TONES[status.tone] : ""}`}>{status?.text ?? ""}</span>
 			<span className="tabular text-right text-[var(--ink-muted)]">{versions ?? ""}</span>
-		</button>
+		</RowShell>
 	);
 }

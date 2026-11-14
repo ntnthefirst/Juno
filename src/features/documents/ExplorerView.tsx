@@ -114,7 +114,7 @@ export function ExplorerView({
 	empty,
 }: ExplorerViewProps) {
 	const container = useRef<HTMLDivElement>(null);
-	const buttons = useRef(new Map<string, HTMLButtonElement>());
+	const buttons = useRef(new Map<string, HTMLElement>());
 	const [columns, setColumns] = useState(1);
 	const [dropKey, setDropKey] = useState<string | null>(null);
 	// Set by a key that moved the focus, so the row it landed on takes the
@@ -164,7 +164,7 @@ export function ExplorerView({
 		element?.scrollIntoView({ block: "nearest" });
 	}, [selection.focus]);
 
-	const register = useCallback((key: string) => (element: HTMLButtonElement | null) => {
+	const register = useCallback((key: string) => (element: HTMLElement | null) => {
 		if (element) buttons.current.set(key, element);
 		else buttons.current.delete(key);
 	}, []);
@@ -217,7 +217,7 @@ export function ExplorerView({
 			tabIndex: item.key === stop ? 0 : -1,
 			"data-explorer-item": item.key,
 			draggable: drag !== null,
-			onClick: (event: MouseEvent<HTMLButtonElement>) => {
+			onClick: (event: MouseEvent<HTMLElement>) => {
 				const toggle = event.ctrlKey || event.metaKey;
 				if (toggle || event.shiftKey) {
 					gate.cancel();
@@ -227,12 +227,12 @@ export function ExplorerView({
 				onSelection(selectOnly(item.key));
 				gate.click(item.key, event.detail);
 			},
-			onContextMenu: (event: MouseEvent<HTMLButtonElement>) => {
+			onContextMenu: (event: MouseEvent<HTMLElement>) => {
 				gate.cancel();
 				if (!held.has(item.key)) onSelection(selectOnly(item.key));
 				onItemMenu(item, event);
 			},
-			onDragStart: (event: DragEvent<HTMLButtonElement>) => {
+			onDragStart: (event: DragEvent<HTMLElement>) => {
 				if (!drag) return;
 				gate.cancel();
 				if (onDragOut?.(item, event)) return;
@@ -241,18 +241,18 @@ export function ExplorerView({
 			},
 			...(droppable
 				? {
-						onDragOver: (event: DragEvent<HTMLButtonElement>) => {
+						onDragOver: (event: DragEvent<HTMLElement>) => {
 							if (!carriesSomething(event)) return;
 							event.preventDefault();
 							event.stopPropagation();
 							event.dataTransfer.dropEffect = Array.from(event.dataTransfer.types).includes("Files") ? "copy" : "move";
 							setDropKey(item.key);
 						},
-						onDragLeave: (event: DragEvent<HTMLButtonElement>) => {
+						onDragLeave: (event: DragEvent<HTMLElement>) => {
 							if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
 							setDropKey((current) => (current === item.key ? null : current));
 						},
-						onDrop: (event: DragEvent<HTMLButtonElement>) => {
+						onDrop: (event: DragEvent<HTMLElement>) => {
 							if (!carriesSomething(event)) return;
 							event.preventDefault();
 							event.stopPropagation();

@@ -22,11 +22,23 @@ export function RenameField({ value, onCommit, onCancel }: RenameFieldProps) {
 		input.current?.select();
 	}, []);
 
-	/** The row the field sits in, focused again once the field is gone. */
+	/**
+	 * The row the field sits in, focused again once the field is gone. The row
+	 * is drawn as a button again then, a new element, so it is found by its key.
+	 */
 	function refocusRow() {
 		const row = input.current?.closest<HTMLElement>("[data-explorer-item], [data-tree-node]");
+		const item = row?.getAttribute("data-explorer-item");
+		const node = row?.getAttribute("data-tree-node");
+		const selector =
+			item != null
+				? `[data-explorer-item="${CSS.escape(item)}"]`
+				: node != null
+					? `[data-tree-node="${CSS.escape(node)}"]`
+					: null;
 		window.requestAnimationFrame(() => {
-			if (row?.isConnected) row.focus({ preventScroll: true });
+			const next = selector ? document.querySelector<HTMLElement>(selector) : null;
+			next?.focus({ preventScroll: true });
 		});
 	}
 

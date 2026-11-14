@@ -80,8 +80,9 @@ export function FullPreview({
 	useEffect(() => {
 		function onKey(event: KeyboardEvent) {
 			if (event.defaultPrevented) return;
-			// A question on top answers its own keys first.
-			if (document.querySelector("[role='dialog']")) return;
+			// A question on top answers its own keys first, and so does adding a
+			// file from the preview, which covers it.
+			if (document.querySelector("[role='dialog'], [data-add-files]")) return;
 			if (event.key === "Escape") {
 				if (isTyping(event.target)) return;
 				event.preventDefault();

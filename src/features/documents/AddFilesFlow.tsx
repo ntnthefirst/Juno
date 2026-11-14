@@ -122,19 +122,40 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 	}, []);
 
 	// Escape cancels what is left while a question is on screen, the way the close button does.
-	// Caught before the window's other listeners, so a preview underneath does not close with it.
+	// Caught before the window's other listeners, so a preview underneath does not close with it,
+	// and swallowed while a file is being kept, so the preview does not close under the flow.
 	const asking = step.status === "where" || step.status === "asking";
+	const drawn = step.status !== "reading";
 	useEffect(() => {
-		if (!asking) return;
+		if (!drawn) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (document.querySelector("[role='dialog']")) return;
 			event.preventDefault();
-			finish();
+			if (asking) finish();
 		}
 		window.addEventListener("keydown", onKey, true);
 		return () => window.removeEventListener("keydown", onKey, true);
-	}, [asking, finish]);
+	}, [drawn, asking, finish]);
+
+	// The flow takes the focus when it first draws, so the list's keys and a
+	// preview's arrows underneath do not act on what it covers, and gives it
+	// back to whatever had it when it is done.
+	const frameRef = useRef<HTMLDivElement>(null);
+	const opener = useRef<HTMLElement | null>(null);
+	useEffect(() => {
+		if (!drawn) return;
+		// Between two files nothing is drawn, so it is taken again for each question.
+		opener.current ??= document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+		frameRef.current?.focus({ preventScroll: true });
+	}, [drawn]);
+	useEffect(
+		() => () => {
+			const back = opener.current;
+			if (back && back !== document.body && back.isConnected) back.focus({ preventScroll: true });
+		},
+		[],
+	);
 
 	// Reads the file at `index` once the place is known, and either adds it or asks.
 	useEffect(() => {
@@ -372,10 +393,12 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 
 	const frame = (
 		<div
+			ref={frameRef}
+			tabIndex={-1}
 			role="region"
 			aria-label={heading}
 			data-add-files
-			className="animate-scale absolute inset-0 z-30 flex flex-col bg-[var(--surface)]"
+			className="animate-scale absolute inset-0 z-30 flex flex-col bg-[var(--surface)] focus:outline-none"
 		>
 			<div className="flex h-[56px] flex-none items-center gap-3 border-b border-[var(--line)] pr-4 pl-2">
 				<IconAction icon="close" label="Cancel" size="base" onClick={cancelAll} />

@@ -10,6 +10,8 @@ type TooltipProps = {
 	side?: "right" | "bottom";
 	/** Classes for the element wrapping the trigger, which the label is measured from. */
 	className?: string;
+	/** Shows nothing while true, for a label that only helps sometimes (a name that is cut short). */
+	disabled?: boolean;
 	children: ReactNode;
 };
 
@@ -39,7 +41,7 @@ let lastHiddenAt = 0;
  * It closes on press as well as on leave, so the label does not hang over the
  * screen the click just opened.
  */
-export function Tooltip({ label, keys, side = "right", className = "flex", children }: TooltipProps) {
+export function Tooltip({ label, keys, side = "right", className = "flex", disabled = false, children }: TooltipProps) {
 	const anchor = useRef<HTMLSpanElement>(null);
 	const timer = useRef<number | undefined>(undefined);
 	const bubble = useRef<HTMLSpanElement>(null);
@@ -72,6 +74,7 @@ export function Tooltip({ label, keys, side = "right", className = "flex", child
 
 	function show() {
 		window.clearTimeout(timer.current);
+		if (disabled) return;
 		if (Date.now() - lastHiddenAt < WARM_WINDOW) {
 			reveal();
 			return;

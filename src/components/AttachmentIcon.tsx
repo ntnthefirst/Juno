@@ -4,6 +4,8 @@ import { Icon, type IconName } from "./Icon";
 type AttachmentIconProps = {
 	filename: string;
 	mimeType: string;
+	/** Square, in pixels. Defaults to 18. */
+	size?: number;
 };
 
 const GLYPH: Record<AttachmentKind, IconName> = {
@@ -29,11 +31,11 @@ const TONE: Partial<Record<AttachmentKind, string>> = {
 	slides: "text-[var(--warn)]",
 };
 
-export function AttachmentIcon({ filename, mimeType }: AttachmentIconProps) {
+export function AttachmentIcon({ filename, mimeType, size = 18 }: AttachmentIconProps) {
 	const kind = attachmentKind(filename, mimeType);
 	return (
 		<span className={`shrink-0 ${TONE[kind] ?? "text-[var(--ink-muted)]"}`}>
-			<Icon name={GLYPH[kind]} size={18} />
+			<Icon name={GLYPH[kind]} size={size} />
 		</span>
 	);
 }

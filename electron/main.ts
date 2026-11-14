@@ -2195,7 +2195,11 @@ if (!app.requestSingleInstanceLock()) {
 										const target = document.querySelector("main section[aria-label]") ?? document.querySelector("main");
 										target.dispatchEvent(new DragEvent("dragover", { dataTransfer: transfer, bubbles: true, cancelable: true }));
 										target.dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true }));
-										const flow = await until(() => document.querySelector("[data-add-files]"), 60);
+										// A slow read shows the flow saying what it reads first, so wait for the question itself.
+										const flow = await until(() => {
+											const shown = document.querySelector("[data-add-files]");
+											return shown && [...shown.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version")) ? shown : null;
+										}, 60);
 										if (!flow) return "the dropped file was not compared with the one already kept";
 										if (!flow.textContent.includes("Afspraken levering")) return "the comparison does not name the document it looks like";
 										if (![...flow.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version"))) return "no way to add it as a version";

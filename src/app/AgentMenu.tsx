@@ -63,6 +63,8 @@ async function fetchMenu(): Promise<Load> {
 export function AgentMenu({ at, onClose, onOpenScreen }: AgentMenuProps) {
 	const [load, setLoad] = useState<Load | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	// Kept apart from a read's error, because the read that follows every answer would clear it.
+	const [answerError, setAnswerError] = useState<string | null>(null);
 	const [busy, setBusy] = useState<string | null>(null);
 	const [now, setNow] = useState<number | null>(null);
 
@@ -84,11 +86,12 @@ export function AgentMenu({ at, onClose, onOpenScreen }: AgentMenuProps) {
 	async function answer(action: AgentAction, approve: boolean) {
 		if (busy) return;
 		setBusy(action.id);
+		setAnswerError(null);
 		try {
 			if (approve) await window.juno.agent.actions.approve(action.id);
 			else await window.juno.agent.actions.reject(action.id);
 		} catch (cause: unknown) {
-			setError(messageOf(cause));
+			setAnswerError(messageOf(cause));
 		} finally {
 			setBusy(null);
 			read();
@@ -110,9 +113,9 @@ export function AgentMenu({ at, onClose, onOpenScreen }: AgentMenuProps) {
 
 	return (
 		<TitleMenu at={at} label="Agent" width={360} onClose={onClose} footer={{ label: "Open agent", onSelect: onOpenScreen }}>
-			{error ? (
+			{answerError ?? error ? (
 				<p data-selectable className="px-2.5 py-3 text-dense text-[var(--risk)]">
-					{error}
+					{answerError ?? error}
 				</p>
 			) : null}
 			{load === null ? (

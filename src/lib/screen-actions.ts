@@ -9,8 +9,6 @@ import { openNewRecord } from "./new-record";
  */
 export type ScreenAction =
 	| "new"
-	| "new-page"
-	| "import"
 	| "styled-mail"
 	| "new-folder"
 	| "new-rule"

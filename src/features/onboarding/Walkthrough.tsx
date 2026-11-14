@@ -77,16 +77,9 @@ const STOPS: WalkthroughStop[] = [
 	{
 		id: "documents",
 		title: "Documents",
-		body: "What you have generated or imported for a client, and whether it is signed.",
-		screen: "documents",
-		target: '[data-nav="documents"]',
-	},
-	{
-		id: "document-templates",
-		title: "Templates",
-		body: "The contracts and letters your documents are made from. They are a folder of their own, at the foot of the tree in Documents.",
-		screen: "documents",
-		target: '[data-tree-node="templates"]',
+		body: "Every client and project has a Documents tab: any kind of file, previewed in place, signed, and made from your templates. Templates is a button on that tab.",
+		screen: "projects",
+		target: '[data-nav="projects"]',
 	},
 	{
 		id: "agent",

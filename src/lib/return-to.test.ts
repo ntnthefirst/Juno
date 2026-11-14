@@ -12,15 +12,11 @@ describe("coverOrigin", () => {
 		expect(coverOrigin(document, "overview")).toBe("overview");
 	});
 
-	it("keeps the way it was in Documents itself", () => {
-		expect(coverOrigin(document, "documents")).toBeNull();
-	});
-
 	it("lands every other request as a place of its own", () => {
-		expect(coverOrigin({ kind: "document-folder", key: "unfiled" }, "clients")).toBeNull();
-		expect(coverOrigin({ kind: "project", id: "p1", name: "Site" }, "clients")).toBeNull();
-		expect(coverOrigin({ kind: "thread", id: "t1", messageId: null }, "documents")).toBeNull();
-		expect(coverOrigin({ kind: "screen", screen: "documents" }, "clients")).toBeNull();
+		expect(coverOrigin({ kind: "project", id: "p1", name: "Site", tab: "documents" }, "clients")).toBeNull();
+		expect(coverOrigin({ kind: "templates", place: null }, "projects")).toBeNull();
+		expect(coverOrigin({ kind: "thread", id: "t1", messageId: null }, "projects")).toBeNull();
+		expect(coverOrigin({ kind: "screen", screen: "unfiled" }, "clients")).toBeNull();
 	});
 });
 

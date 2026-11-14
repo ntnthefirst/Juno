@@ -11,9 +11,12 @@ export type OpenTarget =
 	 * template lands where it is kept.
 	 */
 	| { kind: "project"; id: string; name: string; tab?: "documents"; documentId?: string }
+	/**
+	 * A document, previewed over the screen it was asked for from (a page opens
+	 * to write in), which closing goes back to. It is on its client's or
+	 * project's Documents tab too.
+	 */
 	| { kind: "document"; id: string; name: string }
-	/** A node of the documents tree, opened in the explorer: `client:<id>`, `project:<id>`, `folder:<id>`, `unfiled` or `templates`. */
-	| { kind: "document-folder"; key: string }
 	/** A document template, previewed on the Templates screen. */
 	| { kind: "document-template"; id: string; name: string }
 	/**
@@ -45,8 +48,8 @@ export function screenFor(target: OpenTarget): ScreenId {
 		case "project":
 			return "projects";
 		case "document":
-		case "document-folder":
-			return "documents";
+			// Never landed on: the shell draws a document over the screen in view.
+			return "overview";
 		case "document-template":
 		case "templates":
 			return "templates";

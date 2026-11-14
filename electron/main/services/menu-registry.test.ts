@@ -150,8 +150,8 @@ describe("note menu", () => {
 		expect(ids(await ask("file", page.document.id))).toEqual(["open", "move-to", "rename", "delete"]);
 	});
 
-	it("starts the Notes blank menu with a note and a page", async () => {
-		expect(ids(await ask("blank", "notes")).slice(0, 3)).toEqual(["new-note", "new-page", "new-event"]);
+	it("starts the Notes blank menu with a note, and leaves pages to a Documents tab", async () => {
+		expect(ids(await ask("blank", "notes")).slice(0, 2)).toEqual(["new-note", "new-event"]);
 	});
 });
 

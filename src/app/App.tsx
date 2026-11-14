@@ -7,7 +7,7 @@ import { AgentNotices } from "../features/agent/AgentNotices";
 import { AgentScreen } from "../features/agent/AgentScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
-import { DocumentsScreen } from "../features/documents/DocumentsScreen";
+import { DocumentCover } from "../features/documents/DocumentCover";
 import { MailScreen } from "../features/mail/MailScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { Walkthrough } from "../features/onboarding/Walkthrough";
@@ -164,12 +164,13 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	const [contentHost, setContentHost] = useState<HTMLElement | null>(null);
 	const [recentOpen, setRecentOpen] = useState(false);
 	const [agentPending, setAgentPending] = useState(0);
-	// A document's preview asked for from another screen is drawn over it, with
-	// that screen kept underneath, so closing the preview goes back to the same
-	// tab, scroll and row. `visit` mounts Documents fresh for each request.
+	// A document asked for from another screen is drawn over it, with that
+	// screen kept underneath, so closing the preview goes back to the same tab,
+	// scroll and row. `visit` mounts the cover fresh for each request. The
+	// sidebar and New still belong to the screen underneath.
 	const [cover, setCover] = useState<(CameFrom<HTMLElement> & { visit: number; documentId: string }) | null>(null);
 	const [coverHost, setCoverHost] = useState<HTMLElement | null>(null);
-	const shown: ScreenId = cover ? "documents" : screen;
+	const shown: ScreenId = cover ? cover.screen : screen;
 	const coverRef = useRef(cover);
 	const hostRef = useRef(contentHost);
 	useEffect(() => {
@@ -247,7 +248,6 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 		reminders: () => navigate("reminders"),
 		goTo: navigate,
 		newItem: newHere,
-		newPage: () => startNew("documents", "new-page"),
 		settings: () => void window.juno.window.openSettings(),
 		back: () => back?.onSelect(),
 		lock: lock.configured ? () => void window.juno.lock.lock() : null,
@@ -369,6 +369,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 					back={back}
 					title={trail[trail.length - 1]?.label ?? (shown === "calendar" ? "" : SCREEN_LABELS[shown])}
 					screen={shown}
+					documentOpen={cover !== null}
 					onOpenPalette={() => setPaletteOpen(true)}
 					recentOpen={recentOpen}
 					onRecentOpenChange={setRecentOpen}
@@ -403,8 +404,6 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 							<ProjectsScreen />
 						) : screen === "reminders" ? (
 							<RemindersScreen />
-						) : screen === "documents" ? (
-							<DocumentsScreen />
 						) : screen === "mail" ? (
 							<MailScreen />
 						) : screen === "notes" ? (
@@ -429,7 +428,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 					{cover ? (
 						<main ref={setCoverHost} key={`cover:${cover.visit}`} className={SHEET}>
-							<DocumentsScreen returnTo={{ label: cover.label, onReturn: returnFromCover, documentId: cover.documentId }} />
+							<DocumentCover documentId={cover.documentId} label={cover.label} onReturn={returnFromCover} />
 						</main>
 					) : null}
 				</div>

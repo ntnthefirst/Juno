@@ -447,7 +447,6 @@ if (!app.requestSingleInstanceLock()) {
 									{ name: "projects", nav: "projects", text: ["No projects yet"] },
 									{ name: "reminders", nav: null, text: [] },
 									{ name: "notes", nav: "notes", text: ["No notes yet"] },
-									{ name: "documents", nav: "documents", text: ["Unfiled", "Templates"] },
 									{ name: "mail", nav: "mail", text: ["No mail accounts yet"] },
 								];
 								for (const step of emptyChecks) {
@@ -818,9 +817,10 @@ if (!app.requestSingleInstanceLock()) {
 								blocks: [...current.blocks.slice(0, at), picture, ...current.blocks.slice(at)],
 							});
 
-							// Files of each kind the explorer previews, kept under the first
+							// Files of each kind a Documents tab previews, kept under the first
 							// client the way a drop keeps them: a picture, a Word file, a
-							// workbook and a note, and a folder of the owner's own holding one.
+							// workbook and a note, and one file kept under nothing, which the
+							// Overview lists as a file without a client.
 							// Made here rather than taken from the test fixtures, which the build leaves out.
 							const { default: JSZip } = await import("jszip");
 							type ExcelJs = typeof import("exceljs");
@@ -852,11 +852,9 @@ if (!app.requestSingleInstanceLock()) {
 								},
 							};
 							const imports = await import("./main/services/document-import");
-							const folderService = await import("./main/services/document-folders");
 							const ownerId = current.document.clientId;
-							const offers = await folderService.create({ name: "Offertes", clientId: ownerId });
-							const keep = (fileName: string, data: Uint8Array, folderId: string | null = null) =>
-								imports.importFile({ source: { kind: "bytes", fileName, data, via: "drop" }, clientId: ownerId, folderId });
+							const keep = (fileName: string, data: Uint8Array) =>
+								imports.importFile({ source: { kind: "bytes", fileName, data, via: "drop" }, clientId: ownerId });
 							await keep("Werktekening tafel.png", new Uint8Array(png));
 							await keep(
 								"Bestek keuken.docx",
@@ -865,7 +863,6 @@ if (!app.requestSingleInstanceLock()) {
 									"De kasten worden op maat gemaakt en ter plaatse geplaatst.",
 									"Werkblad in eik van 38 mm, afgewerkt met hardwasolie.",
 								]),
-								offers.id,
 							);
 							await keep(
 								"Prijzen hout 2026.xlsx",
@@ -888,7 +885,10 @@ if (!app.requestSingleInstanceLock()) {
 									"Levering van de eiken tafel op vrijdag in de voormiddag.\nDe planken krijgen een week om te wennen in de werkplaats.\nBel De Smet een dag vooraf.\n",
 								),
 							);
-							console.log("SMOKE_DEMO explorer files=4 folder=Offertes");
+							await imports.importFile({
+								source: { kind: "bytes", fileName: "Bonnetje bouwmarkt.txt", data: new TextEncoder().encode("Schroeven en lijm, 18,40 euro.\n"), via: "drop" },
+							});
+							console.log("SMOKE_DEMO documents files=4 unfiled=1");
 						}
 
 							// Two files on the project, added through the service rather than
@@ -1401,7 +1401,9 @@ if (!app.requestSingleInstanceLock()) {
 										"Mail",
 										"Drafts",
 										"Notes",
-										"Documents",
+										"Client documents",
+										"Project documents",
+										"Files without a client",
 										"Page",
 										"Agent",
 										"Agent log",
@@ -1415,21 +1417,22 @@ if (!app.requestSingleInstanceLock()) {
 									`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 								);
 								// Drafts is a view inside Mail; Week and the event form live inside
-								// Calendar. Reminders is reached from the overview, and the two template
-								// screens from the switch at the top of Mail and Documents. None of
-								// them is a sidebar entry.
+								// Calendar. Reminders and the files without a client are reached from
+								// the overview, Styled mail from Mail, and a client's documents, a page
+								// and the document templates from a client's Documents tab (decision 81).
+								// None of them is a sidebar entry.
 								const sidebarEntry =
-									screen === "Client record"
+									screen === "Client record" || screen === "Client documents" || screen === "Page" || screen === "Document templates"
 										? "Clients"
-										: screen === "Page"
-											? "Documents"
+										: screen === "Project documents"
+											? "Projects"
+										: screen === "Files without a client"
+											? "Overview"
 										: screen === "Project record" || screen === "Projects as a list"
 											? "Projects"
 											: screen === "Drafts" || screen === "Mail templates"
 												? "Mail"
-												: screen === "Document templates"
-													? "Documents"
-													: screen === "Reminders"
+												: screen === "Reminders"
 														? "Overview"
 														: screen === "Week" || screen === "Event form"
 															? "Calendar"
@@ -1469,18 +1472,79 @@ if (!app.requestSingleInstanceLock()) {
 									"Reminders": "Reminders",
 								};
 								const route = inPage[screen];
-								// Templates is a folder of the explorer now, the last node of the tree.
+								// A record's Documents tab: the client obet's, or its project's.
+								const openRecordDocuments = (kind: "client" | "project") =>
+									window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const until = async (find, tries = 40) => {
+												for (let at = 0; at < tries; at++) {
+													const found = find();
+													if (found) return found;
+													await wait(150);
+												}
+												return null;
+											};
+											if (${JSON.stringify(kind)} === "client") {
+												const row = await until(() => [...document.querySelectorAll("main table tbody tr button")].find((el) => el.textContent.trim() === "obet"));
+												if (!row) return "no row for the client obet";
+												row.click();
+											} else {
+												const group = document.querySelector("[role=group][aria-label=Layout]");
+												const cards = group ? [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Cards") : null;
+												if (cards) { cards.click(); await wait(400); }
+												const card = await until(() => [...document.querySelectorAll("main ul > li > button")].find((el) => el.textContent.includes("Ontwikkelovereenkomst site")));
+												if (!card) return "no card for the project Ontwikkelovereenkomst site";
+												card.click();
+											}
+											const tab = await until(() => [...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().startsWith("Documents")));
+											if (!tab) return "the record has no Documents tab";
+											tab.click();
+											const listed = await until(() => document.querySelector("main [data-explorer-item]"), 60);
+											return listed ? "ok" : "the Documents tab lists nothing";
+										})()`,
+									) as Promise<string>;
+								if (screen === "Client documents" || screen === "Page" || screen === "Document templates") {
+									const opened = await openRecordDocuments("client");
+									if (opened !== "ok") throw new Error(`Smoke: on the way to ${screen}, ${opened}`);
+								}
+								if (screen === "Project documents") {
+									const opened = await openRecordDocuments("project");
+									if (opened !== "ok") throw new Error(`Smoke: on the way to ${screen}, ${opened}`);
+								}
+								// Templates is a screen without a rail entry, opened from a Documents tab.
 								if (screen === "Document templates") {
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
-											const node = document.querySelector("[data-tree-node=templates]");
-											if (!node) return false;
-											node.click();
-											await new Promise((r) => setTimeout(r, 700));
+											const button = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Templates");
+											if (!button) return false;
+											button.click();
+											for (let tries = 0; tries < 40 && !document.querySelector("main [data-explorer-item]"); tries++) await new Promise((r) => setTimeout(r, 150));
 											return Boolean(document.querySelector("main [data-explorer-item]"));
 										})()`,
 									)) as boolean;
-									if (!opened) throw new Error("Smoke: no Templates folder in the documents tree, or it lists nothing");
+									if (!opened) throw new Error("Smoke: no Templates button on the client's Documents tab, or the Templates screen lists nothing");
+								}
+								if (screen === "Files without a client") {
+									const opened = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											let card = null;
+											for (let tries = 0; tries < 40 && !card; tries++) {
+												card = document.querySelector("main section[aria-label='Files without a client']");
+												if (!card) await wait(150);
+											}
+											if (!card) return "the Overview has no card for the files without a client";
+											if (!card.textContent.includes("Bonnetje bouwmarkt")) return "the card does not list the file kept under nothing";
+											if (![...card.querySelectorAll("button")].some((el) => el.textContent.trim() === "Pick a place")) return "the card offers no way to give the file a place";
+											const all = [...card.querySelectorAll("button")].find((el) => el.textContent.trim() === "See all");
+											if (!all) return "the card has no See all";
+											all.click();
+											for (let tries = 0; tries < 40 && ![...document.querySelectorAll("main [data-explorer-item]")].some((el) => el.textContent.includes("Bonnetje bouwmarkt")); tries++) await wait(150);
+											return [...document.querySelectorAll("main [data-explorer-item]")].some((el) => el.textContent.includes("Bonnetje bouwmarkt")) ? "ok" : "See all does not list the file";
+										})()`,
+									)) as string;
+									if (opened !== "ok") throw new Error(`Smoke: files without a client: ${opened}`);
 								}
 								if (route && !(await pressText(route)))
 									throw new Error(`Smoke: no "${route}" to press on the way to ${screen}`);
@@ -1522,18 +1586,14 @@ if (!app.requestSingleInstanceLock()) {
 									if (shown !== "ok") throw new Error(`Smoke: notes ${shown}`);
 								}
 								if (screen === "Page") {
-									// A page opens from the Documents list, with its table, and a slash
-									// on the empty last line draws the block menu.
+									// A page opens from its client's Documents tab, with its table, and a
+									// slash on the empty last line draws the block menu.
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											await wait(500);
-											const client = [...document.querySelectorAll("[data-tree-node^='client:']")].find((el) => el.textContent.includes("obet"));
-											if (!client) return "the client is not in the documents tree";
-											client.click();
-											await wait(700);
 											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Oak dining table, quote"));
-											if (!row) return "the page is not in its client's folder";
+											if (!row) return "the page is not on its client's Documents tab";
 											if (!row.textContent.includes("Page")) return "the row does not say it is a page";
 											row.click();
 											await wait(1100);
@@ -1681,7 +1741,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.textContent.includes("Repository")) return "the links are not shown";
 											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
 											const tab = (name) => [...main.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === name);
-											for (const name of ["Notes", "Mail", "Timeline", "Time", "Calendar"]) {
+											for (const name of ["Notes", "Documents", "Mail", "Timeline", "Time", "Calendar"]) {
 												if (!tab(name)) return "no " + name + " tab";
 											}
 											if (!main.querySelector("button[aria-label='Add to this project']")) return "no Add menu";
@@ -1689,7 +1749,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!notes) return "no notes editor on the project";
 											if (!notes.textContent.includes("Release notes")) return "the notes editor does not show the stored notes";
 											if (!main.textContent.includes("Details")) return "no details column";
-											if (!main.querySelector("button[aria-label='Add a document']")) return "no documents section on the project";
+											if (main.querySelector("section[aria-label='Project files']")) return "the project files are still on the Notes tab";
 											if (!main.textContent.includes("Repository")) return "the links are not shown";
 											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
 											if (main.textContent.includes("Dates and reminders")) return "the old dates section is still on the first tab";
@@ -1736,6 +1796,11 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector("header button[aria-label='More project actions']")) return "no actions menu";
 											if (!main.querySelector("button[aria-label='Add to this project']")) return "no add menu";
 
+											// The Documents tab holds the documents and, under them, the project's own files.
+											tab("Documents").click();
+											await wait(900);
+											if (!main.querySelector("section[aria-label^='Documents of']")) return "no documents on the project's Documents tab";
+											if (!main.querySelector("section[aria-label='Project files']")) return "the project files are not on the Documents tab";
 											// Where the files are kept is one answer this screen still gives, from the files section.
 											const otherWays = main.querySelector("button[aria-label='Other ways to add a file']");
 											if (!otherWays) return "no other ways to add a file";
@@ -1779,6 +1844,7 @@ if (!app.requestSingleInstanceLock()) {
 										const clickTab = (label: string) =>
 											`const t = [...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === ${JSON.stringify(label)}); t.click(); await new Promise((r) => setTimeout(r, 500));`;
 										await shoot("notes", clickTab("Notes"));
+										await shoot("documents", clickTab("Documents"));
 										await shoot("mail", clickTab("Mail"));
 										await shoot("timeline", clickTab("Timeline"));
 										await shoot("calendar", clickTab("Calendar"));
@@ -1789,20 +1855,20 @@ if (!app.requestSingleInstanceLock()) {
 									}
 									// A document previewed from the project is drawn over it, and Escape
 									// goes back to the same tab with the focus on the row and the page
-									// scrolled where it was, not to the Documents screen.
+									// scrolled where it was.
 									const projectReturn = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											const selectedTab = () => [...document.querySelectorAll("main [role=tab]")].find((el) => el.getAttribute("aria-selected") === "true")?.textContent.trim() ?? null;
-											// The project's documents are on its Notes tab, under the notes.
-											[...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().startsWith("Notes"))?.click();
+											// The project's documents are on its Documents tab.
+											[...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().startsWith("Documents"))?.click();
 											await wait(500);
 											let row = null;
 											for (let waited = 0; waited < 4000 && !row; waited += 100) {
 												row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Smoke measurements"));
 												if (!row) await wait(100);
 											}
-											if (!row) return "the project's Documents section has no row for its file";
+											if (!row) return "the project's Documents tab has no row for its file";
 											const tab = selectedTab();
 											row.scrollIntoView({ block: "center" });
 											const scroller = [...document.querySelectorAll("main *")].find((el) => el.scrollTop > 0) ?? null;
@@ -1912,7 +1978,7 @@ if (!app.requestSingleInstanceLock()) {
 										if (tab !== "Documents") continue;
 										// A document previewed from the client's tab is drawn over the
 										// client, and Escape goes back to the same tab with the focus
-										// on the row it was opened from, not to the Documents screen.
+										// on the row it was opened from.
 										const previewed = await window.webContents.executeJavaScript(
 											`(async () => {
 												const row = document.querySelector("main [data-explorer-item]");
@@ -2125,7 +2191,9 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									await new Promise((r) => setTimeout(r, 600));
 								}
-								if (screen === "Documents") {
+								if (screen === "Client documents" || screen === "Project documents") {
+									const client = screen === "Client documents";
+									const prefix = client ? "client-documents-" : "project-documents-";
 									const shoot = async (name: string, settle = 400) => {
 										for (const theme of ["light", "dark"] as const) {
 											nativeTheme.themeSource = theme;
@@ -2153,44 +2221,40 @@ if (!app.requestSingleInstanceLock()) {
 												${script}
 											})()`,
 										)) as string;
-										if (result !== "ok") throw new Error(`Smoke: documents explorer ${what}: ${result}`);
+										if (result !== "ok") throw new Error(`Smoke: ${screen} ${what}: ${result}`);
 									};
 
-									// The tree, then the client's folder as a list.
+									// The tab as a list, with the bar the frames draw: the heading and a
+									// count, then the view switch, Templates, New and Add files. A client's
+									// list names the project of each document in a column of its own.
 									await step(
-										"tree",
-										`const tree = document.querySelector("[role=tree][aria-label=Folders]");
-										if (!tree) return "no folder tree";
-										if (!tree.querySelector("[data-tree-node=unfiled]") || !tree.querySelector("[data-tree-node=templates]")) return "the tree has no Unfiled or no Templates";
-										const list = document.querySelector("[role=group][aria-label=Layout] button[aria-label=List]");
-										if (list && list.getAttribute("aria-pressed") !== "true") list.click();
-										const client = [...tree.querySelectorAll("[data-tree-node^='client:']")].find((el) => el.textContent.includes("obet"));
-										if (!client) return "the client is not in the tree";
-										client.click();
-										const sheet = await until(() => row("Prijzen hout 2026"));
-										if (!sheet) return "the client's folder does not list its files";
-										if (!row("Offertes")) return "the owner's folder is not listed in the client's folder";
-										if (!sheet.textContent.includes("Excel")) return "the row does not say what kind of file it is";
-										if (!document.querySelector("header input[aria-label='Search documents']")) return "no search in the title bar";
+										"list",
+										`const section = document.querySelector("main section[aria-label^='Documents of']");
+										if (!section) return "no Documents tab";
+										const list = section.querySelector("[role=group][aria-label=Layout] button[aria-label=List]");
+										if (!list) return "no view switch on the tab";
+										if (list.getAttribute("aria-pressed") !== "true") list.click();
+										await wait(300);
+										for (const label of ["Templates", "Add files"]) {
+											if (![...section.querySelectorAll("button")].some((el) => el.textContent.trim() === label)) return "no " + label + " on the tab";
+										}
+										if (!section.querySelector("button[aria-label='New document']")) return "no New on the tab";
+										const headers = [...section.querySelectorAll(".sticky > *")].map((el) => el.textContent.trim());
+										const wanted = ${JSON.stringify(client)} ? ["Name", "Project", "Type", "Size", "Modified", "Status", "Versions"] : ["Name", "Type", "Size", "Modified", "Status", "Versions"];
+										if (headers.join(",") !== wanted.join(",")) return "the columns are " + headers.join(",");
+										const file = await until(() => row(${JSON.stringify(client ? "Prijzen hout 2026" : "PDF")}));
+										if (!file) return "the tab does not list its files";
+										if (${JSON.stringify(client)} && !rows().some((el) => el.textContent.includes("Ontwikkelovereenkomst site"))) return "the client's list does not name a project's document";
+										const box = file.getBoundingClientRect();
+										if (Math.round(box.height) !== 36) return "a row is " + Math.round(box.height) + "px tall";
 										return "ok";`,
 									);
-									await shoot("explorer-list");
+									await shoot(prefix + "list");
 
-									// Search across everything, Ctrl A selects every row, Escape lets go.
+									// Ctrl A selects every row, Escape lets go.
 									await step(
-										"search and selection",
-										`const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-										const search = document.querySelector("header input[aria-label='Search documents']");
-										setValue.call(search, "zzz-nothing-matches-zzz");
-										search.dispatchEvent(new Event("input", { bubbles: true }));
-										if (!(await until(() => document.querySelector("main").textContent.includes("Nothing matches that")))) return "the search did not narrow the list";
-										setValue.call(search, "bestek");
-										search.dispatchEvent(new Event("input", { bubbles: true }));
-										if (!(await until(() => row("Bestek keuken")))) return "the search does not reach a file in a folder";
-										setValue.call(search, "");
-										search.dispatchEvent(new Event("input", { bubbles: true }));
-										const first = await until(() => row("Prijzen hout 2026"));
-										if (!first) return "clearing the search did not bring the folder back";
+										"selection",
+										`const first = rows()[0];
 										first.focus();
 										first.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true, bubbles: true }));
 										await wait(200);
@@ -2202,10 +2266,10 @@ if (!app.requestSingleInstanceLock()) {
 										return "ok";`,
 									);
 
-									// The same folder as tiles, with the pictures they draw.
+									// The same list as tiles, with the pictures they draw.
 									await step(
 										"tiles",
-										`const tiles = document.querySelector("[role=group][aria-label=Layout] button[aria-label=Tiles]");
+										`const tiles = document.querySelector("main section[aria-label^='Documents of'] [role=group][aria-label=Layout] button[aria-label=Tiles]");
 										if (!tiles) return "no tile layout";
 										tiles.click();
 										await wait(400);
@@ -2214,32 +2278,20 @@ if (!app.requestSingleInstanceLock()) {
 										await wait(900);
 										return "ok";`,
 									);
-									await shoot("explorer-grid");
+									await shoot(prefix + "tiles");
 									await step(
 										"back to the list",
-										`document.querySelector("[role=group][aria-label=Layout] button[aria-label=List]").click();
+										`document.querySelector("main section[aria-label^='Documents of'] [role=group][aria-label=Layout] button[aria-label=List]").click();
 										await wait(400);
 										return rows().length > 0 ? "ok" : "the list came back empty";`,
 									);
 
 									// A preview of each kind: a PDF in the viewer, Word as its page, a workbook as cells, a picture.
-									const preview = async (name: string, find: string, folder: string | null, ready: string, painted = false) => {
+									const preview = async (name: string, find: string, ready: string, painted = false) => {
 										await step(
 											`preview of ${name}`,
 											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(300);
-											const folder = ${JSON.stringify(folder)};
-											if (folder) {
-												const node = [...document.querySelectorAll("[data-tree-node]")].find((el) => el.textContent.includes(folder));
-												if (node) node.click();
-												else {
-													// A folder inside the open one is opened from the list, by a double click.
-													const inside = row(folder);
-													if (!inside) return "no folder called " + folder;
-													inside.dispatchEvent(new MouseEvent("click", { detail: 2, bubbles: true }));
-												}
-												await wait(500);
-											}
 											const target = await until(() => row(${JSON.stringify(find)}));
 											if (!target) return "no row for " + ${JSON.stringify(find)};
 											target.click();
@@ -2273,96 +2325,97 @@ if (!app.requestSingleInstanceLock()) {
 												}
 												if (!inked) await new Promise((r) => setTimeout(r, 150));
 											}
-											if (!inked) throw new Error(`Smoke: documents explorer preview of ${name}: the page stayed empty`);
+											if (!inked) throw new Error(`Smoke: documents tab preview of ${name}: the page stayed empty`);
 										}
-																				await shoot(`preview-${name}`);
+										await shoot(`${prefix}preview-${name}`);
 									};
-									await preview("sheet", "Prijzen hout 2026", "obet", "table");
-									await preview("image", "Werktekening tafel", null, "img");
-									await preview("word", "Bestek keuken", "Offertes", "iframe", true);
-									await preview("pdf", "PDF", "Ontwikkelovereenkomst site", "canvas");
+									if (client) {
+										// A preview of each kind: a workbook as cells, a picture, Word as its page, a PDF in the viewer.
+										await preview("sheet", "Prijzen hout 2026", "table");
+										await preview("image", "Werktekening tafel", "img");
+										await preview("word", "Bestek keuken", "iframe", true);
+										await preview("pdf", "PDF", "canvas");
 
-									// Next and Previous go through the folder, and Escape closes the preview.
-									await step(
-										"previous and next",
-										`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-										await wait(300);
-										[...document.querySelectorAll("[data-tree-node^='client:']")].find((el) => el.textContent.includes("obet"))?.click();
-										const first = await until(() => row("Afspraken levering"));
-										if (!first) return "the client's folder is not listed";
-										first.click();
-										if (!(await until(() => document.querySelector("[data-full-preview]")))) return "the preview did not open";
-										const next = await until(() => document.querySelector("[data-full-preview] button[aria-label='Next file']"));
-										const before = document.querySelector("[data-full-preview] h2")?.textContent;
-										if (!next) return "no next file";
-										if (!next.disabled) {
-											next.click();
+										// Next and Previous go through the list, and Escape closes the preview.
+										await step(
+											"previous and next",
+											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											const first = await until(() => row("Afspraken levering"));
+											if (!first) return "the tab does not list the note";
+											first.click();
+											if (!(await until(() => document.querySelector("[data-full-preview]")))) return "the preview did not open";
+											const next = await until(() => document.querySelector("[data-full-preview] button[aria-label='Next file']"));
+											const before = document.querySelector("[data-full-preview] h2")?.textContent;
+											if (!next) return "no next file";
+											if (!next.disabled) {
+												next.click();
+												await wait(500);
+												if (document.querySelector("[data-full-preview] h2")?.textContent === before) return "Next did not change the file";
+											}
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(400);
+											if (document.querySelector("[data-full-preview]")) return "Escape did not close the preview";
+											const selected = [...document.querySelectorAll("main [role=tab]")].find((el) => el.getAttribute("aria-selected") === "true");
+											return selected && selected.textContent.trim().startsWith("Documents") ? "ok" : "closing the preview did not return to the Documents tab";`,
+										);
+
+										// A dropped file that looks like one already kept is shown beside it first.
+										await step(
+											"comparison",
+											`const text = "Levering van de eiken tafel op vrijdag in de voormiddag.\\nDe planken krijgen een week om te wennen in de werkplaats.\\nBel De Smet twee dagen vooraf.\\n";
+											const file = new File([text], "Afspraken levering.txt", { type: "text/plain", lastModified: Date.now() });
+											const transfer = new DataTransfer();
+											transfer.items.add(file);
+											const target = document.querySelector("main section[aria-label^='Documents of']");
+											if (!target) return "no Documents tab to drop on";
+											target.dispatchEvent(new DragEvent("dragover", { dataTransfer: transfer, bubbles: true, cancelable: true }));
+											target.dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true }));
+											// A slow read shows the flow saying what it reads first, so wait for the question itself.
+											const flow = await until(() => {
+												const shown = document.querySelector("[data-add-files]");
+												return shown && [...shown.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version")) ? shown : null;
+											}, 60);
+											if (!flow) return "the dropped file was not compared with the one already kept";
+											if (!flow.textContent.includes("Afspraken levering")) return "the comparison does not name the document it looks like";
+											if (![...flow.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version"))) return "no way to add it as a version";
+											const panes = await until(() => (flow.querySelectorAll("section pre").length === 2 ? true : null), 60);
+											if (!panes) return "the two files are not shown side by side";
+											return "ok";`,
+										);
+										await shoot("add-compare");
+										// What differs, word by word: "een dag" kept, "twee dagen" coming in.
+										await step(
+											"the words that differ",
+											`const flow = document.querySelector("[data-add-files]");
+											const words = await until(() => [...flow.querySelectorAll("button")].find((el) => el.textContent.trim() === "What differs"), 60);
+											if (!words) return "the comparison offers no way to see what differs";
+											words.click();
+											const view = await until(() => flow.querySelector("section[aria-label='What differs']"), 30);
+											if (!view) return "what differs is not shown";
+											const added = [...view.querySelectorAll("ins")].map((el) => el.textContent).join(" ");
+											const removed = [...view.querySelectorAll("del")].map((el) => el.textContent).join(" ");
+											if (!added.includes("twee dagen") || !removed.includes("een dag")) return "the changed words are not marked: +" + added + " -" + removed;
+											return "ok";`,
+										);
+										await shoot("add-compare-words");
+										await step(
+											"leaving the comparison",
+											`const cancel = [...document.querySelectorAll("[data-add-files] button")].find((el) => el.textContent.trim() === "Cancel");
+											if (!cancel) return "no way to cancel";
+											cancel.click();
 											await wait(500);
-											if (document.querySelector("[data-full-preview] h2")?.textContent === before) return "Next did not change the file";
-										}
-										window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-										await wait(400);
-										return document.querySelector("[data-full-preview]") ? "Escape did not close the preview" : "ok";`,
-									);
-
-									// A dropped file that looks like one already kept is shown beside it first.
-									await step(
-										"comparison",
-										`const text = "Levering van de eiken tafel op vrijdag in de voormiddag.\\nDe planken krijgen een week om te wennen in de werkplaats.\\nBel De Smet twee dagen vooraf.\\n";
-										const file = new File([text], "Afspraken levering.txt", { type: "text/plain", lastModified: Date.now() });
-										const transfer = new DataTransfer();
-										transfer.items.add(file);
-										const target = document.querySelector("main section[aria-label]") ?? document.querySelector("main");
-										target.dispatchEvent(new DragEvent("dragover", { dataTransfer: transfer, bubbles: true, cancelable: true }));
-										target.dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true }));
-										// A slow read shows the flow saying what it reads first, so wait for the question itself.
-										const flow = await until(() => {
-											const shown = document.querySelector("[data-add-files]");
-											return shown && [...shown.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version")) ? shown : null;
-										}, 60);
-										if (!flow) return "the dropped file was not compared with the one already kept";
-										if (!flow.textContent.includes("Afspraken levering")) return "the comparison does not name the document it looks like";
-										if (![...flow.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version"))) return "no way to add it as a version";
-										const panes = await until(() => (flow.querySelectorAll("section pre").length === 2 ? true : null), 60);
-										if (!panes) return "the two files are not shown side by side";
-										return "ok";`,
-									);
-									await shoot("add-compare");
-									// What differs, word by word: "een dag" kept, "twee dagen" coming in.
-									await step(
-										"the words that differ",
-										`const flow = document.querySelector("[data-add-files]");
-										const words = await until(() => [...flow.querySelectorAll("button")].find((el) => el.textContent.trim() === "What differs"), 60);
-										if (!words) return "the comparison offers no way to see what differs";
-										words.click();
-										const view = await until(() => flow.querySelector("section[aria-label='What differs']"), 30);
-										if (!view) return "what differs is not shown";
-										const added = [...view.querySelectorAll("ins")].map((el) => el.textContent).join(" ");
-										const removed = [...view.querySelectorAll("del")].map((el) => el.textContent).join(" ");
-										if (!added.includes("twee dagen") || !removed.includes("een dag")) return "the changed words are not marked: +" + added + " -" + removed;
-										return "ok";`,
-									);
-									await shoot("add-compare-words");
-									await step(
-										"leaving the comparison",
-										`const cancel = [...document.querySelectorAll("[data-add-files] button")].find((el) => el.textContent.trim() === "Cancel");
-										if (!cancel) return "no way to cancel";
-										cancel.click();
-										await wait(500);
-										return document.querySelector("[data-add-files]") ? "the comparison stayed open" : "ok";`,
-									);
-
-									// Templates is a folder of its own.
-									await step(
-										"templates folder",
-										`document.querySelector("[data-tree-node=templates]").click();
-										const example = await until(() => row("Voorbeeld"));
-										if (!example) return "the Templates folder does not list the example";
-										if (!document.querySelector("main button[aria-label='New document template']")) return "no New template in the Templates folder";
-										if (![...document.querySelectorAll("main button")].some((el) => el.textContent.includes("Import Word file"))) return "no Import Word file";
-										return "ok";`,
-									);
-									await shoot("explorer-templates");
+											return document.querySelector("[data-add-files]") ? "the comparison stayed open" : "ok";`,
+										);
+									} else {
+										await preview("pdf", "PDF", "canvas");
+										await step(
+											"closing the preview",
+											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(400);
+											return document.querySelector("[data-full-preview]") ? "Escape did not close the preview" : "ok";`,
+										);
+									}
 								}
 								if (screen === "Document templates") {
 									// The example first. It is the one template every first install has,

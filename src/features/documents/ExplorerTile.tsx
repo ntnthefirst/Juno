@@ -2,7 +2,6 @@ import { useState, type CSSProperties, type HTMLAttributes } from "react";
 import { FileName } from "../../components/FileName";
 import { formatBytes } from "../projects/format";
 import { SpecimenMark } from "./SpecimenMark";
-import { countWithin } from "./explorer-tree";
 import { nameOf, projectOf, sizeOf, typeOf, type ExplorerItem } from "./explorer-items";
 import { STATUS_TONES, statusOf } from "./item-status";
 import { RenameField } from "./RenameField";
@@ -27,12 +26,8 @@ type ExplorerTileProps = {
 	eager: boolean;
 };
 
-/** The line under a tile's name: a folder's count, or a file's type and size, and its project when asked. */
+/** The line under a tile's name: a file's type and size, and its project when asked. */
 function metaOf(item: ExplorerItem, showProject: boolean): string {
-	if (item.kind === "node") {
-		const count = countWithin(item.node);
-		return `${count} ${count === 1 ? "item" : "items"}`;
-	}
 	const size = sizeOf(item);
 	return [showProject ? projectOf(item) : "", typeOf(item), size === null ? "" : formatBytes(size)].filter(Boolean).join(" · ");
 }

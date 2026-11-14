@@ -5,14 +5,16 @@ import { isOwnDrag, ownDrop } from "../lib/document-drag";
 import { carriesFiles, describeOutcome, itemsFromFiles, type ImportItem } from "../lib/pdf-drop";
 
 /**
- * Catches a file dropped anywhere in the window and adds it to Documents.
+ * Catches a file dropped anywhere in the window and adds it to a client or a
+ * project.
  *
  * Two jobs. The first is to stop the window navigating to a file that was let
  * go of over it, which is what Chromium does with a drop nothing has claimed,
  * and which the navigation rules would only turn into a blank refusal. The
- * second is adding it, which first asks where it is kept, since nothing on
- * this screen says. Documents itself, and a client's or project's documents,
- * claim their drop before this sees it, and this stays out of the way then.
+ * second is adding it, which first asks which client or project it is kept
+ * under, since nothing on this screen says. A client's or a project's
+ * Documents tab claims its drop before this sees it, and this stays out of
+ * the way then.
  */
 export function DocumentDropLayer() {
 	const [hint, setHint] = useState(false);
@@ -64,7 +66,7 @@ export function DocumentDropLayer() {
 					className="pointer-events-none fixed inset-x-0 top-[var(--titlebar-height)] z-40 flex justify-center pt-4"
 				>
 					<p className="animate-pop rounded-[var(--radius-lg)] border border-[var(--accent)] bg-[var(--surface)] px-4 py-2 text-base text-[var(--ink)] shadow-[var(--shadow-popover)]">
-						Drop files to add them to Documents
+						Drop files to add them to a client or a project
 					</p>
 				</div>
 			) : null}

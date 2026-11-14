@@ -7,7 +7,6 @@ export type ScreenId =
 	| "mail"
 	| "mail-templates"
 	| "notes"
-	| "documents"
 	| "templates"
 	| "unfiled"
 	| "clients"
@@ -35,7 +34,6 @@ export const SIDEBAR_TOP: ScreenItem[] = [
 	{ id: "projects", label: "Projects", icon: "projects" },
 	{ id: "mail", label: "Mail", icon: "mail" },
 	{ id: "notes", label: "Notes", icon: "note" },
-	{ id: "documents", label: "Documents", icon: "documents" },
 ];
 
 export const SCREEN_LABELS: Record<ScreenId, string> = {
@@ -44,7 +42,6 @@ export const SCREEN_LABELS: Record<ScreenId, string> = {
 	mail: "Mail",
 	"mail-templates": "Styled mail",
 	notes: "Notes",
-	documents: "Documents",
 	templates: "Templates",
 	unfiled: "Files without a client",
 	clients: "Clients",
@@ -60,7 +57,6 @@ export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
 	mail: "mail",
 	"mail-templates": "mail",
 	notes: "notes",
-	documents: "documents",
 	templates: "projects",
 	unfiled: "overview",
 	clients: "clients",
@@ -83,7 +79,6 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
 	mail: { screen: "mail", label: "New message" },
 	"mail-templates": { screen: "mail", label: "New message" },
 	notes: { screen: "notes", label: "New note" },
-	documents: { screen: "documents", label: "New from a template" },
 };
 
 /**
@@ -103,11 +98,9 @@ export type NewMenuEntry = {
 
 export const NEW_MENU: NewMenuEntry[] = [
 	{ screen: "notes", label: "New note", icon: "note" },
-	{ screen: "documents", action: "new-page", label: "New page", icon: "documents" },
 	{ screen: "calendar", label: "New event", icon: "calendar" },
 	{ screen: "clients", label: "New client", icon: "clients" },
 	{ screen: "projects", label: "New project", icon: "projects" },
-	{ screen: "documents", action: "import", label: "Import a file", icon: "import", separatorBefore: true },
 ];
 
 /**
@@ -133,18 +126,12 @@ export const NEW_MENUS: Partial<Record<ScreenId, NewMenuEntry[]>> = {
 		{ screen: "calendar", action: "subscribe", label: "Subscribe to a calendar", icon: "sync", separatorBefore: true },
 		{ screen: "calendar", action: "import-calendar", label: "Import a calendar file", icon: "import" },
 	],
-	documents: [
-		{ screen: "documents", action: "new-page", label: "New page", icon: "documents" },
-		{ screen: "documents", label: "New from a template", icon: "templates" },
-		{ screen: "documents", action: "import", label: "Import a file", icon: "import", separatorBefore: true },
-	],
 };
 
 /** The glyph of the entry a screen adds to the New menu when the design's list has none for it. */
 export const NEW_OWN_ICON: Record<string, IconName> = {
 	"New reminder": "reminders",
 	"New message": "mail",
-	"New document": "documents",
 };
 
 /**

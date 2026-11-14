@@ -1,5 +1,5 @@
 import type { ScreenId } from "../app/screens";
-import { screenFor, type OpenTarget } from "./open-entity";
+import type { OpenTarget } from "./open-entity";
 
 /**
  * Where a document's preview came from, held by the shell while the preview
@@ -24,12 +24,11 @@ export type ScrollMark<E> = { element: E; top: number; left: number };
 /**
  * The screen a request should open over rather than replace, or null when it
  * lands the way it always has. Only a document is previewed over where it was
- * asked for: from Documents itself the explorer under it is the place it came
- * from, and every other kind of request is a place of its own.
+ * asked for, since a document has no screen of its own (decision 81); every
+ * other kind of request is a place of its own.
  */
 export function coverOrigin(target: OpenTarget, shown: ScreenId): ScreenId | null {
-	if (target.kind !== "document") return null;
-	return screenFor(target) === shown ? null : shown;
+	return target.kind === "document" ? shown : null;
 }
 
 /** Every element that is scrolled away from its start, with how far. */

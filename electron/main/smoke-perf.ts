@@ -3,7 +3,7 @@
  *
  * Seeds a business of a realistic size through the bridge, the way a person's
  * records arrive, then times what a person waits for: the first paint, each of
- * the seven places, opening a record, a long list, and a theme change in the
+ * the six places, opening a record, a long list, and a theme change in the
  * main window and in settings over it, and how long a preview of a large
  * workbook and Word file holds the main process, parsed there as it used to
  * be and through the file worker. Each figure is printed on a
@@ -252,11 +252,11 @@ async function seed(window: BrowserWindow): Promise<Record<string, number>> {
 		for (let i = 0; i < 60; i++) {
 			await b.pages.create({ title: "Perf page " + String(i).padStart(2, "0"), clientId: clients[i % 40].id });
 		}
-		// Files of their own, so Documents has a folder full of them to open and preview:
-		// 150 in Unfiled and a few beside client 5's pages.
+		// Files of their own, so a Documents tab has a list full of them to open and
+		// preview: 150 on client 6's tab and a few beside client 5's pages.
 		const text = (i) => new TextEncoder().encode("Perf file " + i + "\\n" + "Een regel tekst om te lezen. ".repeat(40));
 		for (let i = 0; i < 150; i++) {
-			await b.documents.importFile({ source: { kind: "bytes", fileName: "Perf file " + String(i).padStart(3, "0") + ".txt", data: text(i) } });
+			await b.documents.importFile({ source: { kind: "bytes", fileName: "Perf file " + String(i).padStart(3, "0") + ".txt", data: text(i) }, clientId: clients[6].id });
 		}
 		for (let i = 0; i < 12; i++) {
 			await b.documents.importFile({ source: { kind: "bytes", fileName: "Perf brief " + String(i).padStart(2, "0") + ".txt", data: text(1000 + i) }, clientId: clients[5].id });
@@ -314,7 +314,7 @@ async function screens(window: BrowserWindow): Promise<void> {
 			const out = [];
 			// The words that say the screen's own records have arrived, which a
 			// screen with no skeleton cannot otherwise be told apart from loaded.
-			const expect = { overview: "", calendar: "Perf event", clients: "Perf client", projects: "Perf project", mail: "Perf thread", notes: "Perf note", documents: "Unfiled" };
+			const expect = { overview: "", calendar: "Perf event", clients: "Perf client", projects: "Perf project", mail: "Perf thread", notes: "Perf note" };
 			for (const id of Object.keys(expect)) {
 				await wait(300);
 				takeLong();
@@ -350,19 +350,20 @@ async function screens(window: BrowserWindow): Promise<void> {
 }
 
 async function records(window: BrowserWindow): Promise<void> {
-	// `before` is a click that brings the record into view first and is not timed:
-	// Documents keeps pages and files in the folder of their client, opened from the tree.
-	const tree = "main [role=tree] [role=treeitem]";
+	// `before` is the clicks that bring the record into view first and are not
+	// timed: pages and files are on their client's Documents tab (decision 81).
+	const row = "main tbody tr";
+	const documentsTab = { selector: "main [role=tab]", text: "Documents" };
 	// `held`: one click on a file or a page is held for the double-click time
 	// before it opens (lib/click-timing.ts), so the figure waits that out and
 	// includes it, as the person does.
-	const steps: Array<{ name: string; screen: string; selector: string; text: string; before?: { selector: string; text: string }; held?: boolean }> = [
+	const steps: Array<{ name: string; screen: string; selector: string; text: string; before?: { selector: string; text: string }[]; held?: boolean }> = [
 		{ name: "client", screen: "clients", selector: "main tbody tr", text: "Perf client 007" },
 		{ name: "project", screen: "projects", selector: "main button, main a, main tr, main li", text: "Perf project 003" },
 		{ name: "thread", screen: "mail", selector: "main li, main button, main tr, main [role=row]", text: "Perf thread 0398" },
-		{ name: "folder", screen: "documents", selector: tree, text: "Unfiled" },
-		{ name: "file", screen: "documents", selector: "main [data-explorer-item]", text: "Perf file 010", before: { selector: tree, text: "Unfiled" }, held: true },
-		{ name: "page", screen: "documents", selector: "main [data-explorer-item]", text: "Perf page 05", before: { selector: tree, text: "Perf client 005" }, held: true },
+		{ name: "documents", screen: "clients", selector: documentsTab.selector, text: documentsTab.text, before: [{ selector: row, text: "Perf client 006" }] },
+		{ name: "file", screen: "clients", selector: "main [data-explorer-item]", text: "Perf file 010", before: [{ selector: row, text: "Perf client 006" }, documentsTab], held: true },
+		{ name: "page", screen: "clients", selector: "main [data-explorer-item]", text: "Perf page 05", before: [{ selector: row, text: "Perf client 005" }, documentsTab], held: true },
 		{ name: "note", screen: "notes", selector: "main button", text: "Perf note 29" },
 	];
 	for (const step of steps) {
@@ -371,10 +372,10 @@ async function records(window: BrowserWindow): Promise<void> {
 			${HELPERS}
 			nav(${JSON.stringify(step.screen)}).click();
 			await settle(performance.now());
-			const before = ${JSON.stringify(step.before ?? null)};
-			if (before) {
-				const opener = await appear(before.selector, before.text);
-				if (!opener) return { missing: 1 };
+			for (const before of ${JSON.stringify(step.before ?? [])}) {
+				const found = await appear(before.selector, before.text);
+				if (!found) return { missing: 1 };
+				const opener = found.matches("button, [role=tab]") ? found : ([...found.querySelectorAll("button")].find((node) => node.textContent.includes(before.text)) ?? found);
 				opener.click();
 				await settle(performance.now());
 			}

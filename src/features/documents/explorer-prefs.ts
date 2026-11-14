@@ -1,24 +1,21 @@
 import { DEFAULT_SORT, type ExplorerSort, type SortColumn } from "./explorer-items";
-import { ROOT_KEY } from "./explorer-tree";
 
 /**
- * How the explorer was left: list or tiles, the nodes that were open in the
- * tree, the folder that was open, the order and whether a preview shows its
- * details column. A convenience for this window only, so it lives in the
- * page's own storage and a storage that refuses (a private profile, a full
- * disk) only means the explorer opens the way it does the first time.
+ * How the documents were last shown: list or tiles, the order and whether a
+ * preview shows its details column. One choice for every Documents tab and
+ * the Templates screen. A convenience for this window only, so it lives in
+ * the page's own storage and a storage that refuses (a private profile, a
+ * full disk) only means the list opens the way it does the first time.
  */
 export type ExplorerPrefs = {
 	view: "list" | "grid";
-	expanded: string[];
-	openKey: string;
 	sort: ExplorerSort;
 	details: boolean;
 };
 
 const KEY = "juno.documents.explorer";
 
-const DEFAULTS: ExplorerPrefs = { view: "list", expanded: [], openKey: ROOT_KEY, sort: DEFAULT_SORT, details: true };
+const DEFAULTS: ExplorerPrefs = { view: "list", sort: DEFAULT_SORT, details: true };
 
 const COLUMNS: readonly SortColumn[] = ["name", "type", "size", "modified"];
 
@@ -30,10 +27,6 @@ export function readPrefs(): ExplorerPrefs {
 		const sort = value["sort"] as Record<string, unknown> | undefined;
 		return {
 			view: value["view"] === "grid" ? "grid" : "list",
-			expanded: Array.isArray(value["expanded"])
-				? (value["expanded"] as unknown[]).filter((key): key is string => typeof key === "string").slice(0, 500)
-				: [],
-			openKey: typeof value["openKey"] === "string" ? value["openKey"] : ROOT_KEY,
 			sort:
 				sort && COLUMNS.includes(sort["by"] as SortColumn)
 					? { by: sort["by"] as SortColumn, descending: sort["descending"] === true }

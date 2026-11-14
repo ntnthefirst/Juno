@@ -24,10 +24,10 @@ describe("listCommandFor", () => {
 		expect(listCommandFor(press({ key: "Enter" }), false)).toEqual({ kind: "open" });
 	});
 
-	it("renames on F2, deletes on Delete and goes up on Backspace", () => {
+	it("renames on F2 and deletes on Delete, and leaves Backspace alone now there are no folders", () => {
 		expect(listCommandFor(press({ key: "F2" }), false)).toEqual({ kind: "rename" });
 		expect(listCommandFor(press({ key: "Delete" }), false)).toEqual({ kind: "delete" });
-		expect(listCommandFor(press({ key: "Backspace" }), false)).toEqual({ kind: "up-folder" });
+		expect(listCommandFor(press({ key: "Backspace" }), false)).toBeNull();
 	});
 
 	it("reads the modifier keys as Control off a Mac and Command on one", () => {

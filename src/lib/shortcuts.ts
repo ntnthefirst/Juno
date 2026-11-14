@@ -83,8 +83,7 @@ export const SCREEN_COMBOS: Partial<Record<ScreenId, string>> = {
 	projects: "mod+4",
 	mail: "mod+5",
 	notes: "mod+6",
-	documents: "mod+7",
-	agent: "mod+8",
+	agent: "mod+7",
 };
 
 export const COMBOS = {
@@ -94,7 +93,6 @@ export const COMBOS = {
 	recent: "mod+e",
 	reminders: "mod+shift+r",
 	newItem: "mod+n",
-	newPage: "mod+shift+n",
 	settings: "mod+,",
 	back: "alt+arrowleft",
 	lock: "mod+shift+l",
@@ -107,8 +105,8 @@ export const COMBOS = {
 } as const;
 
 /**
- * The keys of a file list while it has focus: the documents explorer and the
- * same rows on a client or a project. They are the list's own, listened for on
+ * The keys of a file list while it has focus: a client's or a project's
+ * Documents tab, and the Templates screen. They are the list's own, listened for on
  * the list and not on the window, so a field anywhere else keeps its Ctrl C and
  * Ctrl V.
  */
@@ -122,7 +120,6 @@ export const LIST_COMBOS = {
 	copy: "mod+c",
 	cut: "mod+x",
 	paste: "mod+v",
-	up: "backspace",
 } as const;
 
 export type ShortcutRow = { combos: string[]; label: string };
@@ -142,7 +139,6 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: [COMBOS.recent], label: "Recent records" },
 			{ combos: [COMBOS.reminders], label: "Reminders" },
 			{ combos: [COMBOS.newItem], label: "New, on this screen" },
-			{ combos: [COMBOS.newPage], label: "New page" },
 			{ combos: [COMBOS.back], label: "Back, out of a record" },
 			{ combos: [COMBOS.undo], label: "Undo, while a message offers it" },
 			{ combos: [COMBOS.settings], label: "Settings" },
@@ -159,8 +155,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: ["mod+4"], label: "Projects" },
 			{ combos: ["mod+5"], label: "Mail" },
 			{ combos: ["mod+6"], label: "Notes" },
-			{ combos: ["mod+7"], label: "Documents" },
-			{ combos: ["mod+8"], label: "Agent" },
+			{ combos: ["mod+7"], label: "Agent" },
 		],
 	},
 	{
@@ -185,8 +180,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: [LIST_COMBOS.duplicate], label: "Duplicate" },
 			{ combos: [LIST_COMBOS.copy], label: "Copy" },
 			{ combos: [LIST_COMBOS.cut], label: "Cut, to move with the next paste" },
-			{ combos: [LIST_COMBOS.paste], label: "Paste into the open folder" },
-			{ combos: [LIST_COMBOS.up], label: "Up one folder" },
+			{ combos: [LIST_COMBOS.paste], label: "Paste into this client or project" },
 		],
 	},
 	{

@@ -12,7 +12,6 @@ export type ListCommand =
 	| { kind: "copy" }
 	| { kind: "cut" }
 	| { kind: "paste" }
-	| { kind: "up-folder" }
 	| { kind: "clear" };
 
 const ARROWS: Record<string, "up" | "down" | "left" | "right"> = {
@@ -42,7 +41,6 @@ export function listCommandFor(event: KeyLike, mac?: boolean): ListCommand | nul
 	if (matchesCombo(event, LIST_COMBOS.open, mac)) return { kind: "open" };
 	if (matchesCombo(event, LIST_COMBOS.rename, mac)) return { kind: "rename" };
 	if (matchesCombo(event, LIST_COMBOS.remove, mac)) return { kind: "delete" };
-	if (matchesCombo(event, LIST_COMBOS.up, mac)) return { kind: "up-folder" };
 	if (matchesCombo(event, LIST_COMBOS.selectAll, mac)) return { kind: "select-all" };
 	if (matchesCombo(event, LIST_COMBOS.duplicate, mac)) return { kind: "duplicate" };
 	if (matchesCombo(event, LIST_COMBOS.copy, mac)) return { kind: "copy" };

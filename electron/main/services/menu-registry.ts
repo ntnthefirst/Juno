@@ -61,12 +61,7 @@ function blank(area: string, context: MenuRequest["context"]): MenuEntry[] {
 	// The mail list has things to do to a list that no other screen has.
 	if (area === "notes") {
 		const [first, ...rest] = EVERYWHERE;
-		return [
-			{ id: "new-note", label: "New note", icon: "note" },
-			{ id: "new-page", label: "New page", icon: "documents" },
-			...(first ? [{ ...first, separatorBefore: true }] : []),
-			...rest,
-		];
+		return [{ id: "new-note", label: "New note", icon: "note" }, ...(first ? [{ ...first, separatorBefore: true }] : []), ...rest];
 	}
 	if (area === "mail") {
 		return [

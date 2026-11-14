@@ -132,8 +132,7 @@ export function ExplorerView({
 	const gate = useClickGate<string>({
 		single: (key) => {
 			const item = byKey.get(key);
-			// A folder is selected by one click and opened by two.
-			if (item && item.kind !== "node") onActivate(item, "preview");
+			if (item) onActivate(item, "preview");
 		},
 		double: (key) => {
 			const item = byKey.get(key);

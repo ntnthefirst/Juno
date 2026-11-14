@@ -11,7 +11,7 @@ import type { FilePreview } from "../../shared/types";
 import { parseCsv } from "./csv";
 import { importFile } from "./document-import";
 import { configureDocumentStorage, remove as removeDocument } from "./documents";
-import { familyOf, readableFileName } from "./file-kind";
+import { familyOf, readableFileName, zipEntrySizes } from "./file-kind";
 import {
 	AGREEMENT,
 	docxBytes,
@@ -25,13 +25,14 @@ import {
 import {
 	configurePreview,
 	forgetPreviews,
+	iworkPicture,
 	MAX_HELD_BYTES,
 	preview,
 	previewForAgent,
 	sanitiseDocumentHtml,
 	servePreview,
 } from "./file-preview";
-import { readSheets } from "./file-text";
+import { readableText, readSheets } from "./file-text";
 import { extractText } from "./pdf-text";
 
 // pdf.js and ExcelJS are loaded the first time they are used, and each load
@@ -46,6 +47,24 @@ afterEach(() => configurePreview(null));
 
 function bytes(fileName: string, data: Uint8Array | string) {
 	return { kind: "bytes" as const, fileName, data: typeof data === "string" ? new Uint8Array(Buffer.from(data)) : data };
+}
+
+/**
+ * The same ZIP with every entry claiming to unpack to two gigabytes, as a
+ * ZIP bomb's directory does. Nothing is inflated, so this is cheap to make.
+ */
+function bomb(zip: Uint8Array): Uint8Array {
+	const out = new Uint8Array(zip);
+	const view = new DataView(out.buffer);
+	let end = out.length - 22;
+	while (end >= 0 && view.getUint32(end, true) !== 0x06054b50) end -= 1;
+	const count = view.getUint16(end + 10, true);
+	let at = view.getUint32(end + 16, true);
+	for (let index = 0; index < count; index += 1) {
+		view.setUint32(at + 24, 0x7fffffff, true);
+		at += 46 + view.getUint16(at + 28, true) + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+	}
+	return out;
 }
 
 function served(result: FilePreview) {
@@ -252,6 +271,27 @@ describe("a preview", () => {
 		expect(served(third)).not.toBeNull();
 		forgetPreviews();
 	}, 60_000);
+
+	it("reads a ZIP's sizes from its directory without inflating it", async () => {
+		const entries = zipEntrySizes(await docxBytes(AGREEMENT))!;
+		const body = entries.find((entry) => entry.name === "word/document.xml");
+		expect(body!.inflated).toBeGreaterThan(100);
+		expect(zipEntrySizes(new Uint8Array(Buffer.from("not a zip at all, only words")))).toBeNull();
+	});
+
+	it("turns away a Word file, a workbook or an iWork picture that unpacks to far more than it weighs", async () => {
+		const word = bomb(await docxBytes(AGREEMENT));
+		const wordPreview = await preview(bytes("Bom.docx", word), freshDb());
+		expect(wordPreview).toMatchObject({ kind: "none", reason: expect.stringMatching(/too large/) });
+		expect((await readableText(word, "Bom.docx")).text).toBeNull();
+
+		const sheet = bomb(await xlsxBytes({ Blad: [["a", 1]] }));
+		await expect(readSheets(sheet, "Bom.xlsx")).rejects.toThrow(/unpacks to more than Juno reads/);
+		expect((await preview(bytes("Bom.xlsx", sheet), freshDb())).kind).toBe("none");
+
+		const pages = bomb(await iworkBytes(JPEG_BYTES));
+		expect(await iworkPicture(pages)).toBeNull();
+	});
 
 	it("answers nothing for a token it never issued", () => {
 		expect(servePreview("0".repeat(48))).toBeNull();

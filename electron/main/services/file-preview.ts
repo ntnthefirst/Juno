@@ -29,7 +29,17 @@ import { extensionOf } from "../../shared/mime";
 import type { FilePreview, FilePreviewForAgent, FilePreviewMeta, FilePreviewSource } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import * as versions from "./document-versions";
-import { familyOf, isPdfBytes, isZipBytes, mediaTypeFor, safeExtensionOf, type FileFamily } from "./file-kind";
+import {
+	familyOf,
+	isPdfBytes,
+	isZipBytes,
+	mediaTypeFor,
+	safeExtensionOf,
+	ZIP_LIMITS,
+	zipEntrySizes,
+	zipWithin,
+	type FileFamily,
+} from "./file-kind";
 import { readableText, readSheets } from "./file-text";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import { get as getDocument } from "./documents";
@@ -262,6 +272,7 @@ function documentPage(title: string, body: string): string {
 
 /** A `.docx` as a page of sanitised HTML, the way decision 76 draws one. */
 export async function wordToHtml(bytes: Uint8Array, title: string): Promise<string> {
+	if (!zipWithin(bytes, ZIP_LIMITS.word)) throw new Error(`"${title}" unpacks to more than Juno reads.`);
 	const result = await mammoth.convertToHtml({ buffer: Buffer.from(bytes) });
 	return documentPage(title, sanitiseDocumentHtml(result.value));
 }
@@ -273,11 +284,19 @@ const IWORK_PICTURES = ["preview.jpg", "QuickLook/Preview.jpg", "QuickLook/Thumb
 /** The preview picture an iWork file carries in its zip, or null. */
 export async function iworkPicture(bytes: Uint8Array): Promise<Buffer | null> {
 	if (!isZipBytes(bytes)) return null;
+	// The rest of the package can be large (a presentation's films). Only the
+	// picture is inflated, so only its size counts.
+	const entries = zipEntrySizes(bytes);
+	if (!entries || entries.length > ZIP_LIMITS.picture.maxEntries) return null;
+	const sizes = new Map(entries.map((entry) => [entry.name, entry.inflated]));
 	try {
 		const zip = await JSZip.loadAsync(bytes);
 		for (const name of IWORK_PICTURES) {
 			const entry = zip.file(name);
-			if (entry) return Buffer.from(await entry.async("uint8array"));
+			if (!entry) continue;
+			const size = sizes.get(name);
+			if (size === undefined || size > ZIP_LIMITS.picture.maxInflated) return null;
+			return Buffer.from(await entry.async("uint8array"));
 		}
 	} catch {
 		// A damaged zip has no picture; the thumbnail below may still.
@@ -350,8 +369,12 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 		}
 		case "word": {
 			if (file.size > MAX_WORD_BYTES) return fallback(file, meta, "This Word file is too large to preview. Open it to see it.");
+			const word = bytesOf(file);
+			if (isZipBytes(word) && !zipWithin(word, ZIP_LIMITS.word)) {
+				return fallback(file, meta, "This Word file is too large to preview. Open it to see it.");
+			}
 			try {
-				const html = await wordToHtml(bytesOf(file), file.name);
+				const html = await wordToHtml(word, file.name);
 				const token = issue({ contentType: "text/html; charset=utf-8", csp: HTML_CSP, body: Buffer.from(html, "utf8") });
 				return { kind: "html", meta, url: urlFor(token) };
 			} catch {

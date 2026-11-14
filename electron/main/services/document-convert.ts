@@ -30,7 +30,7 @@ import { getDb, type Db } from "../db";
 import { announce } from "./document-events";
 import * as versions from "./document-versions";
 import { documentStorageDir, fileNameFor, get } from "./documents";
-import { familyOf, isPdfBytes, isPdfMediaType } from "./file-kind";
+import { familyOf, isPdfBytes, isPdfMediaType, ZIP_LIMITS, zipWithin } from "./file-kind";
 import { sanitiseDocumentHtml } from "./file-preview";
 import { decodeText, readSheets } from "./file-text";
 import { extractText } from "./pdf-text";
@@ -128,6 +128,11 @@ async function convertInJuno(bytes: Uint8Array, fileName: string, title: string)
 	const extension = extensionOf(fileName);
 	switch (familyOf(fileName)) {
 		case "word": {
+			if (!zipWithin(bytes, ZIP_LIMITS.word)) {
+				throw new Error(
+					"This Word file unpacks to more than Juno can convert. Save it as PDF in Word, then add that as a version.",
+				);
+			}
 			const result = await mammoth.convertToHtml({ buffer: Buffer.from(bytes) });
 			return printHtml({ title, bodyHtml: sanitiseDocumentHtml(result.value) });
 		}

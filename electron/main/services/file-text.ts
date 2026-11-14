@@ -13,7 +13,7 @@
 import mammoth from "mammoth";
 import type { PreviewSheet } from "../../shared/types";
 import { parseCsv } from "./csv";
-import { familyOf, isPdfBytes, isZipBytes } from "./file-kind";
+import { familyOf, isPdfBytes, isZipBytes, ZIP_LIMITS, zipWithin } from "./file-kind";
 import { extractText, normalise, readText } from "./pdf-text";
 
 /** Past this a file is not read for its words. Matching a scan of a book is not the job. */
@@ -112,6 +112,9 @@ export async function readSheets(bytes: Uint8Array, fileName: string, limits = P
 	if (family !== "sheet" || !isZipBytes(bytes)) {
 		throw new Error(`"${fileName}" is not a spreadsheet Juno can read.`);
 	}
+	if (!zipWithin(bytes, ZIP_LIMITS.sheet)) {
+		throw new Error(`"${fileName}" unpacks to more than Juno reads. Open it in the app that made it.`);
+	}
 	const lib = await exceljs();
 	const workbook = new lib.Workbook();
 	// ExcelJS declares its own Buffer as an ArrayBuffer, and reads one through JSZip.
@@ -171,7 +174,7 @@ export async function readableText(
 			case "pdf":
 				return isPdfBytes(bytes) ? cut((await readText(bytes)) ?? "", limit) : { text: null, truncated: false };
 			case "word": {
-				if (!isZipBytes(bytes)) return { text: null, truncated: false };
+				if (!isZipBytes(bytes) || !zipWithin(bytes, ZIP_LIMITS.word)) return { text: null, truncated: false };
 				const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
 				return cut(result.value, limit);
 			}

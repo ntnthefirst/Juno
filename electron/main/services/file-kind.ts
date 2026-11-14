@@ -105,6 +105,99 @@ export function isZipBytes(bytes: Uint8Array): boolean {
 	return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
 }
 
+export interface ZipEntrySize {
+	name: string;
+	/** The size the entry says it has once inflated. */
+	inflated: number;
+}
+
+/**
+ * What a ZIP's central directory says about its entries, read without
+ * inflating anything, or null when the directory cannot be found or read.
+ *
+ * Mammoth, ExcelJS and JSZip inflate whatever a file holds, in the main
+ * process, so a Word file of a few kilobytes that unpacks to gigabytes stops
+ * Juno. Reading the sizes first is how a file like that is turned away before
+ * any of them sees it. A ZIP64 size is taken from its extra field.
+ */
+export function zipEntrySizes(bytes: Uint8Array): ZipEntrySize[] | null {
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+	const length = bytes.byteLength;
+	if (length < 22) return null;
+	let end = -1;
+	for (let at = length - 22; at >= Math.max(0, length - 22 - 0xffff); at -= 1) {
+		if (view.getUint32(at, true) === 0x06054b50) {
+			end = at;
+			break;
+		}
+	}
+	if (end < 0) return null;
+	let count = view.getUint16(end + 10, true);
+	let offset = view.getUint32(end + 16, true);
+	if (count === 0xffff || offset === 0xffffffff) {
+		const locator = end - 20;
+		if (locator < 0 || view.getUint32(locator, true) !== 0x07064b50) return null;
+		const record = Number(view.getBigUint64(locator + 8, true));
+		if (record < 0 || record + 56 > length || view.getUint32(record, true) !== 0x06064b50) return null;
+		count = Number(view.getBigUint64(record + 32, true));
+		offset = Number(view.getBigUint64(record + 48, true));
+	}
+	const entries: ZipEntrySize[] = [];
+	let at = offset;
+	for (let index = 0; index < count; index += 1) {
+		if (at + 46 > length || view.getUint32(at, true) !== 0x02014b50) return null;
+		let inflated = view.getUint32(at + 24, true);
+		const nameLength = view.getUint16(at + 28, true);
+		const extraLength = view.getUint16(at + 30, true);
+		const commentLength = view.getUint16(at + 32, true);
+		if (at + 46 + nameLength + extraLength > length) return null;
+		const name = Buffer.from(bytes.subarray(at + 46, at + 46 + nameLength)).toString("utf8");
+		if (inflated === 0xffffffff) {
+			// The ZIP64 extra field: an id of 1, then the inflated size first.
+			let extra = at + 46 + nameLength;
+			const extraEnd = extra + extraLength;
+			let found = false;
+			while (extra + 4 <= extraEnd) {
+				const id = view.getUint16(extra, true);
+				const size = view.getUint16(extra + 2, true);
+				if (id === 0x0001 && size >= 8 && extra + 12 <= extraEnd) {
+					inflated = Number(view.getBigUint64(extra + 4, true));
+					found = true;
+					break;
+				}
+				extra += 4 + size;
+			}
+			if (!found) return null;
+		}
+		entries.push({ name, inflated });
+		at += 46 + nameLength + extraLength + commentLength;
+	}
+	return entries;
+}
+
+/** The most a Word file or a workbook may unpack to, and how many parts it may have, before Juno reads it. */
+export const ZIP_LIMITS = {
+	word: { maxInflated: 256 * 1024 * 1024, maxEntries: 10_000 },
+	sheet: { maxInflated: 64 * 1024 * 1024, maxEntries: 10_000 },
+	/** One picture inside an iWork file. */
+	picture: { maxInflated: 20 * 1024 * 1024, maxEntries: 100_000 },
+};
+
+/**
+ * Whether a ZIP is small enough, unpacked, to hand to a reader that inflates
+ * all of it. A ZIP whose directory cannot be read is not.
+ */
+export function zipWithin(bytes: Uint8Array, limits: { maxInflated: number; maxEntries: number }): boolean {
+	const entries = zipEntrySizes(bytes);
+	if (!entries || entries.length > limits.maxEntries) return false;
+	let total = 0;
+	for (const entry of entries) {
+		total += entry.inflated;
+		if (total > limits.maxInflated) return false;
+	}
+	return true;
+}
+
 export function isPdfMediaType(mediaType: string | null | undefined): boolean {
 	return !mediaType || mediaType === "application/pdf";
 }

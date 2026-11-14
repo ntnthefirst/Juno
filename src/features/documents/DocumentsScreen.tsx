@@ -282,6 +282,32 @@ export function DocumentsScreen() {
 		});
 	}
 
+	/**
+	 * Focuses a row once the list has been read again and draws it, giving up
+	 * after a second. The dialog that asked hands the focus back to the row it
+	 * opened from, which a delete has just taken away.
+	 */
+	function focusRowWhenDrawn(key: string, gone: ReadonlySet<string>) {
+		const started = performance.now();
+		const rowOf = (of: string) => document.querySelector<HTMLElement>(`[data-explorer-item="${CSS.escape(of)}"]`);
+		const attempt = () => {
+			const stillDrawn = [...gone].some((of) => rowOf(of) !== null);
+			if (stillDrawn && performance.now() - started < 1000) {
+				window.requestAnimationFrame(attempt);
+				return;
+			}
+			// Somewhere else on purpose, such as the search field, is left alone.
+			const active = document.activeElement;
+			const lost = active === null || active === document.body || active.closest("[role='listbox']") !== null;
+			const row = rowOf(key);
+			if (row && lost) {
+				row.focus({ preventScroll: true });
+				row.scrollIntoView({ block: "nearest" });
+			}
+		};
+		window.requestAnimationFrame(attempt);
+	}
+
 	const position =
 		previewIndex >= 0
 			? {
@@ -576,6 +602,19 @@ export function DocumentsScreen() {
 
 	async function remove(what: Confirm) {
 		setConfirm(null);
+		// The row after the last one deleted (or before, at the end) takes the
+		// selection and the focus, as in a file manager, so the keys carry on
+		// instead of falling out of the list with the rows that went.
+		const removing = new Set([
+			...what.documents.map((record) => documentKey(record.id)),
+			...what.templates.map((template) => templateKey(template.id)),
+			...what.folders.map((folder) => folder.key),
+		]);
+		const last = items.reduce((at, item, index) => (removing.has(item.key) ? index : at), -1);
+		// Nothing of the list went (a folder deleted from the tree): the list's selection stays.
+		const kept = (item: ExplorerItem) => !removing.has(item.key);
+		const neighbour =
+			last < 0 ? null : (items.slice(last + 1).find(kept) ?? items.slice(0, last).reverse().find(kept) ?? null);
 		const gone: Deleted = { documents: [], folders: [] };
 		try {
 			for (const record of what.documents) gone.documents.push(await window.juno.documents.remove(record.id));
@@ -586,8 +625,9 @@ export function DocumentsScreen() {
 		} catch (cause: unknown) {
 			fail(cause);
 		}
-		setSelection(NO_SELECTION);
+		setSelection(neighbour ? selectOnly(neighbour.key) : NO_SELECTION);
 		changed();
+		if (neighbour) focusRowWhenDrawn(neighbour.key, removing);
 		if (gone.documents.length + gone.folders.length > 0) setDeleted(gone);
 		else if (what.templates.length > 0) setNotice(`${plural(what.templates.length, "template", "templates")} deleted.`);
 	}

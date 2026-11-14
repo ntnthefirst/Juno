@@ -132,7 +132,14 @@ export function AgendaView({
 												<span className="block truncate text-sm text-[var(--ink-muted)]">{subtitle(p.item)}</span>
 											</span>
 											{p.dated ? null : (
-												<span className="tabular shrink-0 self-center text-base">{formatMinutes(p.startMinute)}</span>
+												<span className="tabular shrink-0 self-center text-base">
+													{/* A later day of something that runs past midnight starts at 00:00 only on paper. */}
+													{!p.continued
+														? formatMinutes(p.startMinute)
+														: p.continues
+															? "All day"
+															: `Until ${formatMinutes(p.endMinute)}`}
+												</span>
 											)}
 										</button>
 									))}

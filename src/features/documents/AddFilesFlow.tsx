@@ -170,8 +170,8 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 		}
 	}
 
+	// What was not reached is left out of the count: a cancel is not news worth a toast.
 	function cancelAll() {
-		outcome.current.skipped += Math.max(0, items.length - index);
 		finish();
 	}
 

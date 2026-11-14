@@ -333,3 +333,25 @@ describe("a copy another program holds open", () => {
 		expect(working.lockedFileError(error, "a.docx")).toBe(error);
 	});
 });
+
+describe("converting a file too long to lay out", () => {
+	it("refuses a long text file in Juno and says to use its own program", async () => {
+		const { db, client } = await setUp();
+		const printed: { title: string; bodyHtml: string }[] = [];
+		configureConversion({
+			printHtml: async (input) => {
+				printed.push(input);
+				return Buffer.from(await textPdf(["x"]));
+			},
+			wordAvailable: async () => false,
+			convertWithWord: async () => {
+				throw new Error("Word must not be asked.");
+			},
+		});
+		const long = await importFile({ source: bytes("Log.txt", "regel\n".repeat(50_000)), clientId: client.id }, db);
+		await expect(convertToPdf(long.id, db)).rejects.toThrow(/"Log.txt" is too long for Juno to convert here\. Open it in its own program/);
+		const short = await importFile({ source: bytes("Kort.txt", "regel\n"), clientId: client.id }, db);
+		await convertToPdf(short.id, db);
+		expect(printed).toHaveLength(1);
+	});
+});

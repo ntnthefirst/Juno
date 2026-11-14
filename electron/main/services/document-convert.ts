@@ -32,7 +32,7 @@ import * as versions from "./document-versions";
 import { documentStorageDir, fileNameFor, get } from "./documents";
 import { familyOf, isPdfBytes, isPdfMediaType, ZIP_LIMITS, zipWithin } from "./file-kind";
 import { sanitiseDocumentHtml } from "./file-preview";
-import { decodeText, readSheets } from "./file-text";
+import { decodeText, MAX_CSV_BYTES, PREVIEW_LIMITS, readSheets } from "./file-text";
 import { extractText } from "./pdf-text";
 import { escapeHtml } from "./template-render";
 
@@ -122,6 +122,17 @@ function pictureHtml(bytes: Uint8Array, mediaType: string): string {
 	);
 }
 
+/**
+ * Juno prints the text and the table of a file itself, in one piece, so a huge
+ * one would freeze the window while it is laid out. It stops at the same size
+ * the preview reads.
+ */
+function tooLongToConvert(fileName: string): Error {
+	return new Error(
+		`"${fileName}" is too long for Juno to convert here. Open it in its own program and save or print it as PDF from there.`,
+	);
+}
+
 /** Makes the PDF bytes for one file in Juno, or says why it cannot. */
 async function convertInJuno(bytes: Uint8Array, fileName: string, title: string): Promise<Buffer> {
 	const { printHtml } = configured();
@@ -142,10 +153,12 @@ async function convertInJuno(bytes: Uint8Array, fileName: string, title: string)
 			);
 		case "sheet":
 		case "csv": {
+			if (familyOf(fileName) === "csv" && bytes.length > MAX_CSV_BYTES) throw tooLongToConvert(fileName);
 			const { sheets } = await readSheets(bytes, fileName);
 			return printHtml({ title, bodyHtml: sheetsToHtml(sheets) });
 		}
 		case "text":
+			if (bytes.length > PREVIEW_LIMITS.maxTextCharacters) throw tooLongToConvert(fileName);
 			return printHtml({ title, bodyHtml: `${TABLE_CSS}<pre class="juno-text">${escapeHtml(decodeText(bytes))}</pre>` });
 		case "image":
 			if (extension === "png") return imageToPdf(bytes, "png");

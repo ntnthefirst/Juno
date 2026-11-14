@@ -59,7 +59,7 @@ export function decodeText(bytes: Uint8Array): string {
 }
 
 /** How much of a CSV a preview reads. 500 rows of 50 columns fit in far less. */
-const MAX_CSV_BYTES = 8 * 1024 * 1024;
+export const MAX_CSV_BYTES = 8 * 1024 * 1024;
 
 /**
  * The first part of a text file, so a preview of a 60 MB log does not decode

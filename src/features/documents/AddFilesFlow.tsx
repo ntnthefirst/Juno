@@ -19,8 +19,8 @@ import { firstMatch, needsAsking, reasonFor } from "./import-reasons";
 type AddFilesFlowProps = {
 	items: ImportItem[];
 	/**
-	 * Where the files go: the folder that is open, a client's or a project's
-	 * own place. Null when nothing says, as for a drop outside Documents: then
+	 * Where the files go: the client or the project whose Documents tab they
+	 * were dropped on. Null when nothing says, as for a drop outside Documents: then
 	 * the first question is where.
 	 */
 	place: DocumentPlace | null;
@@ -49,7 +49,6 @@ async function keepSeparate(source: ImportSource, target: DocumentPlace, title?:
 			attachmentId: source.attachmentId,
 			clientId: target.clientId,
 			projectId: target.projectId,
-			folderId: target.folderId,
 			...(title ? { title } : {}),
 		});
 		return;
@@ -58,7 +57,6 @@ async function keepSeparate(source: ImportSource, target: DocumentPlace, title?:
 		source,
 		clientId: target.clientId,
 		projectId: target.projectId,
-		folderId: target.folderId,
 		...(title ? { title } : {}),
 	});
 }
@@ -203,7 +201,6 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 				source: current.source,
 				clientId: where.clientId,
 				projectId: where.projectId,
-				folderId: where.folderId,
 			});
 			if (cancelled) return;
 			const match = firstMatch(analysis);
@@ -318,7 +315,7 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 							disabled={!owner.clientId && !owner.projectId}
 							onClick={() => {
 								setStep({ status: "reading" });
-								setWhere({ clientId: owner.clientId || null, projectId: owner.projectId || null, folderId: null });
+								setWhere({ clientId: owner.clientId || null, projectId: owner.projectId || null });
 							}}
 						>
 							{items.length === 1 ? "Add the file" : `Add ${items.length} files`}

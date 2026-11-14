@@ -8,10 +8,7 @@ import type {
 	CompareTextInput,
 	AddVersionInput,
 	AnalyseImportInput,
-	DocumentFolderInput,
-	DocumentFolderMove,
 	DocumentMoveInput,
-	DocumentPlace,
 	FilePreviewSource,
 	GenerateDocumentInput,
 	ImportFileInput,
@@ -25,7 +22,6 @@ import * as compare from "../services/document-compare";
 import * as convert from "../services/document-convert";
 import * as drag from "../services/document-drag";
 import { onDocumentsChanged } from "../services/document-events";
-import * as folders from "../services/document-folders";
 import * as imports from "../services/document-import";
 import * as fromMail from "../services/document-mail";
 import * as organise from "../services/document-organise";
@@ -40,7 +36,6 @@ export function registerDocumentsIpc(): void {
 		documents.list(query ?? {}),
 	);
 	ipcMain.handle("documents.listUnfiled", () => documents.listUnfiled());
-	ipcMain.handle("documents.listIn", (_event, place: DocumentPlace) => documents.listIn(place));
 	ipcMain.handle("documents.move", (_event, id: string, input: DocumentMoveInput) => organise.move(id, input));
 	ipcMain.handle("documents.rename", (_event, id: string, title: string) => organise.rename(id, title));
 	ipcMain.handle("documents.duplicate", (_event, id: string) => organise.duplicate(id));
@@ -62,13 +57,6 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.saveThreadAttachments", (_event, input: SaveThreadAttachmentsInput) =>
 		fromMail.saveFromThread(input),
 	);
-
-	ipcMain.handle("documents.folders.tree", () => folders.tree());
-	ipcMain.handle("documents.folders.create", (_event, input: DocumentFolderInput) => folders.create(input));
-	ipcMain.handle("documents.folders.rename", (_event, id: string, name: string) => folders.rename(id, name));
-	ipcMain.handle("documents.folders.move", (_event, id: string, target: DocumentFolderMove) => folders.move(id, target));
-	ipcMain.handle("documents.folders.remove", (_event, id: string) => folders.remove(id));
-	ipcMain.handle("documents.folders.restore", (_event, id: string) => folders.restore(id));
 
 	// Pushed, because an edit saved in another app becomes a version while a
 	// screen is open, and that screen did not ask for it.

@@ -11,8 +11,6 @@ type DocumentOwnerFieldsProps = {
 	disabled?: boolean;
 	/** The client is fixed, for a document started from that client's page. Its projects stay offered. */
 	lockClient?: boolean;
-	/** The folder of the explorer it goes into, while the two pickers name that folder's place. */
-	folder?: string | null;
 };
 
 /**
@@ -23,7 +21,7 @@ type DocumentOwnerFieldsProps = {
  * that client's projects are offered; choosing a project that has a client
  * chooses the client too. An empty string is "none" in both.
  */
-export function DocumentOwnerFields({ value, onChange, disabled = false, lockClient = false, folder = null }: DocumentOwnerFieldsProps) {
+export function DocumentOwnerFields({ value, onChange, disabled = false, lockClient = false }: DocumentOwnerFieldsProps) {
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
 
@@ -75,11 +73,6 @@ export function DocumentOwnerFields({ value, onChange, disabled = false, lockCli
 					help={value.clientId ? undefined : "A project with a client brings its client along."}
 				/>
 			</div>
-			{folder ? (
-				<p className="text-sm text-[var(--ink-muted)]">
-					Kept in the folder {folder}. Pick another client or project to keep it elsewhere.
-				</p>
-			) : null}
 		</div>
 	);
 }

@@ -11,7 +11,6 @@ import { mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/s
 import * as calendar from "./calendar";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
-import * as folders from "./document-folders";
 import { importFile } from "./document-import";
 import { configureDocumentStorage } from "./documents";
 import * as accounts from "./mail-accounts";
@@ -189,19 +188,10 @@ describe("documents explorer menus", () => {
 		expect(entries).toContain("sign");
 	});
 
-	it("lets only a folder of the owner's own be renamed, moved or deleted", async () => {
-		const client = await clients.create({ name: "Obet" }, db);
-		const folder = await folders.create({ name: "Contracts", clientId: client.id }, db);
-		expect(ids(await ask("folder", `folder:${folder.id}`))).toEqual(["open", "new-folder", "add-files", "rename", "move-to", "delete"]);
-		expect(ids(await ask("folder", `client:${client.id}`))).toEqual(["open", "new-folder", "add-files"]);
-		expect(ids(await ask("folder", "unfiled"))).toEqual(["open", "new-folder", "add-files"]);
-		expect(ids(await ask("folder", "templates"))).toEqual(["open"]);
-		expect(await ask("folder", "folder:gone")).toEqual([]);
-		expect(await ask("folder", "client:gone")).toEqual([]);
-	});
-
-	it("starts the documents blank menu with adding to the open folder", async () => {
-		expect(ids(await ask("blank", "documents")).slice(0, 4)).toEqual(["add-files", "new-folder", "new-page", "new-document"]);
+	it("starts a Documents tab's blank menu with adding to that record, and offers no folder", async () => {
+		const entries = ids(await ask("blank", "documents"));
+		expect(entries.slice(0, 3)).toEqual(["add-files", "new-page", "new-document"]);
+		expect(entries).not.toContain("new-folder");
 	});
 });
 

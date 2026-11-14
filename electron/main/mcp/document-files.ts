@@ -1,18 +1,16 @@
 import type { DocumentMoveInput, FilePreviewSource } from "../../shared/types";
 import * as compare from "../services/document-compare";
 import * as convert from "../services/document-convert";
-import * as folders from "../services/document-folders";
 import * as imports from "../services/document-import";
 import * as fromMail from "../services/document-mail";
 import * as organise from "../services/document-organise";
-import * as documents from "../services/documents";
 import * as preview from "../services/file-preview";
 import type { ToolDescriptor } from "./types";
 
 /**
- * Tools for documents as a file explorer (decisions 75 to 77): the tree and
- * the owner's folders, moving, copying and renaming, a preview as words and
- * cells, converting to PDF and keeping a mail attachment.
+ * Tools for documents as files (decisions 75 to 77 and 81): moving and copying
+ * to another client or project, renaming, a preview as words and cells,
+ * converting to PDF and keeping a mail attachment. There are no folders.
  *
  * Opening a file in another app has no tool. The agent operates the business,
  * not the window (mcp.md section 7).
@@ -25,21 +23,16 @@ function optionalId(value: unknown): string | null | undefined {
 
 function placeArgs(args: Record<string, unknown>): DocumentMoveInput {
 	return {
-		...(args.folder_id !== undefined ? { folderId: optionalId(args.folder_id) } : {}),
 		...(args.client_id !== undefined ? { clientId: optionalId(args.client_id) } : {}),
 		...(args.project_id !== undefined ? { projectId: optionalId(args.project_id) } : {}),
 	};
 }
 
 const PLACE_PROPERTIES = {
-	folder_id: {
-		type: ["string", "null"],
-		description: "A folder from documents.folders.list. Its client and project decide where the document is kept.",
-	},
-	client_id: { type: ["string", "null"], description: "Without a folder: the client to keep it under, or null." },
+	client_id: { type: ["string", "null"], description: "The client to keep it under, or null." },
 	project_id: {
 		type: ["string", "null"],
-		description: "Without a folder: the project to keep it under, or null. A project that has a client brings that client.",
+		description: "The project to keep it under, or null. A project that has a client brings that client.",
 	},
 };
 
@@ -53,126 +46,11 @@ function previewSource(args: Record<string, unknown>): FilePreviewSource {
 
 export const documentFileTools: ToolDescriptor[] = [
 	{
-		name: "documents.folders.list",
-		title: "List the documents tree",
-		description:
-			"The documents tree: a node per client holding a node per project, a node per project of your own, " +
-			"Unfiled, and Templates, with the folders the owner made inside them. Each node has a place " +
-			"(client_id, project_id, folder_id) and how many documents sit directly in it. Templates lists the " +
-			"document templates. Read the documents in one node with documents.list_in.",
-		readOnly: true,
-		requiresConfirmation: false,
-		inputSchema: { type: "object", properties: {}, additionalProperties: false },
-		handler: async () => folders.tree(),
-	},
-	{
-		name: "documents.list_in",
-		title: "List the documents in one folder",
-		description:
-			"The documents directly in one node of the tree, newest first: in a folder when folder_id is given, " +
-			"otherwise kept under exactly that client and project and in no folder. Pass null or leave out " +
-			"client_id and project_id for Unfiled.",
-		readOnly: true,
-		requiresConfirmation: false,
-		inputSchema: { type: "object", properties: PLACE_PROPERTIES, additionalProperties: false },
-		handler: async (args) =>
-			documents.listIn({
-				folderId: optionalId(args.folder_id) ?? null,
-				clientId: optionalId(args.client_id) ?? null,
-				projectId: optionalId(args.project_id) ?? null,
-			}),
-	},
-	{
-		name: "documents.folders.create",
-		title: "Make a document folder",
-		description:
-			"Makes a folder of the owner's own in the documents tree: inside another folder (parent_id), or " +
-			"directly under a client, a project, or Unfiled (both null). A name is unique among the folders beside it.",
-		readOnly: false,
-		requiresConfirmation: true,
-		inputSchema: {
-			type: "object",
-			properties: {
-				name: { type: "string", description: "The folder's name, for example Offertes." },
-				parent_id: { type: ["string", "null"], description: "A folder to make it in. Its place wins." },
-				client_id: PLACE_PROPERTIES.client_id,
-				project_id: PLACE_PROPERTIES.project_id,
-			},
-			required: ["name"],
-			additionalProperties: false,
-		},
-		handler: async (args) =>
-			folders.create({
-				name: String(args.name),
-				parentId: optionalId(args.parent_id) ?? null,
-				clientId: optionalId(args.client_id) ?? null,
-				projectId: optionalId(args.project_id) ?? null,
-			}),
-	},
-	{
-		name: "documents.folders.rename",
-		title: "Rename a document folder",
-		description: "Changes a folder's name. Nothing in it moves.",
-		readOnly: false,
-		requiresConfirmation: true,
-		inputSchema: {
-			type: "object",
-			properties: { id: { type: "string", description: "Folder id." }, name: { type: "string" } },
-			required: ["id", "name"],
-			additionalProperties: false,
-		},
-		handler: async (args) => folders.rename(String(args.id), String(args.name)),
-	},
-	{
-		name: "documents.folders.move",
-		title: "Move a document folder",
-		description:
-			"Moves a folder into another folder (parent_id), or directly under a client, a project or Unfiled. " +
-			"When it moves to another client or project, the folders inside it and every document in them are " +
-			"kept there too.",
-		readOnly: false,
-		requiresConfirmation: true,
-		inputSchema: {
-			type: "object",
-			properties: {
-				id: { type: "string", description: "Folder id." },
-				parent_id: { type: ["string", "null"], description: "A folder to move it into. Its place wins." },
-				client_id: PLACE_PROPERTIES.client_id,
-				project_id: PLACE_PROPERTIES.project_id,
-			},
-			required: ["id"],
-			additionalProperties: false,
-		},
-		handler: async (args) =>
-			folders.move(String(args.id), {
-				parentId: optionalId(args.parent_id) ?? null,
-				clientId: optionalId(args.client_id) ?? null,
-				projectId: optionalId(args.project_id) ?? null,
-			}),
-	},
-	{
-		name: "documents.folders.delete",
-		title: "Delete a document folder",
-		description:
-			"Deletes an empty folder. A folder that still holds documents or folders is refused, and the refusal " +
-			"says what is in it: move or delete those first.",
-		readOnly: false,
-		requiresConfirmation: true,
-		inputSchema: {
-			type: "object",
-			properties: { id: { type: "string", description: "Folder id." } },
-			required: ["id"],
-			additionalProperties: false,
-		},
-		handler: async (args) => folders.remove(String(args.id)),
-	},
-	{
 		name: "documents.move",
 		title: "Move a document",
 		description:
-			"Puts a document in a folder, or directly under a client, a project, or nothing. A folder under " +
-			"another client or project keeps the document there, by the same rule as documents.link. Only " +
-			"where it is kept changes.",
+			"Keeps a document under another client or project, by the same rule as documents.link, and refuses " +
+			"a title the new place already has. Only where it is kept changes.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
@@ -219,7 +97,7 @@ export const documentFileTools: ToolDescriptor[] = [
 		name: "documents.copy",
 		title: "Copy a document to another place",
 		description:
-			"Makes a new document from the newest version in another folder, client or project. It keeps its " +
+			"Makes a new document from the newest version under another client or project. It keeps its " +
 			"title when that is free there, and is named '<title> (copy)' otherwise.",
 		readOnly: false,
 		requiresConfirmation: true,

@@ -66,7 +66,6 @@ export async function create(input: PageInput = {}, db: Db = getDb()): Promise<P
 		.values({
 			clientId: owner.clientId,
 			projectId: owner.projectId,
-			folderId: owner.folderId,
 			title,
 			bodyHtml: blocksToHtml(blocks),
 			blocksJson: JSON.stringify(blocks),

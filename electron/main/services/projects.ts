@@ -35,7 +35,7 @@ import {
 } from "../db/schema";
 import { cleanIds, requireAll, reviewOf, type BulkReview } from "./bulk";
 import { requireClient } from "./clients";
-import { carryProjectToClient } from "./document-folders";
+import { carryProjectToClient } from "./document-place";
 import {
 	checkChosenFolder,
 	defaultFolderFor,

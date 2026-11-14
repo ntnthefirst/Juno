@@ -24,7 +24,6 @@ import * as calendar from "./calendar";
 import * as calendarSubscriptions from "./calendar-subscriptions";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
-import * as folders from "./document-folders";
 import * as documentTemplates from "./document-templates";
 import * as documents from "./documents";
 import * as mailDocuments from "./document-mail";
@@ -72,13 +71,12 @@ function blank(area: string, context: MenuRequest["context"]): MenuEntry[] {
 			{ id: "toggle-styled-mail", label: "Styled mail", icon: "templates", separatorBefore: true },
 		];
 	}
-	// The explorer's empty space fills the folder that is open.
+	// A Documents tab's empty space fills the client or project it is on.
 	if (area === "documents") {
 		return [
 			{ id: "add-files", label: "Add files", icon: "import" },
-			{ id: "new-folder", label: "New folder", icon: "folder-add" },
 			{ id: "new-page", label: "New page", icon: "documents", separatorBefore: true },
-			{ id: "new-document", label: "New document from a template", icon: "templates" },
+			{ id: "new-document", label: "Document from template", icon: "templates" },
 			...EVERYWHERE.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
 		];
 	}
@@ -103,34 +101,6 @@ function isPdfName(fileName: string | null, mediaType: string): boolean {
 }
 
 const REMOVE: MenuEntry = { id: "delete", label: "Delete", icon: "remove", danger: true, separatorBefore: true };
-
-/**
- * A node of the documents tree, named by its key (decision 75). Every node
- * opens and takes new files; a client, a project and Unfiled hold folders of
- * the owner's own; only such a folder can be renamed, moved or deleted, since
- * the others are the records drawn. Templates holds templates and nothing else.
- */
-async function folderEntries(key: string, db: Db): Promise<MenuEntry[]> {
-	const open: MenuEntry = { id: "open", label: "Open", icon: "folder-open", accelerator: "Enter" };
-	const fill: MenuEntry[] = [
-		{ id: "new-folder", label: "New folder", icon: "folder-add", separatorBefore: true },
-		{ id: "add-files", label: "Add files", icon: "import" },
-	];
-	if (key === "templates") return [open];
-	if (key === "unfiled") return [open, ...fill];
-	const [kind, recordId] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
-	if (!recordId) return [];
-	if (kind === "client") return (await clients.get(recordId, db)) ? [open, ...fill] : [];
-	if (kind === "project") return (await projects.get(recordId, db)) ? [open, ...fill] : [];
-	if (kind !== "folder" || !(await folders.get(recordId, db))) return [];
-	return [
-		open,
-		...fill,
-		{ id: "rename", label: "Rename", icon: "edit", accelerator: "F2", separatorBefore: true },
-		{ id: "move-to", label: "Move to", icon: "move-right" },
-		REMOVE,
-	];
-}
 
 /**
  * An attachment in the reader. Docs a company sends go to the job they are
@@ -279,8 +249,6 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 			return entries;
 		}
 
-		case "folder":
-			return folderEntries(id, db);
 
 		case "attachment":
 			return attachmentEntries(id, context, db);

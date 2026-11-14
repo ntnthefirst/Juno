@@ -45,7 +45,7 @@ async function read(id: string, db: Db): Promise<DocumentRecord> {
 	return record;
 }
 
-/** Puts a document in a folder, or directly in a client's, a project's or no place. */
+/** Keeps a document under another client or project, by the owner rule. */
 export async function move(id: string, input: DocumentMoveInput, db: Db = getDb()): Promise<DocumentRecord> {
 	const row = requireDocument(id, db);
 	const place = resolvePlace(input, db);
@@ -53,7 +53,7 @@ export async function move(id: string, input: DocumentMoveInput, db: Db = getDb(
 		assertTitleFree(place, row.title, db, id);
 	}
 	db.update(documents)
-		.set({ clientId: place.clientId, projectId: place.projectId, folderId: place.folderId, updatedAt: now() })
+		.set({ clientId: place.clientId, projectId: place.projectId, updatedAt: now() })
 		.where(eq(documents.id, id))
 		.run();
 	return read(id, db);
@@ -105,7 +105,6 @@ async function copyInto(id: string, target: Partial<DocumentPlace>, sameTitleWhe
 		.values({
 			clientId: place.clientId,
 			projectId: place.projectId,
-			folderId: place.folderId,
 			templateId: row.templateId,
 			templateVersion: row.templateVersion,
 			title,
@@ -146,7 +145,7 @@ async function copyInto(id: string, target: Partial<DocumentPlace>, sameTitleWhe
 /** A new document from the newest version, in the same place, named "<title> (copy)". */
 export async function duplicate(id: string, db: Db = getDb()): Promise<DocumentRecord> {
 	const row = requireDocument(id, db);
-	return copyInto(id, { clientId: row.clientId, projectId: row.projectId, folderId: row.folderId }, false, db);
+	return copyInto(id, { clientId: row.clientId, projectId: row.projectId }, false, db);
 }
 
 /**

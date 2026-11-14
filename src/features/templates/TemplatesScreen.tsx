@@ -109,7 +109,7 @@ export function TemplatesScreen() {
 	useEffect(() => reload(), [reload]);
 
 	const start: StartPlace | null = place
-		? { place: { clientId: place.clientId, projectId: place.projectId, folderId: null }, name: place.name }
+		? { place: { clientId: place.clientId, projectId: place.projectId }, name: place.name }
 		: null;
 
 	const needle = search.trim().toLocaleLowerCase();

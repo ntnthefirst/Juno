@@ -170,7 +170,7 @@ export function titleOf(fileName: string): string {
  */
 export async function analyse(
 	file: Resolved,
-	placeInput: { clientId?: string | null; projectId?: string | null; folderId?: string | null },
+	placeInput: { clientId?: string | null; projectId?: string | null },
 	db: Db,
 ): Promise<ImportAnalysis> {
 	const hash = versions.hashBytes(file.bytes);
@@ -192,7 +192,7 @@ export async function analyse(
 	}
 
 	// The place it is going to: the one asked for, or the mail thread's client.
-	const asked = placeInput.clientId || placeInput.projectId || placeInput.folderId;
+	const asked = placeInput.clientId || placeInput.projectId;
 	const place = resolvePlace(asked ? placeInput : { clientId: file.threadClientId }, db);
 
 	const defaultTitle = titleOf(file.fileName);
@@ -210,7 +210,6 @@ export async function analyse(
 			clientId: record.clientId,
 			clientName: record.clientName,
 			projectId: record.projectId,
-			folderId: record.folderId,
 			score: found?.score ?? 0,
 			identical: found?.identical ?? false,
 			reason: found ? (found.identical ? "bytes" : "text") : "name",
@@ -242,7 +241,7 @@ export async function analyseImport(input: AnalyseImportInput, db: Db = getDb())
 }
 
 export async function analysePath(
-	input: { sourcePath: string; clientId?: string | null; projectId?: string | null; folderId?: string | null },
+	input: { sourcePath: string; clientId?: string | null; projectId?: string | null },
 	db: Db = getDb(),
 ): Promise<ImportAnalysis> {
 	return analyse(resolvePath(input.sourcePath), input, db);
@@ -282,7 +281,6 @@ export async function createDocument(
 		clientId?: string | null;
 		title?: string;
 		projectId?: string | null;
-		folderId?: string | null;
 		issuedOn?: string;
 	},
 	db: Db,
@@ -302,7 +300,6 @@ export async function createDocument(
 		.values({
 			clientId: place.clientId,
 			projectId: place.projectId,
-			folderId: place.folderId,
 			templateId: null,
 			templateVersion: null,
 			title,
@@ -378,12 +375,12 @@ export async function importFromMail(input: ImportFromMailInput, db: Db = getDb(
 		if (!document) throw new Error("The version was written but the document could not be read back.");
 		return { document, version, addedAsVersion: true };
 	}
-	const asked = input.clientId || input.projectId || input.folderId;
+	const asked = input.clientId || input.projectId;
 	const { record, version } = await createDocument(
 		file,
 		{
 			...(asked
-				? { clientId: input.clientId, projectId: input.projectId, folderId: input.folderId }
+				? { clientId: input.clientId, projectId: input.projectId }
 				: { clientId: file.threadClientId }),
 			title: input.title,
 		},

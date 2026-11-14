@@ -22,7 +22,7 @@ export function choiceOf(place: ThreadDocumentPlace | null): DocumentOwnerChoice
 }
 
 export function placeOfChoice(choice: DocumentOwnerChoice): DocumentPlace {
-	return { clientId: choice.clientId || null, projectId: choice.projectId || null, folderId: null };
+	return { clientId: choice.clientId || null, projectId: choice.projectId || null };
 }
 
 export const LINK_LABELS = {

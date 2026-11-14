@@ -9,7 +9,6 @@ function match(partial: Partial<ImportMatch>): ImportMatch {
 		clientId: null,
 		clientName: null,
 		projectId: null,
-		folderId: null,
 		score: 0,
 		identical: false,
 		reason: "name",

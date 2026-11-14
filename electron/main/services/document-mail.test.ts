@@ -137,7 +137,7 @@ describe("a conversation filed under a project", () => {
 		expect(before.attachments.find((entry) => entry.attachmentId === fresh)?.document).toBeNull();
 
 		const result = await fromMail.saveFromThread({ threadId, attachmentIds: [fresh, same, signed] }, db);
-		expect(result.place).toEqual({ clientId: client.id, projectId: project.id, folderId: null });
+		expect(result.place).toEqual({ clientId: client.id, projectId: project.id });
 		const byId = new Map(result.outcomes.map((outcome) => [outcome.attachmentId, outcome]));
 
 		const saved = byId.get(fresh);
@@ -176,7 +176,7 @@ describe("a conversation filed under a project", () => {
 		attachment(message(threadId), "Factuur.txt", "Levering van balken voor het atelier.");
 
 		const result = await fromMail.saveFromThread({ threadId }, db);
-		expect(result.place).toEqual({ clientId: null, projectId: own.id, folderId: null });
+		expect(result.place).toEqual({ clientId: null, projectId: own.id });
 		expect(result.outcomes[0]?.status).toBe("saved");
 	});
 
@@ -214,12 +214,12 @@ describe("a conversation filed under nothing", () => {
 		expect((await fromMail.forThread(threadId, db)).place).toMatchObject({ projectId: project.id, linked: true });
 	});
 
-	it("saves to Unfiled when that is the place chosen", async () => {
+	it("saves under nothing when an agent names no client and no project", async () => {
 		const threadId = thread("Prijs");
 		attachment(message(threadId), "Prijs.txt", "Prijs van de schuur.");
 
-		const result = await fromMail.saveFromThread({ threadId, clientId: null, projectId: null, folderId: null }, db);
-		expect(result.place).toEqual({ clientId: null, projectId: null, folderId: null });
+		const result = await fromMail.saveFromThread({ threadId, clientId: null, projectId: null }, db);
+		expect(result.place).toEqual({ clientId: null, projectId: null });
 		expect(result.outcomes[0]).toMatchObject({ status: "saved", document: { clientId: null, projectId: null } });
 	});
 

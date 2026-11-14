@@ -505,7 +505,6 @@ const api: JunoApi = {
 		importFromMail: (input) => call("documents.importFromMail", input),
 		threadAttachments: (threadId) => call("documents.threadAttachments", threadId),
 		saveThreadAttachments: (input) => call("documents.saveThreadAttachments", input),
-		listIn: (place) => call("documents.listIn", place),
 		listUnfiled: () => call("documents.listUnfiled"),
 		move: (id, input) => call("documents.move", id, input),
 		rename: (id, title) => call("documents.rename", id, title),
@@ -521,14 +520,6 @@ const api: JunoApi = {
 			return () => {
 				ipcRenderer.off("documents.changed", handler);
 			};
-		},
-		folders: {
-			tree: () => call("documents.folders.tree"),
-			create: (input) => call("documents.folders.create", input),
-			rename: (id, name) => call("documents.folders.rename", id, name),
-			move: (id, target) => call("documents.folders.move", id, target),
-			remove: (id) => call("documents.folders.remove", id),
-			restore: (id) => call("documents.folders.restore", id),
 		},
 		versions: (documentId) => call("documents.versions", documentId),
 		openVersion: (versionId) => call("documents.openVersion", versionId),

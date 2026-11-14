@@ -9,14 +9,14 @@ import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
 import { belongsTo } from "../documents/belongs-to";
 import { DocumentOwnerFields, type DocumentOwnerChoice } from "../documents/DocumentOwnerFields";
-import { folderFor, ownerOf, type StartPlace } from "../documents/start-place";
+import { ownerOf, type StartPlace } from "../documents/start-place";
 
 type UseCanvasTemplateScreenProps = {
 	template: DocumentTemplate;
 	onBack: () => void;
 	/** Called when the person is finished, so the caller can decide where to go. */
 	onDone: () => void;
-	/** The folder of the explorer it was started from, which is where it is kept unless another place is picked. */
+	/** The client or project the Templates screen was opened from, which is where it is kept unless another is picked. */
 	start?: StartPlace | null;
 	/** The document, the moment it exists, so the caller can show it once the person is done. */
 	onCreated?: (record: DocumentRecord) => void;
@@ -49,7 +49,6 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone, start = null
 	const [printing, setPrinting] = useState(false);
 	const [asking, setAsking] = useState(false);
 	const [owner, setOwner] = useState<DocumentOwnerChoice>(() => ownerOf(start));
-	const folderId = folderFor(start, owner);
 	const [title, setTitle] = useState(template.name);
 	const [created, setCreated] = useState<Created | null>(null);
 	const [savedTo, setSavedTo] = useState<string | null>(null);
@@ -139,7 +138,6 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone, start = null
 				clientId: owner.clientId || null,
 				templateId: template.id,
 				projectId: owner.projectId || null,
-				folderId,
 				title: title.trim() || template.name,
 				extras: values,
 			});
@@ -259,7 +257,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone, start = null
 
 			{step === "keep" ? (
 				<div className="flex flex-col gap-4">
-					<DocumentOwnerFields value={owner} onChange={setOwner} disabled={busy} folder={folderId ? start?.name : null} />
+					<DocumentOwnerFields value={owner} onChange={setOwner} disabled={busy} />
 					<Field label="Title" value={title} onChange={setTitle} help="How the document is listed." />
 					<p className="max-w-[62ch] text-sm text-[var(--ink-muted)]">
 						Pick a client or a project: the document is kept on its Documents tab. The PDF is the one you saw. Nothing from a client or project is written into it. A document from a template

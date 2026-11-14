@@ -137,14 +137,10 @@ export const documentComponentAssets = sqliteTable(
 );
 
 /**
- * A folder the owner made in the documents tree (decision 75). The tree's own
- * folders, one per client, per project and Unfiled, are the owner rule drawn
- * and are not rows. A folder sits inside one of those places, or inside
- * another folder of the same place, and carries the place it sits in so a
- * document dropped into it is kept under that client or project.
- *
- * Nothing on disk follows the tree. Files stay in Juno's documents folder,
- * named by Juno.
+ * A folder the owner made in the documents tree of decision 75. Unused since
+ * decision 81: there are no folders, migration 0035 took every document out
+ * of one and soft deleted every row. The table stays, with its rows, so what
+ * an older install had is still in the file; nothing reads or writes it.
  */
 export const documentFolders = sqliteTable(
 	"document_folders",
@@ -212,7 +208,7 @@ export const documents = sqliteTable(
 		 * compiled from this on every save, so anything that reads a body still works.
 		 */
 		blocksJson: text("blocks_json"),
-		/** A folder the owner made, inside the place the document is kept. Null for none. */
+		/** The folder of decision 75. Null for every document since migration 0035, and never written. */
 		folderId: text("folder_id").references(() => documentFolders.id),
 	},
 	(t) => [

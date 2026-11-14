@@ -519,8 +519,8 @@ export const documentTools: ToolDescriptor[] = [
 		name: "documents.generate",
 		title: "Generate a document",
 		description:
-			"Renders a template and stores the result as a draft with its PDF, under a client, a project, in a folder, " +
-			"both or neither. A project that has a client brings that client along. Nothing is sent. " +
+			"Renders a template and stores the result as a draft with its PDF, under a client, a project or both, " +
+			"which is the Documents tab it is listed on. A project that has a client brings that client along. Nothing is sent. " +
 			"Placeholders that cannot be filled are rendered as visible markers and reported. A template laid " +
 			"out on paper (one with a canvas) takes every value from extras, keyed by its input keys, and " +
 			"nothing from the client: the client is who the document belongs to.",
@@ -532,12 +532,6 @@ export const documentTools: ToolDescriptor[] = [
 				client_id: { type: ["string", "null"], description: "Optional. " + OWNER_RULE },
 				template_id: { type: "string" },
 				project_id: { type: ["string", "null"], description: "Optional. Must belong to the client when both are given." },
-				folder_id: {
-					type: ["string", "null"],
-					description:
-						"Optional. A folder from documents.folders.list to keep the document in; its client and project win, " +
-						"and naming a different client or project is refused.",
-				},
 				title: { type: "string", description: "Defaults to the template name and the client or project name." },
 				issued_on: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
 				extras: {
@@ -554,7 +548,6 @@ export const documentTools: ToolDescriptor[] = [
 				clientId: (args.client_id as string | null) ?? null,
 				templateId: String(args.template_id),
 				projectId: (args.project_id as string | null) ?? null,
-				...(args.folder_id !== undefined ? { folderId: args.folder_id as string | null } : {}),
 				...(args.title !== undefined ? { title: String(args.title) } : {}),
 				...(args.issued_on !== undefined ? { issuedOn: String(args.issued_on) } : {}),
 				...(args.extras !== undefined
@@ -572,7 +565,8 @@ export const documentTools: ToolDescriptor[] = [
 		title: "Import a file as a document",
 		description:
 			"Copies an existing file of any kind on this machine (a PDF, a Word file, a spreadsheet, a picture) " +
-			"into Juno and records it under a client, a project, both or neither, or in a folder. It has no body " +
+			"into Juno and records it under a client, a project or both, the Documents tab it is listed on. One " +
+			"kept under neither is listed on the Overview as a file without a client. It has no body " +
 			"and cannot be rendered again, because it did not come from a template. A PDF can be signed; any " +
 			"other kind is converted with documents.convert_pdf first. " +
 			"Refused when the same client, or project when there is no client, already has a document with the " +
@@ -586,10 +580,6 @@ export const documentTools: ToolDescriptor[] = [
 				client_id: { type: ["string", "null"], description: "Optional. " + OWNER_RULE },
 				title: { type: "string", description: "Defaults to the file's own name without its extension." },
 				project_id: { type: ["string", "null"], description: "Optional. Must belong to the client when both are given." },
-				folder_id: {
-					type: ["string", "null"],
-					description: "Optional. A folder from documents.folders.list; its client and project win.",
-				},
 				issued_on: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
 			},
 			required: ["source_path"],
@@ -601,7 +591,6 @@ export const documentTools: ToolDescriptor[] = [
 				clientId: (args.client_id as string | null) ?? null,
 				...(args.title !== undefined ? { title: String(args.title) } : {}),
 				...(args.project_id !== undefined ? { projectId: args.project_id as string | null } : {}),
-				...(args.folder_id !== undefined ? { folderId: args.folder_id as string | null } : {}),
 				...(args.issued_on !== undefined ? { issuedOn: String(args.issued_on) } : {}),
 			};
 			return imports.importPath(input);

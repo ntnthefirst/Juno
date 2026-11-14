@@ -1,7 +1,7 @@
 /**
  * Documents as a file explorer (decision 75): any file is a document and is
- * matched by its bytes, its words or its name; the owner's folders and the
- * tree; moving, duplicating, copying and renaming; a mail attachment kept as
+ * matched by its bytes, its words or its name; where it is kept; moving,
+ * duplicating, copying and renaming; a mail attachment kept as
  * a document; and signing refused for a newest version that is not a PDF.
  */
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -11,7 +11,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import * as clients from "./clients";
 import * as compare from "./document-compare";
 import * as drag from "./document-drag";
-import * as folders from "./document-folders";
 import { analyseImport, importFile, importFromMail } from "./document-import";
 import * as organise from "./document-organise";
 import * as templates from "./document-templates";
@@ -113,106 +112,17 @@ describe("the name a file is kept under", () => {
 	});
 });
 
-describe("folders", () => {
-	it("makes folders inside a client, a project and Unfiled, and draws them in the tree with counts", async () => {
-		const { db, acme, website, own } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		const drafts = await folders.create({ name: "Concepten", parentId: offers.id }, db);
-		const designs = await folders.create({ name: "Ontwerpen", projectId: website.id }, db);
-		const loose = await folders.create({ name: "Varia" }, db);
-		expect(drafts).toMatchObject({ clientId: acme.id, projectId: null, parentId: offers.id });
-		expect(designs).toMatchObject({ clientId: acme.id, projectId: website.id });
-
-		await importFile({ source: bytes("Offerte.txt", "Een offerte."), folderId: drafts.id }, db);
-		await importFile({ source: bytes("Brief.txt", "Een brief."), clientId: acme.id }, db);
-		await importFile({ source: bytes("Los.txt", "Los.") }, db);
-
-		const tree = await folders.tree(db);
-		expect(tree.roots.map((node) => node.key)).toEqual([
-			`client:${acme.id}`,
-			expect.stringMatching(/^client:/),
-			`project:${own.id}`,
-			"unfiled",
-			"templates",
-		]);
-		const acmeNode = tree.roots[0]!;
-		expect(acmeNode.documentCount).toBe(1);
-		expect(acmeNode.children.map((node) => node.key)).toEqual([`project:${website.id}`, `folder:${offers.id}`]);
-		expect(acmeNode.children[0]!.children[0]).toMatchObject({ key: `folder:${designs.id}`, kind: "folder" });
-		const offersNode = acmeNode.children[1]!;
-		expect(offersNode.children[0]).toMatchObject({ name: "Concepten", documentCount: 1 });
-		expect(offersNode.children[0]!.place).toEqual({ clientId: acme.id, projectId: null, folderId: drafts.id });
-		const unfiled = tree.roots.find((node) => node.key === "unfiled")!;
-		expect(unfiled.documentCount).toBe(1);
-		expect(unfiled.children.map((node) => node.folderId)).toEqual([loose.id]);
-		expect(tree.templates).toEqual([]);
-	});
-
-	it("keeps names unique beside each other, and renames", async () => {
-		const { db, acme } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		await expect(folders.create({ name: "offertes ", clientId: acme.id }, db)).rejects.toThrow(/already a folder named/);
-		await expect(folders.create({ name: "Offertes" }, db)).resolves.toBeDefined();
-		await expect(folders.create({ name: "   " }, db)).rejects.toThrow(/needs a name/);
-		expect((await folders.rename(offers.id, "Prijsoffertes", db)).name).toBe("Prijsoffertes");
-	});
-
-	it("refuses to delete a folder that holds something, saying what, and deletes an empty one", async () => {
-		const { db, acme } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		await folders.create({ name: "Oud", parentId: offers.id }, db);
-		await importFile({ source: bytes("A.txt", "a"), folderId: offers.id }, db);
-		await importFile({ source: bytes("B.txt", "b"), folderId: offers.id }, db);
-		await expect(folders.remove(offers.id, db)).rejects.toThrow('"Offertes" still holds 2 documents and 1 folder. Move or delete them first.');
-
-		const empty = await folders.create({ name: "Leeg", clientId: acme.id }, db);
-		expect((await folders.remove(empty.id, db)).deletedAt).not.toBeNull();
-		expect((await folders.list(db)).map((folder) => folder.name)).not.toContain("Leeg");
-	});
-
-	it("moves a folder to another client with everything inside it, and never into itself", async () => {
-		const { db, acme, other } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		const inner = await folders.create({ name: "Oud", parentId: offers.id }, db);
-		const doc = await importFile({ source: bytes("Offerte.txt", "Een offerte."), folderId: inner.id }, db);
-
-		await expect(folders.move(offers.id, { parentId: inner.id }, db)).rejects.toThrow(/inside it/);
-		await expect(folders.move(offers.id, { parentId: offers.id }, db)).rejects.toThrow(/into itself/);
-
-		const moved = await folders.move(offers.id, { clientId: other.id }, db);
-		expect(moved).toMatchObject({ clientId: other.id, parentId: null });
-		expect(await folders.get(inner.id, db)).toMatchObject({ clientId: other.id, parentId: offers.id });
-		expect(await documents.get(doc.id, db)).toMatchObject({ clientId: other.id, folderId: inner.id });
-	});
-
-	it("refuses to move a folder where one of its documents' titles is taken, and moves nothing", async () => {
-		const { db, acme, other } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		const doc = await importFile({ source: bytes("Offerte.txt", "Voor Acme."), folderId: offers.id }, db);
-		await importFile({ source: bytes("Offerte.txt", "Voor Noord."), clientId: other.id }, db);
-
-		await expect(folders.move(offers.id, { clientId: other.id }, db)).rejects.toThrow(
-			/Brouwerij Noord already has a document named "Offerte"/,
-		);
-		expect(await folders.get(offers.id, db)).toMatchObject({ clientId: acme.id });
-		expect(await documents.get(doc.id, db)).toMatchObject({ clientId: acme.id, folderId: offers.id });
-	});
-
-	it("carries a project's folders and documents to its new client, and to none", async () => {
+describe("where a document is kept", () => {
+	it("carries a project's documents to its new client, and to none", async () => {
 		const { db, acme, other, website } = await setUp();
-		const offers = await folders.create({ name: "Offertes", projectId: website.id }, db);
-		const inFolder = await importFile({ source: bytes("Offerte.txt", "Een offerte."), folderId: offers.id }, db);
 		const loose = await importFile({ source: bytes("Plan.txt", "Een plan."), projectId: website.id }, db);
 		const acmeOwn = await importFile({ source: bytes("Brief.txt", "Voor Acme."), clientId: acme.id }, db);
 
 		await projects.update(website.id, { clientId: other.id }, db);
-		expect(await folders.get(offers.id, db)).toMatchObject({ clientId: other.id, projectId: website.id });
-		expect(await documents.get(inFolder.id, db)).toMatchObject({ clientId: other.id, projectId: website.id });
 		expect(await documents.get(loose.id, db)).toMatchObject({ clientId: other.id, projectId: website.id });
 		expect(await documents.get(acmeOwn.id, db)).toMatchObject({ clientId: acme.id });
 
 		await projects.update(website.id, { clientId: null }, db);
-		expect(await folders.get(offers.id, db)).toMatchObject({ clientId: null, projectId: website.id });
 		expect(await documents.get(loose.id, db)).toMatchObject({ clientId: null, projectId: website.id });
 	});
 
@@ -228,71 +138,21 @@ describe("folders", () => {
 		expect(await documents.get(mine.id, db)).toMatchObject({ clientId: acme.id });
 	});
 
-	it("refuses to restore a folder under a deleted client or project, naming which, and restores it once the parent is back", async () => {
+	it("makes a document from a template and a page under the project they were started from, with its client", async () => {
 		const { db, acme, website } = await setUp();
-		const onClient = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		const onProject = await folders.create({ name: "Ontwerp", projectId: website.id }, db);
-		await folders.remove(onClient.id, db);
-		await folders.remove(onProject.id, db);
-		await projects.remove(website.id, db);
-		await clients.remove(acme.id, db);
-
-		await expect(folders.restore(onClient.id, db)).rejects.toThrow(/The client "Acme" is deleted\. Restore it first/);
-		await expect(folders.restore(onProject.id, db)).rejects.toThrow(/The project "Website" is deleted\. Restore it first/);
-		expect(await folders.get(onClient.id, db)).toBeNull();
-
-		await clients.restore(acme.id, db);
-		await projects.restore(website.id, db);
-		expect(await folders.restore(onClient.id, db)).toMatchObject({ deletedAt: null });
-		expect(await folders.restore(onProject.id, db)).toMatchObject({ deletedAt: null });
-	});
-
-	it("restores a folder only where its name is still free", async () => {
-		const { db, acme } = await setUp();
-		const first = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		await folders.remove(first.id, db);
-		await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		await expect(folders.restore(first.id, db)).rejects.toThrow(/already a folder named "Offertes"/);
-	});
-
-	it("restores a deleted document out of a folder that is gone, so the tree still shows it", async () => {
-		const { db, acme } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		const doc = await importFile({ source: bytes("Offerte.txt", "Een offerte."), folderId: offers.id }, db);
-		await documents.remove(doc.id, db);
-		await folders.remove(offers.id, db);
-		const restored = await documents.restore(doc.id, db);
-		expect(restored).toMatchObject({ clientId: acme.id, folderId: null });
-		expect((await documents.listIn({ clientId: acme.id, projectId: null, folderId: null }, db)).map((d) => d.id)).toEqual([
-			doc.id,
-		]);
-	});
-
-	it("makes a document from a template straight into a folder, taking the folder's client and project", async () => {
-		const { db, acme, other, website } = await setUp();
-		const designs = await folders.create({ name: "Ontwerpen", projectId: website.id }, db);
 		const template = await templates.create({ name: "Offerte" }, db);
-
-		const made = await documents.generate({ templateId: template.id, folderId: designs.id }, db);
-		expect(made.document).toMatchObject({ clientId: acme.id, projectId: website.id, folderId: designs.id });
-		expect((await documents.listIn({ clientId: acme.id, projectId: website.id, folderId: designs.id }, db)).map((row) => row.id)).toEqual([
-			made.document.id,
-		]);
-
-		// The same client and project as the folder is no clash; another client is refused.
-		await expect(
-			documents.generate({ templateId: template.id, clientId: acme.id, projectId: website.id, folderId: designs.id }, db),
-		).resolves.toBeDefined();
-		await expect(documents.generate({ templateId: template.id, clientId: other.id, folderId: designs.id }, db)).rejects.toThrow(
-			/kept under another client or project/,
-		);
+		const made = await documents.generate({ templateId: template.id, projectId: website.id }, db);
+		expect(made.document).toMatchObject({ clientId: acme.id, projectId: website.id });
+		const page = await pages.create({ projectId: website.id }, db);
+		expect(page.document).toMatchObject({ clientId: acme.id, projectId: website.id, sourceKind: "page" });
+		expect((await documents.list({ clientId: acme.id }, db)).map((row) => row.id).sort()).toEqual([made.document.id, page.document.id].sort());
 	});
 
-	it("writes a new page straight into a folder", async () => {
+	it("brings a deleted document back where it was kept", async () => {
 		const { db, acme } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		const page = await pages.create({ folderId: offers.id }, db);
-		expect(page.document).toMatchObject({ clientId: acme.id, projectId: null, folderId: offers.id, sourceKind: "page" });
+		const doc = await importFile({ source: bytes("Offerte.txt", "Een offerte."), clientId: acme.id }, db);
+		await documents.remove(doc.id, db);
+		expect(await documents.restore(doc.id, db)).toMatchObject({ clientId: acme.id, projectId: null });
 	});
 });
 
@@ -334,43 +194,31 @@ describe("comparing an incoming file with a kept one", () => {
 });
 
 describe("moving, duplicating, copying and renaming", () => {
-	it("moves a document into a folder under another project, relinking it by the owner rule", async () => {
+	it("moves a document to another client's project, relinking it by the owner rule", async () => {
 		const { db, other, website, acme } = await setUp();
-		const designs = await folders.create({ name: "Ontwerpen", projectId: website.id }, db);
 		const doc = await importFile({ source: bytes("Schets.txt", "Een schets."), clientId: other.id }, db);
-		const moved = await organise.move(doc.id, { folderId: designs.id }, db);
-		expect(moved).toMatchObject({ clientId: acme.id, projectId: website.id, folderId: designs.id });
+		const moved = await organise.move(doc.id, { projectId: website.id }, db);
+		expect(moved).toMatchObject({ clientId: acme.id, projectId: website.id });
 
-		// Relinking to another place takes it out of the folder, which belongs to the old place.
-		const relinked = await documents.link(doc.id, { clientId: other.id, projectId: null }, db);
-		expect(relinked.folderId).toBeNull();
-
-		await expect(organise.move(doc.id, { folderId: designs.id, clientId: other.id }, db)).rejects.toThrow(
-			/kept under another client or project/,
-		);
+		await expect(organise.move(doc.id, { clientId: other.id, projectId: website.id }, db)).rejects.toThrow();
 	});
 
-	it("lists what sits directly in one node", async () => {
+	it("lists a client's documents with its projects', and a project's alone", async () => {
 		const { db, acme, website } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
-		const inFolder = await importFile({ source: bytes("A.txt", "a"), folderId: offers.id }, db);
 		const atClient = await importFile({ source: bytes("B.txt", "b"), clientId: acme.id }, db);
 		const atProject = await importFile({ source: bytes("C.txt", "c"), projectId: website.id }, db);
-		const ids = async (place: { clientId: string | null; projectId: string | null; folderId: string | null }) =>
-			(await documents.listIn(place, db)).map((record) => record.id);
-		expect(await ids({ clientId: acme.id, projectId: null, folderId: null })).toEqual([atClient.id]);
-		expect(await ids({ clientId: acme.id, projectId: website.id, folderId: null })).toEqual([atProject.id]);
-		expect(await ids({ clientId: null, projectId: null, folderId: offers.id })).toEqual([inFolder.id]);
+		const ids = async (query: { clientId?: string; projectId?: string }) => (await documents.list(query, db)).map((record) => record.id).sort();
+		expect(await ids({ clientId: acme.id })).toEqual([atClient.id, atProject.id].sort());
+		expect(await ids({ projectId: website.id })).toEqual([atProject.id]);
 	});
 
 	it("duplicates in the same place as '(copy)', copying the file with its extension", async () => {
 		const { db, acme } = await setUp();
-		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
 		const docx = await docxBytes(AGREEMENT);
-		const original = await importFile({ source: bytes("Offerte.docx", docx), folderId: offers.id }, db);
+		const original = await importFile({ source: bytes("Offerte.docx", docx), clientId: acme.id }, db);
 
 		const copy = await organise.duplicate(original.id, db);
-		expect(copy).toMatchObject({ title: "Offerte (copy)", clientId: acme.id, folderId: offers.id, versionCount: 1 });
+		expect(copy).toMatchObject({ title: "Offerte (copy)", clientId: acme.id, versionCount: 1 });
 		expect(copy.pdfPath).not.toBe(original.pdfPath);
 		expect(copy.pdfPath!.endsWith(".docx")).toBe(true);
 		expect(Buffer.compare(readFileSync(copy.pdfPath!), Buffer.from(docx))).toBe(0);
@@ -384,7 +232,7 @@ describe("moving, duplicating, copying and renaming", () => {
 		const { db, acme, other } = await setUp();
 		const original = await importFile({ source: bytes("Voorwaarden.txt", "Onze voorwaarden."), clientId: acme.id }, db);
 		const copied = await organise.copyTo(original.id, { clientId: other.id }, db);
-		expect(copied).toMatchObject({ title: "Voorwaarden", clientId: other.id, folderId: null });
+		expect(copied).toMatchObject({ title: "Voorwaarden", clientId: other.id });
 		const again = await organise.copyTo(original.id, { clientId: other.id }, db);
 		expect(again.title).toBe("Voorwaarden (copy)");
 		expect((await documents.get(original.id, db))!.clientId).toBe(acme.id);

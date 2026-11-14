@@ -2075,8 +2075,6 @@ export interface DocumentRecord extends Standard {
 	versionCount: number;
 	/** The newest version, which is the one `pdfPath` points at. Null before the first file. */
 	latestVersion: DocumentLatestVersion | null;
-	/** A folder the owner made, inside the place the document is kept (decision 75). Null for none. */
-	folderId: string | null;
 }
 
 /** What a list needs to know about a document's newest file: its kind decides the tile, the preview and Sign. */
@@ -2098,7 +2096,6 @@ export interface ImportDocumentInput {
 	clientId?: string | null;
 	title?: string;
 	projectId?: string | null;
-	folderId?: string | null;
 	issuedOn?: IsoDate;
 }
 
@@ -2240,7 +2237,6 @@ export interface ImportMatch {
 	clientId: string | null;
 	clientName: string | null;
 	projectId: string | null;
-	folderId: string | null;
 	/** 0 to 1, how much of the text is the same. 1 for the same bytes, 0 for a name only. */
 	score: number;
 	/** The same bytes are already one of this document's versions. */
@@ -2266,18 +2262,16 @@ export interface ImportAnalysis {
 	byteSize: number;
 }
 
-/** Where a document is kept, as the tree draws it (decision 75). Null for none at each level. */
+/** Where a document is kept: a client, a project, both, or (for what older installs hold) neither (decisions 48 and 81). */
 export interface DocumentPlace {
 	clientId: string | null;
 	projectId: string | null;
-	folderId: string | null;
 }
 
 export interface AnalyseImportInput {
 	source: ImportSource;
 	clientId?: string | null;
 	projectId?: string | null;
-	folderId?: string | null;
 }
 
 export interface ImportFileInput {
@@ -2285,8 +2279,6 @@ export interface ImportFileInput {
 	clientId?: string | null;
 	title?: string;
 	projectId?: string | null;
-	/** A folder the owner made. Its client and project win over the two above. */
-	folderId?: string | null;
 	issuedOn?: IsoDate;
 }
 
@@ -2300,7 +2292,6 @@ export interface ImportFromMailInput {
 	versionOf?: string | null;
 	clientId?: string | null;
 	projectId?: string | null;
-	folderId?: string | null;
 	title?: string;
 }
 
@@ -2354,10 +2345,9 @@ export interface SaveThreadAttachmentsInput {
 	threadId: string;
 	/** Some of the conversation's attachments. Left out, every one that is not already a document. */
 	attachmentIds?: string[];
-	/** Where they go. All three left out, the conversation's own project or client. */
+	/** Where they go. Both left out, the conversation's own project or client. */
 	clientId?: string | null;
 	projectId?: string | null;
-	folderId?: string | null;
 	/** Also file the conversation under the project (or link it to the client) the files are saved to. */
 	linkThread?: boolean;
 }
@@ -2382,61 +2372,9 @@ export interface SaveThreadAttachmentsResult {
 	outcomes: SavedAttachment[];
 }
 
-/* ------------------------------------------------------ documents tree */
+/* ---------------------------------------------------- templates list */
 
-/** A folder the owner made in the documents tree. */
-export interface DocumentFolder extends Standard {
-	name: string;
-	/** The folder it sits in, or null when it sits directly in its place. */
-	parentId: string | null;
-	clientId: string | null;
-	projectId: string | null;
-	sortOrder: number;
-}
-
-export interface DocumentFolderInput {
-	name: string;
-	/** Another folder to sit in. Its place wins over `clientId` and `projectId`. */
-	parentId?: string | null;
-	/** The place to sit in when there is no parent. A project brings its client. */
-	clientId?: string | null;
-	projectId?: string | null;
-}
-
-export interface DocumentFolderMove {
-	/** Another folder to sit in, or null to sit directly in the place below. */
-	parentId?: string | null;
-	clientId?: string | null;
-	projectId?: string | null;
-}
-
-/**
- * A node of the documents tree. `client`, `project`, `unfiled` and `templates`
- * are drawn from the records and are not rows; `folder` is a row of
- * `document_folders`. `key` is stable across reads, so a window can keep a node
- * open or selected by it.
- */
-export interface DocumentTreeNode {
-	key: string;
-	kind: "client" | "project" | "unfiled" | "templates" | "folder";
-	name: string;
-	/**
-	 * Where a document added or moved here is kept. Null for `templates`, which
-	 * holds templates and no documents.
-	 */
-	place: DocumentPlace | null;
-	/** Documents directly in this node, not counting its children. */
-	documentCount: number;
-	/** Set for `folder`. */
-	folderId: string | null;
-	/** Set for `client`, and for a `project` or `folder` under a client. */
-	clientId: string | null;
-	/** Set for `project`, and for a `folder` under a project. */
-	projectId: string | null;
-	children: DocumentTreeNode[];
-}
-
-/** A document template as the Templates node lists it. Opening one opens its editor. */
+/** A document template as the Templates screen lists it. Opening one opens its editor. */
 export interface DocumentTemplateEntry {
 	id: string;
 	name: string;
@@ -2447,20 +2385,8 @@ export interface DocumentTemplateEntry {
 	hasCanvas: boolean;
 }
 
-/**
- * The whole tree: a node per client (holding a node per project), a node per
- * project of the owner's own, Unfiled, then Templates, in that order. The
- * owner's folders sit inside any of the first three kinds.
- */
-export interface DocumentTree {
-	roots: DocumentTreeNode[];
-	templates: DocumentTemplateEntry[];
-}
-
 export interface DocumentMoveInput {
-	/** A folder to put it in. Its client and project decide where the document is kept. */
-	folderId?: string | null;
-	/** Without a folder: the place to keep it, by the owner rule (decision 48). */
+	/** The place to keep it, by the owner rule (decision 48). A project with a client brings its client. */
 	clientId?: string | null;
 	projectId?: string | null;
 }
@@ -2567,8 +2493,6 @@ export interface GenerateDocumentInput {
 	issuedOn?: IsoDate;
 	/** Values typed for this document, such as an addendum's change summary. */
 	extras?: Record<string, string>;
-	/** A folder the owner made, to keep the document in. Its client and project win over the two above. */
-	folderId?: string | null;
 }
 
 export interface GenerateDocumentResult {
@@ -4075,8 +3999,6 @@ export interface PageInput {
 	title?: string;
 	clientId?: string | null;
 	projectId?: string | null;
-	/** A folder the owner made. Its client and project win over the two above. */
-	folderId?: string | null;
 	blocks?: unknown;
 }
 

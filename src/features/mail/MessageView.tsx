@@ -478,7 +478,6 @@ export function MessageView({
 					? {
 							clientId: target.place.clientId,
 							projectId: target.place.projectId,
-							folderId: target.place.folderId,
 							linkThread: target.linkThread,
 						}
 					: {}),

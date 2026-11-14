@@ -23,9 +23,7 @@ export const MENU_KINDS = [
 	"note",
 	"outbox",
 	"template",
-	/** A node of the documents tree: a client, a project, Unfiled, Templates or a folder, named by its key. */
-	"folder",
-	/** A document template in the Templates folder. */
+	/** A document template on the Templates screen. */
 	"document-template",
 	/** An attachment of a received mail, in the reader. */
 	"attachment",
@@ -125,7 +123,6 @@ export const MENU_ACTIONS = [
 	"rename",
 	"convert-pdf",
 	"sign",
-	"new-folder",
 	"add-files",
 	"save-as",
 	"save-to-place",

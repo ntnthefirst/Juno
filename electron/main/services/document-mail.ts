@@ -254,8 +254,8 @@ export async function saveFromThread(
 		throw new Error(`That is ${chosen.length} attachments. Save at most ${MAX_ATTACHMENTS_PER_SAVE} at a time.`);
 	}
 
-	// A place named at all, even Unfiled (all three null), is the place; none named is the conversation's own.
-	const asked = input.clientId !== undefined || input.projectId !== undefined || input.folderId !== undefined;
+	// A place named at all, even none (both null), is the place; none named is the conversation's own.
+	const asked = input.clientId !== undefined || input.projectId !== undefined;
 	const { summary } = thread;
 	if (!asked && !summary.projectId && !summary.clientId) {
 		throw new Error("This conversation is not filed under a client or a project. Choose where the files go.");
@@ -263,12 +263,12 @@ export async function saveFromThread(
 	// The project alone when the conversation has one, because a project brings its own client
 	// and the conversation's client may be the one writing about it (mail-threads.linkProject).
 	const placeInput: DocumentPlace = asked
-		? { clientId: input.clientId ?? null, projectId: input.projectId ?? null, folderId: input.folderId ?? null }
+		? { clientId: input.clientId ?? null, projectId: input.projectId ?? null }
 		: summary.projectId
-			? { clientId: null, projectId: summary.projectId, folderId: null }
-			: { clientId: summary.clientId, projectId: null, folderId: null };
+			? { clientId: null, projectId: summary.projectId }
+			: { clientId: summary.clientId, projectId: null };
 	const resolved = resolvePlace(placeInput, db);
-	const place: DocumentPlace = { clientId: resolved.clientId, projectId: resolved.projectId, folderId: resolved.folderId };
+	const place: DocumentPlace = { clientId: resolved.clientId, projectId: resolved.projectId };
 
 	let threadSummary = summary;
 	if (input.linkThread) {

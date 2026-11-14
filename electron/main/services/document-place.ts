@@ -1,51 +1,22 @@
 /**
- * Where a document is kept, as the tree draws it (decision 75): a client, a
- * project, both or neither, by the owner rule (decision 48, document-owner.ts),
- * and optionally a folder the owner made inside that place.
+ * Where a document is kept: a client, a project, both or neither, by the owner
+ * rule (decision 48, document-owner.ts). There are no folders (decision 81):
+ * the place is the record, and a document is listed on that record's
+ * Documents tab.
  *
- * A folder carries its place, so naming a folder decides the client and the
- * project too; naming a folder and a different client is refused, the way
- * naming a project and a client it does not belong to is.
- *
- * Titles are unique within a place (decision 48), not within a folder: two
- * folders of one client still hold one "Offerte". That is what keeps the
+ * Titles are unique within a place (decision 48). That is what keeps the
  * same-name match of an incoming file meaningful wherever it is dropped.
  */
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb, type Db } from "../db";
-import { documentFolders, documents } from "../db/schema";
+import { now } from "../db/columns";
+import { documents } from "../db/schema";
 import { resolveOwner, type DocumentOwner } from "./document-owner";
 
-export interface ResolvedPlace extends DocumentOwner {
-	folderId: string | null;
-}
+export type ResolvedPlace = DocumentOwner;
 
-export function folderRow(folderId: string, db: Db = getDb()) {
-	const row = db
-		.select()
-		.from(documentFolders)
-		.where(and(eq(documentFolders.id, folderId), isNull(documentFolders.deletedAt)))
-		.get();
-	if (!row) throw new Error("That folder no longer exists. Pick another one.");
-	return row;
-}
-
-export function resolvePlace(
-	input: { clientId?: string | null; projectId?: string | null; folderId?: string | null },
-	db: Db = getDb(),
-): ResolvedPlace {
-	if (input.folderId) {
-		const folder = folderRow(input.folderId, db);
-		const clashes =
-			(input.clientId !== undefined && input.clientId !== null && input.clientId !== folder.clientId) ||
-			(input.projectId !== undefined && input.projectId !== null && input.projectId !== folder.projectId);
-		if (clashes) {
-			throw new Error("That folder is kept under another client or project. Pick the folder alone, or another folder.");
-		}
-		const owner = resolveOwner({ clientId: folder.clientId, projectId: folder.projectId }, db);
-		return { ...owner, folderId: folder.id };
-	}
-	return { ...resolveOwner({ clientId: input.clientId, projectId: input.projectId }, db), folderId: null };
+export function resolvePlace(input: { clientId?: string | null; projectId?: string | null }, db: Db = getDb()): ResolvedPlace {
+	return resolveOwner({ clientId: input.clientId, projectId: input.projectId }, db);
 }
 
 /**
@@ -91,11 +62,43 @@ export function availableTitle(
 }
 
 /** Throws the sentence decision 48 asks for when the title is taken in the place. */
-export function assertTitleFree(place: ResolvedPlace | DocumentOwner, title: string, db: Db, exceptId?: string): void {
+export function assertTitleFree(place: ResolvedPlace, title: string, db: Db, exceptId?: string): void {
 	if (documentTitled(place, title, db, exceptId)) {
 		const where = place.clientName ?? place.projectName;
 		throw new Error(
 			`${where ? `${where} already has` : "There is already"} a document named "${title}". Add the file as a new version of it, or give it another name.`,
 		);
 	}
+}
+
+/**
+ * Brings a project's documents under the client the project has now. A
+ * project's documents are kept under its client by the owner rule (decision
+ * 48), so when the project changes client they follow it, or the old client's
+ * tab would still list them and the new one would not. Call it in the
+ * transaction that changed the project. Refused, before anything is written,
+ * when the new client already has a document of the same title.
+ */
+export function carryProjectToClient(projectId: string, db: Db = getDb()): void {
+	const owner = resolveOwner({ projectId }, db);
+	const stamp = now();
+	db.transaction((tx) => {
+		const live = tx
+			.select({ title: documents.title })
+			.from(documents)
+			.where(and(eq(documents.projectId, projectId), isNull(documents.deletedAt)))
+			.all();
+		for (const { title } of live) {
+			if (documentTitled(owner, title, tx)) {
+				const where = owner.clientName ?? `"${owner.projectName}"`;
+				throw new Error(
+					`${where} already has a document named "${title}". Rename one of the two, then change the client of "${owner.projectName}".`,
+				);
+			}
+		}
+		tx.update(documents)
+			.set({ clientId: owner.clientId, updatedAt: stamp })
+			.where(eq(documents.projectId, projectId))
+			.run();
+	});
 }

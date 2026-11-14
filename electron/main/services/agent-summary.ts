@@ -33,7 +33,6 @@ const NOUNS: [prefix: string, noun: string][] = [
 	["projects.update_link", "project link"],
 	["projects.delete_link", "project link"],
 	["projects.", "project"],
-	["documents.folders.", "document folder"],
 	["documents.", "document"],
 	["templates.components.", "component"],
 	["templates.", "document template"],

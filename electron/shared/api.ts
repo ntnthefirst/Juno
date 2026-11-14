@@ -108,16 +108,11 @@ import type {
 	SaveThreadAttachmentsInput,
 	SaveThreadAttachmentsResult,
 	ThreadAttachments,
-	DocumentPlace,
 	DocumentMoveInput,
 	ConvertPdfResult,
 	FilePreview,
 	FilePreviewSource,
 	DocumentsChanged,
-	DocumentTree,
-	DocumentFolder,
-	DocumentFolderInput,
-	DocumentFolderMove,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -906,7 +901,7 @@ export interface JunoApi {
 		analyseImport(input: AnalyseImportInput): Promise<ImportAnalysis>;
 		/** What an incoming file says differently from a kept version, word by word. */
 		compareText(input: CompareTextInput): Promise<TextComparison>;
-		/** A new document from the file, in a place or a folder. Refuses a title the place already has. */
+		/** A new document from the file, under a client or a project. Refuses a title the place already has. */
 		importFile(input: ImportFileInput): Promise<DocumentRecord>;
 		/** Adds the file to a document as a version, placed by the file's own date. */
 		addVersion(input: AddVersionInput): Promise<DocumentVersion>;
@@ -916,17 +911,15 @@ export interface JunoApi {
 		threadAttachments(threadId: string): Promise<ThreadAttachments>;
 		/** Saves a conversation's attachments to its project or client, or the place given, each checked like a drop. */
 		saveThreadAttachments(input: SaveThreadAttachmentsInput): Promise<SaveThreadAttachmentsResult>;
-		/** The documents directly in one node of the tree. */
-		listIn(place: DocumentPlace): Promise<DocumentRecord[]>;
 		/** The documents kept under no client and no project, newest first, for the Overview to give a place. */
 		listUnfiled(): Promise<DocumentRecord[]>;
-		/** Into a folder, or directly under a client, a project or nothing. A folder decides the client and project. */
+		/** Under another client or project. A project with a client brings its client. */
 		move(id: string, input: DocumentMoveInput): Promise<DocumentRecord>;
 		/** Changes the title only. */
 		rename(id: string, title: string): Promise<DocumentRecord>;
 		/** A new document from the newest version, in the same place, named "<title> (copy)". */
 		duplicate(id: string): Promise<DocumentRecord>;
-		/** A new document from the newest version, in another folder, client or project. */
+		/** A new document from the newest version, under another client or project. */
 		copyTo(id: string, target: DocumentMoveInput): Promise<DocumentRecord>;
 		/** Keeps a PDF of the newest version as the next version. `via: "juno"` means the layout may differ. */
 		convertPdf(id: string): Promise<ConvertPdfResult>;
@@ -944,17 +937,6 @@ export interface JunoApi {
 		startDrag(ids: string[]): Promise<string[]>;
 		/** Fires when documents changed without this window asking, such as an edit saved in another app. */
 		onChanged(listener: (change: DocumentsChanged) => void): () => void;
-		folders: {
-			/** The whole tree: clients with their projects, your own projects, Unfiled and Templates, with your folders inside. */
-			tree(): Promise<DocumentTree>;
-			create(input: DocumentFolderInput): Promise<DocumentFolder>;
-			rename(id: string, name: string): Promise<DocumentFolder>;
-			/** Moving to another client or project takes everything inside along. */
-			move(id: string, target: DocumentFolderMove): Promise<DocumentFolder>;
-			/** Refuses a folder that is not empty, with what is in it. */
-			remove(id: string): Promise<DocumentFolder>;
-			restore(id: string): Promise<DocumentFolder>;
-		};
 		/** Newest first. */
 		versions(documentId: string): Promise<DocumentVersion[]>;
 		/** Opens one version in its app. Anything but the newest opens read only. */

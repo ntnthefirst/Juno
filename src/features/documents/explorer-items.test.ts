@@ -23,7 +23,6 @@ function record(partial: Partial<DocumentRecord> & Pick<DocumentRecord, "id" | "
 		sourceKind: "imported",
 		versionCount: 1,
 		latestVersion: null,
-		folderId: null,
 		...partial,
 	};
 }

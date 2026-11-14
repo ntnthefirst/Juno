@@ -641,7 +641,7 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 						</div>
 					</Dialog>
 				) : null}
-				{items && here ? <AddFilesFlow items={items} place={{ ...here, folderId: null }} placeName={name} onDone={finished} /> : null}
+				{items && here ? <AddFilesFlow items={items} place={here} placeName={name} onDone={finished} /> : null}
 				{picker ? (
 					<RecordPickerDialog
 						title={`${picker.mode === "copy" ? "Copy" : "Move"} ${picker.records.length === 1 ? picker.records[0]!.title : plural(picker.records.length, "document", "documents")}`}

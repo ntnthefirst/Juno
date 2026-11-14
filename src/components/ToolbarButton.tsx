@@ -1,5 +1,5 @@
-import { Button } from "../../components/Button";
-import { Icon, type IconName } from "../../components/Icon";
+import { Button } from "./Button";
+import { Icon, type IconName } from "./Icon";
 
 type ToolbarButtonProps = {
 	icon: IconName;

@@ -66,8 +66,8 @@ import { PageView } from "./PageView";
 import { PlacePickerDialog } from "./PlacePickerDialog";
 import { SignPage } from "./SignPage";
 import type { StartPlace } from "./start-place";
-import { TemplatePreview } from "./TemplatePreview";
-import { ToolbarButton } from "./ToolbarButton";
+import { TemplatePreview } from "../templates/TemplatePreview";
+import { ToolbarButton } from "../../components/ToolbarButton";
 import { useExplorerData } from "./use-explorer-data";
 
 type DocumentsScreenProps = {

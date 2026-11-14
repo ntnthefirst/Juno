@@ -4,6 +4,7 @@ import { microsoftSignInConfigured } from "@shared/oauth";
 import type { MailAutoconfig } from "@shared/types";
 import { Button } from "../../../components/Button";
 import { Icon } from "../../../components/Icon";
+import { messageOf } from "../../../lib/errors";
 import { isMac } from "../../../lib/platform";
 import { ProviderLogo } from "./ProviderLogo";
 import { ServerFields } from "./ServerFields";
@@ -59,7 +60,7 @@ export function SignInStep({
 		try {
 			await window.juno.mail.accounts.openProviderPage(provider.id);
 		} catch (cause: unknown) {
-			setOpening(cause instanceof Error ? cause.message : String(cause));
+			setOpening(messageOf(cause));
 		}
 	}
 

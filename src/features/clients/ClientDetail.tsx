@@ -34,6 +34,7 @@ import { RecordLink } from "../../components/RecordLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
+import { messageOf } from "../../lib/errors";
 import { openNewRecord } from "../../lib/new-record";
 import { requestOpen } from "../../lib/open-entity";
 import { statusTextClass } from "../../lib/status-tone";
@@ -111,10 +112,6 @@ type StatusNameProps = {
  *  tag, no box, no background. "No status" reads in the muted ink. */
 function StatusName({ name }: StatusNameProps) {
 	return <span className={statusTextClass(name?.tone ?? null)}>{name?.label ?? "No status"}</span>;
-}
-
-function messageOf(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 type Detail = {

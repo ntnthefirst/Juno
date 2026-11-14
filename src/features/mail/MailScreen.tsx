@@ -871,7 +871,9 @@ export function MailScreen() {
 		setOutboxDeleteBusy(true);
 		try {
 			await window.juno.mail.outbox.remove(outboxDelete.id);
-			setOpened(null);
+			// Deleting from the list's menu leaves a conversation open beside it alone.
+			const removed = outboxDelete.id;
+			setOpened((current) => (current?.kind === "outbox" && current.id === removed ? null : current));
 			setOutboxVersion((v) => v + 1);
 			say("Message deleted.");
 		} catch (cause: unknown) {

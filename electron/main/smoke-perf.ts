@@ -293,7 +293,7 @@ async function screens(window: BrowserWindow): Promise<void> {
 			const out = [];
 			// The words that say the screen's own records have arrived, which a
 			// screen with no skeleton cannot otherwise be told apart from loaded.
-			const expect = { overview: "", calendar: "Perf event", clients: "Perf client", projects: "Perf project", mail: "Perf thread", notes: "Perf note", documents: "Perf page" };
+			const expect = { overview: "", calendar: "Perf event", clients: "Perf client", projects: "Perf project", mail: "Perf thread", notes: "Perf note", documents: "Unfiled" };
 			for (const id of Object.keys(expect)) {
 				await wait(300);
 				takeLong();

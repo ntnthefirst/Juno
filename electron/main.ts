@@ -429,7 +429,7 @@ if (!app.requestSingleInstanceLock()) {
 									{ name: "projects", nav: "projects", text: ["No projects yet"] },
 									{ name: "reminders", nav: null, text: [] },
 									{ name: "notes", nav: "notes", text: ["No notes yet"] },
-									{ name: "documents", nav: "documents", text: ["No documents yet"] },
+									{ name: "documents", nav: "documents", text: ["Unfiled", "Templates"] },
 									{ name: "mail", nav: "mail", text: ["No mail accounts yet"] },
 								];
 								for (const step of emptyChecks) {
@@ -799,6 +799,78 @@ if (!app.requestSingleInstanceLock()) {
 							await pageService.update(created.quotePageId, {
 								blocks: [...current.blocks.slice(0, at), picture, ...current.blocks.slice(at)],
 							});
+
+							// Files of each kind the explorer previews, kept under the first
+							// client the way a drop keeps them: a picture, a Word file, a
+							// workbook and a note, and a folder of the owner's own holding one.
+							// Made here rather than taken from the test fixtures, which the build leaves out.
+							const { default: JSZip } = await import("jszip");
+							type ExcelJs = typeof import("exceljs");
+							const excel = await import("exceljs").then((module) => (module as ExcelJs & { default?: ExcelJs }).default ?? module);
+							const escapeXml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+							const fixtures = {
+								docxBytes: async (paragraphs: string[]) => {
+									const zip = new JSZip();
+									zip.file(
+										"[Content_Types].xml",
+										'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+									);
+									zip.file(
+										"_rels/.rels",
+										'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+									);
+									zip.file(
+										"word/document.xml",
+										'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+											paragraphs.map((text) => `<w:p><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`).join("") +
+											"</w:body></w:document>",
+									);
+									return zip.generateAsync({ type: "uint8array" });
+								},
+								xlsxBytes: async (sheets: Record<string, (string | number)[][]>) => {
+									const workbook = new excel.Workbook();
+									for (const [name, rows] of Object.entries(sheets)) workbook.addWorksheet(name).addRows(rows);
+									return new Uint8Array(await workbook.xlsx.writeBuffer());
+								},
+							};
+							const imports = await import("./main/services/document-import");
+							const folderService = await import("./main/services/document-folders");
+							const ownerId = current.document.clientId;
+							const offers = await folderService.create({ name: "Offertes", clientId: ownerId });
+							const keep = (fileName: string, data: Uint8Array, folderId: string | null = null) =>
+								imports.importFile({ source: { kind: "bytes", fileName, data, via: "drop" }, clientId: ownerId, folderId });
+							await keep("Werktekening tafel.png", new Uint8Array(png));
+							await keep(
+								"Bestek keuken.docx",
+								await fixtures.docxBytes([
+									"Bestek voor de keuken in massieve eik.",
+									"De kasten worden op maat gemaakt en ter plaatse geplaatst.",
+									"Werkblad in eik van 38 mm, afgewerkt met hardwasolie.",
+								]),
+								offers.id,
+							);
+							await keep(
+								"Prijzen hout 2026.xlsx",
+								await fixtures.xlsxBytes({
+									Hout: [
+										["Soort", "Dikte", "Prijs per m2"],
+										["Eik", "38 mm", 92],
+										["Essen", "32 mm", 74],
+										["Beuk", "27 mm", 58],
+									],
+									Afwerking: [
+										["Product", "Inhoud", "Prijs"],
+										["Hardwasolie", "1 l", 32],
+									],
+								}),
+							);
+							await keep(
+								"Afspraken levering.txt",
+								new TextEncoder().encode(
+									"Levering van de eiken tafel op vrijdag in de voormiddag.\nDe planken krijgen een week om te wennen in de werkplaats.\nBel De Smet een dag vooraf.\n",
+								),
+							);
+							console.log("SMOKE_DEMO explorer files=4 folder=Offertes");
 						}
 
 							// Two files on the project, added through the service rather than
@@ -1377,9 +1449,21 @@ if (!app.requestSingleInstanceLock()) {
 								await new Promise((r) => setTimeout(r, 800));
 								const inPage: Record<string, string> = {
 									"Reminders": "Reminders",
-									"Document templates": "Templates",
 								};
 								const route = inPage[screen];
+								// Templates is a folder of the explorer now, the last node of the tree.
+								if (screen === "Document templates") {
+									const opened = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const node = document.querySelector("[data-tree-node=templates]");
+											if (!node) return false;
+											node.click();
+											await new Promise((r) => setTimeout(r, 700));
+											return Boolean(document.querySelector("main [data-explorer-item]"));
+										})()`,
+									)) as boolean;
+									if (!opened) throw new Error("Smoke: no Templates folder in the documents tree, or it lists nothing");
+								}
 								if (route && !(await pressText(route)))
 									throw new Error(`Smoke: no "${route}" to press on the way to ${screen}`);
 								if (screen === "Mail templates") {
@@ -1426,11 +1510,15 @@ if (!app.requestSingleInstanceLock()) {
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											await wait(500);
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Oak dining table, quote"));
-											if (!row) return "the page is not in the list";
-											if (!row.closest("li").textContent.includes("Page")) return "the row does not say it is a page";
+											const client = [...document.querySelectorAll("[data-tree-node^='client:']")].find((el) => el.textContent.includes("obet"));
+											if (!client) return "the client is not in the documents tree";
+											client.click();
+											await wait(700);
+											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Oak dining table, quote"));
+											if (!row) return "the page is not in its client's folder";
+											if (!row.textContent.includes("Page")) return "the row does not say it is a page";
 											row.click();
-											await wait(900);
+											await wait(1100);
 											const main = document.querySelector("main");
 											if (!main.querySelector("[role=toolbar][aria-label=Format]")) return "no format toolbar";
 											if (!main.querySelector("table")) return "the table is not drawn";
@@ -1932,81 +2020,205 @@ if (!app.requestSingleInstanceLock()) {
 									await new Promise((r) => setTimeout(r, 600));
 								}
 								if (screen === "Documents") {
-									// The search bar and the selection above the table: typed text
-									// narrows the rows, select-all ticks every one left, and both are
-									// cleared again so the screenshot below still shows the list at
-									// rest with everything in it.
-									const searched = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											const search = document.querySelector('input[aria-label="Search documents"]');
-											if (!search) return "no search field";
-											setValue.call(search, "zzz-nothing-matches-zzz");
-											search.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(250);
-											const main = document.querySelector("main");
-											if (!main.textContent.includes("Nothing matches")) return "the search did not filter the rows";
-											setValue.call(search, "");
-											search.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(250);
-											const selectAll = document.querySelector('input[aria-label="Select all"]');
-											if (!selectAll) return "no select-all checkbox";
-											selectAll.click();
-											await wait(200);
-											if (!main.textContent.includes("selected")) return "select-all did not select the rows";
-											const clear = document.querySelector('input[aria-label="Clear selection"]');
-											if (!clear) return "select-all left no way to clear the selection";
-											clear.click();
-											await wait(200);
-											return "ok";
-										})()`,
-									)) as string;
-									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
-
-									// Opening a document opens its PDF: a canvas that painted, and the
-									// column beside it with the versions and the timeline. A viewer that
-									// throws draws a message instead of a canvas, which is what this reads.
-									const viewed = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button[type='button']")].find((el) => !el.closest("li").textContent.includes("Page ·"));
-											if (!row) return "no document row to open";
-											row.click();
-											await wait(2000);
-											const aside = document.querySelector("aside[aria-label='Document']");
-											if (!aside) return "no document column";
-											for (const heading of ["Details", "Versions", "Timeline"]) {
-												if (![...aside.querySelectorAll("h3")].some((el) => el.textContent.startsWith(heading))) {
-													return "the column has no " + heading + " section";
-												}
-											}
-											const canvas = document.querySelector("main canvas");
-											if (!canvas || canvas.width === 0) return "the viewer drew no page";
-											if (document.querySelector("main").textContent.includes("Could not open this PDF")) return "the viewer could not open the PDF";
-											if (!aside.querySelector("ol li")) return "the column lists no versions or timeline";
-											return "ok";
-										})()`,
-									)) as string;
-									if (viewed !== "ok") throw new Error(`Smoke: document viewer ${viewed}`);
-									if (shotDir) {
+									const shoot = async (name: string, settle = 400) => {
 										for (const theme of ["light", "dark"] as const) {
 											nativeTheme.themeSource = theme;
 											await window.webContents.executeJavaScript(
 												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 											);
-											await new Promise((r) => setTimeout(r, 400));
-											writeFileSync(
-												joinPath(shotDir, `document-viewer-${theme}.png`),
-												(await capture(window.webContents)).toPNG(),
-											);
+											await new Promise((r) => setTimeout(r, settle));
+											writeFileSync(joinPath(shotDir, `${name}-${theme}.png`), (await capture(window.webContents)).toPNG());
 										}
-									}
-									// Back to the list, the way the record is left with Escape.
-									await window.webContents.executeJavaScript(
-										`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									};
+									const step = async (what: string, script: string) => {
+										const result = (await window.webContents.executeJavaScript(
+											`(async () => {
+												const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+												const rows = () => [...document.querySelectorAll("main [data-explorer-item]")];
+												const row = (text) => rows().find((el) => el.textContent.includes(text));
+												const until = async (find, tries = 40) => {
+													for (let at = 0; at < tries; at++) {
+														const found = find();
+														if (found) return found;
+														await wait(150);
+													}
+													return null;
+												};
+												${script}
+											})()`,
+										)) as string;
+										if (result !== "ok") throw new Error(`Smoke: documents explorer ${what}: ${result}`);
+									};
+
+									// The tree, then the client's folder as a list.
+									await step(
+										"tree",
+										`const tree = document.querySelector("[role=tree][aria-label=Folders]");
+										if (!tree) return "no folder tree";
+										if (!tree.querySelector("[data-tree-node=unfiled]") || !tree.querySelector("[data-tree-node=templates]")) return "the tree has no Unfiled or no Templates";
+										const list = document.querySelector("[role=group][aria-label=Layout] button[aria-label=List]");
+										if (list && list.getAttribute("aria-pressed") !== "true") list.click();
+										const client = [...tree.querySelectorAll("[data-tree-node^='client:']")].find((el) => el.textContent.includes("obet"));
+										if (!client) return "the client is not in the tree";
+										client.click();
+										const sheet = await until(() => row("Prijzen hout 2026"));
+										if (!sheet) return "the client's folder does not list its files";
+										if (!row("Offertes")) return "the owner's folder is not listed in the client's folder";
+										if (!sheet.textContent.includes("Excel")) return "the row does not say what kind of file it is";
+										if (!document.querySelector("header input[aria-label='Search documents']")) return "no search in the title bar";
+										return "ok";`,
 									);
-									await new Promise((r) => setTimeout(r, 400));
+									await shoot("explorer-list");
+
+									// Search across everything, Ctrl A selects every row, Escape lets go.
+									await step(
+										"search and selection",
+										`const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+										const search = document.querySelector("header input[aria-label='Search documents']");
+										setValue.call(search, "zzz-nothing-matches-zzz");
+										search.dispatchEvent(new Event("input", { bubbles: true }));
+										if (!(await until(() => document.querySelector("main").textContent.includes("Nothing matches that")))) return "the search did not narrow the list";
+										setValue.call(search, "bestek");
+										search.dispatchEvent(new Event("input", { bubbles: true }));
+										if (!(await until(() => row("Bestek keuken")))) return "the search does not reach a file in a folder";
+										setValue.call(search, "");
+										search.dispatchEvent(new Event("input", { bubbles: true }));
+										const first = await until(() => row("Prijzen hout 2026"));
+										if (!first) return "clearing the search did not bring the folder back";
+										first.focus();
+										first.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true, bubbles: true }));
+										await wait(200);
+										const held = rows().filter((el) => el.getAttribute("aria-selected") === "true").length;
+										if (held !== rows().length) return "Ctrl A selected " + held + " of " + rows().length;
+										first.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										await wait(200);
+										if (rows().some((el) => el.getAttribute("aria-selected") === "true")) return "Escape did not let the selection go";
+										return "ok";`,
+									);
+
+									// The same folder as tiles, with the pictures they draw.
+									await step(
+										"tiles",
+										`const tiles = document.querySelector("[role=group][aria-label=Layout] button[aria-label=Tiles]");
+										if (!tiles) return "no tile layout";
+										tiles.click();
+										await wait(400);
+										const picture = await until(() => document.querySelector("main [data-explorer-item] img"), 60);
+										if (!picture) return "no tile drew a picture of its file";
+										await wait(900);
+										return "ok";`,
+									);
+									await shoot("explorer-grid");
+									await step(
+										"back to the list",
+										`document.querySelector("[role=group][aria-label=Layout] button[aria-label=List]").click();
+										await wait(400);
+										return rows().length > 0 ? "ok" : "the list came back empty";`,
+									);
+
+									// A preview of each kind: a PDF in the viewer, Word as its page, a workbook as cells, a picture.
+									const preview = async (name: string, find: string, folder: string | null, ready: string) => {
+										await step(
+											`preview of ${name}`,
+											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											const folder = ${JSON.stringify(folder)};
+											if (folder) {
+												const node = [...document.querySelectorAll("[data-tree-node]")].find((el) => el.textContent.includes(folder));
+												if (node) node.click();
+												else {
+													// A folder inside the open one is opened from the list, by a double click.
+													const inside = row(folder);
+													if (!inside) return "no folder called " + folder;
+													inside.dispatchEvent(new MouseEvent("click", { detail: 2, bubbles: true }));
+												}
+												await wait(500);
+											}
+											const target = await until(() => row(${JSON.stringify(find)}));
+											if (!target) return "no row for " + ${JSON.stringify(find)};
+											target.click();
+											const shown = await until(() => document.querySelector("[data-full-preview]"));
+											if (!shown) return "a click did not open the preview";
+											const drawn = await until(() => document.querySelector("[data-full-preview] " + ${JSON.stringify(ready)}), 60);
+											if (!drawn) return "the preview drew no " + ${JSON.stringify(ready)};
+											const details = document.querySelector("[data-full-preview] aside[aria-label=Details]");
+											if (details && ${JSON.stringify(name)} === "pdf") {
+												for (const heading of ["Details", "Versions", "Timeline"]) {
+													if (![...details.querySelectorAll("h3")].some((el) => el.textContent.startsWith(heading))) return "the column has no " + heading;
+												}
+											}
+											await wait(500);
+											return "ok";`,
+										);
+										await shoot(`preview-${name}`);
+									};
+									await preview("sheet", "Prijzen hout 2026", "obet", "table");
+									await preview("image", "Werktekening tafel", null, "img");
+									await preview("word", "Bestek keuken", "Offertes", "iframe");
+									await preview("pdf", "PDF", "Ontwikkelovereenkomst site", "canvas");
+
+									// Next and Previous go through the folder, and Escape closes the preview.
+									await step(
+										"previous and next",
+										`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										await wait(300);
+										[...document.querySelectorAll("[data-tree-node^='client:']")].find((el) => el.textContent.includes("obet"))?.click();
+										const first = await until(() => row("Afspraken levering"));
+										if (!first) return "the client's folder is not listed";
+										first.click();
+										if (!(await until(() => document.querySelector("[data-full-preview]")))) return "the preview did not open";
+										const next = await until(() => document.querySelector("[data-full-preview] button[aria-label='Next file']"));
+										const before = document.querySelector("[data-full-preview] h2")?.textContent;
+										if (!next) return "no next file";
+										if (!next.disabled) {
+											next.click();
+											await wait(500);
+											if (document.querySelector("[data-full-preview] h2")?.textContent === before) return "Next did not change the file";
+										}
+										window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										await wait(400);
+										return document.querySelector("[data-full-preview]") ? "Escape did not close the preview" : "ok";`,
+									);
+
+									// A dropped file that looks like one already kept is shown beside it first.
+									await step(
+										"comparison",
+										`const text = "Levering van de eiken tafel op vrijdag in de voormiddag.\\nDe planken krijgen een week om te wennen in de werkplaats.\\nBel De Smet twee dagen vooraf.\\n";
+										const file = new File([text], "Afspraken levering.txt", { type: "text/plain", lastModified: Date.now() });
+										const transfer = new DataTransfer();
+										transfer.items.add(file);
+										const target = document.querySelector("main section[aria-label]") ?? document.querySelector("main");
+										target.dispatchEvent(new DragEvent("dragover", { dataTransfer: transfer, bubbles: true, cancelable: true }));
+										target.dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true }));
+										const flow = await until(() => document.querySelector("[data-add-files]"), 60);
+										if (!flow) return "the dropped file was not compared with the one already kept";
+										if (!flow.textContent.includes("Afspraken levering")) return "the comparison does not name the document it looks like";
+										if (![...flow.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version"))) return "no way to add it as a version";
+										const panes = await until(() => (flow.querySelectorAll("section pre").length === 2 ? true : null), 60);
+										if (!panes) return "the two files are not shown side by side";
+										return "ok";`,
+									);
+									await shoot("add-compare");
+									await step(
+										"leaving the comparison",
+										`const cancel = [...document.querySelectorAll("[data-add-files] button")].find((el) => el.textContent.trim() === "Cancel");
+										if (!cancel) return "no way to cancel";
+										cancel.click();
+										await wait(500);
+										return document.querySelector("[data-add-files]") ? "the comparison stayed open" : "ok";`,
+									);
+
+									// Templates is a folder of its own.
+									await step(
+										"templates folder",
+										`document.querySelector("[data-tree-node=templates]").click();
+										const example = await until(() => row("Voorbeeld"));
+										if (!example) return "the Templates folder does not list the example";
+										if (!document.querySelector("main button[aria-label='New document template']")) return "no New template in the Templates folder";
+										if (![...document.querySelectorAll("main button")].some((el) => el.textContent.includes("Import Word file"))) return "no Import Word file";
+										return "ok";`,
+									);
+									await shoot("explorer-templates");
 								}
 								if (screen === "Document templates") {
 									// The example first. It is the one template every first install has,
@@ -2015,7 +2227,7 @@ if (!app.requestSingleInstanceLock()) {
 									const inspected = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
+											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Voorbeeld"));
 											if (!row) return "no row for the example";
 											row.click();
 											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
@@ -2057,7 +2269,7 @@ if (!app.requestSingleInstanceLock()) {
 									const returned = await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
 											// The canvas editor has no back button of its own: Escape leaves it.
 											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(400);
@@ -2071,7 +2283,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!back()) return "no back action from the preview";
 											back().click();
 											await wait(500);
-											return document.querySelector("main ul li button") ? "ok" : "did not return to the list";
+											return document.querySelector("main [data-explorer-item]") ? "ok" : "did not return to the list";
 										})()`,
 									) as string;
 									if (returned !== "ok") throw new Error(`Smoke: leaving the example document template ${returned}`);
@@ -2086,7 +2298,7 @@ if (!app.requestSingleInstanceLock()) {
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wanted = ${JSON.stringify(screen === "Mail templates" ? "Herinnering betaling" : "Handgeschreven overeenkomst")};
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes(wanted));
+											const row = [...document.querySelectorAll(${JSON.stringify(screen === "Mail templates" ? "main ul li button" : "main [data-explorer-item]")})].find((el) => el.textContent.includes(wanted));
 											if (!row) return "no template row";
 											row.click();
 											await new Promise((r) => setTimeout(r, 900));
@@ -2167,7 +2379,7 @@ if (!app.requestSingleInstanceLock()) {
 									const leftEditor = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
 											if (!back) return "no back action";
 											back.click();
 											await wait(400);
@@ -2245,7 +2457,7 @@ if (!app.requestSingleInstanceLock()) {
 									const created = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
 											if (!back) return "no back action from the preview";
 											back.click();
 											await wait(500);
@@ -2293,12 +2505,11 @@ if (!app.requestSingleInstanceLock()) {
 									const searched = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											if (!back) return "no back action from the preview";
-											back.click();
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
+											if (back) back.click();
 											await wait(500);
 											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											const search = document.querySelector('input[aria-label="Search document templates"]');
+											const search = document.querySelector('input[aria-label="Search documents"]');
 											if (!search) return "no search field";
 											setValue.call(search, "zzz-nothing-matches-zzz");
 											search.dispatchEvent(new Event("input", { bubbles: true }));
@@ -2308,14 +2519,13 @@ if (!app.requestSingleInstanceLock()) {
 											setValue.call(search, "");
 											search.dispatchEvent(new Event("input", { bubbles: true }));
 											await wait(250);
-											const selectAll = document.querySelector('input[aria-label="Select all"]');
-											if (!selectAll) return "no select-all checkbox";
-											selectAll.click();
+											const first = [...main.querySelectorAll("[data-explorer-item]")][0];
+											if (!first) return "the list came back empty";
+											first.focus();
+											first.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true, bubbles: true }));
 											await wait(200);
-											if (!main.textContent.includes("selected")) return "select-all did not select the rows";
-											const clear = document.querySelector('input[aria-label="Clear selection"]');
-											if (!clear) return "select-all left no way to clear the selection";
-											clear.click();
+											if (!main.textContent.includes("selected")) return "Ctrl A did not select the rows";
+											first.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(200);
 											return "ok";
 										})()`,
@@ -2329,7 +2539,7 @@ if (!app.requestSingleInstanceLock()) {
 									const paperPreview = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Offerte op papier"));
+											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Offerte op papier"));
 											if (!row) return "no row for the template on paper";
 											row.click();
 											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
@@ -2409,10 +2619,10 @@ if (!app.requestSingleInstanceLock()) {
 												leave();
 												await wait(400);
 											}
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
 											if (back) back.click();
 											await wait(500);
-											return document.querySelector("main ul li button") ? "ok" : "did not return to the list";
+											return document.querySelector("main [data-explorer-item]") ? "ok" : "did not return to the list";
 										})()`,
 									)) as string;
 									if (paperLeft !== "ok") throw new Error(`Smoke: leaving the document template on paper ${paperLeft}`);
@@ -2423,7 +2633,7 @@ if (!app.requestSingleInstanceLock()) {
 									const flowed = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Lange tekst op papier"));
+											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Lange tekst op papier"));
 											if (!row) return "no row for the long template";
 											row.click();
 											await wait(700);
@@ -2465,7 +2675,7 @@ if (!app.requestSingleInstanceLock()) {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(500);
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
 											if (back) back.click();
 											await wait(500);
 										})()`,
@@ -2478,13 +2688,13 @@ if (!app.requestSingleInstanceLock()) {
 									const placed = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const find = () => [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Offerte met briefhoofd"));
+											const find = () => [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Offerte met briefhoofd"));
 											for (let tries = 0; tries < 3 && !find(); tries++) {
 												window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 												await wait(500);
 												[...(document.querySelector("[role=dialog]")?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
 												await wait(300);
-												[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back")?.click();
+												[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"))?.click();
 												await wait(500);
 											}
 											const row = find();
@@ -2516,7 +2726,7 @@ if (!app.requestSingleInstanceLock()) {
 									const listed = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
 											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(500);
 											const dialog = document.querySelector("[role=dialog]");
@@ -2526,9 +2736,7 @@ if (!app.requestSingleInstanceLock()) {
 											back()?.click();
 											await wait(500);
 											// Components is in the title bar's more menu, where the design leaves room for it.
-											document.querySelector("button[aria-label='More template actions']")?.click();
-											await wait(300);
-											const open = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Components");
+											const open = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Components");
 											if (!open) return "no components action on the templates list";
 											open.click();
 											await wait(700);
@@ -2568,7 +2776,7 @@ if (!app.requestSingleInstanceLock()) {
 									await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
+											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
 											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(500);
 											const dialog = document.querySelector("[role=dialog]");

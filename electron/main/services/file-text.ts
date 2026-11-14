@@ -58,6 +58,26 @@ export function decodeText(bytes: Uint8Array): string {
 	}
 }
 
+/** How much of a CSV a preview reads. 500 rows of 50 columns fit in far less. */
+const MAX_CSV_BYTES = 8 * 1024 * 1024;
+
+/**
+ * The first part of a text file, so a preview of a 60 MB log does not decode
+ * and parse all of it on the main process. Cut after the last line break in
+ * that part, or else before a character UTF-8 spreads over several bytes, so
+ * the part still decodes as what it is.
+ */
+export function leadingBytes(bytes: Uint8Array, maxBytes: number): { bytes: Uint8Array; cut: boolean } {
+	if (bytes.length <= maxBytes) return { bytes, cut: false };
+	// A line break near the end of the part, not one far back before a very long line.
+	let end = bytes.lastIndexOf(0x0a, maxBytes - 1) + 1;
+	if (end < maxBytes * 0.75) {
+		end = maxBytes;
+		while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end -= 1;
+	}
+	return { bytes: bytes.subarray(0, end), cut: true };
+}
+
 /** A file that calls itself text and is not: a NUL byte in the first part gives it away. */
 function looksBinary(bytes: Uint8Array): boolean {
 	const sample = bytes.subarray(0, Math.min(bytes.length, 8000));
@@ -95,13 +115,14 @@ export interface SheetsResult {
 export async function readSheets(bytes: Uint8Array, fileName: string, limits = PREVIEW_LIMITS): Promise<SheetsResult> {
 	const family = familyOf(fileName);
 	if (family === "csv") {
-		const parsed = parseCsv(decodeText(bytes), { maxRows: limits.maxRows, maxColumns: limits.maxColumns });
+		const start = leadingBytes(bytes, MAX_CSV_BYTES);
+		const parsed = parseCsv(decodeText(start.bytes), { maxRows: limits.maxRows, maxColumns: limits.maxColumns });
 		return {
 			sheets: [
 				{
 					name: fileName.replace(/\.csv$/i, "") || "Sheet",
 					rows: parsed.rows.map((row) => trimRow(row.map((cell) => formatCell(null, cell)))),
-					truncatedRows: parsed.truncatedRows,
+					truncatedRows: parsed.truncatedRows || start.cut,
 					truncatedColumns: parsed.truncatedColumns,
 					totalRows: parsed.totalRows,
 				},
@@ -188,8 +209,13 @@ export async function readableText(
 				return cut(lines.join("\n"), limit);
 			}
 			case "text":
-			case "svg":
-				return looksBinary(bytes) ? { text: null, truncated: false } : cut(decodeText(bytes), limit);
+			case "svg": {
+				if (looksBinary(bytes)) return { text: null, truncated: false };
+				// No character takes more than four bytes, so this is always enough.
+				const start = leadingBytes(bytes, limit * 4);
+				const read = cut(decodeText(start.bytes), limit);
+				return start.cut && read.text !== null ? { text: read.text, truncated: true } : read;
+			}
 			default:
 				return { text: null, truncated: false };
 		}

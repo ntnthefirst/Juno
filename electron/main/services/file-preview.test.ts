@@ -32,7 +32,7 @@ import {
 	sanitiseDocumentHtml,
 	servePreview,
 } from "./file-preview";
-import { readableText, readSheets } from "./file-text";
+import { leadingBytes, readableText, readSheets } from "./file-text";
 import { extractText } from "./pdf-text";
 
 // pdf.js and ExcelJS are loaded the first time they are used, and each load
@@ -211,6 +211,20 @@ describe("a preview", () => {
 		const long = await preview(bytes("log.txt", "a".repeat(250_000)), freshDb());
 		expect(long).toMatchObject({ kind: "text", truncated: true });
 		if (long.kind === "text") expect(long.text.length).toBe(200_000);
+	});
+
+	it("reads only the start of a long CSV or text file, and says it was cut", async () => {
+		const csv = "a,b\n".repeat(3_000_000);
+		const table = await readSheets(new Uint8Array(Buffer.from(csv)), "lang.csv");
+		expect(table.sheets[0]!).toMatchObject({ truncatedRows: true });
+		expect(table.sheets[0]!.totalRows).toBeLessThan(3_000_000);
+		expect(table.sheets[0]!.rows).toHaveLength(500);
+
+		// Three bytes a character and no line break: the cut must not split one.
+		const euros = await readableText(new Uint8Array(Buffer.from("€".repeat(400_000))), "prijzen.txt");
+		expect(euros.truncated).toBe(true);
+		expect(euros.text).toBe("€".repeat(200_000));
+		expect(leadingBytes(new Uint8Array(Buffer.from("ab€")), 3)).toEqual({ bytes: new Uint8Array(Buffer.from("ab")), cut: true });
 	});
 
 	it("shows the picture an iWork file carries", async () => {

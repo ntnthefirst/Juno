@@ -50,6 +50,10 @@ export function NotesScreen() {
 	const [focusTitle, setFocusTitle] = useState(false);
 	// A delete of several asks first, and is undone as one.
 	const [confirmingDelete, setConfirmingDelete] = useState<string[] | null>(null);
+	// Writes what the open note has typed and not yet saved. A delete waits for
+	// it, so the note goes, and comes back on Undo, with its last keystrokes.
+	const [saveOpenNote, setSaveOpenNote] = useState<(() => Promise<void>) | null>(null);
+	const registerSave = useCallback((save: (() => Promise<void>) | null) => setSaveOpenNote(() => save), []);
 
 
 	const reload = notes.reload;
@@ -110,6 +114,7 @@ export function NotesScreen() {
 
 	async function remove(note: Note) {
 		try {
+			if (openId === note.id) await saveOpenNote?.();
 			await window.juno.notes.remove(note.id);
 			if (openId === note.id) setSelectedId(null);
 			setNotice({
@@ -174,6 +179,7 @@ export function NotesScreen() {
 	async function deleteSelected(ids: string[]) {
 		setConfirmingDelete(null);
 		try {
+			if (openId !== null && ids.includes(openId)) await saveOpenNote?.();
 			const removed = await window.juno.notes.removeMany(ids);
 			selection.clear();
 			if (openId !== null && ids.includes(openId)) setSelectedId(null);
@@ -337,6 +343,7 @@ export function NotesScreen() {
 						onFocused={() => setFocusTitle(false)}
 						onSaved={reload}
 						onError={(message) => setNotice({ message })}
+						onSaveReady={registerSave}
 					/>
 				) : null}
 			</section>
@@ -389,6 +396,8 @@ type NoteEditorProps = {
 	onFocused: () => void;
 	onSaved: () => void;
 	onError: (message: string) => void;
+	/** Hands over this editor's save while it is open, so the screen can write before a delete. */
+	onSaveReady: (save: (() => Promise<void>) | null) => void;
 };
 
 /**
@@ -396,7 +405,7 @@ type NoteEditorProps = {
  * moment after typing stops, and again when it goes away, so switching to
  * another note or leaving the screen never loses the last keystrokes.
  */
-function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEditorProps) {
+function NoteEditor({ note, focusTitle, onFocused, onSaved, onError, onSaveReady }: NoteEditorProps) {
 	const [title, setTitle] = useState(note.title);
 	const [blocks, setBlocks] = useState<Block[]>(() => {
 		const parsed = parseMarkdown(note.body);
@@ -412,13 +421,13 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 		saved.current = { onSaved, onError };
 	});
 
-	const flush = useCallback(() => {
+	const flush = useCallback((): Promise<void> => {
 		if (timer.current !== null) window.clearTimeout(timer.current);
 		timer.current = null;
 		const pending = draft.current;
-		if (!pending) return;
+		if (!pending) return Promise.resolve();
 		draft.current = null;
-		window.juno.notes
+		return window.juno.notes
 			.update(note.id, pending)
 			.then(() => saved.current.onSaved())
 			.catch((cause: unknown) => saved.current.onError(messageOf(cause)));
@@ -428,12 +437,17 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 		(next: { title: string; body: string }) => {
 			draft.current = next;
 			if (timer.current !== null) window.clearTimeout(timer.current);
-			timer.current = window.setTimeout(flush, SAVE_AFTER_MS);
+			timer.current = window.setTimeout(() => void flush(), SAVE_AFTER_MS);
 		},
 		[flush],
 	);
 
-	useEffect(() => flush, [flush]);
+	useEffect(() => () => void flush(), [flush]);
+
+	useEffect(() => {
+		onSaveReady(flush);
+		return () => onSaveReady(null);
+	}, [onSaveReady, flush]);
 
 	useEffect(() => {
 		if (!focusTitle) return;

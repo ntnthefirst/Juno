@@ -27,6 +27,8 @@ export const MENU_KINDS = [
 	"folder",
 	/** A document template in the Templates folder. */
 	"document-template",
+	/** An attachment of a received mail, in the reader. */
+	"attachment",
 ] as const;
 export type MenuKind = (typeof MENU_KINDS)[number];
 
@@ -47,8 +49,9 @@ export const BLOCK_KINDS = ["intro", "outro"] as const;
  * - `unread`: the mail list, with a folder open that has unread mail in it.
  * - `reader`: a conversation's own "..." button, which acts on the message in view.
  * - `subscription`: an event-kind chip from a calendar subscription, which is read only.
+ * - `untrusted`: an attachment whose sender is not trusted, which is previewed and kept but not opened in its app.
  */
-export const MENU_CONTEXTS = ["deadline", "trash", "detail", "unread", "reader", "subscription"] as const;
+export const MENU_CONTEXTS = ["deadline", "trash", "detail", "unread", "reader", "subscription", "untrusted"] as const;
 export type MenuContext = (typeof MENU_CONTEXTS)[number];
 
 export type MenuRequest = {
@@ -124,6 +127,13 @@ export const MENU_ACTIONS = [
 	"sign",
 	"new-folder",
 	"add-files",
+	"show-in-folder",
+	"save-as",
+	"save-to-place",
+	"save-all-to-place",
+	"save-to",
+	"add-to-project-files",
+	"open-document",
 ] as const;
 export type MenuAction = (typeof MENU_ACTIONS)[number];
 

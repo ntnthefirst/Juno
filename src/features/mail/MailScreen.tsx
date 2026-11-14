@@ -1102,7 +1102,7 @@ export function MailScreen() {
 						messageId={opened?.kind === "thread" ? opened.messageId : null}
 						onBack={() => setReaderOpen(false)}
 						onChanged={() => setAccountsVersion((v) => v + 1)}
-						onNotice={setNotice}
+						onNotice={say}
 						onReply={(messageId, mode) => void reply(messageId, mode)}
 						onEditDraft={(id) => void editOutgoing(id)}
 						onReplyOutgoing={(id, mode) => void replyOutgoing(id, mode)}

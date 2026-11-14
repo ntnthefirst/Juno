@@ -25,7 +25,7 @@ type ThreadViewProps = {
 	onBack: () => void;
 	/** The thread's link changed, so the list needs a refresh. */
 	onChanged: () => void;
-	onNotice: (message: string) => void;
+	onNotice: (message: string, action?: { label: string; run: () => void }) => void;
 	onReply: (messageId: string, mode: MailReplyMode) => void;
 	/** Opens a draft, a message waiting for approval or a failed send in the composer. */
 	onEditDraft: (outboxId: string) => void;

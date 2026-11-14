@@ -16,6 +16,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { BlankArea, MenuEntry, MenuRequest } from "../../shared/menu";
 import { BLANK_AREAS, BLOCK_KINDS } from "../../shared/menu";
+import { isOpenableAttachment } from "../../shared/attachment-kind";
 import { extensionOf } from "../../shared/mime";
 import { getDb, type Db } from "../db";
 import { referenceItems } from "../db/schema";
@@ -26,6 +27,7 @@ import * as clients from "./clients";
 import * as folders from "./document-folders";
 import * as documentTemplates from "./document-templates";
 import * as documents from "./documents";
+import * as mailDocuments from "./document-mail";
 import * as outbox from "./mail-outbox";
 import * as mailTemplates from "./mail-templates";
 import * as notes from "./notes";
@@ -133,6 +135,43 @@ async function folderEntries(key: string, db: Db): Promise<MenuEntry[]> {
 		{ id: "move-to", label: "Move to", icon: "move-right" },
 		REMOVE,
 	];
+}
+
+/**
+ * An attachment in the reader. Docs a company sends go to the job they are
+ * about in one click: "Save to" the conversation's project, or its client,
+ * with the full place picker one step away. One that is already a document
+ * opens that document instead of being offered again. Opening in its own app
+ * is left out for a sender who is not trusted, and for a type the main
+ * process will not hand to the operating system.
+ */
+async function attachmentEntries(id: string, context: MenuRequest["context"], db: Db): Promise<MenuEntry[]> {
+	const threadId = mailDocuments.threadOfAttachment(id, db);
+	if (!threadId) return [];
+	const { place, attachments } = await mailDocuments.forThread(threadId, db);
+	const self = attachments.find((entry) => entry.attachmentId === id);
+	if (!self) return [];
+	const canOpen = context !== "untrusted" && isOpenableAttachment(self.fileName);
+	const entries: MenuEntry[] = [
+		{ id: "preview", label: "Open preview", icon: "visible" },
+		...(canOpen ? [{ id: "open", label: "Open", icon: "external" } as const] : []),
+		{ id: "show-in-folder", label: "Show in folder", icon: "folder-open" },
+		{ id: "save-as", label: "Save as", icon: "export" },
+	];
+	if (self.document) {
+		entries.push({ id: "open-document", label: "Open in documents", icon: "documents", separatorBefore: true });
+	} else {
+		if (place?.linked) entries.push({ id: "save-to-place", label: `Save to ${place.name}`, icon: "documents", separatorBefore: true });
+		entries.push({ id: "save-to", label: "Save to...", icon: "import", separatorBefore: !place?.linked });
+	}
+	const unsaved = attachments.filter((entry) => entry.messageId === self.messageId && !entry.document);
+	if (place?.linked && unsaved.length > 1) {
+		entries.push({ id: "save-all-to-place", label: `Save all to ${place.name}`, icon: "documents" });
+	}
+	if (place?.linked && place.projectId) {
+		entries.push({ id: "add-to-project-files", label: `Add to ${place.name} files`, icon: "projects", separatorBefore: true });
+	}
+	return entries;
 }
 
 /** The items for one menu, in order. Empty when the record is gone or the kind has nothing to say. */
@@ -249,6 +288,9 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 
 		case "folder":
 			return folderEntries(id, db);
+
+		case "attachment":
+			return attachmentEntries(id, context, db);
 
 		case "document-template": {
 			if (!(await documentTemplates.get(id, db))) return [];

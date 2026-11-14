@@ -15,14 +15,20 @@ import { Button } from "../../components/Button";
 import { FindBar } from "../../components/FindBar";
 import { Notice } from "../../components/Notice";
 import { COMBOS, matchesCombo } from "../../lib/shortcuts";
-import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
+import { ContextMenu, type MenuItem } from "../../components/Menu";
+import { ActionMenu } from "../../components/ActionMenu";
+import { Icon } from "../../components/Icon";
+import { IconAction } from "../../components/IconAction";
+import { contextMenuFor, type MenuHandlers, type MenuTarget } from "../../lib/native-menu";
+import { requestOpen } from "../../lib/open-entity";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
-import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
+import { announceDocumentsChanged, describeOutcome, onDocumentsChanged, type ImportItem } from "../../lib/pdf-drop";
 import { useClickGate } from "../../lib/click-timing";
 import { fileTypeLabel } from "../../lib/file-type";
 import { FileQuickLook } from "../../components/FileQuickLook";
-import type { DocumentPlace } from "@shared/types";
+import type { AttachmentDocument, DocumentPlace, SaveThreadAttachmentsResult, ThreadAttachments } from "@shared/types";
+import { AttachmentPlacePage } from "./AttachmentPlacePage";
 import { AddFilesFlow } from "../documents/AddFilesFlow";
 import { AttachmentSaveColumn } from "./AttachmentSaveColumn";
 import { AttachmentIcon } from "../../components/AttachmentIcon";
@@ -36,7 +42,8 @@ type MessageViewProps = {
 	/** Accordion: the thread shows one open message at a time. */
 	open: boolean;
 	onToggle: () => void;
-	onNotice: (message: string) => void;
+	/** A toast, sometimes with the one thing worth doing about it (Show). */
+	onNotice: (message: string, action?: { label: string; run: () => void }) => void;
 	onReply: (messageId: string, mode: MailReplyMode) => void;
 	clientLinked: boolean;
 	/** The client the conversation is linked to: an attachment saved to documents is kept under it. */
@@ -108,6 +115,12 @@ export function MessageView({
 	const senderBlocked = senderAddress !== null && readTrust(BLOCKED_SENDERS_KEY).includes(senderAddress);
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [importItems, setImportItems] = useState<{ items: ImportItem[]; place: DocumentPlace } | null>(null);
+	// Which attachments are already documents, and where a one-click save puts the rest. Read in the main process.
+	const [kept, setKept] = useState<ThreadAttachments | null>(null);
+	const [keptVersion, setKeptVersion] = useState(0);
+	// Attachments waiting for the person to say where they go.
+	const [placeAsk, setPlaceAsk] = useState<string[] | null>(null);
+	const [saving, setSaving] = useState(false);
 	// The attachment shown in the full preview, by its place among the visible ones.
 	const [previewAt, setPreviewAt] = useState<number | null>(null);
 	const [body, setBody] = useState<MailMessageBody | null>(null);
@@ -167,6 +180,30 @@ export function MessageView({
 	useEffect(() => {
 		noticeRef.current = onNotice;
 	});
+
+	// Read again after a save here, after one anywhere else (a drop, another message), and when the filing changes.
+	const hasAttachments = message.attachments.some((attachment) => !attachment.isInline);
+	const filedUnder = `${clientId ?? ""}:${project?.id ?? ""}`;
+	useEffect(() => {
+		if (!hasAttachments) return;
+		let cancelled = false;
+		const read = () => {
+			window.juno.documents
+				.threadAttachments(message.threadId)
+				.then((value) => {
+					if (!cancelled) setKept(value);
+				})
+				.catch(() => {
+					// Without it every attachment still saves through Save to; only the one-click offer is missing.
+				});
+		};
+		read();
+		const stop = onDocumentsChanged(read);
+		return () => {
+			cancelled = true;
+			stop();
+		};
+	}, [message.threadId, hasAttachments, keptVersion, filedUnder]);
 
 	function tellFrame(action: "search" | "next" | "previous" | "clear", query = "") {
 		frame.current?.contentWindow?.postMessage({ type: "juno.mail.find", action, query }, "*");
@@ -385,6 +422,86 @@ export function MessageView({
 		}
 	}
 
+	function openDocument(document: AttachmentDocument) {
+		requestOpen({ kind: "document", id: document.documentId, name: document.title });
+	}
+
+	/** Says what became of each file, with Show for what was saved, and opens the comparison for a likely version. */
+	function report(result: SaveThreadAttachmentsResult, linked: boolean) {
+		const saved = result.outcomes.flatMap((outcome) => (outcome.status === "saved" ? [outcome] : []));
+		const skipped = result.outcomes.flatMap((outcome) => (outcome.status === "skipped" ? [outcome] : []));
+		const review = result.outcomes.flatMap((outcome) => (outcome.status === "review" ? [outcome] : []));
+		const failed = result.outcomes.flatMap((outcome) => (outcome.status === "failed" ? [outcome] : []));
+		const first = saved[0]?.document;
+		const placeName = first?.projectName ?? first?.clientName ?? null;
+		const parts: string[] = [];
+		if (linked && result.thread.projectName) parts.push(`Filed this conversation under ${result.thread.projectName}.`);
+		else if (linked && result.thread.clientName) parts.push(`Linked this conversation to ${result.thread.clientName}.`);
+		if (saved.length === 1 && first) parts.push(placeName ? `Saved ${first.title} to ${placeName}.` : `Saved ${first.title} to documents.`);
+		if (saved.length > 1) parts.push(placeName ? `Saved ${saved.length} files to ${placeName}.` : `Saved ${saved.length} files to documents.`);
+		if (skipped.length === 1 && skipped[0]) parts.push(`${skipped[0].fileName} is already in documents as ${skipped[0].document.title}.`);
+		if (skipped.length > 1) parts.push(`${skipped.length} files were already in documents.`);
+		for (const entry of failed) parts.push(entry.message);
+		if (saved.length > 0) announceDocumentsChanged();
+		if (linked) onChanged();
+		const folderKey = result.place.folderId
+			? `folder:${result.place.folderId}`
+			: result.place.projectId
+				? `project:${result.place.projectId}`
+				: result.place.clientId
+					? `client:${result.place.clientId}`
+					: "unfiled";
+		const show =
+			saved.length === 1 && first
+				? { label: "Show", run: () => requestOpen({ kind: "document", id: first.id, name: first.title }) }
+				: saved.length > 1
+					? { label: "Show", run: () => requestOpen({ kind: "document-folder", key: folderKey }) }
+					: undefined;
+		if (parts.length > 0) onNotice(parts.join(" "), show);
+		// A file that looks like a document already kept is shown beside it, and the person picks.
+		if (review.length > 0) {
+			setImportItems({
+				items: review.map((entry) => ({ label: entry.fileName, source: { kind: "attachment", attachmentId: entry.attachmentId } })),
+				place: result.place,
+			});
+		}
+	}
+
+	/**
+	 * Saves attachments through the main process, which checks each the way a
+	 * drop is checked. With no place the conversation's own is used, and a
+	 * conversation filed under nothing is asked where first.
+	 */
+	async function saveAttachments(ids: string[], target?: { place: DocumentPlace; linkThread: boolean }) {
+		if (ids.length === 0 || saving) return;
+		if (!target && !kept?.place?.linked) {
+			setPlaceAsk(ids);
+			return;
+		}
+		setSaving(true);
+		try {
+			const result = await window.juno.documents.saveThreadAttachments({
+				threadId: message.threadId,
+				attachmentIds: ids,
+				...(target
+					? {
+							clientId: target.place.clientId,
+							projectId: target.place.projectId,
+							folderId: target.place.folderId,
+							linkThread: target.linkThread,
+						}
+					: {}),
+			});
+			setPlaceAsk(null);
+			report(result, target?.linkThread === true);
+		} catch (cause: unknown) {
+			onNotice(messageOf(cause));
+		} finally {
+			setSaving(false);
+			setKeptVersion((version) => version + 1);
+		}
+	}
+
 	async function markUnread() {
 		try {
 			await window.juno.mail.file.setSeen([message.id], false);
@@ -467,12 +584,32 @@ export function MessageView({
 	const from = message.from ? displayName(message.from) : "(unknown sender)";
 	const visibleAttachments = message.attachments.filter((a) => !a.isInline);
 	const canOpenFile = (attachment: MailAttachment) => canOpenHere && isOpenableAttachment(attachment.filename);
-	const saveToDocuments = (attachment: MailAttachment, place: DocumentPlace) =>
-		setImportItems({
-			items: [{ label: attachment.filename, source: { kind: "attachment", attachmentId: attachment.id } }],
-			place,
-		});
-	const threadPlace: DocumentPlace = { clientId, projectId: project?.id ?? null, folderId: null };
+	const documentOf = (attachmentId: string): AttachmentDocument | null =>
+		kept?.attachments.find((entry) => entry.attachmentId === attachmentId)?.document ?? null;
+	const place = kept?.place ?? null;
+	const quickPlace = place?.linked ? place : null;
+	const filing = { clientId, projectId: project?.id ?? null };
+	// Only what is not a document yet, so Save all never offers what is already kept.
+	const unsaved = kept ? visibleAttachments.filter((attachment) => !documentOf(attachment.id)) : [];
+	const attachmentTarget = (id: string): MenuTarget => ({ kind: "attachment", id, ...(canOpenHere ? {} : { context: "untrusted" }) });
+	const attachmentHandlers = (attachment: MailAttachment): MenuHandlers => ({
+		preview: () => {
+			const at = visibleAttachments.findIndex((entry) => entry.id === attachment.id);
+			if (at >= 0) setPreviewAt(at);
+		},
+		open: () => void openFile(attachment.id),
+		"show-in-folder": () => void reveal(attachment.id),
+		"save-as": () => void save(attachment.id),
+		"save-to-place": () => void saveAttachments([attachment.id]),
+		"save-to": () => setPlaceAsk([attachment.id]),
+		"save-all-to-place": () => void saveAttachments(unsaved.map((entry) => entry.id)),
+		"add-to-project-files": () => void addToProject(attachment.id, attachment.filename),
+		"open-document": () => {
+			const keptDocument = documentOf(attachment.id);
+			if (keptDocument) openDocument(keptDocument);
+		},
+		failed: (text) => onNotice(text),
+	});
 	const frameSrc = `${MAIL_FRAME_ORIGIN}/message/${message.id}${remoteImages ? "?images=1" : ""}`;
 	const frameHeight = measuredFrame?.messageId === message.id ? measuredFrame.height : null;
 	const ariaLabel = `Actions for message from ${from}`;
@@ -660,55 +797,35 @@ export function MessageView({
 
 					{visibleAttachments.length > 0 ? (
 						<div className="shrink-0 border-t border-[var(--line)] py-3">
-							<h3 className="text-overline uppercase text-[var(--ink-muted)]">
-								Attachments
-							</h3>
+							<div className="flex min-h-[32px] items-center gap-3">
+								<h3 className="flex-1 text-overline uppercase text-[var(--ink-muted)]">
+									Attachments
+								</h3>
+								{unsaved.length > 1 ? (
+									<Button
+										size="dense"
+										disabled={saving}
+										onClick={() => void saveAttachments(unsaved.map((attachment) => attachment.id))}
+									>
+										<span className="whitespace-nowrap">
+											{quickPlace ? `Save all to ${quickPlace.name}` : "Save all to documents"}
+										</span>
+									</Button>
+								) : null}
+							</div>
 							<ul
 								className="mt-2 flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0"
 								onWheel={scrollSideways}
 							>
 								{visibleAttachments.map((attachment) => {
-									const canOpen = canOpenHere && isOpenableAttachment(attachment.filename);
-									const items: MenuItem[] = [
-										{
-											id: "open",
-											label: "Open",
-											icon: "external",
-											disabled: !canOpen,
-											onSelect: () => void openFile(attachment.id),
-										},
-										{
-											id: "reveal",
-											label: "Show in folder",
-											icon: "folder-open",
-											onSelect: () => void reveal(attachment.id),
-										},
-										{
-											id: "save",
-											label: "Save as",
-											icon: "export",
-											onSelect: () => void save(attachment.id),
-										},
-										{
-											id: "import",
-											label: "Save to documents",
-											icon: "documents",
-											onSelect: () => saveToDocuments(attachment, threadPlace),
-										},
-										...(project
-											? [
-													{
-														id: "project",
-														label: `Add to ${project.name} files`,
-														icon: "projects" as const,
-														onSelect: () => void addToProject(attachment.id, attachment.filename),
-													},
-												]
-											: []),
-									];
+									const keptDocument = documentOf(attachment.id);
+									const target = attachmentTarget(attachment.id);
+									const handlers = attachmentHandlers(attachment);
 									return (
 										<li
 											key={attachment.id}
+											data-attachment-chip
+											onContextMenu={contextMenuFor(target, handlers)}
 											className="flex shrink-0 items-center gap-1 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface)] pl-3 pr-1"
 											style={{ height: 40 }}
 										>
@@ -728,10 +845,30 @@ export function MessageView({
 													</span>
 												</span>
 											</button>
-											<MenuButton
-												icon="chevron-down"
+											{keptDocument ? (
+												<button
+													type="button"
+													onClick={() => openDocument(keptDocument)}
+													title={`Open ${keptDocument.title} in documents`}
+													className="ml-1 inline-flex h-[32px] shrink-0 items-center gap-1 rounded-[var(--radius-md)] px-2 text-micro whitespace-nowrap text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+												>
+													<Icon name="check" size={12} className="text-[var(--ok)]" />
+													In documents
+												</button>
+											) : kept ? (
+												<IconAction
+													icon="folder-add"
+													label={quickPlace ? `Save to ${quickPlace.name}` : "Save to documents"}
+													disabled={saving}
+													onClick={() => void saveAttachments([attachment.id])}
+												/>
+											) : null}
+											<ActionMenu
+												target={target}
+												handlers={handlers}
 												ariaLabel={`Actions for ${attachment.filename}`}
-												items={items}
+												icon="chevron-down"
+												size="dense"
 											/>
 										</li>
 									);
@@ -907,12 +1044,13 @@ export function MessageView({
 						const attachment = visibleAttachments.find((entry) => entry.id === file.key);
 						return attachment ? (
 							<AttachmentSaveColumn
-								key={attachment.id}
-								clientId={clientId}
-								projectId={project?.id ?? null}
-								onSave={(owner) =>
-									saveToDocuments(attachment, { clientId: owner.clientId || null, projectId: owner.projectId || null, folderId: null })
-								}
+								key={`${attachment.id}:${kept ? "read" : "reading"}`}
+								document={documentOf(attachment.id)}
+								onOpenDocument={openDocument}
+								place={place}
+								filing={filing}
+								busy={saving}
+								onSave={(target, linkThread) => void saveAttachments([attachment.id], { place: target, linkThread })}
 								{...(project
 									? { onAddToProject: () => void addToProject(attachment.id, attachment.filename), projectName: project.name }
 									: {})}
@@ -927,11 +1065,22 @@ export function MessageView({
 					place={importItems.place}
 					onDone={(outcome) => {
 						setImportItems(null);
+						setKeptVersion((version) => version + 1);
 						const text = [describeOutcome(outcome), ...outcome.failures.map((entry) => entry.message)]
 							.filter(Boolean)
 							.join(" ");
 						if (text) onNotice(text);
 					}}
+				/>
+			) : null}
+			{placeAsk ? (
+				<AttachmentPlacePage
+					fileNames={placeAsk.map((id) => visibleAttachments.find((entry) => entry.id === id)?.filename ?? "Attachment")}
+					place={place}
+					filing={filing}
+					busy={saving}
+					onSave={(target, linkThread) => void saveAttachments(placeAsk, { place: target, linkThread })}
+					onCancel={() => setPlaceAsk(null)}
 				/>
 			) : null}
 		</article>

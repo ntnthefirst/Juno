@@ -5200,6 +5200,65 @@ if (!app.requestSingleInstanceLock()) {
 									}
 									await mailFrame.executeJavaScript(`document.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))`);
 									await new Promise((r) => setTimeout(r, 500));
+
+									// A conversation filed under a project saves its attachments there in
+									// one click (the chip's own button and the right-click menu), and an
+									// attachment already kept says so and opens its document instead.
+									const smokeProjectsForMail = await import("./main/services/projects");
+									const smokeMailDocuments = await import("./main/services/document-mail");
+									const { entriesFor: smokeMenuEntries } = await import("./main/services/menu-registry");
+									const offerThread = (await listSmokeThreads({ limit: 50 })).find((thread) => thread.subject.includes("Offerte website"));
+									const offerProject = (await smokeProjectsForMail.list({})).find((project) => project.name.includes("Juno"));
+									if (!offerThread || !offerProject) throw new Error("Smoke: no conversation with an attachment, or no project to file it under");
+									await (await import("./main/services/mail-threads")).linkProject(offerThread.id, offerProject.id);
+									const offerFiles = await smokeMailDocuments.forThread(offerThread.id);
+									const offerFile = offerFiles.attachments[0];
+									if (!offerFile || offerFile.document) throw new Error("Smoke: the conversation's attachment is missing, or already a document");
+									const offerMenu = await smokeMenuEntries({ kind: "attachment", id: offerFile.attachmentId, context: null, x: 0, y: 0 });
+									if (!offerMenu.some((entry) => entry.id === "save-to-place" && entry.label === `Save to ${offerProject.name}`)) {
+										throw new Error(`Smoke: the attachment menu offered ${offerMenu.map((entry) => entry.label).join(" | ")}`);
+									}
+									const offerOpened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
+											if (back) { back.click(); await wait(700); }
+											const row = [...document.querySelectorAll("ul li button")].find((el) => el.textContent.includes("Offerte website"));
+											if (!row) return "no row for the conversation with the attachment";
+											row.click();
+											await wait(1200);
+											const trust = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Trust this email");
+											if (trust) { trust.click(); await wait(900); }
+											// The message that carries the file, which may not be the one that opened.
+											const withFile = [...document.querySelectorAll('aside[aria-label="Conversation"] ol button')].find((el) => el.textContent.includes("Nathan") || el.textContent.startsWith("You"));
+											if (!document.querySelector("[data-attachment-chip]") && withFile) { withFile.click(); await wait(900); }
+											for (let i = 0; i < 20 && !document.querySelector("[data-attachment-chip] button[aria-label^='Save to ']"); i++) await wait(150);
+											const save = document.querySelector("[data-attachment-chip] button[aria-label^='Save to ']");
+											if (!save) return "no one-click save on the attachment";
+											if (save.getAttribute("aria-label") !== ${JSON.stringify(`Save to ${offerProject.name}`)}) return "the save names " + save.getAttribute("aria-label");
+											document.querySelector("[data-attachment-chip]").scrollIntoView({ block: "center" });
+											return "ok";
+										})()`,
+									);
+									if (offerOpened !== "ok") throw new Error(`Smoke: attachment save ${offerOpened}`);
+									await shoot("mail-attachment-save");
+									const offerSaved = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											document.querySelector("[data-attachment-chip] button[aria-label^='Save to ']").click();
+											for (let i = 0; i < 30 && !document.querySelector("[data-attachment-chip] button[title$=' in documents']"); i++) await wait(150);
+											if (!document.querySelector("[data-attachment-chip] button[title$=' in documents']")) return "no In documents mark after saving";
+											const toast = [...document.querySelectorAll("[role=status]")].find((el) => el.textContent.includes("Saved"));
+											if (!toast || !toast.textContent.includes("Saved")) return "no toast saying it was saved, only: " + [...document.querySelectorAll("[role=status]")].map((el) => el.textContent.trim().slice(0, 80)).join(" / ");
+											if (![...toast.querySelectorAll("button")].some((el) => el.textContent.trim() === "Show")) return "the toast has no Show";
+											return "ok";
+										})()`,
+									);
+									if (offerSaved !== "ok") throw new Error(`Smoke: attachment save ${offerSaved}`);
+									const offerKept = (await smokeMailDocuments.forThread(offerThread.id)).attachments[0]?.document;
+									if (offerKept?.projectId !== offerProject.id) throw new Error("Smoke: the attachment was not kept under the conversation's project");
+									await shoot("mail-attachment-in-documents");
+									console.log("SMOKE_DEMO attachment saved to the conversation's project in one click");
 								}
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;

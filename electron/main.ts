@@ -2223,7 +2223,7 @@ if (!app.requestSingleInstanceLock()) {
 									);
 
 									// A preview of each kind: a PDF in the viewer, Word as its page, a workbook as cells, a picture.
-									const preview = async (name: string, find: string, folder: string | null, ready: string) => {
+									const preview = async (name: string, find: string, folder: string | null, ready: string, painted = false) => {
 										await step(
 											`preview of ${name}`,
 											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -2256,11 +2256,30 @@ if (!app.requestSingleInstanceLock()) {
 											await wait(500);
 											return "ok";`,
 										);
-										await shoot(`preview-${name}`);
+										if (painted) {
+											// A page in a sandboxed frame is opaque to the window and to the main
+											// process alike (no script can be run in it), so the pixels are the proof:
+											// the frame exists well before its text is painted, and a grey page with
+											// nothing on it is the state this waits out.
+											const box = (await window.webContents.executeJavaScript(
+												`(() => { const r = document.querySelector("[data-full-preview] iframe").getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }; })()`,
+											)) as { x: number; y: number; width: number; height: number };
+											let inked = false;
+											for (let attempt = 0; attempt < 50 && !inked; attempt++) {
+												const pixels = (await window.webContents.capturePage(box)).toBitmap();
+												// BGRA. Text on the white page is dark and nothing else in the frame is.
+												for (let at = 0; at + 3 < pixels.length && !inked; at += 4) {
+													inked = pixels[at]! < 90 && pixels[at + 1]! < 90 && pixels[at + 2]! < 90;
+												}
+												if (!inked) await new Promise((r) => setTimeout(r, 150));
+											}
+											if (!inked) throw new Error(`Smoke: documents explorer preview of ${name}: the page stayed empty`);
+										}
+																				await shoot(`preview-${name}`);
 									};
 									await preview("sheet", "Prijzen hout 2026", "obet", "table");
 									await preview("image", "Werktekening tafel", null, "img");
-									await preview("word", "Bestek keuken", "Offertes", "iframe");
+									await preview("word", "Bestek keuken", "Offertes", "iframe", true);
 									await preview("pdf", "PDF", "Ontwikkelovereenkomst site", "canvas");
 
 									// Next and Previous go through the folder, and Escape closes the preview.

@@ -72,6 +72,8 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 	const [intervalError, setIntervalError] = useState<string | null>(null);
 	const [leadError, setLeadError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	// Reading the client and project pickers is not saving, so it is said apart from a failed save.
+	const [loadError, setLoadError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
 	useEffect(() => {
@@ -81,7 +83,7 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 				if (!cancelled) setClients(rows);
 			})
 			.catch((cause: unknown) => {
-				if (!cancelled) setError(`Could not load your clients. ${messageOf(cause)}`);
+				if (!cancelled) setLoadError(`Could not load your clients. ${messageOf(cause)}`);
 			});
 		return () => {
 			cancelled = true;
@@ -100,7 +102,7 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 				if (!cancelled) setProjects(rows);
 			})
 			.catch((cause: unknown) => {
-				if (!cancelled) setError(`Could not load that client's projects. ${messageOf(cause)}`);
+				if (!cancelled) setLoadError(`Could not load that client's projects. ${messageOf(cause)}`);
 			});
 		return () => {
 			cancelled = true;
@@ -280,6 +282,12 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 						<MarkdownEditor id={notesId} value={values.notes} onChange={(value) => set("notes", value)} rows={3} />
 					</div>
 				</div>
+
+				{loadError ? (
+					<p role="alert" data-selectable className="mt-4 border-l-2 border-[var(--risk)] pl-4 text-sm text-[var(--risk)]">
+						{loadError}
+					</p>
+				) : null}
 
 				{error ? (
 					<div className="mt-4 border-l-2 border-[var(--risk)] pl-4">

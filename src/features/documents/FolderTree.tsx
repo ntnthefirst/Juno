@@ -6,6 +6,7 @@ import { Icon, type IconName } from "../../components/Icon";
 import { LIST_COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { DRAG_TYPE, encodeDrag, type DragPayload } from "./drop-routing";
 import { countWithin, parentOf, ROOT_KEY, TEMPLATES_KEY, visibleRows } from "./explorer-tree";
+import { OFFSCREEN_ROW } from "./offscreen-row";
 import { RenameField } from "./RenameField";
 
 type FolderTreeProps = {
@@ -216,7 +217,7 @@ export function FolderTree({
 							if (hasChildren) onToggle(node.key);
 						}}
 						onContextMenu={(event) => onNodeMenu(node, event)}
-						style={{ height: "var(--row-height)", paddingLeft: 8 + (depth - 1) * 16 }}
+						style={{ height: "var(--row-height)", paddingLeft: 8 + (depth - 1) * 16, ...OFFSCREEN_ROW }}
 						className={rowClass(node.key)}
 						{...dropHandlers(node)}
 					>

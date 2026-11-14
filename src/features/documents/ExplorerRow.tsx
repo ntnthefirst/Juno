@@ -7,6 +7,7 @@ import { SpecimenMark } from "./SpecimenMark";
 import { modifiedOf, nameOf, sizeOf, typeOf, type ExplorerItem } from "./explorer-items";
 import { ExplorerIcon } from "./ExplorerIcon";
 import { STATUS_TONES, statusOf } from "./item-status";
+import { OFFSCREEN_ROW } from "./offscreen-row";
 import { RenameField } from "./RenameField";
 
 type ExplorerRowProps = {
@@ -57,7 +58,7 @@ export function ExplorerRow({
 		<button
 			type="button"
 			{...bind}
-			style={{ gridTemplateColumns: columns, height: "var(--row-height)" }}
+			style={{ gridTemplateColumns: columns, height: "var(--row-height)", ...OFFSCREEN_ROW }}
 			className={`grid w-full cursor-default items-center gap-3 rounded-[var(--radius-md)] px-3 text-left text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus)] ${
 				dropping
 					? "bg-[var(--accent-soft)] ring-1 ring-[var(--accent)] ring-inset"

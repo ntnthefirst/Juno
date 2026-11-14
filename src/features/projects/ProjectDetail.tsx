@@ -294,7 +294,8 @@ export function ProjectDetail({
 	useEffect(() => {
 		if (!opened) return;
 		function onKey(event: KeyboardEvent) {
-			if (event.defaultPrevented || document.querySelector("[role='dialog']")) return;
+			// Delete in a file preview or a side panel means the thing shown there, not the project.
+			if (event.defaultPrevented || document.querySelector("[role='dialog'], [data-side-panel], [data-full-preview]")) return;
 			if (matchesCombo(event, COMBOS.openFolder)) {
 				event.preventDefault();
 				openFolder();

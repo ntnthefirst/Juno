@@ -193,7 +193,9 @@ export function ProjectsScreen() {
 		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || generating || documentPage) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
-			if (document.querySelector("[role='dialog']")) return;
+			// A side panel or a file preview inside the record closes first. Their
+			// own listeners are added after this one, so they cannot stop it.
+			if (document.querySelector("[role='dialog'], [data-side-panel], [data-full-preview]")) return;
 			clearSelection();
 		}
 		window.addEventListener("keydown", onKey);

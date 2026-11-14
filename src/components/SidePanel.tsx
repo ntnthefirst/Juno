@@ -75,7 +75,10 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
 			// A dialog over the panel, or a list inside it, took this Escape first.
-			if (event.key === "Escape" && !event.defaultPrevented) onClose();
+			if (event.key === "Escape" && !event.defaultPrevented) {
+				event.preventDefault();
+				onClose();
+			}
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
@@ -118,6 +121,7 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 				ref={panel}
 				tabIndex={-1}
 				aria-label={title}
+				data-side-panel
 				className="animate-slide absolute inset-y-0 right-0 z-30 flex w-[420px] max-w-full flex-col border-l border-[var(--line)] bg-[var(--surface)] focus:outline-none"
 				style={{ boxShadow: "var(--shadow-panel)" }}
 			>

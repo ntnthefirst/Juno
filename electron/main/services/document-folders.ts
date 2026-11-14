@@ -237,6 +237,8 @@ export async function restore(id: string, db: Db = getDb()): Promise<DocumentFol
 	const row = db.select().from(documentFolders).where(eq(documentFolders.id, id)).get();
 	if (!row) throw new Error("That folder does not exist.");
 	if (row.parentId) folderRow(row.parentId, db);
+	// A folder of the same name may have been made beside it since.
+	assertNameFree(row.name, row, db, id);
 	db.update(documentFolders).set({ deletedAt: null, updatedAt: now() }).where(eq(documentFolders.id, id)).run();
 	return toFolder(folderRow(id, db));
 }

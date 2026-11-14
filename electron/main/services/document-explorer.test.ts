@@ -170,6 +170,14 @@ describe("folders", () => {
 		expect(await folders.get(offers.id, db)).toMatchObject({ clientId: acme.id });
 		expect(await documents.get(doc.id, db)).toMatchObject({ clientId: acme.id, folderId: offers.id });
 	});
+
+	it("restores a folder only where its name is still free", async () => {
+		const { db, acme } = await setUp();
+		const first = await folders.create({ name: "Offertes", clientId: acme.id }, db);
+		await folders.remove(first.id, db);
+		await folders.create({ name: "Offertes", clientId: acme.id }, db);
+		await expect(folders.restore(first.id, db)).rejects.toThrow(/already a folder named "Offertes"/);
+	});
 });
 
 describe("moving, duplicating, copying and renaming", () => {

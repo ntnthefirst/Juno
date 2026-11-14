@@ -121,6 +121,21 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 		done.current(outcome.current);
 	}, []);
 
+	// Escape cancels what is left while a question is on screen, the way the close button does.
+	// Caught before the window's other listeners, so a preview underneath does not close with it.
+	const asking = step.status === "where" || step.status === "asking";
+	useEffect(() => {
+		if (!asking) return;
+		function onKey(event: KeyboardEvent) {
+			if (event.key !== "Escape" || event.defaultPrevented) return;
+			if (document.querySelector("[role='dialog']")) return;
+			event.preventDefault();
+			finish();
+		}
+		window.addEventListener("keydown", onKey, true);
+		return () => window.removeEventListener("keydown", onKey, true);
+	}, [asking, finish]);
+
 	// Reads the file at `index` once the place is known, and either adds it or asks.
 	useEffect(() => {
 		if (!where) return;

@@ -6115,6 +6115,9 @@ if (!app.requestSingleInstanceLock()) {
 							}
 							console.log("SMOKE_DEMO desktop tray=ok badge=ok shortcut=ok");
 						}
+						// Files are parsed in a worker thread, which only a run of the built
+						// (or packaged) app can show starts at all.
+						await (await import("./main/smoke-files")).checkFileWorker();
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);
 						app.quit();
 					})();

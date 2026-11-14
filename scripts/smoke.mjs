@@ -65,6 +65,17 @@ child.on("exit", (code) => {
 	clearTimeout(timer);
 
 	const ready = stdout.includes("SMOKE_READY");
+	// pdf.js tries to load the canvas it can draw with, which the package
+	// leaves out on purpose (electron-builder.yml), says so once, and reads
+	// text without it. That one line is expected from a packaged build.
+	const expected = /Cannot load "@napi-rs\/canvas" package: "Error: Cannot find module '@napi-rs\/canvas'/;
+	const meaningful = (text) =>
+		text
+			.split("\n")
+			.filter((line) => !expected.test(line))
+			.join("\n");
+	const out = meaningful(stdout);
+	const err = meaningful(stderr);
 	// Electron writes a lot of benign noise to stderr on Windows. Only these
 	// matter, and each one means the application is actually broken.
 	const fatal = [
@@ -75,7 +86,7 @@ child.on("exit", (code) => {
 		/Failed to load resource/i,
 		/is not defined/,
 		/Cannot find module/,
-	].filter((re) => re.test(stderr) || re.test(stdout));
+	].filter((re) => re.test(err) || re.test(out));
 
 	if (!ready) {
 		console.error("\nSmoke failed: the window never finished loading.");

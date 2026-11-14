@@ -4,7 +4,9 @@
  * Seeds a business of a realistic size through the bridge, the way a person's
  * records arrive, then times what a person waits for: the first paint, each of
  * the seven places, opening a record, a long list, and a theme change in the
- * main window and in settings over it. Each figure is printed on a
+ * main window and in settings over it, and how long a preview of a large
+ * workbook and Word file holds the main process, parsed there as it used to
+ * be and through the file worker. Each figure is printed on a
  * `SMOKE_PERF` line so two runs can be compared side by side.
  *
  * The page figures are read in the renderer, against its own clock, and the
@@ -19,6 +21,7 @@ import { configureMailboxSource } from "./services/mail-source";
 import * as settings from "./services/settings";
 import { closeSetupWindow, getSettingsWindow, openSettingsWindow } from "./windows";
 import { startIpcTimings } from "./ipc/lock-guard";
+import { measureFileBlocking } from "./smoke-files";
 
 export interface BootMarks {
 	/** `performance.now()` in this process at `app.whenReady()`. */
@@ -538,4 +541,7 @@ export async function runPerfProbe(window: BrowserWindow, marks: BootMarks): Pro
 	await settings.setTheme("system");
 	nativeTheme.themeSource = "system";
 	if (process.env.JUNO_SMOKE_FRONT) window.setAlwaysOnTop(false);
+
+	// Last, because making the files holds this process for seconds on purpose.
+	for (const [name, values] of Object.entries(await measureFileBlocking())) print(name, values);
 }

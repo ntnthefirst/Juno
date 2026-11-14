@@ -86,8 +86,8 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 						<div>
 							<p className="font-[var(--weight-medium)]">Nothing is waiting</p>
 							<p className="mt-0.5 max-w-[60ch] text-dense text-[var(--ink-muted)]">
-								When an agent asks for something that changes a record or sends a mail, it appears here as
-								a card you can read, and nothing happens until you approve it.
+								When an agent asks for something that needs your approval, it appears here as a card you
+								can read, and nothing happens until you approve it.
 							</p>
 						</div>
 					</div>

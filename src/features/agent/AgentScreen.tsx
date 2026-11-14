@@ -72,8 +72,9 @@ export function AgentScreen() {
 					<div>
 						<h1 className="text-h1">Agent</h1>
 						<p className="mt-1.5 max-w-[880px] text-lg text-[var(--ink-muted)]">
-							Juno exposes everything it can do to an agent on this machine. Reading happens freely; anything
-							that changes a record or sends a mail waits here for you.
+							Juno exposes everything it can do to an agent on this machine. Reading happens freely. Anything
+							that sends, signs, files or deletes waits here for you, and so does a change to a record unless
+							you allow it under Settings &gt; MCP &gt; Permissions.
 						</p>
 					</div>
 				</div>

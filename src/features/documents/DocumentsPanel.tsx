@@ -558,6 +558,7 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 								canDropOn={() => false}
 								onDropOn={() => undefined}
 								label={`Documents of ${name}`}
+								fill={false}
 								empty={
 									<div className="px-6 py-10 text-center">
 										<p className="font-[var(--weight-medium)]">{unfiled ? "Every file has a client or a project" : "No documents yet"}</p>

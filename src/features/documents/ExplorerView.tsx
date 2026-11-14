@@ -54,6 +54,12 @@ type ExplorerViewProps = {
 	/** The list's accessible name. */
 	label: string;
 	empty: ReactNode;
+	/**
+	 * True when the list fills a screen and scrolls there, so the space under
+	 * the last row is room to right-click and drop. Inside a card on a tab the
+	 * card ends with the last row.
+	 */
+	fill?: boolean;
 };
 
 /** The columns of the list: name, (where or project), type, size, modified, status, versions. */
@@ -115,6 +121,7 @@ export function ExplorerView({
 	onDropOn,
 	label,
 	empty,
+	fill = true,
 }: ExplorerViewProps) {
 	const container = useRef<HTMLDivElement>(null);
 	const buttons = useRef(new Map<string, HTMLElement>());
@@ -299,7 +306,7 @@ export function ExplorerView({
 				if ((event.target as Element).closest("[data-explorer-item]")) return;
 				onBlankMenu?.(event);
 			}}
-			className="min-h-full pb-10"
+			className={fill ? "min-h-full pb-10" : "pb-1"}
 		>
 			{view === "list" ? (
 				<>

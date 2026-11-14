@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { parseMarkdown, toMarkdown, type Block } from "@shared/blocks";
+import { newBlockId, parseMarkdown, toMarkdown, type Block } from "@shared/blocks";
 import type { Note, NoteHit, ProjectSummary } from "@shared/types";
 import { BlockEditor } from "../../components/BlockEditor";
 import { Button } from "../../components/Button";
@@ -393,7 +393,8 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 	const [title, setTitle] = useState(note.title);
 	const [blocks, setBlocks] = useState<Block[]>(() => {
 		const parsed = parseMarkdown(note.body);
-		return parsed.length > 0 ? parsed : parseMarkdown("");
+		// An empty body parses to no lines at all, and the editor needs one to type on.
+		return parsed.length > 0 ? parsed : [{ id: newBlockId(), type: "text", text: "" }];
 	});
 	const draft = useRef<{ title: string; body: string } | null>(null);
 	const timer = useRef<number | null>(null);

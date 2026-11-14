@@ -600,6 +600,18 @@ export function DocumentsScreen() {
 		setConfirm({ documents, folders, templates: named });
 	}
 
+	/**
+	 * The row after the last of these (or before, at the end of the list).
+	 * Null when none of them is in the list, such as a folder deleted from the
+	 * tree, so the list's selection stays as it is.
+	 */
+	function neighbourOf(removing: ReadonlySet<string>): ExplorerItem | null {
+		const last = items.reduce((at, item, index) => (removing.has(item.key) ? index : at), -1);
+		if (last < 0) return null;
+		const kept = (item: ExplorerItem) => !removing.has(item.key);
+		return items.slice(last + 1).find(kept) ?? items.slice(0, last).reverse().find(kept) ?? null;
+	}
+
 	async function remove(what: Confirm) {
 		setConfirm(null);
 		// The row after the last one deleted (or before, at the end) takes the
@@ -610,11 +622,7 @@ export function DocumentsScreen() {
 			...what.templates.map((template) => templateKey(template.id)),
 			...what.folders.map((folder) => folder.key),
 		]);
-		const last = items.reduce((at, item, index) => (removing.has(item.key) ? index : at), -1);
-		// Nothing of the list went (a folder deleted from the tree): the list's selection stays.
-		const kept = (item: ExplorerItem) => !removing.has(item.key);
-		const neighbour =
-			last < 0 ? null : (items.slice(last + 1).find(kept) ?? items.slice(0, last).reverse().find(kept) ?? null);
+		const neighbour = neighbourOf(removing);
 		const gone: Deleted = { documents: [], folders: [] };
 		try {
 			for (const record of what.documents) gone.documents.push(await window.juno.documents.remove(record.id));
@@ -1224,8 +1232,13 @@ export function DocumentsScreen() {
 					details={details}
 					onToggleDetails={() => setDetails((value) => !value)}
 					onDeleted={(record) => {
+						// The preview would hand the focus back to the row that just went.
+						const removing = new Set([documentKey(record.id)]);
+						const neighbour = neighbourOf(removing);
 						setPreview(null);
+						setSelection(neighbour ? selectOnly(neighbour.key) : NO_SELECTION);
 						changed();
+						if (neighbour) focusRowWhenDrawn(neighbour.key, removing);
 						setDeleted({ documents: [record], folders: [] });
 					}}
 					onChanged={data.reload}

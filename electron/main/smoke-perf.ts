@@ -39,10 +39,16 @@ const PER_THREAD = 3;
  * smoke run could see it. Such a screen fails the run.
  */
 const NEVER_SETTLES_MS = 9000;
+
+/** DOUBLE_CLICK_MS in src/lib/click-timing.ts, and a frame. */
+const HELD_MS = 260;
 const unsettled: string[] = [];
+/** A record the walk could not find to open: the walk no longer matches the screen, and its figure would be a blank. */
+const missing: string[] = [];
 
 function checkSettled(name: string, values: Record<string, number | string>): void {
 	if (typeof values.done === "number" && values.done >= NEVER_SETTLES_MS) unsettled.push(`${name} (${String(values.busiest ?? "")})`);
+	if (values.missing) missing.push(name);
 }
 
 function print(name: string, values: Record<string, number | string>): void {
@@ -240,6 +246,15 @@ async function seed(window: BrowserWindow): Promise<Record<string, number>> {
 		for (let i = 0; i < 60; i++) {
 			await b.pages.create({ title: "Perf page " + String(i).padStart(2, "0"), clientId: clients[i % 40].id });
 		}
+		// Files of their own, so Documents has a folder full of them to open and preview:
+		// 150 in Unfiled and a few beside client 5's pages.
+		const text = (i) => new TextEncoder().encode("Perf file " + i + "\\n" + "Een regel tekst om te lezen. ".repeat(40));
+		for (let i = 0; i < 150; i++) {
+			await b.documents.importFile({ source: { kind: "bytes", fileName: "Perf file " + String(i).padStart(3, "0") + ".txt", data: text(i) } });
+		}
+		for (let i = 0; i < 12; i++) {
+			await b.documents.importFile({ source: { kind: "bytes", fileName: "Perf brief " + String(i).padStart(2, "0") + ".txt", data: text(1000 + i) }, clientId: clients[5].id });
+		}
 		const records = Math.round(performance.now() - t0);
 		const t1 = performance.now();
 		await b.mail.accounts.create({ email: "hallo@juno.test", label: "Juno", imapHost: "imap.juno.test", smtpHost: "smtp.juno.test", password: "smoke" });
@@ -329,11 +344,19 @@ async function screens(window: BrowserWindow): Promise<void> {
 }
 
 async function records(window: BrowserWindow): Promise<void> {
-	const steps: Array<{ name: string; screen: string; selector: string; text: string }> = [
+	// `before` is a click that brings the record into view first and is not timed:
+	// Documents keeps pages and files in the folder of their client, opened from the tree.
+	const tree = "main [role=tree] [role=treeitem]";
+	// `held`: one click on a file or a page is held for the double-click time
+	// before it opens (lib/click-timing.ts), so the figure waits that out and
+	// includes it, as the person does.
+	const steps: Array<{ name: string; screen: string; selector: string; text: string; before?: { selector: string; text: string }; held?: boolean }> = [
 		{ name: "client", screen: "clients", selector: "main tbody tr", text: "Perf client 007" },
 		{ name: "project", screen: "projects", selector: "main button, main a, main tr, main li", text: "Perf project 003" },
 		{ name: "thread", screen: "mail", selector: "main li, main button, main tr, main [role=row]", text: "Perf thread 0398" },
-		{ name: "page", screen: "documents", selector: "main ul li button, main tr", text: "Perf page 05" },
+		{ name: "folder", screen: "documents", selector: tree, text: "Unfiled" },
+		{ name: "file", screen: "documents", selector: "main [data-explorer-item]", text: "Perf file 010", before: { selector: tree, text: "Unfiled" }, held: true },
+		{ name: "page", screen: "documents", selector: "main [data-explorer-item]", text: "Perf page 05", before: { selector: tree, text: "Perf client 005" }, held: true },
 		{ name: "note", screen: "notes", selector: "main button", text: "Perf note 29" },
 	];
 	for (const step of steps) {
@@ -342,6 +365,13 @@ async function records(window: BrowserWindow): Promise<void> {
 			${HELPERS}
 			nav(${JSON.stringify(step.screen)}).click();
 			await settle(performance.now());
+			const before = ${JSON.stringify(step.before ?? null)};
+			if (before) {
+				const opener = await appear(before.selector, before.text);
+				if (!opener) return { missing: 1 };
+				opener.click();
+				await settle(performance.now());
+			}
 			const target = await appear(${JSON.stringify(step.selector)}, ${JSON.stringify(step.text)});
 			if (!target) return { missing: 1 };
 			await wait(300);
@@ -349,6 +379,7 @@ async function records(window: BrowserWindow): Promise<void> {
 			takeFrames();
 			const start = performance.now();
 			(target.closest("button, a, tr, [role=row], [role=button]") ?? target).click();
+			if (${step.held === true}) await wait(${HELD_MS});
 			const time = await settle(start);
 			const out = { ...time, ...takeLong(), ...takeFrames() };
 			document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -487,6 +518,9 @@ export async function runPerfProbe(window: BrowserWindow, marks: BootMarks): Pro
 	await records(window);
 	if (unsettled.length > 0) {
 		throw new Error(`Smoke: these never stopped changing, which is a render loop: ${unsettled.join("; ")}`);
+	}
+	if (missing.length > 0) {
+		throw new Error(`Smoke: the perf walk could not find what to open for ${missing.join(", ")}. Update the walk to match the screen.`);
 	}
 
 	await themeSwitch(window, window, "main");

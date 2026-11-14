@@ -8,7 +8,6 @@ export type ScreenId =
 	| "mail-templates"
 	| "notes"
 	| "documents"
-	| "document-templates"
 	| "clients"
 	| "projects"
 	| "reminders"
@@ -21,9 +20,9 @@ export type ScreenItem = { id: ScreenId; label: string; icon: IconName };
  * happens, and Settings at the foot. The agent is about Juno itself and sits
  * in the title bar, beside the window's own buttons.
  *
- * Mail and Documents each hold a second screen behind a switch at the top of
- * the page (`SCREEN_SWITCH`), and Reminders is reached from the overview, so
- * none of the three has an entry of its own here. Settings is a window, not a
+ * Mail holds Styled mail, opened from its title bar, Documents holds the
+ * templates as a folder of its own (decision 75), and Reminders is reached
+ * from the overview, so none of them has an entry of its own here. Settings is a window, not a
  * screen, and is added by the sidebar rather than listed.
  */
 export const SIDEBAR_TOP: ScreenItem[] = [
@@ -43,7 +42,6 @@ export const SCREEN_LABELS: Record<ScreenId, string> = {
 	"mail-templates": "Styled mail",
 	notes: "Notes",
 	documents: "Documents",
-	"document-templates": "Templates",
 	clients: "Clients",
 	projects: "Projects",
 	reminders: "Reminders",
@@ -58,22 +56,10 @@ export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
 	"mail-templates": "mail",
 	notes: "notes",
 	documents: "documents",
-	"document-templates": "documents",
 	clients: "clients",
 	projects: "projects",
 	reminders: "overview",
 	agent: "agent",
-};
-
-/**
- * Screens that share a page with another through a switch. Each pair names its
- * two sides, in the order the switch draws them.
- */
-export type ScreenSwitch = { left: { id: ScreenId; label: string }; right: { id: ScreenId; label: string } };
-
-export const DOCUMENT_SWITCH: ScreenSwitch = {
-	left: { id: "documents", label: "Documents" },
-	right: { id: "document-templates", label: "Templates" },
 };
 
 /**
@@ -91,7 +77,6 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
 	"mail-templates": { screen: "mail", label: "New message" },
 	notes: { screen: "notes", label: "New note" },
 	documents: { screen: "documents", label: "New document" },
-	"document-templates": { screen: "documents", label: "New document" },
 };
 
 /**

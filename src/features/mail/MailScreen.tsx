@@ -1004,6 +1004,7 @@ export function MailScreen() {
 					type="button"
 					onClick={() => setStylesOpen((open) => !open)}
 					aria-pressed={stylesOpen}
+					data-styled-mail
 					className={[
 						"inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-[0.97]",
 						stylesOpen ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",

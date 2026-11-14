@@ -26,7 +26,6 @@ const KIND_SCREENS: Partial<Record<AgentEntityKind, Extract<OpenTarget, { kind: 
 	contact: "clients",
 	mailAccount: "mail",
 	mailFolder: "mail",
-	documentTemplate: "document-templates",
 };
 
 /** Whether a record can be opened from here at all. A deleted one cannot. */
@@ -59,6 +58,9 @@ export async function openEntity(entity: AgentEntityRef): Promise<void> {
 			return;
 		case "document":
 			requestOpen({ kind: "document", id: entity.id, name: entity.label ?? "Document" });
+			return;
+		case "documentTemplate":
+			requestOpen({ kind: "document-template", id: entity.id, name: entity.label ?? "Template" });
 			return;
 		case "mailThread":
 			requestOpen({ kind: "thread", id: entity.id, messageId: null });

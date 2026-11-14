@@ -63,9 +63,9 @@ const STOPS: WalkthroughStop[] = [
 	{
 		id: "mail-templates",
 		title: "Styled mail",
-		body: "The emails you send to clients again and again, laid out like a page. Switch to them from the top of Mail.",
-		screen: "mail-templates",
-		target: "[data-section-switch]",
+		body: "The emails you send to clients again and again, laid out like a page. Styled mail in the title bar of Mail opens them beside the mailbox.",
+		screen: "mail",
+		target: "[data-styled-mail]",
 	},
 	{
 		id: "notes",
@@ -84,9 +84,9 @@ const STOPS: WalkthroughStop[] = [
 	{
 		id: "document-templates",
 		title: "Templates",
-		body: "The contracts and letters your documents are generated from. Switch to them from the top of Documents.",
-		screen: "document-templates",
-		target: "[data-section-switch]",
+		body: "The contracts and letters your documents are made from. They are a folder of their own, at the foot of the tree in Documents.",
+		screen: "documents",
+		target: '[data-tree-node="templates"]',
 	},
 	{
 		id: "agent",

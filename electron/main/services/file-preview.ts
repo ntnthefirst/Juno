@@ -73,7 +73,14 @@ const served = new Map<string, Served>();
 const IMAGE_CSP = "default-src 'none'; sandbox";
 /** An SVG is a document: styles inside it may apply, and nothing else may run or load. */
 const SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox";
-const HTML_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'";
+/**
+ * A Word file's page. `sandbox` with no allowances makes it an opaque origin
+ * that runs no script, submits no form and cannot navigate the window, so the
+ * policy holds even where the sanitiser let something through.
+ */
+const HTML_POLICY = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'";
+/** The page repeats the policy in a meta tag too, where `sandbox` is not allowed, so it is added to the header only. */
+const HTML_CSP = `${HTML_POLICY}; sandbox`;
 
 function issue(entry: Omit<Served, "expires">): string {
 	const clock = Date.now();
@@ -232,7 +239,7 @@ function documentPage(title: string, body: string): string {
 	const escapedTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 	return (
 		`<!doctype html><html><head><meta charset="utf-8">` +
-		`<meta http-equiv="Content-Security-Policy" content="${HTML_CSP}">` +
+		`<meta http-equiv="Content-Security-Policy" content="${HTML_POLICY}">` +
 		`<title>${escapedTitle}</title><style>${DOCUMENT_CSS}</style></head><body>${body}</body></html>`
 	);
 }

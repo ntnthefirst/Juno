@@ -129,6 +129,9 @@ describe("a preview", () => {
 		expect(answer.contentType).toMatch(/^text\/html/);
 		expect(answer.csp).toContain("default-src 'none'");
 		expect(answer.csp).not.toMatch(/script-src/);
+		// An empty sandbox: no script, no form, no navigation of the window, even
+		// past a sanitiser that missed something.
+		expect(answer.csp).toMatch(/(^|; )sandbox(;|$)/);
 		expect(html).toContain("Artikel 1. De opdrachtnemer levert de website op.");
 		expect(html).not.toMatch(/<script/i);
 	});

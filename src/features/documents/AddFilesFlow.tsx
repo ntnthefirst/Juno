@@ -79,7 +79,10 @@ const COMPARE_VIEWS = [
 	{ id: "words" as const, label: "What differs" },
 ];
 
-const metaLine = (fileName: string | null, mediaType: string, size: number | null, date: string | null) =>
+/** How long a read may take before the flow says so, so a quick batch does not flash a frame. */
+const READING_DELAY_MS = 300;
+
+const metaLine =(fileName: string | null, mediaType: string, size: number | null, date: string | null) =>
 	[fileTypeLabel(fileName, mediaType), size === null ? "" : formatBytes(size), modifiedLabel(date)].filter(Boolean).join(" · ");
 
 /**
@@ -104,6 +107,13 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 	const [error, setError] = useState<string | null>(null);
 	const [compared, setCompared] = useState<Compared | null>(null);
 	const [compareView, setCompareView] = useState<"files" | "words">("files");
+	// Nothing is drawn while a file is read quickly, so a batch does not flash a frame per file.
+	// Once a read has taken longer than READING_DELAY_MS, or a question has been asked, the
+	// frame stays up until the flow is done, and a read between two files shows its progress.
+	const [shown, setShown] = useState(!place);
+	// Cancel while a file is read stops after that file: the read is already in the main process.
+	const [stopping, setStopping] = useState(false);
+	const stop = useRef(false);
 	const outcome = useRef<ImportOutcome>({ documents: 0, versions: 0, skipped: 0, failures: [] });
 	const finished = useRef(false);
 	// Held in a ref so a parent that re-renders with a new callback does not start the current file over.
@@ -121,11 +131,24 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 		done.current(outcome.current);
 	}, []);
 
-	// Escape cancels what is left while a question is on screen, the way the close button does.
-	// Caught before the window's other listeners, so a preview underneath does not close with it,
-	// and swallowed while a file is being kept, so the preview does not close under the flow.
+	const requestStop = useCallback(() => {
+		stop.current = true;
+		setStopping(true);
+	}, []);
+
+	const reading = step.status === "reading" && where !== null;
+	useEffect(() => {
+		if (!reading || shown) return;
+		const timer = window.setTimeout(() => setShown(true), READING_DELAY_MS);
+		return () => window.clearTimeout(timer);
+	}, [reading, shown, index]);
+
+	// Escape cancels what is left while a question is on screen, the way the close button does,
+	// and stops after the current file while one is read. Caught before the window's other
+	// listeners, so a preview underneath does not close with it, and swallowed while a file is
+	// being kept, so the preview does not close under the flow.
 	const asking = step.status === "where" || step.status === "asking";
-	const drawn = step.status !== "reading";
+	const drawn = shown;
 	useEffect(() => {
 		if (!drawn) return;
 		function onKey(event: KeyboardEvent) {
@@ -133,10 +156,11 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 			if (document.querySelector("[role='dialog']")) return;
 			event.preventDefault();
 			if (asking) finish();
+			else if (reading) requestStop();
 		}
 		window.addEventListener("keydown", onKey, true);
 		return () => window.removeEventListener("keydown", onKey, true);
-	}, [drawn, asking, finish]);
+	}, [drawn, asking, reading, finish, requestStop]);
 
 	// The flow takes the focus when it first draws, so the list's keys and a
 	// preview's arrows underneath do not act on what it covers, and gives it
@@ -145,10 +169,16 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 	const opener = useRef<HTMLElement | null>(null);
 	useEffect(() => {
 		if (!drawn) return;
-		// Between two files nothing is drawn, so it is taken again for each question.
 		opener.current ??= document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
 		frameRef.current?.focus({ preventScroll: true });
 	}, [drawn]);
+	// An answer's button goes with its question, which would drop the focus on the page;
+	// it comes back to the frame, so the keys still belong to the flow.
+	useEffect(() => {
+		const frame = frameRef.current;
+		if (!drawn || !frame || frame.contains(document.activeElement)) return;
+		frame.focus({ preventScroll: true });
+	}, [drawn, step.status, index]);
 	useEffect(
 		() => () => {
 			const back = opener.current;
@@ -179,15 +209,23 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 				await keepSeparate(current.source, where, analysis.availableTitle);
 				if (cancelled) return;
 				outcome.current.documents += 1;
-				setIndex((at) => at + 1);
+				if (stop.current) finish();
+				else setIndex((at) => at + 1);
+				return;
+			}
+			// Stopped while this one was read: a question nobody is waiting for is not asked.
+			if (stop.current) {
+				finish();
 				return;
 			}
 			setError(null);
+			setShown(true);
 			setStep({ status: "asking", analysis, match });
 		})().catch((cause: unknown) => {
 			if (cancelled) return;
 			outcome.current.failures.push({ name: current.label, message: messageOf(cause) });
-			setIndex((at) => at + 1);
+			if (stop.current) finish();
+			else setIndex((at) => at + 1);
 		});
 		return () => {
 			cancelled = true;
@@ -242,8 +280,10 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 	}
 
 	// What was not reached is left out of the count: a cancel is not news worth a toast.
+	// While a file is read, the flow stops once that file is done instead.
 	function cancelAll() {
-		finish();
+		if (reading) requestStop();
+		else finish();
 	}
 
 	const heading = placeName ? `Add to ${placeName}` : "Add files";
@@ -386,8 +426,38 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 				</div>
 			</div>
 		);
+	} else if (reading && drawn) {
+		const current = items[index];
+		const many = items.length > 1;
+		body = (
+			<div className="flex h-full items-center justify-center p-10">
+				<div className="w-full max-w-[420px]">
+					<div role="status" aria-live="polite">
+						<p className="truncate text-base">{stopping ? "Stopping after this file" : `Reading ${current?.label ?? "the file"}`}</p>
+						<p className="mt-1 text-sm text-[var(--ink-muted)]">
+							{stopping
+								? "The file being read is finished first. Nothing after it is added."
+								: "A file that looks like nothing here goes straight in."}
+						</p>
+					</div>
+					{many ? (
+						<div className="mt-4 h-[4px] overflow-hidden rounded-[var(--radius-sm)] bg-[var(--line)]" aria-hidden="true">
+							<div
+								className="h-full origin-left bg-[var(--accent)] transition-transform duration-[var(--duration-base)] ease-[var(--ease-smooth)]"
+								style={{ transform: `scaleX(${index / items.length})` }}
+							/>
+						</div>
+					) : null}
+					<div className="mt-6 flex justify-end">
+						<Button disabled={stopping} onClick={requestStop}>
+							{stopping ? "Stopping" : many ? "Cancel the rest" : "Cancel"}
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
 	} else {
-		// Reading, or adding a file that needed no question: nothing to ask yet, so nothing to draw.
+		// Read quickly so far, or adding a file that needed no question: nothing to draw yet.
 		return null;
 	}
 
@@ -405,7 +475,12 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 				<h2 className="min-w-0 flex-1 truncate text-base font-[var(--weight-medium)]">{heading}</h2>
 				{counter ? <span className="tabular flex-none text-sm text-[var(--ink-muted)]">{counter}</span> : null}
 			</div>
-			<div className="min-h-0 flex-1 bg-[var(--sunken)]/40">{body}</div>
+			<div className="min-h-0 flex-1 bg-[var(--sunken)]/40">
+				{/* Keyed by what is asked, so the next file's question fades in over the reading line and not on every answer. */}
+				<div key={step.status === "asking" || step.status === "saving" ? `ask:${index}` : step.status} className="animate-fade h-full">
+					{body}
+				</div>
+			</div>
 		</div>
 	);
 	return host ? createPortal(frame, host) : frame;

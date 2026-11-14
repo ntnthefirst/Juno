@@ -370,7 +370,7 @@ if (!app.requestSingleInstanceLock()) {
 						const startupNotice = (await window.webContents.executeJavaScript(
 							`new Promise(async (resolve) => {
 								for (let i = 0; i < 30; i++) {
-									const toast = document.querySelector("[role=status]");
+									const toast = document.querySelector("[data-toast]");
 									if (toast && toast.textContent.includes("MCP server enabled on http://127.0.0.1:")) {
 										return resolve(toast.textContent);
 									}
@@ -5252,8 +5252,8 @@ if (!app.requestSingleInstanceLock()) {
 											document.querySelector("[data-attachment-chip] button[aria-label^='Save to ']").click();
 											for (let i = 0; i < 30 && !document.querySelector("[data-attachment-chip] button[title$=' in documents']"); i++) await wait(150);
 											if (!document.querySelector("[data-attachment-chip] button[title$=' in documents']")) return "no In documents mark after saving";
-											const toast = [...document.querySelectorAll("[role=status]")].find((el) => el.textContent.includes("Saved"));
-											if (!toast || !toast.textContent.includes("Saved")) return "no toast saying it was saved, only: " + [...document.querySelectorAll("[role=status]")].map((el) => el.textContent.trim().slice(0, 80)).join(" / ");
+											const toast = [...document.querySelectorAll("[data-toast]")].find((el) => el.textContent.includes("Saved"));
+											if (!toast || !toast.textContent.includes("Saved")) return "no toast saying it was saved, only: " + [...document.querySelectorAll("[data-toast]")].map((el) => el.textContent.trim().slice(0, 80)).join(" / ");
 											if (![...toast.querySelectorAll("button")].some((el) => el.textContent.trim() === "Show")) return "the toast has no Show";
 											return "ok";
 										})()`,

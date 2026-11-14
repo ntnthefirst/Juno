@@ -12,8 +12,9 @@ const SETTLE_MS = 60;
 function liveRegion(): HTMLElement {
 	if (region?.isConnected) return region;
 	const made = document.createElement("div");
-	made.setAttribute("role", "status");
+	// A live region and nothing else: no status role, so it is never taken for a status line on the page.
 	made.setAttribute("aria-live", "polite");
+	made.setAttribute("data-live-region", "");
 	made.setAttribute("aria-atomic", "true");
 	made.className = "sr-only";
 	document.body.append(made);

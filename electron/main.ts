@@ -2984,8 +2984,9 @@ if (!app.requestSingleInstanceLock()) {
 											const dialog = document.querySelector("[role=dialog]");
 											[...(dialog?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
 											await wait(500);
-											[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Templates")?.click();
-											await wait(500);
+											// The way back to the templates is in the title bar, not in the page.
+											[...document.querySelectorAll("header button, main button")].find((el) => el.textContent.trim() === "Templates")?.click();
+											await wait(700);
 										})()`,
 									);
 								}
@@ -4790,7 +4791,9 @@ if (!app.requestSingleInstanceLock()) {
 											const b = document.querySelector("button[aria-label='Week']");
 											if (!b) return "no week button";
 											b.click();
-											await new Promise((r) => setTimeout(r, 600));
+											// The week waits for its items before it slides in, which a
+											// busy machine can take longer than one fixed pause over.
+											for (let tries = 0; tries < 20 && !document.querySelector("[role=button][aria-label]"); tries++) await new Promise((r) => setTimeout(r, 150));
 											return document.querySelector("[role=button][aria-label]") ? "ok" : "no events drawn";
 										})()`,
 									);
@@ -6041,7 +6044,7 @@ if (!app.requestSingleInstanceLock()) {
 								console.log(`SMOKE_DEMO settings pages=${pages.length}`);
 								closeSettingsWindow();
 
-								// The sidebar is a rail of icons and never opens. Eight entries (seven
+								// The sidebar is a rail of icons and never opens. Seven entries (six
 								// places and settings; the agent is in the title bar), no text of its
 								// own, and a label in a tooltip that appears when the pointer rests on one.
 								await new Promise((r) => setTimeout(r, 400));
@@ -6050,7 +6053,7 @@ if (!app.requestSingleInstanceLock()) {
 										const nav = document.querySelector("nav[data-sidebar]");
 										if (!nav) return "no sidebar";
 										const entries = nav.querySelectorAll("button[data-nav]").length;
-										if (entries !== 8) return "the sidebar has " + entries + " entries, not 8";
+										if (entries !== 7) return "the sidebar has " + entries + " entries, not 7";
 										if (!document.querySelector("header button[data-nav=agent]")) return "the agent is not in the title bar";
 										if (nav.textContent.trim() !== "") return "the sidebar draws text: " + nav.textContent.trim();
 										const width = Math.round(nav.getBoundingClientRect().width);

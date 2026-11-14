@@ -55,7 +55,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 			.then((template) => {
 				if (cancelled) return;
 				if (!template) {
-					setLoad({ status: "error", message: "This template is no longer in your juno." });
+					setLoad({ status: "error", message: "It was deleted. Go back to Templates to open another." });
 					return;
 				}
 				setLoad({ status: "ready", template });

@@ -16,12 +16,15 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { BlankArea, MenuEntry, MenuRequest } from "../../shared/menu";
 import { BLANK_AREAS, BLOCK_KINDS } from "../../shared/menu";
+import { extensionOf } from "../../shared/mime";
 import { getDb, type Db } from "../db";
 import { referenceItems } from "../db/schema";
 import * as calendar from "./calendar";
 import * as calendarSubscriptions from "./calendar-subscriptions";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
+import * as folders from "./document-folders";
+import * as documentTemplates from "./document-templates";
 import * as documents from "./documents";
 import * as outbox from "./mail-outbox";
 import * as mailTemplates from "./mail-templates";
@@ -72,6 +75,16 @@ function blank(area: string, context: MenuRequest["context"]): MenuEntry[] {
 			{ id: "toggle-styled-mail", label: "Styled mail", icon: "templates", separatorBefore: true },
 		];
 	}
+	// The explorer's empty space fills the folder that is open.
+	if (area === "documents") {
+		return [
+			{ id: "add-files", label: "Add files", icon: "import" },
+			{ id: "new-folder", label: "New folder", icon: "folder-add" },
+			{ id: "new-page", label: "New page", icon: "documents", separatorBefore: true },
+			{ id: "new-document", label: "New document from a template", icon: "templates" },
+			...EVERYWHERE.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
+		];
+	}
 	const own = OWN_NEW[area as BlankArea];
 	const rest = EVERYWHERE.filter((entry) => entry.id !== own?.id);
 	return own ? [own, ...rest] : rest;
@@ -87,7 +100,40 @@ function isArchivedStatus(statusId: string | null, db: Db): boolean {
 	return row?.key === "archived";
 }
 
+/** Signing needs a PDF; anything else is converted first (decision 77). */
+function isPdfName(fileName: string | null, mediaType: string): boolean {
+	return mediaType === "application/pdf" || extensionOf(fileName ?? "") === "pdf";
+}
+
 const REMOVE: MenuEntry = { id: "delete", label: "Delete", icon: "remove", danger: true, separatorBefore: true };
+
+/**
+ * A node of the documents tree, named by its key (decision 75). Every node
+ * opens and takes new files; a client, a project and Unfiled hold folders of
+ * the owner's own; only such a folder can be renamed, moved or deleted, since
+ * the others are the records drawn. Templates holds templates and nothing else.
+ */
+async function folderEntries(key: string, db: Db): Promise<MenuEntry[]> {
+	const open: MenuEntry = { id: "open", label: "Open", icon: "folder-open", accelerator: "Enter" };
+	const fill: MenuEntry[] = [
+		{ id: "new-folder", label: "New folder", icon: "folder-add", separatorBefore: true },
+		{ id: "add-files", label: "Add files", icon: "import" },
+	];
+	if (key === "templates") return [open];
+	if (key === "unfiled") return [open, ...fill];
+	const [kind, recordId] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+	if (!recordId) return [];
+	if (kind === "client") return (await clients.get(recordId, db)) ? [open, ...fill] : [];
+	if (kind === "project") return (await projects.get(recordId, db)) ? [open, ...fill] : [];
+	if (kind !== "folder" || !(await folders.get(recordId, db))) return [];
+	return [
+		open,
+		...fill,
+		{ id: "rename", label: "Rename", icon: "edit", accelerator: "F2", separatorBefore: true },
+		{ id: "move-to", label: "Move to", icon: "move-right" },
+		REMOVE,
+	];
+}
 
 /** The items for one menu, in order. Empty when the record is gone or the kind has nothing to say. */
 export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promise<MenuEntry[]> {
@@ -160,14 +206,57 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 		case "file": {
 			const file = await documents.get(id, db);
 			if (!file) return [];
-			// A page has no file to hand to another program.
-			const hasFile = file.sourceKind !== "page";
+			// A page has no file to hand to another program, convert or sign.
+			if (file.sourceKind === "page") {
+				return [
+					{ id: "open", label: "Open", icon: "external" },
+					{ id: "move-to", label: "Move to", icon: "move-right", separatorBefore: true },
+					{ id: "rename", label: "Rename", icon: "edit", accelerator: "F2" },
+					{ ...REMOVE, accelerator: "Delete" },
+				];
+			}
+			const latest = file.latestVersion;
+			const pdf = latest ? isPdfName(latest.fileName, latest.mediaType) : false;
+			const entries: MenuEntry[] = [
+				{ id: "preview", label: "Open preview", icon: "visible", accelerator: "Space" },
+				...(latest
+					? [
+							{ id: "open-in-default-app", label: "Open", icon: "external", accelerator: "Enter" } as const,
+							{ id: "reveal-file", label: "Show in folder", icon: "folder-open" } as const,
+						]
+					: []),
+				...(latest
+					? [{ id: "duplicate-file", label: "Duplicate", icon: "templates", accelerator: "CommandOrControl+D", separatorBefore: true } as const]
+					: []),
+				{ id: "copy-to", label: "Copy to", icon: "copy", separatorBefore: !latest },
+				{ id: "move-to", label: "Move to", icon: "move-right" },
+				{ id: "rename", label: "Rename", icon: "edit", accelerator: "F2" },
+			];
+			if (latest && !pdf) entries.push({ id: "convert-pdf", label: "Convert to PDF", icon: "sync", separatorBefore: true });
+			// A specimen is never signed (docs/templates.md), so it is not offered.
+			if (latest && !file.isSpecimen) {
+				entries.push({ id: "sign", label: pdf ? "Sign" : "Convert and sign", icon: "sign", separatorBefore: pdf });
+			}
+			if (latest) {
+				entries.push(
+					{ id: "download-file", label: "Download", icon: "export", separatorBefore: true },
+					{ id: "send-file", label: "Send by mail", icon: "mail" },
+				);
+			}
+			entries.push({ ...REMOVE, accelerator: "Delete" });
+			return entries;
+		}
+
+		case "folder":
+			return folderEntries(id, db);
+
+		case "document-template": {
+			if (!(await documentTemplates.get(id, db))) return [];
 			return [
-				{ id: "open", label: "Open", icon: "external" },
-				...(hasFile ? [{ id: "open-in-default-app", label: "Open in the default app", icon: "documents" } as const] : []),
-				...(hasFile ? [{ id: "download-file", label: "Download", icon: "export" } as const] : []),
-				...(hasFile ? [{ id: "send-file", label: "Send by mail", icon: "mail" } as const] : []),
-				REMOVE,
+				{ id: "preview", label: "Open preview", icon: "visible", accelerator: "Space" },
+				{ id: "edit", label: "Edit", icon: "edit", accelerator: "Enter" },
+				{ id: "use-template", label: "Use", icon: "documents" },
+				{ ...REMOVE, accelerator: "Delete" },
 			];
 		}
 

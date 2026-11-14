@@ -1,0 +1,315 @@
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import type { DocumentPlace, FilePreviewSource, ImportAnalysis, ImportMatch, ImportSource } from "@shared/types";
+import { Button } from "../../components/Button";
+import { IconAction } from "../../components/IconAction";
+import { useContentHost } from "../../lib/content-host";
+import { messageOf } from "../../lib/errors";
+import { fileTypeLabel } from "../../lib/file-type";
+import { modifiedLabel } from "../../lib/modified-label";
+import { announceDocumentsChanged, type ImportItem, type ImportOutcome } from "../../lib/pdf-drop";
+import { formatBytes } from "../projects/format";
+import { ComparePane } from "./ComparePane";
+import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
+import { firstMatch, needsAsking, reasonFor } from "./import-reasons";
+
+type AddFilesFlowProps = {
+	items: ImportItem[];
+	/**
+	 * Where the files go: the folder that is open, a client's or a project's
+	 * own place. Null when nothing says, as for a drop outside Documents: then
+	 * the first question is where.
+	 */
+	place: DocumentPlace | null;
+	/** The place's name, for the heading. */
+	placeName?: string;
+	onDone: (outcome: ImportOutcome) => void;
+};
+
+type Step =
+	| { status: "where" }
+	| { status: "reading" }
+	| { status: "asking"; analysis: ImportAnalysis; match: ImportMatch }
+	| { status: "saving"; analysis: ImportAnalysis; match: ImportMatch };
+
+/** A preview source for the file being added. A drop is its own bytes; a mail attachment is named by id. */
+function previewOf(source: ImportSource): FilePreviewSource {
+	return source.kind === "attachment"
+		? { kind: "attachment", attachmentId: source.attachmentId }
+		: { kind: "bytes", fileName: source.fileName, data: source.data, ...(source.fileDate ? { fileDate: source.fileDate } : {}) };
+}
+
+/** Keeps the file as a document of its own, in the place chosen. */
+async function keepSeparate(source: ImportSource, target: DocumentPlace, title?: string): Promise<void> {
+	if (source.kind === "attachment") {
+		await window.juno.documents.importFromMail({
+			attachmentId: source.attachmentId,
+			clientId: target.clientId,
+			projectId: target.projectId,
+			folderId: target.folderId,
+			...(title ? { title } : {}),
+		});
+		return;
+	}
+	await window.juno.documents.importFile({
+		source,
+		clientId: target.clientId,
+		projectId: target.projectId,
+		folderId: target.folderId,
+		...(title ? { title } : {}),
+	});
+}
+
+async function addAsVersion(source: ImportSource, documentId: string): Promise<void> {
+	if (source.kind === "attachment") {
+		await window.juno.documents.importFromMail({ attachmentId: source.attachmentId, versionOf: documentId });
+		return;
+	}
+	await window.juno.documents.addVersion({ documentId, source });
+}
+
+const metaLine = (fileName: string | null, mediaType: string, size: number | null, date: string | null) =>
+	[fileTypeLabel(fileName, mediaType), size === null ? "" : formatBytes(size), modifiedLabel(date)].filter(Boolean).join(" · ");
+
+/**
+ * Adding files is one step (decision 75). Each file is read by the main
+ * process first; one that looks like nothing here goes straight in. One that
+ * looks like a document already kept is shown beside that document's newest
+ * file, with the reason in plain words, and the person picks: a new version
+ * of that one, or a document of its own. Nothing is filed as a version on a
+ * guess. A file whose very bytes are already a version says so and offers to
+ * skip it.
+ *
+ * It covers the content area rather than sitting in a dialog, because the
+ * question has two answers but needs the room to show both files (decision
+ * 30). Several files are steps, one after another.
+ */
+export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowProps) {
+	const host = useContentHost();
+	const [index, setIndex] = useState(0);
+	const [where, setWhere] = useState<DocumentPlace | null>(place);
+	const [owner, setOwner] = useState<DocumentOwnerChoice>({ clientId: "", projectId: "" });
+	const [step, setStep] = useState<Step>(place ? { status: "reading" } : { status: "where" });
+	const [error, setError] = useState<string | null>(null);
+	const outcome = useRef<ImportOutcome>({ documents: 0, versions: 0, skipped: 0, failures: [] });
+	const finished = useRef(false);
+	// Held in a ref so a parent that re-renders with a new callback does not start the current file over.
+	const done = useRef(onDone);
+	useEffect(() => {
+		done.current = onDone;
+	});
+
+	const item = items[index];
+
+	const finish = useCallback(() => {
+		if (finished.current) return;
+		finished.current = true;
+		if (outcome.current.documents + outcome.current.versions > 0) announceDocumentsChanged();
+		done.current(outcome.current);
+	}, []);
+
+	// Reads the file at `index` once the place is known, and either adds it or asks.
+	useEffect(() => {
+		if (!where) return;
+		const current = items[index];
+		if (!current) {
+			finish();
+			return;
+		}
+		let cancelled = false;
+		(async () => {
+			const analysis = await window.juno.documents.analyseImport({
+				source: current.source,
+				clientId: where.clientId,
+				projectId: where.projectId,
+				folderId: where.folderId,
+			});
+			if (cancelled) return;
+			const match = firstMatch(analysis);
+			if (!needsAsking(analysis) || !match) {
+				await keepSeparate(current.source, where, analysis.availableTitle);
+				if (cancelled) return;
+				outcome.current.documents += 1;
+				setIndex((at) => at + 1);
+				return;
+			}
+			setError(null);
+			setStep({ status: "asking", analysis, match });
+		})().catch((cause: unknown) => {
+			if (cancelled) return;
+			outcome.current.failures.push({ name: current.label, message: messageOf(cause) });
+			setIndex((at) => at + 1);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [index, where, items, finish]);
+
+	function next(result: "documents" | "versions" | "skipped") {
+		outcome.current[result] += 1;
+		setStep({ status: "reading" });
+		setIndex((current) => current + 1);
+	}
+
+	async function answer(choice: "version" | "separate") {
+		if (!item || !where || step.status !== "asking") return;
+		const { analysis, match } = step;
+		setError(null);
+		setStep({ status: "saving", analysis, match });
+		try {
+			if (choice === "version") {
+				await addAsVersion(item.source, match.documentId);
+				next("versions");
+			} else {
+				await keepSeparate(item.source, where, analysis.availableTitle);
+				next("documents");
+			}
+		} catch (cause: unknown) {
+			setError(messageOf(cause));
+			setStep({ status: "asking", analysis, match });
+		}
+	}
+
+	function cancelAll() {
+		outcome.current.skipped += Math.max(0, items.length - index);
+		finish();
+	}
+
+	const heading = placeName ? `Add to ${placeName}` : "Add files";
+	const counter = items.length > 1 ? `File ${Math.min(index + 1, items.length)} of ${items.length}` : null;
+
+	let body: ReactNode = null;
+	if (step.status === "where") {
+		body = (
+			<div className="flex h-full items-start justify-center overflow-y-auto p-10">
+				<div className="w-full max-w-[620px]">
+					<h3 className="text-h3">Where should {items.length === 1 ? "this file" : "these files"} go?</h3>
+					<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
+						Choose a client, a project, both or neither. Leave both empty to keep them in Unfiled.
+					</p>
+					<ul className="mt-4 flex flex-col gap-1 text-dense text-[var(--ink-muted)]">
+						{items.slice(0, 8).map((entry, at) => (
+							<li key={`${at}:${entry.label}`} className="truncate">
+								{entry.label}
+							</li>
+						))}
+						{items.length > 8 ? <li>and {items.length - 8} more</li> : null}
+					</ul>
+					<div className="mt-6">
+						<DocumentOwnerFields value={owner} onChange={setOwner} />
+					</div>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={cancelAll}>Cancel</Button>
+						<Button
+							variant="primary"
+							onClick={() => {
+								setStep({ status: "reading" });
+								setWhere({ clientId: owner.clientId || null, projectId: owner.projectId || null, folderId: null });
+							}}
+						>
+							{items.length === 1 ? "Add the file" : `Add ${items.length} files`}
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
+	} else if ((step.status === "asking" || step.status === "saving") && item) {
+		const { analysis, match } = step;
+		const busy = step.status === "saving";
+		const existing = match.latestVersion;
+		body = (
+			<div className="flex h-full min-h-0 flex-col">
+				<div className="flex-none px-6 pt-5 pb-4">
+					<p className="text-lg font-[var(--weight-medium)]">{reasonFor(match)}.</p>
+					<p className="mt-1 max-w-[72ch] text-sm text-[var(--ink-muted)]">
+						{match.identical
+							? "Nothing would change by adding it again. Skip it, or keep a separate copy anyway."
+							: `Add it as the next version of ${match.title}, or keep it as a document of its own named ${analysis.availableTitle}.`}
+					</p>
+					{analysis.matches.length > 1 ? (
+						<div className="mt-3 flex flex-wrap items-center gap-1" role="group" aria-label="Documents it looks like">
+							{analysis.matches.map((other) => (
+								<button
+									key={other.documentId}
+									type="button"
+									aria-pressed={other.documentId === match.documentId}
+									onClick={() => setStep({ status: "asking", analysis, match: other })}
+									className={`h-[28px] max-w-[260px] truncate rounded-[var(--radius-md)] px-3 text-dense transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] ${
+										other.documentId === match.documentId
+											? "bg-[var(--accent-soft)] text-[var(--accent)]"
+											: "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+									}`}
+								>
+									{other.title}
+								</button>
+							))}
+						</div>
+					) : null}
+				</div>
+				<div className="flex min-h-0 flex-1 gap-4 px-6">
+					<ComparePane
+						label="Adding"
+						name={analysis.fileName}
+						meta={metaLine(analysis.fileName, analysis.mediaType, analysis.byteSize, analysis.fileDate)}
+						source={previewOf(item.source)}
+						emphasis
+					/>
+					<ComparePane
+						key={match.documentId}
+						label={`Already in Juno${match.clientName ? `, ${match.clientName}` : ""}`}
+						name={match.title}
+						meta={existing ? metaLine(existing.fileName, existing.mediaType, existing.byteSize, existing.fileDate) : ""}
+						source={existing ? { kind: "version", versionId: existing.id } : null}
+					/>
+				</div>
+				{error ? (
+					<p role="alert" data-selectable className="mx-6 mt-3 flex-none border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
+						{error}
+					</p>
+				) : null}
+				<div className="flex flex-none items-center justify-end gap-2 px-6 py-4">
+					<Button onClick={cancelAll}>{items.length - index > 1 ? "Cancel the rest" : "Cancel"}</Button>
+					{match.identical ? (
+						<>
+							<Button disabled={busy} onClick={() => void answer("separate")}>
+								Keep a separate copy
+							</Button>
+							<Button variant="primary" disabled={busy} onClick={() => next("skipped")}>
+								Skip this file
+							</Button>
+						</>
+					) : (
+						<>
+							<Button disabled={busy} onClick={() => void answer("separate")}>
+								Keep as a separate document
+							</Button>
+							<Button variant="primary" disabled={busy} onClick={() => void answer("version")}>
+								{busy ? "Adding" : `Add as a new version of ${match.title}`}
+							</Button>
+						</>
+					)}
+				</div>
+			</div>
+		);
+	} else {
+		// Reading, or adding a file that needed no question: nothing to ask yet, so nothing to draw.
+		return null;
+	}
+
+	const frame = (
+		<div
+			role="region"
+			aria-label={heading}
+			data-add-files
+			className="animate-scale absolute inset-0 z-30 flex flex-col bg-[var(--surface)]"
+		>
+			<div className="flex h-[56px] flex-none items-center gap-3 border-b border-[var(--line)] pr-4 pl-2">
+				<IconAction icon="close" label="Cancel" size="base" onClick={cancelAll} />
+				<h2 className="min-w-0 flex-1 truncate text-base font-[var(--weight-medium)]">{heading}</h2>
+				{counter ? <span className="tabular flex-none text-sm text-[var(--ink-muted)]">{counter}</span> : null}
+			</div>
+			<div className="min-h-0 flex-1 bg-[var(--sunken)]/40">{body}</div>
+		</div>
+	);
+	return host ? createPortal(frame, host) : frame;
+}

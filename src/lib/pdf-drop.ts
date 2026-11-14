@@ -16,20 +16,16 @@ export type ImportOutcome = {
 };
 
 /**
- * Dropped files, read into the shape the import takes. A file that is not a PDF
- * is reported rather than sent, so a stray .txt in a drop costs nothing.
+ * Dropped files, read into the shape adding takes. Any kind of file is a
+ * document (decision 75), so nothing is turned away here; the main process
+ * checks what it is given and says why it refuses one.
  *
  * The bytes are read here and sent over. The window never has a path to give:
  * a path from the renderer is exactly what the bridge is not allowed to take.
  */
-export async function itemsFromFiles(files: File[]): Promise<{ items: ImportItem[]; rejected: string[] }> {
+export async function itemsFromFiles(files: File[]): Promise<ImportItem[]> {
 	const items: ImportItem[] = [];
-	const rejected: string[] = [];
 	for (const file of files) {
-		if (!file.name.toLowerCase().endsWith(".pdf")) {
-			rejected.push(`"${file.name}" is not a PDF.`);
-			continue;
-		}
 		items.push({
 			label: file.name,
 			source: {
@@ -41,7 +37,7 @@ export async function itemsFromFiles(files: File[]): Promise<{ items: ImportItem
 			},
 		});
 	}
-	return { items, rejected };
+	return items;
 }
 
 export function itemsFromPicked(picked: PickedPdf[]): ImportItem[] {
@@ -51,12 +47,15 @@ export function itemsFromPicked(picked: PickedPdf[]): ImportItem[] {
 	}));
 }
 
-/** "2 documents imported, 1 version added." Past tense, one sentence. */
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** "2 files added, 1 version added." Past tense, one sentence. */
 export function describeOutcome(outcome: ImportOutcome): string | null {
 	const parts: string[] = [];
-	if (outcome.documents > 0) parts.push(`${outcome.documents} ${outcome.documents === 1 ? "document" : "documents"} imported`);
-	if (outcome.versions > 0) parts.push(`${outcome.versions} ${outcome.versions === 1 ? "version" : "versions"} added`);
-	if (outcome.failures.length > 0) parts.push(`${outcome.failures.length} not brought in`);
+	if (outcome.documents > 0) parts.push(`${plural(outcome.documents, "file", "files")} added`);
+	if (outcome.versions > 0) parts.push(`${plural(outcome.versions, "version", "versions")} added`);
+	if (outcome.skipped > 0) parts.push(`${outcome.skipped} skipped`);
+	if (outcome.failures.length > 0) parts.push(`${outcome.failures.length} not added`);
 	return parts.length > 0 ? `${parts.join(", ")}.`.replace(/^./, (first) => first.toUpperCase()) : null;
 }
 

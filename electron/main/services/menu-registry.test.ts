@@ -1,3 +1,5 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { beforeEach, describe, expect, it } from "vitest";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +10,9 @@ import { openDatabase } from "../db/node-sqlite-shim";
 import * as calendar from "./calendar";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
+import * as folders from "./document-folders";
+import { importFile } from "./document-import";
+import { configureDocumentStorage } from "./documents";
 import * as notes from "./notes";
 import * as pages from "./pages";
 import { entriesFor } from "./menu-registry";
@@ -135,13 +140,64 @@ describe("note menu", () => {
 		expect(await ask("note", note.id)).toEqual([]);
 	});
 
-	it("takes Open in the default app off a page, which has no file", async () => {
+	it("gives a page only what a page can do, since it has no file", async () => {
 		const page = await pages.create({}, db);
-		expect(ids(await ask("file", page.document.id))).toEqual(["open", "delete"]);
+		expect(ids(await ask("file", page.document.id))).toEqual(["open", "move-to", "rename", "delete"]);
 	});
 
 	it("starts the Notes blank menu with a note and a page", async () => {
 		expect(ids(await ask("blank", "notes")).slice(0, 3)).toEqual(["new-note", "new-page", "new-event"]);
+	});
+});
+
+describe("documents explorer menus", () => {
+	const bytes = (text: string) => new TextEncoder().encode(text);
+
+	beforeEach(() => {
+		configureDocumentStorage(mkdtempSync(join(tmpdir(), "juno-menu-storage-")));
+	});
+
+	it("offers a file everything the explorer does, and Convert and sign for a file that is not a PDF", async () => {
+		const record = await importFile({ source: { kind: "bytes", fileName: "Notes.txt", data: bytes("Prijs per meter") } }, db);
+		expect(ids(await ask("file", record.id))).toEqual([
+			"preview",
+			"open-in-default-app",
+			"reveal-file",
+			"duplicate-file",
+			"copy-to",
+			"move-to",
+			"rename",
+			"convert-pdf",
+			"sign",
+			"download-file",
+			"send-file",
+			"delete",
+		]);
+		const sign = (await ask("file", record.id)).find((entry) => entry.id === "sign");
+		expect(sign?.label).toBe("Convert and sign");
+	});
+
+	it("leaves Convert to PDF off a PDF", async () => {
+		const pdf = bytes("%PDF-1.4\n1 0 obj\n<< >>\nendobj\n%%EOF");
+		const record = await importFile({ source: { kind: "bytes", fileName: "Offerte.pdf", data: pdf } }, db);
+		const entries = ids(await ask("file", record.id));
+		expect(entries).not.toContain("convert-pdf");
+		expect(entries).toContain("sign");
+	});
+
+	it("lets only a folder of the owner's own be renamed, moved or deleted", async () => {
+		const client = await clients.create({ name: "Obet" }, db);
+		const folder = await folders.create({ name: "Contracts", clientId: client.id }, db);
+		expect(ids(await ask("folder", `folder:${folder.id}`))).toEqual(["open", "new-folder", "add-files", "rename", "move-to", "delete"]);
+		expect(ids(await ask("folder", `client:${client.id}`))).toEqual(["open", "new-folder", "add-files"]);
+		expect(ids(await ask("folder", "unfiled"))).toEqual(["open", "new-folder", "add-files"]);
+		expect(ids(await ask("folder", "templates"))).toEqual(["open"]);
+		expect(await ask("folder", "folder:gone")).toEqual([]);
+		expect(await ask("folder", "client:gone")).toEqual([]);
+	});
+
+	it("starts the documents blank menu with adding to the open folder", async () => {
+		expect(ids(await ask("blank", "documents")).slice(0, 4)).toEqual(["add-files", "new-folder", "new-page", "new-document"]);
 	});
 });
 

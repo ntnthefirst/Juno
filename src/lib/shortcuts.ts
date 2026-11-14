@@ -60,6 +60,8 @@ const NAMED: Record<string, string> = {
 	escape: "Esc",
 	enter: "Enter",
 	delete: "Del",
+	space: "Space",
+	backspace: "Backspace",
 };
 
 /** The keys of a shortcut as they are drawn on this machine: ["Ctrl", "K"] or ["⌘", "K"]. */
@@ -100,6 +102,25 @@ export const COMBOS = {
 	find: "mod+f",
 	openFolder: "mod+o",
 	deleteRecord: "delete",
+} as const;
+
+/**
+ * The keys of a file list while it has focus: the documents explorer and the
+ * same rows on a client or a project. They are the list's own, listened for on
+ * the list and not on the window, so a field anywhere else keeps its Ctrl C and
+ * Ctrl V.
+ */
+export const LIST_COMBOS = {
+	preview: "space",
+	open: "enter",
+	rename: "f2",
+	remove: "delete",
+	selectAll: "mod+a",
+	duplicate: "mod+d",
+	copy: "mod+c",
+	cut: "mod+x",
+	paste: "mod+v",
+	up: "backspace",
 } as const;
 
 export type ShortcutRow = { combos: string[]; label: string };
@@ -148,6 +169,21 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 		rows: [
 			{ combos: [COMBOS.openFolder], label: "Open the project folder" },
 			{ combos: [COMBOS.deleteRecord], label: "Delete the project" },
+		],
+	},
+	{
+		title: "In the documents list",
+		rows: [
+			{ combos: [LIST_COMBOS.preview], label: "Preview" },
+			{ combos: [LIST_COMBOS.open], label: "Open in its app" },
+			{ combos: [LIST_COMBOS.rename], label: "Rename" },
+			{ combos: [LIST_COMBOS.remove], label: "Delete" },
+			{ combos: [LIST_COMBOS.selectAll], label: "Select all" },
+			{ combos: [LIST_COMBOS.duplicate], label: "Duplicate" },
+			{ combos: [LIST_COMBOS.copy], label: "Copy" },
+			{ combos: [LIST_COMBOS.cut], label: "Cut, to move with the next paste" },
+			{ combos: [LIST_COMBOS.paste], label: "Paste into the open folder" },
+			{ combos: [LIST_COMBOS.up], label: "Up one folder" },
 		],
 	},
 	{

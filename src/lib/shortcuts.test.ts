@@ -78,6 +78,13 @@ describe("formatCombo", () => {
 		expect(formatCombo("escape", false)).toEqual(["Esc"]);
 	});
 
+	it("names the list keys the documents sheet shows", () => {
+		expect(formatCombo("space", false)).toEqual(["Space"]);
+		expect(formatCombo("f2", false)).toEqual(["F2"]);
+		expect(formatCombo("backspace", false)).toEqual(["Backspace"]);
+		expect(formatCombo("mod+d", false)).toEqual(["Ctrl", "D"]);
+	});
+
 	it("draws a lone character as itself", () => {
 		expect(formatCombo("?", false)).toEqual(["?"]);
 		expect(formatCombo("mod+,", false)).toEqual(["Ctrl", ","]);

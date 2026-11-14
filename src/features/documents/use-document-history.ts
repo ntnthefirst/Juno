@@ -17,13 +17,14 @@ type History = {
  * that was just queued.
  */
 export function useDocumentHistory(documentId: string) {
-	const [history, setHistory] = useState<History | null>(null);
+	// Tagged with the document it is of, so the next document in a preview never shows the last one's versions.
+	const [held, setHistory] = useState<{ documentId: string; history: History } | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	const reload = useCallback(() => {
 		Promise.all([window.juno.documents.versions(documentId), window.juno.documents.timeline(documentId)])
 			.then(([versions, timeline]) => {
-				setHistory({ versions, timeline });
+				setHistory({ documentId, history: { versions, timeline } });
 				setError(null);
 			})
 			.catch((cause: unknown) => setError(messageOf(cause)));
@@ -34,5 +35,6 @@ export function useDocumentHistory(documentId: string) {
 		return onDocumentsChanged(reload);
 	}, [reload]);
 
+	const history = held && held.documentId === documentId ? held.history : null;
 	return { history, error, reload };
 }

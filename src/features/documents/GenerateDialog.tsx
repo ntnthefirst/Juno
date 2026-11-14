@@ -12,6 +12,9 @@ type GenerateDialogProps = {
 	lockedClientId?: string;
 	/** Fixes the project, for a document started from that project's own page. */
 	lockedProjectId?: string;
+	/** Where it starts out kept, for a document started from a folder of the explorer. Still changeable. */
+	initialClientId?: string | null;
+	initialProjectId?: string | null;
 	/** Wording for the way back, when it is not the Documents list. */
 	backLabel?: string;
 	onClose: () => void;
@@ -39,6 +42,8 @@ function labelFor(path: string): string {
 export function GenerateDialog({
 	lockedClientId,
 	lockedProjectId,
+	initialClientId,
+	initialProjectId,
 	backLabel = "Documents",
 	onClose,
 	onGenerated,
@@ -50,8 +55,8 @@ export function GenerateDialog({
 	// A project's own page fixes the project; its client, if it has one, comes
 	// with it in the service, so the client is left for the service to fill.
 	const [owner, setOwner] = useState<DocumentOwnerChoice>({
-		clientId: lockedClientId ?? "",
-		projectId: lockedProjectId ?? "",
+		clientId: lockedClientId ?? initialClientId ?? "",
+		projectId: lockedProjectId ?? initialProjectId ?? "",
 	});
 	const [templateId, setTemplateId] = useState("");
 	const [title, setTitle] = useState("");

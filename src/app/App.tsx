@@ -13,13 +13,13 @@ import { NotesScreen } from "../features/notes/NotesScreen";
 import { Walkthrough } from "../features/onboarding/Walkthrough";
 import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
-import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { OverviewScreen } from "../features/overview/OverviewScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
 import { currentRequest, onOpenRequest, requestOpen, screenFor } from "../lib/open-entity";
 import { announceRecordsChanged } from "../lib/new-record";
+import { ContentHostContext } from "../lib/content-host";
 import { currentScreenAction, onScreenActionRequest, requestScreenAction, type ScreenAction } from "../lib/screen-actions";
 import { useThemeSync } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
@@ -157,6 +157,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			setNewHidden((count) => count - 1);
 		};
 	}, []);
+	// The sheet the screen is drawn on, for what covers the content area and nothing else.
+	const [contentHost, setContentHost] = useState<HTMLElement | null>(null);
 	const [recentOpen, setRecentOpen] = useState(false);
 	const [agentPending, setAgentPending] = useState(0);
 
@@ -293,6 +295,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 	return (
 		<TitleBarSlotContext.Provider value={{ left: slot, right: rightSlot, overflow: overflowSlot, hideNew }}>
+			<ContentHostContext.Provider value={contentHost}>
 			<div className="flex h-full flex-col bg-[var(--paper)]">
 				<TitleBar
 					back={back}
@@ -319,7 +322,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 						onOpenSettings={() => void window.juno.window.openSettings()}
 					/>
 
-					<main key={`${screen}:${visit}`} className="animate-screen mr-2 mb-2 min-w-0 flex-1 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
+					<main ref={setContentHost} key={`${screen}:${visit}`} className="animate-screen relative mr-2 mb-2 min-w-0 flex-1 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
 						{screen === "overview" ? (
 							<OverviewScreen />
 						) : screen === "clients" ? (
@@ -338,8 +341,6 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 							<CalendarScreen />
 						) : screen === "mail-templates" ? (
 							<MailTemplatesScreen />
-						) : screen === "document-templates" ? (
-							<DocumentTemplatesScreen />
 						) : screen === "agent" ? (
 							<AgentScreen />
 						) : (
@@ -365,6 +366,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 				{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 			</div>
+			</ContentHostContext.Provider>
 		</TitleBarSlotContext.Provider>
 	);
 }

@@ -7,6 +7,10 @@ const EVENT = "juno:open-entity";
 export type OpenTarget =
 	| { kind: "project"; id: string; name: string }
 	| { kind: "document"; id: string; name: string }
+	/** A node of the documents tree, opened in the explorer: `client:<id>`, `project:<id>`, `folder:<id>`, `unfiled` or `templates`. */
+	| { kind: "document-folder"; key: string }
+	/** A document template, previewed in the Templates folder. */
+	| { kind: "document-template"; id: string; name: string }
 	| { kind: "note"; id: string }
 	| { kind: "thread"; id: string; messageId: string | null }
 	| { kind: "mail-template"; id: string; mode: "view" | "edit" }
@@ -27,6 +31,8 @@ export function screenFor(target: OpenTarget): ScreenId {
 		case "project":
 			return "projects";
 		case "document":
+		case "document-folder":
+		case "document-template":
 			return "documents";
 		case "note":
 			return "notes";

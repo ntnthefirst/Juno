@@ -121,7 +121,7 @@ export function TemplateEditor({ templateId, onSaved, onBack }: TemplateEditorPr
 			.then((loaded) => {
 				if (cancelled) return;
 				if (!loaded) {
-					setLoad({ status: "error", message: "This template is no longer in your juno." });
+					setLoad({ status: "error", message: "It was deleted. Go back to Templates to open another." });
 					return;
 				}
 				setLoad({ status: "ready", loaded });

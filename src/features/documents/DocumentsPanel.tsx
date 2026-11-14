@@ -1,22 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
-import type { DocumentRecord } from "@shared/types";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import type { DocumentPlace, DocumentRecord, ReferenceItem } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Icon } from "../../components/Icon";
+import { Dialog } from "../../components/Dialog";
 import { MenuButton } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
-import {
-	describeOutcome,
-	itemsFromFiles,
-	itemsFromPicked,
-	onDocumentsChanged,
-	type ImportItem,
-	type ImportOutcome,
-} from "../../lib/pdf-drop";
+import type { ListCommand } from "../../lib/list-keys";
+import { NO_SELECTION, pruneSelection, type ListSelection } from "../../lib/list-selection";
+import { contextMenuFor } from "../../lib/native-menu";
+import { describeOutcome, itemsFromFiles, itemsFromPicked, onDocumentsChanged, type ImportItem, type ImportOutcome } from "../../lib/pdf-drop";
 import { useFileDrop } from "../../lib/use-file-drop";
 import { AddExistingDialog } from "./AddExistingDialog";
-import { ImportFlow } from "./ImportFlow";
-import { VersionCount } from "./VersionCount";
-import { VersionList } from "./VersionList";
+import { AddFilesFlow } from "./AddFilesFlow";
+import { documentItem, nextSort, sortItems, type ExplorerItem, type ExplorerSort } from "./explorer-items";
+import { ExplorerView } from "./ExplorerView";
 
 type DocumentsPanelProps = {
 	scope: DocumentsScope;
@@ -24,7 +20,7 @@ type DocumentsPanelProps = {
 	name: string;
 	/** Starting a document from a template is a page, which the screen owns. */
 	onGenerate: () => void;
-	/** Opening one is the same viewer the Documents screen shows, which the screen owns too. */
+	/** A click previews the document in the explorer (requestOpen with the document), which the screen asks for. */
 	onOpen: (id: string, title: string) => void;
 	/** The client's own counts and timeline are stale once a document is added. */
 	onChanged: () => void;
@@ -35,45 +31,39 @@ export type DocumentsScope = { clientId: string } | { projectId: string };
 
 type Load =
 	| { status: "loading" }
-	| { status: "ready"; records: DocumentRecord[] }
+	| { status: "ready"; records: DocumentRecord[]; statuses: ReferenceItem[] }
 	| { status: "error"; message: string };
 
-/** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
-function formatDate(date: string | null): string {
-	if (!date) return "";
-	const parts = date.split("-");
-	return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
-}
-
 /**
- * A client's or a project's documents, with the three ways to add one. The plus
- * offers a template, a PDF from this computer, or a document Juno already
- * has, and files dropped on the panel are imported for this client or project
- * without being asked which one. A project that has
- * a client brings its client along (document-owner.ts), so a file dropped on
- * a client's project shows on the client's page too.
+ * A client's or a project's documents, any kind of file, in the same rows the
+ * explorer draws and with the same clicks (decision 75): one click opens the
+ * document's preview in Documents, a double click opens the file in its own
+ * app. Files dropped on the panel, or chosen with Add files, are kept for this
+ * client or project, and one that looks like a document already here is shown
+ * beside it first. A project that has a client brings its client along
+ * (document-owner.ts), so a file dropped on a client's project shows on the
+ * client's page too.
  */
-export function DocumentsPanel({
-	scope,
-	name,
-	onGenerate,
-	onOpen,
-	onChanged,
-}: DocumentsPanelProps) {
+export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: DocumentsPanelProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [items, setItems] = useState<ImportItem[] | null>(null);
-	const [expanded, setExpanded] = useState<string[]>([]);
-	const [problems, setProblems] = useState<string[]>([]);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [addingExisting, setAddingExisting] = useState(false);
+	const [heldSelection, setSelection] = useState<ListSelection>(NO_SELECTION);
+	const [sort, setSort] = useState<ExplorerSort>({ by: "modified", descending: true });
+	const [renaming, setRenaming] = useState<string | null>(null);
+	const [confirm, setConfirm] = useState<DocumentRecord[] | null>(null);
 
 	const clientId = "clientId" in scope ? scope.clientId : undefined;
 	const projectId = "projectId" in scope ? scope.projectId : undefined;
+	const place: DocumentPlace = { clientId: clientId ?? null, projectId: projectId ?? null, folderId: null };
 
 	const reload = useCallback(() => {
-		window.juno.documents
-			.list(clientId ? { clientId } : { projectId })
-			.then((records) => setLoad({ status: "ready", records }))
+		Promise.all([
+			window.juno.documents.list(clientId ? { clientId } : { projectId }),
+			window.juno.reference.getSet("document_status"),
+		])
+			.then(([records, set]) => setLoad({ status: "ready", records, statuses: set ? set.items : [] }))
 			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 	}, [clientId, projectId]);
 
@@ -82,38 +72,110 @@ export function DocumentsPanel({
 		return onDocumentsChanged(reload);
 	}, [reload]);
 
+	const records = useMemo(() => (load.status === "ready" ? load.records : []), [load]);
+	const statusLabels = useMemo(
+		() => new Map((load.status === "ready" ? load.statuses : []).map((item) => [item.id, item.label])),
+		[load],
+	);
+	const shown = useMemo(() => sortItems(records.map(documentItem), sort), [records, sort]);
+	const keys = useMemo(() => shown.map((item) => item.key), [shown]);
+
+	const selection = useMemo(() => pruneSelection(heldSelection, keys), [heldSelection, keys]);
+
+	const selected = shown.flatMap((item) =>
+		item.kind === "document" && selection.selected.includes(item.key) ? [item.record] : [],
+	);
+
 	async function bring(files: File[]) {
-		setProblems([]);
 		setNotice(null);
-		const { items: read, rejected } = await itemsFromFiles(files);
-		setProblems(rejected);
+		const read = await itemsFromFiles(files);
 		if (read.length > 0) setItems(read);
 	}
 
 	async function choose() {
-		setProblems([]);
 		setNotice(null);
 		try {
-			const picked = await window.juno.documents.pickPdfs();
+			const picked = await window.juno.documents.pickFiles();
 			if (picked.length > 0) setItems(itemsFromPicked(picked));
 		} catch (cause: unknown) {
-			setProblems([messageOf(cause)]);
+			setNotice(messageOf(cause));
 		}
 	}
 
 	function finished(outcome: ImportOutcome) {
 		setItems(null);
-		setNotice(describeOutcome(outcome));
-		setProblems((current) => [...current, ...outcome.failures.map((entry) => entry.message)]);
+		const failures = outcome.failures.map((entry) => `${entry.name}: ${entry.message}`).join(" ");
+		setNotice([describeOutcome(outcome), failures].filter(Boolean).join(" ") || null);
 		if (outcome.documents + outcome.versions > 0) onChanged();
 	}
 
-	function toggle(id: string) {
-		setExpanded((current) => (current.includes(id) ? current.filter((other) => other !== id) : [...current, id]));
+	function preview(record: DocumentRecord) {
+		onOpen(record.id, record.title);
+	}
+
+	async function openOutside(record: DocumentRecord) {
+		if (record.sourceKind === "page" || !record.latestVersion) {
+			preview(record);
+			return;
+		}
+		try {
+			const opened = await window.juno.documents.open(record.id);
+			if (opened.readOnly) setNotice(`${record.title} opened read only, because it is signed.`);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	async function act(work: () => Promise<unknown>, done?: string) {
+		try {
+			await work();
+			if (done) setNotice(done);
+			reload();
+			onChanged();
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	function command(next: ListCommand) {
+		if (next.kind === "rename" && selected.length === 1) setRenaming(`doc:${selected[0]!.id}`);
+		else if (next.kind === "delete" && selected.length > 0) setConfirm(selected);
+		else if (next.kind === "duplicate") {
+			const files = selected.filter((record) => record.latestVersion !== null);
+			if (files.length > 0) {
+				void act(async () => {
+					for (const record of files) await window.juno.documents.duplicate(record.id);
+				}, files.length === 1 ? `${files[0]!.title} duplicated.` : `${files.length} documents duplicated.`);
+			}
+		}
+	}
+
+	function itemMenu(item: ExplorerItem, event: MouseEvent) {
+		if (item.kind !== "document") return;
+		const { record } = item;
+		contextMenuFor(
+			{ kind: "file", id: record.id },
+			{
+				preview: () => preview(record),
+				open: () => preview(record),
+				// Copy to, Move to, Convert and Sign are the explorer's, where the record's folder is open.
+				"copy-to": () => preview(record),
+				"move-to": () => preview(record),
+				"convert-pdf": () => preview(record),
+				sign: () => preview(record),
+				rename: () => setRenaming(item.key),
+				delete: () => setConfirm(selected.some((other) => other.id === record.id) && selected.length > 1 ? selected : [record]),
+				done: (message) => {
+					reload();
+					onChanged();
+					if (message) setNotice(message);
+				},
+				failed: setNotice,
+			},
+		)(event);
 	}
 
 	const drop = useFileDrop((files) => void bring(files));
-	const records = load.status === "ready" ? load.records : [];
 
 	return (
 		<section
@@ -122,124 +184,97 @@ export function DocumentsPanel({
 				drop.dragging ? "outline-2 outline-dashed outline-offset-4 outline-[var(--accent)]" : ""
 			}`}
 		>
-			<div className="mb-4 flex items-center justify-between gap-4">
+			<div className="mb-3 flex items-center justify-between gap-4">
 				<h3 className="text-h3">Documents</h3>
-				<MenuButton
-					ariaLabel="Add a document"
-					items={[
-						{ id: "template", label: "From a template", icon: "documents", onSelect: onGenerate },
-						{ id: "import", label: "Import a PDF", icon: "import", onSelect: () => void choose() },
-						{
-							id: "existing",
-							label: "Add an existing document",
-							icon: "link",
-							onSelect: () => {
-								setNotice(null);
-								setAddingExisting(true);
+				<div className="flex items-center gap-1">
+					<Button size="dense" onClick={() => void choose()}>
+						Add files
+					</Button>
+					<MenuButton
+						ariaLabel="Add a document"
+						items={[
+							{ id: "template", label: "From a template", icon: "documents", onSelect: onGenerate },
+							{ id: "import", label: "Add files", icon: "import", onSelect: () => void choose() },
+							{
+								id: "existing",
+								label: "Add an existing document",
+								icon: "link",
+								onSelect: () => {
+									setNotice(null);
+									setAddingExisting(true);
+								},
 							},
-						},
-					]}
-					label="New"
-					icon="add"
-				/>
+						]}
+						label="New"
+						icon="add"
+					/>
+				</div>
 			</div>
 
-			{load.status === "loading" ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
-			) : load.status === "error" ? (
+			{load.status === "error" ? (
 				<div className="border-l-2 border-[var(--risk)] pl-4">
 					<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the documents.</p>
 					<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
 						{load.message}
 					</p>
 				</div>
-			) : records.length === 0 ? (
-				<div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--line-strong)] px-6 py-10 text-center">
-					<p className="font-[var(--weight-medium)]">No documents yet</p>
-					<p className="mx-auto mt-1 max-w-[46ch] text-dense text-[var(--ink-muted)]">
-						Drop PDF files here, or use the plus to start one from a template, import one, or add a document Juno already has. A file that is an existing document again is offered as a new version.
-					</p>
+			) : load.status === "loading" ? (
+				<div aria-hidden className="flex flex-col gap-2 py-2">
+					{Array.from({ length: 3 }, (_, at) => (
+						<span key={at} className="h-5 animate-pulse rounded-[var(--radius-sm)] bg-[var(--sunken)]" style={{ width: `${70 - at * 12}%` }} />
+					))}
 				</div>
 			) : (
-				<ul>
-					{records.map((record) => (
-						<li key={record.id} className="border-b border-[var(--line)] py-3 text-base">
-							<div className="flex items-center justify-between gap-4">
-							<div className="flex min-w-0 items-center gap-3">
-								<span
-									aria-hidden
-									className={`flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] ${
-										record.sourceKind === "page"
-											? "bg-[var(--accent-soft)] text-[var(--accent)]"
-											: record.sourceKind === "imported"
-												? "bg-[var(--risk-soft)] text-[var(--risk)]"
-												: "bg-[var(--sunken)] text-[var(--ink-muted)]"
-									}`}
-								>
-									<Icon name={record.sourceKind === "page" ? "edit" : "documents"} size={16} />
-								</span>
-								<div className="min-w-0">
-									<span data-selectable className="block truncate text-base font-[var(--weight-medium)]">
-										{record.title}
-									</span>
-									<span className="flex items-center gap-2 text-[var(--ink-muted)]">
-										{record.sourceKind === "imported" ? "Imported PDF" : record.sourceKind === "page" ? "Page" : "From a template"}
-										{record.versionCount > 0 ? (
-											<VersionCount
-												count={record.versionCount}
-												open={expanded.includes(record.id)}
-												onToggle={() => toggle(record.id)}
-											/>
-										) : null}
-									</span>
-								</div>
+				<div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
+					<ExplorerView
+						items={shown}
+						view="list"
+						selection={selection}
+						onSelection={setSelection}
+						statusLabels={statusLabels}
+						sort={sort}
+						onSort={(by) => setSort((current) => nextSort(current, by))}
+						renamingKey={renaming}
+						onRename={(item, title) => {
+							setRenaming(null);
+							if (item.kind === "document") void act(() => window.juno.documents.rename(item.record.id, title));
+						}}
+						onRenameEnd={() => setRenaming(null)}
+						cutKeys={new Set()}
+						onActivate={(item, how) => {
+							if (item.kind !== "document") return;
+							if (how === "open") void openOutside(item.record);
+							else preview(item.record);
+						}}
+						onCommand={command}
+						onItemMenu={itemMenu}
+						dragOf={() => null}
+						canDropOn={() => false}
+						onDropOn={() => undefined}
+						label={`Documents of ${name}`}
+						empty={
+							<div className="px-6 py-10 text-center">
+								<p className="font-[var(--weight-medium)]">No documents yet</p>
+								<p className="mx-auto mt-1 max-w-[46ch] text-dense text-[var(--ink-muted)]">
+									Drop any files here, or press Add files. A file that looks like a document already here is shown beside it
+									first.
+								</p>
 							</div>
-							<div className="flex shrink-0 items-center gap-3">
-								<span className="tabular text-micro text-[var(--ink-faint)]">
-									{formatDate(record.issuedOn)}
-								</span>
-								<Button
-									size="dense"
-									disabled={record.pdfPath === null}
-									onClick={() => onOpen(record.id, record.title)}
-								>
-									Open
-								</Button>
-							</div>
-							</div>
-							{expanded.includes(record.id) ? (
-								<div className="mt-2 pl-9">
-									<VersionList documentId={record.id} nested />
-								</div>
-							) : null}
-						</li>
-					))}
-				</ul>
+						}
+					/>
+				</div>
 			)}
 
 			{drop.dragging ? (
 				<div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[var(--radius-lg)] bg-[var(--accent-soft)]/80">
-					<p className="font-[var(--weight-medium)] text-[var(--accent)]">
-						Drop to add to {name}
-					</p>
+					<p className="font-[var(--weight-medium)] text-[var(--accent)]">Drop to add to {name}</p>
 				</div>
 			) : null}
 
 			{notice ? (
-				<p role="status" className="mt-3 text-sm text-[var(--ink-muted)]">
+				<p role="status" data-selectable className="mt-3 text-sm text-[var(--ink-muted)]">
 					{notice}
 				</p>
-			) : null}
-			{problems.length > 0 ? (
-				<div className="mt-3 border-l-2 border-[var(--risk)] pl-4">
-					<ul className="text-sm text-[var(--ink-muted)]">
-						{problems.map((message, index) => (
-							<li key={`${index}:${message}`} data-selectable>
-								{message}
-							</li>
-						))}
-					</ul>
-				</div>
 			) : null}
 			{addingExisting ? (
 				<AddExistingDialog
@@ -254,14 +289,30 @@ export function DocumentsPanel({
 					}}
 				/>
 			) : null}
-			{items ? (
-				<ImportFlow
-					items={items}
-					{...(clientId ? { clientId } : {})}
-					{...(projectId ? { projectId } : {})}
-					onDone={finished}
-				/>
+			{confirm ? (
+				<Dialog title="Delete" width="narrow" onClose={() => setConfirm(null)}>
+					<p className="mt-3 text-base">
+						{confirm.length === 1 ? `Delete ${confirm[0]!.title}?` : `Delete ${confirm.length} documents?`} They go from this list
+						and from Documents.
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setConfirm(null)}>Cancel</Button>
+						<Button
+							variant="danger"
+							onClick={() => {
+								const gone = confirm;
+								setConfirm(null);
+								void act(async () => {
+									for (const record of gone) await window.juno.documents.remove(record.id);
+								}, gone.length === 1 ? `${gone[0]!.title} deleted.` : `${gone.length} documents deleted.`);
+							}}
+						>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
+			{items ? <AddFilesFlow items={items} place={place} placeName={name} onDone={finished} /> : null}
 		</section>
 	);
 }

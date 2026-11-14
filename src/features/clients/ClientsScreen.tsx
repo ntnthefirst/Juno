@@ -9,7 +9,6 @@ import type {
 	ClientPhone,
 	ClientSummary,
 	Contact,
-	DocumentRecord,
 	Project,
 } from "@shared/types";
 import type { Crumb } from "../../app/breadcrumb-context";
@@ -28,6 +27,7 @@ import { RecordLink } from "../../components/RecordLink";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { clearPendingClient, peekPendingClient } from "../../lib/open-client";
+import { requestOpen } from "../../lib/open-entity";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { contextMenuFor } from "../../lib/native-menu";
 import { ComposePage, type ComposeSeed } from "../mail/ComposePage";
@@ -50,9 +50,7 @@ import {
 } from "./client-view";
 import { ColumnHeader } from "./ColumnHeader";
 import { CheckList, RangeField } from "./ColumnFilters";
-import { DocumentDetail } from "../documents/DocumentDetail";
 import { GenerateDialog } from "../documents/GenerateDialog";
-import { SignPage } from "../documents/SignPage";
 import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
 import { ClientNotePanel } from "./ClientNotePanel";
@@ -98,9 +96,6 @@ export function ClientsScreen() {
 	const [documentForm, setDocumentForm] = useState(false);
 	// A document opens in the same viewer the Documents screen uses, inside this
 	// client, so the trail and Escape lead back to the Documents tab.
-	const [openDocument, setOpenDocument] = useState<{ id: string; title: string } | null>(null);
-	const [signingRecord, setSigningRecord] = useState<DocumentRecord | null>(null);
-	const [documentVersion, setDocumentVersion] = useState(0);
 	const [detailTab, setDetailTab] = useState<TabId>("overview");
 	// Unlike contacts and projects, these are small enough to edit in a side
 	// panel next to the detail pane rather than taking over the screen.
@@ -178,15 +173,7 @@ export function ClientsScreen() {
 		setSelectedName(row.name);
 	}
 
-	function closeDocument() {
-		setOpenDocument(null);
-		setSigningRecord(null);
-		setDetailTab("documents");
-	}
-
 	function backToList() {
-		setOpenDocument(null);
-		setSigningRecord(null);
 		setDetailTab("overview");
 		setSelectedId(null);
 		setSelectedName(null);
@@ -351,12 +338,6 @@ export function ClientsScreen() {
 			{ label: selectedName ?? "Client", onSelect: () => setScheduleForm(null) },
 			{ label: scheduleFormLabel(scheduleForm) },
 		];
-	} else if (openDocument && selectedId) {
-		trail = [
-			clientCrumb,
-			{ label: selectedName ?? "Client", onSelect: closeDocument },
-			{ label: openDocument.title },
-		];
 	} else if (documentForm && selectedId) {
 		trail = [
 			clientCrumb,
@@ -377,18 +358,14 @@ export function ClientsScreen() {
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (selectedId === null) return;
-			if (form || contactForm || projectForm || scheduleForm || documentForm || signingRecord) return;
-			if (openDocument) {
-				if (!document.querySelector("[role='dialog']")) closeDocument();
-				return;
-			}
+			if (form || contactForm || projectForm || scheduleForm || documentForm) return;
 			if (emailPanel || phonePanel || linkPanel || addressPanel || notePanel) return;
 			if (document.querySelector("[role='dialog']")) return;
 			backToList();
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
+	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentForm, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
 
 	if (compose) {
 		return (
@@ -456,38 +433,6 @@ export function ClientsScreen() {
 		);
 	}
 
-	if (signingRecord && selectedId) {
-		return (
-			<SignPage
-				record={signingRecord}
-				onClose={() => setSigningRecord(null)}
-				onSigned={() => {
-					setSigningRecord(null);
-					setDocumentVersion((version) => version + 1);
-					bumpDetail();
-				}}
-			/>
-		);
-	}
-
-	if (openDocument && selectedId) {
-		return (
-			<div className="h-full min-h-0 w-full">
-				<DocumentDetail
-					key={`${openDocument.id}:${documentVersion}`}
-					documentId={openDocument.id}
-					onDeleted={() => {
-						closeDocument();
-						bumpDetail();
-					}}
-					onChanged={bumpDetail}
-					onSign={setSigningRecord}
-					onTitleChange={(title) => setOpenDocument((current) => (current ? { ...current, title } : current))}
-				/>
-			</div>
-		);
-	}
-
 	if (documentForm && selectedId) {
 		return (
 			<GenerateDialog
@@ -532,7 +477,7 @@ export function ClientsScreen() {
 							onEditLink={(link) => setLinkPanel({ link })}
 							onEditAddress={(address) => setAddressPanel({ address })}
 							onGenerateDocument={() => setDocumentForm(true)}
-							onOpenDocument={(id, title) => setOpenDocument({ id, title })}
+							onOpenDocument={(id, title) => requestOpen({ kind: "document", id, name: title })}
 							initialTab={detailTab}
 							onTabChange={setDetailTab}
 							onEditNote={(note, initialKind) => setNotePanel({ clientId: selectedId, note, initialKind })}

@@ -1,23 +1,24 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import type {
-	DocumentRecord,
-	DocumentTemplate,
-	ReferenceItem,
-	VersionUse,
-} from "@shared/types";
+import type { DocumentRecord, DocumentTemplate, DocumentVersion, ReferenceItem, VersionUse } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
+import { FilePreviewView } from "../../components/FilePreviewView";
+import { FullPreview } from "../../components/FullPreview";
 import { IconAction } from "../../components/IconAction";
-import { MenuButton } from "../../components/Menu";
-import { belongsTo } from "./belongs-to";
-import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
+import { MenuButton, type MenuItem } from "../../components/Menu";
+import { PdfViewer } from "../../components/PdfViewer";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { fileTypeLabel, isPdfFile } from "../../lib/file-type";
+import { modifiedLabel } from "../../lib/modified-label";
 import { announceDocumentsChanged } from "../../lib/pdf-drop";
-import { TitleBarSlot } from "../../app/TitleBarSlot";
-import { ComposePage } from "../mail/ComposePage";
+import { useFilePreview } from "../../lib/use-file-preview";
+import { formatBytes } from "../projects/format";
+import { belongsTo } from "./belongs-to";
+import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
 import { DocumentTimeline } from "./DocumentTimeline";
-import { PdfViewer } from "../../components/PdfViewer";
+import { RenameField } from "./RenameField";
+import { SpecimenMark } from "./SpecimenMark";
 import { useDocumentHistory } from "./use-document-history";
 import { KIND_LABELS } from "./version-format";
 import { VersionSwitcher } from "./VersionSwitcher";
@@ -27,22 +28,6 @@ function formatDate(date: string | null): string {
 	if (!date) return "";
 	const parts = date.split("-");
 	return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
-}
-
-export function SpecimenMark() {
-	return (
-		<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--risk-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--risk)]">
-			Specimen
-		</span>
-	);
-}
-
-function ImportedMark() {
-	return (
-		<span className="inline-block shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--ink-muted)]">
-			Imported
-		</span>
-	);
 }
 
 type Detail = {
@@ -68,40 +53,105 @@ type SectionProps = {
 	children: ReactNode;
 };
 
+type VersionBodyProps = {
+	version: DocumentVersion;
+	caption: ReactNode;
+	onOpen: () => void;
+};
+
 type DocumentDetailProps = {
 	documentId: string;
+	/** Where it sits among the files of the folder it was opened from, for Previous and Next. */
+	position: { index: number; total: number; onPrevious: () => void; onNext: () => void } | null;
+	/** "Back to Contracts". */
+	closeLabel: string;
+	onClose: () => void;
+	/** Bumped when the document changed outside this view, such as an edit saved in Word. */
+	revision: number;
+	details: boolean;
+	onToggleDetails: () => void;
 	onDeleted: (record: DocumentRecord) => void;
 	onChanged: () => void;
 	/** Signing is a page that takes the screen, so the screen owns it. */
 	onSign: (record: DocumentRecord) => void;
-	/** The screen shows this in the title bar trail. Called with the loaded
-	 * record's own title, so a rename elsewhere still reaches the trail rather
-	 * than leaving it stuck on whatever label the list row had. */
+	/** So is writing a mail with it attached. */
+	onSend: (record: DocumentRecord) => void;
+	/** Copy to and Move to ask where, in the screen's own picker. */
+	onCopyTo: (record: DocumentRecord) => void;
+	onMoveTo: (record: DocumentRecord) => void;
+	/** A notice for the screen to show, such as that a conversion may look different. */
+	onNotice: (message: string) => void;
+	/** The record's own title, for the title bar trail, once it has loaded and after a rename. */
 	onTitleChange: (title: string) => void;
 };
 
 /**
- * A document is its PDF, so opening one opens the PDF: the viewer takes the left
- * and everything else about the document sits in a column on the right. The
- * version being looked at is a choice made here, and the newest is the default.
- * Sending by email, signing and downloading ask first when it is not the newest.
+ * One version of a file as the preview draws it: a PDF in the viewer, which
+ * stays the viewer for PDFs (decision 40), and anything else from what the
+ * main process made of it (decision 76).
+ */
+function VersionBody({ version, caption, onOpen }: VersionBodyProps) {
+	const pdf = isPdfFile(version.fileName, version.mediaType);
+	const state = useFilePreview(pdf ? null : { kind: "version", versionId: version.id });
+	if (pdf) {
+		return (
+			<PdfViewer
+				fileKey={version.id}
+				read={window.juno.documents.readVersion}
+				caption={caption}
+				empty={<p className="text-[var(--ink-muted)]">This version has no file.</p>}
+			/>
+		);
+	}
+	return <FilePreviewView state={state} onOpen={onOpen} caption={caption} />;
+}
+
+/**
+ * A document opened from the explorer: the file over the whole content area,
+ * with its name, type and size at the top, Previous and Next through the
+ * folder, its actions, and a column at the right with what the detail view
+ * always had: the details, the client and project it is kept under, the
+ * versions to look through and the timeline. The column can be put away.
+ *
+ * The version on screen is a choice made here and the newest is the default.
+ * Sending by email, signing and downloading ask first when it is not the
+ * newest (decision 40).
  */
 export function DocumentDetail({
 	documentId,
+	position,
+	closeLabel,
+	onClose,
+	revision,
+	details,
+	onToggleDetails,
 	onDeleted,
 	onChanged,
 	onSign,
+	onSend,
+	onCopyTo,
+	onMoveTo,
+	onNotice,
 	onTitleChange,
 }: DocumentDetailProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [action, setAction] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
-	const [sending, setSending] = useState(false);
-	const [notice, setNotice] = useState<string | null>(null);
+	const [busy, setBusy] = useState<string | null>(null);
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const [renaming, setRenaming] = useState(false);
 	// Null follows the newest, so a version that arrives is shown without a click.
 	const [viewedId, setViewedId] = useState<string | null>(null);
 	const { history, reload: reloadHistory } = useDocumentHistory(documentId);
+	// Previous and Next change the document without a new view, so what was about the last one goes.
+	const [shownId, setShownId] = useState(documentId);
+	if (shownId !== documentId) {
+		setShownId(documentId);
+		setLoad({ status: "loading" });
+		setViewedId(null);
+		setRenaming(false);
+		setAction(null);
+		setConfirmingDelete(false);
+	}
 
 	const fetchDetail = useCallback(async (): Promise<Detail | null> => {
 		const [record, statusSet] = await Promise.all([
@@ -109,9 +159,7 @@ export function DocumentDetail({
 			window.juno.reference.getSet("document_status"),
 		]);
 		if (!record) return null;
-		const template = record.templateId
-			? await window.juno.templates.get(record.templateId)
-			: null;
+		const template = record.templateId ? await window.juno.templates.get(record.templateId) : null;
 		return {
 			record,
 			statuses: statusSet ? statusSet.items.filter((item) => item.hiddenAt === null) : [],
@@ -124,11 +172,7 @@ export function DocumentDetail({
 		fetchDetail()
 			.then((detail) => {
 				if (cancelled) return;
-				setLoad(
-					detail
-						? { status: "ready", detail }
-						: { status: "error", message: "This document is no longer in your juno." },
-				);
+				setLoad(detail ? { status: "ready", detail } : { status: "error", message: "It was deleted. Close the preview to go back to the folder." });
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setLoad({ status: "error", message: messageOf(cause) });
@@ -136,18 +180,20 @@ export function DocumentDetail({
 		return () => {
 			cancelled = true;
 		};
-	}, [fetchDetail]);
+	}, [fetchDetail, revision]);
 
 	const refresh = useCallback(() => {
 		fetchDetail()
 			.then((detail) => {
 				if (detail) setLoad({ status: "ready", detail });
 			})
-			.catch((cause: unknown) => {
-				setLoad({ status: "error", message: messageOf(cause) });
-			});
+			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
 		reloadHistory();
 	}, [fetchDetail, reloadHistory]);
+
+	useEffect(() => {
+		if (revision > 0) reloadHistory();
+	}, [revision, reloadHistory]);
 
 	const loadedTitle = load.status === "ready" ? load.detail.record.title : null;
 	useEffect(() => {
@@ -158,54 +204,16 @@ export function DocumentDetail({
 	const latest = versions[0] ?? null;
 	const viewing = versions.find((version) => version.id === viewedId) ?? latest;
 
-	async function setStatus(statusId: string) {
-		setAction(null);
-		try {
-			await window.juno.documents.setStatus(documentId, statusId.length > 0 ? statusId : null);
-			refresh();
-			onChanged();
-		} catch (cause: unknown) {
-			setAction(messageOf(cause));
-		}
-	}
-
-	/** Moves it to another client or project, or to neither. The file stays as it is. */
-	async function relink(next: DocumentOwnerChoice) {
-		setAction(null);
-		try {
-			await window.juno.documents.link(documentId, {
-				clientId: next.clientId || null,
-				projectId: next.projectId || null,
-			});
-			refresh();
-			onChanged();
-		} catch (cause: unknown) {
-			setAction(messageOf(cause));
-		}
-	}
-
-	async function renderPdf() {
+	async function run(label: string, work: () => Promise<void>) {
 		if (busy) return;
-		setBusy(true);
-		setAction(null);
-		try {
-			await window.juno.documents.renderPdf(documentId);
-			setViewedId(null);
-			refresh();
-			onChanged();
-		} catch (cause: unknown) {
-			setAction(messageOf(cause));
-		} finally {
-			setBusy(false);
-		}
-	}
-
-	async function run(work: () => Promise<void>) {
+		setBusy(label);
 		setAction(null);
 		try {
 			await work();
 		} catch (cause: unknown) {
 			setAction(messageOf(cause));
+		} finally {
+			setBusy(null);
 		}
 	}
 
@@ -220,32 +228,100 @@ export function DocumentDetail({
 		}
 	}
 
-	async function download() {
-		if (!viewing) return;
-		const number = viewing.number;
-		await run(async () => {
-			const saved = await window.juno.documents.downloadVersion(viewing.id);
-			if (saved) setNotice(`Saved a copy of version ${number}.`);
-		});
+	const changed = () => {
+		announceDocumentsChanged();
+		refresh();
+		onChanged();
+	};
+
+	if (load.status !== "ready") {
+		return (
+			<FullPreview title="Document" closeLabel={closeLabel} onClose={onClose} position={position}>
+				{load.status === "loading" ? (
+					<FilePreviewView state={{ status: "loading" }} />
+				) : (
+					<FilePreviewView state={{ status: "error", message: load.message }} />
+				)}
+			</FullPreview>
+		);
 	}
 
-	async function deleteVersion() {
-		if (!viewing) return;
-		const number = viewing.number;
-		await run(async () => {
-			if (!(await window.juno.documents.deleteVersion(viewing.id))) return;
-			setViewedId(null);
-			setNotice(`Deleted version ${number}.`);
-			announceDocumentsChanged();
+	const { record, statuses, template } = load.detail;
+	const templateVersion = record.templateVersion ?? template?.version ?? null;
+	const isImported = record.sourceKind === "imported";
+	const hasFile = viewing !== null;
+	const newestIsPdf = latest ? isPdfFile(latest.fileName, latest.mediaType) : false;
+	const canSign = !record.isSpecimen && latest !== null;
+
+	const setStatus = (statusId: string) =>
+		void run("status", async () => {
+			await window.juno.documents.setStatus(documentId, statusId.length > 0 ? statusId : null);
 			refresh();
 			onChanged();
 		});
-	}
 
-	async function addVersion() {
-		setAction(null);
-		try {
-			const picked = await window.juno.documents.pickPdfs();
+	/** Moves it to another client or project, or to neither. The file stays as it is. */
+	const relink = (next: DocumentOwnerChoice) =>
+		void run("link", async () => {
+			await window.juno.documents.link(documentId, { clientId: next.clientId || null, projectId: next.projectId || null });
+			changed();
+		});
+
+	const renderPdf = () =>
+		void run("render", async () => {
+			await window.juno.documents.renderPdf(documentId);
+			setViewedId(null);
+			changed();
+		});
+
+	/** A PDF of the newest version, kept as the next one. Juno's own route says the layout may differ. */
+	const convert = (then?: (converted: DocumentRecord) => void) =>
+		void run("convert", async () => {
+			const result = await window.juno.documents.convertPdf(documentId);
+			setViewedId(null);
+			changed();
+			if (result.via === "juno") {
+				onNotice("Converted by Juno, because Word is not installed here. The layout may differ from the original.");
+			} else {
+				onNotice("Converted to PDF through Word.");
+			}
+			then?.(result.document);
+		});
+
+	const openOutside = () =>
+		void run("open", async () => {
+			if (!viewing || viewing.isLatest) {
+				const opened = await window.juno.documents.open(documentId);
+				if (opened.readOnly) onNotice("Opened read only, because this version is signed.");
+			} else {
+				await window.juno.documents.openVersion(viewing.id);
+				onNotice(`Version ${viewing.number} opened read only. Edits are made to the newest.`);
+			}
+		});
+
+	const download = () =>
+		void guarded("download", () => {
+			if (!viewing) return;
+			const number = viewing.number;
+			void run("download", async () => {
+				const saved = await window.juno.documents.downloadVersion(viewing.id);
+				if (saved) onNotice(`Saved a copy of version ${number}.`);
+			});
+		});
+
+	const deleteVersion = () =>
+		void run("version", async () => {
+			if (!viewing) return;
+			const number = viewing.number;
+			if (!(await window.juno.documents.deleteVersion(viewing.id))) return;
+			setViewedId(null);
+			onNotice(`Deleted version ${number}.`);
+			changed();
+		});
+
+	const addVersion = () =>
+		void run("add", async () => {
+			const picked = await window.juno.documents.pickFiles();
 			for (const file of picked) {
 				await window.juno.documents.addVersion({
 					documentId,
@@ -253,46 +329,58 @@ export function DocumentDetail({
 				});
 			}
 			if (picked.length > 0) {
-				announceDocumentsChanged();
-				refresh();
-				onChanged();
+				setViewedId(null);
+				changed();
 			}
-		} catch (cause: unknown) {
-			setAction(messageOf(cause));
-			refresh();
-		}
-	}
+		});
 
-	async function remove() {
+	const duplicate = () =>
+		void run("duplicate", async () => {
+			const copy = await window.juno.documents.duplicate(documentId);
+			onNotice(`Duplicated as ${copy.title}.`);
+			announceDocumentsChanged();
+			onChanged();
+		});
+
+	const rename = (title: string) => {
+		setRenaming(false);
+		void run("rename", async () => {
+			await window.juno.documents.rename(documentId, title);
+			changed();
+		});
+	};
+
+	const remove = () => {
 		setConfirmingDelete(false);
-		try {
+		void run("delete", async () => {
 			onDeleted(await window.juno.documents.remove(documentId));
-		} catch (cause: unknown) {
-			setAction(messageOf(cause));
-		}
-	}
+		});
+	};
 
-	if (load.status === "loading") return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
+	const sign = () => {
+		if (newestIsPdf) void guarded("sign", () => onSign(record));
+		else convert(onSign);
+	};
 
-	if (load.status === "error") {
-		return (
-			<div className="m-8 border-l-2 border-[var(--risk)] pl-4">
-				<p className="font-[var(--weight-medium)] text-[var(--risk)]">
-					Could not load this document.
-				</p>
-				<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
-					{load.message}
-				</p>
-			</div>
-		);
-	}
-
-	const { record, statuses, template } = load.detail;
-	const templateVersion = record.templateVersion ?? template?.version ?? null;
-	// An imported PDF has no body and no template behind it, so nothing here may
-	// offer an action the service would reject: no re-render.
-	const isImported = record.sourceKind === "imported";
-	const hasFile = viewing !== null;
+	const menu: MenuItem[] = [
+		{ id: "duplicate", label: "Duplicate", icon: "templates", disabled: !latest, onSelect: duplicate },
+		{ id: "copy-to", label: "Copy to", icon: "copy", disabled: !latest, onSelect: () => onCopyTo(record) },
+		{ id: "move-to", label: "Move to", icon: "move-right", onSelect: () => onMoveTo(record) },
+		{ id: "rename", label: "Rename", icon: "edit", hint: "F2", onSelect: () => setRenaming(true) },
+		{ id: "send", label: "Send by email", icon: "mail", disabled: !hasFile, separatorBefore: true, onSelect: () => void guarded("email", () => onSend(record)) },
+		{ id: "add-version", label: "Add a version", icon: "import", onSelect: addVersion },
+		{
+			id: "delete-version",
+			label: "Delete this version",
+			icon: "remove",
+			disabled: !hasFile || versions.length < 2,
+			onSelect: deleteVersion,
+		},
+		...(!isImported && record.templateId
+			? [{ id: "render", label: "Create the PDF again", icon: "sync" as const, onSelect: renderPdf }]
+			: []),
+		{ id: "delete", label: "Delete", icon: "remove", danger: true, separatorBefore: true, onSelect: () => setConfirmingDelete(true) },
+	];
 
 	const caption = viewing ? (
 		<span className="flex items-center gap-2">
@@ -301,242 +389,167 @@ export function DocumentDetail({
 			</span>
 			<span>{KIND_LABELS[viewing.kind]}</span>
 			{viewing.isLatest ? null : (
-				<>
-					<span className="rounded-[var(--radius-sm)] bg-[var(--warn-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--warn)]">
-						Not the latest
-					</span>
-					<button
-						type="button"
-						onClick={() => setViewedId(null)}
-						className="text-[var(--accent)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
-					>
-						View latest
-					</button>
-				</>
+				<button
+					type="button"
+					onClick={() => setViewedId(null)}
+					className="text-[var(--accent)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+				>
+					View latest
+				</button>
 			)}
 		</span>
 	) : null;
 
-	return (
-		<div className="flex h-full min-h-0">
-			<div className="min-w-0 flex-1">
-				<PdfViewer
-					fileKey={viewing?.id ?? null}
-					read={window.juno.documents.readVersion}
-					caption={caption}
-					empty={
-						history === null ? (
-							<p className="text-[var(--ink-muted)]">Loading.</p>
-						) : (
-							<div>
-								<p className="text-[var(--ink-muted)]">This document has no PDF yet.</p>
-								{!isImported ? (
-									<div className="mt-3">
-										<Button variant="primary" disabled={busy} onClick={() => void renderPdf()}>
-											{busy ? "Creating" : "Create PDF"}
-										</Button>
-									</div>
-								) : null}
-							</div>
-						)
-					}
-				/>
-			</div>
+	const meta = viewing
+		? [
+				fileTypeLabel(viewing.fileName, viewing.mediaType),
+				viewing.byteSize === null ? "" : formatBytes(viewing.byteSize),
+				modifiedLabel(viewing.fileDate),
+				belongsTo(record),
+			]
+				.filter(Boolean)
+				.join(" · ")
+		: belongsTo(record);
 
-			<aside
-				aria-label="Document"
-				className="flex h-full w-[500px] shrink-0 flex-col overflow-y-auto border-l border-[var(--line)] bg-[var(--surface)]"
-			>
-				<div className="px-7 pt-6">
-					<div className="flex flex-wrap items-center gap-2">
-						<h2
-							data-selectable
-							className="min-w-0 break-words text-h3"
-						>
-							{record.title}
-						</h2>
-						{record.isSpecimen ? <SpecimenMark /> : null}
-						{isImported ? <ImportedMark /> : null}
+	const column = (
+		<div className="flex flex-col gap-2 px-6 pt-2 pb-6">
+			{record.isSpecimen ? (
+				<p className="mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
+					This came from a template nobody had reviewed. The wording is invented, the PDF carries a red banner, and it cannot be
+					signed.
+				</p>
+			) : null}
+			<Section title="Details">
+				<div className="grid grid-cols-2 gap-4">
+					<Select
+						label="Status"
+						value={record.statusId ?? ""}
+						onChange={setStatus}
+						placeholder="No status"
+						options={statuses.map((item) => ({ value: item.id, label: item.label }))}
+					/>
+					<Fact label="Issued on">
+						<span className="tabular">{formatDate(record.issuedOn) || "Not set"}</span>
+					</Fact>
+					<div className="col-span-2">
+						<DocumentOwnerFields
+							value={{ clientId: record.clientId ?? "", projectId: record.projectId ?? "" }}
+							onChange={relink}
+						/>
 					</div>
-					<p className="mt-1 text-sm text-[var(--ink-muted)]">{belongsTo(record)}</p>
-
-					<div className="mt-4 flex items-center gap-1">
-						{/* The design draws no Sign on a specimen, which cannot be signed. */}
-						{record.isSpecimen ? null : (
-							<Button variant="primary" disabled={!hasFile} onClick={() => void guarded("sign", () => onSign(record))}>
-								Sign
-							</Button>
-						)}
-						<TitleBarSlot side="right">
-							<IconAction
-								size="dense"
-								icon="mail"
-								label="Send by email"
-								disabled={!hasFile}
-								onClick={() => void guarded("email", () => setSending(true))}
-							/>
-							<IconAction
-								size="dense"
-								icon="export"
-								label="Download a copy"
-								disabled={!hasFile}
-								onClick={() => void guarded("download", () => void download())}
-							/>
-							<IconAction
-								size="dense"
-								icon="external"
-								label="Open outside Juno"
-								disabled={!hasFile}
-								onClick={() => viewing && void run(async () => {
-										await window.juno.documents.openVersion(viewing.id);
-									})}
-							/>
-							<IconAction
-								size="dense"
-								icon="folder-open"
-								label="Show in folder"
-								disabled={!hasFile}
-								onClick={() => viewing && void run(() => window.juno.documents.revealVersion(viewing.id))}
-							/>
-							<IconAction
-									size="dense"
-									icon="remove"
-									label="Delete this version"
-									disabled={!hasFile || versions.length < 2}
-									onClick={() => void deleteVersion()}
-								/>
-						</TitleBarSlot>
-						<TitleBarSlot side="overflow">
-								<MenuButton
-								size="dense"
-								ariaLabel="More document actions"
-								items={[
-									...(!isImported
-										? [
-												{
-													id: "render",
-													label: busy ? "Creating" : "Create the PDF again",
-													icon: "sync" as const,
-													disabled: busy,
-													onSelect: () => void renderPdf(),
-												},
-											]
-										: []),
-									{
-										id: "delete",
-										label: "Delete",
-										icon: "remove" as const,
-										danger: true,
-										separatorBefore: !isImported,
-										onSelect: () => setConfirmingDelete(true),
-									},
-								]}
-							/>
-						</TitleBarSlot>
-					</div>
+					{latest ? (
+						<div className="col-span-2">
+							<Fact label="File">
+								<span className="break-all">{latest.fileName ?? record.title}</span>
+							</Fact>
+						</div>
+					) : null}
+					{isImported ? (
+						<Fact label="Source">Added from a file</Fact>
+					) : (
+						<>
+							<Fact label="Template">{template ? template.name : "The template has since been removed."}</Fact>
+							<Fact label="Template version">
+								<span className="tabular">{templateVersion === null ? "Unknown" : templateVersion}</span>
+							</Fact>
+						</>
+					)}
 				</div>
+			</Section>
 
-				{record.isSpecimen ? (
-					<p className="mx-7 mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">
-						This came from a template nobody had reviewed. The wording is invented, the PDF carries a
-						red banner, and it cannot be signed.
-					</p>
-				) : null}
+			<Section
+				title={`Versions ${record.versionCount}`}
+				aside={
+					<Button size="dense" disabled={busy !== null} onClick={addVersion}>
+						Add a version
+					</Button>
+				}
+			>
+				<VersionSwitcher
+					versions={versions}
+					viewingId={viewing?.id ?? null}
+					onView={(id) => setViewedId(id === latest?.id ? null : id)}
+					onOpenCertificate={(id) => void run("certificate", () => window.juno.documents.openCertificate(id))}
+				/>
+			</Section>
 
+			<Section title="Timeline">
+				<DocumentTimeline entries={history?.timeline ?? []} onView={(id) => setViewedId(id === latest?.id ? null : id)} />
+			</Section>
+		</div>
+	);
+
+	return (
+		<FullPreview
+			title={record.title}
+			heading={renaming ? <RenameField value={record.title} onCommit={rename} onCancel={() => setRenaming(false)} /> : undefined}
+			badges={
+				<>
+					{record.isSpecimen ? <SpecimenMark /> : null}
+					{viewing && !viewing.isLatest ? (
+						<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--warn-soft)] px-2 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--warn)]">
+							Not the latest
+						</span>
+					) : null}
+				</>
+			}
+			meta={meta}
+			position={position}
+			closeLabel={closeLabel}
+			onClose={onClose}
+			column={column}
+			columnOpen={details}
+			onToggleColumn={onToggleDetails}
+			actions={
+				<>
+					<Button size="dense" disabled={!hasFile || busy !== null} onClick={openOutside}>
+						Open
+					</Button>
+					{latest && !newestIsPdf ? (
+						<Button size="dense" disabled={busy !== null} onClick={() => convert()}>
+							{busy === "convert" ? "Converting" : "Convert to PDF"}
+						</Button>
+					) : null}
+					{canSign ? (
+						<Button size="dense" variant="primary" disabled={busy !== null} onClick={sign}>
+							{newestIsPdf ? "Sign" : "Convert and sign"}
+						</Button>
+					) : null}
+					<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line)]" />
+					<IconAction icon="export" label="Download a copy" disabled={!hasFile} onClick={download} />
+					<IconAction
+						icon="folder-open"
+						label="Show in folder"
+						disabled={!hasFile}
+						onClick={() => viewing && void run("reveal", () => window.juno.documents.revealVersion(viewing.id))}
+					/>
+					<MenuButton size="dense" ariaLabel="More document actions" items={menu} />
+				</>
+			}
+		>
+			<div className="flex h-full min-h-0 flex-col">
 				{action ? (
-					<p
-						role="alert"
-						data-selectable
-						className="mx-7 mt-4 border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]"
-					>
+					<p role="alert" data-selectable className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-sm text-[var(--risk)]">
 						{action}
 					</p>
 				) : null}
-				{notice ? (
-					<p role="status" className="mx-7 mt-4 border-l-2 border-[var(--ok)] pl-3 text-sm text-[var(--ok)]">
-						{notice}
-					</p>
-				) : null}
-
-				<div className="mt-2 flex flex-col gap-2 px-7 pb-6">
-					<Section title="Details">
-						<div className="grid grid-cols-2 gap-4">
-							<Select
-								label="Status"
-								value={record.statusId ?? ""}
-								onChange={(value) => void setStatus(value)}
-								placeholder="No status"
-								options={statuses.map((item) => ({ value: item.id, label: item.label }))}
-							/>
-							<Fact label="Issued on">
-								<span className="tabular">{formatDate(record.issuedOn) || "Not set"}</span>
-							</Fact>
-							<div className="col-span-2">
-								<DocumentOwnerFields
-									value={{ clientId: record.clientId ?? "", projectId: record.projectId ?? "" }}
-									onChange={(next) => void relink(next)}
-								/>
-							</div>
-							{isImported ? (
-								<Fact label="Source">Imported PDF</Fact>
-							) : (
-								<>
-									<Fact label="Template">
-										{template ? template.name : "The template has since been removed."}
-									</Fact>
-									<Fact label="Template version">
-										<span className="tabular">{templateVersion === null ? "Unknown" : templateVersion}</span>
-									</Fact>
-								</>
-							)}
+				<div className="min-h-0 flex-1">
+					{viewing ? (
+						<VersionBody key={viewing.id} version={viewing} caption={caption} onOpen={openOutside} />
+					) : history === null ? (
+						<FilePreviewView state={{ status: "loading" }} />
+					) : (
+						<div className="flex h-full flex-col items-center justify-center gap-3 bg-[var(--sunken)] p-8 text-center">
+							<p className="text-[var(--ink-muted)]">This document has no file yet.</p>
+							{!isImported && record.templateId ? (
+								<Button variant="primary" disabled={busy !== null} onClick={renderPdf}>
+									{busy === "render" ? "Creating" : "Create PDF"}
+								</Button>
+							) : null}
 						</div>
-					</Section>
-
-					<Section
-						title={`Versions ${record.versionCount}`}
-						aside={
-							<Button size="dense" onClick={() => void addVersion()}>
-								Add a version
-							</Button>
-						}
-					>
-						<VersionSwitcher
-							versions={versions}
-							viewingId={viewing?.id ?? null}
-							onView={(id) => setViewedId(id === latest?.id ? null : id)}
-							onOpenCertificate={(id) => void run(() => window.juno.documents.openCertificate(id))}
-						/>
-					</Section>
-
-					<Section title="Timeline">
-						<DocumentTimeline
-							entries={history?.timeline ?? []}
-							onView={(id) => setViewedId(id === latest?.id ? null : id)}
-						/>
-					</Section>
+					)}
 				</div>
-			</aside>
-
-			{sending ? (
-				<ComposePage
-					seed={{
-						clientId: record.clientId,
-						projectId: record.projectId,
-						documentIds: [record.id],
-						subject: record.title,
-					}}
-					onClose={() => setSending(false)}
-					onDeleted={() => {
-						setSending(false);
-						setNotice("Draft deleted.");
-					}}
-					onDone={(_message, queued) => {
-						setSending(false);
-						setNotice(queued ? "Message queued. Follow it in the mail outbox." : "Draft saved in the mail outbox.");
-						reloadHistory();
-					}}
-				/>
-			) : null}
+			</div>
 
 			{confirmingDelete ? (
 				<Dialog title="Delete document" width="narrow" onClose={() => setConfirmingDelete(false)}>
@@ -545,13 +558,13 @@ export function DocumentDetail({
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
 						<Button onClick={() => setConfirmingDelete(false)}>Cancel</Button>
-						<Button variant="danger" onClick={() => void remove()}>
+						<Button variant="danger" onClick={remove}>
 							Delete
 						</Button>
 					</div>
 				</Dialog>
 			) : null}
-		</div>
+		</FullPreview>
 	);
 }
 

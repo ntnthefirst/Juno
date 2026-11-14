@@ -10,7 +10,24 @@
  */
 
 /** The kinds drawn in the design's Context Menu set. */
-export const MENU_KINDS = ["reminder", "event", "client", "file", "mail", "blank", "project", "add", "block", "note", "outbox", "template"] as const;
+export const MENU_KINDS = [
+	"reminder",
+	"event",
+	"client",
+	"file",
+	"mail",
+	"blank",
+	"project",
+	"add",
+	"block",
+	"note",
+	"outbox",
+	"template",
+	/** A node of the documents tree: a client, a project, Unfiled, Templates or a folder, named by its key. */
+	"folder",
+	/** A document template in the Templates folder. */
+	"document-template",
+] as const;
 export type MenuKind = (typeof MENU_KINDS)[number];
 
 /** A blank area is named by the screen it is on, so the menu can start with what belongs there. */
@@ -99,11 +116,19 @@ export const MENU_ACTIONS = [
 	"edit-block",
 	"new-block",
 	"manage-blocks",
+	"preview",
+	"copy-to",
+	"move-to",
+	"rename",
+	"convert-pdf",
+	"sign",
+	"new-folder",
+	"add-files",
 ] as const;
 export type MenuAction = (typeof MENU_ACTIONS)[number];
 
 /** What the main process does itself, through the same services the buttons use. */
-export const MENU_MAIN_ACTIONS = ["snooze-tomorrow", "open-in-default-app", "open-folder", "copy-path", "pin-note", "unpin-note", "duplicate-note", "duplicate-event", "archive-client", "download-file"] as const;
+export const MENU_MAIN_ACTIONS = ["snooze-tomorrow", "open-in-default-app", "open-folder", "copy-path", "pin-note", "unpin-note", "duplicate-note", "duplicate-event", "archive-client", "download-file", "duplicate-file", "reveal-file"] as const;
 export type MenuMainAction = (typeof MENU_MAIN_ACTIONS)[number];
 
 export type MenuOutcome =
@@ -135,11 +160,14 @@ export const MENU_ICONS = [
 	"export",
 	"external",
 	"flag",
+	"folder-add",
+	"folder-open",
 	"forward",
 	"import",
 	"junk",
 	"link",
 	"mail",
+	"move-right",
 	"note",
 	"play",
 	"projects",
@@ -147,10 +175,12 @@ export const MENU_ICONS = [
 	"reminders",
 	"remove",
 	"reply",
+	"sign",
 	"stop",
 	"sync",
 	"templates",
 	"undo",
+	"visible",
 ] as const;
 export type MenuIcon = (typeof MENU_ICONS)[number];
 

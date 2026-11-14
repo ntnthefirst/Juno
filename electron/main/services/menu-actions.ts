@@ -15,6 +15,7 @@ import { getDb, type Db } from "../db";
 import * as calendar from "./calendar";
 import * as clients from "./clients";
 import * as documentActions from "./document-actions";
+import * as organise from "./document-organise";
 import { todayIsoDate } from "./document-context";
 import * as projectActions from "./project-actions";
 import * as notes from "./notes";
@@ -70,6 +71,15 @@ export async function perform(request: MenuRequest, action: MenuMainAction, db: 
 
 			case "download-file":
 				await documentActions.downloadLatest(request.id, db);
+				return { type: "none" };
+
+			case "duplicate-file": {
+				const copy = await organise.duplicate(request.id, db);
+				return { type: "done", message: `Duplicated as ${copy.title}.` };
+			}
+
+			case "reveal-file":
+				await documentActions.revealPdf(request.id, db);
 				return { type: "none" };
 
 			case "open-in-default-app":

@@ -1,8 +1,9 @@
 import type { ProjectAsset } from "@shared/types";
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Icon } from "../../components/Icon";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { useClickGate } from "../../lib/click-timing";
-import { ASSET_ICONS, assetImageUrl, formatBytes, pathTail } from "./format";
+import { assetImageUrl, formatBytes, pathTail } from "./format";
 
 type AssetListProps = {
 	assets: ProjectAsset[];
@@ -127,9 +128,7 @@ export function AssetList({
 								className="flex items-center gap-3 border-b border-[var(--line)] px-2"
 								style={{ height: "var(--row-height)" }}
 							>
-								<span className="flex-none text-[var(--ink-faint)]">
-									<Icon name={ASSET_ICONS[asset.kind]} />
-								</span>
+								<FileTypeIcon filename={asset.fileName} mimeType={asset.mimeType ?? ""} />
 								<button
 									type="button"
 									onClick={(event) => clicks.click(asset, event.detail)}

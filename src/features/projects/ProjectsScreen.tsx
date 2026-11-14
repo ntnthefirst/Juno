@@ -377,9 +377,8 @@ export function ProjectsScreen() {
 					) : undefined
 				}
 			/>
-			<div className="mb-6 flex w-full flex-col gap-4">
-				{view ? <ViewControls view={view} onChange={changeView} /> : null}
-			</div>
+			{/* Drawn in the title bar, so it takes no room on the page. */}
+			{view ? <ViewControls view={view} onChange={changeView} /> : null}
 
 			{selection.selectedIds.length > 0 && shown.length > 0 ? (
 				<div className="mb-6">

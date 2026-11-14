@@ -23,6 +23,16 @@ export function TitleMenu({ at, label, width, footer, onClose, children }: Title
 	// The width is fixed, so the menu is held inside the window without measuring it.
 	const left = Math.max(8, Math.min(at.x, window.innerWidth - 8 - width));
 
+	// Focus moves onto the menu so Tab reaches its rows (rather than leaving the
+	// button and closing it), and goes back to the button when it closes.
+	useEffect(() => {
+		const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		surface.current?.focus({ preventScroll: true });
+		return () => {
+			if (opener?.isConnected) opener.focus({ preventScroll: true });
+		};
+	}, []);
+
 	useEffect(() => {
 		function onKeyDown(event: KeyboardEvent) {
 			if (event.key === "Escape") {
@@ -53,7 +63,8 @@ export function TitleMenu({ at, label, width, footer, onClose, children }: Title
 				role="dialog"
 				data-palette
 				aria-label={label}
-				className="animate-scale fixed z-[61] flex max-h-[min(560px,calc(100vh-64px))] flex-col rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-1.5"
+				tabIndex={-1}
+				className="animate-scale fixed z-[61] flex focus:outline-none max-h-[min(560px,calc(100vh-64px))] flex-col rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-1.5"
 				style={{ left, top: at.y, width, boxShadow: "var(--shadow-popover)" }}
 			>
 				<div className="min-h-0 flex-1 overflow-y-auto">{children}</div>

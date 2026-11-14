@@ -209,7 +209,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone, start = null
 							</Button>
 						</>
 					) : (
-						<Button variant="primary" disabled={busy} onClick={() => void create()}>
+						<Button variant="primary" disabled={busy || (!owner.clientId && !owner.projectId)} onClick={() => void create()}>
 							{busy ? "Creating" : "Create document"}
 						</Button>
 					)}
@@ -262,7 +262,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone, start = null
 					<DocumentOwnerFields value={owner} onChange={setOwner} disabled={busy} folder={folderId ? start?.name : null} />
 					<Field label="Title" value={title} onChange={setTitle} help="How the document is listed." />
 					<p className="max-w-[62ch] text-sm text-[var(--ink-muted)]">
-						The PDF is the one you saw. Nothing from a client or project is written into it. A document from a template
+						Pick a client or a project: the document is kept on its Documents tab. The PDF is the one you saw. Nothing from a client or project is written into it. A document from a template
 						nobody has reviewed is marked as a specimen and cannot be signed.
 					</p>
 				</div>
@@ -271,7 +271,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone, start = null
 			{asking && printed ? (
 				<Dialog title="Keep this document" onClose={() => setAsking(false)} width="narrow">
 					<p className="text-dense">
-						The PDF is made. Keep it in Juno, under a client, a project or neither?
+						The PDF is made. Keep it in Juno, under a client or a project?
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
 						<Button onClick={() => setAsking(false)}>Not now</Button>

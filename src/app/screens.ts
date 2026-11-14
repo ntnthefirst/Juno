@@ -8,6 +8,7 @@ export type ScreenId =
 	| "mail-templates"
 	| "notes"
 	| "documents"
+	| "templates"
 	| "clients"
 	| "projects"
 	| "reminders"
@@ -20,9 +21,10 @@ export type ScreenItem = { id: ScreenId; label: string; icon: IconName };
  * happens, and Settings at the foot. The agent is about Juno itself and sits
  * in the title bar, beside the window's own buttons.
  *
- * Mail holds Styled mail, opened from its title bar, Documents holds the
- * templates as a folder of its own (decision 75), and Reminders is reached
- * from the overview, so none of them has an entry of its own here. Settings is a window, not a
+ * Mail holds Styled mail, opened from its title bar, Templates is reached
+ * from a client's or a project's Documents tab and keeps Projects lit, and
+ * Reminders is reached from the overview, so none of them has an entry of
+ * its own here. Settings is a window, not a
  * screen, and is added by the sidebar rather than listed.
  */
 export const SIDEBAR_TOP: ScreenItem[] = [
@@ -42,6 +44,7 @@ export const SCREEN_LABELS: Record<ScreenId, string> = {
 	"mail-templates": "Styled mail",
 	notes: "Notes",
 	documents: "Documents",
+	templates: "Templates",
 	clients: "Clients",
 	projects: "Projects",
 	reminders: "Reminders",
@@ -56,6 +59,7 @@ export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
 	"mail-templates": "mail",
 	notes: "notes",
 	documents: "documents",
+	templates: "projects",
 	clients: "clients",
 	projects: "projects",
 	reminders: "overview",

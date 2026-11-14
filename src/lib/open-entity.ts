@@ -5,12 +5,23 @@ const EVENT = "juno:open-entity";
 
 /** What a link anywhere in the app can open: a record, a conversation, a new message, or at least the screen it lives on. */
 export type OpenTarget =
-	| { kind: "project"; id: string; name: string }
+	/**
+	 * A project. `tab: "documents"` opens it on its Documents tab, and
+	 * `documentId` previews that document there, as a document made from a
+	 * template lands where it is kept.
+	 */
+	| { kind: "project"; id: string; name: string; tab?: "documents"; documentId?: string }
 	| { kind: "document"; id: string; name: string }
 	/** A node of the documents tree, opened in the explorer: `client:<id>`, `project:<id>`, `folder:<id>`, `unfiled` or `templates`. */
 	| { kind: "document-folder"; key: string }
-	/** A document template, previewed in the Templates folder. */
+	/** A document template, previewed on the Templates screen. */
 	| { kind: "document-template"; id: string; name: string }
+	/**
+	 * The Templates screen. `place` is the client or project it was opened
+	 * from: a document made from a template there is kept under it, and the
+	 * way back goes to it.
+	 */
+	| { kind: "templates"; place?: TemplatesPlace | null }
 	| { kind: "note"; id: string }
 	| { kind: "thread"; id: string; messageId: string | null }
 	| { kind: "mail-template"; id: string; mode: "view" | "edit" }
@@ -25,6 +36,9 @@ export type OpenTarget =
 	| { kind: "compose"; to: MailAddress[]; clientId?: string | null; projectId?: string | null }
 	| { kind: "screen"; screen: ScreenId };
 
+/** Where a document made on the Templates screen is kept, and what the way back is called. */
+export type TemplatesPlace = { clientId: string | null; projectId: string | null; name: string };
+
 /** The screen that shows what a request asks for. */
 export function screenFor(target: OpenTarget): ScreenId {
 	switch (target.kind) {
@@ -32,8 +46,10 @@ export function screenFor(target: OpenTarget): ScreenId {
 			return "projects";
 		case "document":
 		case "document-folder":
-		case "document-template":
 			return "documents";
+		case "document-template":
+		case "templates":
+			return "templates";
 		case "note":
 			return "notes";
 		case "thread":

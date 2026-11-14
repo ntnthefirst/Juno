@@ -42,6 +42,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone, start = 
 	const [stepIndex, setStepIndex] = useState(0);
 	const [values, setValues] = useState<Record<string, string>>({});
 	const [attemptedFill, setAttemptedFill] = useState(false);
+	const [attemptedLink, setAttemptedLink] = useState(false);
 	const [owner, setOwner] = useState<DocumentOwnerChoice>(() => ownerOf(start));
 	const [preview, setPreview] = useState<Preview>({ status: "idle" });
 	const [created, setCreated] = useState<{
@@ -117,7 +118,12 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone, start = 
 			setAttemptedFill(true);
 			if (missingRequired.length > 0) return;
 		}
-		if (step === "link") void runPreview();
+		if (step === "link") {
+			// A document is kept under a client or a project, so the next step waits for one.
+			setAttemptedLink(true);
+			if (!clientId && !projectId) return;
+			void runPreview();
+		}
 		setStepIndex((index) => Math.min(index + 1, steps.length - 1));
 	}
 
@@ -212,7 +218,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone, start = 
 				<>
 					<Button onClick={goBack}>{stepIndex === 0 ? "Cancel" : "Previous"}</Button>
 					{step === "review" ? (
-						<Button variant="primary" disabled={busy} onClick={() => void create()}>
+						<Button variant="primary" disabled={busy || (!clientId && !projectId)} onClick={() => void create()}>
 							{busy ? "Creating" : "Create document"}
 						</Button>
 					) : (
@@ -243,7 +249,12 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone, start = 
 			) : null}
 
 			{step === "link" ? (
-				<DocumentOwnerFields value={owner} onChange={setOwner} folder={folderId ? start?.name : null} />
+				<div className="flex flex-col gap-3">
+					<DocumentOwnerFields value={owner} onChange={setOwner} folder={folderId ? start?.name : null} />
+					<p className={`text-sm ${attemptedLink && !clientId && !projectId ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}>
+						Pick a client or a project. The document is kept on its Documents tab.
+					</p>
+				</div>
 			) : null}
 
 			{step === "review" ? (

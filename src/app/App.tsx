@@ -14,6 +14,7 @@ import { Walkthrough } from "../features/onboarding/Walkthrough";
 import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
+import { TemplatesScreen } from "../features/templates/TemplatesScreen";
 import { OverviewScreen } from "../features/overview/OverviewScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
@@ -411,6 +412,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 							<CalendarScreen />
 						) : screen === "mail-templates" ? (
 							<MailTemplatesScreen />
+						) : screen === "templates" ? (
+							<TemplatesScreen />
 						) : screen === "agent" ? (
 							<AgentScreen />
 						) : (

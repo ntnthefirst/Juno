@@ -8,7 +8,7 @@ import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
 import { prefersReducedMotion } from "../../lib/motion";
 import { contextMenuFor, type MenuHandlers } from "../../lib/native-menu";
-import { describeDue, formatDate } from "./format";
+import { describeDue, describeSnoozedUntil, formatDate } from "./format";
 
 type ReminderRowProps = {
 	reminder: Reminder;
@@ -95,6 +95,8 @@ export function ReminderRow({
 	const meta = [belongsTo, reminder.recurrenceLabel].filter(Boolean).join(" · ");
 	const done = reminder.bucket === "done";
 	const overdue = reminder.bucket === "overdue";
+	// A snoozed row says when it comes back, since its due date has usually passed.
+	const snoozedUntil = reminder.bucket === "snoozed" ? reminder.snoozedUntil : null;
 	async function complete() {
 		if (busy || leaving) return;
 		setLeftFrom(reminder);
@@ -184,10 +186,12 @@ export function ReminderRow({
 					>
 						{agenda && trailing !== undefined
 							? trailing
-							: today
-								? describeDue(reminder.dueOn, today)
-								: formatDate(reminder.dueOn)}
-						{agenda && trailing !== undefined ? null : reminder.dueTime ? `, ${reminder.dueTime}` : null}
+							: snoozedUntil && today
+								? describeSnoozedUntil(snoozedUntil, today)
+								: today
+									? describeDue(reminder.dueOn, today)
+									: formatDate(reminder.dueOn)}
+						{(agenda && trailing !== undefined) || snoozedUntil ? null : reminder.dueTime ? `, ${reminder.dueTime}` : null}
 					</span>
 
 					<span className={`${agenda ? "absolute right-0 top-1/2 -translate-y-1/2 bg-surface" : ""} flex-none opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100`}>

@@ -124,3 +124,13 @@ export function describeDue(dueOn: string, today: string): string {
 	const month = MONTHS[due.month - 1] ?? "";
 	return due.year === now.year ? `${due.day} ${month}` : `${due.day} ${month} ${due.year}`;
 }
+
+/**
+ * When a snoozed reminder comes back, said the way the due date is: "Until
+ * tomorrow", "Until Fri", "Until 3 Dec". A snoozed row shows this instead of
+ * the due date, which has usually passed and says nothing about when it returns.
+ */
+export function describeSnoozedUntil(until: string, today: string): string {
+	const when = describeDue(until, today);
+	return `Until ${/^(Today|Tomorrow|Yesterday)$/.test(when) ? when.toLowerCase() : when}`;
+}

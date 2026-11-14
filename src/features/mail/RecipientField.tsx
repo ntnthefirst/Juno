@@ -155,7 +155,7 @@ export function RecipientField({
 					// Clicking the padding around the chips lands in the input, which is
 					// what the whole box looks like it does.
 					onClick={() => input.current?.focus()}
-					className="flex min-h-[40px] flex-wrap items-center gap-1 rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-2 py-1 focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)]"
+					className="flex min-h-[40px] flex-wrap items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-2 py-1 focus-within:border-[var(--focus)] focus-within:shadow-[inset_0_0_0_1px_var(--focus)]"
 				>
 					{value.map((address, index) => (
 						<span

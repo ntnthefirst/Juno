@@ -509,7 +509,9 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		description:
 			"Changes a draft that has not been sent: its recipients, subject or body. Only the fields you pass " +
 			"change, and a list you pass replaces the whole list. body_text is plain text and is turned into HTML " +
-			"in the house style. A message that is queued, sending or sent is refused: it has to be a draft. " +
+			"in the house style. A draft, a message waiting for approval and one that failed can be changed; " +
+			"one waiting for approval becomes a draft again, so ask with mail.send once more. A message that is " +
+			"queued, sending or sent is refused. " +
 			"Nothing is sent; to send it ask with mail.send. Find the id with mail.outbox.list.",
 		readOnly: false,
 		requiresConfirmation: true,

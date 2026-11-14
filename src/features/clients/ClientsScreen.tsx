@@ -50,6 +50,7 @@ import {
 } from "./client-view";
 import { ColumnHeader } from "./ColumnHeader";
 import { CheckList, RangeField } from "./ColumnFilters";
+import { DocumentTakeover, type DocumentTakeoverRequest } from "../documents/DocumentTakeover";
 import { GenerateDialog } from "../documents/GenerateDialog";
 import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
@@ -94,6 +95,7 @@ export function ClientsScreen() {
 	// A document from a template is a page too. Coming back from it lands on the
 	// Documents tab, where it was started from.
 	const [documentForm, setDocumentForm] = useState(false);
+	const [documentPage, setDocumentPage] = useState<DocumentTakeoverRequest | null>(null);
 	// A document opens in the same viewer the Documents screen uses, inside this
 	// client, so the trail and Escape lead back to the Documents tab.
 	const [detailTab, setDetailTab] = useState<TabId>("overview");
@@ -344,6 +346,12 @@ export function ClientsScreen() {
 			{ label: selectedName ?? "Client", onSelect: () => setDocumentForm(false) },
 			{ label: "New document" },
 		];
+	} else if (documentPage && selectedId) {
+		trail = [
+			clientCrumb,
+			{ label: selectedName ?? "Client", onSelect: () => setDocumentPage(null) },
+			{ label: documentPage.kind === "sign" ? `Sign ${documentPage.record.title}` : "New message" },
+		];
 	} else if (selectedId !== null) {
 		trail = [clientCrumb, { label: selectedName ?? "Client" }];
 	}
@@ -358,14 +366,14 @@ export function ClientsScreen() {
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (selectedId === null) return;
-			if (form || contactForm || projectForm || scheduleForm || documentForm) return;
+			if (form || contactForm || projectForm || scheduleForm || documentForm || documentPage) return;
 			if (emailPanel || phonePanel || linkPanel || addressPanel || notePanel) return;
 			if (document.querySelector("[role='dialog']")) return;
 			backToList();
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentForm, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
+	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentForm, documentPage, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
 
 	if (compose) {
 		return (
@@ -433,6 +441,20 @@ export function ClientsScreen() {
 		);
 	}
 
+	if (documentPage && selectedId) {
+		return (
+			<DocumentTakeover
+				request={documentPage}
+				onClose={(sentence) => {
+					setDocumentPage(null);
+					setDetailTab("documents");
+					bumpDetail();
+					if (sentence) setNotice(sentence);
+				}}
+			/>
+		);
+	}
+
 	if (documentForm && selectedId) {
 		return (
 			<GenerateDialog
@@ -478,6 +500,7 @@ export function ClientsScreen() {
 							onEditAddress={(address) => setAddressPanel({ address })}
 							onGenerateDocument={() => setDocumentForm(true)}
 							onOpenDocument={(id, title) => requestOpen({ kind: "document", id, name: title })}
+							onDocumentTakeover={setDocumentPage}
 							initialTab={detailTab}
 							onTabChange={setDetailTab}
 							onEditNote={(note, initialKind) => setNotePanel({ clientId: selectedId, note, initialKind })}
@@ -545,6 +568,8 @@ export function ClientsScreen() {
 						}}
 					/>
 				) : null}
+
+				{notice ? <Toast message={notice} onDismiss={dismissNotice} /> : null}
 			</div>
 		);
 	}

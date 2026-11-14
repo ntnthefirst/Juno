@@ -13,7 +13,6 @@ import { Segmented } from "../../components/Segmented";
 import { Toast } from "../../components/Toast";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { messageOf } from "../../lib/errors";
-import { isPdfFile } from "../../lib/file-type";
 import type { ListCommand } from "../../lib/list-keys";
 import { NO_SELECTION, pruneSelection, selectOnly, type ListSelection } from "../../lib/list-selection";
 import { contextMenuFor } from "../../lib/native-menu";
@@ -29,6 +28,7 @@ import { UseCanvasTemplateScreen } from "../templates/UseCanvasTemplateScreen";
 import { UseDocumentTemplateScreen } from "../templates/UseDocumentTemplateScreen";
 import { AddFilesFlow } from "./AddFilesFlow";
 import { DocumentDetail } from "./DocumentDetail";
+import { convertToPdf, needsConversion } from "./document-flows";
 import { decodeDrag, DRAG_TYPE, routeDrop, type DragPayload } from "./drop-routing";
 import { readClipboard, writeClipboard } from "./explorer-clipboard";
 import {
@@ -412,23 +412,18 @@ export function DocumentsScreen() {
 
 	async function convert(record: DocumentRecord, then?: (converted: DocumentRecord) => void) {
 		try {
-			const result = await window.juno.documents.convertPdf(record.id);
+			const done = await convertToPdf(record);
 			changed();
-			setNotice(
-				result.via === "juno"
-					? "Converted by Juno, because Word is not installed here. The layout may differ from the original."
-					: "Converted to PDF through Word.",
-			);
-			then?.(result.document);
+			setNotice(done.notice);
+			then?.(done.record);
 		} catch (cause: unknown) {
 			fail(cause);
 		}
 	}
 
 	function sign(record: DocumentRecord) {
-		const latest = record.latestVersion;
-		if (latest && isPdfFile(latest.fileName, latest.mediaType)) setMode({ kind: "sign", record });
-		else void convert(record, (converted) => setMode({ kind: "sign", record: converted }));
+		if (needsConversion(record)) void convert(record, (converted) => setMode({ kind: "sign", record: converted }));
+		else setMode({ kind: "sign", record });
 	}
 
 	async function duplicate(records: DocumentRecord[]) {

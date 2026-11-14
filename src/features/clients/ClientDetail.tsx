@@ -34,6 +34,7 @@ import { RecordLink } from "../../components/RecordLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
+import type { DocumentTakeoverRequest } from "../documents/DocumentTakeover";
 import { messageOf } from "../../lib/errors";
 import { openNewRecord } from "../../lib/new-record";
 import { requestOpen } from "../../lib/open-entity";
@@ -188,6 +189,8 @@ type ClientDetailProps = {
 	/** A document from a template is a page of its own, so the screen owns it. */
 	onGenerateDocument: () => void;
 	onOpenDocument: (id: string, title: string) => void;
+	/** Signing or sending one of its documents, a page the screen shows in place of the client. */
+	onDocumentTakeover: (request: DocumentTakeoverRequest) => void;
 	/** The tab to open on, for coming back from a page that started from one. */
 	initialTab?: TabId;
 	/** Reported so the screen can hand the same tab back after a remount. */
@@ -219,6 +222,7 @@ export function ClientDetail({
 	onEditNote,
 	onGenerateDocument,
 	onOpenDocument,
+	onDocumentTakeover,
 	initialTab = "overview",
 	onTabChange,
 }: ClientDetailProps) {
@@ -679,6 +683,7 @@ export function ClientDetail({
 						onGenerate={onGenerateDocument}
 						onOpen={onOpenDocument}
 						onChanged={refresh}
+						onTakeOver={onDocumentTakeover}
 					/>
 				) : (
 					<ClientMail

@@ -16,6 +16,7 @@ import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
 import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
+import { DocumentTakeover, type DocumentTakeoverRequest } from "../documents/DocumentTakeover";
 import { GenerateDialog } from "../documents/GenerateDialog";
 import { ProjectDetail, type ProjectTab } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
@@ -87,6 +88,7 @@ export function ProjectsScreen() {
 	const [tab, setTab] = useState<ProjectTab>("notes");
 	// A document from a template is a page of its own, the same as on a client.
 	const [generating, setGenerating] = useState(false);
+	const [documentPage, setDocumentPage] = useState<DocumentTakeoverRequest | null>(null);
 	const [deleted, setDeleted] = useState<ProjectSummary | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
@@ -183,7 +185,7 @@ export function ProjectsScreen() {
 	// nothing floats above it: a dialog on top handles Escape itself, and
 	// without this guard both would fire.
 	useEffect(() => {
-		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || generating) return;
+		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || generating || documentPage) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (document.querySelector("[role='dialog']")) return;
@@ -191,7 +193,7 @@ export function ProjectsScreen() {
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, editing, scheduleForm, timeForm, generating, clearSelection]);
+	}, [selectedId, editing, scheduleForm, timeForm, generating, documentPage, clearSelection]);
 
 	const rows = load.status === "ready" ? load.rows : null;
 	const needle = term.trim().toLowerCase();
@@ -258,6 +260,12 @@ export function ProjectsScreen() {
 						{ label: selectedName ?? "Project", onSelect: () => setGenerating(false) },
 						{ label: "New document" },
 					]
+				: selectedId !== null && documentPage !== null
+				? [
+						{ label: "Projects", onSelect: clearSelection },
+						{ label: selectedName ?? "Project", onSelect: () => setDocumentPage(null) },
+						{ label: documentPage.kind === "sign" ? `Sign ${documentPage.record.title}` : "New message" },
+					]
 				: selectedId !== null && timeForm !== null
 				? [
 						{ label: "Projects", onSelect: clearSelection },
@@ -281,6 +289,19 @@ export function ProjectsScreen() {
 				project={editing}
 				onClose={() => setEditing(null)}
 				onSaved={saved}
+			/>
+		);
+	}
+
+	if (selectedId !== null && documentPage) {
+		return (
+			<DocumentTakeover
+				request={documentPage}
+				onClose={(sentence) => {
+					setDocumentPage(null);
+					setDetailVersion((version) => version + 1);
+					if (sentence) setNotice(sentence);
+				}}
 			/>
 		);
 	}
@@ -332,25 +353,29 @@ export function ProjectsScreen() {
 
 	if (selectedId !== null) {
 		return (
-			<ProjectDetail
-				key={selectedId}
-				version={detailVersion}
-				projectId={selectedId}
-				tab={tab}
-				onTabChange={setTab}
-				onBack={clearSelection}
-				onChanged={refreshList}
-				onEdit={(project) => setEditing(project)}
-				onSchedule={setScheduleForm}
-				onGenerateDocument={() => setGenerating(true)}
-				onTimeForm={(entry) => setTimeForm({ entry })}
-				onNameChange={setSelectedName}
-				onDeleted={(project) => {
-					clearSelection();
-					setDeleted(project);
-					refreshList();
-				}}
-			/>
+			<>
+				<ProjectDetail
+					key={selectedId}
+					version={detailVersion}
+					projectId={selectedId}
+					tab={tab}
+					onTabChange={setTab}
+					onBack={clearSelection}
+					onChanged={refreshList}
+					onEdit={(project) => setEditing(project)}
+					onSchedule={setScheduleForm}
+					onGenerateDocument={() => setGenerating(true)}
+					onDocumentTakeover={setDocumentPage}
+					onTimeForm={(entry) => setTimeForm({ entry })}
+					onNameChange={setSelectedName}
+					onDeleted={(project) => {
+						clearSelection();
+						setDeleted(project);
+						refreshList();
+					}}
+				/>
+				{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
+			</>
 		);
 	}
 

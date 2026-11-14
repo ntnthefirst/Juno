@@ -30,6 +30,7 @@ import { openNewRecord } from "../../lib/new-record";
 import { editScheduleForm, type ScheduleForm } from "../calendar/schedule-form";
 import { scheduleRows, type ScheduleRow } from "../calendar/schedule-rows";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
+import type { DocumentTakeoverRequest } from "../documents/DocumentTakeover";
 import { LinkedNotes } from "../notes/LinkedNotes";
 import { AssetList } from "./AssetList";
 import { FileQuickLook } from "../../components/FileQuickLook";
@@ -64,6 +65,8 @@ type ProjectDetailProps = {
 	onSchedule: (form: ScheduleForm) => void;
 	/** So is a document from a template. */
 	onGenerateDocument: () => void;
+	/** And signing or sending one of its documents. */
+	onDocumentTakeover: (request: DocumentTakeoverRequest) => void;
 	/** And a time entry, new or edited. */
 	onTimeForm: (entry: TimeEntry | null) => void;
 	onNameChange: (name: string) => void;
@@ -115,6 +118,7 @@ export function ProjectDetail({
 	onEdit,
 	onSchedule,
 	onGenerateDocument,
+	onDocumentTakeover,
 	onTimeForm,
 	onNameChange,
 	onDeleted,
@@ -535,6 +539,7 @@ export function ProjectDetail({
 								onGenerate={onGenerateDocument}
 								onOpen={(id, title) => requestOpen({ kind: "document", id, name: title })}
 								onChanged={() => undefined}
+								onTakeOver={onDocumentTakeover}
 							/>
 						</div>
 

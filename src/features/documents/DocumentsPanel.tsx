@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import type { DocumentPlace, DocumentRecord, ReferenceItem } from "@shared/types";
+import type { DocumentPlace, DocumentRecord, DocumentTreeNode, ReferenceItem } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { MenuButton } from "../../components/Menu";
 import { RowsSkeleton } from "../../components/RowsSkeleton";
+import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import type { ListCommand } from "../../lib/list-keys";
 import { NO_SELECTION, pruneSelection, type ListSelection } from "../../lib/list-selection";
@@ -12,8 +13,12 @@ import { describeOutcome, itemsFromFiles, itemsFromPicked, onDocumentsChanged, t
 import { useFileDrop } from "../../lib/use-file-drop";
 import { AddExistingDialog } from "./AddExistingDialog";
 import { AddFilesFlow } from "./AddFilesFlow";
+import { convertToPdf, needsConversion } from "./document-flows";
+import type { DocumentTakeoverRequest } from "./DocumentTakeover";
 import { documentItem, nextSort, sortItems, type ExplorerItem, type ExplorerSort } from "./explorer-items";
+import { keyOfRecord, moveTargetOf } from "./explorer-tree";
 import { ExplorerView } from "./ExplorerView";
+import { PlacePickerDialog } from "./PlacePickerDialog";
 
 type DocumentsPanelProps = {
 	scope: DocumentsScope;
@@ -25,7 +30,11 @@ type DocumentsPanelProps = {
 	onOpen: (id: string, title: string) => void;
 	/** The client's own counts and timeline are stale once a document is added. */
 	onChanged: () => void;
+	/** Signing and sending are pages, which the screen shows in place of the record. */
+	onTakeOver: (request: DocumentTakeoverRequest) => void;
 };
+
+type Picker = { mode: "copy" | "move"; records: DocumentRecord[]; current: string | null; roots: DocumentTreeNode[] };
 
 /** Whose documents: a client's, or a project's. */
 export type DocumentsScope = { clientId: string } | { projectId: string };
@@ -45,7 +54,7 @@ type Load =
  * (document-owner.ts), so a file dropped on a client's project shows on the
  * client's page too.
  */
-export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: DocumentsPanelProps) {
+export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged, onTakeOver }: DocumentsPanelProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [items, setItems] = useState<ImportItem[] | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -54,6 +63,8 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: D
 	const [sort, setSort] = useState<ExplorerSort>({ by: "modified", descending: true });
 	const [renaming, setRenaming] = useState<string | null>(null);
 	const [confirm, setConfirm] = useState<DocumentRecord[] | null>(null);
+	const [deleted, setDeleted] = useState<DocumentRecord[] | null>(null);
+	const [picker, setPicker] = useState<Picker | null>(null);
 
 	const clientId = "clientId" in scope ? scope.clientId : undefined;
 	const projectId = "projectId" in scope ? scope.projectId : undefined;
@@ -138,6 +149,67 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: D
 		}
 	}
 
+	/** Copy to and Move to: the same tree to pick from as the explorer's, read when it is asked for. */
+	async function pick(mode: Picker["mode"], chosen: DocumentRecord[]) {
+		try {
+			const tree = await window.juno.documents.folders.tree();
+			setPicker({ mode, records: chosen, current: mode === "move" && chosen.length === 1 ? keyOfRecord(chosen[0]!) : null, roots: tree.roots });
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	function copyOrMove(mode: Picker["mode"], chosen: DocumentRecord[], target: DocumentTreeNode) {
+		const into = moveTargetOf(target);
+		if (!into) return;
+		const what = chosen.length === 1 ? chosen[0]!.title : `${chosen.length} documents`;
+		void act(async () => {
+			for (const record of chosen) {
+				if (mode === "copy") await window.juno.documents.copyTo(record.id, into);
+				else await window.juno.documents.move(record.id, into);
+			}
+		}, `${what} ${mode === "copy" ? "copied" : "moved"} to ${target.name}.`);
+	}
+
+	async function convert(record: DocumentRecord, then?: (converted: DocumentRecord) => void) {
+		try {
+			const done = await convertToPdf(record);
+			setNotice(done.notice);
+			reload();
+			onChanged();
+			then?.(done.record);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	function sign(record: DocumentRecord) {
+		if (needsConversion(record)) void convert(record, (converted) => onTakeOver({ kind: "sign", record: converted }));
+		else onTakeOver({ kind: "sign", record });
+	}
+
+	async function remove(gone: DocumentRecord[]) {
+		const removed: DocumentRecord[] = [];
+		try {
+			for (const record of gone) removed.push(await window.juno.documents.remove(record.id));
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+		setSelection(NO_SELECTION);
+		reload();
+		onChanged();
+		if (removed.length > 0) setDeleted(removed);
+	}
+
+	async function restore() {
+		const back = deleted;
+		setDeleted(null);
+		if (!back) return;
+		await act(async () => {
+			for (const record of back) await window.juno.documents.restore(record.id);
+		});
+	}
+
 	function command(next: ListCommand) {
 		if (next.kind === "rename" && selected.length === 1) setRenaming(`doc:${selected[0]!.id}`);
 		else if (next.kind === "delete" && selected.length > 0) setConfirm(selected);
@@ -154,18 +226,20 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: D
 	function itemMenu(item: ExplorerItem, event: MouseEvent) {
 		if (item.kind !== "document") return;
 		const { record } = item;
+		// An action on one of several selected rows is an action on all of them.
+		const together = selected.some((other) => other.id === record.id) && selected.length > 1 ? selected : [record];
 		contextMenuFor(
 			{ kind: "file", id: record.id },
 			{
 				preview: () => preview(record),
 				open: () => preview(record),
-				// Copy to, Move to, Convert and Sign are the explorer's, where the record's folder is open.
-				"copy-to": () => preview(record),
-				"move-to": () => preview(record),
-				"convert-pdf": () => preview(record),
-				sign: () => preview(record),
+				"copy-to": () => void pick("copy", together),
+				"move-to": () => void pick("move", together),
+				"convert-pdf": () => void convert(record),
+				sign: () => sign(record),
+				"send-file": () => onTakeOver({ kind: "send", record }),
 				rename: () => setRenaming(item.key),
-				delete: () => setConfirm(selected.some((other) => other.id === record.id) && selected.length > 1 ? selected : [record]),
+				delete: () => setConfirm(together),
 				done: (message) => {
 					reload();
 					onChanged();
@@ -290,7 +364,7 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: D
 				<Dialog title="Delete" width="narrow" onClose={() => setConfirm(null)}>
 					<p className="mt-3 text-base">
 						{confirm.length === 1 ? `Delete ${confirm[0]!.title}?` : `Delete ${confirm.length} documents?`} They go from this list
-						and from Documents.
+						and from Documents. You can undo this straight after.
 					</p>
 					<div className="mt-6 flex justify-end gap-2">
 						<Button onClick={() => setConfirm(null)}>Cancel</Button>
@@ -299,9 +373,7 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: D
 							onClick={() => {
 								const gone = confirm;
 								setConfirm(null);
-								void act(async () => {
-									for (const record of gone) await window.juno.documents.remove(record.id);
-								}, gone.length === 1 ? `${gone[0]!.title} deleted.` : `${gone.length} documents deleted.`);
+								void remove(gone);
 							}}
 						>
 							Delete
@@ -310,6 +382,28 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: D
 				</Dialog>
 			) : null}
 			{items ? <AddFilesFlow items={items} place={place} placeName={name} onDone={finished} /> : null}
+			{picker ? (
+				<PlacePickerDialog
+					title={`${picker.mode === "copy" ? "Copy" : "Move"} ${picker.records.length === 1 ? picker.records[0]!.title : `${picker.records.length} documents`}`}
+					confirmLabel={picker.mode === "copy" ? "Copy here" : "Move here"}
+					roots={picker.roots}
+					current={picker.current}
+					onClose={() => setPicker(null)}
+					onPick={(target) => {
+						const chosen = picker;
+						setPicker(null);
+						copyOrMove(chosen.mode, chosen.records, target);
+					}}
+				/>
+			) : null}
+			{deleted ? (
+				<Toast
+					message={deleted.length === 1 ? `${deleted[0]!.title} deleted.` : `${deleted.length} documents deleted.`}
+					actionLabel="Undo"
+					onAction={() => void restore()}
+					onDismiss={() => setDeleted(null)}
+				/>
+			) : null}
 		</section>
 	);
 }

@@ -254,7 +254,7 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 
 	return (
 		<li
-			className="group flex items-center gap-3 border-b border-[var(--line)] px-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-within:bg-[var(--accent-soft)]"
+			className="group relative flex items-center gap-3 border-b border-[var(--line)] px-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-within:bg-[var(--accent-soft)]"
 			style={{ height: "var(--row-height)" }}
 		>
 			<span
@@ -293,7 +293,10 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 			>
 				{overdue ? `Overdue, ${when}` : when}
 			</span>
-			<span className="flex flex-none items-center opacity-0 focus-within:opacity-100 group-hover:opacity-100">
+			{/* Laid over the right of the row rather than beside it, so while they
+			    are hidden the repeat line has the whole width, and showing them
+			    on hover or focus moves nothing. The tint matches the row's own. */}
+			<span className="pointer-events-none absolute inset-y-0 right-0 flex items-center bg-[var(--accent-soft)] pl-2 pr-1 opacity-0 transition-opacity duration-[var(--duration-fast)] ease-[var(--ease)] focus-within:pointer-events-auto focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
 				{row.kind === "reminder" ? (
 					<IconButton label={`Mark ${item.title} done`} icon="check" onClick={onComplete} />
 				) : null}

@@ -66,6 +66,16 @@ export function fileTypeLabel(fileName: string | null, mediaType: string): strin
 	return "File";
 }
 
+/**
+ * The name a document is attached to a mail under: its title, with the
+ * extension of its newest file, which is what goes out (decision 75). A
+ * document with no file yet is still a PDF to be made.
+ */
+export function attachedNameOf(document: { title: string; latestVersion: { fileName: string | null } | null }): string {
+	const extension = extensionOfName(document.latestVersion?.fileName ?? null) || "pdf";
+	return `${document.title}.${extension}`;
+}
+
 /** Whether a file of this name and type is a PDF, which is what Sign needs. */
 export function isPdfFile(fileName: string | null, mediaType: string): boolean {
 	return mediaType === "application/pdf" || extensionOfName(fileName) === "pdf";

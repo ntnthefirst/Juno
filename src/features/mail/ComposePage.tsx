@@ -22,6 +22,7 @@ import { Notice } from "../../components/Notice";
 import { requestOpen } from "../../lib/open-entity";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { attachedNameOf } from "../../lib/file-type";
 import { BlockMenu, type ManageTarget } from "./blocks/BlockMenu";
 import { squash } from "./blocks/block-text";
 import MessageEditor, { type MessageEditorHandle } from "./MessageEditor";
@@ -670,17 +671,20 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escape
 								? "Draft"
 								: "";
 
-	const nearbyLabel = clientId
-		? (documents?.find((record) => record.clientId === clientId)?.clientName ?? "This client")
-		: projectId
-			? (documents?.find((record) => record.projectId === projectId)?.projectName ?? "This project")
+	// A message filed under a project lists that project's documents first, the
+	// job being narrower than the client; otherwise the client's.
+	const nearbyLabel = projectId
+		? (documents?.find((record) => record.projectId === projectId)?.projectName ?? projectFiles?.name ?? "This project")
+		: clientId
+			? (documents?.find((record) => record.clientId === clientId)?.clientName ?? "This client")
 			: undefined;
+	const isNearby = (record: DocumentRecord) => (projectId ? record.projectId === projectId : record.clientId === clientId);
 	const attachedDocuments = documentIds.map((id) => {
 		const record = documents?.find((item) => item.id === id);
 		const kept = savedMessage?.attachments.find((item) => item.documentId === id);
 		return {
 			id,
-			name: record ? `${record.title}.pdf` : (kept?.filename ?? "Document"),
+			name: record ? attachedNameOf(record) : (kept?.filename ?? "Document"),
 			isSpecimen: record?.isSpecimen ?? false,
 		};
 	});
@@ -837,11 +841,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escape
 											documents={documents}
 											search={documentSearch}
 											{...(nearbyLabel
-												? {
-														nearby: (record: DocumentRecord) =>
-															clientId ? record.clientId === clientId : record.projectId === projectId,
-														nearbyLabel,
-													}
+												? { nearby: isNearby, nearbyLabel }
 												: {})}
 											checked={documentIds}
 											onPick={(record) =>

@@ -191,9 +191,17 @@ type ClientDetailProps = {
 	initialTab?: TabId;
 	/** Reported so the screen can hand the same tab back after a remount. */
 	onTabChange?: (tab: TabId) => void;
+	/**
+	 * Raised by the screen when something changed the client from outside this
+	 * pane (a side panel, a new-record window). The record is read again in
+	 * place rather than remounted, so the page does not drop to "Loading." and
+	 * lose its scroll on every edit.
+	 */
+	version?: number;
 };
 
 export function ClientDetail({
+	version = 0,
 	clientId,
 	onEdit,
 	onDelete,
@@ -285,6 +293,13 @@ export function ClientDetail({
 				}),
 		[fetchDetail],
 	);
+
+	const seenVersion = useRef(version);
+	useEffect(() => {
+		if (seenVersion.current === version) return;
+		seenVersion.current = version;
+		void refresh();
+	}, [version, refresh]);
 
 	// The notes are written as they are typed, so the copy held here is brought
 	// up to date without reading the record again: a reload would put the stored

@@ -511,7 +511,8 @@ export function ClientsScreen() {
 				<div className="min-h-0 flex-1 overflow-y-auto p-8">
 					<div className="w-full">
 						<ClientDetail
-							key={`${selectedId}:${detailVersion}`}
+							key={selectedId}
+							version={detailVersion}
 							clientId={selectedId}
 							onEdit={(client) => setForm({ client })}
 							onDelete={(client) => void remove(client)}

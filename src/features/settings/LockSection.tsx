@@ -223,7 +223,7 @@ export function LockDialog({
 						label={method === "pin" ? "Current PIN" : "Current passphrase"}
 						value={current}
 						onChange={setCurrent}
-						type="text"
+						type="password"
 						required
 					/>
 				) : null}
@@ -234,14 +234,14 @@ export function LockDialog({
 							label={kind === "pin" ? "New PIN" : "New passphrase"}
 							value={next}
 							onChange={setNext}
-							type="text"
+							type="password"
 							required
 						/>
 						<Field
 							label="Enter it again"
 							value={again}
 							onChange={setAgain}
-							type="text"
+							type="password"
 							required
 						/>
 					</>

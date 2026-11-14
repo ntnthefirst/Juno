@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DocumentPlace, ThreadDocumentPlace } from "@shared/types";
 import { Button } from "../../components/Button";
@@ -38,7 +38,9 @@ export function AttachmentPlacePage({ fileNames, place, filing, busy, onSave, on
 	useEffect(() => {
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
-			if (document.querySelector("[role='dialog']")) return;
+			if (document.querySelector("[role='dialog'], [role='menu']")) return;
+			// An open list under a field closes on its own Escape and leaves the page alone.
+			if (event.target instanceof HTMLElement && event.target.getAttribute("aria-expanded") === "true") return;
 			event.preventDefault();
 			onCancel();
 		}
@@ -46,13 +48,26 @@ export function AttachmentPlacePage({ fileNames, place, filing, busy, onSave, on
 		return () => window.removeEventListener("keydown", onKey, true);
 	}, [onCancel]);
 
+	// The page takes the focus, so the mail list's keys underneath do not act on
+	// the conversation it covers, and gives it back to the chip or button that opened it.
+	const frameRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		frameRef.current?.focus({ preventScroll: true });
+		return () => {
+			if (opener?.isConnected) opener.focus({ preventScroll: true });
+		};
+	}, []);
+
 	const one = fileNames.length === 1;
 	const frame = (
 		<div
+			ref={frameRef}
+			tabIndex={-1}
 			role="region"
 			aria-label="Save to documents"
 			data-add-files
-			className="animate-scale absolute inset-0 z-30 flex flex-col bg-[var(--surface)]"
+			className="animate-scale absolute inset-0 z-30 flex flex-col bg-[var(--surface)] focus:outline-none"
 		>
 			<div className="flex h-[56px] flex-none items-center gap-3 border-b border-[var(--line)] pr-4 pl-2">
 				<IconAction icon="close" label="Cancel" size="base" onClick={onCancel} />

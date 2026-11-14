@@ -11,7 +11,7 @@ import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { fileTypeLabel, isPdfFile } from "../../lib/file-type";
 import { modifiedLabel } from "../../lib/modified-label";
-import { announceDocumentsChanged } from "../../lib/pdf-drop";
+import { announceDocumentsChanged, onDocumentsChanged } from "../../lib/pdf-drop";
 import { useFilePreview } from "../../lib/use-file-preview";
 import { formatBytes } from "../projects/format";
 import { belongsTo } from "./belongs-to";
@@ -229,9 +229,12 @@ export function DocumentDetail({
 		}
 	}
 
+	// Any change to the documents reads this one again: a move or a copy made
+	// from the explorer behind the preview changes where it is kept.
+	useEffect(() => onDocumentsChanged(refresh), [refresh]);
+
 	const changed = () => {
 		announceDocumentsChanged();
-		refresh();
 		onChanged();
 	};
 

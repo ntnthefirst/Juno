@@ -1543,6 +1543,10 @@ project of the owner's own has no client, and neither does its document.
 Revisit if: a document ever needs more than one project. That is a join table,
 and the single column would have to move into it with its data.
 
+**Amended by decision 81.** The window no longer offers "nothing": a new
+document asks for a client or a project. One kept under neither, from an agent
+or an older install, is listed on the Overview to be given one.
+
 ## 49. A mail carries any file, and Documents keeps the PDF paperwork
 
 Documents is the paperwork with a life of its own: made from a template or
@@ -2004,6 +2008,9 @@ decision and not an edit. It is taken.
 **What would reverse this:** a rail that has to carry a ninth place, which is a
 screen switch instead, as Documents and Templates are.
 
+**Amended by decision 81.** Documents left the rail, so it is six places and
+Settings, and the Agent is Ctrl or Cmd 7.
+
 ## 62. A page is a kind of document
 
 A page in the design sits in the Documents list, belongs to a client or a
@@ -2030,6 +2037,9 @@ project and reads like a document (frame `73:5038`). That is what a document is
 **What would reverse this:** pages that need to be signed or sent as a file. That
 is a render to PDF, which `documents.render_pdf` already does from the body, and
 not a different table.
+
+**Amended by decision 81.** A page is made and listed on a client's or a
+project's Documents tab, and opens over the record there.
 
 ## 63. Toasts, the tray, the badge and one shortcut are Windows only, and go through the same gates
 
@@ -2609,6 +2619,14 @@ same list.
 **What would reverse this:** wanting the tree in Explorer as well, which is a
 sync of a folder on disk with its own decision about who wins a rename.
 
+**Amended by decision 81.** There is no tree, no folder of the owner's own and
+no Documents screen any more. The file handling above (any file, a click
+previews and a double click opens, versions from an edit outside Juno, copy,
+duplicate, rename, move, delete, the comparison before a file is kept, the
+drag out) is the same, on a client's and a project's Documents tab. Templates
+is a screen of its own again, and a preview asked for from another screen is
+drawn over it as before, by itself rather than inside Documents.
+
 ## 76. Every file has a preview, made in the main process and shown from its own origin
 
 The preview is decided by the file's type, in the main process
@@ -2745,3 +2763,60 @@ do in the rest of the system.
 **What would reverse this:** the set being withdrawn or its licence changing
 (the copies here stay under the MIT notice), or a design that draws file types
 in the interface's own colours.
+
+## 81. Documents live on a client's and a project's Documents tab
+
+Amends decisions 48, 61, 62 and 75. The owner wanted no folders and no Documents
+place: a file is about a client or a job, so it is found under that client or
+that project, and a tree beside the records was a second way to file the same
+thing.
+
+- **The rail is six places and Settings:** Overview, Calendar, Clients,
+  Projects, Mail, Notes. The digits follow it from the top, so the Agent is
+  Ctrl or Cmd 7. New page, Import a file and Ctrl or Cmd Shift N are gone
+  from the title bar's New: a page and a file are made on a Documents tab,
+  where it is already known whose they are.
+- **A client's and a project's Documents tab is the explorer, for that
+  record.** A list or tiles, sorted by any column, the file type icons, one
+  click previews over the content area and closing comes back to the tab, a
+  double click opens the working copy, F2, Ctrl or Cmd D, C, X and V, Delete
+  with an undo, a drop from Windows with the comparison first, a drag out,
+  and Copy to and Move to through a picker of clients and their projects
+  (`DocumentsPanel.tsx`, `RecordPickerDialog.tsx`). A client's tab lists its
+  projects' documents too, with the project in a column; a project's tab
+  lists its own. New makes a page or a document from a template there.
+- **No folders.** The owner cannot make one. `document_folders` stays in
+  the database with its rows soft deleted, and migration 0035 takes every
+  document out of the folder it was in and keeps it under that folder's
+  client and project, so nothing moves away from the record it was about.
+  The folder tools and channels are gone, and `folder_id` is no longer read
+  or written.
+- **A project's own files are on its Documents tab too**, under its
+  documents as Project files. They keep their own storage (decision 35): a
+  project file is a file on disk in the project's folder or linked where it
+  is, and a document is a record with versions. Moving them into one list
+  would have meant a version history for a linked export, or a project
+  folder for every contract, and neither is wanted. One place per project to
+  look, two kinds of file in it.
+- **Templates is a screen without a rail entry, lit under Projects**, as
+  Styled mail is under Mail. It is reached from the Templates button and New
+  on a Documents tab, and from the palette. Opened from a record, a document
+  made from a template is kept under that record, Done shows it on its tab,
+  and the way back in the title bar goes to the record. The list, the
+  editors, Import Word file and Components are as they were.
+- **A new document asks for a client or a project.** Adding files with no
+  record in view, saving a mail attachment from a conversation filed under
+  nothing, and keeping a document from a template all ask which. The
+  services still accept a document kept under neither, for an agent and for
+  what older installs hold, and those are listed on the Overview as Files
+  without a client, each with a way to pick a place, and See all opens the
+  whole list (`documents.list_unfiled` for an agent).
+- **A preview asked for from another screen** (a timeline, Recent, the
+  palette, the Agent screen, Mail) is drawn over that screen and goes back
+  to it (`DocumentCover.tsx`), as decision 75 described with Documents
+  underneath.
+
+**What would reverse this:** a business that files the same file under
+several clients, or keeps files that belong to no client or project as a
+matter of course. Either wants a place of its own for documents again, and
+it would be a decision about that place, not a revert of this one.

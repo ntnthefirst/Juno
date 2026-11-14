@@ -144,10 +144,13 @@ kind of template up by key.
 
 ## The rail
 
-Seven places and Settings: Overview, Calendar, Clients, Projects, Mail, Notes,
-Documents (decision 61). A note is its own record, and **a page is a kind of
-document** (decision 62), so pages are listed, owned and deleted as documents
-are. An eighth place is a decision, not an edit.
+Six places and Settings: Overview, Calendar, Clients, Projects, Mail, Notes
+(decisions 61 and 81). **Documents live on a client's and a project's
+Documents tab**, not in a place of their own, and there are no folders. A note
+is its own record, and **a page is a kind of document** (decision 62), so pages
+are listed, owned and deleted as documents are, on those tabs. Templates is a
+screen without an entry, lit under Projects. A seventh place is a decision,
+not an edit.
 
 ## Windows
 

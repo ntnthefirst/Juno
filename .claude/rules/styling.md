@@ -212,7 +212,7 @@ decided in the service).
 
 **A list's search is in the title bar** (`app/TitleSearch.tsx`), first in the
 right slot, on every screen that filters a list: Clients, Projects, Mail,
-Notes, Documents and both template screens. Ctrl or Cmd F puts the cursor in
+Notes and both template screens. Ctrl or Cmd F puts the cursor in
 it; an open message or page finds inside itself with the same keys instead, by
 listening on the document, which hears the key first. Ctrl or Cmd Shift F
 opens the palette, like Ctrl or Cmd K. A list's filters are behind the funnel
@@ -227,9 +227,10 @@ no expanded state, no toggle, no drawer and no setting for any of them: the
 name of an entry is in its tooltip (`components/Tooltip.tsx`, drawn by the
 application, not the native `title`) and in its `aria-label`.
 
-- **Seven places on top, Settings at the bottom.** Overview, Calendar, Clients,
-  Projects, Mail, Notes, Documents; then Settings. `app/screens.ts` lists them.
-  Notes is the seventh (decision 61); an eighth place is a decision, not an edit. The agent is in the title bar, at
+- **Six places on top, Settings at the bottom.** Overview, Calendar, Clients,
+  Projects, Mail, Notes; then Settings. `app/screens.ts` lists them.
+  Documents left the rail for a client's and a project's Documents tab
+  (decision 81); a seventh place is a decision, not an edit. The agent is in the title bar, at
   the right beside the window's own buttons, with the same three colours.
 - **An entry has three states.** Soft (`--ink-faint`) at rest, firm (`--ink`)
   under the pointer, and when it is the page a `--hover` tile with an iris
@@ -241,14 +242,31 @@ application, not the native `title`) and in its `aria-label`.
   draws 48px entries and 24px icons; the screens use the Sidebar, which wins.
 - **A badge is a dot,** and the count goes in the tooltip and the accessible name.
 - **Screens without an entry** light the entry they belong to
-  (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail.
+  (`SIDEBAR_ENTRY`): Reminders and Files without a client under Overview,
+  Styled mail under Mail, Templates under Projects.
 
 ### A second screen without an entry
 
-Documents has no second screen: its templates are a folder of the explorer,
-the last node of the tree (decision 75), reached from elsewhere with
-`requestOpen({ kind: "document-folder", key: "templates" })`. Their editors,
-the use flow and Components take the Documents screen while they are open.
+Templates is a screen without an entry (decision 81), lit under Projects. It
+is reached from the Templates button and New on a client's or a project's
+Documents tab, which open it with that record as its place
+(`requestOpen({ kind: "templates", place })`), and from the palette. A
+document made there is kept under that record and Done shows it on the
+record's tab; the way back in the title bar goes to the record. Its editors,
+the use flow and Components take the Templates screen while they are open.
+
+Files without a client is the list behind the Overview card of the same name,
+lit under Overview: every document kept under no client and no project, each
+given a place with Move to.
+
+A client's and a project's Documents tab (`features/documents/DocumentsPanel.tsx`)
+is laid out as the frames `11 Client Record / Documents` and `13 Project Record
+/ Documents` draw it: a bar with the heading "Documents" and a count at the
+left and, at the right, the view switch (list, tiles), Templates, New and Add
+files as quiet text buttons with icons; under it a bordered `--radius-lg` card
+with the column header (Name, Type, Size, Modified, Status, Versions; a
+client's tab adds Project after Name) and 36px rows. A project's own files sit
+under that card as Project files.
 
 Mail does it differently, by the owner's choice. New message and a Styled mail
 button sit in the title bar while Mail is open, and the button opens a column

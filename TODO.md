@@ -148,12 +148,6 @@ The file is read only from the code side. These are yours to draw or tidy.
 
 Nothing here needs a decision, only time.
 
-- **The Documents screen as a file explorer** (decisions 75 to 77). The main
-  process, the bridge and the agent's tools are built: the tree and folders,
-  any file as a document with its match reasons, previews, working copies,
-  Convert to PDF, duplicate, copy, rename and move. The screen still shows the
-  list and the Templates switch, and has to become the tree, the preview pane
-  and the drop target the decisions describe.
 - **A page cannot be duplicated or copied yet.** Its pictures live in a folder
   named after the page (decision 68), so a copy would need its own folder and
   its blocks pointed at it. The service refuses with a sentence until then.
@@ -161,9 +155,10 @@ Nothing here needs a decision, only time.
   passes the minute stops the script, but Word was started by COM, not by the
   script, so a Word stuck on a dialog keeps running hidden until it is ended
   in Task Manager. Recording its process id at start would let Juno end it.
-- **The owner's folders sit inside clients, projects and Unfiled, not
-  Templates.** Templates have no folder column and their tables stay as they
-  are (decision 75), so the tree draws Templates as a list.
+- **Dragging a document onto another record moves nothing.** With no tree
+  (decision 81) Move to is the way; a drop of Juno's own drag on a client's or
+  a project's Documents tab is let go of. Taking it as a move there would need
+  the tab to tell its own drag from one started on another tab.
 
 ---
 

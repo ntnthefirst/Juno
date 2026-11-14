@@ -1044,30 +1044,45 @@ export function DocumentsScreen() {
 	};
 
 	const heading = needle ? `Results for "${needle}"` : (node?.name ?? "Documents");
+	const searchFailed = needle && data.searchError !== null;
 	const count = needle
-		? data.everything === null
-			? "Searching"
-			: plural(items.length, "result", "results")
+		? searchFailed
+			? ""
+			: data.everything === null
+				? "Searching"
+				: plural(items.length, "result", "results")
 		: selection.selected.length > 1
 			? `${selection.selected.length} of ${items.length} selected`
 			: plural(items.length, "item", "items");
 
 	const inTemplates = openKey === TEMPLATES_KEY && !needle;
 	// A search reads every document first; until then "Nothing matches" would be a guess.
+	// A read that failed is said, with a way to read again, rather than left as a skeleton.
 	const loading =
 		data.tree.status === "loading" ||
-		(needle ? data.everything === null : openKey !== ROOT_KEY && !inTemplates && data.records === null);
+		(needle ? data.everything === null && !searchFailed : openKey !== ROOT_KEY && !inTemplates && data.records === null);
+	const failure =
+		data.tree.status === "error"
+			? { title: "Could not load your documents.", message: data.tree.message }
+			: searchFailed
+				? { title: "Could not search your documents.", message: data.searchError }
+				: null;
 
 	const empty = loading ? (
 		<div className="px-2 pt-8">
 			<RowsSkeleton rows={8} divided={false} label="Loading the folder" />
 		</div>
-	) : data.tree.status === "error" ? (
-		<div className="m-8 border-l-2 border-[var(--risk)] pl-4">
-			<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load your documents.</p>
-			<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
-				{data.tree.message}
+	) : failure ? (
+		<div role="alert" className="animate-fade m-8 border-l-2 border-[var(--risk)] pl-4">
+			<p className="font-[var(--weight-medium)] text-[var(--risk)]">{failure.title}</p>
+			<p data-selectable className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
+				{failure.message}
 			</p>
+			<div className="mt-3">
+				<Button size="dense" onClick={data.reload}>
+					Try again
+				</Button>
+			</div>
 		</div>
 	) : needle ? (
 		<EmptyState

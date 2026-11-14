@@ -18,6 +18,8 @@ export type ExplorerData = {
 	records: DocumentRecord[] | null;
 	/** Every document, read only while a search is typed. */
 	everything: DocumentRecord[] | null;
+	/** Why every document could not be read for a search, until the next read. */
+	searchError: string | null;
 	statuses: ReferenceItem[];
 	reload: () => void;
 	/** Bumped for each document an edit outside Juno changed, so an open preview reads it again. */
@@ -34,6 +36,8 @@ export function useExplorerData(openKey: string, searching: boolean): ExplorerDa
 	const [tree, setTree] = useState<TreeLoad>({ status: "loading" });
 	const [contents, setContents] = useState<Contents | null>(null);
 	const [everything, setEverything] = useState<DocumentRecord[] | null>(null);
+	// Kept with the read it belongs to, so a retry shows the skeleton again rather than the old failure.
+	const [searchFailure, setSearchFailure] = useState<{ stamp: number; message: string } | null>(null);
 	const [statuses, setStatuses] = useState<ReferenceItem[]>([]);
 	const [changedOutside, setChangedOutside] = useState<{ ids: string[]; at: number }>({ ids: [], at: 0 });
 	const [stamp, setStamp] = useState(0);
@@ -81,9 +85,13 @@ export function useExplorerData(openKey: string, searching: boolean): ExplorerDa
 		window.juno.documents
 			.list()
 			.then((records) => {
-				if (!cancelled) setEverything(records);
+				if (cancelled) return;
+				setEverything(records);
+				setSearchFailure(null);
 			})
-			.catch(() => undefined);
+			.catch((cause: unknown) => {
+				if (!cancelled) setSearchFailure({ stamp, message: messageOf(cause) });
+			});
 		return () => {
 			cancelled = true;
 		};
@@ -104,6 +112,7 @@ export function useExplorerData(openKey: string, searching: boolean): ExplorerDa
 		tree,
 		records: contents && contents.key === openKey ? contents.records : null,
 		everything: searching ? everything : null,
+		searchError: searching && searchFailure && searchFailure.stamp === stamp ? searchFailure.message : null,
 		statuses,
 		reload,
 		changedOutside,

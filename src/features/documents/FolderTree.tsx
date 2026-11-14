@@ -22,6 +22,8 @@ type FolderTreeProps = {
 	onRenameEnd: () => void;
 	onStartRename: (node: DocumentTreeNode) => void;
 	onNodeMenu: (node: DocumentTreeNode, event: MouseEvent) => void;
+	/** Delete on a folder of the owner's own asks to delete it, as its menu does. */
+	onDeleteNode: (node: DocumentTreeNode) => void;
 	/** Whether something dragged may land on this node. Null is the top, Documents itself. */
 	canDrop: (node: DocumentTreeNode | null) => boolean;
 	onDrop: (node: DocumentTreeNode | null, event: DragEvent) => void;
@@ -43,7 +45,8 @@ const SPRING_OPEN_MS = 700;
  * node is everything inside it.
  *
  * It is a tree to the keyboard as well: up and down move and open, left
- * closes or goes up, right opens or goes in, F2 renames a folder. Documents
+ * closes or goes up, right opens or goes in, F2 renames a folder and Delete
+ * deletes one. Documents
  * and folders dragged onto a node move there, and files from outside are
  * added to it.
  */
@@ -59,6 +62,7 @@ export function FolderTree({
 	onRenameEnd,
 	onStartRename,
 	onNodeMenu,
+	onDeleteNode,
 	canDrop,
 	onDrop,
 }: FolderTreeProps) {
@@ -115,6 +119,9 @@ export function FolderTree({
 		} else if (matchesCombo(event.nativeEvent, LIST_COMBOS.rename) && node?.kind === "folder") {
 			event.preventDefault();
 			onStartRename(node);
+		} else if (matchesCombo(event.nativeEvent, LIST_COMBOS.remove) && node?.kind === "folder") {
+			event.preventDefault();
+			onDeleteNode(node);
 		}
 	}
 

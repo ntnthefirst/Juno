@@ -1075,6 +1075,7 @@ export function DocumentsScreen() {
 						onRename={(target, name) => void renameNode(target, name)}
 						onRenameEnd={() => setRenaming(null)}
 						onNodeMenu={nodeMenu}
+						onDeleteNode={(target) => setConfirm({ documents: [], folders: [target], templates: [] })}
 						canDrop={(target) => target === null || target.place !== null}
 						onDrop={(target, event) => void dropOn(target, event)}
 					/>

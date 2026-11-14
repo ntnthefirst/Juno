@@ -8,13 +8,18 @@
  * that is text as text. Every other kind has no words Juno can read, and is
  * matched by its bytes or its name only.
  *
+ * The parsing runs in the file worker (`file-reader.ts`), off the main
+ * process. What is decided here, before any bytes go there, is whether a file
+ * is read at all: its kind, its size and what its ZIP says it unpacks to.
+ *
  * No Electron import, so every rule here is covered by a test.
  */
-import mammoth from "mammoth";
-import type { PreviewSheet } from "../../shared/types";
-import { parseCsv } from "./csv";
 import { familyOf, isPdfBytes, isZipBytes, ZIP_LIMITS, zipWithin } from "./file-kind";
+import { decodeText, type SheetsResult } from "./file-jobs";
+import { readInWorker, type ReadOptions } from "./file-reader";
 import { extractText, normalise, readText } from "./pdf-text";
+
+export { decodeText, type SheetsResult } from "./file-jobs";
 
 /** Past this a file is not read for its words. Matching a scan of a book is not the job. */
 export const MAX_READ_BYTES = 40 * 1024 * 1024;
@@ -27,36 +32,6 @@ export const PREVIEW_LIMITS = {
 	maxColumns: 50,
 	maxCellCharacters: 500,
 };
-
-type ExcelJs = typeof import("exceljs");
-
-let excel: Promise<ExcelJs> | null = null;
-
-/**
- * ExcelJS is loaded the first time a spreadsheet is read, not at launch. It is
- * CommonJS that fills `module.exports` through a require, so its names reach an
- * ES import only through `default`, and reach the compiled main process
- * directly; both are accepted.
- */
-function exceljs(): Promise<ExcelJs> {
-	excel ??= import("exceljs").then((module) => (module as ExcelJs & { default?: ExcelJs }).default ?? module);
-	return excel;
-}
-
-/**
- * Bytes as text. UTF-8 when they are valid UTF-8, which is nearly every file
- * written this century, and Windows-1252 otherwise, which is what an older
- * Belgian or Dutch machine wrote.
- */
-export function decodeText(bytes: Uint8Array): string {
-	const start = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
-	const body = bytes.subarray(start);
-	try {
-		return new TextDecoder("utf-8", { fatal: true }).decode(body);
-	} catch {
-		return new TextDecoder("windows-1252").decode(body);
-	}
-}
 
 /** How much of a CSV a preview reads. 500 rows of 50 columns fit in far less. */
 export const MAX_CSV_BYTES = 8 * 1024 * 1024;
@@ -84,51 +59,25 @@ function looksBinary(bytes: Uint8Array): boolean {
 	return sample.includes(0);
 }
 
-function formatCell(value: unknown, text: string): string {
-	const date =
-		value instanceof Date
-			? value
-			: value && typeof value === "object" && "result" in value && value.result instanceof Date
-				? value.result
-				: null;
-	const shown = date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : text;
-	return shown.length > PREVIEW_LIMITS.maxCellCharacters ? `${shown.slice(0, PREVIEW_LIMITS.maxCellCharacters)}...` : shown;
-}
-
-/** Drops the empty cells at the end of a row, so a sheet with one wide row does not pad every other. */
-function trimRow(row: string[]): string[] {
-	let end = row.length;
-	while (end > 0 && row[end - 1] === "") end -= 1;
-	return row.slice(0, end);
-}
-
-export interface SheetsResult {
-	sheets: PreviewSheet[];
-	truncatedSheets: boolean;
-}
-
 /**
  * Each sheet of an `.xlsx` or a `.csv` as rows of the text its cells show,
  * cut at the preview limits. Throws for a file that is not what its name says,
  * which the preview turns into a sentence.
  */
-export async function readSheets(bytes: Uint8Array, fileName: string, limits = PREVIEW_LIMITS): Promise<SheetsResult> {
+export async function readSheets(
+	bytes: Uint8Array,
+	fileName: string,
+	limits = PREVIEW_LIMITS,
+	options: Pick<ReadOptions, "transfer"> = {},
+): Promise<SheetsResult> {
 	const family = familyOf(fileName);
 	if (family === "csv") {
 		const start = leadingBytes(bytes, MAX_CSV_BYTES);
-		const parsed = parseCsv(decodeText(start.bytes), { maxRows: limits.maxRows, maxColumns: limits.maxColumns });
-		return {
-			sheets: [
-				{
-					name: fileName.replace(/\.csv$/i, "") || "Sheet",
-					rows: parsed.rows.map((row) => trimRow(row.map((cell) => formatCell(null, cell)))),
-					truncatedRows: parsed.truncatedRows || start.cut,
-					truncatedColumns: parsed.truncatedColumns,
-					totalRows: parsed.totalRows,
-				},
-			],
-			truncatedSheets: false,
-		};
+		return readInWorker(
+			{ kind: "csv", sheetName: fileName.replace(/\.csv$/i, "") || "Sheet", cut: start.cut, limits },
+			start.bytes,
+			{ fileName, transfer: options.transfer },
+		);
 	}
 	if (family !== "sheet" || !isZipBytes(bytes)) {
 		throw new Error(`"${fileName}" is not a spreadsheet Juno can read.`);
@@ -136,34 +85,7 @@ export async function readSheets(bytes: Uint8Array, fileName: string, limits = P
 	if (!zipWithin(bytes, ZIP_LIMITS.sheet)) {
 		throw new Error(`"${fileName}" unpacks to more than Juno reads. Open it in the app that made it.`);
 	}
-	const lib = await exceljs();
-	const workbook = new lib.Workbook();
-	// ExcelJS declares its own Buffer as an ArrayBuffer, and reads one through JSZip.
-	await workbook.xlsx.load(new Uint8Array(bytes).buffer);
-	const sheets: PreviewSheet[] = [];
-	const all = workbook.worksheets;
-	for (const worksheet of all.slice(0, limits.maxSheets)) {
-		const rowCount = worksheet.rowCount;
-		const columnCount = worksheet.columnCount;
-		const rows: string[][] = [];
-		for (let r = 1; r <= Math.min(rowCount, limits.maxRows); r += 1) {
-			const row = worksheet.getRow(r);
-			const cells: string[] = [];
-			for (let c = 1; c <= Math.min(columnCount, limits.maxColumns); c += 1) {
-				const cell = row.getCell(c);
-				cells.push(formatCell(cell.value, cell.text ?? ""));
-			}
-			rows.push(trimRow(cells));
-		}
-		sheets.push({
-			name: worksheet.name,
-			rows,
-			truncatedRows: rowCount > limits.maxRows,
-			truncatedColumns: columnCount > limits.maxColumns,
-			totalRows: rowCount,
-		});
-	}
-	return { sheets, truncatedSheets: all.length > limits.maxSheets };
+	return readInWorker({ kind: "workbook", limits }, bytes, { fileName, transfer: options.transfer });
 }
 
 export interface ReadableText {
@@ -188,6 +110,7 @@ export async function readableText(
 	bytes: Uint8Array,
 	fileName: string,
 	limit = PREVIEW_LIMITS.maxTextCharacters,
+	options: Pick<ReadOptions, "transfer"> = {},
 ): Promise<ReadableText> {
 	if (bytes.length === 0 || bytes.length > MAX_READ_BYTES) return { text: null, truncated: false };
 	try {
@@ -196,12 +119,11 @@ export async function readableText(
 				return isPdfBytes(bytes) ? cut((await readText(bytes)) ?? "", limit) : { text: null, truncated: false };
 			case "word": {
 				if (!isZipBytes(bytes) || !zipWithin(bytes, ZIP_LIMITS.word)) return { text: null, truncated: false };
-				const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
-				return cut(result.value, limit);
+				return cut(await readInWorker({ kind: "word-text" }, bytes, { fileName, transfer: options.transfer }), limit);
 			}
 			case "sheet":
 			case "csv": {
-				const { sheets } = await readSheets(bytes, fileName);
+				const { sheets } = await readSheets(bytes, fileName, PREVIEW_LIMITS, options);
 				const lines = sheets.flatMap((sheet) => [
 					...(sheets.length > 1 ? [`# ${sheet.name}`] : []),
 					...sheet.rows.map((row) => row.join("\t")),

@@ -13,6 +13,9 @@ export default defineConfig({
 		// runs every test twice and fails on require("vitest").
 		exclude: ["node_modules/**", "dist/**", "dist-electron/**", "release/**"],
 		environment: "node",
+		// Files are parsed in a worker thread, which tests start from the
+		// TypeScript sources rather than the compiled main process.
+		setupFiles: ["electron/main/workers/file-worker-fixtures.ts"],
 		// The first PDF import of a file loads pdf.js, which alone takes a few seconds
 		// on a busy machine. The 5 s default failed good runs on a loaded CI runner.
 		testTimeout: 15_000,

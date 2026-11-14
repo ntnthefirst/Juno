@@ -23,8 +23,6 @@ import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import JSZip from "jszip";
-import mammoth from "mammoth";
-import sanitizeHtml from "sanitize-html";
 import { extensionOf } from "../../shared/mime";
 import type { FilePreview, FilePreviewForAgent, FilePreviewMeta, FilePreviewSource } from "../../shared/types";
 import { getDb, type Db } from "../db";
@@ -40,7 +38,9 @@ import {
 	zipWithin,
 	type FileFamily,
 } from "./file-kind";
-import { readableText, readSheets } from "./file-text";
+import { sanitiseDocumentHtml } from "./file-jobs";
+import { FileReadError, readInWorker, type ReadOptions } from "./file-reader";
+import { PREVIEW_LIMITS, readableText, readSheets } from "./file-text";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import { get as getDocument } from "./documents";
 import { attachmentPath } from "./mail-threads";
@@ -227,6 +227,16 @@ function bytesOf(file: SourceFile): Buffer {
 	return file.bytes ?? readFileSync(file.path!);
 }
 
+/**
+ * Whether the bytes `bytesOf` hands back are read afresh for the one call,
+ * so they can be moved to the file worker rather than copied. Bytes the
+ * window handed over are not: a failed preview writes them out again for the
+ * system thumbnail.
+ */
+function ownBytes(file: SourceFile): boolean {
+	return file.bytes === null;
+}
+
 /* -------------------------------------------------------- Word as HTML */
 
 const DOCUMENT_CSS = `
@@ -240,26 +250,8 @@ table { border-collapse: collapse; margin: 0 0 1em; max-width: 100%; }
 td, th { border: 1px solid #d9d6cf; padding: 4px 8px; vertical-align: top; }
 `;
 
-const SAFE_IMAGE = /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i;
-
-/**
- * Mammoth's HTML, cut to the elements a document is made of. Pictures stay
- * only as inline PNG, JPEG, GIF or WebP; links lose their address, because a
- * preview is read, not followed. No attribute that styles or runs survives.
- */
-export function sanitiseDocumentHtml(html: string): string {
-	return sanitizeHtml(html, {
-		allowedTags: [
-			"p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "sub", "sup", "br",
-			"ul", "ol", "li", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "a", "img", "blockquote", "pre", "code",
-		],
-		allowedAttributes: { img: ["src", "alt"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
-		allowedSchemes: [],
-		allowedSchemesByTag: { img: ["data"] },
-		allowProtocolRelative: false,
-		exclusiveFilter: (frame) => frame.tag === "img" && !SAFE_IMAGE.test(frame.attribs.src ?? ""),
-	});
-}
+/** Lives with the parsing, in the file worker. Exported here too, where it was first written. */
+export { sanitiseDocumentHtml };
 
 function documentPage(title: string, body: string): string {
 	const escapedTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -270,11 +262,23 @@ function documentPage(title: string, body: string): string {
 	);
 }
 
-/** A `.docx` as a page of sanitised HTML, the way decision 76 draws one. */
-export async function wordToHtml(bytes: Uint8Array, title: string): Promise<string> {
+/**
+ * A `.docx` as a page of sanitised HTML, the way decision 76 draws one. Read
+ * and sanitised in the file worker; only the size check runs here.
+ */
+export async function wordToHtml(
+	bytes: Uint8Array,
+	title: string,
+	options: Pick<ReadOptions, "transfer"> = {},
+): Promise<string> {
 	if (!zipWithin(bytes, ZIP_LIMITS.word)) throw new Error(`"${title}" unpacks to more than Juno reads.`);
-	const result = await mammoth.convertToHtml({ buffer: Buffer.from(bytes) });
-	return documentPage(title, sanitiseDocumentHtml(result.value));
+	const body = await readInWorker({ kind: "word-html" }, bytes, { fileName: title, transfer: options.transfer });
+	return documentPage(title, body);
+}
+
+/** What a person is told when a file could not be read: the reader's own sentence, when it has one. */
+function reasonFor(error: unknown, otherwise: string): string {
+	return error instanceof FileReadError ? error.message : otherwise;
 }
 
 /* ------------------------------------------------- pictures in files */
@@ -374,20 +378,22 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 				return fallback(file, meta, "This Word file is too large to preview. Open it to see it.");
 			}
 			try {
-				const html = await wordToHtml(word, file.name);
+				const html = await wordToHtml(word, file.name, { transfer: ownBytes(file) });
 				const token = issue({ contentType: "text/html; charset=utf-8", csp: HTML_CSP, body: Buffer.from(html, "utf8") });
 				return { kind: "html", meta, url: urlFor(token) };
-			} catch {
-				return fallback(file, meta, "This Word file could not be read. Open it in Word to see it.");
+			} catch (error) {
+				return fallback(file, meta, reasonFor(error, "This Word file could not be read. Open it in Word to see it."));
 			}
 		}
 		case "sheet":
 		case "csv": {
 			try {
-				const { sheets, truncatedSheets } = await readSheets(bytesOf(file), file.name);
+				const { sheets, truncatedSheets } = await readSheets(bytesOf(file), file.name, PREVIEW_LIMITS, {
+					transfer: ownBytes(file),
+				});
 				return { kind: "table", meta, sheets, truncatedSheets };
-			} catch {
-				return fallback(file, meta, "This spreadsheet could not be read. Open it to see it.");
+			} catch (error) {
+				return fallback(file, meta, reasonFor(error, "This spreadsheet could not be read. Open it to see it."));
 			}
 		}
 		case "text": {
@@ -439,7 +445,7 @@ export async function previewForAgent(source: FilePreviewSource, db: Db = getDb(
 	if (file.size > MAX_PREVIEW_BYTES) return { meta, kind: "none", text: null, truncated: false, sheets: null };
 	if (family === "sheet" || family === "csv") {
 		try {
-			const { sheets } = await readSheets(bytesOf(file), file.name);
+			const { sheets } = await readSheets(bytesOf(file), file.name, PREVIEW_LIMITS, { transfer: ownBytes(file) });
 			return { meta, kind, text: null, truncated: false, sheets };
 		} catch {
 			return { meta, kind: "none", text: null, truncated: false, sheets: null };
@@ -448,6 +454,8 @@ export async function previewForAgent(source: FilePreviewSource, db: Db = getDb(
 	if (family === "image" || family === "svg" || family === "iwork" || family === "other" || family === "legacy-word") {
 		return { meta, kind, text: null, truncated: false, sheets: null };
 	}
-	const { text, truncated } = await readableText(bytesOf(file), file.name);
+	const { text, truncated } = await readableText(bytesOf(file), file.name, PREVIEW_LIMITS.maxTextCharacters, {
+		transfer: ownBytes(file),
+	});
 	return { meta, kind, text, truncated, sheets: null };
 }

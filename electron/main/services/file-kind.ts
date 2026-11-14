@@ -115,10 +115,11 @@ export interface ZipEntrySize {
  * What a ZIP's central directory says about its entries, read without
  * inflating anything, or null when the directory cannot be found or read.
  *
- * Mammoth, ExcelJS and JSZip inflate whatever a file holds, in the main
- * process, so a Word file of a few kilobytes that unpacks to gigabytes stops
- * Juno. Reading the sizes first is how a file like that is turned away before
- * any of them sees it. A ZIP64 size is taken from its extra field.
+ * Mammoth, ExcelJS and JSZip inflate whatever a file holds, so a Word file of
+ * a few kilobytes that unpacks to gigabytes would stop the file worker, or the
+ * main process where JSZip still runs. Reading the sizes first, in the main
+ * process, is how a file like that is turned away before any of them sees it.
+ * A ZIP64 size is taken from its extra field.
  */
 export function zipEntrySizes(bytes: Uint8Array): ZipEntrySize[] | null {
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);

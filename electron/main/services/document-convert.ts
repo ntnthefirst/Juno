@@ -16,13 +16,16 @@
  * sentence: Juno has no way to draw it, and a PDF of its thumbnail would be a
  * lie about what the document says.
  *
+ * A Word file and a spreadsheet are read in the file worker (`file-reader.ts`),
+ * so a long one does not hold every window while it is parsed; only laying
+ * the result out as a PDF happens here.
+ *
  * The printer and Word are handed in at startup (`configureConversion`), so
  * this module stays testable in plain Node with a printer that is not one.
  */
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import mammoth from "mammoth";
 import { PDFDocument } from "pdf-lib";
 import { extensionOf } from "../../shared/mime";
 import type { ConversionRoute, ConvertPdfResult, PreviewSheet } from "../../shared/types";
@@ -31,7 +34,7 @@ import { announce } from "./document-events";
 import * as versions from "./document-versions";
 import { documentStorageDir, fileNameFor, get } from "./documents";
 import { familyOf, isPdfBytes, isPdfMediaType, ZIP_LIMITS, zipWithin } from "./file-kind";
-import { sanitiseDocumentHtml } from "./file-preview";
+import { readInWorker } from "./file-reader";
 import { decodeText, MAX_CSV_BYTES, PREVIEW_LIMITS, readSheets } from "./file-text";
 import { extractText } from "./pdf-text";
 import { escapeHtml } from "./template-render";
@@ -133,7 +136,11 @@ function tooLongToConvert(fileName: string): Error {
 	);
 }
 
-/** Makes the PDF bytes for one file in Juno, or says why it cannot. */
+/**
+ * Makes the PDF bytes for one file in Juno, or says why it cannot. The bytes
+ * are read for this call alone, so they are moved to the file worker rather
+ * than copied.
+ */
 async function convertInJuno(bytes: Uint8Array, fileName: string, title: string): Promise<Buffer> {
 	const { printHtml } = configured();
 	const extension = extensionOf(fileName);
@@ -144,8 +151,8 @@ async function convertInJuno(bytes: Uint8Array, fileName: string, title: string)
 					"This Word file unpacks to more than Juno can convert. Save it as PDF in Word, then add that as a version.",
 				);
 			}
-			const result = await mammoth.convertToHtml({ buffer: Buffer.from(bytes) });
-			return printHtml({ title, bodyHtml: sanitiseDocumentHtml(result.value) });
+			const bodyHtml = await readInWorker({ kind: "word-html" }, bytes, { fileName, transfer: true });
+			return printHtml({ title, bodyHtml });
 		}
 		case "legacy-word":
 			throw new Error(
@@ -154,7 +161,7 @@ async function convertInJuno(bytes: Uint8Array, fileName: string, title: string)
 		case "sheet":
 		case "csv": {
 			if (familyOf(fileName) === "csv" && bytes.length > MAX_CSV_BYTES) throw tooLongToConvert(fileName);
-			const { sheets } = await readSheets(bytes, fileName);
+			const { sheets } = await readSheets(bytes, fileName, PREVIEW_LIMITS, { transfer: true });
 			return printHtml({ title, bodyHtml: sheetsToHtml(sheets) });
 		}
 		case "text":

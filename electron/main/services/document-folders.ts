@@ -236,6 +236,16 @@ export async function remove(id: string, db: Db = getDb()): Promise<DocumentFold
 export async function restore(id: string, db: Db = getDb()): Promise<DocumentFolder> {
 	const row = db.select().from(documentFolders).where(eq(documentFolders.id, id)).get();
 	if (!row) throw new Error("That folder does not exist.");
+	// A folder is drawn under its client or project, so one restored under a
+	// deleted parent would be in no tree at all. The parent is restored first.
+	if (row.projectId) {
+		const project = db.select().from(projects).where(eq(projects.id, row.projectId)).get();
+		if (project?.deletedAt) throw new Error(`The project "${project.name}" is deleted. Restore it first, then restore this folder.`);
+	}
+	if (row.clientId) {
+		const client = db.select().from(clients).where(eq(clients.id, row.clientId)).get();
+		if (client?.deletedAt) throw new Error(`The client "${client.name}" is deleted. Restore it first, then restore this folder.`);
+	}
 	if (row.parentId) folderRow(row.parentId, db);
 	// A folder of the same name may have been made beside it since.
 	assertNameFree(row.name, row, db, id);

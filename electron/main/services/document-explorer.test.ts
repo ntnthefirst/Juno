@@ -209,6 +209,25 @@ describe("folders", () => {
 		expect(await documents.get(mine.id, db)).toMatchObject({ clientId: acme.id });
 	});
 
+	it("refuses to restore a folder under a deleted client or project, naming which, and restores it once the parent is back", async () => {
+		const { db, acme, website } = await setUp();
+		const onClient = await folders.create({ name: "Offertes", clientId: acme.id }, db);
+		const onProject = await folders.create({ name: "Ontwerp", projectId: website.id }, db);
+		await folders.remove(onClient.id, db);
+		await folders.remove(onProject.id, db);
+		await projects.remove(website.id, db);
+		await clients.remove(acme.id, db);
+
+		await expect(folders.restore(onClient.id, db)).rejects.toThrow(/The client "Acme" is deleted\. Restore it first/);
+		await expect(folders.restore(onProject.id, db)).rejects.toThrow(/The project "Website" is deleted\. Restore it first/);
+		expect(await folders.get(onClient.id, db)).toBeNull();
+
+		await clients.restore(acme.id, db);
+		await projects.restore(website.id, db);
+		expect(await folders.restore(onClient.id, db)).toMatchObject({ deletedAt: null });
+		expect(await folders.restore(onProject.id, db)).toMatchObject({ deletedAt: null });
+	});
+
 	it("restores a folder only where its name is still free", async () => {
 		const { db, acme } = await setUp();
 		const first = await folders.create({ name: "Offertes", clientId: acme.id }, db);

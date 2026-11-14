@@ -1,5 +1,5 @@
 import type { DocumentTreeNode } from "@shared/types";
-import { AttachmentIcon } from "../../components/AttachmentIcon";
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Avatar } from "../../components/Avatar";
 import { Icon, type IconName } from "../../components/Icon";
 import type { ExplorerItem } from "./explorer-items";
@@ -19,7 +19,7 @@ const NODE_ICONS: Record<Exclude<DocumentTreeNode["kind"], "client" | "project">
 /**
  * What a row or a tile is, at a glance: a client or a project by its avatar,
  * the same tint it has everywhere else, a folder by a folder, and a file by
- * the glyph and colour of its family, which is how the mail reader marks an
+ * the icon people know for its type, the one the mail reader uses for an
  * attachment, so a Word file looks the same in both places.
  */
 export function ExplorerIcon({ item, size = 18 }: ExplorerIconProps) {
@@ -55,7 +55,7 @@ export function ExplorerIcon({ item, size = 18 }: ExplorerIconProps) {
 		);
 	}
 	return (
-		<AttachmentIcon
+		<FileTypeIcon
 			filename={record.latestVersion.fileName ?? record.title}
 			mimeType={record.latestVersion.mediaType}
 			size={size}

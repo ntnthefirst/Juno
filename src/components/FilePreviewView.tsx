@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { PreviewState } from "../lib/use-file-preview";
-import { AttachmentIcon } from "./AttachmentIcon";
+import { FileTypeIcon } from "./FileTypeIcon";
 import { Button } from "./Button";
 import { PdfBytesViewer } from "./PdfBytesViewer";
 import { PreviewSkeleton } from "./PreviewSkeleton";
@@ -120,7 +120,7 @@ export function FilePreviewView({ state, onOpen, caption }: FilePreviewViewProps
 			return (
 				<div className="animate-fade flex h-full flex-col items-center justify-center gap-3 bg-[var(--sunken)] p-8 text-center">
 					<span className="flex h-16 w-16 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--surface)]">
-						<AttachmentIcon filename={preview.meta.name} mimeType={preview.meta.mediaType} size={28} />
+						<FileTypeIcon filename={preview.meta.name} mimeType={preview.meta.mediaType} size={28} />
 					</span>
 					<p className="text-base font-[var(--weight-medium)]">No preview for this file</p>
 					<p className="max-w-[52ch] text-sm text-[var(--ink-muted)]">{preview.reason}</p>

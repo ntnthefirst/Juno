@@ -1,6 +1,6 @@
 import type { DocumentRecord } from "@shared/types";
 import { attachedNameOf } from "../lib/file-type";
-import { AttachmentIcon } from "./AttachmentIcon";
+import { FileTypeIcon } from "./FileTypeIcon";
 import { Checkbox } from "./Checkbox";
 import { RowsSkeleton } from "./RowsSkeleton";
 
@@ -84,7 +84,7 @@ export function DocumentSearchList({
 							const name = attachedNameOf(record);
 							const body = (
 								<>
-									<AttachmentIcon filename={name} mimeType={record.latestVersion?.mediaType ?? "application/pdf"} />
+									<FileTypeIcon filename={name} mimeType={record.latestVersion?.mediaType ?? "application/pdf"} />
 									<span className="min-w-0 flex-1">
 										<span className="block truncate text-dense">{record.title}</span>
 										<span className="block truncate text-micro text-[var(--ink-muted)]">

@@ -67,7 +67,7 @@ export function TileThumb({ item, eager = false }: TileThumbProps) {
 					className="animate-fade h-full w-full object-cover object-top"
 				/>
 			) : (
-				<ExplorerIcon item={item} size={36} />
+				<ExplorerIcon item={item} size={48} />
 			)}
 		</span>
 	);

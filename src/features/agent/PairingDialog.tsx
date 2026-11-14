@@ -26,6 +26,10 @@ const CODE_LENGTH = 6;
  */
 export function PairingDialog({ onConnected }: PairingDialogProps) {
 	const [requests, setRequests] = useState<PairingRequest[]>([]);
+	// A request that ended on a wrong code leaves the list at once, so why it
+	// ended is held here until it has been read, or the prompt would vanish
+	// before it could say so.
+	const [ended, setEnded] = useState<{ clientName: string; message: string } | null>(null);
 
 	const reload = useCallback(() => {
 		window.juno.agent.pairing
@@ -41,20 +45,48 @@ export function PairingDialog({ onConnected }: PairingDialogProps) {
 		return window.juno.agent.connections.onChange(reload);
 	}, [reload]);
 
+	if (ended) {
+		return (
+			<Dialog title="Connect an app" width="narrow" onClose={() => setEnded(null)}>
+				<p className="mt-3 text-[var(--ink)]">
+					<span className="font-[var(--weight-semibold)]">{ended.clientName}</span> was not connected.
+				</p>
+				<p role="alert" className="mt-2 text-sm text-[var(--risk)]">
+					{ended.message}
+				</p>
+				<div className="mt-5 flex justify-end">
+					<Button variant="quiet" onClick={() => setEnded(null)}>
+						Close
+					</Button>
+				</div>
+			</Dialog>
+		);
+	}
+
 	const current = requests[0];
 	if (!current) return null;
 
 	// Keyed, so the next request starts with an empty box and none of the last one's message.
-	return <PairingPrompt key={current.id} request={current} onConnected={onConnected} onChanged={reload} />;
+	return (
+		<PairingPrompt
+			key={current.id}
+			request={current}
+			onConnected={onConnected}
+			onEnded={(message) => setEnded({ clientName: current.clientName, message })}
+			onChanged={reload}
+		/>
+	);
 }
 
 type PairingPromptProps = {
 	request: PairingRequest;
 	onConnected: (clientName: string) => void;
+	/** The request closed without connecting, with the sentence that says why. */
+	onEnded: (message: string) => void;
 	onChanged: () => void;
 };
 
-function PairingPrompt({ request, onConnected, onChanged }: PairingPromptProps) {
+function PairingPrompt({ request, onConnected, onEnded, onChanged }: PairingPromptProps) {
 	const [typed, setTyped] = useState("");
 	const [message, setMessage] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -72,9 +104,9 @@ function PairingPrompt({ request, onConnected, onChanged }: PairingPromptProps) 
 					`That is not the code. ${answer.attemptsLeft} ${answer.attemptsLeft === 1 ? "try" : "tries"} left.`,
 				);
 			} else if (answer.reason === "too-many-attempts") {
-				setMessage("Too many wrong codes. Start the connection again from the app.");
+				onEnded("Too many wrong codes. Start the connection again from the app.");
 			} else {
-				setMessage("That request has closed. Start the connection again from the app.");
+				onEnded("That request has closed. Start the connection again from the app.");
 			}
 			onChanged();
 		} catch (cause: unknown) {

@@ -150,6 +150,9 @@ export function WeekView({
 
 	function endDrag(event: PointerEvent<HTMLElement>) {
 		if (!drag) return;
+		// The resize handle sits inside the block, so its release would reach the
+		// block as well and save the same resize a second time.
+		event.stopPropagation();
 		event.currentTarget.releasePointerCapture(event.pointerId);
 		const finished = drag;
 		setDrag(null);

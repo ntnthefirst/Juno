@@ -55,8 +55,10 @@ export function NotesScreen() {
 	const reload = notes.reload;
 	const term = search.trim();
 
+	// Searched again whenever the list is read again, so a duplicate or an edit made while searching is found.
+	const listed = notes.status === "ready" ? notes.value : null;
 	useEffect(() => {
-		if (term === "") return;
+		if (term === "" || listed === null) return;
 		let cancelled = false;
 		const timer = window.setTimeout(() => {
 			window.juno.notes
@@ -72,7 +74,7 @@ export function NotesScreen() {
 			cancelled = true;
 			window.clearTimeout(timer);
 		};
-	}, [term]);
+	}, [term, listed]);
 
 	const create = useCallback(async () => {
 		try {
@@ -93,7 +95,12 @@ export function NotesScreen() {
 		if (!all) return [];
 		if (!searching) return all.map((note) => ({ note, preview: notePreview(note) }));
 		if (hits?.term !== term) return [];
-		return hits.rows.map((hit) => ({ note: hit.note, preview: hit.snippet }));
+		// A hit is drawn from the list as it is now, so a note deleted or edited since the search came back shows as it is.
+		const live = new Map(all.map((note) => [note.id, note]));
+		return hits.rows.flatMap((hit) => {
+			const note = live.get(hit.note.id);
+			return note ? [{ note, preview: hit.snippet }] : [];
+		});
 	}, [all, searching, hits, term]);
 
 	// The first note opens when nothing is chosen, so the screen is never a list beside a blank page.

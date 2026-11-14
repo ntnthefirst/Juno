@@ -15,6 +15,7 @@ import { announceDocumentsChanged } from "../../lib/pdf-drop";
 import { useFilePreview } from "../../lib/use-file-preview";
 import { formatBytes } from "../projects/format";
 import { belongsTo } from "./belongs-to";
+import { convertedSentence } from "./document-flows";
 import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
 import { DocumentTimeline } from "./DocumentTimeline";
 import { RenameField } from "./RenameField";
@@ -280,11 +281,7 @@ export function DocumentDetail({
 			const result = await window.juno.documents.convertPdf(documentId);
 			setViewedId(null);
 			changed();
-			if (result.via === "juno") {
-				onNotice("Converted by Juno, because Word is not installed here. The layout may differ from the original.");
-			} else {
-				onNotice("Converted to PDF through Word.");
-			}
+			onNotice(convertedSentence(result.via));
 			then?.(result.document);
 		});
 
@@ -367,7 +364,7 @@ export function DocumentDetail({
 		{ id: "copy-to", label: "Copy to", icon: "copy", disabled: !latest, onSelect: () => onCopyTo(record) },
 		{ id: "move-to", label: "Move to", icon: "move-right", onSelect: () => onMoveTo(record) },
 		{ id: "rename", label: "Rename", icon: "edit", hint: "F2", onSelect: () => setRenaming(true) },
-		{ id: "send", label: "Send by email", icon: "mail", disabled: !hasFile, separatorBefore: true, onSelect: () => void guarded("email", () => onSend(record)) },
+		{ id: "send", label: "Send by mail", icon: "mail", disabled: !hasFile, separatorBefore: true, onSelect: () => void guarded("email", () => onSend(record)) },
 		{ id: "add-version", label: "Add a version", icon: "import", onSelect: addVersion },
 		{
 			id: "delete-version",

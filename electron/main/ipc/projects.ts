@@ -88,7 +88,6 @@ export function registerProjectsIpc(): void {
 		assets.reorder(projectId, orderedIds),
 	);
 	ipcMain.handle("projects.assets.open", (_event, id: string) => actions.openAsset(id));
-	ipcMain.handle("projects.assets.reveal", (_event, id: string) => actions.revealAsset(id));
 
 	// Commands and runs have no MCP counterpart, on purpose. A command runs in a
 	// real shell with the user's own privileges, so writing one and running one

@@ -230,7 +230,6 @@ const api: JunoApi = {
 			restore: (id) => call("projects.assets.restore", id),
 			reorder: (projectId, orderedIds) => call("projects.assets.reorder", projectId, orderedIds),
 			open: (id) => call("projects.assets.open", id),
-			reveal: (id) => call("projects.assets.reveal", id),
 		},
 
 		commands: {
@@ -528,7 +527,6 @@ const api: JunoApi = {
 		},
 		versions: (documentId) => call("documents.versions", documentId),
 		openVersion: (versionId) => call("documents.openVersion", versionId),
-		revealVersion: (versionId) => call("documents.revealVersion", versionId),
 		openCertificate: (versionId) => call("documents.openCertificate", versionId),
 		readPdf: (id) => call("documents.readPdf", id),
 		readVersion: (versionId) => call("documents.readVersion", versionId),
@@ -544,7 +542,6 @@ const api: JunoApi = {
 		sign: (input) => call("documents.sign", input),
 		signatures: (documentId) => call("documents.signatures", documentId),
 		openPdf: (id) => call("documents.openPdf", id),
-		revealPdf: (id) => call("documents.revealPdf", id),
 	},
 
 	signingCertificate: {
@@ -668,7 +665,6 @@ const api: JunoApi = {
 			body: (id) => call("mail.messages.body", id),
 		},
 		attachments: {
-			reveal: (id) => call("mail.attachments.reveal", id),
 			open: (id) => call("mail.attachments.open", id),
 			save: (id) => call("mail.attachments.save", id),
 		},

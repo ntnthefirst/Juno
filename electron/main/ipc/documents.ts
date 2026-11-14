@@ -96,7 +96,6 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.addVersion", (_event, input: AddVersionInput) => imports.addVersion(input));
 	ipcMain.handle("documents.versions", (_event, documentId: string) => versions.list(documentId));
 	ipcMain.handle("documents.openVersion", (_event, versionId: string) => actions.openVersion(versionId));
-	ipcMain.handle("documents.revealVersion", (_event, versionId: string) => actions.revealVersion(versionId));
 	ipcMain.handle("documents.openCertificate", (_event, versionId: string) => actions.openCertificate(versionId));
 	ipcMain.handle("documents.readPdf", (_event, id: string) => actions.readPdf(id));
 	ipcMain.handle("documents.readVersion", (_event, versionId: string) => actions.readVersion(versionId));
@@ -121,5 +120,4 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.signatures", (_event, id: string) => actions.signatures(id));
 
 	ipcMain.handle("documents.openPdf", (_event, id: string) => actions.openPdf(id));
-	ipcMain.handle("documents.revealPdf", (_event, id: string) => actions.revealPdf(id));
 }

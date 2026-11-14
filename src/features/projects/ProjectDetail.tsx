@@ -697,11 +697,6 @@ export function ProjectDetail({
 									setNotice(messageOf(cause));
 								})
 							}
-							onReveal={(asset) =>
-								void window.juno.projects.assets.reveal(asset.id).catch((cause: unknown) => {
-									setNotice(messageOf(cause));
-								})
-							}
 							onSetCover={(asset) =>
 								void act(() => window.juno.projects.setCover(project.id, asset?.id ?? null), true)
 							}
@@ -874,14 +869,6 @@ export function ProjectDetail({
 								}
 							>
 								Open
-							</Button>
-							<Button
-								size="dense"
-								onClick={() =>
-									void window.juno.projects.assets.reveal(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
-								}
-							>
-								Show in folder
 							</Button>
 						</>
 					)}

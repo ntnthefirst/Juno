@@ -541,7 +541,6 @@ export interface JunoApi {
 			restore(id: string): Promise<ProjectAsset>;
 			reorder(projectId: string, orderedIds: string[]): Promise<ProjectAsset[]>;
 			open(id: string): Promise<void>;
-			reveal(id: string): Promise<void>;
 		};
 
 		/**
@@ -953,7 +952,6 @@ export interface JunoApi {
 		versions(documentId: string): Promise<DocumentVersion[]>;
 		/** Opens one version in its app. Anything but the newest opens read only. */
 		openVersion(versionId: string): Promise<{ readOnly: boolean }>;
-		revealVersion(versionId: string): Promise<void>;
 		/** Opens the signing details of a stamped or signed version. */
 		openCertificate(versionId: string): Promise<void>;
 		/** The document's PDF, for the placement page. Never a path. */
@@ -982,7 +980,6 @@ export interface JunoApi {
 		signatures(documentId: string): Promise<DocumentSignature[]>;
 		/** Opens the PDF in whatever the OS uses for one. */
 		openPdf(id: string): Promise<{ readOnly: boolean }>;
-		revealPdf(id: string): Promise<void>;
 	};
 
 	signingCertificate: {
@@ -1207,8 +1204,6 @@ export interface JunoApi {
 			body(id: string): Promise<MailMessageBody | null>;
 		};
 		attachments: {
-			/** Shows the file in the file manager. */
-			reveal(id: string): Promise<void>;
 			/** Opens it in the default app. Only plain document, image and media types. */
 			open(id: string): Promise<void>;
 			/** Copies it wherever the person chooses. Null when they cancel. */

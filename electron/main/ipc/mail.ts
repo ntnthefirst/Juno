@@ -166,12 +166,6 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.messages.get", (_event, id: string) => threads.getMessage(id));
 	ipcMain.handle("mail.messages.body", (_event, id: string) => threads.getBody(id));
 
-	ipcMain.handle("mail.attachments.reveal", (_event, id: string) => {
-		// Revealed, never opened. An attachment is an attacker's file until a
-		// person decides otherwise, and that decision happens in the file manager.
-		shell.showItemInFolder(threads.attachmentPath(id).path);
-	});
-
 	// Opened only for the short list of plain document, image and media types
 	// the service allows. The window offers it for a trusted sender or mail
 	// the person sent.

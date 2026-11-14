@@ -128,7 +128,3 @@ export async function openAsset(id: string, db: Db = getDb()): Promise<void> {
 	const error = await shell.openPath(assets.pathOf(id, db).path);
 	if (error) throw new Error(error);
 }
-
-export async function revealAsset(id: string, db: Db = getDb()): Promise<void> {
-	shell.showItemInFolder(assets.pathOf(id, db).path);
-}

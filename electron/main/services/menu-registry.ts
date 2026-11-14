@@ -155,7 +155,6 @@ async function attachmentEntries(id: string, context: MenuRequest["context"], db
 	const entries: MenuEntry[] = [
 		{ id: "preview", label: "Open preview", icon: "visible" },
 		...(canOpen ? [{ id: "open", label: "Open", icon: "external" } as const] : []),
-		{ id: "show-in-folder", label: "Show in folder", icon: "folder-open" },
 		{ id: "save-as", label: "Save as", icon: "export" },
 	];
 	if (self.document) {
@@ -261,7 +260,6 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 				...(latest
 					? [
 							{ id: "open-in-default-app", label: "Open", icon: "external", accelerator: "Enter" } as const,
-							{ id: "reveal-file", label: "Show in folder", icon: "folder-open" } as const,
 						]
 					: []),
 				...(latest

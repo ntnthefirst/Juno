@@ -492,17 +492,9 @@ export async function openPdf(id: string, db: Db = getDb()): Promise<{ readOnly:
 	return working.openDocument(id, db);
 }
 
-export async function revealPdf(id: string, db: Db = getDb()): Promise<void> {
-	shell.showItemInFolder(await latestPdfPath(id, db));
-}
-
 /** One version in particular, from the version list. Anything but the newest opens read only. */
 export async function openVersion(versionId: string, db: Db = getDb()): Promise<{ readOnly: boolean }> {
 	return working.openVersion(versionId, db);
-}
-
-export async function revealVersion(versionId: string, db: Db = getDb()): Promise<void> {
-	shell.showItemInFolder(versions.pathOf(versionId, db));
 }
 
 /** The bytes of one version, for the viewer. Resolved from its id, never from a path. */
@@ -614,10 +606,4 @@ export async function openCertificate(versionId: string, db: Db = getDb()): Prom
 async function openPath(path: string): Promise<void> {
 	const error = await shell.openPath(path);
 	if (error) throw new Error(error);
-}
-
-async function latestPdfPath(id: string, db: Db): Promise<string> {
-	const record = await documents.get(id, db);
-	if (!record?.pdfPath) throw new Error("This document has no PDF yet. Create one first.");
-	return record.pdfPath;
 }

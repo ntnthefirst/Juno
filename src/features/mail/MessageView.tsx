@@ -384,14 +384,6 @@ export function MessageView({
 		}
 	}
 
-	async function reveal(id: string) {
-		try {
-			await window.juno.mail.attachments.reveal(id);
-		} catch (cause: unknown) {
-			onNotice(messageOf(cause));
-		}
-	}
-
 	async function openFile(id: string) {
 		try {
 			await window.juno.mail.attachments.open(id);
@@ -596,7 +588,6 @@ export function MessageView({
 			if (at >= 0) setPreviewAt(at);
 		},
 		open: () => void openFile(attachment.id),
-		"show-in-folder": () => void reveal(attachment.id),
 		"save-as": () => void save(attachment.id),
 		"save-to-place": () => void saveAttachments([attachment.id]),
 		"save-to": () => setPlaceAsk([attachment.id]),
@@ -1040,9 +1031,6 @@ export function MessageView({
 								</Button>
 								<Button size="dense" onClick={() => void save(attachment.id)}>
 									Download
-								</Button>
-								<Button size="dense" onClick={() => void reveal(attachment.id)}>
-									Show in folder
 								</Button>
 							</>
 						) : null;

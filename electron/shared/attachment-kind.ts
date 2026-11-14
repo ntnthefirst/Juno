@@ -83,7 +83,7 @@ export function attachmentKind(filename: string, mimeType: string): AttachmentKi
  * Types that may be handed to the operating system to open. A short list on
  * purpose: formats that carry macros, scripts or a browser engine (svg, html,
  * rtf, the legacy Office formats) and anything executable are left out, and
- * they stay reachable through "Show in folder".
+ * they stay reachable through Save as.
  */
 const OPENABLE = new Set([
 	"pdf",

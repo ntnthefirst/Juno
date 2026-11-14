@@ -127,7 +127,6 @@ export const MENU_ACTIONS = [
 	"sign",
 	"new-folder",
 	"add-files",
-	"show-in-folder",
 	"save-as",
 	"save-to-place",
 	"save-all-to-place",
@@ -138,7 +137,7 @@ export const MENU_ACTIONS = [
 export type MenuAction = (typeof MENU_ACTIONS)[number];
 
 /** What the main process does itself, through the same services the buttons use. */
-export const MENU_MAIN_ACTIONS = ["snooze-tomorrow", "open-in-default-app", "open-folder", "copy-path", "pin-note", "unpin-note", "duplicate-note", "duplicate-event", "archive-client", "download-file", "duplicate-file", "reveal-file"] as const;
+export const MENU_MAIN_ACTIONS = ["snooze-tomorrow", "open-in-default-app", "open-folder", "copy-path", "pin-note", "unpin-note", "duplicate-note", "duplicate-event", "archive-client", "download-file", "duplicate-file"] as const;
 export type MenuMainAction = (typeof MENU_MAIN_ACTIONS)[number];
 
 export type MenuOutcome =

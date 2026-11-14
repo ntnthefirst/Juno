@@ -167,7 +167,6 @@ describe("documents explorer menus", () => {
 		expect(ids(await ask("file", record.id))).toEqual([
 			"preview",
 			"open-in-default-app",
-			"reveal-file",
 			"duplicate-file",
 			"copy-to",
 			"move-to",
@@ -262,7 +261,6 @@ describe("attachment menu", () => {
 		expect(ids(entries)).toEqual([
 			"preview",
 			"open",
-			"show-in-folder",
 			"save-as",
 			"save-to-place",
 			"save-to",

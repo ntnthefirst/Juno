@@ -578,7 +578,7 @@ export function attachmentPath(id: string, db: Db = getDb()): { path: string; fi
 export function openableAttachmentPath(id: string, db: Db = getDb()): string {
 	const { path, filename } = attachmentPath(id, db);
 	if (!isOpenableAttachment(filename)) {
-		throw new Error(`${filename} cannot be opened from Juno. Use Show in folder instead.`);
+		throw new Error(`${filename} cannot be opened from Juno. Use Save as to keep a copy.`);
 	}
 	return path;
 }

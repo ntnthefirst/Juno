@@ -14,7 +14,6 @@ type AssetListProps = {
 	onPreview: (asset: ProjectAsset) => void;
 	/** A double click: the file in its own app. */
 	onOpen: (asset: ProjectAsset) => void;
-	onReveal: (asset: ProjectAsset) => void;
 	onSetCover: (asset: ProjectAsset | null) => void;
 	onRemove: (asset: ProjectAsset) => void;
 };
@@ -22,12 +21,11 @@ type AssetListProps = {
 function menuFor(
 	asset: ProjectAsset,
 	isCover: boolean,
-	props: Pick<AssetListProps, "onPreview" | "onOpen" | "onReveal" | "onSetCover" | "onRemove">,
+	props: Pick<AssetListProps, "onPreview" | "onOpen" | "onSetCover" | "onRemove">,
 ): MenuItem[] {
 	return [
 		{ id: "preview", label: "Open preview", icon: "visible", onSelect: () => props.onPreview(asset) },
 		{ id: "open", label: "Open", icon: "external", onSelect: () => props.onOpen(asset) },
-		{ id: "reveal", label: "Show in folder", icon: "folder-open", onSelect: () => props.onReveal(asset) },
 		{
 			id: "cover",
 			label: isCover ? "Stop using as the cover" : "Use as the cover",
@@ -64,11 +62,10 @@ export function AssetList({
 	previews,
 	onPreview,
 	onOpen,
-	onReveal,
 	onSetCover,
 	onRemove,
 }: AssetListProps) {
-	const handlers = { onPreview, onOpen, onReveal, onSetCover, onRemove };
+	const handlers = { onPreview, onOpen, onSetCover, onRemove };
 	// One click previews and two open, as a file does everywhere else (decision 75).
 	const clicks = useClickGate<ProjectAsset>({ single: onPreview, double: onOpen }, (a, b) => a.id === b.id);
 	const images = previews ? assets.filter((asset) => asset.kind === "image" && asset.exists) : [];

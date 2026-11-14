@@ -80,10 +80,6 @@ export async function perform(request: MenuRequest, action: MenuMainAction, db: 
 				return { type: "done", message: `Duplicated as ${copy.title}.` };
 			}
 
-			case "reveal-file":
-				await documentActions.revealPdf(request.id, db);
-				return { type: "none" };
-
 			case "open-in-default-app": {
 				const opened = await documentActions.openPdf(request.id, db);
 				const record = await documents.get(request.id, db);

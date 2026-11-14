@@ -2548,6 +2548,8 @@ same list.
   setting), named by Juno, not mirrored as a tree on disk. Show in folder
   opens the file's real place. Mirroring the tree on disk would make a rename
   in Explorer and a rename in Juno two truths.
+  Amended: the owner removed Show in folder everywhere; a file is reached in
+  Juno, not in Explorer.
 - **A click previews and a double click opens.** One click opens the full
   preview over the content area, held for the double-click time so a double
   click does not show it first; a double click opens the file in the default

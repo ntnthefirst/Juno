@@ -535,12 +535,6 @@ export function DocumentDetail({
 					) : null}
 					<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line)]" />
 					<IconAction icon="export" label="Download a copy" disabled={!hasFile} onClick={download} />
-					<IconAction
-						icon="folder-open"
-						label="Show in folder"
-						disabled={!hasFile}
-						onClick={() => viewing && void run("reveal", () => window.juno.documents.revealVersion(viewing.id))}
-					/>
 					<MenuButton size="dense" ariaLabel="More document actions" items={menu} />
 				</>
 			}

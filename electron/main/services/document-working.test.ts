@@ -170,6 +170,20 @@ describe("a working copy", () => {
 		expect(versions.list(record.id, db)[0]).toMatchObject({ kind: "edited", isLatest: true });
 	});
 
+	it("keeps an edit whose version was deleted, and still opens the document", async () => {
+		const { db, client, opened } = await setUp();
+		const record = await importFile({ source: bytes("Plan.txt", "een"), clientId: client.id }, db);
+		const { addVersion } = await import("./document-import");
+		const second = await addVersion({ documentId: record.id, source: bytes("Plan.txt", "twee") }, db);
+		await working.openDocument(record.id, db);
+		versions.remove(second.id, db);
+		saveElsewhere(opened[0]!, "drie, bewerkt");
+		expect((await working.checkAll(db)).changed).toEqual([record.id]);
+		const latest = versions.list(record.id, db)[0]!;
+		expect(latest).toMatchObject({ kind: "edited", fileName: "Plan.txt" });
+		await expect(working.openDocument(record.id, db)).resolves.toEqual({ readOnly: false });
+	});
+
 	it("says so when no app could open the file", async () => {
 		const { db, client } = await setUp();
 		working.configureWorkingCopies({ openPath: async () => "No application is associated" });

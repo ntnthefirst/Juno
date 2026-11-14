@@ -23,7 +23,7 @@
  */
 import { and, eq, isNull } from "drizzle-orm";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { extensionOf } from "../../shared/mime";
 import type { DocumentVersion } from "../../shared/types";
 import { getDb, type Db } from "../db";
@@ -32,7 +32,7 @@ import { documentWorkingCopies, documents } from "../db/schema";
 import { announce } from "./document-events";
 import * as versions from "./document-versions";
 import { documentStorageDir, fileNameFor, get } from "./documents";
-import { readableFileName } from "./file-kind";
+import { mediaTypeFor, readableFileName } from "./file-kind";
 import { matchText } from "./file-text";
 
 type Hooks = {
@@ -87,6 +87,22 @@ function makeWritable(path: string): void {
 	}
 }
 
+/**
+ * The name and type an edit is kept under: those of the version the copy was
+ * made from, or, when that version has since been deleted, the copy's own
+ * name, which is the document's title with the same extension. An edit is
+ * never lost because the version it started from went.
+ */
+function baseOf(row: Row, db: Db): { fileName: string; mediaType: string } {
+	try {
+		const file = versions.fileOf(row.versionId, db);
+		return { fileName: file.fileName, mediaType: file.mediaType };
+	} catch {
+		const fileName = basename(row.path);
+		return { fileName, mediaType: mediaTypeFor(fileName) };
+	}
+}
+
 export interface CheckResult {
 	/** The documents that gained a version from an edit. */
 	changed: string[];
@@ -132,7 +148,7 @@ async function checkRow(row: Row, db: Db): Promise<DocumentVersion | null> {
 		retire(row, db);
 		return null;
 	}
-	const base = versions.fileOf(row.versionId, db);
+	const base = baseOf(row, db);
 	// The copy is kept as it is now, under a name the service builds. The
 	// working copy itself stays where the other app has it open.
 	const destination = join(documentStorageDir(), fileNameFor(record.title, "-bewerkt", extensionOf(row.path)));

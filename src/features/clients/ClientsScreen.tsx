@@ -81,7 +81,12 @@ export function ClientsScreen() {
 	// renames the client corrects it through `saved`, which is the only other
 	// place the full row comes back from the main process.
 	const [selectedName, setSelectedName] = useState<string | null>(() => peekPendingClient()?.name ?? null);
-	useEffect(() => clearPendingClient, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPendingClient();
+		return clearPendingClient;
+	}, []);
 	useRecentTouch("client", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const bumpDetail = () => setDetailVersion((current) => current + 1);

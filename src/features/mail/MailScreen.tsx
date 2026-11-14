@@ -111,7 +111,12 @@ export function MailScreen() {
 	// going back closes the reader but leaves the row you read marked, so it
 	// stays clear which one that was.
 	const [readerOpen, setReaderOpen] = useState(() => peekPending("thread") !== null);
-	useEffect(() => clearPending, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
 	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [lastPicked, setLastPicked] = useState<string | null>(null);
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});

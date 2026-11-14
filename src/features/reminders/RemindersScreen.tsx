@@ -42,7 +42,12 @@ export function RemindersScreen() {
 	// request) arrives as a request, read once as this screen mounts, and opens
 	// in its form with the list behind it to come back to.
 	const [requested] = useState(() => peekPending("reminder")?.id ?? null);
-	useEffect(() => clearPending, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
 	useEffect(() => {
 		if (!requested) return;
 		let cancelled = false;

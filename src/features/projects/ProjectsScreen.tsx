@@ -78,7 +78,12 @@ export function ProjectsScreen() {
 	// Seeded from the clicked row so the trail never flashes empty, then kept
 	// current by ProjectDetail once the real record has loaded.
 	const [selectedName, setSelectedName] = useState<string | null>(() => peekPending("project")?.name ?? null);
-	useEffect(() => clearPending, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
 	useRecentTouch("project", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [editing, setEditing] = useState<Project | null>(null);

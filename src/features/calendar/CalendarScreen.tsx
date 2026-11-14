@@ -93,7 +93,12 @@ export function CalendarScreen() {
 	// The calendar opens on its day and shows it in the panel once it has read
 	// that range.
 	const [requested] = useState(() => peekPending("event"));
-	useEffect(() => clearPending, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
 	const focus = useRef<{ id: string; date: string | null } | null>(
 		requested ? { id: requested.id, date: requested.date ?? null } : null,
 	);

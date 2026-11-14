@@ -37,7 +37,12 @@ type Row = { note: Note; preview: string };
 export function NotesScreen() {
 	const notes = useLoaded(loadNotes);
 	const [selectedId, setSelectedId] = useState<string | null>(() => peekPending("note")?.id ?? null);
-	useEffect(() => clearPending, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
 	const [search, setSearch] = useState("");
 	const [hits, setHits] = useState<{ term: string; rows: NoteHit[] } | null>(null);
 	const [notice, setNotice] = useState<{ message: string; undo?: () => void } | null>(null);

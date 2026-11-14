@@ -2605,8 +2605,9 @@ never as a path:
 Large files are cut: the first sheets and rows of a spreadsheet, the first
 part of a text file, with a line saying what was left out.
 
-Word files, workbooks, CSV and PDF text are parsed in a worker thread the
-main process starts the first time it needs one (`workers/file-worker.ts`,
+Word files, workbooks, CSV and PDF text are parsed, and two files' words
+compared, in a worker thread the main process starts the first time it
+needs one (`workers/file-worker.ts`,
 run by `services/file-reader.ts`), one job at a time and each with a time
 limit of thirty seconds, after which the worker is ended and the person is
 told to open the file in its own app, so a large file never holds a window.

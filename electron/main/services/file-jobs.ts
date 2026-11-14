@@ -1,7 +1,8 @@
 /**
  * The parsing that turns a file's bytes into something Juno can show or
  * compare: a Word file as sanitised HTML or as its raw text, a workbook or a
- * CSV as rows of cells, and a PDF as its text.
+ * CSV as rows of cells, and a PDF as its text. Comparing two texts word by
+ * word is here too, because two long ones take a good part of a second.
  *
  * Every one of these can hold a thread for seconds on a file that is within
  * every limit, so none of them runs on the main process, where that thread is
@@ -17,6 +18,7 @@ import mammoth from "mammoth";
 import sanitizeHtml from "sanitize-html";
 import type { PreviewSheet } from "../../shared/types";
 import { parseCsv } from "./csv";
+import { diffWords, type WordDiff } from "./text-diff";
 
 /** How much of a workbook or a CSV is read: the sheets, rows and columns, and how long a cell may be. */
 export interface SheetLimits {
@@ -42,7 +44,9 @@ export type FileJob =
 	/** The start of a CSV as one sheet. `cut` says the caller kept only the start. */
 	| { kind: "csv"; sheetName: string; cut: boolean; limits: SheetLimits }
 	/** A PDF's text, a line per line of the page, or null when it has none. */
-	| { kind: "pdf-text" };
+	| { kind: "pdf-text" }
+	/** Which words `after` adds to `before` and leaves out (`text-diff.ts`). Takes no bytes. */
+	| { kind: "word-diff"; before: string; after: string };
 
 /** What each kind of job answers with. Plain data, so it crosses between threads as it is. */
 export interface FileJobOutput {
@@ -51,6 +55,7 @@ export interface FileJobOutput {
 	workbook: SheetsResult;
 	csv: SheetsResult;
 	"pdf-text": string | null;
+	"word-diff": WordDiff;
 }
 
 export type FileJobKind = FileJob["kind"];
@@ -287,6 +292,8 @@ export async function runFileJob(job: FileJob, bytes: Uint8Array): Promise<FileJ
 			return csvSheets(bytes, job.sheetName, job.cut, job.limits);
 		case "pdf-text":
 			return pdfText(bytes);
+		case "word-diff":
+			return diffWords(job.before, job.after);
 		default:
 			throw new Error("The file worker was asked for a job it does not know.");
 	}

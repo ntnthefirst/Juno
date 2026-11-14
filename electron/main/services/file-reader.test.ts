@@ -3,6 +3,7 @@ import { fakeWorker, sourceWorker } from "../workers/file-worker-fixtures";
 import { docxBytes, xlsxBytes } from "./file-fixtures";
 import { configureFileReader, FileReadError, readInWorker } from "./file-reader";
 import { PREVIEW_LIMITS } from "./file-text";
+import { diffWords } from "./text-diff";
 
 afterAll(() => configureFileReader({ source: sourceWorker() }));
 
@@ -19,6 +20,12 @@ describe("the file worker", () => {
 			await xlsxBytes({ Uren: [["Dag", "Uren"], ["maandag", 7]] }),
 		);
 		expect(sheets[0]!.rows).toEqual([["Dag", "Uren"], ["maandag", "7"]]);
+	});
+
+	it("compares two texts word by word there, as text-diff.ts does here", async () => {
+		const before = "Overeenkomst tussen partijen. Betaling binnen dertig dagen.";
+		const after = "Overeenkomst tussen partijen. Betaling binnen veertien dagen. Getekend te Gent.";
+		expect(await readInWorker({ kind: "word-diff", before, after }, new Uint8Array(0))).toEqual(diffWords(before, after));
 	});
 
 	it("leaves bytes it was not given to keep as they were, and moves the ones it was", async () => {

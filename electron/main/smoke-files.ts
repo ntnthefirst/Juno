@@ -202,7 +202,7 @@ export async function measureFileBlocking(): Promise<Record<string, Record<strin
 	let inlineRows = 0;
 	const workbookInline = await heldWhile(async () => {
 		const result = await runFileJob({ kind: "workbook", limits: PREVIEW_LIMITS }, workbook);
-		inlineRows = typeof result === "object" && result !== null ? (result.sheets[0]?.rows.length ?? 0) : 0;
+		inlineRows = typeof result === "object" && result !== null && "sheets" in result ? (result.sheets[0]?.rows.length ?? 0) : 0;
 	});
 	let workerRows = 0;
 	const workbookWorker = await heldWhile(async () => {

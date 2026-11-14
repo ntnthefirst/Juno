@@ -12,7 +12,7 @@ import { getDb, type Db } from "../db";
 import * as versions from "./document-versions";
 import { readableText } from "./file-text";
 import { resolvePath, resolveSource } from "./document-import";
-import { diffWords } from "./text-diff";
+import { readInWorker } from "./file-reader";
 
 type Read = { bytes: Uint8Array; fileName: string };
 
@@ -36,7 +36,8 @@ async function compareRead(before: Read, after: Read): Promise<TextComparison> {
 	if (left === null || right === null) {
 		return { status: "unreadable", side: left === null && right === null ? "both" : left === null ? "before" : "after" };
 	}
-	return { status: "compared", ...diffWords(left, right) };
+	// Two long texts take a while to compare word by word, so the file worker does it.
+	return { status: "compared", ...(await readInWorker({ kind: "word-diff", before: left, after: right }, new Uint8Array(0))) };
 }
 
 export async function compareText(input: CompareTextInput, db: Db = getDb()): Promise<TextComparison> {

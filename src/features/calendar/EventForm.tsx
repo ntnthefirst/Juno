@@ -191,7 +191,12 @@ export function EventForm({ event, occurrence = null, scope = "all", backLabel, 
 		setTitleError(title.length === 0 ? "Enter a title." : null);
 		setStartError(startOk ? null : "Choose when it starts.");
 		setEndError(endOk ? null : "Choose when it ends.");
-		if (title.length === 0 || !startOk || !endOk) return;
+		if (title.length === 0 || !startOk || !endOk) {
+			// Save is offered on every step, so the step holding the first problem is
+			// brought up; otherwise its message is set on a step nobody can see.
+			setStep(title.length === 0 ? 0 : 1);
+			return;
+		}
 
 		const start = values.allDay ? values.startDate : joinLocal(values.startDate, values.startTime);
 		const end = values.allDay ? addDays(values.endDate, 1) : joinLocal(values.endDate, values.endTime);

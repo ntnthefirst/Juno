@@ -268,20 +268,21 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 				<button
 					type="button"
 					onClick={onEdit}
-					className="min-w-0 shrink truncate rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+					className="max-w-full shrink-0 truncate rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 				>
 					{item.title}
 				</button>
 				{project ? (
 					<RecordLink
 						tone="quiet"
-						className="shrink-0 text-sm text-[var(--ink-muted)]"
+						className="min-w-0 shrink text-sm text-[var(--ink-muted)]"
 						onOpen={() => requestOpen({ kind: "project", ...project })}
 					>
 						{project.name}
 					</RecordLink>
 				) : null}
-				{detail ? <span className="min-w-0 truncate text-sm text-[var(--ink-muted)]">{detail}</span> : null}
+				{/* The title keeps its room; what is said after it gives way first. */}
+				{detail ? <span className="min-w-0 flex-1 truncate text-sm text-[var(--ink-muted)]">{detail}</span> : null}
 			</span>
 			<span
 				className={`tabular flex-none text-sm ${overdue ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}

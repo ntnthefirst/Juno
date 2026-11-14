@@ -15,7 +15,7 @@ import { openDatabase } from "../db/node-sqlite-shim";
 import * as clients from "./clients";
 import * as projectsService from "./projects";
 import * as documents from "./documents";
-import { addVersion, analyseImport, importFile, importPdf } from "./document-import";
+import { addVersion, analyseImport, importFile, importPath } from "./document-import";
 import * as versions from "./document-versions";
 import { configureDocumentStorage } from "./documents";
 import { configureMailThreads } from "./mail-threads";
@@ -37,14 +37,14 @@ function freshDb(): Db {
 	return createDrizzle(connection);
 }
 
-/** A file that starts with a real PDF header. Good enough: importPdf only checks the header and copies it. */
+/** A file that starts with a real PDF header. Good enough: importPath only checks the header and copies it. */
 function writePdfFixture(dir: string, name = "source.pdf"): string {
 	const path = join(dir, name);
 	writeFileSync(path, "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< >>\nendobj\n%%EOF");
 	return path;
 }
 
-describe("documents.importPdf", () => {
+describe("documents.importPath", () => {
 	it("imports a real PDF and records it as imported", async () => {
 		const db = freshDb();
 		const storageDir = mkdtempSync(join(tmpdir(), "juno-import-storage-"));
@@ -54,7 +54,7 @@ describe("documents.importPdf", () => {
 		const client = await clients.create({ name: "Acme" }, db);
 		const source = writePdfFixture(sourceDir);
 
-		const record = await importPdf({ sourcePath: source, clientId: client.id }, db);
+		const record = await importPath({ sourcePath: source, clientId: client.id }, db);
 
 		expect(record.sourceKind).toBe("imported");
 		expect(record.isSpecimen).toBe(false);
@@ -63,19 +63,23 @@ describe("documents.importPdf", () => {
 		expect(readFileSync(record.pdfPath!)).toEqual(readFileSync(source));
 	});
 
-	it("refuses a file that is not a PDF", async () => {
+	it("keeps a file of any kind, and refuses one named .pdf that is not a PDF", async () => {
 		const db = freshDb();
 		const storageDir = mkdtempSync(join(tmpdir(), "juno-import-storage-"));
 		const sourceDir = mkdtempSync(join(tmpdir(), "juno-import-source-"));
 		configureDocumentStorage(storageDir);
 
 		const client = await clients.create({ name: "Acme" }, db);
-		const source = join(sourceDir, "not-a-pdf.txt");
-		writeFileSync(source, "hello, this is plain text");
+		const text = join(sourceDir, "notes.txt");
+		writeFileSync(text, "hello, this is plain text");
+		const record = await importPath({ sourcePath: text, clientId: client.id }, db);
+		expect(record.title).toBe("notes");
+		expect(record.latestVersion).toMatchObject({ mediaType: "text/plain", fileName: "notes.txt", byteSize: 25 });
+		expect(record.pdfPath!.endsWith(".txt")).toBe(true);
 
-		await expect(importPdf({ sourcePath: source, clientId: client.id }, db)).rejects.toThrow(
-			/is not a PDF/,
-		);
+		const fake = join(sourceDir, "fake.pdf");
+		writeFileSync(fake, "hello, this is plain text");
+		await expect(importPath({ sourcePath: fake, clientId: client.id }, db)).rejects.toThrow(/is not a PDF/);
 	});
 
 	it("refuses a path that does not exist", async () => {
@@ -86,7 +90,7 @@ describe("documents.importPdf", () => {
 		const client = await clients.create({ name: "Acme" }, db);
 		const missing = join(storageDir, "nope.pdf");
 
-		await expect(importPdf({ sourcePath: missing, clientId: client.id }, db)).rejects.toThrow(
+		await expect(importPath({ sourcePath: missing, clientId: client.id }, db)).rejects.toThrow(
 			/Could not find/,
 		);
 	});
@@ -100,7 +104,7 @@ describe("documents.importPdf", () => {
 		const client = await clients.create({ name: "Acme" }, db);
 		const source = writePdfFixture(sourceDir);
 
-		const record = await importPdf(
+		const record = await importPath(
 			{ sourcePath: source, clientId: client.id, title: "../../../etc/evil" },
 			db,
 		);
@@ -122,8 +126,8 @@ describe("documents import names and bytes", () => {
 		const { db, sourceDir } = await setup();
 		const client = await clients.create({ name: "Acme" }, db);
 		const source = writePdfFixture(sourceDir, "Contract.pdf");
-		await importPdf({ sourcePath: source, clientId: client.id }, db);
-		await expect(importPdf({ sourcePath: source, clientId: client.id }, db)).rejects.toThrow(
+		await importPath({ sourcePath: source, clientId: client.id }, db);
+		await expect(importPath({ sourcePath: source, clientId: client.id }, db)).rejects.toThrow(
 			/Acme already has a document named "Contract"/,
 		);
 	});
@@ -133,20 +137,20 @@ describe("documents import names and bytes", () => {
 		const a = await clients.create({ name: "Acme" }, db);
 		const b = await clients.create({ name: "Beta" }, db);
 		const source = writePdfFixture(sourceDir, "Contract.pdf");
-		await importPdf({ sourcePath: source, clientId: a.id }, db);
-		await expect(importPdf({ sourcePath: source, clientId: b.id }, db)).resolves.toBeDefined();
+		await importPath({ sourcePath: source, clientId: a.id }, db);
+		await expect(importPath({ sourcePath: source, clientId: b.id }, db)).resolves.toBeDefined();
 	});
 
 	it("ignores case, and frees the name once the document is deleted", async () => {
 		const { db, sourceDir } = await setup();
 		const client = await clients.create({ name: "Acme" }, db);
-		const first = await importPdf({ sourcePath: writePdfFixture(sourceDir, "Contract.pdf"), clientId: client.id }, db);
+		const first = await importPath({ sourcePath: writePdfFixture(sourceDir, "Contract.pdf"), clientId: client.id }, db);
 		await expect(
-			importPdf({ sourcePath: writePdfFixture(sourceDir, "contract.pdf"), clientId: client.id }, db),
+			importPath({ sourcePath: writePdfFixture(sourceDir, "contract.pdf"), clientId: client.id }, db),
 		).rejects.toThrow(/already has a document/);
 		await documents.remove(first.id, db);
 		await expect(
-			importPdf({ sourcePath: writePdfFixture(sourceDir, "contract.pdf"), clientId: client.id }, db),
+			importPath({ sourcePath: writePdfFixture(sourceDir, "contract.pdf"), clientId: client.id }, db),
 		).resolves.toBeDefined();
 	});
 
@@ -354,7 +358,7 @@ describe("what a document belongs to", () => {
 
 	it("takes the project's client when only the project is given", async () => {
 		const { db, sourceDir, client, website } = await setUp();
-		const record = await importPdf({ sourcePath: writePdfFixture(sourceDir), projectId: website.id }, db);
+		const record = await importPath({ sourcePath: writePdfFixture(sourceDir), projectId: website.id }, db);
 		expect(record).toMatchObject({ clientId: client.id, clientName: "Noir", projectId: website.id, projectName: "Website" });
 		expect((await documents.list({ clientId: client.id }, db)).map((row) => row.id)).toEqual([record.id]);
 		expect((await documents.list({ projectId: website.id }, db)).map((row) => row.id)).toEqual([record.id]);
@@ -362,9 +366,9 @@ describe("what a document belongs to", () => {
 
 	it("keeps one under a project of your own, or under nothing", async () => {
 		const { db, sourceDir, own } = await setUp();
-		const underProject = await importPdf({ sourcePath: writePdfFixture(sourceDir, "a.pdf"), projectId: own.id }, db);
+		const underProject = await importPath({ sourcePath: writePdfFixture(sourceDir, "a.pdf"), projectId: own.id }, db);
 		expect(underProject).toMatchObject({ clientId: null, clientName: null, projectName: "Juno" });
-		const loose = await importPdf({ sourcePath: writePdfFixture(sourceDir, "b.pdf") }, db);
+		const loose = await importPath({ sourcePath: writePdfFixture(sourceDir, "b.pdf") }, db);
 		expect(loose).toMatchObject({ clientId: null, projectId: null });
 		expect((await documents.list({}, db)).map((row) => row.id).sort()).toEqual([underProject.id, loose.id].sort());
 	});
@@ -372,13 +376,13 @@ describe("what a document belongs to", () => {
 	it("refuses a client the project does not belong to", async () => {
 		const { db, sourceDir, other, website } = await setUp();
 		await expect(
-			importPdf({ sourcePath: writePdfFixture(sourceDir), clientId: other.id, projectId: website.id }, db),
+			importPath({ sourcePath: writePdfFixture(sourceDir), clientId: other.id, projectId: website.id }, db),
 		).rejects.toThrow(/belongs to a different client/);
 	});
 
 	it("moves a document to a project, and off everything", async () => {
 		const { db, sourceDir, client, website } = await setUp();
-		const record = await importPdf({ sourcePath: writePdfFixture(sourceDir), clientId: client.id }, db);
+		const record = await importPath({ sourcePath: writePdfFixture(sourceDir), clientId: client.id }, db);
 
 		const moved = await documents.link(record.id, { clientId: null, projectId: website.id }, db);
 		expect(moved).toMatchObject({ clientId: client.id, projectId: website.id });
@@ -392,11 +396,11 @@ describe("what a document belongs to", () => {
 
 	it("names the same title only once in one place", async () => {
 		const { db, sourceDir, own } = await setUp();
-		await importPdf({ sourcePath: writePdfFixture(sourceDir, "c.pdf"), projectId: own.id, title: "Brief" }, db);
+		await importPath({ sourcePath: writePdfFixture(sourceDir, "c.pdf"), projectId: own.id, title: "Brief" }, db);
 		await expect(
-			importPdf({ sourcePath: writePdfFixture(sourceDir, "d.pdf"), projectId: own.id, title: "Brief" }, db),
+			importPath({ sourcePath: writePdfFixture(sourceDir, "d.pdf"), projectId: own.id, title: "Brief" }, db),
 		).rejects.toThrow(/Juno already has a document named "Brief"/);
 		// Somewhere else, the same title is free.
-		await expect(importPdf({ sourcePath: writePdfFixture(sourceDir, "e.pdf"), title: "Brief" }, db)).resolves.toBeTruthy();
+		await expect(importPath({ sourcePath: writePdfFixture(sourceDir, "e.pdf"), title: "Brief" }, db)).resolves.toBeTruthy();
 	});
 });

@@ -10,7 +10,7 @@
 import { app, BrowserWindow, nativeTheme, session, shell } from "electron";
 import { join } from "node:path";
 import { DEV_CSP_NONCE, DEV_URL, DEV_WS_URL } from "../../shared/dev";
-import { ASSET_ORIGIN, MAIL_FRAME_ORIGIN } from "../../shared/types";
+import { ASSET_ORIGIN, MAIL_FRAME_ORIGIN, PREVIEW_ORIGIN } from "../../shared/types";
 import { APP_ORIGIN } from "../scheme";
 import { nativePalette } from "./native-palette";
 
@@ -48,16 +48,18 @@ function contentSecurityPolicy(isDev: boolean): string {
 		// app://asset serves one thing, the bytes of a project file that is an
 		// image, and only ever as the source of an <img>. It is a separate origin
 		// so a file that turns out not to be one cannot become a document.
-		`img-src 'self' data: blob: ${ASSET_ORIGIN}`,
+		// app://preview serves a file's preview picture or thumbnail by token
+		// (decision 76), for an <img> as well.
+		`img-src 'self' data: blob: ${ASSET_ORIGIN} ${PREVIEW_ORIGIN}`,
 		"font-src 'self' data:",
 		`connect-src ${connect}`,
 		"object-src 'none'",
 		"base-uri 'none'",
 		"form-action 'none'",
 		"frame-ancestors 'none'",
-		// The one frame the app may show: a message body, on its own origin,
-		// with its own policy. See main/scheme.ts.
-		`frame-src ${MAIL_FRAME_ORIGIN}`,
+		// The frames the app may show: a message body, and a Word file's
+		// preview, each on its own origin with its own policy. See main/scheme.ts.
+		`frame-src ${MAIL_FRAME_ORIGIN} ${PREVIEW_ORIGIN}`,
 	].join("; ");
 }
 
@@ -71,7 +73,8 @@ export function installSessionPolicy(isDev: boolean): void {
 		// `default-src 'none'` with something broader.
 		if (
 			details.url.startsWith(`${MAIL_FRAME_ORIGIN}/`) ||
-			details.url.startsWith(`${ASSET_ORIGIN}/`)
+			details.url.startsWith(`${ASSET_ORIGIN}/`) ||
+			details.url.startsWith(`${PREVIEW_ORIGIN}/`)
 		) {
 			callback({ responseHeaders: details.responseHeaders });
 			return;

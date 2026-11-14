@@ -34,6 +34,17 @@ function pdfjs(): Promise<PdfJs> {
  * which only means it cannot be matched, never that it cannot be imported.
  */
 export async function extractText(bytes: Uint8Array): Promise<string | null> {
+	const text = await readText(bytes);
+	if (text === null) return null;
+	const normalised = normalise(text);
+	return normalised.length > 0 ? normalised.slice(0, MAX_TEXT_LENGTH) : null;
+}
+
+/**
+ * The text of a PDF as it reads, a line per line of the page, for a preview
+ * and for an agent. Null when there is none, as above.
+ */
+export async function readText(bytes: Uint8Array): Promise<string | null> {
 	const lib = await pdfjs();
 	const task = lib.getDocument({
 		data: new Uint8Array(bytes),
@@ -49,13 +60,19 @@ export async function extractText(bytes: Uint8Array): Promise<string | null> {
 			const content = await (await pdf.getPage(number)).getTextContent();
 			for (const item of content.items) {
 				const text = "str" in item ? item.str : "";
-				if (text.length === 0) continue;
-				parts.push(text);
+				const breaks = "hasEOL" in item && item.hasEOL;
+				if (text.length === 0 && !breaks) continue;
+				parts.push(breaks ? `${text}\n` : `${text} `);
 				length += text.length + 1;
 			}
+			parts.push("\n");
 			if (length > MAX_TEXT_LENGTH) break;
 		}
-		const text = normalise(parts.join(" "));
+		const text = parts
+			.join("")
+			.replace(/[ \t]+\n/g, "\n")
+			.replace(/\n{3,}/g, "\n\n")
+			.trim();
 		return text.length > 0 ? text.slice(0, MAX_TEXT_LENGTH) : null;
 	} catch {
 		return null;

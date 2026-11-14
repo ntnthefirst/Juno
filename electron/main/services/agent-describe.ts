@@ -104,7 +104,8 @@ const ID_KINDS: [prefix: string, kind: AgentEntityKind][] = [
 /** What `id` means in a tool name, or null when it is something this does not name. */
 export function kindOfId(toolName: string): AgentEntityKind | null {
 	// clients.emails.update takes the id of an email row, not of a client.
-	if (/^(clients|projects)\.[a-z_]+\./.test(toolName)) return null;
+	// documents.folders.rename takes a folder's id, not a document's.
+	if (/^(clients|projects|documents)\.[a-z_]+\./.test(toolName)) return null;
 	for (const [prefix, kind] of ID_KINDS) if (toolName.startsWith(prefix)) return kind;
 	return null;
 }

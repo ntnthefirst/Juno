@@ -98,8 +98,21 @@ import type {
 	DocumentVersion,
 	ImportAnalysis,
 	ImportFileInput,
-	ImportSource,
 	PickedPdf,
+	PickedFile,
+	AnalyseImportInput,
+	ImportFromMailInput,
+	ImportFromMailResult,
+	DocumentPlace,
+	DocumentMoveInput,
+	ConvertPdfResult,
+	FilePreview,
+	FilePreviewSource,
+	DocumentsChanged,
+	DocumentTree,
+	DocumentFolder,
+	DocumentFolderInput,
+	DocumentFolderMove,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -874,15 +887,56 @@ export interface JunoApi {
 		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
 		/** Opens the file picker and hands back the chosen PDFs as bytes. Empty when cancelled. */
 		pickPdfs(): Promise<PickedPdf[]>;
-		/** Which existing documents an incoming file looks like, before anything is written. */
-		analyseImport(input: { source: ImportSource; clientId?: string | null }): Promise<ImportAnalysis>;
-		/** A new document from the file. Refuses a title the client already has. */
+		/** Opens the file picker for any kind of file and hands the chosen files back as bytes. Empty when cancelled. */
+		pickFiles(): Promise<PickedFile[]>;
+		/**
+		 * Which existing documents an incoming file looks like, each with its reason
+		 * (the same bytes, the same words, the same name in the place it is going
+		 * to), before anything is written.
+		 */
+		analyseImport(input: AnalyseImportInput): Promise<ImportAnalysis>;
+		/** A new document from the file, in a place or a folder. Refuses a title the place already has. */
 		importFile(input: ImportFileInput): Promise<DocumentRecord>;
 		/** Adds the file to a document as a version, placed by the file's own date. */
 		addVersion(input: AddVersionInput): Promise<DocumentVersion>;
+		/** A mail attachment kept as a document, or with `versionOf` as the next version of one. */
+		importFromMail(input: ImportFromMailInput): Promise<ImportFromMailResult>;
+		/** The documents directly in one node of the tree. */
+		listIn(place: DocumentPlace): Promise<DocumentRecord[]>;
+		/** Into a folder, or directly under a client, a project or nothing. A folder decides the client and project. */
+		move(id: string, input: DocumentMoveInput): Promise<DocumentRecord>;
+		/** Changes the title only. */
+		rename(id: string, title: string): Promise<DocumentRecord>;
+		/** A new document from the newest version, in the same place, named "<title> (copy)". */
+		duplicate(id: string): Promise<DocumentRecord>;
+		/** A new document from the newest version, in another folder, client or project. */
+		copyTo(id: string, target: DocumentMoveInput): Promise<DocumentRecord>;
+		/** Keeps a PDF of the newest version as the next version. `via: "juno"` means the layout may differ. */
+		convertPdf(id: string): Promise<ConvertPdfResult>;
+		/** What to draw for a file. Never a path; pictures and Word files come as `app://preview/` addresses. */
+		preview(source: FilePreviewSource): Promise<FilePreview>;
+		/**
+		 * Opens the newest version in the operating system's app for it: a working
+		 * copy whose saved edits come back as versions, or read only when it is signed.
+		 */
+		open(id: string): Promise<{ readOnly: boolean }>;
+		/** Fires when documents changed without this window asking, such as an edit saved in another app. */
+		onChanged(listener: (change: DocumentsChanged) => void): () => void;
+		folders: {
+			/** The whole tree: clients with their projects, your own projects, Unfiled and Templates, with your folders inside. */
+			tree(): Promise<DocumentTree>;
+			create(input: DocumentFolderInput): Promise<DocumentFolder>;
+			rename(id: string, name: string): Promise<DocumentFolder>;
+			/** Moving to another client or project takes everything inside along. */
+			move(id: string, target: DocumentFolderMove): Promise<DocumentFolder>;
+			/** Refuses a folder that is not empty, with what is in it. */
+			remove(id: string): Promise<DocumentFolder>;
+			restore(id: string): Promise<DocumentFolder>;
+		};
 		/** Newest first. */
 		versions(documentId: string): Promise<DocumentVersion[]>;
-		openVersion(versionId: string): Promise<void>;
+		/** Opens one version in its app. Anything but the newest opens read only. */
+		openVersion(versionId: string): Promise<{ readOnly: boolean }>;
 		revealVersion(versionId: string): Promise<void>;
 		/** Opens the signing details of a stamped or signed version. */
 		openCertificate(versionId: string): Promise<void>;

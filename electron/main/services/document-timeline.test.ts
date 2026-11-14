@@ -7,7 +7,7 @@ import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
 import { mailOutbox, mailOutboxAttachments } from "../db/schema";
 import * as clients from "./clients";
-import { importPdf } from "./document-import";
+import { importPath } from "./document-import";
 import { timeline } from "./document-timeline";
 import * as versions from "./document-versions";
 import { configureDocumentStorage } from "./documents";
@@ -29,7 +29,7 @@ async function importedDocument(db: Db) {
 	const source = join(mkdtempSync(join(tmpdir(), "juno-timeline-source-")), "source.pdf");
 	writeFileSync(source, "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< >>\nendobj\n%%EOF");
 	const client = await clients.create({ name: "Acme" }, db);
-	return importPdf({ sourcePath: source, clientId: client.id }, db);
+	return importPath({ sourcePath: source, clientId: client.id }, db);
 }
 
 describe("document timeline", () => {
@@ -50,7 +50,7 @@ describe("document timeline", () => {
 		const entries = await timeline(record.id, db);
 		expect(entries.map((entry) => entry.kind)).toEqual(["stamped", "imported"]);
 		expect(entries[0]!.versionId).not.toBeNull();
-		// importPdf is the agent's route in, which is how the version is recorded.
+		// importPath is the agent's route in, which is how the version is recorded.
 		expect(entries[1]!.detail).toBe("Added by the agent, source.pdf");
 	});
 

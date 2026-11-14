@@ -14,6 +14,8 @@ const ICONS: Record<DocumentTimelineKind, IconName> = {
 	imported: "import",
 	stamped: "edit",
 	signed: "lock",
+	edited: "edit",
+	converted: "documents",
 	emailed: "sent",
 };
 

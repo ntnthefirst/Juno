@@ -22,6 +22,9 @@
  * origin serves is only ever the source of an `<img>`. A document template's
  * pictures come from the same host under `/template/<id>`, by the same rule,
  * and a page's under `/page/<page id>/<file>`.
+ *
+ * `app://preview` is a fourth, for a file's preview (decision 76), served by
+ * token from services/file-preview.ts with the policy that service chose.
  */
 import { net, protocol } from "electron";
 import { normalize, resolve, sep } from "node:path";
@@ -32,6 +35,7 @@ import { frameCsp } from "./services/mail-sanitise";
 import * as projectAssets from "./services/project-assets";
 import * as templateAssets from "./services/document-template-assets";
 import * as pageImages from "./services/page-images";
+import { servePreview } from "./services/file-preview";
 
 export const APP_ORIGIN = "app://bundle";
 
@@ -141,6 +145,28 @@ async function serveAsset(url: URL): Promise<Response> {
 }
 
 /**
+ * A file's preview (decision 76): a Word file as sanitised HTML, a picture, an
+ * SVG or a thumbnail, by an opaque token the preview service issued. The
+ * answer carries the policy that service chose for it, and `nosniff`, so a
+ * picture can never be read as a page.
+ */
+function servePreviewFile(url: URL): Response {
+	if (isLocked()) return new Response("Locked", { status: 423 });
+	const match = /^\/([a-f0-9]{48})$/.exec(url.pathname);
+	const found = match ? servePreview(match[1]!) : null;
+	if (!found) return new Response("Not found", { status: 404 });
+	return new Response(new Uint8Array(found.body), {
+		status: 200,
+		headers: {
+			"Content-Type": found.contentType,
+			"Content-Security-Policy": found.csp,
+			"X-Content-Type-Options": "nosniff",
+			"Cache-Control": "no-store",
+		},
+	});
+}
+
+/**
  * `rootDir` is the built renderer, or null in development, where the window
  * loads from the Vite server and only the mail host is needed.
  */
@@ -151,6 +177,7 @@ export function registerAppScheme(rootDir: string | null): void {
 		const url = new URL(request.url);
 		if (url.host === "mail") return serveMail(url);
 		if (url.host === "asset") return serveAsset(url);
+		if (url.host === "preview") return servePreviewFile(url);
 		if (url.host === "bundle" && root) return serveBundle(root, url);
 		return new Response("Not found", { status: 404 });
 	});

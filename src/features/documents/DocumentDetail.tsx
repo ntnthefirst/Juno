@@ -387,7 +387,9 @@ export function DocumentDetail({
 								icon="external"
 								label="Open outside Juno"
 								disabled={!hasFile}
-								onClick={() => viewing && void run(() => window.juno.documents.openVersion(viewing.id))}
+								onClick={() => viewing && void run(async () => {
+										await window.juno.documents.openVersion(viewing.id);
+									})}
 							/>
 							<IconAction
 								size="dense"

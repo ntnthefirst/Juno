@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, BrowserWindow, globalShortcut, Menu, nativeTheme, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, Menu, nativeImage, nativeTheme, shell } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -30,7 +30,12 @@ import { configureClaudeDesktop } from "./main/services/claude-desktop";
 import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
 import { configureBackups, setCloseHook } from "./main/services/backup";
-import { configureDocuments } from "./main/services/document-pdf";
+import { configureDocuments, printPdf } from "./main/services/document-pdf";
+import { configureConversion } from "./main/services/document-convert";
+import * as documentWorking from "./main/services/document-working";
+import { configureWorkingCopies } from "./main/services/document-working";
+import { configurePreview } from "./main/services/file-preview";
+import { convertWithWord, wordInstalled } from "./main/services/word-convert";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
 import { apply as applyDocumentsFolder, configureDocumentsFolder } from "./main/services/documents-folder";
@@ -128,6 +133,21 @@ if (!app.requestSingleInstanceLock()) {
 			},
 		});
 		await applyDocumentsFolder();
+		// The three things a file explorer needs Electron for, handed in so the
+		// services stay testable in plain Node (decisions 75 to 77): opening a
+		// working copy, a thumbnail Windows draws, and a printer and Word for PDF.
+		configureWorkingCopies({ openPath: (path) => shell.openPath(path) });
+		configurePreview({
+			thumbnail: async (path) => {
+				const image = await nativeImage.createThumbnailFromPath(path, { width: 512, height: 512 });
+				return image.isEmpty() ? null : image.toPNG();
+			},
+		});
+		configureConversion({
+			printHtml: ({ title, bodyHtml }) => printPdf({ title, bodyHtml, isSpecimen: false }),
+			wordAvailable: wordInstalled,
+			convertWithWord,
+		});
 		configureTemplateAssets(templateAssetsDir());
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
@@ -271,6 +291,17 @@ if (!app.requestSingleInstanceLock()) {
 		installNotifications(isDev);
 		startBadge();
 		onMainWindowCreated((created) => created.once("ready-to-show", () => void syncBadge()));
+		// An edit saved in another app comes back as a version when the person
+		// returns to Juno (decision 75). Not while locked, and not more than once
+		// every few seconds however often focus comes and goes.
+		let lastEditCheck = 0;
+		onMainWindowCreated((created) =>
+			created.on("focus", () => {
+				if (lock.isLocked() || Date.now() - lastEditCheck < 3000) return;
+				lastEditCheck = Date.now();
+				void documentWorking.checkAll().catch(() => undefined);
+			}),
+		);
 		await desktop.applyShortcut();
 
 		// In development only the mail host is served; the window comes from Vite.

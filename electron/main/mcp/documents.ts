@@ -7,6 +7,7 @@ import * as templateAssets from "../services/document-template-assets";
 import * as imports from "../services/document-import";
 import * as timeline from "../services/document-timeline";
 import * as versions from "../services/document-versions";
+import * as working from "../services/document-working";
 import * as documents from "../services/documents";
 import type { ToolDescriptor } from "./types";
 
@@ -501,7 +502,7 @@ export const documentTools: ToolDescriptor[] = [
 			required: ["id"],
 			additionalProperties: false,
 		},
-		handler: async (args) => documents.get(String(args.id)),
+		handler: async (args) => working.getChecked(String(args.id)),
 	},
 	{
 		name: "documents.generate",
@@ -550,11 +551,12 @@ export const documentTools: ToolDescriptor[] = [
 	},
 	{
 		name: "documents.import",
-		title: "Import a PDF as a document",
+		title: "Import a file as a document",
 		description:
-			"Copies an existing PDF on this machine into Juno and records it under a client, a project, both " +
-			"or neither. It has no body " +
-			"and cannot be rendered again, because it did not come from a template, but it can still be signed. " +
+			"Copies an existing file of any kind on this machine (a PDF, a Word file, a spreadsheet, a picture) " +
+			"into Juno and records it under a client, a project, both or neither, or in a folder. It has no body " +
+			"and cannot be rendered again, because it did not come from a template. A PDF can be signed; any " +
+			"other kind is converted with documents.convert_pdf first. " +
 			"Refused when the same client, or project when there is no client, already has a document with the " +
 			"same title: check documents.find_matches first.",
 		readOnly: false,
@@ -562,10 +564,14 @@ export const documentTools: ToolDescriptor[] = [
 		inputSchema: {
 			type: "object",
 			properties: {
-				source_path: { type: "string", description: "Absolute path to the PDF on this machine." },
+				source_path: { type: "string", description: "Absolute path to the file on this machine." },
 				client_id: { type: ["string", "null"], description: "Optional. " + OWNER_RULE },
-				title: { type: "string", description: "Defaults to the file's own name." },
+				title: { type: "string", description: "Defaults to the file's own name without its extension." },
 				project_id: { type: ["string", "null"], description: "Optional. Must belong to the client when both are given." },
+				folder_id: {
+					type: ["string", "null"],
+					description: "Optional. A folder from documents.folders.list; its client and project win.",
+				},
 				issued_on: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
 			},
 			required: ["source_path"],
@@ -577,9 +583,10 @@ export const documentTools: ToolDescriptor[] = [
 				clientId: (args.client_id as string | null) ?? null,
 				...(args.title !== undefined ? { title: String(args.title) } : {}),
 				...(args.project_id !== undefined ? { projectId: args.project_id as string | null } : {}),
+				...(args.folder_id !== undefined ? { folderId: args.folder_id as string | null } : {}),
 				...(args.issued_on !== undefined ? { issuedOn: String(args.issued_on) } : {}),
 			};
-			return imports.importPdf(input);
+			return imports.importPath(input);
 		},
 	},
 	{
@@ -600,17 +607,18 @@ export const documentTools: ToolDescriptor[] = [
 	},
 	{
 		name: "documents.find_matches",
-		title: "Find documents a PDF matches",
+		title: "Find documents a file matches",
 		description:
-			"Reads a PDF on this machine and lists the existing documents it looks like: the same file, the same " +
-			"text with a signature or stamp added, or the same name for the given client. Writes nothing. " +
+			"Reads a file on this machine and lists the existing documents it looks like, each with its reason: " +
+			"bytes (the same file), text (the same words with a signature or stamp added; PDF, Word, spreadsheet " +
+			"and text files only), or name (the same title for the given client). Writes nothing. " +
 			"Use it before documents.import to decide whether the file is a new version instead.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: {
 			type: "object",
 			properties: {
-				source_path: { type: "string", description: "Absolute path to the PDF on this machine." },
+				source_path: { type: "string", description: "Absolute path to the file on this machine." },
 				client_id: { type: ["string", "null"], description: "The client the file is for, when known." },
 			},
 			required: ["source_path"],
@@ -624,9 +632,9 @@ export const documentTools: ToolDescriptor[] = [
 	},
 	{
 		name: "documents.add_version",
-		title: "Add a PDF as a version of a document",
+		title: "Add a file as a version of a document",
 		description:
-			"Copies a PDF on this machine into Juno as a new version of an existing document, such as the copy a " +
+			"Copies a file on this machine into Juno as a new version of an existing document, such as the copy a " +
 			"client signed and sent back. Its place among the versions follows the file's own modified date. " +
 			"Refused when the same file is already one of the document's versions.",
 		readOnly: false,
@@ -635,7 +643,7 @@ export const documentTools: ToolDescriptor[] = [
 			type: "object",
 			properties: {
 				document_id: { type: "string", description: "The document the file is a version of." },
-				source_path: { type: "string", description: "Absolute path to the PDF on this machine." },
+				source_path: { type: "string", description: "Absolute path to the file on this machine." },
 			},
 			required: ["document_id", "source_path"],
 			additionalProperties: false,

@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { seededColumns, standardColumns } from "../columns";
 import { clients, projects, referenceItems } from "./clients";
 
@@ -137,6 +137,37 @@ export const documentComponentAssets = sqliteTable(
 );
 
 /**
+ * A folder the owner made in the documents tree (decision 75). The tree's own
+ * folders, one per client, per project and Unfiled, are the owner rule drawn
+ * and are not rows. A folder sits inside one of those places, or inside
+ * another folder of the same place, and carries the place it sits in so a
+ * document dropped into it is kept under that client or project.
+ *
+ * Nothing on disk follows the tree. Files stay in Juno's documents folder,
+ * named by Juno.
+ */
+export const documentFolders = sqliteTable(
+	"document_folders",
+	{
+		...standardColumns,
+		name: text("name").notNull(),
+		/** The folder it sits in. Null when it sits directly in its place. */
+		parentId: text("parent_id").references((): AnySQLiteColumn => documentFolders.id),
+		/** The place it sits in: a client, a project, both, or neither for Unfiled. */
+		clientId: text("client_id").references(() => clients.id),
+		projectId: text("project_id").references(() => projects.id),
+		sortOrder: integer("sort_order").notNull().default(0),
+	},
+	(t) => [
+		index("document_folders_parent_idx").on(t.parentId),
+		index("document_folders_client_idx").on(t.clientId),
+		index("document_folders_project_idx").on(t.projectId),
+		index("document_folders_owner_idx").on(t.ownerId),
+		index("document_folders_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
  * A document is one generated instance. It keeps its own copy of the rendered
  * body, because a contract has to still read the way it read when it was sent,
  * even after the template it came from is edited.
@@ -181,9 +212,12 @@ export const documents = sqliteTable(
 		 * compiled from this on every save, so anything that reads a body still works.
 		 */
 		blocksJson: text("blocks_json"),
+		/** A folder the owner made, inside the place the document is kept. Null for none. */
+		folderId: text("folder_id").references(() => documentFolders.id),
 	},
 	(t) => [
 		index("documents_client_idx").on(t.clientId),
+		index("documents_folder_idx").on(t.folderId),
 		index("documents_project_idx").on(t.projectId),
 		index("documents_template_idx").on(t.templateId),
 		index("documents_status_idx").on(t.statusId),
@@ -246,9 +280,9 @@ export const documentVersions = sqliteTable(
 		documentId: text("document_id")
 			.notNull()
 			.references(() => documents.id),
-		/** generated, imported, stamped or signed. What the version is, not where it came from. */
+		/** generated, imported, stamped, signed, edited or converted. What the version is, not where it came from. */
 		kind: text("kind").notNull(),
-		/** How it arrived: generate, picker, drop, mail, sign, agent. */
+		/** How it arrived: generate, picker, drop, mail, sign, agent, external, convert, duplicate. */
 		source: text("source").notNull(),
 		pdfPath: text("pdf_path").notNull(),
 		/** The name the file had when it arrived, for an imported version. */
@@ -257,8 +291,15 @@ export const documentVersions = sqliteTable(
 		fileDate: text("file_date").notNull(),
 		/** SHA-256 of the file. Null for versions recorded before this table existed. */
 		fileHash: text("file_hash"),
-		/** The words in the PDF, for spotting that an incoming file is this document again. */
+		/** The words in the file, for spotting that an incoming file is this document again. */
 		textContent: text("text_content"),
+		/**
+		 * What kind of file it is (decision 75). A version can be any file, and
+		 * signing, previewing and converting all decide by this.
+		 */
+		mediaType: text("media_type"),
+		/** The file's size in bytes. Null for versions kept before it was recorded. */
+		byteSize: integer("byte_size"),
 		signatureId: text("signature_id").references(() => documentSignatures.id),
 		mailAttachmentId: text("mail_attachment_id"),
 	},
@@ -268,5 +309,39 @@ export const documentVersions = sqliteTable(
 		index("document_versions_hash_idx").on(t.fileHash),
 		index("document_versions_owner_idx").on(t.ownerId),
 		index("document_versions_deleted_idx").on(t.deletedAt),
+	],
+);
+
+/**
+ * The copy of a document's newest version that was opened in another app
+ * (decision 75). A version's file is never written to after it is kept, so
+ * opening one for editing opens this copy instead, and when its bytes differ
+ * from what was recorded here they are kept as a new version.
+ *
+ * The size and the modified time are compared first, so the check that runs
+ * whenever the window gains focus reads a file only when it changed.
+ */
+export const documentWorkingCopies = sqliteTable(
+	"document_working_copies",
+	{
+		...standardColumns,
+		documentId: text("document_id")
+			.notNull()
+			.references(() => documents.id),
+		/** The version the copy last matched. */
+		versionId: text("version_id")
+			.notNull()
+			.references(() => documentVersions.id),
+		/** Built by the service under the documents folder, never taken from a caller. */
+		path: text("path").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		modifiedMs: integer("modified_ms").notNull(),
+		fileHash: text("file_hash").notNull(),
+	},
+	(t) => [
+		index("document_working_copies_document_idx").on(t.documentId),
+		index("document_working_copies_version_idx").on(t.versionId),
+		index("document_working_copies_owner_idx").on(t.ownerId),
+		index("document_working_copies_deleted_idx").on(t.deletedAt),
 	],
 );

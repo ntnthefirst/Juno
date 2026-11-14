@@ -16,6 +16,7 @@ import { clientPhoneTools } from "./client-phones";
 import { clientTimelineTools } from "./client-timeline";
 import { clientTools } from "./clients";
 import { contactTools } from "./contacts";
+import { documentFileTools } from "./document-files";
 import { documentTools, templateTools } from "./documents";
 import { geocodingTools } from "./geocoding";
 import { mailActionTools } from "./mail-actions";
@@ -57,6 +58,7 @@ const lists: ToolDescriptor[][] = [
 	desktopTools,
 	templateTools,
 	documentTools,
+	documentFileTools,
 	reminderTools,
 	mailTools,
 	mailBlockTools,

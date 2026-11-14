@@ -7,7 +7,14 @@
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import type { Client, Contact, DocumentSourceKind, DocumentVersionKind, Project } from "../../shared/types";
+import type {
+	Client,
+	Contact,
+	DocumentLatestVersion,
+	DocumentPlace,
+	DocumentSourceKind,
+	Project,
+} from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import {
@@ -16,6 +23,7 @@ import {
 	clientPhones,
 	clients,
 	contacts,
+	documentFolders,
 	documents,
 	projects,
 	referenceItems,
@@ -24,6 +32,7 @@ import { buildContext, todayIsoDate } from "./document-context";
 import { resolveOwner } from "./document-owner";
 import * as templates from "./document-templates";
 import * as versions from "./document-versions";
+import { isPdfMediaType, safeExtensionOf } from "./file-kind";
 import * as settings from "./settings";
 
 /** The primary row of each, or null. A client need not have any of them yet. */
@@ -93,7 +102,9 @@ export interface DocumentRecord {
 	 */
 	sourceKind: DocumentSourceKind;
 	versionCount: number;
-	latestVersion: { id: string; kind: DocumentVersionKind; fileDate: string } | null;
+	latestVersion: DocumentLatestVersion | null;
+	/** A folder the owner made, inside the place the document is kept. */
+	folderId: string | null;
 }
 
 export interface GenerateInput {
@@ -141,6 +152,7 @@ function toRecord(
 		sourceKind: row.sourceKind as DocumentSourceKind,
 		versionCount: summary?.count ?? 0,
 		latestVersion: summary?.latest ?? null,
+		folderId: row.folderId,
 	};
 }
 
@@ -153,8 +165,11 @@ function toRecord(
  * comes out as `etc`, so joining this onto a directory can never leave it.
  * Shared with document-actions.ts, which renders and signs PDFs under the same
  * scheme, so there is exactly one naming rule rather than two that can drift.
+ *
+ * The extension is the file's own (decision 75), kept to letters and digits;
+ * one that is anything else is dropped rather than trusted.
  */
-export function fileNameFor(title: string, suffix: string): string {
+export function fileNameFor(title: string, suffix: string, extension = "pdf"): string {
 	const safe = title
 		.normalize("NFKD")
 		.replace(/[^\w\s-]/g, "")
@@ -163,7 +178,8 @@ export function fileNameFor(title: string, suffix: string): string {
 		.slice(0, 60)
 		.toLowerCase();
 	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-	return `${safe || "document"}-${stamp}${suffix}.pdf`;
+	const ending = safeExtensionOf(extension);
+	return `${safe || "document"}-${stamp}${suffix}${ending ? `.${ending}` : ""}`;
 }
 
 let importDirectory = "";
@@ -219,6 +235,31 @@ export async function list(
 	return rows.map((row) => toRecord(row.document, row, summaries.get(row.document.id)));
 }
 
+/**
+ * The documents directly in one node of the tree (decision 75): in a folder
+ * the owner made, or, without one, kept under exactly that client and project
+ * and in no folder. A client's node does not list its projects' documents;
+ * those are in the project's node below it.
+ */
+export async function listIn(place: DocumentPlace, db: Db = getDb()): Promise<DocumentRecord[]> {
+	const where = place.folderId
+		? eq(documents.folderId, place.folderId)
+		: and(
+				place.clientId ? eq(documents.clientId, place.clientId) : isNull(documents.clientId),
+				place.projectId ? eq(documents.projectId, place.projectId) : isNull(documents.projectId),
+				isNull(documents.folderId),
+			);
+	const rows = selectWithNames(db)
+		.where(and(isNull(documents.deletedAt), where))
+		.orderBy(desc(documents.createdAt), desc(documents.id))
+		.all();
+	const summaries = versions.summaries(
+		rows.map((row) => row.document.id),
+		db,
+	);
+	return rows.map((row) => toRecord(row.document, row, summaries.get(row.document.id)));
+}
+
 export async function get(id: string, db: Db = getDb()): Promise<DocumentRecord | null> {
 	const row = selectWithNames(db)
 		.where(and(eq(documents.id, id), isNull(documents.deletedAt)))
@@ -237,9 +278,31 @@ export async function link(
 	db: Db = getDb(),
 ): Promise<DocumentRecord> {
 	const owner = resolveOwner(input, db);
+	const current = db
+		.select({ folderId: documents.folderId })
+		.from(documents)
+		.where(and(eq(documents.id, id), isNull(documents.deletedAt)))
+		.get();
+	if (!current) throw new Error("That document no longer exists.");
+	// A folder belongs to one place. Moving the document out of that place
+	// takes it out of the folder too, or the tree would draw it somewhere it
+	// is not kept.
+	const folder = current.folderId
+		? db
+				.select({ clientId: documentFolders.clientId, projectId: documentFolders.projectId })
+				.from(documentFolders)
+				.where(and(eq(documentFolders.id, current.folderId), isNull(documentFolders.deletedAt)))
+				.get()
+		: undefined;
+	const keepsFolder = folder && folder.clientId === owner.clientId && folder.projectId === owner.projectId;
 	const row = db
 		.update(documents)
-		.set({ clientId: owner.clientId, projectId: owner.projectId, updatedAt: now() })
+		.set({
+			clientId: owner.clientId,
+			projectId: owner.projectId,
+			folderId: keepsFolder ? current.folderId : null,
+			updatedAt: now(),
+		})
 		.where(and(eq(documents.id, id), isNull(documents.deletedAt)))
 		.returning()
 		.get();
@@ -364,6 +427,7 @@ export async function readPdfBytes(id: string, db: Db = getDb()): Promise<Uint8A
 	if (!record.pdfPath || !existsSync(record.pdfPath)) {
 		throw new Error("This document has no PDF yet. Create one first.");
 	}
+	assertNewestIsPdf(record);
 	return new Uint8Array(readFileSync(record.pdfPath));
 }
 
@@ -408,11 +472,26 @@ export async function previewContext(
  * invented contract being signed is covered by a test rather than only by the
  * interface that happens to call it.
  */
-export function assertSignable(record: Pick<DocumentRecord, "isSpecimen">): void {
+export function assertSignable(record: Pick<DocumentRecord, "isSpecimen" | "title" | "latestVersion">): void {
 	if (record.isSpecimen) {
 		throw new Error(
 			"This document came from a template that has not been reviewed, so it cannot be signed. " +
 				"Rewrite the template with your own text and mark it as reviewed first.",
+		);
+	}
+	assertNewestIsPdf(record);
+}
+
+/**
+ * Throws when the newest version is a file of another kind (decision 77):
+ * a stamp goes on a PDF page, so a Word file is converted first, and the
+ * conversion is kept as a version of its own.
+ */
+export function assertNewestIsPdf(record: Pick<DocumentRecord, "title" | "latestVersion">): void {
+	const latest = record.latestVersion;
+	if (latest && !isPdfMediaType(latest.mediaType)) {
+		throw new Error(
+			`The newest version of "${record.title}" is not a PDF. Convert it to PDF first, then sign the PDF.`,
 		);
 	}
 }

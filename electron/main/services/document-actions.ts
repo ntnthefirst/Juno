@@ -16,6 +16,7 @@ import type {
 	DocumentCanvasRender,
 	DocumentComponentRender,
 	DocumentSignature,
+	PickedFile,
 	PickedPdf,
 	SignDocumentInput,
 	StampPlacement,
@@ -30,6 +31,9 @@ import { lookupFor } from "./document-component-lookup";
 import * as pdf from "./document-pdf";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import * as versions from "./document-versions";
+import * as working from "./document-working";
+import { mediaTypeFor, safeExtensionOf } from "./file-kind";
+import { extensionOf } from "../../shared/mime";
 import { extractText } from "./pdf-text";
 import { signPdf } from "./pdf-sign";
 import * as certificate from "./signing-certificate";
@@ -56,6 +60,29 @@ export async function previewHtml(id: string, db: Db = getDb()): Promise<string>
 }
 
 /**
+ * Asks for any files (decision 75) and hands their bytes back, for the window
+ * to add through the same questions a drop asks. Empty when cancelled.
+ */
+export async function pickFiles(): Promise<PickedFile[]> {
+	const parent = BrowserWindow.getFocusedWindow();
+	const options = { title: "Add files", properties: ["openFile" as const, "multiSelections" as const] };
+	const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+	if (result.canceled) return [];
+	return result.filePaths.map((path) => {
+		const stat = statSync(path);
+		if (stat.size > MAX_IMPORT_BYTES) {
+			throw new Error(`"${basename(path)}" is larger than 100 MB. Keep it in a project's files instead, which can link to it.`);
+		}
+		return {
+			fileName: basename(path),
+			data: new Uint8Array(readFileSync(path)),
+			fileDate: stat.mtime.toISOString(),
+			mediaType: mediaTypeFor(basename(path)),
+		};
+	});
+}
+
+/**
  * Asks for one or more PDFs and hands their bytes back, for the window to
  * import through the same questions a drop asks. Empty when the picker is
  * cancelled, which is not an error.
@@ -73,7 +100,7 @@ export async function pickPdfs(): Promise<PickedPdf[]> {
 	return result.filePaths.map((path) => {
 		const stat = statSync(path);
 		if (stat.size > MAX_IMPORT_BYTES) {
-			throw new Error(`"${basename(path)}" is larger than 50 MB. Split it or compress it first.`);
+			throw new Error(`"${basename(path)}" is larger than 100 MB. Split it or compress it first.`);
 		}
 		return { fileName: basename(path), data: new Uint8Array(readFileSync(path)), fileDate: stat.mtime.toISOString() };
 	});
@@ -449,18 +476,22 @@ export async function readPdf(id: string, db: Db = getDb()): Promise<Uint8Array>
 	return documents.readPdfBytes(id, db);
 }
 
-/** Opens the newest version, which is what opening a document means. */
+/**
+ * Opens the newest version, which is what opening a document means, in the
+ * operating system's app for it: a working copy Juno watches for edits, or a
+ * read-only copy of a signed one (document-working.ts).
+ */
 export async function openPdf(id: string, db: Db = getDb()): Promise<void> {
-	await openPath(await latestPdfPath(id, db));
+	await working.openDocument(id, db);
 }
 
 export async function revealPdf(id: string, db: Db = getDb()): Promise<void> {
 	shell.showItemInFolder(await latestPdfPath(id, db));
 }
 
-/** One version in particular, from the version list. Resolved from its id. */
-export async function openVersion(versionId: string, db: Db = getDb()): Promise<void> {
-	await openPath(versions.pathOf(versionId, db));
+/** One version in particular, from the version list. Anything but the newest opens read only. */
+export async function openVersion(versionId: string, db: Db = getDb()): Promise<{ readOnly: boolean }> {
+	return working.openVersion(versionId, db);
 }
 
 export async function revealVersion(versionId: string, db: Db = getDb()): Promise<void> {
@@ -481,14 +512,17 @@ export async function downloadVersion(versionId: string, db: Db = getDb()): Prom
 	const { version } = versions.get(versionId, db);
 	const record = await documents.get(version.documentId, db);
 	if (!record) throw new Error("That document no longer exists.");
-	const source = versions.pathOf(versionId, db);
+	const file = versions.fileOf(versionId, db);
+	const source = file.path;
+	// The file keeps its own kind: a Word version downloads as Word.
+	const extension = safeExtensionOf(extensionOf(file.fileName || file.path)) || "pdf";
 
 	const base = record.title.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]/g, "").trim() || "document";
 	const parent = BrowserWindow.getFocusedWindow();
 	const options = {
 		title: "Download a copy",
-		defaultPath: `${base}${version.isLatest ? "" : `-v${version.number}`}.pdf`,
-		filters: [{ name: "PDF", extensions: ["pdf"] }],
+		defaultPath: `${base}${version.isLatest ? "" : `-v${version.number}`}.${extension}`,
+		filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
 	};
 	const result = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
 	if (result.canceled || !result.filePath) return null;

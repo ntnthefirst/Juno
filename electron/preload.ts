@@ -18,6 +18,7 @@ import type {
 	AgentAction,
 	AutomationRun,
 	ChildClosedInfo,
+	DocumentsChanged,
 	LockState,
 	MailOutboxMessage,
 	MailSyncStatus,
@@ -493,9 +494,34 @@ const api: JunoApi = {
 		get: (id) => call("documents.get", id),
 		generate: (input) => call("documents.generate", input),
 		pickPdfs: () => call("documents.pickPdfs"),
+		pickFiles: () => call("documents.pickFiles"),
 		analyseImport: (input) => call("documents.analyseImport", input),
 		importFile: (input) => call("documents.importFile", input),
 		addVersion: (input) => call("documents.addVersion", input),
+		importFromMail: (input) => call("documents.importFromMail", input),
+		listIn: (place) => call("documents.listIn", place),
+		move: (id, input) => call("documents.move", id, input),
+		rename: (id, title) => call("documents.rename", id, title),
+		duplicate: (id) => call("documents.duplicate", id),
+		copyTo: (id, target) => call("documents.copyTo", id, target),
+		convertPdf: (id) => call("documents.convertPdf", id),
+		preview: (source) => call("documents.preview", source),
+		open: (id) => call("documents.open", id),
+		onChanged: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, change: DocumentsChanged) => listener(change);
+			ipcRenderer.on("documents.changed", handler);
+			return () => {
+				ipcRenderer.off("documents.changed", handler);
+			};
+		},
+		folders: {
+			tree: () => call("documents.folders.tree"),
+			create: (input) => call("documents.folders.create", input),
+			rename: (id, name) => call("documents.folders.rename", id, name),
+			move: (id, target) => call("documents.folders.move", id, target),
+			remove: (id) => call("documents.folders.remove", id),
+			restore: (id) => call("documents.folders.restore", id),
+		},
 		versions: (documentId) => call("documents.versions", documentId),
 		openVersion: (versionId) => call("documents.openVersion", versionId),
 		revealVersion: (versionId) => call("documents.revealVersion", versionId),

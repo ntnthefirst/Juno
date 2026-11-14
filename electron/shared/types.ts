@@ -2066,24 +2066,51 @@ export interface DocumentRecord extends Standard {
 	sourceKind: DocumentSourceKind;
 	/** How many files this document has been. Always at least one once it has a PDF. */
 	versionCount: number;
-	/** The newest version, which is the one `pdfPath` points at. Null before the first PDF. */
-	latestVersion: { id: string; kind: DocumentVersionKind; fileDate: Iso } | null;
+	/** The newest version, which is the one `pdfPath` points at. Null before the first file. */
+	latestVersion: DocumentLatestVersion | null;
+	/** A folder the owner made, inside the place the document is kept (decision 75). Null for none. */
+	folderId: string | null;
+}
+
+/** What a list needs to know about a document's newest file: its kind decides the tile, the preview and Sign. */
+export interface DocumentLatestVersion {
+	id: string;
+	kind: DocumentVersionKind;
+	fileDate: Iso;
+	fileName: string | null;
+	/** `application/pdf` for every version kept before any file could be a document. */
+	mediaType: string;
+	byteSize: number | null;
 }
 
 export type DocumentSourceKind = "generated" | "imported" | "page";
 
 export interface ImportDocumentInput {
-	/** An absolute path to a PDF that exists. Copied in, never referenced. */
+	/** An absolute path to a file that exists. Copied in, never referenced. Any type. */
 	sourcePath: string;
 	clientId?: string | null;
 	title?: string;
 	projectId?: string | null;
+	folderId?: string | null;
 	issuedOn?: IsoDate;
 }
 
-/** What a version is. Where it came from is `DocumentVersionSource`. */
-export type DocumentVersionKind = "generated" | "imported" | "stamped" | "signed";
-export type DocumentVersionSource = "generate" | "picker" | "drop" | "mail" | "sign" | "agent";
+/**
+ * What a version is. Where it came from is `DocumentVersionSource`.
+ * `edited` was saved in another app from a working copy (decision 75);
+ * `converted` is a PDF Juno or Word made from the version before it (decision 77).
+ */
+export type DocumentVersionKind = "generated" | "imported" | "stamped" | "signed" | "edited" | "converted";
+export type DocumentVersionSource =
+	| "generate"
+	| "picker"
+	| "drop"
+	| "mail"
+	| "sign"
+	| "agent"
+	| "external"
+	| "convert"
+	| "duplicate";
 
 /** One file a document has been. Newest first wherever a list of them is returned. */
 export interface DocumentVersion extends Standard {
@@ -2091,6 +2118,10 @@ export interface DocumentVersion extends Standard {
 	kind: DocumentVersionKind;
 	source: DocumentVersionSource;
 	fileName: string | null;
+	/** What kind of file it is. `application/pdf` for every version kept before any file could be a document. */
+	mediaType: string;
+	/** In bytes. Null for a version kept before sizes were recorded. */
+	byteSize: number | null;
 	/** Orders the versions: the file's own date for an import, the moment it was made otherwise. */
 	fileDate: Iso;
 	fileHash: string | null;
@@ -2106,7 +2137,15 @@ export interface DocumentVersion extends Standard {
 	hasCertificate: boolean;
 }
 
-export type DocumentTimelineKind = "created" | "generated" | "imported" | "stamped" | "signed" | "emailed";
+export type DocumentTimelineKind =
+	| "created"
+	| "generated"
+	| "imported"
+	| "stamped"
+	| "signed"
+	| "edited"
+	| "converted"
+	| "emailed";
 
 /** One thing that happened to a document, newest first wherever a list of them is returned. */
 export interface DocumentTimelineEntry {
@@ -2123,8 +2162,9 @@ export interface DocumentTimelineEntry {
 export type VersionUse = "download" | "email" | "sign";
 
 /**
- * A PDF the window hands over: bytes it read from a drop or a picker, or a mail
- * attachment named by id. Never a path. See .claude/rules/security.md section 2.
+ * A file the window hands over: bytes it read from a drop or a picker, or a
+ * mail attachment named by id. Never a path. Any type (decision 75). See
+ * .claude/rules/security.md section 2.
  */
 export type ImportSource =
 	| {
@@ -2146,30 +2186,63 @@ export interface PickedPdf {
 	fileDate: Iso;
 }
 
+/** Any file read by the main process's picker, ready to be added as a document. */
+export interface PickedFile extends PickedPdf {
+	mediaType: string;
+}
+
+/**
+ * Why an existing document is offered for an incoming file: the very same
+ * bytes, the same words (a signed or re-saved copy, decision 39), or only the
+ * same name in the place it is going to.
+ */
+export type ImportMatchReason = "bytes" | "text" | "name";
+
 /** A document the incoming file looks like. */
 export interface ImportMatch {
 	documentId: string;
 	title: string;
 	clientId: string | null;
 	clientName: string | null;
-	/** 0 to 1, how much of the text is the same. */
+	projectId: string | null;
+	folderId: string | null;
+	/** 0 to 1, how much of the text is the same. 1 for the same bytes, 0 for a name only. */
 	score: number;
 	/** The same bytes are already one of this document's versions. */
 	identical: boolean;
-	/** Why it is offered: the same text, or only the same name. */
-	reason: "text" | "name";
+	reason: ImportMatchReason;
+	/** The document's newest file, for showing beside the incoming one. Null for a document with no file yet. */
+	latestVersion: DocumentLatestVersion | null;
 }
 
 export interface ImportAnalysis {
 	fileName: string;
 	/** What the title would be as a document of its own. */
 	defaultTitle: string;
+	/** `defaultTitle`, or the first free variation of it in the place it is going to. */
+	availableTitle: string;
 	/** The client the file probably belongs to: the one asked for, the mail's, or the best match's. */
 	suggestedClientId: string | null;
 	/** Best first. Empty when nothing looks like it. */
 	matches: ImportMatch[];
 	/** The file's date, which decides where it would sit among the versions. */
 	fileDate: Iso;
+	mediaType: string;
+	byteSize: number;
+}
+
+/** Where a document is kept, as the tree draws it (decision 75). Null for none at each level. */
+export interface DocumentPlace {
+	clientId: string | null;
+	projectId: string | null;
+	folderId: string | null;
+}
+
+export interface AnalyseImportInput {
+	source: ImportSource;
+	clientId?: string | null;
+	projectId?: string | null;
+	folderId?: string | null;
 }
 
 export interface ImportFileInput {
@@ -2177,7 +2250,201 @@ export interface ImportFileInput {
 	clientId?: string | null;
 	title?: string;
 	projectId?: string | null;
+	/** A folder the owner made. Its client and project win over the two above. */
+	folderId?: string | null;
 	issuedOn?: IsoDate;
+}
+
+/**
+ * A mail attachment kept as a document (decision 75). With `versionOf` it
+ * becomes the next version of that document instead, which is the answer to
+ * "new version or new document" after `documents.analyseImport`.
+ */
+export interface ImportFromMailInput {
+	attachmentId: string;
+	versionOf?: string | null;
+	clientId?: string | null;
+	projectId?: string | null;
+	folderId?: string | null;
+	title?: string;
+}
+
+export interface ImportFromMailResult {
+	document: DocumentRecord;
+	version: DocumentVersion;
+	/** True when it was added to an existing document rather than made into one. */
+	addedAsVersion: boolean;
+}
+
+/* ------------------------------------------------------ documents tree */
+
+/** A folder the owner made in the documents tree. */
+export interface DocumentFolder extends Standard {
+	name: string;
+	/** The folder it sits in, or null when it sits directly in its place. */
+	parentId: string | null;
+	clientId: string | null;
+	projectId: string | null;
+	sortOrder: number;
+}
+
+export interface DocumentFolderInput {
+	name: string;
+	/** Another folder to sit in. Its place wins over `clientId` and `projectId`. */
+	parentId?: string | null;
+	/** The place to sit in when there is no parent. A project brings its client. */
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+export interface DocumentFolderMove {
+	/** Another folder to sit in, or null to sit directly in the place below. */
+	parentId?: string | null;
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+/**
+ * A node of the documents tree. `client`, `project`, `unfiled` and `templates`
+ * are drawn from the records and are not rows; `folder` is a row of
+ * `document_folders`. `key` is stable across reads, so a window can keep a node
+ * open or selected by it.
+ */
+export interface DocumentTreeNode {
+	key: string;
+	kind: "client" | "project" | "unfiled" | "templates" | "folder";
+	name: string;
+	/**
+	 * Where a document added or moved here is kept. Null for `templates`, which
+	 * holds templates and no documents.
+	 */
+	place: DocumentPlace | null;
+	/** Documents directly in this node, not counting its children. */
+	documentCount: number;
+	/** Set for `folder`. */
+	folderId: string | null;
+	/** Set for `client`, and for a `project` or `folder` under a client. */
+	clientId: string | null;
+	/** Set for `project`, and for a `folder` under a project. */
+	projectId: string | null;
+	children: DocumentTreeNode[];
+}
+
+/** A document template as the Templates node lists it. Opening one opens its editor. */
+export interface DocumentTemplateEntry {
+	id: string;
+	name: string;
+	updatedAt: Iso;
+	/** Null for a template nobody has reviewed: what it makes is a specimen. */
+	reviewedAt: Iso | null;
+	/** True when it is laid out on paper (decision 41), so Use fills its inputs first. */
+	hasCanvas: boolean;
+}
+
+/**
+ * The whole tree: a node per client (holding a node per project), a node per
+ * project of the owner's own, Unfiled, then Templates, in that order. The
+ * owner's folders sit inside any of the first three kinds.
+ */
+export interface DocumentTree {
+	roots: DocumentTreeNode[];
+	templates: DocumentTemplateEntry[];
+}
+
+export interface DocumentMoveInput {
+	/** A folder to put it in. Its client and project decide where the document is kept. */
+	folderId?: string | null;
+	/** Without a folder: the place to keep it, by the owner rule (decision 48). */
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+/** How a PDF was made from a file (decision 77). `juno` means the layout may differ from the original. */
+export type ConversionRoute = "word" | "juno";
+
+export interface ConvertPdfResult {
+	document: DocumentRecord;
+	version: DocumentVersion;
+	via: ConversionRoute;
+}
+
+/** Pushed to every window whenever documents changed outside the window's own call. */
+export interface DocumentsChanged {
+	documentIds: string[];
+	/** Why, so a window can say it: an edit saved in another app, or anything else. */
+	reason: "edited-outside" | "changed";
+}
+
+/* ------------------------------------------------------------- previews */
+
+/**
+ * What a preview is asked for: a document's newest file, one version, a mail
+ * attachment or a project file, each by id, or bytes the window is about to
+ * add. Never a path (decision 76).
+ */
+export type FilePreviewSource =
+	| { kind: "document"; documentId: string }
+	| { kind: "version"; versionId: string }
+	| { kind: "attachment"; attachmentId: string }
+	| { kind: "asset"; assetId: string }
+	| { kind: "bytes"; fileName: string; data: Uint8Array; fileDate?: Iso };
+
+/** What every preview says about the file, whatever it can show of it. */
+export interface FilePreviewMeta {
+	name: string;
+	/** In bytes. */
+	size: number;
+	mediaType: string;
+	/** Lower case, no dot. Empty when the name has none. */
+	extension: string;
+	/** The file's last change, UTC ISO-8601, when it is known. */
+	modified: Iso | null;
+}
+
+export interface PreviewSheet {
+	name: string;
+	/** Every cell as the text it shows. Rows can be shorter than the widest one. */
+	rows: string[][];
+	/** True when rows past the limit were left out. */
+	truncatedRows: boolean;
+	/** True when columns past the limit were left out. */
+	truncatedColumns: boolean;
+	/** How many rows the sheet has in all, when known. */
+	totalRows: number;
+}
+
+/**
+ * What the window draws for a file (decision 76). Decided in the main process
+ * from the file's type; the window never gets a path.
+ *
+ * - `pdf`: the bytes, for the PDF viewer.
+ * - `image`: a picture at an `app://preview/` address, for an `<img>` only.
+ *   An SVG comes this way too, and `<img>` runs no script in it.
+ * - `html`: a Word file made into sanitised HTML at an `app://preview/`
+ *   address, for a frame with an empty `sandbox`.
+ * - `text`: the text, cut at a limit.
+ * - `table`: each sheet's cells as text, cut at limits.
+ * - `thumbnail`: a picture of the file at an `app://preview/` address: the
+ *   one an iWork file carries, or the one Windows makes.
+ * - `none`: nothing to show beyond `meta`; `reason` says why in a sentence.
+ */
+export type FilePreview =
+	| { kind: "pdf"; meta: FilePreviewMeta; data: Uint8Array }
+	| { kind: "image"; meta: FilePreviewMeta; url: string }
+	| { kind: "html"; meta: FilePreviewMeta; url: string }
+	| { kind: "text"; meta: FilePreviewMeta; text: string; truncated: boolean }
+	| { kind: "table"; meta: FilePreviewMeta; sheets: PreviewSheet[]; truncatedSheets: boolean }
+	| { kind: "thumbnail"; meta: FilePreviewMeta; url: string; from: "iwork" | "system" }
+	| { kind: "none"; meta: FilePreviewMeta; reason: string };
+
+/** What an agent is given for a file: the same decision, with words and cells instead of addresses. */
+export interface FilePreviewForAgent {
+	meta: FilePreviewMeta;
+	kind: FilePreview["kind"];
+	/** The words in the file, cut at a limit. Null when it has none Juno can read. */
+	text: string | null;
+	truncated: boolean;
+	sheets: PreviewSheet[] | null;
 }
 
 export interface AddVersionInput {
@@ -2675,6 +2942,17 @@ export const MAIL_FRAME_ORIGIN = "app://mail";
  * arbitrary file reader that .claude/rules/security.md section 2 forbids.
  */
 export const ASSET_ORIGIN = "app://asset";
+
+/**
+ * Where a file's preview is served from (decision 76): a Word file made into
+ * sanitised HTML, a picture, an SVG, or the thumbnail a file carries. A fourth
+ * host, so a fourth origin. Each address is `${PREVIEW_ORIGIN}/<token>`, an
+ * opaque token the main process made for one preview, and each response
+ * carries its own policy, so the window's is never stamped over it. HTML from
+ * here is shown in a frame with an empty sandbox, and everything else by
+ * `<img>` only.
+ */
+export const PREVIEW_ORIGIN = "app://preview";
 
 /**
  * What the reader needs beside the frame: the plain text for a message with no

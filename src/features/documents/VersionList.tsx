@@ -86,7 +86,9 @@ export function VersionList({ documentId, nested = false }: VersionListProps) {
 							<span className="tabular mr-2 text-sm text-[var(--ink-muted)]">
 								{formatInstant(version.fileDate)}
 							</span>
-							<Button size="dense" onClick={() => void run(() => window.juno.documents.openVersion(version.id))}>
+							<Button size="dense" onClick={() => void run(async () => {
+									await window.juno.documents.openVersion(version.id);
+								})}>
 								Open
 							</Button>
 							{version.hasCertificate ? (

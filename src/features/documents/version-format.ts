@@ -5,6 +5,8 @@ export const KIND_LABELS: Record<DocumentVersionKind, string> = {
 	imported: "Imported",
 	stamped: "Stamped",
 	signed: "Signed digitally",
+	edited: "Edited outside Juno",
+	converted: "Converted to PDF",
 };
 
 export const SOURCE_LABELS: Record<DocumentVersionSource, string> = {
@@ -14,6 +16,9 @@ export const SOURCE_LABELS: Record<DocumentVersionSource, string> = {
 	mail: "From a mail",
 	sign: "Signed in Juno",
 	agent: "Added by the agent",
+	external: "Saved in another app",
+	convert: "Converted in Juno",
+	duplicate: "Copied from another document",
 };
 
 /** Brass is for signed and sealed only (brand/BRAND.md), so it marks those two. */

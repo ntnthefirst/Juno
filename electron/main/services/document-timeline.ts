@@ -26,6 +26,9 @@ const SOURCE_WORDS: Record<DocumentVersionSource, string> = {
 	mail: "From a mail",
 	sign: "Signed in Juno",
 	agent: "Added by the agent",
+	external: "Saved in another app",
+	convert: "Converted in Juno",
+	duplicate: "Copied from another document",
 };
 
 /** `to_json` is written by the outbox, but a bad row must not take the timeline down with it. */
@@ -69,8 +72,17 @@ export async function timeline(documentId: string, db: Db = getDb()): Promise<Do
 				id: `version:${version.id}`,
 				kind: "imported",
 				at: version.fileDate,
-				title: "Imported as a PDF",
+				title: version.mediaType === "application/pdf" ? "Imported as a PDF" : "Added as a file",
 				detail: [source, version.fileName].filter(Boolean).join(", "),
+				versionId: version.id,
+			});
+		} else if (version.kind === "edited" || version.kind === "converted") {
+			entries.push({
+				id: `version:${version.id}`,
+				kind: version.kind,
+				at: version.fileDate,
+				title: version.kind === "edited" ? "Edited outside Juno" : "Converted to PDF",
+				detail: version.fileName,
 				versionId: version.id,
 			});
 		} else {

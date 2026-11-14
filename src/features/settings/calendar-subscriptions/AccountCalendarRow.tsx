@@ -25,6 +25,13 @@ function looksLikeAddress(value: string): boolean {
 	return /^(https|webcals?):\/\/\S+\.\S+/i.test(value.trim());
 }
 
+/** Runs `step` once everything already in `queue` has answered, failed or not. */
+function after<T>(queue: { current: Promise<unknown> }, step: () => Promise<T>): Promise<T> {
+	const run = queue.current.then(step);
+	queue.current = run.catch(() => undefined);
+	return run;
+}
+
 /**
  * The calendar row under "Bring in" on the last step of adding an account
  * (frame `190:473`): a switch, and the secret address in iCal format. Pasting
@@ -38,8 +45,12 @@ export function AccountCalendarRow({ account }: AccountCalendarRowProps) {
 	const [on, setOn] = useState(google);
 	const [address, setAddress] = useState("");
 	const [state, setState] = useState<State>({ status: "idle" });
-	// Read inside the timer, so a later paste updates what the earlier one made.
+	// Read when each step runs, so a later paste updates what the earlier one made.
 	const made = useRef<CalendarSubscription | null>(null);
+	// Every add, change and removal runs after the one before has answered. A
+	// calendar is read for a while, and a switch turned off or an address
+	// corrected meanwhile otherwise left it subscribed, or subscribed twice.
+	const queue = useRef<Promise<unknown>>(Promise.resolve());
 
 	useEffect(() => {
 		const value = address.trim();
@@ -47,13 +58,15 @@ export function AccountCalendarRow({ account }: AccountCalendarRowProps) {
 		let cancelled = false;
 		const timer = window.setTimeout(() => {
 			setState({ status: "saving" });
-			const existing = made.current;
-			const work = existing
-				? window.juno.calendar.subscriptions.update(existing.id, { url: value })
-				: subscribeAccountCalendar(value, google ? "Google Calendar" : account.label, account.id);
-			work
+			after(queue, async () => {
+				const existing = made.current;
+				const subscription = existing
+					? await window.juno.calendar.subscriptions.update(existing.id, { url: value })
+					: await subscribeAccountCalendar(value, google ? "Google Calendar" : account.label, account.id);
+				made.current = subscription;
+				return subscription;
+			})
 				.then((subscription) => {
-					made.current = subscription;
 					if (!cancelled) setState({ status: "added", subscription });
 				})
 				.catch((cause: unknown) => {
@@ -69,10 +82,12 @@ export function AccountCalendarRow({ account }: AccountCalendarRowProps) {
 	function toggle(next: boolean) {
 		setOn(next);
 		if (next) return;
-		const existing = made.current;
-		made.current = null;
 		setState({ status: "idle" });
-		if (existing) void window.juno.calendar.subscriptions.remove(existing.id).catch(() => undefined);
+		void after(queue, async () => {
+			const existing = made.current;
+			made.current = null;
+			if (existing) await window.juno.calendar.subscriptions.remove(existing.id);
+		}).catch(() => undefined);
 	}
 
 	return (

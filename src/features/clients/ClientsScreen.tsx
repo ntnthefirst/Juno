@@ -368,7 +368,8 @@ export function ClientsScreen() {
 			if (selectedId === null) return;
 			if (form || contactForm || projectForm || scheduleForm || documentPage) return;
 			if (emailPanel || phonePanel || linkPanel || addressPanel || notePanel) return;
-			if (document.querySelector("[role='dialog']")) return;
+			// A file preview or the add files flow on the Documents tab closes first.
+			if (document.querySelector("[role='dialog'], [data-full-preview], [data-add-files]")) return;
 			backToList();
 		}
 		window.addEventListener("keydown", onKey);

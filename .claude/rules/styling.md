@@ -446,6 +446,14 @@ Not for amounts, which are tabular sans.
   `--ink-faint` does not. Check the pair, not the token in isolation.
 - A row that is clickable gets a visible hover (`bg-accent-soft`) and the same
   state on keyboard focus.
+- **A toast is heard through the window's one live region** (`lib/announce.ts`),
+  never a region of its own: a region added to the page together with its text
+  is not read by every screen reader. Anything else that has to be heard without
+  moving the focus calls `announce()` too.
+- **Something that covers the content takes the focus and gives it back**, as
+  `FullPreview`, `AddFilesFlow` and `AttachmentPlacePage` do, so the list keys
+  underneath never act on what it hides. Its Escape leaves an open menu or an
+  open list under a field (`aria-expanded="true"`) to close itself first.
 
 ## 8. Global CSS stays tiny
 

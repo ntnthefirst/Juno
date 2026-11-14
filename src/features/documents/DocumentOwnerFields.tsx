@@ -11,6 +11,8 @@ type DocumentOwnerFieldsProps = {
 	disabled?: boolean;
 	/** The client is fixed, for a document started from that client's page. Its projects stay offered. */
 	lockClient?: boolean;
+	/** The folder of the explorer it goes into, while the two pickers name that folder's place. */
+	folder?: string | null;
 };
 
 /**
@@ -21,7 +23,7 @@ type DocumentOwnerFieldsProps = {
  * that client's projects are offered; choosing a project that has a client
  * chooses the client too. An empty string is "none" in both.
  */
-export function DocumentOwnerFields({ value, onChange, disabled = false, lockClient = false }: DocumentOwnerFieldsProps) {
+export function DocumentOwnerFields({ value, onChange, disabled = false, lockClient = false, folder = null }: DocumentOwnerFieldsProps) {
 	const [clients, setClients] = useState<ClientSummary[]>([]);
 	const [projects, setProjects] = useState<ProjectSummary[]>([]);
 
@@ -42,35 +44,42 @@ export function DocumentOwnerFields({ value, onChange, disabled = false, lockCli
 	const offered = value.clientId ? projects.filter((project) => project.clientId === value.clientId) : projects;
 
 	return (
-		<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-			<Select
-				label="Client"
-				value={value.clientId}
-				disabled={disabled || lockClient}
-				placeholder="No client"
-				options={clients.map((client) => ({ value: client.id, label: client.name }))}
-				onChange={(clientId) => {
-					// A project of another client cannot stay chosen under this one.
-					const project = projects.find((row) => row.id === value.projectId);
-					const keep = project && (!clientId || project.clientId === clientId);
-					onChange({ clientId, projectId: keep ? value.projectId : "" });
-				}}
-			/>
-			<Select
-				label="Project"
-				value={value.projectId}
-				disabled={disabled}
-				placeholder="No project"
-				options={offered.map((project) => ({
-					value: project.id,
-					label: value.clientId || !project.clientName ? project.name : `${project.name} (${project.clientName})`,
-				}))}
-				onChange={(projectId) => {
-					const project = projects.find((row) => row.id === projectId);
-					onChange({ clientId: project?.clientId ?? value.clientId, projectId });
-				}}
-				help={value.clientId ? undefined : "A project with a client brings its client along."}
-			/>
+		<div className="flex flex-col gap-2">
+			<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+				<Select
+					label="Client"
+					value={value.clientId}
+					disabled={disabled || lockClient}
+					placeholder="No client"
+					options={clients.map((client) => ({ value: client.id, label: client.name }))}
+					onChange={(clientId) => {
+						// A project of another client cannot stay chosen under this one.
+						const project = projects.find((row) => row.id === value.projectId);
+						const keep = project && (!clientId || project.clientId === clientId);
+						onChange({ clientId, projectId: keep ? value.projectId : "" });
+					}}
+				/>
+				<Select
+					label="Project"
+					value={value.projectId}
+					disabled={disabled}
+					placeholder="No project"
+					options={offered.map((project) => ({
+						value: project.id,
+						label: value.clientId || !project.clientName ? project.name : `${project.name} (${project.clientName})`,
+					}))}
+					onChange={(projectId) => {
+						const project = projects.find((row) => row.id === projectId);
+						onChange({ clientId: project?.clientId ?? value.clientId, projectId });
+					}}
+					help={value.clientId ? undefined : "A project with a client brings its client along."}
+				/>
+			</div>
+			{folder ? (
+				<p className="text-sm text-[var(--ink-muted)]">
+					Kept in the folder {folder}. Pick another client or project to keep it elsewhere.
+				</p>
+			) : null}
 		</div>
 	);
 }

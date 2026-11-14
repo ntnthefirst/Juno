@@ -6,6 +6,7 @@ import { Field } from "../../components/Field";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
 import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
+import { folderFor, ownerOf, type StartPlace } from "./start-place";
 
 type GenerateDialogProps = {
 	/** Fixes the client, for a document started from that client's own page. */
@@ -13,8 +14,7 @@ type GenerateDialogProps = {
 	/** Fixes the project, for a document started from that project's own page. */
 	lockedProjectId?: string;
 	/** Where it starts out kept, for a document started from a folder of the explorer. Still changeable. */
-	initialClientId?: string | null;
-	initialProjectId?: string | null;
+	start?: StartPlace | null;
 	/** Wording for the way back, when it is not the Documents list. */
 	backLabel?: string;
 	onClose: () => void;
@@ -42,8 +42,7 @@ function labelFor(path: string): string {
 export function GenerateDialog({
 	lockedClientId,
 	lockedProjectId,
-	initialClientId,
-	initialProjectId,
+	start = null,
 	backLabel = "Documents",
 	onClose,
 	onGenerated,
@@ -55,9 +54,10 @@ export function GenerateDialog({
 	// A project's own page fixes the project; its client, if it has one, comes
 	// with it in the service, so the client is left for the service to fill.
 	const [owner, setOwner] = useState<DocumentOwnerChoice>({
-		clientId: lockedClientId ?? initialClientId ?? "",
-		projectId: lockedProjectId ?? initialProjectId ?? "",
+		clientId: lockedClientId ?? ownerOf(start).clientId,
+		projectId: lockedProjectId ?? ownerOf(start).projectId,
 	});
+	const folderId = folderFor(start, owner);
 	const [templateId, setTemplateId] = useState("");
 	const [title, setTitle] = useState("");
 	const [issuedOn, setIssuedOn] = useState("");
@@ -107,6 +107,7 @@ export function GenerateDialog({
 				clientId: owner.clientId || null,
 				templateId,
 				projectId: owner.projectId || null,
+				folderId,
 				title: title.trim() || undefined,
 				issuedOn: issuedOn.length > 0 ? issuedOn : undefined,
 				extras: Object.keys(values).length > 0 ? values : undefined,
@@ -165,6 +166,7 @@ export function GenerateDialog({
 						onChange={setOwner}
 						lockClient={lockedClientId !== undefined}
 						disabled={lockedProjectId !== undefined}
+						folder={folderId ? start?.name : null}
 					/>
 
 					<div className="grid grid-cols-2 gap-4">

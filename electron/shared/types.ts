@@ -2461,6 +2461,8 @@ export interface GenerateDocumentInput {
 	issuedOn?: IsoDate;
 	/** Values typed for this document, such as an addendum's change summary. */
 	extras?: Record<string, string>;
+	/** A folder the owner made, to keep the document in. Its client and project win over the two above. */
+	folderId?: string | null;
 }
 
 export interface GenerateDocumentResult {

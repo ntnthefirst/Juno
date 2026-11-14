@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import type { DocumentFolder, DocumentPlace, DocumentRecord, DocumentTemplate, DocumentTreeNode, GenerateDocumentResult } from "@shared/types";
 import { usePublishBreadcrumb, type Crumb } from "../../app/breadcrumb-context";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
@@ -62,6 +62,7 @@ import { GenerateDialog } from "./GenerateDialog";
 import { PageView } from "./PageView";
 import { PlacePickerDialog } from "./PlacePickerDialog";
 import { SignPage } from "./SignPage";
+import type { StartPlace } from "./start-place";
 import { TemplatePreview } from "./TemplatePreview";
 import { ToolbarButton } from "./ToolbarButton";
 import { useExplorerData } from "./use-explorer-data";
@@ -72,9 +73,9 @@ type Mode =
 	| { kind: "page"; id: string; title: string }
 	| { kind: "sign"; record: DocumentRecord }
 	| { kind: "send"; record: DocumentRecord }
-	| { kind: "generate" }
+	| { kind: "generate"; start: StartPlace | null }
 	| { kind: "template-edit"; id: string; canvas: boolean; flow?: boolean }
-	| { kind: "template-use"; template: DocumentTemplate }
+	| { kind: "template-use"; template: DocumentTemplate; start: StartPlace | null }
 	| { kind: "components" }
 	| { kind: "component"; id: string; from: string | null };
 
@@ -135,6 +136,8 @@ export function DocumentsScreen() {
 	const [dropping, setDropping] = useState(false);
 	// What Ctrl C or Ctrl X holds, mirrored here so a cut row is drawn faded until it is pasted.
 	const [clip, setClip] = useState(readClipboard);
+	// The document a Use flow made, shown when the person presses Done.
+	const made = useRef<DocumentRecord | null>(null);
 	const cutKeys = useMemo(() => new Set(clip && clip.mode === "cut" ? clip.ids.map(documentKey) : []), [clip]);
 
 	const needle = search.trim();
@@ -154,6 +157,12 @@ export function DocumentsScreen() {
 	useEffect(() => writePrefs({ details }), [details]);
 	useEffect(() => writePrefs({ expanded: [...expanded] }), [expanded]);
 	useEffect(() => writePrefs({ openKey }), [openKey]);
+
+	// The node open before Templates: a document made from a template there is kept in it.
+	const cameFrom = useRef(wantedKey === TEMPLATES_KEY ? ROOT_KEY : wantedKey);
+	useEffect(() => {
+		if (openKey !== TEMPLATES_KEY) cameFrom.current = openKey;
+	}, [openKey]);
 
 	/** Opens a node, and every node above it in the tree, so it can be seen. */
 	const openNode = useCallback(
@@ -339,29 +348,33 @@ export function DocumentsScreen() {
 		}
 	}
 
-	async function generated(result: GenerateDocumentResult) {
+	/** Where a document made from a template starts out kept: the open node, or in Templates the one open before it. */
+	function startPlace(): StartPlace | null {
+		const key = openKey === TEMPLATES_KEY ? cameFrom.current : openKey;
+		const at = key === ROOT_KEY ? null : findNode(roots, key);
+		return at?.place ? { place: at.place, name: at.name } : null;
+	}
+
+	/** Opens the node a document is kept in, with it selected and previewed. */
+	function land(record: DocumentRecord) {
+		setOpenKey(keyOfRecord(record));
+		setSelection(selectOnly(documentKey(record.id)));
+		setPreview({ kind: "document", id: record.id });
+		setPreviewTitle(record.title);
+	}
+
+	function generated(result: GenerateDocumentResult) {
 		setMode({ kind: "explorer" });
-		let record = result.document;
-		// Started in a folder of the owner's own and kept where that folder is: it goes in the folder.
-		if (node?.folderId && node.place && record.clientId === node.place.clientId && record.projectId === node.place.projectId) {
-			try {
-				record = await window.juno.documents.move(record.id, { folderId: node.folderId });
-			} catch {
-				// Kept beside the folder instead, which is still where it belongs.
-			}
-		}
+		const record = result.document;
 		changed();
 		setNotice(
 			result.pdfError !== null
 				? "The document was saved, but its PDF was not written. Create it from the preview."
 				: result.missing.length > 0
 					? `${plural(result.missing.length, "value was", "values were")} missing and marked in the document.`
-					: "Document generated.",
+						: "Document generated.",
 		);
-		setOpenKey(keyOfRecord(record));
-		setSelection(selectOnly(documentKey(record.id)));
-		setPreview({ kind: "document", id: record.id });
-		setPreviewTitle(record.title);
+		land(record);
 	}
 
 	async function openOutside(record: DocumentRecord) {
@@ -663,13 +676,13 @@ export function DocumentsScreen() {
 		"add-files": () => void pickAndAdd(),
 		"new-folder": () => void newFolder(),
 		"new-page": () => void newPage(),
-		"new-document": () => setMode({ kind: "generate" }),
+		"new-document": () => setMode({ kind: "generate", start: startPlace() }),
 	});
 
 	async function startTemplate(id: string) {
 		try {
 			const template = await window.juno.templates.get(id);
-			if (template) setMode({ kind: "template-use", template });
+			if (template) setMode({ kind: "template-use", template, start: startPlace() });
 		} catch (cause: unknown) {
 			fail(cause);
 		}
@@ -678,7 +691,7 @@ export function DocumentsScreen() {
 	useScreenAction("documents", (action) => {
 		if (action === "new-page") void newPage();
 		else if (action === "import") void pickAndAdd();
-		else setMode({ kind: "generate" });
+		else setMode({ kind: "generate", start: startPlace() });
 	});
 
 	/* ------------------------------------------------------------ drops */
@@ -800,11 +813,10 @@ export function DocumentsScreen() {
 	if (mode.kind === "generate") {
 		return (
 			<GenerateDialog
-				initialClientId={placeHere?.clientId ?? null}
-				initialProjectId={placeHere?.projectId ?? null}
+				start={mode.start}
 				backLabel={placeName}
 				onClose={toExplorer}
-				onGenerated={(result) => void generated(result)}
+				onGenerated={generated}
 			/>
 		);
 	}
@@ -894,16 +906,36 @@ export function DocumentsScreen() {
 	}
 
 	if (mode.kind === "template-use") {
+		// Done shows the document in the folder it went into, the way generating from the explorer does.
 		const done = () => {
 			toExplorer();
 			changed();
+			if (made.current) land(made.current);
+			made.current = null;
+		};
+		const created = (record: DocumentRecord) => {
+			made.current = record;
 		};
 		return (
 			<div className="h-full min-h-0">
 				{mode.template.canvas ? (
-					<UseCanvasTemplateScreen key={mode.template.id} template={mode.template} onBack={toExplorer} onDone={done} />
+					<UseCanvasTemplateScreen
+						key={mode.template.id}
+						template={mode.template}
+						start={mode.start}
+						onBack={toExplorer}
+						onCreated={created}
+						onDone={done}
+					/>
 				) : (
-					<UseDocumentTemplateScreen key={mode.template.id} templateId={mode.template.id} onBack={toExplorer} onDone={done} />
+					<UseDocumentTemplateScreen
+						key={mode.template.id}
+						templateId={mode.template.id}
+						start={mode.start}
+						onBack={toExplorer}
+						onCreated={created}
+						onDone={done}
+					/>
 				)}
 			</div>
 		);
@@ -975,7 +1007,7 @@ export function DocumentsScreen() {
 						{ id: "add", label: "Add files", icon: "import", onSelect: () => void pickAndAdd() },
 						{ id: "folder", label: "New folder", icon: "folder-add", disabled: inTemplates, onSelect: () => void newFolder() },
 						{ id: "page", label: "New page", icon: "note", separatorBefore: true, onSelect: () => void newPage() },
-						{ id: "generate", label: "New document from a template", icon: "templates", onSelect: () => setMode({ kind: "generate" }) },
+						{ id: "generate", label: "New document from a template", icon: "templates", onSelect: () => setMode({ kind: "generate", start: startPlace() }) },
 						{ id: "components", label: "Template components", icon: "templates", separatorBefore: true, onSelect: () => setMode({ kind: "components" }) },
 					]}
 				/>
@@ -1120,7 +1152,7 @@ export function DocumentsScreen() {
 					onToggleDetails={() => setDetails((value) => !value)}
 					onClose={() => setPreview(null)}
 					onEdit={(template) => setMode({ kind: "template-edit", id: template.id, canvas: template.canvas !== null })}
-					onUse={(template) => setMode({ kind: "template-use", template })}
+					onUse={(template) => setMode({ kind: "template-use", template, start: startPlace() })}
 					onDelete={(template) => setConfirm({ documents: [], folders: [], templates: [{ id: template.id, name: template.name }] })}
 				/>
 			) : null}

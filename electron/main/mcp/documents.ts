@@ -508,7 +508,7 @@ export const documentTools: ToolDescriptor[] = [
 		name: "documents.generate",
 		title: "Generate a document",
 		description:
-			"Renders a template and stores the result as a draft with its PDF, under a client, a project, " +
+			"Renders a template and stores the result as a draft with its PDF, under a client, a project, in a folder, " +
 			"both or neither. A project that has a client brings that client along. Nothing is sent. " +
 			"Placeholders that cannot be filled are rendered as visible markers and reported. A template laid " +
 			"out on paper (one with a canvas) takes every value from extras, keyed by its input keys, and " +
@@ -521,6 +521,12 @@ export const documentTools: ToolDescriptor[] = [
 				client_id: { type: ["string", "null"], description: "Optional. " + OWNER_RULE },
 				template_id: { type: "string" },
 				project_id: { type: ["string", "null"], description: "Optional. Must belong to the client when both are given." },
+				folder_id: {
+					type: ["string", "null"],
+					description:
+						"Optional. A folder from documents.folders.list to keep the document in; its client and project win, " +
+						"and naming a different client or project is refused.",
+				},
 				title: { type: "string", description: "Defaults to the template name and the client or project name." },
 				issued_on: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
 				extras: {
@@ -537,6 +543,7 @@ export const documentTools: ToolDescriptor[] = [
 				clientId: (args.client_id as string | null) ?? null,
 				templateId: String(args.template_id),
 				projectId: (args.project_id as string | null) ?? null,
+				...(args.folder_id !== undefined ? { folderId: args.folder_id as string | null } : {}),
 				...(args.title !== undefined ? { title: String(args.title) } : {}),
 				...(args.issued_on !== undefined ? { issuedOn: String(args.issued_on) } : {}),
 				...(args.extras !== undefined

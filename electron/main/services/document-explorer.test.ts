@@ -12,6 +12,7 @@ import * as clients from "./clients";
 import * as folders from "./document-folders";
 import { analyseImport, importFile, importFromMail } from "./document-import";
 import * as organise from "./document-organise";
+import * as templates from "./document-templates";
 import * as projects from "./projects";
 import * as documents from "./documents";
 import { configureDocumentStorage } from "./documents";
@@ -247,6 +248,26 @@ describe("folders", () => {
 		expect((await documents.listIn({ clientId: acme.id, projectId: null, folderId: null }, db)).map((d) => d.id)).toEqual([
 			doc.id,
 		]);
+	});
+
+	it("makes a document from a template straight into a folder, taking the folder's client and project", async () => {
+		const { db, acme, other, website } = await setUp();
+		const designs = await folders.create({ name: "Ontwerpen", projectId: website.id }, db);
+		const template = await templates.create({ name: "Offerte" }, db);
+
+		const made = await documents.generate({ templateId: template.id, folderId: designs.id }, db);
+		expect(made.document).toMatchObject({ clientId: acme.id, projectId: website.id, folderId: designs.id });
+		expect((await documents.listIn({ clientId: acme.id, projectId: website.id, folderId: designs.id }, db)).map((row) => row.id)).toEqual([
+			made.document.id,
+		]);
+
+		// The same client and project as the folder is no clash; another client is refused.
+		await expect(
+			documents.generate({ templateId: template.id, clientId: acme.id, projectId: website.id, folderId: designs.id }, db),
+		).resolves.toBeDefined();
+		await expect(documents.generate({ templateId: template.id, clientId: other.id, folderId: designs.id }, db)).rejects.toThrow(
+			/kept under another client or project/,
+		);
 	});
 });
 

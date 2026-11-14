@@ -31,6 +31,7 @@ import {
 } from "../db/schema";
 import { buildContext, todayIsoDate } from "./document-context";
 import { resolveOwner } from "./document-owner";
+import { resolvePlace } from "./document-place";
 import * as templates from "./document-templates";
 import * as versions from "./document-versions";
 import { isPdfMediaType, safeExtensionOf } from "./file-kind";
@@ -117,6 +118,8 @@ export interface GenerateInput {
 	issuedOn?: string;
 	/** Values the operator typed for this document, such as an addendum summary. */
 	extras?: Record<string, string>;
+	/** A folder the owner made. Its client and project win; naming others is refused (document-place.ts). */
+	folderId?: string | null;
 }
 
 export interface GenerateResult {
@@ -332,7 +335,9 @@ export async function generate(
 	const template = await templates.get(input.templateId, db);
 	if (!template) throw new Error("That template no longer exists.");
 
-	const belongsTo = resolveOwner({ clientId: input.clientId, projectId: input.projectId }, db);
+	// A folder decides the client and the project, so a document made from a
+	// template while a folder is open is kept in it in the same write.
+	const belongsTo = resolvePlace({ clientId: input.clientId, projectId: input.projectId, folderId: input.folderId }, db);
 	const client = belongsTo.clientId
 		? db.select().from(clients).where(eq(clients.id, belongsTo.clientId)).get()
 		: undefined;
@@ -400,6 +405,7 @@ export async function generate(
 		.values({
 			clientId: belongsTo.clientId,
 			projectId: belongsTo.projectId,
+			folderId: belongsTo.folderId,
 			templateId: template.id,
 			templateVersion: template.version,
 			title,

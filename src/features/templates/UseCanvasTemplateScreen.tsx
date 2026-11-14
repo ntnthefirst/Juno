@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DocumentTemplate } from "@shared/types";
+import type { DocumentRecord, DocumentTemplate } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Field } from "../../components/Field";
@@ -9,12 +9,17 @@ import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
 import { belongsTo } from "../documents/belongs-to";
 import { DocumentOwnerFields, type DocumentOwnerChoice } from "../documents/DocumentOwnerFields";
+import { folderFor, ownerOf, type StartPlace } from "../documents/start-place";
 
 type UseCanvasTemplateScreenProps = {
 	template: DocumentTemplate;
 	onBack: () => void;
 	/** Called when the person is finished, so the caller can decide where to go. */
 	onDone: () => void;
+	/** The folder of the explorer it was started from, which is where it is kept unless another place is picked. */
+	start?: StartPlace | null;
+	/** The document, the moment it exists, so the caller can show it once the person is done. */
+	onCreated?: (record: DocumentRecord) => void;
 };
 
 type StepKey = "fill" | "pdf" | "keep";
@@ -34,7 +39,7 @@ type Created = { title: string; isSpecimen: boolean; pdfError: string | null; wh
  * needs fields opens a step of its own rather than a form in a dialog
  * (decision 30). A PDF that is not kept can be saved anywhere as a file.
  */
-export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasTemplateScreenProps) {
+export function UseCanvasTemplateScreen({ template, onBack, onDone, start = null, onCreated }: UseCanvasTemplateScreenProps) {
 	const [stepIndex, setStepIndex] = useState(0);
 	const [values, setValues] = useState<Record<string, string>>(() =>
 		Object.fromEntries(template.inputs.filter((input) => input.defaultValue).map((input) => [input.key, input.defaultValue ?? ""])),
@@ -43,7 +48,8 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 	const [printed, setPrinted] = useState<Printed | null>(null);
 	const [printing, setPrinting] = useState(false);
 	const [asking, setAsking] = useState(false);
-	const [owner, setOwner] = useState<DocumentOwnerChoice>({ clientId: "", projectId: "" });
+	const [owner, setOwner] = useState<DocumentOwnerChoice>(() => ownerOf(start));
+	const folderId = folderFor(start, owner);
 	const [title, setTitle] = useState(template.name);
 	const [created, setCreated] = useState<Created | null>(null);
 	const [savedTo, setSavedTo] = useState<string | null>(null);
@@ -133,9 +139,11 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 				clientId: owner.clientId || null,
 				templateId: template.id,
 				projectId: owner.projectId || null,
+				folderId,
 				title: title.trim() || template.name,
 				extras: values,
 			});
+			onCreated?.(result.document);
 			setCreated({
 				title: result.document.title,
 				isSpecimen: result.document.isSpecimen,
@@ -251,7 +259,7 @@ export function UseCanvasTemplateScreen({ template, onBack, onDone }: UseCanvasT
 
 			{step === "keep" ? (
 				<div className="flex flex-col gap-4">
-					<DocumentOwnerFields value={owner} onChange={setOwner} disabled={busy} />
+					<DocumentOwnerFields value={owner} onChange={setOwner} disabled={busy} folder={folderId ? start?.name : null} />
 					<Field label="Title" value={title} onChange={setTitle} help="How the document is listed." />
 					<p className="max-w-[62ch] text-sm text-[var(--ink-muted)]">
 						The PDF is the one you saw. Nothing from a client or project is written into it. A document from a template

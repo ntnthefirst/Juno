@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
-import type { DocumentTemplate } from "@shared/types";
+import type { DocumentRecord, DocumentTemplate } from "@shared/types";
 import { Button } from "../../components/Button";
 import { FormPage, type FormStep } from "../../components/FormPage";
 import { TemplateInputFields } from "../../components/TemplateInputFields";
 import { messageOf } from "../../lib/errors";
 import { DocumentOwnerFields, type DocumentOwnerChoice } from "../documents/DocumentOwnerFields";
+import { folderFor, ownerOf, type StartPlace } from "../documents/start-place";
 
 type UseDocumentTemplateScreenProps = {
 	templateId: string;
 	onBack: () => void;
 	/** Called once the document exists, so the caller can decide where to go. */
 	onDone: () => void;
+	/** The folder of the explorer it was started from, which is where it is kept unless another place is picked. */
+	start?: StartPlace | null;
+	/** The document, the moment it exists, so the caller can show it once the person is done. */
+	onCreated?: (record: DocumentRecord) => void;
 };
 
 type Load =
@@ -32,12 +37,12 @@ type StepKey = "fill" | "link" | "review";
  * anything is written. Nothing here sends or files anything on its own; a
  * generated document still needs a person to sign it.
  */
-export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDocumentTemplateScreenProps) {
+export function UseDocumentTemplateScreen({ templateId, onBack, onDone, start = null, onCreated }: UseDocumentTemplateScreenProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [stepIndex, setStepIndex] = useState(0);
 	const [values, setValues] = useState<Record<string, string>>({});
 	const [attemptedFill, setAttemptedFill] = useState(false);
-	const [owner, setOwner] = useState<DocumentOwnerChoice>({ clientId: "", projectId: "" });
+	const [owner, setOwner] = useState<DocumentOwnerChoice>(() => ownerOf(start));
 	const [preview, setPreview] = useState<Preview>({ status: "idle" });
 	const [created, setCreated] = useState<{
 		title: string;
@@ -75,6 +80,7 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 
 	const clientId = owner.clientId;
 	const projectId = owner.projectId;
+	const folderId = folderFor(start, owner);
 
 	if (load.status === "loading") return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
 
@@ -147,8 +153,10 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 				clientId: clientId || null,
 				templateId: template.id,
 				projectId: projectId.length > 0 ? projectId : null,
+				folderId,
 				extras: values,
 			});
+			onCreated?.(result.document);
 			setCreated({
 				title: result.document.title,
 				isSpecimen: result.document.isSpecimen,
@@ -234,7 +242,9 @@ export function UseDocumentTemplateScreen({ templateId, onBack, onDone }: UseDoc
 				/>
 			) : null}
 
-			{step === "link" ? <DocumentOwnerFields value={owner} onChange={setOwner} /> : null}
+			{step === "link" ? (
+				<DocumentOwnerFields value={owner} onChange={setOwner} folder={folderId ? start?.name : null} />
+			) : null}
 
 			{step === "review" ? (
 				<div>

@@ -27,7 +27,7 @@ import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, documentFolders, documents, projects } from "../db/schema";
 import { resolveOwner } from "./document-owner";
-import { assertTitleFree, folderRow } from "./document-place";
+import { assertTitleFree, documentTitled, folderRow } from "./document-place";
 import * as templates from "./document-templates";
 
 type Row = typeof documentFolders.$inferSelect;
@@ -241,6 +241,42 @@ export async function restore(id: string, db: Db = getDb()): Promise<DocumentFol
 	assertNameFree(row.name, row, db, id);
 	db.update(documentFolders).set({ deletedAt: null, updatedAt: now() }).where(eq(documentFolders.id, id)).run();
 	return toFolder(folderRow(id, db));
+}
+
+/**
+ * Brings a project's documents and folders under the client the project has
+ * now. A project's documents are kept under its client by the owner rule
+ * (decision 48), so when the project changes client they follow it, or the old
+ * client's page would still list them and the new one would not. Call it in
+ * the transaction that changed the project. Refused, before anything is
+ * written, when the new client already has a document of the same title.
+ */
+export function carryProjectToClient(projectId: string, db: Db = getDb()): void {
+	const owner = resolveOwner({ projectId }, db);
+	const stamp = now();
+	db.transaction((tx) => {
+		const live = tx
+			.select({ title: documents.title })
+			.from(documents)
+			.where(and(eq(documents.projectId, projectId), isNull(documents.deletedAt)))
+			.all();
+		for (const { title } of live) {
+			if (documentTitled(owner, title, tx)) {
+				const where = owner.clientName ?? `"${owner.projectName}"`;
+				throw new Error(
+					`${where} already has a document named "${title}". Rename one of the two, then change the client of "${owner.projectName}".`,
+				);
+			}
+		}
+		tx.update(documents)
+			.set({ clientId: owner.clientId, updatedAt: stamp })
+			.where(eq(documents.projectId, projectId))
+			.run();
+		tx.update(documentFolders)
+			.set({ clientId: owner.clientId, updatedAt: stamp })
+			.where(eq(documentFolders.projectId, projectId))
+			.run();
+	});
 }
 
 function placeKey(clientId: string | null, projectId: string | null, folderId: string | null): string {

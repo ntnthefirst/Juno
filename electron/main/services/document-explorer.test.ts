@@ -179,6 +179,36 @@ describe("folders", () => {
 		expect(await documents.get(doc.id, db)).toMatchObject({ clientId: acme.id, folderId: offers.id });
 	});
 
+	it("carries a project's folders and documents to its new client, and to none", async () => {
+		const { db, acme, other, website } = await setUp();
+		const offers = await folders.create({ name: "Offertes", projectId: website.id }, db);
+		const inFolder = await importFile({ source: bytes("Offerte.txt", "Een offerte."), folderId: offers.id }, db);
+		const loose = await importFile({ source: bytes("Plan.txt", "Een plan."), projectId: website.id }, db);
+		const acmeOwn = await importFile({ source: bytes("Brief.txt", "Voor Acme."), clientId: acme.id }, db);
+
+		await projects.update(website.id, { clientId: other.id }, db);
+		expect(await folders.get(offers.id, db)).toMatchObject({ clientId: other.id, projectId: website.id });
+		expect(await documents.get(inFolder.id, db)).toMatchObject({ clientId: other.id, projectId: website.id });
+		expect(await documents.get(loose.id, db)).toMatchObject({ clientId: other.id, projectId: website.id });
+		expect(await documents.get(acmeOwn.id, db)).toMatchObject({ clientId: acme.id });
+
+		await projects.update(website.id, { clientId: null }, db);
+		expect(await folders.get(offers.id, db)).toMatchObject({ clientId: null, projectId: website.id });
+		expect(await documents.get(loose.id, db)).toMatchObject({ clientId: null, projectId: website.id });
+	});
+
+	it("refuses to change a project's client when the new client has a document of the same title, and changes nothing", async () => {
+		const { db, acme, other, website } = await setUp();
+		const mine = await importFile({ source: bytes("Offerte.txt", "Voor Acme."), projectId: website.id }, db);
+		await importFile({ source: bytes("Offerte.txt", "Voor Noord."), clientId: other.id }, db);
+
+		await expect(projects.update(website.id, { clientId: other.id }, db)).rejects.toThrow(
+			/Brouwerij Noord already has a document named "Offerte"/,
+		);
+		expect((await projects.get(website.id, db))?.clientId).toBe(acme.id);
+		expect(await documents.get(mine.id, db)).toMatchObject({ clientId: acme.id });
+	});
+
 	it("restores a folder only where its name is still free", async () => {
 		const { db, acme } = await setUp();
 		const first = await folders.create({ name: "Offertes", clientId: acme.id }, db);

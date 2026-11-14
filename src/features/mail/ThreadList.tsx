@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef } from "react";
+import { Fragment, useEffect, useMemo, useRef } from "react";
 import type { MailOutboxMessage, MailThreadSummary } from "@shared/types";
 import { Avatar } from "../../components/Avatar";
 import { Checkbox } from "../../components/Checkbox";
@@ -129,6 +129,26 @@ export function ThreadList({
 		[merged, searching],
 	);
 
+	// The row that last had the focus. When it leaves the list with the focus still on it,
+	// as a draft does once its delete is confirmed, the row now in its place takes the focus,
+	// so the keyboard carries on from where it was instead of from the top of the window.
+	const lastFocus = useRef<{ id: string; index: number } | null>(null);
+	useEffect(() => {
+		const was = lastFocus.current;
+		if (!was || merged.some((entry) => entry.id === was.id)) return;
+		lastFocus.current = null;
+		const active = document.activeElement;
+		if (active !== null && active !== document.body) return;
+		const next = merged[Math.min(was.index, merged.length - 1)];
+		if (next) rows.current.get(next.id)?.focus({ preventScroll: true });
+	}, [merged]);
+	function rememberFocus(event: React.FocusEvent<HTMLUListElement>) {
+		const target: EventTarget = event.target;
+		const index = merged.findIndex((entry) => rows.current.get(entry.id) === target);
+		const entry = merged[index];
+		if (entry) lastFocus.current = { id: entry.id, index };
+	}
+
 	if (error) {
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
@@ -252,7 +272,7 @@ export function ThreadList({
 				One handler for the list rather than one per row: the keys act on
 				whichever row has focus, and a row is a button that already takes it.
 			*/}
-			<ul className="flex flex-col px-2" onKeyDown={onListKeyDown}>
+			<ul className="flex flex-col px-2" onKeyDown={onListKeyDown} onFocus={rememberFocus}>
 				{sections.map((section) => (
 					<Fragment key={section.key}>
 						{section.label ? (

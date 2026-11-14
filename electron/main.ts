@@ -2204,6 +2204,21 @@ if (!app.requestSingleInstanceLock()) {
 										return "ok";`,
 									);
 									await shoot("add-compare");
+									// What differs, word by word: "een dag" kept, "twee dagen" coming in.
+									await step(
+										"the words that differ",
+										`const flow = document.querySelector("[data-add-files]");
+										const words = await until(() => [...flow.querySelectorAll("button")].find((el) => el.textContent.trim() === "What differs"), 60);
+										if (!words) return "the comparison offers no way to see what differs";
+										words.click();
+										const view = await until(() => flow.querySelector("section[aria-label='What differs']"), 30);
+										if (!view) return "what differs is not shown";
+										const added = [...view.querySelectorAll("ins")].map((el) => el.textContent).join(" ");
+										const removed = [...view.querySelectorAll("del")].map((el) => el.textContent).join(" ");
+										if (!added.includes("twee dagen") || !removed.includes("een dag")) return "the changed words are not marked: +" + added + " -" + removed;
+										return "ok";`,
+									);
+									await shoot("add-compare-words");
 									await step(
 										"leaving the comparison",
 										`const cancel = [...document.querySelectorAll("[data-add-files] button")].find((el) => el.textContent.trim() === "Cancel");

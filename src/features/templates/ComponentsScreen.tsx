@@ -20,7 +20,7 @@ type ComponentsScreenProps = {
 /**
  * The components for document templates: pieces of a page made once and
  * placed in many templates (decision 65). It sits one step in from the
- * Templates screen, which is where a template is made, and follows its list:
+ * Templates folder in Documents, which is where a template is made, and follows its list:
  * a name and what it asks for, the new button at the right.
  */
 export function ComponentsScreen({ onOpen, onBack }: ComponentsScreenProps) {

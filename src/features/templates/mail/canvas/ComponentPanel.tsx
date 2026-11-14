@@ -19,7 +19,7 @@ export function ComponentsSection({ components, onPlace }: ComponentsSectionProp
 		<PanelSection title="Components">
 			{components.length === 0 ? (
 				<PanelNote>
-					You have no components yet. Make one under Components on the Templates screen, then place it here.
+					You have no components yet. Make one under Components in the Templates folder of Documents, then place it here.
 				</PanelNote>
 			) : (
 				<div role="menu" aria-label="Place a component" className="flex flex-col rounded-[var(--radius-sm)] border border-[var(--line)] p-0.5">

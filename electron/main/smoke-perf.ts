@@ -46,7 +46,10 @@ const NEVER_SETTLES_MS = 9000;
 /** DOUBLE_CLICK_MS in src/lib/click-timing.ts, and a frame. */
 const HELD_MS = 260;
 const unsettled: string[] = [];
-/** A record the walk could not find to open: the walk no longer matches the screen, and its figure would be a blank. */
+/**
+ * A record the walk could not find, or found and could not open: the walk no
+ * longer matches the screen, and its figure would be a blank.
+ */
 const missing: string[] = [];
 
 function checkSettled(name: string, values: Record<string, number | string>): void {
@@ -375,15 +378,29 @@ async function records(window: BrowserWindow): Promise<void> {
 				opener.click();
 				await settle(performance.now());
 			}
-			const target = await appear(${JSON.stringify(step.selector)}, ${JSON.stringify(step.text)});
-			if (!target) return { missing: 1 };
+			const found = await appear(${JSON.stringify(step.selector)}, ${JSON.stringify(step.text)});
+			if (!found) return { missing: 1 };
+			// The first match in document order is the outermost: a list item
+			// whose button is inside it. Click the control that holds the text,
+			// since a click on the item itself opens nothing.
+			const clickable = "button, a, tr, [role=row], [role=button], [role=option], [role=treeitem]";
+			const target = found.matches(clickable)
+				? found
+				: ([...found.querySelectorAll(clickable)].find((node) => node.textContent.includes(${JSON.stringify(step.text)})) ?? found.closest(clickable) ?? found);
 			await wait(300);
 			takeLong();
 			takeFrames();
+			// Whether the click changed anything at all: a figure for a click
+			// that opened nothing is a blank that passes.
+			let changes = 0;
+			const watcher = new MutationObserver((records) => { changes += records.length; });
+			watcher.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
 			const start = performance.now();
-			(target.closest("button, a, tr, [role=row], [role=button]") ?? target).click();
+			target.click();
 			if (${step.held === true}) await wait(${HELD_MS});
 			const time = await settle(start);
+			watcher.disconnect();
+			if (changes === 0) return { missing: 1 };
 			const out = { ...time, ...takeLong(), ...takeFrames() };
 			document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 			nav("overview").click();
@@ -523,7 +540,7 @@ export async function runPerfProbe(window: BrowserWindow, marks: BootMarks): Pro
 		throw new Error(`Smoke: these never stopped changing, which is a render loop: ${unsettled.join("; ")}`);
 	}
 	if (missing.length > 0) {
-		throw new Error(`Smoke: the perf walk could not find what to open for ${missing.join(", ")}. Update the walk to match the screen.`);
+		throw new Error(`Smoke: the perf walk could not find or open ${missing.join(", ")}. Update the walk to match the screen.`);
 	}
 
 	await themeSwitch(window, window, "main");

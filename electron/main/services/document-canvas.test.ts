@@ -21,6 +21,7 @@ import { canvasFromHtml, fieldKey, importDocx } from "./document-docx";
 import * as assets from "./document-template-assets";
 import * as templates from "./document-templates";
 import * as documents from "./documents";
+import { AGREEMENT, bomb, docxBytes } from "./file-fixtures";
 import { newBlock } from "./mail-layout";
 
 const MIGRATIONS = resolve(process.cwd(), "electron/main/db/migrations");
@@ -326,6 +327,13 @@ describe("a Word file", () => {
 			["naam_klant", "Naam klant", true],
 			["bedrag", "bedrag", true],
 		]);
+	});
+
+	it("turns away a Word file that unpacks to far more than it weighs and leaves no template behind", async () => {
+		const db = freshDb();
+		const data = bomb(await docxBytes(AGREEMENT));
+		await expect(importDocx({ fileName: "bom.docx", data }, db)).rejects.toThrow(/unpacks to more than Juno reads/);
+		expect(await templates.list(db)).toEqual([]);
 	});
 
 	it("refuses a file that is not a .docx and leaves no template behind", async () => {

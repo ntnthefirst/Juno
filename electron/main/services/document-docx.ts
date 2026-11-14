@@ -33,6 +33,7 @@ import type {
 import { getDb, type Db } from "../db";
 import * as assets from "./document-template-assets";
 import * as templates from "./document-templates";
+import { ZIP_LIMITS, zipEntrySizes, zipWithin } from "./file-kind";
 import { emptyBox, newBlock } from "./mail-layout";
 import { escapeHtml } from "./template-render";
 
@@ -292,6 +293,16 @@ export async function importDocx(
 	// A .docx is a zip, and a zip starts with PK.
 	if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
 		throw new Error(`"${nameFrom(input.fileName)}" is not a Word document. Only .docx files can be imported, not .doc.`);
+	}
+
+	// Mammoth inflates everything the zip holds, so a small file that unpacks
+	// to gigabytes is turned away before it is read, and before a template exists.
+	if (!zipWithin(bytes, ZIP_LIMITS.word)) {
+		throw new Error(
+			zipEntrySizes(bytes)
+				? `"${nameFrom(input.fileName)}" unpacks to more than Juno reads. Open it in Word and save a smaller copy as .docx.`
+				: `"${nameFrom(input.fileName)}" could not be read as a Word document. Open it in Word, save it again as .docx and try once more.`,
+		);
 	}
 
 	const template = await templates.create({ name: nameFrom(input.fileName) }, db);

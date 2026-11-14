@@ -97,3 +97,21 @@ export const AGREEMENT = [
 	"De opdrachtnemer levert de website op binnen de afgesproken termijn en bezorgt alle bestanden.",
 	"Betaling gebeurt binnen dertig dagen na ontvangst van de factuur op het vermelde rekeningnummer.",
 ];
+
+/**
+ * The same ZIP with every entry claiming to unpack to two gigabytes, as a
+ * ZIP bomb's directory does. Nothing is inflated, so this is cheap to make.
+ */
+export function bomb(zip: Uint8Array): Uint8Array {
+	const out = new Uint8Array(zip);
+	const view = new DataView(out.buffer);
+	let end = out.length - 22;
+	while (end >= 0 && view.getUint32(end, true) !== 0x06054b50) end -= 1;
+	const count = view.getUint16(end + 10, true);
+	let at = view.getUint32(end + 16, true);
+	for (let index = 0; index < count; index += 1) {
+		view.setUint32(at + 24, 0x7fffffff, true);
+		at += 46 + view.getUint16(at + 28, true) + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+	}
+	return out;
+}

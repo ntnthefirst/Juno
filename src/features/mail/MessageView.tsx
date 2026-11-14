@@ -31,7 +31,7 @@ import type { AttachmentDocument, DocumentPlace, SaveThreadAttachmentsResult, Th
 import { AttachmentPlacePage } from "./AttachmentPlacePage";
 import { AddFilesFlow } from "../documents/AddFilesFlow";
 import { AttachmentSaveColumn } from "./AttachmentSaveColumn";
-import { AttachmentIcon } from "../../components/AttachmentIcon";
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { LinkPopover } from "./LinkPopover";
 import { PersonChip } from "./PersonChip";
 import { SuggestionBar } from "./SuggestionBar";
@@ -833,7 +833,7 @@ export function MessageView({
 												title={`Preview ${attachment.filename}`}
 												className="flex min-w-0 items-center gap-2 rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 											>
-												<AttachmentIcon filename={attachment.filename} mimeType={attachment.mimeType} />
+												<FileTypeIcon filename={attachment.filename} mimeType={attachment.mimeType} />
 												<span className="flex min-w-0 max-w-[220px] flex-col">
 													<span className="truncate text-dense leading-tight">
 														{attachment.filename}

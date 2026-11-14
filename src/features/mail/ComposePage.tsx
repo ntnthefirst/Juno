@@ -11,7 +11,7 @@ import type {
 	ProjectAsset,
 } from "@shared/types";
 import { mimeTypeOf } from "@shared/mime";
-import { AttachmentIcon } from "../../components/AttachmentIcon";
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Button } from "../../components/Button";
 import { Checkbox } from "../../components/Checkbox";
 import { DocumentSearchList } from "../../components/DocumentSearchList";
@@ -887,7 +887,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escape
 																	className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 text-left hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-default disabled:hover:bg-transparent"
 																	style={{ height: "var(--row-height)" }}
 																>
-																	<AttachmentIcon filename={asset.fileName} mimeType={asset.mimeType ?? mimeTypeOf(asset.fileName)} />
+																	<FileTypeIcon filename={asset.fileName} mimeType={asset.mimeType ?? mimeTypeOf(asset.fileName)} />
 																	<span className="min-w-0 flex-1 truncate text-dense">{asset.fileName}</span>
 																	{attached ? (
 																		<span className="shrink-0 text-micro text-[var(--ink-muted)]">Attached</span>
@@ -928,7 +928,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escape
 									className="flex items-center gap-3 border-b border-[var(--line)] px-2"
 									style={{ height: "var(--row-height)" }}
 								>
-									<AttachmentIcon filename={attached.name} mimeType={mimeTypeOf(attached.name)} />
+									<FileTypeIcon filename={attached.name} mimeType={mimeTypeOf(attached.name)} />
 									<span className="min-w-0 flex-1 truncate text-dense">{attached.name}</span>
 									{attached.isSpecimen ? (
 										<span className="shrink-0 text-micro text-[var(--risk)]">specimen</span>
@@ -947,7 +947,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escape
 									className="flex items-center gap-3 border-b border-[var(--line)] px-2"
 									style={{ height: "var(--row-height)" }}
 								>
-									<AttachmentIcon filename={file.fileName} mimeType={file.mimeType} />
+									<FileTypeIcon filename={file.fileName} mimeType={file.mimeType} />
 									<span className="min-w-0 flex-1 truncate text-dense">{file.fileName}</span>
 									<span className="tabular shrink-0 text-micro text-[var(--ink-muted)]">
 										{formatBytes(file.byteSize)}

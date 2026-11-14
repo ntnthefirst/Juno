@@ -72,7 +72,7 @@ export function BlocksPage({ target, onBack }: BlocksPageProps) {
 	usePublishBreadcrumb([{ label: "Mail", onSelect: onBack }, { label: "Intros and outros" }]);
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (document.querySelector("[role='dialog']")) return;
 			onBack();
 		};

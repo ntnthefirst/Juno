@@ -630,7 +630,8 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 	// every other full-screen form in the app.
 	useEffect(() => {
 		function onKey(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
+			// The recipient suggestions take their own Escape first.
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (document.querySelector("[role='dialog']")) return;
 			void handleClose();
 		}

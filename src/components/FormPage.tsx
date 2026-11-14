@@ -69,7 +69,9 @@ export function FormPage({
 	// this is a convenience rather than the only way out.
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
+			// Something inside took this Escape for itself (a list of suggestions
+			// closing, a search clearing), so it is not a request to leave.
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			// Not while a select is open or a confirmation is over the top of this.
 			if (document.querySelector("[role='dialog']")) return;
 			onBack();

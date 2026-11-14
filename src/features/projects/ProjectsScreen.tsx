@@ -183,7 +183,7 @@ export function ProjectsScreen() {
 	useEffect(() => {
 		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || generating) return;
 		function onKey(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (document.querySelector("[role='dialog']")) return;
 			clearSelection();
 		}

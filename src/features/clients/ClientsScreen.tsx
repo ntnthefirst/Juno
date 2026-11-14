@@ -374,7 +374,7 @@ export function ClientsScreen() {
 	// this screen does not hold.
 	useEffect(() => {
 		function onKey(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (selectedId === null) return;
 			if (form || contactForm || projectForm || scheduleForm || documentForm || signingRecord) return;
 			if (openDocument) {

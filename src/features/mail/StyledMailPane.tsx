@@ -64,7 +64,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 	// Escape steps back out of sending first, then closes the column.
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key !== "Escape" || document.querySelector("[role='dialog'], [role='menu']")) return;
+			if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("[role='dialog'], [role='menu']")) return;
 			if (usingId) setUsingId(null);
 			else onClose();
 		};

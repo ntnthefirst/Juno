@@ -333,11 +333,11 @@ function AboutSection() {
 				<CardSkeleton lines={4} framed={false} />
 			) : (
 				<div className="flex flex-col gap-5">
-					<div className="flex items-center gap-4 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+					<div className="flex items-center gap-4 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
 						<img
 							src={appIcon}
 							alt="Juno"
-							className="h-14 w-14 object-contain filter drop-shadow-[0_2px_8px_rgba(91,79,225,0.2)] flex-none"
+							className="h-14 w-14 flex-none object-contain"
 						/>
 						<div className="min-w-0 flex-1">
 							<div className="flex items-baseline gap-2">

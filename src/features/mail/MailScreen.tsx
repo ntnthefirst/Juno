@@ -916,7 +916,6 @@ export function MailScreen() {
 	if (accounts.length === 0) {
 		return (
 			<div className="p-8">
-				<h1 className="text-h1">Mail</h1>
 				<EmptyState
 					icon="mail"
 					title="No mail accounts yet"

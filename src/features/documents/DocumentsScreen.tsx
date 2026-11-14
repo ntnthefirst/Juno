@@ -41,6 +41,7 @@ import {
 	nodeItem,
 	sortItems,
 	templateItem,
+	templateKey,
 	type ExplorerItem,
 	type ExplorerSort,
 } from "./explorer-items";
@@ -264,6 +265,22 @@ export function DocumentsScreen() {
 			setPreviewTitle(item.template.name);
 		}
 	}, []);
+
+	/**
+	 * Closes the preview with the focus on the row of the file it ended on,
+	 * which Previous and Next may have moved from the one it opened from, so
+	 * the arrow keys carry on from there.
+	 */
+	function closePreview() {
+		const key = preview ? (preview.kind === "document" ? documentKey(preview.id) : templateKey(preview.id)) : null;
+		setPreview(null);
+		if (!key) return;
+		window.requestAnimationFrame(() => {
+			const row = document.querySelector<HTMLElement>(`[data-explorer-item="${CSS.escape(key)}"]`);
+			row?.focus({ preventScroll: true });
+			row?.scrollIntoView({ block: "nearest" });
+		});
+	}
 
 	const position =
 		previewIndex >= 0
@@ -1149,7 +1166,7 @@ export function DocumentsScreen() {
 					documentId={preview.id}
 					position={position}
 					closeLabel={`Back to ${needle ? "the results" : placeName}`}
-					onClose={() => setPreview(null)}
+					onClose={closePreview}
 					revision={data.changedOutside.ids.includes(preview.id) ? data.changedOutside.at : 0}
 					details={details}
 					onToggleDetails={() => setDetails((value) => !value)}
@@ -1172,7 +1189,7 @@ export function DocumentsScreen() {
 					position={position}
 					details={details}
 					onToggleDetails={() => setDetails((value) => !value)}
-					onClose={() => setPreview(null)}
+					onClose={closePreview}
 					onEdit={(template) => setMode({ kind: "template-edit", id: template.id, canvas: template.canvas !== null })}
 					onUse={(template) => setMode({ kind: "template-use", template, start: startPlace() })}
 					onDelete={(template) => setConfirm({ documents: [], folders: [], templates: [{ id: template.id, name: template.name }] })}

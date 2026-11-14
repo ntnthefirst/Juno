@@ -39,7 +39,7 @@ const FREQUENCIES: { value: string; label: string }[] = [
 ];
 
 const CONTROL =
-	"h-10 w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 text-base text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60";
+	"h-10 w-full rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-base text-[var(--ink)] focus:border-[var(--focus)] focus:shadow-[inset_0_0_0_1px_var(--focus)] disabled:opacity-50";
 
 export function RecurrenceEditor({ value, onChange, startLocal, disabled = false, error }: RecurrenceEditorProps) {
 	const id = useId();

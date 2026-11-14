@@ -35,7 +35,10 @@ export function ExplorerToolbar({ node, heading, count, children }: ExplorerTool
 				<h2 className="min-w-0 truncate text-base font-[var(--weight-medium)]" title={heading}>
 					{heading}
 				</h2>
-				<span className="tabular flex-none text-sm text-[var(--ink-muted)]">{count}</span>
+				{/* Polite, so a search says how many it found without the focus leaving the field. */}
+				<span aria-live="polite" className="tabular flex-none text-sm text-[var(--ink-muted)]">
+					{count}
+				</span>
 			</div>
 			<div className="flex flex-none items-center gap-1.5">{children}</div>
 		</div>

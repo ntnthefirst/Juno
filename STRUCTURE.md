@@ -108,6 +108,7 @@ scripts/                dev, build, smoke, the MCP bridge, icon generation
 | A colour, a size, a radius | `brand/tokens.css`, then copy to `src/styles/tokens.css` |
 | Window behaviour | `electron/main/windows/` |
 | What a right-click menu offers | `electron/main/services/menu-registry.ts` (the items), `menu-actions.ts` (what the main process does itself), and the screen's handlers beside its `contextMenuFor` or `ActionMenu` (`src/lib/native-menu.ts`). A new kind is added to `shared/menu.ts` first |
+| Where a link to a record lands, and where closing it goes back to | `src/lib/open-entity.ts` (the requests), `src/lib/return-to.ts` (which open over the screen they came from), and the shell in `src/app/App.tsx` |
 
 ## The structural facts that will bite you
 

@@ -2579,6 +2579,17 @@ same list.
 - **Making something in a folder is one write.** Generating from a template
   and writing a page take the folder (`folder_id` for an agent) and the place
   rule resolves it, rather than the window making the document and moving it.
+- **A preview asked for from another screen goes back there.** A document
+  opened from a client's or project's Documents tab, a timeline, Recent, the
+  palette, the Agent screen or Mail is previewed over that screen rather than
+  in place of it: the shell keeps the screen mounted under React's
+  `Activity`, hidden, with its effects stopped and its title bar controls
+  withdrawn, and draws Documents in a second sheet on top (`lib/return-to.ts`
+  decides which requests do). Escape, the close button and the way back in
+  the title bar return to it with its tab, its scroll and the row that was
+  focused. Going to a folder from the preview, or deleting the document,
+  leaves Documents where it is. Asked for from Documents itself, a preview
+  lands in its folder as before.
 
 **What would reverse this:** wanting the tree in Explorer as well, which is a
 sync of a folder on disk with its own decision about who wins a rename.

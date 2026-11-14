@@ -1648,6 +1648,12 @@ if (!app.requestSingleInstanceLock()) {
 									] as const) {
 										await smokeTime.create({ projectId: ownProject.id, startedAt: `${day}T09:00:00.000Z`, durationMinutes: minutes, note });
 									}
+									// A file of the project's own, so its Documents section has a row to preview from.
+									const smokeImports = await import("./main/services/document-import");
+									await smokeImports.importFile({
+										source: { kind: "bytes", fileName: "Smoke measurements.txt", data: new TextEncoder().encode("Maten van de kast.\n") },
+										projectId: ownProject.id,
+									});
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1768,6 +1774,43 @@ if (!app.requestSingleInstanceLock()) {
 										await timeService.stop();
 										// The "..." and Add menus are native (decision 59), so they are not photographed.
 									}
+									// A document previewed from the project is drawn over it, and Escape
+									// goes back to the same tab with the focus on the row and the page
+									// scrolled where it was, not to the Documents screen.
+									const projectReturn = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const selectedTab = () => [...document.querySelectorAll("main [role=tab]")].find((el) => el.getAttribute("aria-selected") === "true")?.textContent.trim() ?? null;
+											// The project's documents are on its Notes tab, under the notes.
+											[...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().startsWith("Notes"))?.click();
+											await wait(500);
+											let row = null;
+											for (let waited = 0; waited < 4000 && !row; waited += 100) {
+												row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Smoke measurements"));
+												if (!row) await wait(100);
+											}
+											if (!row) return "the project's Documents section has no row for its file";
+											const tab = selectedTab();
+											row.scrollIntoView({ block: "center" });
+											const scroller = [...document.querySelectorAll("main *")].find((el) => el.scrollTop > 0) ?? null;
+											const top = scroller ? scroller.scrollTop : 0;
+											row.focus();
+											row.click();
+											for (let waited = 0; waited < 4000 && !document.querySelector("[data-full-preview]"); waited += 100) await wait(100);
+											if (!document.querySelector("[data-full-preview]")) return "a click on a document row on the project opened no preview";
+											await wait(400);
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(600);
+											if (document.querySelector("[data-full-preview]")) return "Escape left the preview open";
+											if (!document.querySelector("main [role=tablist]")) return "closing the preview did not return to the project";
+											if (selectedTab() !== tab) return "closing the preview changed the project's tab from " + tab + " to " + selectedTab();
+											if (document.activeElement !== row) return "closing the preview did not give the focus back to the row";
+											if (scroller && Math.abs(scroller.scrollTop - top) > 2) return "closing the preview lost the scroll, " + scroller.scrollTop + " instead of " + top;
+											return "ok";
+										})()`,
+									);
+									if (projectReturn !== "ok") throw new Error(`Smoke: ${projectReturn}`);
+									process.stdout.write("SMOKE_DEMO preview return from a project=ok\n");
 								}
 								if (screen === "Client record") {
 									const opened = await window.webContents.executeJavaScript(
@@ -1853,6 +1896,51 @@ if (!app.requestSingleInstanceLock()) {
 											const image = await capture(window.webContents);
 											writeFileSync(joinPath(shotDir, `client-tab-${tab.toLowerCase()}-${theme}.png`), image.toPNG());
 										}
+										if (tab !== "Documents") continue;
+										// A document previewed from the client's tab is drawn over the
+										// client, and Escape goes back to the same tab with the focus
+										// on the row it was opened from, not to the Documents screen.
+										const previewed = await window.webContents.executeJavaScript(
+											`(async () => {
+												const row = document.querySelector("main [data-explorer-item]");
+												if (!row) return "no row";
+												row.focus();
+												row.click();
+												for (let waited = 0; waited < 4000 && !document.querySelector("[data-full-preview]"); waited += 100) {
+													await new Promise((r) => setTimeout(r, 100));
+												}
+												if (!document.querySelector("[data-full-preview]")) return "a click on a document row on the client opened no preview";
+												window.__previewRow = row.getAttribute("data-explorer-item");
+												return "ok";
+											})()`,
+										);
+										if (previewed === "no row") {
+											process.stdout.write("SMOKE: the client has no document row, so the return from a preview was not checked\n");
+											continue;
+										}
+										if (previewed !== "ok") throw new Error(`Smoke: ${previewed}`);
+										await new Promise((r) => setTimeout(r, 600));
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											writeFileSync(joinPath(shotDir, `client-document-preview-${theme}.png`), (await capture(window.webContents)).toPNG());
+										}
+										const returned = await window.webContents.executeJavaScript(
+											`(async () => {
+												document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await new Promise((r) => setTimeout(r, 600));
+												if (document.querySelector("[data-full-preview]")) return "Escape left the preview open";
+												const selected = [...document.querySelectorAll("main [role=tab]")].find((el) => el.getAttribute("aria-selected") === "true");
+												if (!selected || !selected.textContent.trim().startsWith("Documents")) return "closing the preview did not return to the client's Documents tab";
+												if (document.activeElement?.getAttribute("data-explorer-item") !== window.__previewRow) return "closing the preview did not give the focus back to the row";
+												return "ok";
+											})()`,
+										);
+										if (returned !== "ok") throw new Error(`Smoke: ${returned}`);
+										process.stdout.write("SMOKE_DEMO preview return from a client=ok\n");
 									}
 								}
 								if (screen === "Agent log") {

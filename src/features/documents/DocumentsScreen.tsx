@@ -69,6 +69,15 @@ import { TemplatePreview } from "./TemplatePreview";
 import { ToolbarButton } from "./ToolbarButton";
 import { useExplorerData } from "./use-explorer-data";
 
+type DocumentsScreenProps = {
+	/**
+	 * Set when Documents is drawn over another screen to show one document
+	 * asked for there. Closing its preview, or the page, goes back to that
+	 * screen as it was, until the person goes to a folder of their own accord.
+	 */
+	returnTo?: { label: string; onReturn: () => void; documentId: string };
+};
+
 /** What takes the screen instead of the explorer: a page, a form or an editor (decision 30). */
 type Mode =
 	| { kind: "explorer" }
@@ -114,8 +123,13 @@ function requestedKey(): string | null {
  * beside it before anything is filed. Templates is a folder too, and its
  * editors, the use flow and Components take the screen the way they did.
  */
-export function DocumentsScreen() {
+export function DocumentsScreen({ returnTo }: DocumentsScreenProps) {
 	const [prefs] = useState(readPrefs);
+	const [returning, setReturning] = useState(returnTo !== undefined);
+	const goBack = returning && returnTo ? returnTo : null;
+	// The document to show, held by the shell: the screen it covers clears the
+	// waiting request as it is hidden, before this one reads it.
+	const [coverFor] = useState(() => returnTo?.documentId ?? null);
 	const [wantedKey, setOpenKey] = useState(() => requestedKey() ?? prefs.openKey);
 	const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(prefs.expanded));
 	const [view, setView] = useState(prefs.view);
@@ -169,6 +183,7 @@ export function DocumentsScreen() {
 	/** Opens a node, and every node above it in the tree, so it can be seen. */
 	const openNode = useCallback(
 		(key: string) => {
+			setReturning(false);
 			setOpenKey(key);
 			setSelection(NO_SELECTION);
 			setPreview(null);
@@ -189,7 +204,7 @@ export function DocumentsScreen() {
 
 	// Something elsewhere asked for a document: open the folder it is in and preview it, or its page.
 	useEffect(() => {
-		const asked = peekPending("document");
+		const asked = peekPending("document") ?? (coverFor ? { id: coverFor } : null);
 		clearPending();
 		if (!asked) return;
 		let cancelled = false;
@@ -206,7 +221,7 @@ export function DocumentsScreen() {
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [coverFor]);
 
 	// Once the tree is in, the folder a request opened is shown open in it.
 	// Decided while rendering, the way React asks for state that follows other state.
@@ -272,6 +287,10 @@ export function DocumentsScreen() {
 	 * the arrow keys carry on from there.
 	 */
 	function closePreview() {
+		if (goBack) {
+			goBack.onReturn();
+			return;
+		}
 		const key = preview ? (preview.kind === "document" ? documentKey(preview.id) : templateKey(preview.id)) : null;
 		setPreview(null);
 		if (!key) return;
@@ -854,7 +873,16 @@ export function DocumentsScreen() {
 	/* ------------------------------------------------------- breadcrumb */
 
 	const crumbs: Crumb[] = [];
-	if (mode.kind === "template-edit" || mode.kind === "template-use" || mode.kind === "components" || mode.kind === "component") {
+	if (goBack && (mode.kind === "page" || ((mode.kind === "explorer" || mode.kind === "sign" || mode.kind === "send") && preview?.kind === "document"))) {
+		// Opened over another screen: the way back is to that screen, not up the tree.
+		crumbs.push({ label: goBack.label, onSelect: goBack.onReturn });
+		if (mode.kind === "page") crumbs.push({ label: mode.title });
+		else if (mode.kind === "explorer") crumbs.push({ label: previewTitle ?? "Preview" });
+		else {
+			crumbs.push({ label: previewTitle ?? "Preview", onSelect: () => setMode({ kind: "explorer" }) });
+			crumbs.push({ label: mode.kind === "sign" ? `Sign ${mode.record.title}` : "New message" });
+		}
+	} else if (mode.kind === "template-edit" || mode.kind === "template-use" || mode.kind === "components" || mode.kind === "component") {
 		const back = () => setMode({ kind: "explorer" });
 		crumbs.push({ label: "Documents", onSelect: () => { back(); openNode(ROOT_KEY); } }, { label: "Templates", onSelect: back });
 		if (mode.kind === "components") crumbs.push({ label: "Components" });
@@ -1245,7 +1273,7 @@ export function DocumentsScreen() {
 					documentId={preview.id}
 					knownTitle={previewName}
 					position={position}
-					closeLabel={`Back to ${needle ? "the results" : placeName}`}
+					closeLabel={`Back to ${goBack ? goBack.label : needle ? "the results" : placeName}`}
 					onClose={closePreview}
 					revision={data.changedOutside.ids.includes(preview.id) ? data.changedOutside.at : 0}
 					details={details}
@@ -1254,6 +1282,8 @@ export function DocumentsScreen() {
 						// The preview would hand the focus back to the row that just went.
 						const removing = new Set([documentKey(record.id)]);
 						const neighbour = neighbourOf(removing);
+						// The undo is here, so the folder stays rather than the screen it was opened from.
+						setReturning(false);
 						setPreview(null);
 						setSelection(neighbour ? selectOnly(neighbour.key) : NO_SELECTION);
 						changed();

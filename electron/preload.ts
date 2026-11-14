@@ -25,6 +25,7 @@ import type {
 	ProjectRun,
 	RunningTimer,
 	SettingsSection,
+	SettingsTarget,
 	ThemeSetting,
 	UpdateStatus,
 } from "./shared/types";
@@ -49,12 +50,15 @@ const api: JunoApi = {
 		setIcons: (icons) => call("menu.setIcons", icons),
 	},
 	window: {
-		openSettings: (section) => call("window.openSettings", section),
+		openSettings: (section, target) => call("window.openSettings", section, target),
 		closeSettings: () => call("window.closeSettings"),
 		isSettingsOpen: () => call("window.isSettingsOpen"),
 		onShowSection: (listener) => {
-			const handler = (_event: Electron.IpcRendererEvent, section: SettingsSection) =>
-				listener(section);
+			const handler = (
+				_event: Electron.IpcRendererEvent,
+				section: SettingsSection,
+				target: SettingsTarget | null,
+			) => listener(section, target ?? null);
 			ipcRenderer.on("settings.showSection", handler);
 			return () => {
 				ipcRenderer.off("settings.showSection", handler);

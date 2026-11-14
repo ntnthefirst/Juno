@@ -27,7 +27,7 @@ createRoot(root).render(
 		    with no cut and paste on it reads as broken wherever it sits. */}
 		<EditMenu />
 		{view.kind === "settings" ? (
-			<SettingsWindow initialSection={view.section} />
+			<SettingsWindow initialSection={view.section} initialTarget={view.target} />
 		) : view.kind === "setup" ? (
 			<SetupWindow />
 		) : view.kind === "new" ? (

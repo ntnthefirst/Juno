@@ -19,7 +19,7 @@
  */
 import { app, BrowserWindow } from "electron";
 import * as lock from "../services/lock";
-import type { NewRecordKind, NewRecordPrefill, ShellRequest } from "../../shared/types";
+import type { NewRecordKind, NewRecordPrefill, SettingsTarget, ShellRequest } from "../../shared/types";
 import { createMainWindow } from "./main-window";
 import { createNewRecordWindow } from "./new-record-window";
 import { createSettingsWindow } from "./settings-window";
@@ -161,12 +161,12 @@ export function isSettingsOpen(): boolean {
 	return getSettingsWindow() !== null;
 }
 
-export function openSettingsWindow(section?: string): void {
+export function openSettingsWindow(section?: string, target: SettingsTarget | null = null): void {
 	const existing = getSettingsWindow();
 	if (existing) {
 		// Already open, so the section cannot ride in the URL any more. Telling
 		// the window rather than reloading it keeps whatever was half-typed.
-		if (section) existing.webContents.send("settings.showSection", section);
+		if (section) existing.webContents.send("settings.showSection", section, target);
 		existing.focus();
 		return;
 	}
@@ -179,7 +179,7 @@ export function openSettingsWindow(section?: string): void {
 	closeSetupWindow();
 	closeNewRecordWindow(false);
 
-	settingsWindow = createSettingsWindow(parent, devMode, section);
+	settingsWindow = createSettingsWindow(parent, devMode, section, target);
 	settingsWindow.on("closed", () => {
 		settingsWindow = null;
 		childClosed();

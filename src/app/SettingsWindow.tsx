@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { AppInfo, SettingsSection } from "@shared/types";
+import type { AppInfo, SettingsSection, SettingsTarget } from "@shared/types";
 import { Toast } from "../components/Toast";
 import appIcon from "../assets/icon.png";
 import { AccountingSection } from "../features/settings/AccountingSection";
@@ -40,6 +40,8 @@ type SettingsWindowProps = {
 	 * somebody opened settings rather than being sent to one part of it.
 	 */
 	initialSection: SettingsSection | null;
+	/** One step further on that tab, when a screen asked for it (the Add calendar page, a new rule). */
+	initialTarget: SettingsTarget | null;
 };
 
 /**
@@ -50,7 +52,7 @@ type SettingsWindowProps = {
  * subject, and the search above them. Nothing here is a long scroll, and the
  * search does not hide in the title bar.
  */
-export function SettingsWindow({ initialSection }: SettingsWindowProps) {
+export function SettingsWindow({ initialSection, initialTarget }: SettingsWindowProps) {
 	const [theme, setTheme] = useTheme();
 	const [page, setPage] = useState<SettingsPageId>(firstPageOf(initialSection ?? "general"));
 	const [toast, setToast] = useState<string | null>(null);
@@ -58,6 +60,11 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	const [active, setActive] = useState(0);
 	// The section a search result asked for, kept until the page has painted it.
 	const [jumpTo, setJumpTo] = useState<{ anchor: string; nonce: number } | null>(null);
+	// Where a screen sent this window inside its tab. The nonce lets the same target
+	// be asked for twice in a row and still be acted on.
+	const [target, setTarget] = useState<{ value: SettingsTarget; nonce: number } | null>(() =>
+		initialTarget ? { value: initialTarget, nonce: 1 } : null,
+	);
 	const main = useRef<HTMLElement>(null);
 	const searchField = useRef<HTMLInputElement>(null);
 	const resultsId = useId();
@@ -156,9 +163,10 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	// in the URL. Reloading instead would throw away a half-typed field.
 	useEffect(
 		() =>
-			window.juno.window.onShowSection((group) => {
+			window.juno.window.onShowSection((group, next) => {
 				setQuery("");
 				setPage(firstPageOf(group));
+				if (next) setTarget({ value: next, nonce: Date.now() });
 			}),
 		[],
 	);
@@ -210,7 +218,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 					) : (
 						<SoloSectionContext.Provider value={current.solo}>
 							{page === "mail" ? (
-								<MailSection onSaved={setToast} page={current} />
+								<MailSection onSaved={setToast} page={current} target={target} />
 							) : (
 								<div className={PAGE_PADDING}>
 									<PageHeader page={current} />

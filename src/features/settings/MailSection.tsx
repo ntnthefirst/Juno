@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CalendarSubscription, MailAccount } from "@shared/types";
+import type { CalendarSubscription, MailAccount, SettingsTarget } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
@@ -24,9 +24,11 @@ type MailSectionProps = {
 	onSaved: (message: string) => void;
 	/** The page whose title is drawn here, because the account form replaces the whole page, header included. */
 	page: SettingsPage;
+	/** Where another screen sent this tab: the Add calendar page, or a new rule on one account. */
+	target?: { value: SettingsTarget; nonce: number } | null;
 };
 
-export function MailSection({ onSaved, page }: MailSectionProps) {
+export function MailSection({ onSaved, page, target = null }: MailSectionProps) {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [form, setForm] = useState<{ account: MailAccount | null } | null>(null);
@@ -40,6 +42,23 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 	// The Add calendar page, or one subscription's, which takes the whole pane like the account form.
 	const [calendarPage, setCalendarPage] = useState<{ subscription: CalendarSubscription | null } | null>(null);
 	const [calendarsVersion, setCalendarsVersion] = useState(0);
+	// A new rule asked for from outside, handed to the account page it opens.
+	const [ruleStart, setRuleStart] = useState(0);
+	// A target is acted on once, while rendering, so the page it asks for paints
+	// on the same frame rather than after an effect.
+	const [seenTarget, setSeenTarget] = useState(0);
+	if (target && target.nonce !== seenTarget) {
+		setSeenTarget(target.nonce);
+		setForm(null);
+		if (target.value.kind === "add-calendar") {
+			setOpened(null);
+			setCalendarPage({ subscription: null });
+		} else {
+			setCalendarPage(null);
+			setOpened(target.value.accountId);
+			setRuleStart(target.nonce);
+		}
+	}
 
 	const refresh = useCallback(() => {
 		window.juno.mail.accounts
@@ -122,6 +141,7 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 				onBack={() => setOpened(null)}
 				onEdit={() => setForm({ account: openedAccount })}
 				onSaved={onSaved}
+				startNewRule={ruleStart}
 			/>
 		);
 	}

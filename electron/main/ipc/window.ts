@@ -12,6 +12,7 @@
  */
 import { ipcMain } from "electron";
 import { cleanPrefill, isNewRecordKind } from "../../shared/new-record";
+import { cleanSettingsTarget } from "../../shared/settings-target";
 import type { SettingsSection } from "../../shared/types";
 import {
 	closeNewRecordWindow,
@@ -28,8 +29,10 @@ import {
 export function registerWindowIpc(): void {
 	ipcMain.handle("window.takeShellRequest", () => takeShellRequest());
 	ipcMain.handle("window.isSettingsOpen", () => isSettingsOpen());
-	ipcMain.handle("window.openSettings", (_event, section?: SettingsSection) => {
-		openSettingsWindow(section);
+	ipcMain.handle("window.openSettings", (_event, section?: SettingsSection, target?: unknown) => {
+		// The target comes from a renderer and ends up in an address, so it is
+		// checked here and dropped when it is not one of the two there are.
+		openSettingsWindow(section, cleanSettingsTarget(target));
 	});
 	ipcMain.handle("window.closeSettings", () => {
 		closeSettingsWindow();

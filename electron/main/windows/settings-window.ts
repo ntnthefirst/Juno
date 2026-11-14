@@ -1,3 +1,5 @@
+import { settingsTargetQuery } from "../../shared/settings-target";
+import type { SettingsTarget } from "../../shared/types";
 import { BrowserWindow } from "electron";
 import { join } from "node:path";
 import { hardenWindow, titleBarOptions, viewUrl, windowIcon } from "./chrome";
@@ -22,6 +24,7 @@ export function createSettingsWindow(
 	parent: BrowserWindow,
 	isDev: boolean,
 	section?: string,
+	target: SettingsTarget | null = null,
 ): BrowserWindow {
 	const window = new BrowserWindow({
 		parent,
@@ -55,7 +58,8 @@ export function createSettingsWindow(
 
 	window.once("ready-to-show", () => window.show());
 
-	void window.loadURL(viewUrl(isDev, "settings", section));
+	// A target, already checked, rides after the section: the page to open on it.
+	void window.loadURL(viewUrl(isDev, "settings", section, section && target ? settingsTargetQuery(target) : undefined));
 
 	return window;
 }

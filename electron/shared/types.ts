@@ -594,6 +594,13 @@ export type ThemeSetting = "system" | "light" | "dark";
  */
 export type SettingsSection = "general" | "business" | "mail" | "documents" | "security" | "mcp";
 
+/**
+ * Somewhere inside a settings tab a screen can send you, beyond the tab: the
+ * Add calendar page, or a new rule on one mail account's page. Both live on
+ * the Mail accounts tab.
+ */
+export type SettingsTarget = { kind: "add-calendar" } | { kind: "new-rule"; accountId: string };
+
 /** The four records that are made in a small window of their own (decision 60). */
 export type NewRecordKind = "event" | "client" | "project" | "reminder";
 

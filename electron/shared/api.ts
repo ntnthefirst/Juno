@@ -243,6 +243,7 @@ import type {
 	OnboardingPatch,
 	OnboardingState,
 	SettingsSection,
+	SettingsTarget,
 	ChildClosedInfo,
 	ClientIntakeInput,
 	NewRecordKind,
@@ -297,8 +298,12 @@ export interface JunoApi {
 	 * There is no method to open a second main window: there is only ever one.
 	 */
 	window: {
-		/** A section opens that tab, which is how a screen sends you where it needs you. */
-		openSettings(section?: SettingsSection): Promise<void>;
+		/**
+		 * A section opens that tab, which is how a screen sends you where it needs
+		 * you. A target goes one step further on that tab: the Add calendar page, or
+		 * a new rule on one account's page.
+		 */
+		openSettings(section?: SettingsSection, target?: SettingsTarget): Promise<void>;
 		closeSettings(): Promise<void>;
 		isSettingsOpen(): Promise<boolean>;
 		/**
@@ -306,7 +311,7 @@ export interface JunoApi {
 		 * for a different tab. The tab cannot ride in the URL at that point, and
 		 * reloading would throw away whatever was half-typed.
 		 */
-		onShowSection(listener: (section: SettingsSection) => void): () => void;
+		onShowSection(listener: (section: SettingsSection, target: SettingsTarget | null) => void): () => void;
 		/**
 		 * Fires in the main window when either modal child closes. Neither child
 		 * has a channel back, so this is how a setting changed in one of them, and

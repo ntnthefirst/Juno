@@ -506,12 +506,27 @@ function MoveDialog({ note, onClose, onMoved, onError }: MoveDialogProps) {
 	const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
 	const [projectId, setProjectId] = useState(note.projectId ?? "");
 
+	// Read once when the dialog opens. The screen behind passes a new onError on
+	// every render, and an autosave behind the dialog would otherwise read the
+	// projects again, or without end when the read fails.
+	const reportError = useRef(onError);
 	useEffect(() => {
+		reportError.current = onError;
+	});
+	useEffect(() => {
+		let cancelled = false;
 		window.juno.projects
 			.list()
-			.then((list) => setProjects(list))
-			.catch((cause: unknown) => onError(messageOf(cause)));
-	}, [onError]);
+			.then((list) => {
+				if (!cancelled) setProjects(list);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) reportError.current(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	async function move() {
 		try {

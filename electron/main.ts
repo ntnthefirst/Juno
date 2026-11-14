@@ -867,8 +867,9 @@ if (!app.requestSingleInstanceLock()) {
 							console.log(`SMOKE_DEMO agent pending=${waiting.length}`);
 
 							// What a real request carries: a mail to send, a record to change
-							// and a message to cancel, so the Agent screen is drawn with the
-							// records named and the whole mail shown, not with ids.
+							// and a message to delete, so the Agent screen is drawn with the
+							// records named and the whole mail shown, not with ids. An unsent
+							// message is deleted, never cancelled (decision 78).
 							{
 								const accountService = await import("./main/services/mail-accounts");
 								const outboxService = await import("./main/services/mail-outbox");
@@ -893,7 +894,7 @@ if (!app.requestSingleInstanceLock()) {
 										subject: "Herinnering",
 										bodyText: "Hallo.",
 									});
-									await callTool("mail.outbox.cancel", { id: spare.id }, { source: "mcp" });
+									await callTool("mail.outbox.delete", { id: spare.id }, { source: "mcp" });
 									// One sent by hand while the request waited (it closes on its own),
 									// one rejected, and two reads, so the answered cards and the log show
 									// every kind of row.

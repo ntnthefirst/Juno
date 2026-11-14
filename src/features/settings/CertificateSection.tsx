@@ -93,7 +93,7 @@ export function CertificateSection() {
 						{day(info.validTo)}
 					</dd>
 					<dt className="text-[var(--ink-muted)]">Fingerprint</dt>
-					<dd data-selectable className="break-all font-[var(--font-mono)] text-sm">
+					<dd data-selectable className="break-all font-mono text-sm">
 						{info.fingerprint}
 					</dd>
 				</dl>

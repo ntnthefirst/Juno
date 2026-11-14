@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
+import { RecordLink } from "../../components/RecordLink";
+import { requestOpenClient } from "../../lib/open-client";
+import { requestOpen } from "../../lib/open-entity";
 import type { DocumentTreeNode } from "@shared/types";
 
 type ExplorerToolbarProps = {
@@ -19,6 +22,14 @@ type ExplorerToolbarProps = {
  * avatar, what is in it, and what can be added to it.
  */
 export function ExplorerToolbar({ node, heading, count, children }: ExplorerToolbarProps) {
+	// A client's or a project's folder names the record, and the name opens it.
+	const clientId = node?.kind === "client" ? node.clientId : null;
+	const projectId = node?.kind === "project" ? node.projectId : null;
+	const record = clientId
+		? () => requestOpenClient(clientId, heading)
+		: projectId
+			? () => requestOpen({ kind: "project", id: projectId, name: heading })
+			: null;
 	return (
 		<div className="flex h-[52px] flex-none items-center gap-3 border-b border-[var(--line)] px-4">
 			<div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -32,8 +43,14 @@ export function ExplorerToolbar({ node, heading, count, children }: ExplorerTool
 						/>
 					</span>
 				)}
-				<h2 className="min-w-0 truncate text-base font-[var(--weight-medium)]" title={heading}>
-					{heading}
+				<h2 className="min-w-0 truncate text-base font-[var(--weight-medium)]" title={record ? undefined : heading}>
+					{record ? (
+						<RecordLink tone="quiet" label={`Open ${heading}`} onOpen={record}>
+							{heading}
+						</RecordLink>
+					) : (
+						heading
+					)}
 				</h2>
 				{/* Polite, so a search says how many it found without the focus leaving the field. */}
 				<span aria-live="polite" className="tabular flex-none text-sm text-[var(--ink-muted)]">

@@ -5,6 +5,7 @@ import { Dialog } from "../../components/Dialog";
 import { MenuButton } from "../../components/Menu";
 import { RowsSkeleton } from "../../components/RowsSkeleton";
 import { Toast } from "../../components/Toast";
+import { dragDocumentsOut } from "../../lib/document-drag";
 import { messageOf } from "../../lib/errors";
 import type { ListCommand } from "../../lib/list-keys";
 import { NO_SELECTION, pruneSelection, type ListSelection } from "../../lib/list-selection";
@@ -319,7 +320,14 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged, onT
 						}}
 						onCommand={command}
 						onItemMenu={itemMenu}
-						dragOf={() => null}
+						dragOf={(item) => (item.kind === "document" ? { kind: "documents", ids: [item.record.id] } : null)}
+						onDragOut={(item, event) => {
+							if (item.kind !== "document" || !item.record.latestVersion) return false;
+							const ids = selected.some((record) => record.id === item.record.id) ? selected : [item.record];
+							if (ids.some((record) => !record.latestVersion)) return false;
+							dragDocumentsOut(event, ids.map((record) => record.id));
+							return true;
+						}}
 						canDropOn={() => false}
 						onDropOn={() => undefined}
 						label={`Documents of ${name}`}

@@ -4,12 +4,13 @@
  * tree; moving, duplicating, copying and renaming; a mail attachment kept as
  * a document; and signing refused for a newest version that is not a PDF.
  */
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as clients from "./clients";
 import * as compare from "./document-compare";
+import * as drag from "./document-drag";
 import * as folders from "./document-folders";
 import { analyseImport, importFile, importFromMail } from "./document-import";
 import * as organise from "./document-organise";
@@ -277,6 +278,26 @@ describe("folders", () => {
 		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
 		const page = await pages.create({ folderId: offers.id }, db);
 		expect(page.document).toMatchObject({ clientId: acme.id, projectId: null, folderId: offers.id, sourceKind: "page" });
+	});
+});
+
+describe("dragging documents out of Juno", () => {
+	it("drags a copy of each newest file under its title, leaves out a page, and never the kept file itself", async () => {
+		const { db, acme, storage } = await setUp();
+		drag.configureDragRoot(join(storage, "drag"));
+		const first = await importFile({ source: bytes("offerte.txt", "Een offerte."), clientId: acme.id, title: "Offerte" }, db);
+		const second = await importFile({ source: bytes("Brief.txt", "Een brief."), clientId: acme.id }, db);
+		const page = await pages.create({ title: "Notities", clientId: acme.id }, db);
+
+		const files = await drag.dragFiles([first.id, second.id, page.document.id], db);
+		expect(files.map((file) => file.split(/[\\/]/).pop())).toEqual(["Offerte.txt", "Brief.txt"]);
+		expect(readFileSync(files[0]!, "utf8")).toBe("Een offerte.");
+		expect(files.every((file) => !file.startsWith(join(storage, "documents")) && file !== first.pdfPath)).toBe(true);
+
+		// The next drag clears the copies of the one before.
+		const again = await drag.dragFiles([second.id], db);
+		expect(existsSync(files[0]!)).toBe(false);
+		expect(existsSync(again[0]!)).toBe(true);
 	});
 });
 

@@ -2,7 +2,8 @@
  * Document channels. Thin: generation lives in ../services/documents.ts and
  * everything that touches a PDF lives in ../services/document-actions.ts.
  */
-import { BrowserWindow, ipcMain } from "electron";
+import { basename } from "node:path";
+import { app, BrowserWindow, ipcMain } from "electron";
 import type {
 	CompareTextInput,
 	AddVersionInput,
@@ -21,6 +22,7 @@ import type {
 import * as actions from "../services/document-actions";
 import * as compare from "../services/document-compare";
 import * as convert from "../services/document-convert";
+import * as drag from "../services/document-drag";
 import { onDocumentsChanged } from "../services/document-events";
 import * as folders from "../services/document-folders";
 import * as imports from "../services/document-import";
@@ -43,6 +45,14 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.convertPdf", (_event, id: string) => convert.convertToPdf(id));
 	ipcMain.handle("documents.preview", (_event, source: FilePreviewSource) => preview.preview(source));
 	ipcMain.handle("documents.open", (_event, id: string) => working.openDocument(id));
+	// The platform's drag of the newest files, which only the window that is dragging can start.
+	ipcMain.handle("documents.startDrag", async (event, ids: string[]) => {
+		const files = await drag.dragFiles(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
+		if (files.length === 0) return [];
+		const icon = await app.getFileIcon(files[0]!, { size: "normal" });
+		event.sender.startDrag({ file: files[0]!, files, icon });
+		return files.map((file) => basename(file));
+	});
 	ipcMain.handle("documents.pickFiles", () => actions.pickFiles());
 	ipcMain.handle("documents.importFromMail", (_event, input: ImportFromMailInput) => imports.importFromMail(input));
 

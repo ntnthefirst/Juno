@@ -19,6 +19,7 @@ import { contextMenuFor } from "../../lib/native-menu";
 import { clearPending, peekPending } from "../../lib/open-entity";
 import { announceDocumentsChanged, carriesFiles, describeOutcome, itemsFromFiles, itemsFromPicked, type ImportItem } from "../../lib/pdf-drop";
 import { useScreenAction } from "../../lib/screen-actions";
+import { dragDocumentsOut, isOwnDrag, ownDrop } from "../../lib/document-drag";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { ComposePage } from "../mail/ComposePage";
 import { ComponentCanvasEditor, DocumentCanvasEditor } from "../templates/CanvasTemplateEditor";
@@ -699,7 +700,7 @@ export function DocumentsScreen() {
 
 	async function dropOn(target: DocumentTreeNode | null, event: DragEvent) {
 		setDropping(false);
-		const route = routeDrop({ types: Array.from(event.dataTransfer.types), payload: payloadOf(event), target, roots });
+		const route = routeDrop({ ...dropPayload(event), target, roots });
 		if (route.kind === "none") {
 			if (route.reason) setNotice(route.reason);
 			return;
@@ -709,11 +710,35 @@ export function DocumentsScreen() {
 			addFiles(await itemsFromFiles(files), route.place, target?.name ?? "Unfiled");
 			return;
 		}
-		if (route.kind === "move-documents" && target) await moveDocuments(route.ids, target);
+		if (route.kind === "move-documents" && target) {
+			// Let go of over the folder they are already in: a drag that went nowhere.
+			const elsewhere = route.ids.filter((id) => {
+				const shown = byKey.get(documentKey(id));
+				return !(shown?.kind === "document" && keyOfRecord(shown.record) === target.key);
+			});
+			if (elsewhere.length > 0) await moveDocuments(elsewhere, target);
+		}
 		if (route.kind === "move-folder" && target) {
 			const folder = findNode(roots, `folder:${route.folderId}`);
 			if (folder) await moveFolder(folder, target);
 		}
+	}
+
+	/** Documents that all have a file go out as the platform's drag, so they can land outside Juno too. */
+	function dragOut(item: ExplorerItem, event: DragEvent): boolean {
+		const payload = dragOf(item);
+		if (payload?.kind !== "documents") return false;
+		const records = payload.ids.map((id) => byKey.get(documentKey(id))).flatMap((entry) => (entry?.kind === "document" ? [entry.record] : []));
+		if (records.length === 0 || records.some((record) => !record.latestVersion)) return false;
+		dragDocumentsOut(event, records.map((record) => record.id));
+		return true;
+	}
+
+	/** A drop of files that is Juno's own drag coming back in reads as the documents it carries. */
+	function dropPayload(event: DragEvent): { types: string[]; payload: DragPayload | null } {
+		const own = ownDrop(Array.from(event.dataTransfer.files));
+		if (own) return { types: [DRAG_TYPE], payload: { kind: "documents", ids: own } };
+		return { types: Array.from(event.dataTransfer.types), payload: payloadOf(event) };
 	}
 
 	function dragOf(item: ExplorerItem): DragPayload | null {
@@ -734,7 +759,7 @@ export function DocumentsScreen() {
 			event.preventDefault();
 			const files = carriesFiles(event);
 			event.dataTransfer.dropEffect = files ? "copy" : "move";
-			if (files && mode.kind === "explorer" && !adding && !preview) setDropping(true);
+			if (files && !isOwnDrag() && mode.kind === "explorer" && !adding && !preview) setDropping(true);
 		},
 		onDragLeave: (event: DragEvent<HTMLDivElement>) => {
 			if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
@@ -745,7 +770,7 @@ export function DocumentsScreen() {
 			event.preventDefault();
 			if (needle || openKey === TEMPLATES_KEY) {
 				setDropping(false);
-				if (carriesFiles(event) && openKey === TEMPLATES_KEY) setNotice("Templates holds templates. Drop files on a client, a project or a folder.");
+				if (carriesFiles(event) && !isOwnDrag() && openKey === TEMPLATES_KEY) setNotice("Templates holds templates. Drop files on a client, a project or a folder.");
 				return;
 			}
 			void dropOn(node, event);
@@ -1101,6 +1126,7 @@ export function DocumentsScreen() {
 						onItemMenu={itemMenu}
 						onBlankMenu={inTemplates || needle ? undefined : blankMenu}
 						dragOf={dragOf}
+						onDragOut={dragOut}
 						canDropOn={(item) => item.kind === "node" && item.node.place !== null}
 						onDropOn={(item, event) => item.kind === "node" && void dropOn(item.node, event)}
 						label={heading}

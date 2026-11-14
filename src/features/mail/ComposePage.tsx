@@ -25,6 +25,7 @@ import { messageOf } from "../../lib/errors";
 import { BlockMenu, type ManageTarget } from "./blocks/BlockMenu";
 import { squash } from "./blocks/block-text";
 import MessageEditor, { type MessageEditorHandle } from "./MessageEditor";
+import { ownDrop } from "../../lib/document-drag";
 import { useFileDrop } from "../../lib/use-file-drop";
 import { formatBytes } from "./format";
 import { RecipientField } from "./RecipientField";
@@ -502,6 +503,12 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escape
 	}
 
 	async function attachDropped(dropped: File[]) {
+		// A document dragged here from Juno is attached as that document, newest version and all.
+		const own = ownDrop(dropped);
+		if (own) {
+			setDocumentIds((current) => [...current, ...own.filter((id) => !current.includes(id))]);
+			return;
+		}
 		if (attaching) return;
 		setAttaching(true);
 		setError(null);
@@ -565,7 +572,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escape
 		}
 	}
 
-	const drop = useFileDrop((dropped) => void attachDropped(dropped));
+	const drop = useFileDrop((dropped) => void attachDropped(dropped), { acceptOwn: true });
 
 	async function handleSend() {
 		if (busy) return;

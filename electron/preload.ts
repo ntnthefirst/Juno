@@ -508,6 +508,7 @@ const api: JunoApi = {
 		convertPdf: (id) => call("documents.convertPdf", id),
 		preview: (source) => call("documents.preview", source),
 		open: (id) => call("documents.open", id),
+		startDrag: (ids) => call("documents.startDrag", ids),
 		onChanged: (listener) => {
 			const handler = (_event: Electron.IpcRendererEvent, change: DocumentsChanged) => listener(change);
 			ipcRenderer.on("documents.changed", handler);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Toast } from "../components/Toast";
 import { AddFilesFlow } from "../features/documents/AddFilesFlow";
+import { isOwnDrag, ownDrop } from "../lib/document-drag";
 import { carriesFiles, describeOutcome, itemsFromFiles, type ImportItem } from "../lib/pdf-drop";
 
 /**
@@ -24,6 +25,8 @@ export function DocumentDropLayer() {
 			if (!carriesFiles(event) || event.defaultPrevented) return;
 			event.preventDefault();
 			if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+			// A document of Juno's own dragged over the window is not a file to add.
+			if (isOwnDrag()) return;
 			setHint(true);
 			// dragover repeats while a drag is over the window, so the hint goes
 			// away when it stops rather than on a leave that is easy to miss.
@@ -37,7 +40,7 @@ export function DocumentDropLayer() {
 			window.clearTimeout(hideTimer.current);
 			setHint(false);
 			const dropped = Array.from(event.dataTransfer?.files ?? []);
-			if (dropped.length === 0) return;
+			if (dropped.length === 0 || ownDrop(dropped)) return;
 			void itemsFromFiles(dropped).then((read) => {
 				if (read.length > 0) setItems(read);
 			});

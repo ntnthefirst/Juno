@@ -924,6 +924,11 @@ export interface JunoApi {
 		 * copy whose saved edits come back as versions, or read only when it is signed.
 		 */
 		open(id: string): Promise<{ readOnly: boolean }>;
+		/**
+		 * Starts the platform's drag of these documents' newest files, for a row
+		 * dragged out of Juno. Hands back the names the dragged copies carry.
+		 */
+		startDrag(ids: string[]): Promise<string[]>;
 		/** Fires when documents changed without this window asking, such as an edit saved in another app. */
 		onChanged(listener: (change: DocumentsChanged) => void): () => void;
 		folders: {

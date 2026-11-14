@@ -39,6 +39,12 @@ type ExplorerViewProps = {
 	onBlankMenu?: (event: MouseEvent) => void;
 	/** What dragging this row carries. Null for a row that cannot be dragged. */
 	dragOf: (item: ExplorerItem) => DragPayload | null;
+	/**
+	 * Takes the drag over as the platform's, carrying the files themselves, so
+	 * they can be let go of outside Juno. True when it did; the row's own drag
+	 * is then not started.
+	 */
+	onDragOut?: (item: ExplorerItem, event: DragEvent) => boolean;
 	/** Whether this row is a folder something can be dropped on. */
 	canDropOn: (item: ExplorerItem) => boolean;
 	onDropOn: (item: ExplorerItem, event: DragEvent) => void;
@@ -101,6 +107,7 @@ export function ExplorerView({
 	onItemMenu,
 	onBlankMenu,
 	dragOf,
+	onDragOut,
 	canDropOn,
 	onDropOn,
 	label,
@@ -227,6 +234,8 @@ export function ExplorerView({
 			},
 			onDragStart: (event: DragEvent<HTMLButtonElement>) => {
 				if (!drag) return;
+				gate.cancel();
+				if (onDragOut?.(item, event)) return;
 				event.dataTransfer.setData(DRAG_TYPE, encodeDrag(drag));
 				event.dataTransfer.effectAllowed = "move";
 			},

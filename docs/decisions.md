@@ -2531,7 +2531,9 @@ same list.
   their own inside any of them (`document_folders`, five standard columns,
   soft deleted, a document holds a nullable `folder_id`). Moving a document
   between client and project folders is `documents.link`, so the rule in
-  `document-owner.ts` still decides it.
+  `document-owner.ts` still decides it. When a project changes client, its
+  folders and documents go with it in the same transaction, and the change is
+  refused when the new client already has a document of one of their titles.
 - **Files stay in Juno's documents folder** (decision 39 and the folder
   setting), named by Juno, not mirrored as a tree on disk. Show in folder
   opens the file's real place. Mirroring the tree on disk would make a rename

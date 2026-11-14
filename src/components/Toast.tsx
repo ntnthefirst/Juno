@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { announce } from "@/lib/announce";
 import { isFailureMessage } from "@/lib/errors";
+import { COMBOS, matchesCombo } from "@/lib/shortcuts";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 
@@ -45,6 +46,27 @@ export function Toast({ message, tone, actionLabel, onAction, onDismiss }: Toast
 		if (timer.current !== null) window.clearTimeout(timer.current);
 		onAction?.();
 	}
+
+	// Ctrl or Cmd Z takes an Undo the toast offers, so it is not only at the far end of the tab
+	// order. A field keeps its own undo, and nothing fires under a question that is waiting.
+	const latestAct = useRef(act);
+	useEffect(() => {
+		latestAct.current = act;
+	});
+	const undoable = actionLabel === "Undo" && onAction !== undefined;
+	useEffect(() => {
+		if (!undoable) return;
+		function onKey(event: KeyboardEvent) {
+			if (event.defaultPrevented || !matchesCombo(event, COMBOS.undo)) return;
+			const target = event.target;
+			if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+			if (document.querySelector("[role='dialog']")) return;
+			event.preventDefault();
+			latestAct.current();
+		}
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [undoable]);
 
 	return createPortal(
 		<div

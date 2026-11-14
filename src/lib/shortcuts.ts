@@ -102,6 +102,8 @@ export const COMBOS = {
 	find: "mod+f",
 	openFolder: "mod+o",
 	deleteRecord: "delete",
+	/** What a toast offers to undo, such as a delete. A field keeps its own Ctrl Z. */
+	undo: "mod+z",
 } as const;
 
 /**
@@ -142,6 +144,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: [COMBOS.newItem], label: "New, on this screen" },
 			{ combos: [COMBOS.newPage], label: "New page" },
 			{ combos: [COMBOS.back], label: "Back, out of a record" },
+			{ combos: [COMBOS.undo], label: "Undo, while a message offers it" },
 			{ combos: [COMBOS.settings], label: "Settings" },
 			{ combos: [COMBOS.lock], label: "Lock Juno" },
 			{ combos: [COMBOS.help], label: "This list" },

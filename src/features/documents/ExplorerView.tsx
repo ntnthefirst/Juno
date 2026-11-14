@@ -302,7 +302,8 @@ export function ExplorerView({
 					<div
 						role="presentation"
 						style={{ gridTemplateColumns: grid }}
-						className="sticky top-0 z-10 grid h-[32px] items-center gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-[var(--ink-muted)]"
+						// px-4 is the rows' own inset (px-1 around them, px-3 inside each), so a header sits over its column.
+						className="sticky top-0 z-10 grid h-[32px] items-center gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-4 text-sm text-[var(--ink-muted)]"
 					>
 						{headers.map((header) =>
 							header.column && sort && onSort ? (

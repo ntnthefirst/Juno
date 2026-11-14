@@ -168,7 +168,7 @@ if (!app.requestSingleInstanceLock()) {
 		configureMailboxWriter(openImapWriter);
 		configureMailTransport(smtpTransport, imapSentAppender);
 		// The sender pauses with the lock too, and renders a PDF for an attached
-		// document through the same path the documents screen uses.
+		// document through the same path a Documents tab uses.
 		mailSend.configureMailSend({
 			isPaused: () => lock.isLocked(),
 			renderDocumentPdf: async (id) => (await documentActions.renderPdf(id)).pdfPath,

@@ -19,7 +19,7 @@ type AddExistingDialogProps = {
 
 /**
  * Puts a document that already exists under this client or project, so a
- * contract imported from the Documents screen or kept from a mail does not
+ * contract kept from a mail, or listed under another record, does not
  * have to be opened to be filed. Pick one, then say yes; it is a move, so the
  * question says where it is kept now.
  *

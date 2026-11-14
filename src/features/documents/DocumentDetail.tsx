@@ -66,7 +66,7 @@ type DocumentDetailProps = {
 	documentId: string;
 	/** The name the list already shows, drawn while the document is read so the heading does not blink. */
 	knownTitle?: string;
-	/** Where it sits among the files of the folder it was opened from, for Previous and Next. */
+	/** Where it sits among the files of the list it was opened from, for Previous and Next. */
 	position: { index: number; total: number; onPrevious: () => void; onNext: () => void } | null;
 	/** "Back to Contracts". */
 	closeLabel: string;
@@ -112,7 +112,7 @@ function VersionBody({ version, caption, onOpen }: VersionBodyProps) {
 }
 
 /**
- * A document opened from the explorer: the file over the whole content area,
+ * A document opened from a Documents tab: the file over the whole content area,
  * with its name, type and size at the top, Previous and Next through the
  * folder, its actions, and a column at the right with what the detail view
  * always had: the details, the client and project it is kept under, the
@@ -178,7 +178,7 @@ export function DocumentDetail({
 		fetchDetail()
 			.then((detail) => {
 				if (cancelled) return;
-				setLoad(detail ? { status: "ready", detail } : { status: "error", message: "It was deleted. Close the preview to go back to the folder." });
+				setLoad(detail ? { status: "ready", detail } : { status: "error", message: "It was deleted. Close the preview to go back to the list." });
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setLoad({ status: "error", message: messageOf(cause) });

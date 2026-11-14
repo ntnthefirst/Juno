@@ -28,10 +28,10 @@ type ExplorerRowProps = {
 	whereColumn: WhereColumn | null;
 };
 
-/** Where a document is kept, for a search result that is not in the open folder. */
+/** Where a document is kept, for a list that is not one record's own. */
 function whereOf(item: ExplorerItem): string {
 	if (item.kind !== "document") return "";
-	return item.record.clientName || item.record.projectName ? belongsTo(item.record) : "Unfiled";
+	return item.record.clientName || item.record.projectName ? belongsTo(item.record) : "No client";
 }
 
 /**

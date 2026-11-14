@@ -296,7 +296,7 @@ export async function renderPdf(id: string, db: Db = getDb()) {
 			kind: "generated",
 			source: "generate",
 			pdfPath: path,
-			// The name and size the explorer lists, as every other version records them.
+			// The name and size a Documents tab lists, as every other version records them.
 			fileName: `${record.title.trim() || "Document"}.pdf`,
 			mediaType: "application/pdf",
 			byteSize: bytes.length,

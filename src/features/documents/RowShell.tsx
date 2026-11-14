@@ -9,7 +9,7 @@ type RowShellProps = HTMLAttributes<HTMLElement> & {
 };
 
 /**
- * The element a row of the explorer or the tree is drawn as: a button, or a
+ * The element a row or a tile of a file list is drawn as: a button, or a
  * plain element with the same role, classes and handlers while its name is
  * being edited. An input inside a button is invalid HTML, and a screen reader
  * or the keyboard can then reach neither properly.

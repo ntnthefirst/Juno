@@ -8,7 +8,7 @@ type ToolbarButtonProps = {
 	onClick: () => void;
 };
 
-/** A text button with its glyph, the size the explorer's bar holds. */
+/** A quiet text button with its glyph, the size a Documents tab's bar and the Templates bar hold. */
 export function ToolbarButton({ icon, label, disabled = false, onClick }: ToolbarButtonProps) {
 	return (
 		<Button size="dense" disabled={disabled} onClick={onClick}>

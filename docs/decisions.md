@@ -2536,10 +2536,12 @@ same list.
   setting), named by Juno, not mirrored as a tree on disk. Show in folder
   opens the file's real place. Mirroring the tree on disk would make a rename
   in Explorer and a rename in Juno two truths.
-- **A click previews and a double click opens.** One click selects and shows
-  the preview, Space or Enter on a selection opens it full screen, a double
-  click opens the file in the default app of the operating system. The same
-  holds for a mail attachment and a project's file.
+- **A click previews and a double click opens.** One click opens the full
+  preview over the content area, held for the double-click time so a double
+  click does not show it first; a double click opens the file in the default
+  app of the operating system. Ctrl or Cmd and Shift select without opening.
+  With the list focused, Space previews and Enter opens. The same holds for a
+  mail attachment and a project's file.
 - **An edit made in another app is a new version.** A version's file is never
   written to after it is kept. Opening the newest version in its default app
   opens a working copy beside it; when Juno sees that copy's bytes differ from

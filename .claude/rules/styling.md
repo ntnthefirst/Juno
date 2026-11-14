@@ -226,17 +226,14 @@ application, not the native `title`) and in its `aria-label`.
   draws 48px entries and 24px icons; the screens use the Sidebar, which wins.
 - **A badge is a dot,** and the count goes in the tooltip and the accessible name.
 - **Screens without an entry** light the entry they belong to
-  (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail,
-  Templates under Documents.
+  (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail.
 
-### The switch
+### A second screen without an entry
 
-Documents holds a second screen. It is not a second sidebar entry: it is
-`components/SectionSwitch.tsx`, a two-sided control at the top of the page
-(Documents | Templates), reached through the shell with
-`requestOpen({ kind: "screen", screen })` so the target opens on its list. Add
-a pair by adding a `ScreenSwitch` in `app/screens.ts`. Screens a form or an
-editor has taken over show no switch, because they replace the page it sits on.
+Documents has no second screen: its templates are a folder of the explorer,
+the last node of the tree (decision 75), reached from elsewhere with
+`requestOpen({ kind: "document-folder", key: "templates" })`. Their editors,
+the use flow and Components take the Documents screen while they are open.
 
 Mail does it differently, by the owner's choice. New message and a Styled mail
 button sit in the title bar while Mail is open, and the button opens a column
@@ -362,8 +359,10 @@ The animations are utilities, not keyframes written at the call site:
   animation and transition to nothing under `prefers-reduced-motion`, and
   `prefersReducedMotion()` is for the code that waits on a delay of its own. A
   new animation needs nothing to opt in.
-- The raised side of `SectionSwitch` slides: each side is its own screen, so it
-  remembers where it was and the new copy moves from there.
+- **A file's full preview scales in** (`components/FullPreview.tsx`,
+  `animate-scale`) over the content area, the tiles of a folder rise one after
+  another, and while a preview is read the space holds the shape of a page
+  (`PreviewSkeleton`), so nothing moves when it lands.
 - **The calendar pages like a scroll** (`features/calendar/PageSlide.tsx`):
   the old month or week slides out the whole way while the next one follows
   edge to edge, with no fade, and the page waits for its items before it

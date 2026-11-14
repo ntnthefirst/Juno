@@ -10,7 +10,10 @@ afterAll(() => configureFileReader({ source: sourceWorker() }));
 describe("the file worker", () => {
 	afterEach(() => configureFileReader({ source: sourceWorker() }));
 
-	it("reads a Word file and a workbook off the main process", async () => {
+	// The first job starts the worker, which compiles its source as it loads.
+	// That takes a few seconds alone and over twenty in a full run with every
+	// other file busy, so this one test is given a minute.
+	it("reads a Word file and a workbook off the main process", { timeout: 60_000 }, async () => {
 		const html = await readInWorker({ kind: "word-html" }, await docxBytes(["Offerte voor de website", "Tweede alinea"]));
 		expect(html).toContain("<p>Offerte voor de website</p>");
 		const text = await readInWorker({ kind: "word-text" }, await docxBytes(["Alleen tekst"]));

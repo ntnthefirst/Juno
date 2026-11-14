@@ -275,7 +275,7 @@ export function ReminderForm({ reminder, backLabel, onClose, onSaved }: Reminder
 					<div className="col-span-2">
 						<label
 							htmlFor={notesId}
-							className="mb-1 block text-sm text-[var(--ink-muted)]"
+							className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]"
 						>
 							Notes
 						</label>

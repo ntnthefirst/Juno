@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentConnection, AgentTokenCreated } from "@shared/types";
 import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { RowsSkeleton } from "../../components/RowsSkeleton";
@@ -41,6 +42,9 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 	const [name, setName] = useState("");
 	const [created, setCreated] = useState<AgentTokenCreated | null>(null);
 	const [busy, setBusy] = useState(false);
+	// Removing cannot be undone: only a hash of the token is kept, so the client
+	// has to be let in again from the start. It is asked first.
+	const [removing, setRemoving] = useState<AgentConnection | null>(null);
 
 	const reload = useCallback(() => {
 		window.juno.agent.connections
@@ -59,6 +63,7 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 	}, [reload]);
 
 	async function revoke(connection: AgentConnection) {
+		setRemoving(null);
 		try {
 			await window.juno.agent.connections.revoke(connection.id);
 			onNotice(`${connection.name} removed.`);
@@ -128,7 +133,7 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 									Added {day(connection.createdAt)}, {lastUsed(connection)}
 								</span>
 							</span>
-							<Button size="dense" variant="danger" onClick={() => void revoke(connection)}>
+							<Button size="dense" variant="danger" onClick={() => setRemoving(connection)}>
 								Remove
 							</Button>
 						</li>
@@ -197,6 +202,20 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 					</span>
 				</div>
 			)}
+
+			{removing ? (
+				<Dialog title={`Remove ${removing.name}?`} width="narrow" onClose={() => setRemoving(null)}>
+					<p className="mt-3 text-base">
+						It can no longer use Juno, and has to be let in again with a new code or token.
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setRemoving(null)}>Cancel</Button>
+						<Button variant="danger" onClick={() => void revoke(removing)}>
+							Remove
+						</Button>
+					</div>
+				</Dialog>
+			) : null}
 		</div>
 	);
 }

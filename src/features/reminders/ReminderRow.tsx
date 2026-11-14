@@ -53,16 +53,21 @@ export function ReminderRow({
 }: ReminderRowProps) {
 	const [busy, setBusy] = useState(false);
 	// Set the moment a reminder is ticked, so the row folds away while the write happens.
-	const [leaving, setLeaving] = useState(false);
+	// It holds the row as it was read, so the fold lasts until the list has been read
+	// again rather than springing back open in the moment between the write and the read.
+	const [leftFrom, setLeftFrom] = useState<Reminder | null>(null);
+	const leaving = leftFrom === reminder;
 
-	async function run(work: () => Promise<unknown>) {
-		if (busy) return;
+	async function run(work: () => Promise<unknown>): Promise<boolean> {
+		if (busy) return false;
 		setBusy(true);
 		try {
 			await work();
 			onChanged();
+			return true;
 		} catch (cause: unknown) {
 			onError(messageOf(cause));
+			return false;
 		} finally {
 			setBusy(false);
 		}
@@ -92,11 +97,10 @@ export function ReminderRow({
 	const overdue = reminder.bucket === "overdue";
 	async function complete() {
 		if (busy || leaving) return;
-		setLeaving(true);
+		setLeftFrom(reminder);
 		// Long enough for the fold to be seen, and none at all when the system asks for less movement.
 		await new Promise((resolve) => setTimeout(resolve, prefersReducedMotion() ? 0 : 280));
-		await run(() => window.juno.reminders.complete(reminder.id));
-		setLeaving(false);
+		if (!(await run(() => window.juno.reminders.complete(reminder.id)))) setLeftFrom(null);
 	}
 	const toggle = () => (done ? void run(() => window.juno.reminders.reopen(reminder.id)) : void complete());
 

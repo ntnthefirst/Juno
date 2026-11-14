@@ -2605,6 +2605,14 @@ never as a path:
 Large files are cut: the first sheets and rows of a spreadsheet, the first
 part of a text file, with a line saying what was left out.
 
+Word files, workbooks, CSV and PDF text are parsed in a worker thread the
+main process starts the first time it needs one (`workers/file-worker.ts`,
+run by `services/file-reader.ts`), one job at a time and each with a time
+limit of thirty seconds, after which the worker is ended and the person is
+told to open the file in its own app, so a large file never holds a window.
+What a file's ZIP says it unpacks to is still checked in the main process,
+before any bytes are handed over.
+
 ## 77. A file becomes a PDF through Word when Word is there, and through Juno when it is not
 
 Signing and Convert to PDF need a PDF. Decision 19 kept a Word converter out

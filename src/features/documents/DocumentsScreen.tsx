@@ -8,6 +8,7 @@ import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
 import { InlineAdd } from "../../components/InlineAdd";
 import { MenuButton } from "../../components/Menu";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 import { Segmented } from "../../components/Segmented";
 import { Toast } from "../../components/Toast";
 import { blankMenuFor } from "../../lib/blank-menu";
@@ -928,10 +929,8 @@ export function DocumentsScreen() {
 	const loading = data.tree.status === "loading" || (!needle && openKey !== ROOT_KEY && !inTemplates && data.records === null);
 
 	const empty = loading ? (
-		<div aria-hidden className="flex flex-col gap-px px-1 pt-9">
-			{Array.from({ length: 6 }, (_, at) => (
-				<span key={at} className="mx-3 my-2 h-5 animate-pulse rounded-[var(--radius-sm)] bg-[var(--sunken)]" style={{ width: `${70 - at * 7}%` }} />
-			))}
+		<div className="px-2 pt-8">
+			<RowsSkeleton rows={8} divided={false} label="Loading the folder" />
 		</div>
 	) : data.tree.status === "error" ? (
 		<div className="m-8 border-l-2 border-[var(--risk)] pl-4">
@@ -1007,11 +1006,7 @@ export function DocumentsScreen() {
 						onDrop={(target, event) => void dropOn(target, event)}
 					/>
 				) : (
-					<div aria-hidden className="flex flex-col gap-2 p-2">
-						{Array.from({ length: 8 }, (_, at) => (
-							<span key={at} className="h-5 animate-pulse rounded-[var(--radius-sm)] bg-[var(--sunken)]" style={{ width: `${80 - at * 6}%` }} />
-						))}
-					</div>
+					<RowsSkeleton rows={8} avatar divided={false} trailing={false} label="Loading the folders" />
 				)}
 			</nav>
 

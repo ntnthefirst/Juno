@@ -3,6 +3,7 @@ import type { DocumentPlace, DocumentRecord, ReferenceItem } from "@shared/types
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { MenuButton } from "../../components/Menu";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 import { messageOf } from "../../lib/errors";
 import type { ListCommand } from "../../lib/list-keys";
 import { NO_SELECTION, pruneSelection, type ListSelection } from "../../lib/list-selection";
@@ -219,11 +220,7 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged }: D
 					</p>
 				</div>
 			) : load.status === "loading" ? (
-				<div aria-hidden className="flex flex-col gap-2 py-2">
-					{Array.from({ length: 3 }, (_, at) => (
-						<span key={at} className="h-5 animate-pulse rounded-[var(--radius-sm)] bg-[var(--sunken)]" style={{ width: `${70 - at * 12}%` }} />
-					))}
-				</div>
+				<RowsSkeleton rows={4} label="Loading the documents" />
 			) : (
 				<div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
 					<ExplorerView

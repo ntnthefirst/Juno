@@ -277,17 +277,19 @@ export function ExplorerView({
 		? [HEADERS[0]!, { label: "Where", column: null }, ...HEADERS.slice(1)]
 		: HEADERS;
 
+	const listbox = {
+		ref: container,
+		role: "listbox",
+		"aria-label": label,
+		"aria-multiselectable": true,
+		onKeyDown,
+	} as const;
+
 	return (
 		<div
-			ref={container}
-			role="listbox"
-			aria-label={label}
-			aria-multiselectable
-			aria-orientation={view === "grid" ? undefined : "vertical"}
-			onKeyDown={onKeyDown}
 			onMouseDown={(event) => {
 				// A press on the empty space between rows lets the selection go.
-				if (event.button === 0 && !(event.target as Element).closest("[data-explorer-item]")) {
+				if (event.button === 0 && !(event.target as Element).closest("[data-explorer-item], button")) {
 					onSelection({ ...selection, selected: [] });
 				}
 			}}
@@ -299,8 +301,8 @@ export function ExplorerView({
 		>
 			{view === "list" ? (
 				<>
+					{/* Outside the listbox, so the sort buttons are reachable with Tab and the list holds only its options. */}
 					<div
-						role="presentation"
 						style={{ gridTemplateColumns: grid }}
 						// px-4 is the rows' own inset (px-1 around them, px-3 inside each), so a header sits over its column.
 						className="sticky top-0 z-10 grid h-[32px] items-center gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-4 text-sm text-[var(--ink-muted)]"
@@ -310,10 +312,13 @@ export function ExplorerView({
 								<button
 									key={header.label}
 									type="button"
-									tabIndex={-1}
 									onClick={() => onSort(header.column!)}
-									aria-label={`Sort by ${header.label.toLowerCase()}`}
-									className={`flex min-w-0 items-center gap-1 rounded-[var(--radius-sm)] hover:text-[var(--ink)] ${header.align === "right" ? "justify-end" : ""} ${sort.by === header.column ? "text-[var(--ink)]" : ""}`}
+									aria-label={
+										sort.by === header.column
+											? `Sorted by ${header.label.toLowerCase()}, ${sort.descending ? "descending" : "ascending"}. Sort the other way`
+											: `Sort by ${header.label.toLowerCase()}`
+									}
+									className={`flex min-w-0 items-center gap-1 rounded-[var(--radius-sm)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] ${header.align === "right" ? "justify-end" : ""} ${sort.by === header.column ? "text-[var(--ink)]" : ""}`}
 								>
 									<span className="truncate">{header.label}</span>
 									{sort.by === header.column ? (
@@ -327,7 +332,7 @@ export function ExplorerView({
 							),
 						)}
 					</div>
-					<div className="flex flex-col gap-px px-1 pt-1">
+					<div {...listbox} aria-orientation="vertical" className="animate-fade flex flex-col gap-px px-1 pt-1">
 						{items.map((item) => (
 							<ExplorerRow
 								key={item.key}
@@ -347,7 +352,7 @@ export function ExplorerView({
 					</div>
 				</>
 			) : (
-				<div className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-2 p-3">
+				<div {...listbox} className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-2 p-3">
 					{items.map((item, index) => (
 						<ExplorerTile
 							key={item.key}

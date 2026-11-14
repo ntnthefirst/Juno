@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Automation, AutomationRun } from "@shared/types";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { useContextMenu } from "../../lib/use-context-menu";
@@ -187,6 +188,8 @@ type AutomationRowProps = {
  */
 function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) {
 	const menu = useContextMenu();
+	// There is no restore for an automation, so deleting one asks first.
+	const [confirming, setConfirming] = useState(false);
 	const busy = busyId !== null;
 
 	const items: MenuItem[] = [
@@ -221,12 +224,7 @@ function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) 
 			danger: true,
 			separatorBefore: true,
 			disabled: busy,
-			onSelect: () =>
-				void act(
-					automation.id,
-					() => window.juno.automations.remove(automation.id),
-					`${automation.name} deleted.`,
-				),
+			onSelect: () => setConfirming(true),
 		},
 	];
 
@@ -275,6 +273,24 @@ function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) 
 
 			{menu.at ? (
 				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={automation.name} />
+			) : null}
+
+			{confirming ? (
+				<Dialog title={`Delete ${automation.name}?`} width="narrow" onClose={() => setConfirming(false)}>
+					<p className="mt-3 text-base">It stops running, and it cannot be restored.</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setConfirming(false)}>Cancel</Button>
+						<Button
+							variant="danger"
+							onClick={() => {
+								setConfirming(false);
+								void act(automation.id, () => window.juno.automations.remove(automation.id), `${automation.name} deleted.`);
+							}}
+						>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
 		</div>
 	);

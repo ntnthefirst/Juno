@@ -140,13 +140,13 @@ export function RecipientField({
 
 	return (
 		<div>
-			<div className="mb-1 flex items-baseline justify-between gap-2">
+			<div className="mb-1.5 flex items-baseline justify-between gap-2">
 				<label
 					htmlFor={id}
-					className="text-sm text-[var(--ink-muted)]"
+					className="text-sm font-[var(--weight-medium)] text-[var(--ink)]"
 				>
 					{label}
-					{required ? <span className="text-[var(--risk)]"> *</span> : null}
+					{required ? <span aria-hidden> *</span> : null}
 				</label>
 				{actions}
 			</div>

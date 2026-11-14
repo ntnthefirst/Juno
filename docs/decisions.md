@@ -2568,6 +2568,16 @@ same list.
   nothing an agent or an older document relies on moves. Styled mail stays in
   Mail.
 - **Pages stay documents** (decision 62) and open in the page view.
+- **Dragging a document out drags a copy of its newest file**, named by its
+  title, in a folder of its own under the system's temporary folder
+  (`services/document-drag.ts`). Not the kept file: an app it is dropped on
+  may open it in place and save into it, and a kept version is never written
+  to. The window names the documents by id; the main process starts the
+  platform's drag. The same drag let go of over a folder in Juno moves the
+  documents, and over the composer attaches them.
+- **Making something in a folder is one write.** Generating from a template
+  and writing a page take the folder (`folder_id` for an agent) and the place
+  rule resolves it, rather than the window making the document and moving it.
 
 **What would reverse this:** wanting the tree in Explorer as well, which is a
 sync of a folder on disk with its own decision about who wins a rename.

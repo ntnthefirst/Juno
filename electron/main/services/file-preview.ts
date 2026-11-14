@@ -44,6 +44,8 @@ const MAX_WORD_BYTES = 30 * 1024 * 1024;
 const MAX_TOKENS = 40;
 /** How long an address answers. A preview open longer than this is drawn again when it is asked for. */
 const TOKEN_LIFETIME_MS = 30 * 60 * 1000;
+/** The most bytes the addresses hold in memory at once, together. A file Juno keeps is read when asked and does not count. */
+export const MAX_HELD_BYTES = 128 * 1024 * 1024;
 
 type Hooks = {
 	/** A PNG of the file as the operating system draws it, or null when it has none. */
@@ -82,9 +84,23 @@ const HTML_POLICY = "default-src 'none'; style-src 'unsafe-inline'; img-src data
 /** The page repeats the policy in a meta tag too, where `sandbox` is not allowed, so it is added to the header only. */
 const HTML_CSP = `${HTML_POLICY}; sandbox`;
 
+function heldBytes(): number {
+	let total = 0;
+	for (const value of served.values()) total += value.body?.length ?? 0;
+	return total;
+}
+
 function issue(entry: Omit<Served, "expires">): string {
 	const clock = Date.now();
 	for (const [token, value] of served) if (value.expires < clock) served.delete(token);
+	// Forty addresses of sixty megabytes each would be gigabytes in the main
+	// process, so what is held in memory has a ceiling of its own.
+	const incoming = entry.body?.length ?? 0;
+	while (served.size > 0 && heldBytes() + incoming > MAX_HELD_BYTES) {
+		const oldest = served.keys().next().value;
+		if (oldest === undefined) break;
+		served.delete(oldest);
+	}
 	while (served.size >= MAX_TOKENS) {
 		const oldest = served.keys().next().value;
 		if (oldest === undefined) break;

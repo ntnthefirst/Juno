@@ -22,7 +22,15 @@ import {
 	textPdf,
 	xlsxBytes,
 } from "./file-fixtures";
-import { configurePreview, preview, previewForAgent, sanitiseDocumentHtml, servePreview } from "./file-preview";
+import {
+	configurePreview,
+	forgetPreviews,
+	MAX_HELD_BYTES,
+	preview,
+	previewForAgent,
+	sanitiseDocumentHtml,
+	servePreview,
+} from "./file-preview";
 import { readSheets } from "./file-text";
 import { extractText } from "./pdf-text";
 
@@ -231,6 +239,19 @@ describe("a preview", () => {
 		expect(picture).toMatchObject({ kind: "image", text: null, sheets: null });
 		expect(JSON.stringify(picture)).not.toContain("app://");
 	});
+
+	it("holds no more than its ceiling of bytes in memory, dropping the oldest address first", async () => {
+		forgetPreviews();
+		const size = Math.floor(MAX_HELD_BYTES / 2.5);
+		const first = await preview(bytes("een.png", new Uint8Array(size)), freshDb());
+		const second = await preview(bytes("twee.png", new Uint8Array(size)), freshDb());
+		expect(served(first)).not.toBeNull();
+		const third = await preview(bytes("drie.png", new Uint8Array(size)), freshDb());
+		expect(served(first)).toBeNull();
+		expect(served(second)).not.toBeNull();
+		expect(served(third)).not.toBeNull();
+		forgetPreviews();
+	}, 60_000);
 
 	it("answers nothing for a token it never issued", () => {
 		expect(servePreview("0".repeat(48))).toBeNull();

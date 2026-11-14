@@ -521,8 +521,20 @@ export async function remove(id: string, db: Db = getDb()): Promise<DocumentReco
 }
 
 export async function restore(id: string, db: Db = getDb()): Promise<DocumentRecord> {
+	// The folder it was in may have been deleted while it was gone. It comes
+	// back to the folder's place instead, or the tree would hold it nowhere.
+	const current = db.select({ folderId: documents.folderId }).from(documents).where(eq(documents.id, id)).get();
+	const folderAlive = current?.folderId
+		? Boolean(
+				db
+					.select({ id: documentFolders.id })
+					.from(documentFolders)
+					.where(and(eq(documentFolders.id, current.folderId), isNull(documentFolders.deletedAt)))
+					.get(),
+			)
+		: true;
 	db.update(documents)
-		.set({ deletedAt: null, updatedAt: now() })
+		.set({ deletedAt: null, updatedAt: now(), ...(folderAlive ? {} : { folderId: null }) })
 		.where(eq(documents.id, id))
 		.run();
 	const record = await get(id, db);

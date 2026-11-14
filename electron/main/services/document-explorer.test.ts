@@ -178,6 +178,19 @@ describe("folders", () => {
 		await folders.create({ name: "Offertes", clientId: acme.id }, db);
 		await expect(folders.restore(first.id, db)).rejects.toThrow(/already a folder named "Offertes"/);
 	});
+
+	it("restores a deleted document out of a folder that is gone, so the tree still shows it", async () => {
+		const { db, acme } = await setUp();
+		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
+		const doc = await importFile({ source: bytes("Offerte.txt", "Een offerte."), folderId: offers.id }, db);
+		await documents.remove(doc.id, db);
+		await folders.remove(offers.id, db);
+		const restored = await documents.restore(doc.id, db);
+		expect(restored).toMatchObject({ clientId: acme.id, folderId: null });
+		expect((await documents.listIn({ clientId: acme.id, projectId: null, folderId: null }, db)).map((d) => d.id)).toEqual([
+			doc.id,
+		]);
+	});
 });
 
 describe("moving, duplicating, copying and renaming", () => {

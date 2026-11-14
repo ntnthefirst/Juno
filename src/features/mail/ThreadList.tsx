@@ -370,6 +370,7 @@ export function ThreadList({
 										</span>
 										<button
 											type="button"
+											data-row-id={thread.id}
 											ref={(element) => {
 												if (element) rows.current.set(thread.id, element);
 												else rows.current.delete(thread.id);

@@ -78,6 +78,23 @@ type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
  * window does, on any size of screen.
  */
 export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escapeCloses = true }: ComposePageProps) {
+	// The page replaces the list it was opened from, so the row that opened it is
+	// remembered by its id, read before any field here takes the focus, and
+	// focused again once the list is back.
+	const [openerRow] = useState(() => {
+		const active = document.activeElement;
+		return active instanceof HTMLElement ? (active.closest("[data-row-id]")?.getAttribute("data-row-id") ?? null) : null;
+	});
+	useEffect(() => {
+		if (!openerRow) return;
+		return () => {
+			window.requestAnimationFrame(() => {
+				const active = document.activeElement;
+				if (active !== null && active !== document.body) return;
+				document.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(openerRow)}"]`)?.focus({ preventScroll: true });
+			});
+		};
+	}, [openerRow]);
 	const [accounts, setAccounts] = useState<MailAccount[]>([]);
 	const [templates, setTemplates] = useState<MailTemplate[]>([]);
 	const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);

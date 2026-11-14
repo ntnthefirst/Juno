@@ -39,6 +39,7 @@ export function OutboxRow({ message, active, onSelect, buttonRef, onRetry, onEdi
 			<button
 				type="button"
 				ref={buttonRef}
+				data-row-id={message.id}
 				onClick={() => onSelect(message.id)}
 				aria-current={active ? "true" : undefined}
 				className={`flex w-full items-start gap-2 px-3 py-2 text-left ${active ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"}`}

@@ -257,7 +257,7 @@ export function WeekView({
 						{HOURS.map((hour) => (
 							<div
 								key={hour}
-								className="tabular absolute right-2 font-mono text-micro text-[var(--ink-muted)]"
+								className="tabular absolute right-2 text-micro text-[var(--ink-muted)]"
 								style={{ top: hour * HOUR_PX }}
 							>
 								{hour === 0 ? "" : formatMinutes(hour * 60)}
@@ -266,7 +266,7 @@ export function WeekView({
 						{nowMinute !== null ? (
 							<div
 								aria-hidden
-								className="tabular absolute right-2 z-[2] -translate-y-1/2 bg-[var(--surface)] pl-1 font-mono text-micro text-[var(--risk)]"
+								className="tabular absolute right-2 z-[2] -translate-y-1/2 bg-[var(--surface)] pl-1 text-micro text-[var(--risk)]"
 								style={{ top: (nowMinute / 60) * HOUR_PX }}
 							>
 								{formatMinutes(nowMinute)}

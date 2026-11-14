@@ -241,7 +241,6 @@ export function NewEventWindow({ kind: initialKind, prefill }: NewEventWindowPro
 			pattern: reminderRepeat,
 			interval: 1,
 			leadDays: 0,
-			category: "paperwork",
 			clientId,
 			projectId,
 		};

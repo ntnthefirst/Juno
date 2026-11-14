@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { DocumentRecord, DocumentTemplate, DocumentVersion, ReferenceItem, VersionUse } from "@shared/types";
+import { BelongsToLinks } from "../../components/BelongsToLinks";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { FilePreviewView } from "../../components/FilePreviewView";
@@ -7,14 +8,15 @@ import { FullPreview } from "../../components/FullPreview";
 import { IconAction } from "../../components/IconAction";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { PdfViewer } from "../../components/PdfViewer";
+import { RecordLink } from "../../components/RecordLink";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { requestOpen } from "../../lib/open-entity";
 import { fileTypeLabel, isPdfFile } from "../../lib/file-type";
 import { modifiedLabel } from "../../lib/modified-label";
 import { announceDocumentsChanged, onDocumentsChanged } from "../../lib/pdf-drop";
 import { useFilePreview } from "../../lib/use-file-preview";
 import { formatBytes } from "../projects/format";
-import { belongsTo } from "./belongs-to";
 import { convertedSentence } from "./document-flows";
 import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
 import { DocumentTimeline } from "./DocumentTimeline";
@@ -403,16 +405,18 @@ export function DocumentDetail({
 		</span>
 	) : null;
 
-	const meta = viewing
-		? [
-				fileTypeLabel(viewing.fileName, viewing.mediaType),
-				viewing.byteSize === null ? "" : formatBytes(viewing.byteSize),
-				modifiedLabel(viewing.fileDate),
-				belongsTo(record),
-			]
+	const facts = viewing
+		? [fileTypeLabel(viewing.fileName, viewing.mediaType), viewing.byteSize === null ? "" : formatBytes(viewing.byteSize), modifiedLabel(viewing.fileDate)]
 				.filter(Boolean)
 				.join(" · ")
-		: belongsTo(record);
+		: "";
+	// The client and the project each open their own record.
+	const meta = (
+		<>
+			{facts ? `${facts} · ` : null}
+			<BelongsToLinks clientId={record.clientId} clientName={record.clientName} projectId={record.projectId} projectName={record.projectName} />
+		</>
+	);
 
 	const column = (
 		<div className="flex flex-col gap-2 px-6 pt-2 pb-6">
@@ -451,7 +455,18 @@ export function DocumentDetail({
 						<Fact label="Source">Added from a file</Fact>
 					) : (
 						<>
-							<Fact label="Template">{template ? template.name : "The template has since been removed."}</Fact>
+							<Fact label="Template">
+								{template ? (
+									<RecordLink
+										label={`Open ${template.name}`}
+										onOpen={() => requestOpen({ kind: "document-template", id: template.id, name: template.name })}
+									>
+										{template.name}
+									</RecordLink>
+								) : (
+									"The template has since been removed."
+								)}
+							</Fact>
 							<Fact label="Template version">
 								<span className="tabular">{templateVersion === null ? "Unknown" : templateVersion}</span>
 							</Fact>

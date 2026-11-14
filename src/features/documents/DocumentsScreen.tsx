@@ -1045,7 +1045,10 @@ export function DocumentsScreen() {
 			: plural(items.length, "item", "items");
 
 	const inTemplates = openKey === TEMPLATES_KEY && !needle;
-	const loading = data.tree.status === "loading" || (!needle && openKey !== ROOT_KEY && !inTemplates && data.records === null);
+	// A search reads every document first; until then "Nothing matches" would be a guess.
+	const loading =
+		data.tree.status === "loading" ||
+		(needle ? data.everything === null : openKey !== ROOT_KEY && !inTemplates && data.records === null);
 
 	const empty = loading ? (
 		<div className="px-2 pt-8">
@@ -1125,9 +1128,9 @@ export function DocumentsScreen() {
 						canDrop={(target) => target === null || target.place !== null}
 						onDrop={(target, event) => void dropOn(target, event)}
 					/>
-				) : (
+				) : data.tree.status === "loading" ? (
 					<RowsSkeleton rows={8} avatar divided={false} trailing={false} label="Loading the folders" />
-				)}
+				) : null}
 			</nav>
 
 			<section aria-label={heading} className="flex min-w-0 flex-1 flex-col">

@@ -116,10 +116,12 @@ function step(date: string, recurrence: Recurrence, interval: number): string {
 		case "years":
 			return addMonths(date, interval * 12, recurrence.anchorDay);
 		case "quarter_end": {
-			// One day past this quarter's end is the next quarter, whose end is the
-			// next occurrence. Works from any date in the quarter, not just the end.
+			// From a date inside a quarter the next occurrence is that quarter's own
+			// end; from a quarter end it is the end of the quarter after it. Going
+			// straight to the next quarter skipped the current one for a reminder
+			// first set on a date that is not a quarter end.
 			const thisEnd = quarterEnd(date);
-			return quarterEnd(addDays(thisEnd, 1));
+			return compare(date, thisEnd) < 0 ? thisEnd : quarterEnd(addDays(thisEnd, 1));
 		}
 		default:
 			return date;

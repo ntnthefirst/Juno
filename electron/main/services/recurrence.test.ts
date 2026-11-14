@@ -123,6 +123,11 @@ describe("nextOccurrence", () => {
 		);
 	});
 
+	it("lands on the end of the quarter a mid-quarter date falls in, not the one after", () => {
+		expect(nextOccurrence("2026-11-14", { pattern: "quarter_end", interval: 1 })).toBe("2026-12-31");
+		expect(nextOccurrence("2026-03-30", { pattern: "quarter_end", interval: 1 })).toBe("2026-03-31");
+	});
+
 	it("skips past a date that is already behind, rather than returning it", () => {
 		// A weekly reminder untouched for a month should land on the next future
 		// occurrence, not on the one that was missed first.

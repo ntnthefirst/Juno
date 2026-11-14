@@ -9,6 +9,7 @@ import {
 import type { DocumentPaper, MailBlock, MailLayout, TemplateInput } from "@shared/types";
 import type { ComponentLookup } from "@shared/components";
 import { pagesOf, paperLabel } from "@shared/paper";
+import { Icon } from "../../../../components/Icon";
 import { CanvasView, type DropTarget, type Editing, type Measured, type Selection } from "./CanvasView";
 import { isTyping, keysFor, shortcutFor } from "./shortcuts";
 
@@ -237,7 +238,7 @@ export function CanvasStage({
 						}}
 						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
-						<span aria-hidden>-</span>
+						<Icon name="minus" size={14} />
 					</button>
 					<button
 						type="button"
@@ -260,7 +261,7 @@ export function CanvasStage({
 						}}
 						className="flex h-[28px] w-[28px] items-center justify-center rounded-[var(--radius-sm)] text-base text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 					>
-						<span aria-hidden>+</span>
+						<Icon name="add" size={14} />
 					</button>
 				</div>
 			</div>

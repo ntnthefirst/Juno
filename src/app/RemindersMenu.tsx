@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Reminder, ReminderBucket } from "@shared/types";
 import { Checkbox } from "../components/Checkbox";
 import { messageOf } from "../lib/errors";
+import { announceRecordsChanged } from "../lib/new-record";
 import { requestOpen } from "../lib/open-entity";
 import { BUCKET_LABELS, describeDue, todayIso } from "../features/reminders/format";
 import { TitleMenu, TitleMenuHeading } from "./TitleMenu";
@@ -51,6 +52,8 @@ export function RemindersMenu({ at, onClose, onOpenScreen }: RemindersMenuProps)
 		try {
 			await window.juno.reminders.complete(reminder.id);
 			load();
+			// The screen behind the menu may list the same reminder, so it reads again too.
+			announceRecordsChanged();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		} finally {

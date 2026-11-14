@@ -295,16 +295,22 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged, onT
 			</div>
 
 			{load.status === "error" ? (
-				<div className="border-l-2 border-[var(--risk)] pl-4">
+				<div role="alert" className="animate-fade border-l-2 border-[var(--risk)] pl-4">
 					<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the documents.</p>
-					<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
+					<p data-selectable className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 						{load.message}
 					</p>
+					<div className="mt-3">
+						<Button size="dense" onClick={reload}>
+							Try again
+						</Button>
+					</div>
 				</div>
 			) : load.status === "loading" ? (
 				<RowsSkeleton rows={4} label="Loading the documents" />
 			) : (
-				<div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)]">
+				// Clipped for the corners without becoming a scroller, so the column headers stay sticky as the page scrolls.
+				<div className="overflow-clip rounded-[var(--radius-lg)] border border-[var(--line)]">
 					<ExplorerView
 						items={shown}
 						view="list"

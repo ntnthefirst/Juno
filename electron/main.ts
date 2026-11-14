@@ -34,7 +34,7 @@ import { configureDocuments, printPdf } from "./main/services/document-pdf";
 import { configureConversion } from "./main/services/document-convert";
 import * as documentWorking from "./main/services/document-working";
 import { configureWorkingCopies } from "./main/services/document-working";
-import { configurePreview } from "./main/services/file-preview";
+import { configurePreview, forgetPreviews } from "./main/services/file-preview";
 import { convertWithWord, wordInstalled } from "./main/services/word-convert";
 import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
@@ -251,6 +251,11 @@ if (!app.requestSingleInstanceLock()) {
 		setCloseHook(() => closeDb());
 
 		lock.start(await settings.getLock());
+		// A preview address handed out before a lock must not answer after it:
+		// the window dropped what it showed, and the file is read again on unlock.
+		lock.onChange((state) => {
+			if (state.locked) forgetPreviews();
+		});
 
 		splashStep("Starting services");
 		registerAllIpc();

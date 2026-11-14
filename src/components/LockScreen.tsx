@@ -25,10 +25,6 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 	const input = useRef<HTMLInputElement>(null);
 	const inputId = useId();
 
-	useEffect(() => {
-		input.current?.focus();
-	}, []);
-
 	// The clock is read in the interval callback, never during render and never in
 	// the effect body. Reading it while rendering makes the output depend on when
 	// React happens to re-run the component, and setting state straight from an
@@ -46,6 +42,13 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 	// Driven by the penalty itself rather than by the countdown, so the button
 	// stays disabled during the quarter second before the first tick lands.
 	const waiting = lockedOutUntil !== null;
+
+	// The field takes the cursor when the screen opens, and again whenever it
+	// is usable after a wrong try or a lockout. Focusing it straight after the
+	// check does nothing, because it is still disabled until the next render.
+	useEffect(() => {
+		if (!busy && !waiting) input.current?.focus();
+	}, [busy, waiting]);
 
 	async function submit(event: React.FormEvent) {
 		event.preventDefault();
@@ -73,9 +76,11 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 						: "That is not right.",
 				);
 			}
+		} catch {
+			setSecret("");
+			setError("Could not check that. Try again.");
 		} finally {
 			setBusy(false);
-			input.current?.focus();
 		}
 	}
 

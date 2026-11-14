@@ -102,9 +102,12 @@ async function checkRow(row: Row, db: Db): Promise<DocumentVersion | null> {
 	try {
 		stat = statSync(row.path);
 	} catch {
-		// The person deleted the copy. The versions are untouched; the next open
-		// makes a new copy.
-		retire(row, db);
+		// Not there now. That is how a copy looks for a moment while Word or
+		// Excel saves (a temporary file, the original removed, then a rename),
+		// so the copy stays watched: forgetting it here would let the next open
+		// write the version over the edit that is about to land. A copy the
+		// person really deleted costs one failed look per check, and the next
+		// open makes it again.
 		return null;
 	}
 	if (stat.size === row.byteSize && Math.round(stat.mtimeMs) === row.modifiedMs) return null;

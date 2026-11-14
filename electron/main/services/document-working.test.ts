@@ -4,7 +4,7 @@
  * system, the printer and Word are stand-ins; the Word path runs for real only
  * on a machine that has Word.
  */
-import { accessSync, constants, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { accessSync, constants, mkdtempSync, readFileSync, renameSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument } from "pdf-lib";
@@ -153,6 +153,21 @@ describe("a working copy", () => {
 		expect(opened[1]).toMatch(/read-only[\\/]Contract \(version 1\)\.pdf$/);
 		expect(isReadOnly(opened[1]!)).toBe(true);
 		expect((await working.checkAll(db)).changed).toEqual([]);
+	});
+
+	it("keeps watching a copy that is missing for a moment, as it is while Word saves", async () => {
+		const { db, client, opened } = await setUp();
+		const record = await importFile({ source: bytes("Brief.txt", "Eerste versie."), clientId: client.id }, db);
+		await working.openDocument(record.id, db);
+		const copy = opened[0]!;
+		// Word writes a temporary file, removes the original and renames: a
+		// check between the last two finds no file at all.
+		renameSync(copy, `${copy}.tmp`);
+		expect((await working.checkAll(db)).changed).toEqual([]);
+		renameSync(`${copy}.tmp`, copy);
+		saveElsewhere(copy, "Tweede versie, net bewaard.");
+		expect((await working.checkAll(db)).changed).toEqual([record.id]);
+		expect(versions.list(record.id, db)[0]).toMatchObject({ kind: "edited", isLatest: true });
 	});
 
 	it("says so when no app could open the file", async () => {

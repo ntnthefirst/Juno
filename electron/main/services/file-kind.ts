@@ -216,9 +216,15 @@ export function readableFileName(title: string, extension: string): string {
 			.replace(/[\\/:*?"<>|]/g, " ")
 			.replace(/\s+/g, " ")
 			.replace(/^[.\s]+|[.\s]+$/g, "")
-			.slice(0, 80) || "Document";
-	// Windows refuses these as names whatever follows the dot.
-	const base = /^(con|prn|aux|nul|com\d|lpt\d)$/i.test(cleaned) ? `${cleaned} document` : cleaned;
+			.slice(0, 80)
+			// Again after the cut: Windows drops a dot or a space at the end of a
+			// name, and the file written would not be the one asked for.
+			.replace(/[.\s]+$/, "") || "Document";
+	// Windows takes these as a device whatever follows the first dot, so
+	// "nul.tar" is refused as surely as "nul".
+	const stem = cleaned.split(".")[0]!.trimEnd();
+	const reserved = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$)$/i.test(stem);
+	const base = reserved ? `${cleaned} document` : cleaned;
 	const safeExtension = safeExtensionOf(extension);
 	return safeExtension ? `${base}.${safeExtension}` : base;
 }

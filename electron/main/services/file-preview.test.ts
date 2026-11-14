@@ -115,6 +115,18 @@ describe("what a file is", () => {
 		expect(readableFileName("CON", "txt")).toBe("CON document.txt");
 		expect(readableFileName("...", "../x")).toBe("Document");
 	});
+
+	it("keeps clear of a reserved name with a dot after it, and of a dot or space at the end", () => {
+		// Windows takes NUL.tar and CON.backup as the device, whatever follows the dot.
+		expect(readableFileName("nul.tar", "gz")).toBe("nul.tar document.gz");
+		expect(readableFileName("Con.backup", "")).toBe("Con.backup document");
+		expect(readableFileName("COM1", "docx")).toBe("COM1 document.docx");
+		// Cut at 80 characters, the name must not end in a space or a dot, which
+		// Windows drops, so the file written is not the file asked for.
+		const long = `${"a".repeat(79)} b`;
+		expect(readableFileName(long, "")).toBe("a".repeat(79));
+		expect(readableFileName(`${"a".repeat(79)}.b`, "")).toBe("a".repeat(79));
+	});
 });
 
 describe("a preview", () => {

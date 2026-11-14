@@ -22,6 +22,12 @@ export type FolderAction = "new" | "newInside" | "rename" | "remove" | "toggleSy
 type FolderNavProps = {
 	accounts: MailAccount[];
 	folders: Record<string, MailFolder[]>;
+	/**
+	 * Per account, how many rows its Drafts lists: the server's drafts and every
+	 * message not sent yet. Drafts shows this instead of an unread count, since
+	 * a draft is never news.
+	 */
+	draftCounts: Record<string, number>;
 	sync: Record<string, MailSyncStatus>;
 	selection: NavSelection | null;
 	onSelect: (next: NavSelection) => void;
@@ -71,6 +77,7 @@ const HEADER_TEXT =
 export function FolderNav({
 	accounts,
 	folders,
+	draftCounts,
 	sync,
 	selection,
 	onSelect,
@@ -419,9 +426,11 @@ export function FolderNav({
 									badge: accounts.reduce(
 										(total, a) =>
 											total +
-											(folders[a.id] ?? [])
-												.filter((f) => f.specialUse === use)
-												.reduce((sum, f) => sum + f.unreadCount, 0),
+											(use === "drafts"
+												? (draftCounts[a.id] ?? 0)
+												: (folders[a.id] ?? [])
+														.filter((f) => f.specialUse === use)
+														.reduce((sum, f) => sum + f.unreadCount, 0)),
 										0,
 									),
 									onClick: () => onSelect({ accountId: null, folderId: null, view: use }),
@@ -506,7 +515,7 @@ export function FolderNav({
 										icon: SPECIAL_ICONS[use],
 										depth: 0,
 										active: selection?.folderId === folder.id,
-										badge: folder.unreadCount,
+										badge: use === "drafts" ? (draftCounts[account.id] ?? 0) : folder.unreadCount,
 										onClick: () => onSelect({ accountId: account.id, folderId: folder.id, view: use }),
 										onMenu: (event) => openMenu({ kind: "folder", folder }, event),
 									}),

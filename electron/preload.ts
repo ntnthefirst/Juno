@@ -643,6 +643,7 @@ const api: JunoApi = {
 			linkClient: (id, clientId) => call("mail.threads.linkClient", id, clientId),
 			unlinkClient: (id) => call("mail.threads.unlinkClient", id),
 			linkProject: (id, projectId) => call("mail.threads.linkProject", id, projectId),
+			countDrafts: (accountId) => call("mail.threads.countDrafts", accountId),
 			countForClient: (clientId) => call("mail.threads.countForClient", clientId),
 		},
 		file: {

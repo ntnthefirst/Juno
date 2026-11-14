@@ -93,6 +93,7 @@ const MAX_ROWS = 500;
 export function MailScreen() {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [folders, setFolders] = useState<Record<string, MailFolder[]>>({});
+	const [draftCounts, setDraftCounts] = useState<Record<string, number>>({});
 	const [selection, setSelection] = useState<NavSelection | null>(null);
 	const [search, setSearch] = useState("");
 	const [filters, setFilters] = useState<MailFilters>(NO_FILTERS);
@@ -230,19 +231,22 @@ export function MailScreen() {
 	const loadAccounts = useCallback(async () => {
 		const list = await window.juno.mail.accounts.list();
 		const byAccount: Record<string, MailFolder[]> = {};
+		const drafts: Record<string, number> = {};
 		for (const account of list) {
 			byAccount[account.id] = await window.juno.mail.folders.list(account.id);
+			drafts[account.id] = await window.juno.mail.threads.countDrafts(account.id);
 		}
-		return { list, byAccount };
+		return { list, byAccount, drafts };
 	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
 		loadAccounts()
-			.then(({ list, byAccount }) => {
+			.then(({ list, byAccount, drafts }) => {
 				if (cancelled) return;
 				setAccounts(list);
 				setFolders(byAccount);
+				setDraftCounts(drafts);
 				setSelection((current) => {
 					if (current && list.some((a) => a.id === current.accountId)) return current;
 					if (list.length === 0) return null;
@@ -1031,6 +1035,7 @@ export function MailScreen() {
 					<FolderNav
 						accounts={accounts}
 						folders={folders}
+						draftCounts={draftCounts}
 						sync={sync}
 						selection={selection}
 						onSelect={(next) => {

@@ -1167,6 +1167,8 @@ export interface JunoApi {
 			unlinkClient(id: string): Promise<MailThreadSummary>;
 			/** Files the conversation under a project, or takes it off one with null. Leaves its client alone. */
 			linkProject(id: string, projectId: string | null): Promise<MailThreadSummary>;
+			/** How many rows Drafts lists: the server's drafts and every message not sent yet. */
+			countDrafts(accountId?: string): Promise<number>;
 			countForClient(clientId: string): Promise<number>;
 		};
 		/**

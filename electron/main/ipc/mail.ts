@@ -119,7 +119,8 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.threads.linkProject", (_event, id: string, projectId: string | null) =>
 		threads.linkProject(id, projectId),
 	);
-	ipcMain.handle("mail.threads.countForClient", (_event, clientId: string) =>
+	ipcMain.handle("mail.threads.countDrafts", (_event, accountId?: string) => threads.countDrafts(accountId));
+	ipcMain.handle("mail.threads.countForClient",(_event, clientId: string) =>
 		threads.countForClient(clientId),
 	);
 

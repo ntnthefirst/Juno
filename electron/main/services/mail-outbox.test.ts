@@ -471,6 +471,68 @@ describe("the gate", () => {
 	});
 });
 
+describe("the Drafts count", () => {
+	/** A draft the server holds, in its own conversation unless one is given. */
+	function serverDraft(folderId: string, uid: number, threadId?: string): string {
+		const thread =
+			threadId ??
+			db
+				.insert(mailThreads)
+				.values({ accountId, subject: `Concept ${uid}`, subjectNorm: `concept ${uid}`, firstMessageAt: "2026-09-01T10:00:00.000Z", lastMessageAt: "2026-09-01T10:00:00.000Z" })
+				.returning({ id: mailThreads.id })
+				.get().id;
+		db.insert(mailMessages)
+			.values({
+				accountId,
+				folderId,
+				threadId: thread,
+				uid,
+				messageId: `<concept-${uid}@juno.test>`,
+				fromAddress: "hallo@juno.test",
+				subject: `Concept ${uid}`,
+				internalDate: "2026-09-01T10:00:00.000Z",
+				isSeen: true,
+			})
+			.run();
+		return thread;
+	}
+
+	it("counts what the Drafts list shows: one row per server conversation and every message not sent yet", async () => {
+		const drafts = db
+			.insert(mailFolders)
+			.values({ accountId, path: "Drafts", name: "Drafts", specialUse: "drafts", syncEnabled: true })
+			.returning({ id: mailFolders.id })
+			.get().id;
+		// Two drafts in one conversation are one row in the list, and a seen draft still counts.
+		const shared = serverDraft(drafts, 1);
+		serverDraft(drafts, 2, shared);
+		serverDraft(drafts, 3);
+		const gone = serverDraft(drafts, 4);
+		db.update(mailMessages).set({ deletedAt: "2026-09-02T10:00:00.000Z" }).where(eq(mailMessages.threadId, gone)).run();
+
+		const make = async () =>
+			(await outbox.createDraft({ accountId, to: [{ name: null, address: "laura@obet.be" }], subject: "Offerte", bodyText: "Hallo." }, db)).id;
+		await make();
+		const waiting = await make();
+		db.update(mailOutbox).set({ state: "pending" }).where(eq(mailOutbox.id, waiting)).run();
+		const failed = await make();
+		db.update(mailOutbox).set({ state: "failed" }).where(eq(mailOutbox.id, failed)).run();
+		const sent = await make();
+		db.update(mailOutbox).set({ state: "sent" }).where(eq(mailOutbox.id, sent)).run();
+		const deleted = await make();
+		db.update(mailOutbox).set({ deletedAt: "2026-09-02T10:00:00.000Z" }).where(eq(mailOutbox.id, deleted)).run();
+
+		// The list the Drafts view draws, built from the same two queries the window makes.
+		const listed =
+			(await threads.listThreads({ accountId, folderId: drafts }, db)).length +
+			(await outbox.list({ accountId, states: ["draft", "pending", "queued", "sending", "failed"] }, db)).length;
+		expect(listed).toBe(5);
+		expect(await threads.countDrafts(accountId, db)).toBe(listed);
+		expect(await threads.countDrafts(undefined, db)).toBe(listed);
+		expect(await threads.countDrafts("another-account", db)).toBe(0);
+	});
+});
+
 function storeOriginal(db: Db, messageId = "<orig@obet.be>"): string {
 	const threadId = db
 		.insert(mailThreads)

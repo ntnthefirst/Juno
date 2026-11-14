@@ -238,7 +238,9 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged, onT
 			{ kind: "file", id: record.id },
 			{
 				preview: () => preview(record),
-				open: () => preview(record),
+				// The registry offers Open as `open` only for a page; a file's Open is the
+				// main process's `open-in-default-app`. Either way it does what Enter does.
+				open: () => void openOutside(record),
 				"copy-to": () => void pick("copy", together),
 				"move-to": () => void pick("move", together),
 				"convert-pdf": () => void convert(record),

@@ -131,6 +131,11 @@ async function checkRow(row: Row, db: Db): Promise<DocumentVersion | null> {
 	let bytes: Buffer;
 	try {
 		bytes = readFileSync(row.path);
+		// An app that saves in place is writing while this reads. A file whose
+		// size or time moved during the read is half written: left for the next
+		// look rather than kept as a version.
+		const after = statSync(row.path);
+		if (bytes.length !== stat.size || after.size !== stat.size || after.mtimeMs !== stat.mtimeMs) return null;
 	} catch {
 		return null;
 	}

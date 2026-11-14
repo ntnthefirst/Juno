@@ -2707,3 +2707,37 @@ is one step away (Save to...) for anything else.
 **What would reverse this:** a business whose mail about one job routinely
 carries files for another, where the one-click save would file in the wrong
 place more often than the picker costs.
+
+## 80. File types are shown with a bundled third-party icon set
+
+The documents explorer, a mail's attachments, a project's files and the
+preview header used to draw a file by a glyph of its family, tinted from the
+status colours. The owner wanted the icons people already recognise: a Word
+page is the blue one, a PDF the red one, and they mean the same here as they
+do in the rest of the system.
+
+- **One set, the "vivid" icons of file-icon-vectors (MIT).** Flat, one page
+  shape, small files, a label for the type on each, and they read at 16px in
+  a row and at 36px on a tile. The other candidate, the file icons of
+  material-icon-theme (MIT), has a handful of family icons and none for
+  Pages, Numbers or Keynote. The set's classic style is gradient-heavy and
+  five times the size. The files are copied unchanged into
+  `src/assets/file-types/` with the licence in `SOURCES.md`; the package is
+  not a dependency.
+- **They are images, never themed.** Like the provider logos (styling.md
+  section 2) they keep their own colours in both themes and never go through
+  `Icon.tsx`. A set that is hard to read on a surface is fixed by the tile
+  around it, not by recolouring the file.
+- **One component, `components/FileTypeIcon.tsx`,** over a pure mapping in
+  `lib/file-type-icon.ts` (extension first, then the declared type, then a
+  blank page). It replaces `AttachmentIcon`, and the project file rows use it
+  where they drew a kind glyph. A real thumbnail still wins over the icon. A
+  page document keeps Juno's own note glyph, and a folder keeps its own.
+- **Types the set lacks borrow a neighbour.** Numbers takes the spreadsheet
+  icon, an OpenDocument presentation the presentation one, a message the blank
+  page. Drawing those would be our own artwork, which this decision is
+  about avoiding.
+
+**What would reverse this:** the set being withdrawn or its licence changing
+(the copies here stay under the MIT notice), or a design that draws file types
+in the interface's own colours.

@@ -51,7 +51,12 @@ should appear about twice on a screen.
   `features/settings/add-account/ProviderLogo.tsx`, sources in `SOURCES.md`
   beside them) keep their own colours in both themes. They are bundled image
   files, not themed icons, so they never go through `Icon.tsx` or the tokens.
-  The tile around them is tokens as usual. Nothing else qualifies.
+  The tile around them is tokens as usual.
+- **The other exception: file-type icons** (decision 80). The icons in
+  `src/assets/file-types/`, drawn by `components/FileTypeIcon.tsx`, are a bundled
+  set that keeps its own colours in both themes. They are images, never
+  recoloured and never routed through `Icon.tsx`. If one is hard to read on a
+  surface, change the tile around it, not the file. Nothing else qualifies.
 - Spacing uses the 4px scale (`--space-1` through `--space-16`). Radius uses
   `--radius-sm` (6px) for inputs and badges, `--radius-md` (8px) for buttons and
   rows, `--radius-lg` (12px) for cards, `--radius-xl` (16px) for modals. `--radius-full` is avatars

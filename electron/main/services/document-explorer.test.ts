@@ -86,6 +86,14 @@ describe("any file is a document", () => {
 	});
 });
 
+describe("the name a file is kept under", () => {
+	it("never repeats, even for one title in one millisecond", () => {
+		const names = Array.from({ length: 50 }, () => documents.fileNameFor("Offerte", "-import", "docx"));
+		expect(new Set(names).size).toBe(50);
+		expect(names[0]).toMatch(/^offerte-[0-9TZ-]+-[a-f0-9]+-import\.docx$/);
+	});
+});
+
 describe("folders", () => {
 	it("makes folders inside a client, a project and Unfiled, and draws them in the tree with counts", async () => {
 		const { db, acme, website, own } = await setUp();

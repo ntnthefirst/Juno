@@ -6,6 +6,7 @@
  * especially after the client data it quoted has changed.
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import type {
 	Client,
@@ -178,8 +179,12 @@ export function fileNameFor(title: string, suffix: string, extension = "pdf"): s
 		.slice(0, 60)
 		.toLowerCase();
 	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+	// The time alone repeats within a millisecond, and two documents of one
+	// title (under two clients, or a batch of copies) would then share a file,
+	// the second write replacing the first.
+	const unique = randomBytes(4).toString("hex");
 	const ending = safeExtensionOf(extension);
-	return `${safe || "document"}-${stamp}${suffix}${ending ? `.${ending}` : ""}`;
+	return `${safe || "document"}-${stamp}-${unique}${suffix}${ending ? `.${ending}` : ""}`;
 }
 
 let importDirectory = "";

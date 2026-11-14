@@ -261,7 +261,7 @@ export function ClientDetail({
 				setLoad(
 					detail
 						? { status: "ready", detail }
-						: { status: "error", message: "This client is no longer in your juno." },
+						: { status: "error", message: "It was deleted. Go back to the list to open another." },
 				);
 			})
 			.catch((cause: unknown) => {

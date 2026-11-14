@@ -18,8 +18,10 @@ export function registerRemindersIpc(): void {
 		reminders.update(id, patch),
 	);
 
-	ipcMain.handle("reminders.complete", (_event, id: string, note?: string | null) =>
-		reminders.complete(id, { note: note ?? null }),
+	ipcMain.handle(
+		"reminders.complete",
+		(_event, id: string, note?: string | null, dueOn?: string | null) =>
+			reminders.complete(id, { note: note ?? null, dueOn: dueOn ?? null }),
 	);
 	ipcMain.handle("reminders.snooze", (_event, id: string, until: string) =>
 		reminders.snooze(id, until),

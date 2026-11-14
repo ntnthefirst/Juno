@@ -131,7 +131,7 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 	function complete(row: ScheduleRow) {
 		if (row.kind !== "reminder") return;
 		void run(async () => {
-			const done = await window.juno.reminders.complete(row.item.reminderId);
+			const done = await window.juno.reminders.complete(row.item.reminderId, null, row.item.dueOn);
 			setNotice(
 				done.completedAt
 					? `${row.item.title} done.`

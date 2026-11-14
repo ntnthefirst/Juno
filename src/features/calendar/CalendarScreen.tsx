@@ -377,7 +377,7 @@ export function CalendarScreen() {
 	function complete(item: CalendarReminderItem) {
 		setDetail(null);
 		void run(async () => {
-			const done = await window.juno.reminders.complete(item.reminderId);
+			const done = await window.juno.reminders.complete(item.reminderId, null, item.dueOn);
 			setNotice(
 				done.completedAt ? `${item.title} done.` : `${item.title} done. Next one is due ${formatDate(done.dueOn)}.`,
 			);

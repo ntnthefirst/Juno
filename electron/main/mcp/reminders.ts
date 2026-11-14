@@ -205,17 +205,29 @@ export const reminderTools: ToolDescriptor[] = [
 		description:
 			"A one-off is finished. A recurring one rolls forward to its next occurrence after " +
 			"today, so a quarterly reminder left for six months lands on the next quarter rather " +
-			"than the one that was missed. Reversible with reminders.reopen.",
+			"than the one that was missed. Reversible with reminders.reopen. Pass due_on, the " +
+			"occurrence you read, so a reminder somebody already ticked is not ticked twice: " +
+			"when it is done or has moved past that date, it comes back unchanged.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {
 			type: "object",
-			properties: { id: { type: "string" }, note: { type: ["string", "null"] } },
+			properties: {
+				id: { type: "string" },
+				note: { type: ["string", "null"] },
+				due_on: {
+					type: ["string", "null"],
+					description: "The due date of the occurrence being ticked off, YYYY-MM-DD, as reminders.get returned it.",
+				},
+			},
 			required: ["id"],
 			additionalProperties: false,
 		},
 		handler: async (args) =>
-			reminders.complete(String(args.id), { note: (args.note as string | null) ?? null }),
+			reminders.complete(String(args.id), {
+				note: (args.note as string | null) ?? null,
+				dueOn: (args.due_on as string | null) ?? null,
+			}),
 	},
 	{
 		name: "reminders.snooze",

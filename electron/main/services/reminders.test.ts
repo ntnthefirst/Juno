@@ -127,6 +127,31 @@ describe("complete", () => {
 		const rolled = await complete(made.id, {}, db, "2026-05-10");
 		expect(rolled.snoozedUntil).toBeNull();
 	});
+
+	it("ticks an occurrence once when two stale lists both tick it", async () => {
+		const made = await create(
+			{ title: "Weekly", dueOn: "2026-05-04", pattern: "weeks", interval: 1 },
+			db,
+			"2026-05-04",
+		);
+		const first = await complete(made.id, { dueOn: "2026-05-04" }, db, "2026-05-04");
+		const second = await complete(made.id, { dueOn: "2026-05-04" }, db, "2026-05-04");
+
+		expect(first.dueOn).toBe("2026-05-11");
+		// The second tick named the occurrence that was already done, so the next
+		// one is still due rather than skipped.
+		expect(second.dueOn).toBe("2026-05-11");
+		expect(await history(made.id, db)).toHaveLength(1);
+	});
+
+	it("leaves a finished one-off as it is on a second tick", async () => {
+		const made = await create({ title: "Send the thing", dueOn: "2026-05-10" }, db, "2026-05-10");
+		const first = await complete(made.id, {}, db, "2026-05-10");
+		const second = await complete(made.id, {}, db, "2026-05-12");
+
+		expect(second.completedAt).toBe(first.completedAt);
+		expect(await history(made.id, db)).toHaveLength(1);
+	});
 });
 
 describe("snooze", () => {

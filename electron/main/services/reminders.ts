@@ -347,10 +347,16 @@ export async function update(
  * after today, so a quarterly reminder left for six months lands on the next
  * quarter rather than on the one that was missed. The occurrence that was due is
  * written to the completion log either way.
+ *
+ * Only an open occurrence is ticked. Two lists drawn before the first tick both
+ * offer the same occurrence, and a second tick from the older one would log it
+ * twice and roll a recurring reminder past the next one unseen. So a finished
+ * one-off is left as it is, and so is a reminder whose due date is no longer
+ * the `dueOn` the caller saw: either way the record comes back unchanged.
  */
 export async function complete(
 	id: string,
-	options: { note?: string | null } = {},
+	options: { note?: string | null; dueOn?: string | null } = {},
 	db: Db = getDb(),
 	today: string = todayIsoDate(),
 ): Promise<ReminderRecord> {
@@ -360,6 +366,8 @@ export async function complete(
 		.where(and(eq(reminders.id, id), isNull(reminders.deletedAt)))
 		.get();
 	if (!row) throw new Error("That reminder no longer exists.");
+	if (row.completedAt !== null) return toRecord(row, today);
+	if (options.dueOn && options.dueOn !== row.dueOn) return toRecord(row, today);
 
 	const next = nextOccurrence(
 		row.dueOn,

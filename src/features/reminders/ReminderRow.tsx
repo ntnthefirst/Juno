@@ -102,7 +102,7 @@ export function ReminderRow({
 		setLeftFrom(reminder);
 		// Long enough for the fold to be seen, and none at all when the system asks for less movement.
 		await new Promise((resolve) => setTimeout(resolve, prefersReducedMotion() ? 0 : 280));
-		if (!(await run(() => window.juno.reminders.complete(reminder.id)))) setLeftFrom(null);
+		if (!(await run(() => window.juno.reminders.complete(reminder.id, null, reminder.dueOn)))) setLeftFrom(null);
 	}
 	const toggle = () => (done ? void run(() => window.juno.reminders.reopen(reminder.id)) : void complete());
 

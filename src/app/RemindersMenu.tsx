@@ -50,7 +50,7 @@ export function RemindersMenu({ at, onClose, onOpenScreen }: RemindersMenuProps)
 		if (busy) return;
 		setBusy(reminder.id);
 		try {
-			await window.juno.reminders.complete(reminder.id);
+			await window.juno.reminders.complete(reminder.id, null, reminder.dueOn);
 			load();
 			// The screen behind the menu may list the same reminder, so it reads again too.
 			announceRecordsChanged();

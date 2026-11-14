@@ -35,7 +35,7 @@ const DEFERRED_FOR_MS = 10 * 60 * 1000;
 
 /** What a toast, or a button on one, can ask for. The set is closed on purpose. */
 export type ToastAction =
-	| { kind: "reminder.complete"; reminderId: string }
+	| { kind: "reminder.complete"; reminderId: string; dueOn?: string }
 	| { kind: "reminder.snooze"; reminderId: string }
 	| { kind: "agent.review" };
 
@@ -147,7 +147,7 @@ export function reminderToast(rows: reminders.ReminderRecord[], locked: boolean)
 		onClick: { kind: "open" },
 		buttons: only
 			? [
-					{ label: "Complete", action: { kind: "reminder.complete", reminderId: only.id } },
+					{ label: "Complete", action: { kind: "reminder.complete", reminderId: only.id, dueOn: only.dueOn } },
 					{ label: "Snooze a day", action: { kind: "reminder.snooze", reminderId: only.id } },
 				]
 			: [],
@@ -159,7 +159,7 @@ export type ActionResult = "done" | "held" | "failed";
 async function execute(action: ToastAction, tools: NotificationDeps): Promise<void> {
 	switch (action.kind) {
 		case "reminder.complete":
-			await reminders.complete(action.reminderId);
+			await reminders.complete(action.reminderId, { dueOn: action.dueOn ?? null });
 			return;
 		case "reminder.snooze":
 			await reminders.snooze(action.reminderId, addDays(todayIsoDate(), 1));

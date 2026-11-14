@@ -1001,8 +1001,12 @@ export interface JunoApi {
 		get(id: string): Promise<Reminder | null>;
 		create(input: ReminderInput): Promise<Reminder>;
 		update(id: string, patch: ReminderPatch): Promise<Reminder>;
-		/** A one-off finishes. A recurring one rolls forward to its next occurrence. */
-		complete(id: string, note?: string | null): Promise<Reminder>;
+		/**
+		 * A one-off finishes. A recurring one rolls forward to its next occurrence.
+		 * `dueOn` is the occurrence the caller showed: when the reminder has moved
+		 * past it, or is already done, nothing changes.
+		 */
+		complete(id: string, note?: string | null, dueOn?: IsoDate): Promise<Reminder>;
 		snooze(id: string, until: IsoDate): Promise<Reminder>;
 		reopen(id: string): Promise<Reminder>;
 		remove(id: string): Promise<Reminder>;

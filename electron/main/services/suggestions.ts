@@ -14,7 +14,7 @@
  * Link to project button uses) and `reminder` (something asked for by a day, or
  * a promise to come back, offered as a reminder through the reminders service).
  */
-import { and, eq, inArray, isNull, max } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, max } from "drizzle-orm";
 import { isOpenProjectStatus } from "../../shared/project-status";
 import type { MessageSuggestion, SuggestionKind, SuggestionOutcome, SuggestionSources } from "../../shared/types";
 import { getDb, type Db } from "../db";
@@ -365,6 +365,29 @@ export async function forMessage(
 		if (found) out.push(found.suggestion);
 	}
 	return out;
+}
+
+/**
+ * The project a conversation not yet filed under one would be offered, read
+ * from its newest message back, under the same switch and the same Not now as
+ * the offer under the message. Writes nothing; a place picker starts from it.
+ */
+export async function projectForThread(threadId: string, db: Db = getDb()): Promise<string | null> {
+	const sources = await settings.getSuggestionSources();
+	if (!sources.projects) return null;
+	const messages = db
+		.select({ id: mailMessages.id })
+		.from(mailMessages)
+		.where(and(eq(mailMessages.threadId, threadId), isNull(mailMessages.deletedAt)))
+		.orderBy(desc(mailMessages.internalDate), desc(mailMessages.id))
+		.limit(20)
+		.all();
+	for (const message of messages) {
+		if (answered(db, message.id, "project")) continue;
+		const found = findProject(db, message.id);
+		if (found) return found.projectId;
+	}
+	return null;
 }
 
 /** Not now: this suggestion is not offered under this message again. */

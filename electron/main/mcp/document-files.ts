@@ -3,6 +3,7 @@ import * as compare from "../services/document-compare";
 import * as convert from "../services/document-convert";
 import * as folders from "../services/document-folders";
 import * as imports from "../services/document-import";
+import * as fromMail from "../services/document-mail";
 import * as organise from "../services/document-organise";
 import * as documents from "../services/documents";
 import * as preview from "../services/file-preview";
@@ -326,6 +327,64 @@ export const documentFileTools: ToolDescriptor[] = [
 				...(args.title !== undefined ? { title: String(args.title) } : {}),
 				...placeArgs(args),
 			}),
+	},
+	{
+		name: "documents.import_from_thread",
+		title: "Keep a conversation's attachments as documents",
+		description:
+			"Keeps the attachments of a received conversation as documents in one call. Without a place they go " +
+			"to the project the conversation is filed under, or else its client; a conversation filed under " +
+			"neither needs a place. Each file is checked like a drop: one whose bytes are already a version " +
+			"comes back skipped, one that looks like a document already kept (its words or its name) comes " +
+			"back as review with that document and is not saved, so decide it with documents.import_from_mail " +
+			"(with or without version_of), and anything else is saved. With link_conversation the conversation " +
+			"is filed under that project, or linked to that client, in the same call.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				thread_id: { type: "string", description: "The conversation's id, from mail.threads.list." },
+				attachment_ids: {
+					type: "array",
+					items: { type: "string" },
+					description:
+						"Some of its attachments, from mail.threads.get. Left out, every attachment that is not a document yet.",
+				},
+				link_conversation: {
+					type: "boolean",
+					description: "Also file the conversation under the project (or link it to the client) the files go to.",
+				},
+				...PLACE_PROPERTIES,
+			},
+			required: ["thread_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			fromMail.saveFromThread({
+				threadId: String(args.thread_id),
+				...(Array.isArray(args.attachment_ids) ? { attachmentIds: args.attachment_ids.map(String) } : {}),
+				...(args.link_conversation !== undefined ? { linkThread: args.link_conversation === true } : {}),
+				...placeArgs(args),
+			}),
+	},
+	{
+		name: "documents.list_from_thread",
+		title: "List a conversation's attachments and the documents they are",
+		description:
+			"Every attachment of a conversation, each with the document it already is (by its bytes) or null, and " +
+			"place: where documents.import_from_thread would put the rest. place.linked is false when the " +
+			"conversation is filed under nothing and the place is only the project the mail suggestions point " +
+			"at; place is null when there is not even that. Writes nothing.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: { thread_id: { type: "string", description: "The conversation's id, from mail.threads.list." } },
+			required: ["thread_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) => fromMail.forThread(String(args.thread_id)),
 	},
 	{
 		name: "documents.find_matches_in_mail",

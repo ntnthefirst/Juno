@@ -164,6 +164,10 @@ function special(toolName: string, args: Record<string, unknown>, db: Db): strin
 			return named ? `Make a document from the template "${named}"` : "Make a document from a template";
 		case "documents.import":
 			return "Import a document";
+		case "documents.import_from_thread":
+			return named ? `Keep the attachments of "${named}" as documents` : "Keep a conversation's attachments as documents";
+		case "documents.list_from_thread":
+			return named ? `Look at the attachments of "${named}"` : "Look at a conversation's attachments";
 		case "time.start":
 			return named ? `Start the timer on "${named}"` : "Start a timer";
 		case "time.stop":

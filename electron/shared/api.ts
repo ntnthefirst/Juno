@@ -105,6 +105,9 @@ import type {
 	AnalyseImportInput,
 	ImportFromMailInput,
 	ImportFromMailResult,
+	SaveThreadAttachmentsInput,
+	SaveThreadAttachmentsResult,
+	ThreadAttachments,
 	DocumentPlace,
 	DocumentMoveInput,
 	ConvertPdfResult,
@@ -905,6 +908,10 @@ export interface JunoApi {
 		addVersion(input: AddVersionInput): Promise<DocumentVersion>;
 		/** A mail attachment kept as a document, or with `versionOf` as the next version of one. */
 		importFromMail(input: ImportFromMailInput): Promise<ImportFromMailResult>;
+		/** Every attachment of a conversation with the document it already is, and where a one-step save puts the rest. */
+		threadAttachments(threadId: string): Promise<ThreadAttachments>;
+		/** Saves a conversation's attachments to its project or client, or the place given, each checked like a drop. */
+		saveThreadAttachments(input: SaveThreadAttachmentsInput): Promise<SaveThreadAttachmentsResult>;
 		/** The documents directly in one node of the tree. */
 		listIn(place: DocumentPlace): Promise<DocumentRecord[]>;
 		/** Into a folder, or directly under a client, a project or nothing. A folder decides the client and project. */

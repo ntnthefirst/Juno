@@ -10,7 +10,7 @@
  * It lives in the services layer and takes the tools' titles as an argument,
  * because the registry that knows them sits above it.
  */
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type {
 	AgentAction,
 	AgentActionView,
@@ -23,6 +23,7 @@ import type {
 import { isLocked } from "../../shared/agent-permissions";
 import { getDb, type Db } from "../db";
 import { rowOf } from "./agent-permissions";
+import { unsavedAttachmentNames } from "./document-mail";
 import {
 	automations,
 	calendarEvents,
@@ -31,6 +32,7 @@ import {
 	documents,
 	documentTemplates,
 	mailAccounts,
+	mailAttachments,
 	mailFolders,
 	mailMessages,
 	mailOutbox,
@@ -303,6 +305,30 @@ function render(value: unknown): { text: string; long: boolean } | null {
 	return { text: clip(JSON.stringify(value)), long: true };
 }
 
+/**
+ * The names of the mail attachments a call names, or, for a conversation's
+ * save with none named, of every one it would save. Null when the call names
+ * no attachment.
+ */
+function attachmentNames(toolName: string, args: Record<string, unknown>, db: Db): string[] | null {
+	const named = [
+		...(typeof args.attachment_id === "string" ? [args.attachment_id] : []),
+		...(Array.isArray(args.attachment_ids) ? args.attachment_ids.filter((id): id is string => typeof id === "string") : []),
+	];
+	if (named.length > 0) {
+		const rows = db
+			.select({ id: mailAttachments.id, filename: mailAttachments.filename })
+			.from(mailAttachments)
+			.where(inArray(mailAttachments.id, named))
+			.all();
+		return named.map((id) => rows.find((row) => row.id === id)?.filename ?? "An attachment that is gone");
+	}
+	if (toolName === "documents.import_from_thread" && typeof args.thread_id === "string") {
+		return unsavedAttachmentNames(args.thread_id, db);
+	}
+	return null;
+}
+
 /** A tool in a row that can never be Allow, or one nobody classified, is read in full. */
 function needsReview(toolName: string): boolean {
 	try {
@@ -328,6 +354,13 @@ export function describeAction(action: AgentAction, titleOf: TitleOf, db: Db = g
 		if (ids.length > MAX_ENTITIES) {
 			fields.push({ label: `More ${ROLES[kind].toLowerCase()}s`, value: `${ids.length - MAX_ENTITIES} not shown`, long: false });
 		}
+	}
+
+	// Attachments are files, named by the name they arrived with, so the request lists every one it saves.
+	const files = attachmentNames(action.toolName, action.args, db);
+	if (files) {
+		consumed.add("attachment_id").add("attachment_ids");
+		fields.push({ label: files.length === 1 ? "File" : "Files", value: files.join(", ") || "None", long: files.length > 6 });
 	}
 
 	for (const [key, value] of Object.entries(action.args)) {

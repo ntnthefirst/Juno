@@ -2302,6 +2302,77 @@ export interface ImportFromMailResult {
 	addedAsVersion: boolean;
 }
 
+/** The document a mail attachment already is, by its bytes. */
+export interface AttachmentDocument {
+	documentId: string;
+	title: string;
+	clientId: string | null;
+	projectId: string | null;
+}
+
+/**
+ * Where a conversation's attachments go in one step: the project it is filed
+ * under (which brings its client), or else its client. `linked` is false when
+ * the conversation is filed under neither and this is only a suggestion, from
+ * a project its words or its client point at.
+ */
+export interface ThreadDocumentPlace {
+	clientId: string | null;
+	clientName: string | null;
+	projectId: string | null;
+	projectName: string | null;
+	/** The name the one-step save is labelled with: the project's, or the client's. */
+	name: string;
+	linked: boolean;
+}
+
+/** One attachment of a conversation, and the document it already is, if any. */
+export interface ThreadAttachment {
+	attachmentId: string;
+	messageId: string;
+	fileName: string;
+	document: AttachmentDocument | null;
+}
+
+export interface ThreadAttachments {
+	threadId: string;
+	/** Null when the conversation is filed under nothing and nothing suggests a place. */
+	place: ThreadDocumentPlace | null;
+	attachments: ThreadAttachment[];
+}
+
+export interface SaveThreadAttachmentsInput {
+	threadId: string;
+	/** Some of the conversation's attachments. Left out, every one that is not already a document. */
+	attachmentIds?: string[];
+	/** Where they go. All three left out, the conversation's own project or client. */
+	clientId?: string | null;
+	projectId?: string | null;
+	folderId?: string | null;
+	/** Also file the conversation under the project (or link it to the client) the files are saved to. */
+	linkThread?: boolean;
+}
+
+/**
+ * What became of one attachment. `saved` went straight in; `skipped` is the
+ * same bytes as a version already kept, so nothing changed; `review` looks
+ * like a document already kept (by its words or its name) and waits for the
+ * person to compare the two, because nothing is filed as a version on a
+ * guess (decision 39).
+ */
+export type SavedAttachment =
+	| { attachmentId: string; fileName: string; status: "saved"; document: DocumentRecord }
+	| { attachmentId: string; fileName: string; status: "skipped"; document: AttachmentDocument }
+	| { attachmentId: string; fileName: string; status: "review"; match: ImportMatch }
+	| { attachmentId: string; fileName: string; status: "failed"; message: string };
+
+export interface SaveThreadAttachmentsResult {
+	thread: MailThreadSummary;
+	/** Where the files were saved. */
+	place: DocumentPlace;
+	outcomes: SavedAttachment[];
+}
+
 /* ------------------------------------------------------ documents tree */
 
 /** A folder the owner made in the documents tree. */

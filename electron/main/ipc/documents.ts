@@ -16,6 +16,7 @@ import type {
 	GenerateDocumentInput,
 	ImportFileInput,
 	ImportFromMailInput,
+	SaveThreadAttachmentsInput,
 	SignDocumentInput,
 	VersionUse,
 } from "../../shared/types";
@@ -26,6 +27,7 @@ import * as drag from "../services/document-drag";
 import { onDocumentsChanged } from "../services/document-events";
 import * as folders from "../services/document-folders";
 import * as imports from "../services/document-import";
+import * as fromMail from "../services/document-mail";
 import * as organise from "../services/document-organise";
 import * as timeline from "../services/document-timeline";
 import * as versions from "../services/document-versions";
@@ -55,6 +57,10 @@ export function registerDocumentsIpc(): void {
 	});
 	ipcMain.handle("documents.pickFiles", () => actions.pickFiles());
 	ipcMain.handle("documents.importFromMail", (_event, input: ImportFromMailInput) => imports.importFromMail(input));
+	ipcMain.handle("documents.threadAttachments", (_event, threadId: string) => fromMail.forThread(threadId));
+	ipcMain.handle("documents.saveThreadAttachments", (_event, input: SaveThreadAttachmentsInput) =>
+		fromMail.saveFromThread(input),
+	);
 
 	ipcMain.handle("documents.folders.tree", () => folders.tree());
 	ipcMain.handle("documents.folders.create", (_event, input: DocumentFolderInput) => folders.create(input));

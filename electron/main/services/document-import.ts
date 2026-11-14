@@ -168,7 +168,7 @@ export function titleOf(fileName: string): string {
  * words with a signature or a stamp added, or the same name in the place it is
  * going to.
  */
-async function analyse(
+export async function analyse(
 	file: Resolved,
 	placeInput: { clientId?: string | null; projectId?: string | null; folderId?: string | null },
 	db: Db,
@@ -276,7 +276,7 @@ async function recordFile(documentId: string, file: Resolved, path: string, db: 
 	);
 }
 
-async function createDocument(
+export async function createDocument(
 	file: Resolved,
 	input: {
 		clientId?: string | null;

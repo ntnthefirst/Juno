@@ -477,15 +477,18 @@ export function DocumentsScreen() {
 			setNotice("Open a client, a project or a folder to paste into it.");
 			return;
 		}
+		// Cut and pasted into the folder it is already in: nothing moves, and the cut is let go, as in Explorer.
+		const ids = held.mode === "cut" ? held.ids.filter((id) => !byKey.has(documentKey(id))) : held.ids;
 		try {
-			for (const id of held.ids) {
+			for (const id of ids) {
 				if (held.mode === "copy") await window.juno.documents.copyTo(id, target);
 				else await window.juno.documents.move(id, target);
 			}
 			if (held.mode === "cut") writeClipboard(null);
 			setClip(readClipboard());
+			if (ids.length === 0) return;
 			changed();
-			setNotice(`${plural(held.ids.length, "document", "documents")} ${held.mode === "copy" ? "copied" : "moved"} to ${node?.name ?? "here"}.`);
+			setNotice(`${plural(ids.length, "document", "documents")} ${held.mode === "copy" ? "copied" : "moved"} to ${node?.name ?? "here"}.`);
 		} catch (cause: unknown) {
 			fail(cause);
 			changed();

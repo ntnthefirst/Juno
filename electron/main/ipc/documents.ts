@@ -39,6 +39,7 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.list", (_event, query?: { clientId?: string; projectId?: string }) =>
 		documents.list(query ?? {}),
 	);
+	ipcMain.handle("documents.listUnfiled", () => documents.listUnfiled());
 	ipcMain.handle("documents.listIn", (_event, place: DocumentPlace) => documents.listIn(place));
 	ipcMain.handle("documents.move", (_event, id: string, input: DocumentMoveInput) => organise.move(id, input));
 	ipcMain.handle("documents.rename", (_event, id: string, title: string) => organise.rename(id, title));

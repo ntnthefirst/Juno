@@ -1243,7 +1243,7 @@ export function DocumentsScreen({ returnTo }: DocumentsScreenProps) {
 						statusLabels={statusLabels}
 						sort={openKey === ROOT_KEY && !needle ? null : sort}
 						onSort={(by) => setSort((current) => nextSort(current, by))}
-						showWhere={needle.length > 0}
+						whereColumn={needle.length > 0 ? "where" : null}
 						renamingKey={renaming}
 						onRename={(item, name) => void renameItem(item, name)}
 						onRenameEnd={() => setRenaming(null)}

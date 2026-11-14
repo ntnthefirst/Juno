@@ -506,6 +506,7 @@ const api: JunoApi = {
 		threadAttachments: (threadId) => call("documents.threadAttachments", threadId),
 		saveThreadAttachments: (input) => call("documents.saveThreadAttachments", input),
 		listIn: (place) => call("documents.listIn", place),
+		listUnfiled: () => call("documents.listUnfiled"),
 		move: (id, input) => call("documents.move", id, input),
 		rename: (id, title) => call("documents.rename", id, title),
 		duplicate: (id) => call("documents.duplicate", id),

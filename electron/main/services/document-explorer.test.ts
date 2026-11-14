@@ -90,6 +90,21 @@ describe("any file is a document", () => {
 	});
 });
 
+describe("documents kept under no client and no project", () => {
+	it("lists only those, newest first, and drops one once it has a place or is deleted", async () => {
+		const { db, acme, website } = await setUp();
+		const loose = await importFile({ source: bytes("Losse notitie.txt", "los") }, db);
+		const older = await importFile({ source: bytes("Oud bonnetje.txt", "oud") }, db);
+		await importFile({ source: bytes("Offerte.txt", "offerte"), clientId: acme.id }, db);
+		await importFile({ source: bytes("Plan.txt", "plan"), projectId: website.id }, db);
+		expect((await documents.listUnfiled(db)).map((record) => record.title)).toEqual([older.title, loose.title]);
+
+		await documents.link(loose.id, { projectId: website.id }, db);
+		await documents.remove(older.id, db);
+		expect(await documents.listUnfiled(db)).toEqual([]);
+	});
+});
+
 describe("the name a file is kept under", () => {
 	it("never repeats, even for one title in one millisecond", () => {
 		const names = Array.from({ length: 50 }, () => documents.fileNameFor("Offerte", "-import", "docx"));

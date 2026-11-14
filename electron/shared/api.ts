@@ -918,6 +918,8 @@ export interface JunoApi {
 		saveThreadAttachments(input: SaveThreadAttachmentsInput): Promise<SaveThreadAttachmentsResult>;
 		/** The documents directly in one node of the tree. */
 		listIn(place: DocumentPlace): Promise<DocumentRecord[]>;
+		/** The documents kept under no client and no project, newest first, for the Overview to give a place. */
+		listUnfiled(): Promise<DocumentRecord[]>;
 		/** Into a folder, or directly under a client, a project or nothing. A folder decides the client and project. */
 		move(id: string, input: DocumentMoveInput): Promise<DocumentRecord>;
 		/** Changes the title only. */

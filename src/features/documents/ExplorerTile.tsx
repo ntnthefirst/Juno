@@ -3,7 +3,7 @@ import { FileName } from "../../components/FileName";
 import { formatBytes } from "../projects/format";
 import { SpecimenMark } from "./SpecimenMark";
 import { countWithin } from "./explorer-tree";
-import { nameOf, sizeOf, typeOf, type ExplorerItem } from "./explorer-items";
+import { nameOf, projectOf, sizeOf, typeOf, type ExplorerItem } from "./explorer-items";
 import { STATUS_TONES, statusOf } from "./item-status";
 import { RenameField } from "./RenameField";
 import { RowShell } from "./RowShell";
@@ -19,24 +19,26 @@ type ExplorerTileProps = {
 	onRename: (name: string) => void;
 	onRenameEnd: () => void;
 	statusLabels: ReadonlyMap<string, string>;
+	/** Names the project under the type, for a client's documents. */
+	showProject?: boolean;
 	/** The arrival delay, so a folder of tiles comes in one after another. */
 	style: CSSProperties;
 	/** Reads its picture at once instead of when it comes near the screen. */
 	eager: boolean;
 };
 
-/** The line under a tile's name: a folder's count, or a file's type and size. */
-function metaOf(item: ExplorerItem): string {
+/** The line under a tile's name: a folder's count, or a file's type and size, and its project when asked. */
+function metaOf(item: ExplorerItem, showProject: boolean): string {
 	if (item.kind === "node") {
 		const count = countWithin(item.node);
 		return `${count} ${count === 1 ? "item" : "items"}`;
 	}
 	const size = sizeOf(item);
-	return [typeOf(item), size === null ? "" : formatBytes(size)].filter(Boolean).join(" · ");
+	return [showProject ? projectOf(item) : "", typeOf(item), size === null ? "" : formatBytes(size)].filter(Boolean).join(" · ");
 }
 
 /** A file as a tile: a picture of it, its name and one line of what it is. */
-export function ExplorerTile({ item, bind, selected, cut, dropping, renaming, onRename, onRenameEnd, statusLabels, style, eager }: ExplorerTileProps) {
+export function ExplorerTile({ item, bind, selected, cut, dropping, renaming, onRename, onRenameEnd, statusLabels, showProject = false, style, eager }: ExplorerTileProps) {
 	const status = statusOf(item, statusLabels);
 	// A rename draws the tile as another element, which would rise in again;
 	// once it has arrived it stays where it is.
@@ -68,7 +70,7 @@ export function ExplorerTile({ item, bind, selected, cut, dropping, renaming, on
 					{item.kind === "document" && item.record.isSpecimen ? <SpecimenMark /> : null}
 				</span>
 				<span className="tabular flex min-w-0 items-center gap-1.5 text-sm text-[var(--ink-muted)]">
-					<span className="min-w-0 truncate">{metaOf(item)}</span>
+					<span className="min-w-0 truncate">{metaOf(item, showProject)}</span>
 					{status ? (
 						<>
 							<span aria-hidden>·</span>

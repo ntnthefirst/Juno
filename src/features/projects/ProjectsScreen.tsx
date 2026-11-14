@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
+import type { DocumentRecord, Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
@@ -16,8 +16,8 @@ import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
 import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
-import { DocumentTakeover, type DocumentTakeoverRequest } from "../documents/DocumentTakeover";
-import { GenerateDialog } from "../documents/GenerateDialog";
+import { DocumentTakeover } from "../documents/DocumentTakeover";
+import { takeoverLabel, type DocumentTakeoverRequest } from "../documents/takeover";
 import { ProjectDetail, type ProjectTab } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 import { ProjectGrid } from "./ProjectGrid";
@@ -90,10 +90,13 @@ export function ProjectsScreen() {
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
 	// A time entry is a form too: null is closed, an entry of null is a new one.
 	const [timeForm, setTimeForm] = useState<{ entry: TimeEntry | null } | null>(null);
-	const [tab, setTab] = useState<ProjectTab>("notes");
-	// A document from a template is a page of its own, the same as on a client.
-	const [generating, setGenerating] = useState(false);
+	// A request from elsewhere may name the Documents tab and a document to preview there.
+	const [tab, setTab] = useState<ProjectTab>(() => (peekPending("project")?.tab === "documents" ? "documents" : "notes"));
+	const [openDocumentId, setOpenDocumentId] = useState<string | null>(() => peekPending("project")?.documentId ?? null);
+	// Signing, sending or writing a page takes the screen, the same as on a client.
 	const [documentPage, setDocumentPage] = useState<DocumentTakeoverRequest | null>(null);
+	// A page deleted from its own view, offered back from here.
+	const [deletedDocument, setDeletedDocument] = useState<DocumentRecord | null>(null);
 	const [deleted, setDeleted] = useState<ProjectSummary | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
@@ -190,7 +193,7 @@ export function ProjectsScreen() {
 	// nothing floats above it: a dialog on top handles Escape itself, and
 	// without this guard both would fire.
 	useEffect(() => {
-		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || generating || documentPage) return;
+		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || documentPage) return;
 		function onKey(event: KeyboardEvent) {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
 			// A side panel or a file preview inside the record closes first. Their
@@ -200,7 +203,7 @@ export function ProjectsScreen() {
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, editing, scheduleForm, timeForm, generating, documentPage, clearSelection]);
+	}, [selectedId, editing, scheduleForm, timeForm, documentPage, clearSelection]);
 
 	const rows = load.status === "ready" ? load.rows : null;
 	const needle = term.trim().toLowerCase();
@@ -261,17 +264,11 @@ export function ProjectsScreen() {
 					{ label: "Projects", onSelect: () => setEditing(null) },
 					{ label: "Edit project" },
 				]
-			: selectedId !== null && generating
-				? [
-						{ label: "Projects", onSelect: clearSelection },
-						{ label: selectedName ?? "Project", onSelect: () => setGenerating(false) },
-						{ label: "New document" },
-					]
-				: selectedId !== null && documentPage !== null
+			: selectedId !== null && documentPage !== null
 				? [
 						{ label: "Projects", onSelect: clearSelection },
 						{ label: selectedName ?? "Project", onSelect: () => setDocumentPage(null) },
-						{ label: documentPage.kind === "sign" ? `Sign ${documentPage.record.title}` : "New message" },
+						{ label: takeoverLabel(documentPage) },
 					]
 				: selectedId !== null && timeForm !== null
 				? [
@@ -304,24 +301,15 @@ export function ProjectsScreen() {
 		return (
 			<DocumentTakeover
 				request={documentPage}
-				onClose={(sentence) => {
+				onTitleChange={(title) =>
+					setDocumentPage((current) => (current && current.record.title !== title ? { ...current, record: { ...current.record, title } } : current))
+				}
+				onClose={(sentence, gone) => {
 					setDocumentPage(null);
+					setTab("documents");
 					setDetailVersion((version) => version + 1);
-					if (sentence) setNotice(sentence);
-				}}
-			/>
-		);
-	}
-
-	if (selectedId !== null && generating) {
-		return (
-			<GenerateDialog
-				lockedProjectId={selectedId}
-				backLabel="Project"
-				onClose={() => setGenerating(false)}
-				onGenerated={() => {
-					setGenerating(false);
-					setDetailVersion((version) => version + 1);
+					if (gone) setDeletedDocument(gone);
+					else if (sentence) setNotice(sentence);
 				}}
 			/>
 		);
@@ -371,7 +359,8 @@ export function ProjectsScreen() {
 					onChanged={refreshList}
 					onEdit={(project) => setEditing(project)}
 					onSchedule={setScheduleForm}
-					onGenerateDocument={() => setGenerating(true)}
+					openDocumentId={openDocumentId}
+					onOpenedDocument={() => setOpenDocumentId(null)}
 					onDocumentTakeover={setDocumentPage}
 					onTimeForm={(entry) => setTimeForm({ entry })}
 					onNameChange={setSelectedName}
@@ -381,7 +370,23 @@ export function ProjectsScreen() {
 						refreshList();
 					}}
 				/>
-				{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
+				{deletedDocument ? (
+					<Toast
+						message={`${deletedDocument.title} deleted.`}
+						actionLabel="Undo"
+						onAction={() => {
+							const back = deletedDocument;
+							setDeletedDocument(null);
+							void window.juno.documents
+								.restore(back.id)
+								.then(() => setDetailVersion((version) => version + 1))
+								.catch((cause: unknown) => setNotice(messageOf(cause)));
+						}}
+						onDismiss={() => setDeletedDocument(null)}
+					/>
+				) : notice ? (
+					<Toast message={notice} onDismiss={() => setNotice(null)} />
+				) : null}
 			</>
 		);
 	}

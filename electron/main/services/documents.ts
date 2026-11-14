@@ -244,6 +244,24 @@ export async function list(
 }
 
 /**
+ * The documents kept under no client and no project, newest first. Nothing in
+ * the window makes one any more (decision 81), but an older install, an agent
+ * or a mail attachment saved before may have, and the Overview lists them so
+ * each can be given a place.
+ */
+export async function listUnfiled(db: Db = getDb()): Promise<DocumentRecord[]> {
+	const rows = selectWithNames(db)
+		.where(and(isNull(documents.deletedAt), isNull(documents.clientId), isNull(documents.projectId)))
+		.orderBy(desc(documents.createdAt), desc(documents.id))
+		.all();
+	const summaries = versions.summaries(
+		rows.map((row) => row.document.id),
+		db,
+	);
+	return rows.map((row) => toRecord(row.document, row, summaries.get(row.document.id)));
+}
+
+/**
  * The documents directly in one node of the tree (decision 75): in a folder
  * the owner made, or, without one, kept under exactly that client and project
  * and in no folder. A client's node does not list its projects' documents;

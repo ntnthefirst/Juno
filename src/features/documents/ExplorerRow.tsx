@@ -4,7 +4,7 @@ import { modifiedLabel } from "../../lib/modified-label";
 import { formatBytes } from "../projects/format";
 import { belongsTo } from "./belongs-to";
 import { SpecimenMark } from "./SpecimenMark";
-import { modifiedOf, nameOf, sizeOf, typeOf, type ExplorerItem } from "./explorer-items";
+import { modifiedOf, nameOf, projectOf, sizeOf, typeOf, type ExplorerItem, type WhereColumn } from "./explorer-items";
 import { ExplorerIcon } from "./ExplorerIcon";
 import { STATUS_TONES, statusOf } from "./item-status";
 import { OFFSCREEN_ROW } from "./offscreen-row";
@@ -25,7 +25,7 @@ type ExplorerRowProps = {
 	onRename: (name: string) => void;
 	onRenameEnd: () => void;
 	statusLabels: ReadonlyMap<string, string>;
-	showWhere: boolean;
+	whereColumn: WhereColumn | null;
 };
 
 /** Where a document is kept, for a search result that is not in the open folder. */
@@ -49,7 +49,7 @@ export function ExplorerRow({
 	onRename,
 	onRenameEnd,
 	statusLabels,
-	showWhere,
+	whereColumn,
 }: ExplorerRowProps) {
 	const status = statusOf(item, statusLabels);
 	const size = sizeOf(item);
@@ -79,7 +79,9 @@ export function ExplorerRow({
 				)}
 				{item.kind === "document" && item.record.isSpecimen ? <SpecimenMark /> : null}
 			</span>
-			{showWhere ? <span className="min-w-0 truncate text-[var(--ink-muted)]">{whereOf(item)}</span> : null}
+			{whereColumn ? (
+				<span className="min-w-0 truncate text-[var(--ink-muted)]">{whereColumn === "project" ? projectOf(item) : whereOf(item)}</span>
+			) : null}
 			<span className="min-w-0 truncate text-[var(--ink-muted)]">{typeOf(item)}</span>
 			<span className="tabular truncate text-right text-[var(--ink-muted)]">{size === null ? "" : formatBytes(size)}</span>
 			<span className="tabular truncate text-[var(--ink-muted)]">{modifiedLabel(modifiedOf(item))}</span>

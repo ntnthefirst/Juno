@@ -27,6 +27,14 @@ export function templateItem(template: DocumentTemplateEntry): ExplorerItem {
 	return { kind: "template", key: templateKey(template.id), template };
 }
 
+/** The extra column of a list: where each document is kept, or which of the client's projects it is under. */
+export type WhereColumn = "where" | "project";
+
+/** The project a client's document is kept under, or nothing for one of the client's own. */
+export function projectOf(item: ExplorerItem): string {
+	return item.kind === "document" ? (item.record.projectName ?? "") : "";
+}
+
 export type SortColumn = "name" | "type" | "size" | "modified";
 export type ExplorerSort = { by: SortColumn; descending: boolean };
 

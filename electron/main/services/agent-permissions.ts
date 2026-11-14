@@ -105,6 +105,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"documents.list",
 		"documents.list_from_thread",
 		"documents.list_in",
+		"documents.list_unfiled",
 		"documents.list_versions",
 		"documents.preview",
 		"documents.signatures",

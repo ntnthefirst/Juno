@@ -23,7 +23,6 @@ import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { RecordLink } from "../../components/RecordLink";
 import { requestOpenClient } from "../../lib/open-client";
-import { requestOpen } from "../../lib/open-entity";
 import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { addDays, todayIso } from "../calendar/dates";
 import { openNewRecord } from "../../lib/new-record";
@@ -50,7 +49,7 @@ import { dayLabel, formatDuration } from "./time-format";
 import { listAllThreads } from "../../lib/list-all-threads";
 import { RecordSkeleton } from "../../components/RecordSkeleton";
 
-export type ProjectTab = "notes" | "mail" | "timeline" | "time" | "calendar";
+export type ProjectTab = "notes" | "documents" | "mail" | "timeline" | "time" | "calendar";
 
 type ProjectDetailProps = {
 	projectId: string;
@@ -63,9 +62,10 @@ type ProjectDetailProps = {
 	onEdit: (project: Project) => void;
 	/** A date or a reminder is a form, so the screen draws it as a page. */
 	onSchedule: (form: ScheduleForm) => void;
-	/** So is a document from a template. */
-	onGenerateDocument: () => void;
-	/** And signing or sending one of its documents. */
+	/** A document asked for from elsewhere, previewed on the Documents tab once it is in. */
+	openDocumentId?: string | null;
+	onOpenedDocument?: () => void;
+	/** And signing, sending or writing a page of one of its documents. */
 	onDocumentTakeover: (request: DocumentTakeoverRequest) => void;
 	/** And a time entry, new or edited. */
 	onTimeForm: (entry: TimeEntry | null) => void;
@@ -88,6 +88,7 @@ type Loaded = {
 	assets: ProjectAsset[];
 	commands: ProjectCommand[];
 	threadCount: number;
+	documentCount: number;
 	upcoming: ScheduleRow[];
 	loggedMinutes: number;
 };
@@ -104,9 +105,10 @@ function typingIn(target: EventTarget | null): boolean {
  * One project: what it is, what has happened on it, and what is attached.
  *
  * It takes the whole working area rather than sitting beside the list. The
- * header names it and offers Add and the "..." menu; five tabs hold the rest.
- * Notes is the first, with the details beside it and the places and files
- * below. The trail in the title bar says where you are and how to get back.
+ * header names it and offers Add and the "..." menu; six tabs hold the rest.
+ * Notes is the first, with the details beside it and the links and commands
+ * below. Documents holds its documents and, under them, the project's own
+ * files. The trail in the title bar says where you are and how to get back.
  */
 export function ProjectDetail({
 	version = 0,
@@ -117,7 +119,8 @@ export function ProjectDetail({
 	onChanged,
 	onEdit,
 	onSchedule,
-	onGenerateDocument,
+	openDocumentId = null,
+	onOpenedDocument,
 	onDocumentTakeover,
 	onTimeForm,
 	onNameChange,
@@ -140,7 +143,7 @@ export function ProjectDetail({
 		if (!project) throw new Error("That project no longer exists.");
 
 		const today = todayIso();
-		const [client, statusSet, links, assets, commands, threads, items, totals] = await Promise.all([
+		const [client, statusSet, links, assets, commands, threads, items, totals, projectDocuments] = await Promise.all([
 			project.clientId ? window.juno.clients.get(project.clientId) : Promise.resolve(null),
 			window.juno.reference.getSet("project_status"),
 			window.juno.projects.links.list(projectId),
@@ -154,6 +157,7 @@ export function ProjectDetail({
 				projectId,
 			}),
 			window.juno.time.total(projectId),
+			window.juno.documents.list({ projectId }),
 		]);
 
 		return {
@@ -167,6 +171,7 @@ export function ProjectDetail({
 			assets,
 			commands,
 			threadCount: threads.length,
+			documentCount: projectDocuments.length,
 			upcoming: scheduleRows(items, today),
 			loggedMinutes: totals.loggedMinutes,
 		};
@@ -331,7 +336,7 @@ export function ProjectDetail({
 		);
 	}
 
-	const { client, status, links, assets, commands, threadCount, upcoming, loggedMinutes } = data;
+	const { client, status, links, assets, commands, threadCount, documentCount, upcoming, loggedMinutes } = data;
 	const current = data.project;
 	const project = current;
 	const firstCommand = commands[0] ?? null;
@@ -340,6 +345,7 @@ export function ProjectDetail({
 
 	const tabs: TabItem<ProjectTab>[] = [
 		{ id: "notes", label: "Notes" },
+		{ id: "documents", label: "Documents", count: documentCount > 0 ? documentCount : null },
 		{ id: "mail", label: "Mail", count: threadCount > 0 ? threadCount : null, countTone: "warn" },
 		{ id: "timeline", label: "Timeline" },
 		{ id: "time", label: "Time" },
@@ -449,6 +455,83 @@ export function ProjectDetail({
 						onEditEntry={(entry) => onTimeForm(entry)}
 						onChanged={() => reload()}
 					/>
+				) : tab === "documents" ? (
+					<DocumentsPanel
+						scope={{ projectId: current.id }}
+						name={current.name}
+						openDocumentId={openDocumentId}
+						onOpenedDocument={onOpenedDocument}
+						onChanged={() => reload()}
+						onTakeOver={onDocumentTakeover}
+					>
+						<section aria-label="Project files" className="mt-8">
+							<SectionHeading
+								action={
+									<div className="flex items-center gap-2">
+										<Button
+											size="dense"
+											onClick={() =>
+												void act(() => window.juno.projects.assets.choose(project.id, "managed"), true)
+											}
+										>
+											<Icon name="add" />
+											Add files
+										</Button>
+										<MenuButton
+											ariaLabel="Other ways to add a file"
+											items={[
+												{
+													id: "link",
+													label: "Link to files, without copying",
+													icon: "link",
+													onSelect: () =>
+														void act(
+															() => window.juno.projects.assets.choose(project.id, "linked"),
+															true,
+														),
+												},
+												{
+													id: "storage",
+													label: "Where the files are kept",
+													icon: "projects",
+													separatorBefore: true,
+													onSelect: () => setStorageOpen(true),
+												},
+											]}
+										/>
+									</div>
+								}
+								as="h3"
+							>
+								Project files
+							</SectionHeading>
+
+							{assets.length === 0 ? (
+								<p className="text-sm text-[var(--ink-muted)]">
+									No project files yet. They are kept in the project's own folder on disk, or linked where
+									they are, which is what a large export wants. Contracts and other documents go in the list above.
+								</p>
+							) : (
+								<AssetList
+									assets={assets}
+									coverAssetId={project.coverAssetId}
+									previews
+									onPreview={(asset) => setPreviewAsset(asset.id)}
+									onOpen={(asset) =>
+										void window.juno.projects.assets.open(asset.id).catch((cause: unknown) => {
+											setNotice(messageOf(cause));
+										})
+									}
+									onSetCover={(asset) =>
+										void act(() => window.juno.projects.setCover(project.id, asset?.id ?? null), true)
+									}
+									onRemove={(asset) =>
+										void act(() => window.juno.projects.assets.remove(asset.id), true)
+									}
+								/>
+							)}
+						</section>
+					</DocumentsPanel>
 				) : tab === "calendar" ? (
 					<ProjectCalendar
 						projectId={current.id}
@@ -531,18 +614,6 @@ export function ProjectDetail({
 								<MarkdownNotes text={current.description} />
 							</section>
 						) : null}
-
-						<div>
-							{/* Opening one goes to the Documents screen, the same as the palette. */}
-							<DocumentsPanel
-								scope={{ projectId: current.id }}
-								name={current.name}
-								onGenerate={onGenerateDocument}
-								onOpen={(id, title) => requestOpen({ kind: "document", id, name: title })}
-								onChanged={() => undefined}
-								onTakeOver={onDocumentTakeover}
-							/>
-						</div>
 
 						<LinkedNotes projectId={current.id} />
 
@@ -637,73 +708,6 @@ export function ProjectDetail({
 								</li>
 							))}
 						</ul>
-					)}
-				</section>
-
-				<section>
-					<SectionHeading
-						action={
-							<div className="flex items-center gap-2">
-								<Button
-									size="dense"
-									onClick={() =>
-										void act(() => window.juno.projects.assets.choose(project.id, "managed"), true)
-									}
-								>
-									<Icon name="add" />
-									Add files
-								</Button>
-								<MenuButton
-									ariaLabel="Other ways to add a file"
-									items={[
-										{
-											id: "link",
-											label: "Link to files, without copying",
-											icon: "link",
-											onSelect: () =>
-												void act(
-													() => window.juno.projects.assets.choose(project.id, "linked"),
-													true,
-												),
-										},
-										{
-											id: "storage",
-											label: "Where the files are kept",
-											icon: "projects",
-											separatorBefore: true,
-											onSelect: () => setStorageOpen(true),
-										},
-									]}
-								/>
-							</div>
-						}
-					>
-						Files
-					</SectionHeading>
-
-					{assets.length === 0 ? (
-						<p className="text-sm text-[var(--ink-muted)]">
-							No files yet. Added files are copied into the project's folder. Linked files stay
-							where they are, which is what a large export wants.
-						</p>
-					) : (
-						<AssetList
-							assets={assets}
-							coverAssetId={project.coverAssetId}
-							previews
-							onPreview={(asset) => setPreviewAsset(asset.id)}
-							onOpen={(asset) =>
-								void window.juno.projects.assets.open(asset.id).catch((cause: unknown) => {
-									setNotice(messageOf(cause));
-								})
-							}
-							onSetCover={(asset) =>
-								void act(() => window.juno.projects.setCover(project.id, asset?.id ?? null), true)
-							}
-							onRemove={(asset) =>
-								void act(() => window.juno.projects.assets.remove(asset.id), true)
-							}
-						/>
 					)}
 				</section>
 
@@ -922,12 +926,14 @@ function Detail({ label, value, onOpen }: DetailProps) {
 type SectionHeadingProps = {
 	children: string;
 	action?: React.ReactNode;
+	/** h3 for a section inside another, such as the files under a project's documents. */
+	as?: "h2" | "h3";
 };
 
-function SectionHeading({ children, action }: SectionHeadingProps) {
+function SectionHeading({ children, action, as: Heading = "h2" }: SectionHeadingProps) {
 	return (
 		<div className="mb-2 flex items-center justify-between gap-4">
-			<h2 className="text-h3">{children}</h2>
+			<Heading className="text-h3">{children}</Heading>
 			{action}
 		</div>
 	);

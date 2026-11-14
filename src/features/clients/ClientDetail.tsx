@@ -186,10 +186,10 @@ type ClientDetailProps = {
 	onEditLink: (link: ClientLink | null) => void;
 	/** `initialKind` only matters when `note` is null, for "Log a call". */
 	onEditNote: (note: ClientNote | null, initialKind?: ClientNoteKind) => void;
-	/** A document from a template is a page of its own, so the screen owns it. */
-	onGenerateDocument: () => void;
-	onOpenDocument: (id: string, title: string) => void;
-	/** Signing or sending one of its documents, a page the screen shows in place of the client. */
+	/** A document asked for from elsewhere, previewed on the Documents tab once it is in. */
+	openDocumentId?: string | null;
+	onOpenedDocument?: () => void;
+	/** Signing, sending or writing a page, which the screen shows in place of the client. */
 	onDocumentTakeover: (request: DocumentTakeoverRequest) => void;
 	/** The tab to open on, for coming back from a page that started from one. */
 	initialTab?: TabId;
@@ -220,8 +220,8 @@ export function ClientDetail({
 	onEditAddress,
 	onEditLink,
 	onEditNote,
-	onGenerateDocument,
-	onOpenDocument,
+	openDocumentId = null,
+	onOpenedDocument,
 	onDocumentTakeover,
 	initialTab = "overview",
 	onTabChange,
@@ -391,7 +391,7 @@ export function ClientDetail({
 					requestOpen({ kind: "project", id: entry.entityId, name: entry.title });
 					return;
 				case "document":
-					onOpenDocument(entry.entityId, entry.title);
+					requestOpen({ kind: "document", id: entry.entityId, name: entry.title });
 					return;
 				case "mail":
 					requestOpen({ kind: "thread", id: entry.entityId, messageId: null });
@@ -680,8 +680,8 @@ export function ClientDetail({
 					<DocumentsPanel
 						scope={{ clientId }}
 						name={client.name}
-						onGenerate={onGenerateDocument}
-						onOpen={onOpenDocument}
+						openDocumentId={openDocumentId}
+						onOpenedDocument={onOpenedDocument}
 						onChanged={refresh}
 						onTakeOver={onDocumentTakeover}
 					/>

@@ -11,7 +11,7 @@ import {
 } from "../../lib/list-selection";
 import { stagger } from "../../lib/motion";
 import { DRAG_TYPE, encodeDrag, type DragPayload } from "./drop-routing";
-import type { ExplorerItem, ExplorerSort, SortColumn } from "./explorer-items";
+import type { ExplorerItem, ExplorerSort, SortColumn, WhereColumn } from "./explorer-items";
 import { ExplorerRow } from "./ExplorerRow";
 import { ExplorerTile } from "./ExplorerTile";
 
@@ -25,8 +25,11 @@ type ExplorerViewProps = {
 	/** Null for a list in an order of its own, such as search results by relevance. */
 	sort: ExplorerSort | null;
 	onSort?: (by: SortColumn) => void;
-	/** Adds a column for where each document is kept, for results from everywhere. */
-	showWhere?: boolean;
+	/**
+	 * Adds a column after the name: where each document is kept, for results
+	 * from everywhere, or which project, for a client's documents.
+	 */
+	whereColumn?: WhereColumn | null;
 	renamingKey: string | null;
 	onRename: (item: ExplorerItem, name: string) => void;
 	onRenameEnd: () => void;
@@ -53,7 +56,7 @@ type ExplorerViewProps = {
 	empty: ReactNode;
 };
 
-/** The columns of the list: name, (where), type, size, modified, status, versions. */
+/** The columns of the list: name, (where or project), type, size, modified, status, versions. */
 function columnsFor(showWhere: boolean): string {
 	return showWhere
 		? "minmax(0,1fr) minmax(0,200px) 112px 76px 136px 104px 56px"
@@ -97,7 +100,7 @@ export function ExplorerView({
 	statusLabels,
 	sort,
 	onSort,
-	showWhere = false,
+	whereColumn = null,
 	renamingKey,
 	onRename,
 	onRenameEnd,
@@ -272,9 +275,9 @@ export function ExplorerView({
 		);
 	}
 
-	const grid = columnsFor(showWhere);
-	const headers = showWhere
-		? [HEADERS[0]!, { label: "Where", column: null }, ...HEADERS.slice(1)]
+	const grid = columnsFor(whereColumn !== null);
+	const headers = whereColumn
+		? [HEADERS[0]!, { label: whereColumn === "project" ? "Project" : "Where", column: null }, ...HEADERS.slice(1)]
 		: HEADERS;
 
 	const listbox = {
@@ -346,7 +349,7 @@ export function ExplorerView({
 								onRename={(name) => onRename(item, name)}
 								onRenameEnd={onRenameEnd}
 								statusLabels={statusLabels}
-								showWhere={showWhere}
+								whereColumn={whereColumn}
 							/>
 						))}
 					</div>
@@ -365,6 +368,7 @@ export function ExplorerView({
 							onRename={(name) => onRename(item, name)}
 							onRenameEnd={onRenameEnd}
 							statusLabels={statusLabels}
+							showProject={whereColumn === "project"}
 							style={stagger(index)}
 							eager={index < EAGER_TILES}
 						/>

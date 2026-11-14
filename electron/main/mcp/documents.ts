@@ -466,6 +466,17 @@ export const documentTools: ToolDescriptor[] = [
 			}),
 	},
 	{
+		name: "documents.list_unfiled",
+		title: "List documents without a client or project",
+		description:
+			"Documents kept under no client and no project, newest first. The owner sees them on the Overview, " +
+			"as files to give a place. Give one a place with documents.link or documents.move.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: { type: "object", properties: {}, additionalProperties: false },
+		handler: async () => documents.listUnfiled(),
+	},
+	{
 		name: "documents.link",
 		title: "Keep a document under a client or a project",
 		description:

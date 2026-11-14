@@ -3,6 +3,9 @@ import { useState } from "react";
 import type { MailOutboxMessage } from "@shared/types";
 import { tokensToLabels } from "@shared/mail-variables";
 import { Button } from "../../components/Button";
+import { RecordLink } from "../../components/RecordLink";
+import { requestOpenClient } from "../../lib/open-client";
+import { requestOpen } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
 import { framed } from "../../lib/framed-preview";
 import { formatFull } from "./format";
@@ -44,6 +47,7 @@ export function OutboxDetail({ message, onEdit, onDelete, onChanged, onNotice }:
 
 	// Anything that has not gone out is edited or deleted (decision 78).
 	const editable = message.state !== "sending" && message.state !== "sent";
+	const { clientId, clientName, threadId } = message;
 
 	return (
 		<div className="px-8 py-6">
@@ -71,16 +75,59 @@ export function OutboxDetail({ message, onEdit, onDelete, onChanged, onNotice }:
 						<dd data-selectable>{message.cc.map((a) => a.address).join(", ")}</dd>
 					</>
 				) : null}
-				{message.clientName ? (
+				{clientName ? (
 					<>
 						<dt className="text-[var(--ink-muted)]">Client</dt>
-						<dd>{message.clientName}</dd>
+						<dd>
+							{clientId ? (
+								<RecordLink label={`Open ${clientName}`} onOpen={() => requestOpenClient(clientId, clientName)}>
+									{clientName}
+								</RecordLink>
+							) : (
+								clientName
+							)}
+						</dd>
 					</>
 				) : null}
-				{message.attachments.length > 0 ? (
+				{threadId ? (
+					<>
+						<dt className="text-[var(--ink-muted)]">Reply to</dt>
+						<dd>
+							<RecordLink onOpen={() => requestOpen({ kind: "thread", id: threadId, messageId: null })}>The conversation</RecordLink>
+						</dd>
+					</>
+				) : null}
+				{message.attachments.length > 0 || message.files.length > 0 ? (
 					<>
 						<dt className="text-[var(--ink-muted)]">Attached</dt>
-						<dd>{message.attachments.map((a) => a.filename).join(", ")}</dd>
+						<dd className="flex min-w-0 flex-wrap gap-x-2">
+							{/* A document opens its preview, and closing it comes back here. */}
+							{message.attachments.map((attachment) => (
+								<RecordLink
+									key={attachment.id}
+									label={`Preview ${attachment.filename}`}
+									onOpen={() => requestOpen({ kind: "document", id: attachment.documentId, name: attachment.filename })}
+								>
+									{attachment.filename}
+								</RecordLink>
+							))}
+							{message.files.map((file) => {
+								const kept = file.documentId;
+								return kept ? (
+									<RecordLink
+										key={file.id}
+										label={`Preview ${file.fileName}`}
+										onOpen={() => requestOpen({ kind: "document", id: kept, name: file.fileName })}
+									>
+										{file.fileName}
+									</RecordLink>
+								) : (
+									<span key={file.id} className="truncate">
+										{file.fileName}
+									</span>
+								);
+							})}
+						</dd>
 					</>
 				) : null}
 				{message.sentAt ? (

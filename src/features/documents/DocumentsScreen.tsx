@@ -950,7 +950,7 @@ export function DocumentsScreen() {
 	if (mode.kind === "components") {
 		return (
 			<div className="h-full min-h-0">
-				<ComponentsScreen onOpen={(id) => setMode({ kind: "component", id, from: null })} onBack={toExplorer} />
+				<ComponentsScreen onOpen={(id) => setMode({ kind: "component", id, from: null })} />
 			</div>
 		);
 	}

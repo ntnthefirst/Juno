@@ -13,17 +13,16 @@ type Load =
 
 type ComponentsScreenProps = {
 	onOpen: (id: string) => void;
-	/** Back to the list of templates. */
-	onBack: () => void;
 };
 
 /**
  * The components for document templates: pieces of a page made once and
  * placed in many templates (decision 65). It sits one step in from the
  * Templates folder in Documents, which is where a template is made, and follows its list:
- * a name and what it asks for, the new button at the right.
+ * a name and what it asks for, the new button at the right. The way back is
+ * the title bar's, Templates in its path.
  */
-export function ComponentsScreen({ onOpen, onBack }: ComponentsScreenProps) {
+export function ComponentsScreen({ onOpen }: ComponentsScreenProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -75,9 +74,6 @@ export function ComponentsScreen({ onOpen, onBack }: ComponentsScreenProps) {
 		<div className="flex h-full flex-col p-8">
 			<div className="mb-6 w-full">
 				<div className="flex items-center gap-3">
-					<Button size="dense" onClick={onBack}>
-						Templates
-					</Button>
 					<h2 className="text-h3">Components</h2>
 					{load.status === "ready" ? (
 						<span className="text-sm text-[var(--ink-muted)]">

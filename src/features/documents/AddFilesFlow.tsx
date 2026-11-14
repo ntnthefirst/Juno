@@ -379,7 +379,7 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 								Keep as a separate document
 							</Button>
 							<Button variant="primary" disabled={busy} onClick={() => void answer("version")}>
-								{busy ? "Adding" : `Add as a new version of ${match.title}`}
+								{busy ? "Adding" : "Add as a new version"}
 							</Button>
 						</>
 					)}

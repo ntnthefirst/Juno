@@ -19,7 +19,12 @@ import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
 import { describeOutcome, type ImportItem } from "../../lib/pdf-drop";
-import { ImportFlow } from "../documents/ImportFlow";
+import { useClickGate } from "../../lib/click-timing";
+import { fileTypeLabel } from "../../lib/file-type";
+import { FileQuickLook } from "../../components/FileQuickLook";
+import type { DocumentPlace } from "@shared/types";
+import { AddFilesFlow } from "../documents/AddFilesFlow";
+import { AttachmentSaveColumn } from "./AttachmentSaveColumn";
 import { AttachmentIcon } from "../../components/AttachmentIcon";
 import { LinkPopover } from "./LinkPopover";
 import { PersonChip } from "./PersonChip";
@@ -34,6 +39,8 @@ type MessageViewProps = {
 	onNotice: (message: string) => void;
 	onReply: (messageId: string, mode: MailReplyMode) => void;
 	clientLinked: boolean;
+	/** The client the conversation is linked to: an attachment saved to documents is kept under it. */
+	clientId: string | null;
 	/** The project the conversation is filed under: an attachment can go into its files. */
 	project: { id: string; name: string } | null;
 	/** A file action on this message changed it (read, flagged): reload the thread. */
@@ -44,10 +51,6 @@ type MessageViewProps = {
 function scrollSideways(event: WheelEvent<HTMLElement>) {
 	if (event.deltaY === 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
 	event.currentTarget.scrollLeft += event.deltaY;
-}
-
-function isPdf(attachment: MailAttachment): boolean {
-	return attachment.mimeType === "application/pdf" || attachment.filename.toLowerCase().endsWith(".pdf");
 }
 
 const TRUSTED_EMAILS_KEY = "juno.mail.trustedEmails";
@@ -96,6 +99,7 @@ export function MessageView({
 	onReply,
 	onChanged,
 	clientLinked,
+	clientId,
 	project,
 }: MessageViewProps) {
 	const senderAddress = message.from?.address.toLowerCase() ?? null;
@@ -103,7 +107,9 @@ export function MessageView({
 	const senderTrusted = senderAddress !== null && readTrust(TRUSTED_SENDERS_KEY).includes(senderAddress);
 	const senderBlocked = senderAddress !== null && readTrust(BLOCKED_SENDERS_KEY).includes(senderAddress);
 	const [detailsOpen, setDetailsOpen] = useState(false);
-	const [importItems, setImportItems] = useState<ImportItem[] | null>(null);
+	const [importItems, setImportItems] = useState<{ items: ImportItem[]; place: DocumentPlace } | null>(null);
+	// The attachment shown in the full preview, by its place among the visible ones.
+	const [previewAt, setPreviewAt] = useState<number | null>(null);
 	const [body, setBody] = useState<MailMessageBody | null>(null);
 	const [bodyError, setBodyError] = useState<string | null>(null);
 	const [trustDecision, setTrustDecision] = useState<"unknown" | "trusted" | "blocked">(
@@ -126,6 +132,20 @@ export function MessageView({
 	const [findQuery, setFindQuery] = useState("");
 	const [findResult, setFindResult] = useState({ count: 0, current: -1 });
 	const frame = useRef<HTMLIFrameElement>(null);
+	const attachmentClicks = useClickGate<string>({
+		single: (id) => {
+			const at = message.attachments.filter((a) => !a.isInline).findIndex((a) => a.id === id);
+			if (at >= 0) setPreviewAt(at);
+		},
+		double: (id) => {
+			const attachment = message.attachments.find((a) => a.id === id);
+			if (attachment && canOpenHere && isOpenableAttachment(attachment.filename)) void openFile(id);
+			else {
+				const at = message.attachments.filter((a) => !a.isInline).findIndex((a) => a.id === id);
+				if (at >= 0) setPreviewAt(at);
+			}
+		},
+	});
 	const menu = useContextMenu();
 
 	useEffect(() => {
@@ -446,6 +466,13 @@ export function MessageView({
 	const canOpenHere = trusted || (senderAddress !== null && mine.has(senderAddress));
 	const from = message.from ? displayName(message.from) : "(unknown sender)";
 	const visibleAttachments = message.attachments.filter((a) => !a.isInline);
+	const canOpenFile = (attachment: MailAttachment) => canOpenHere && isOpenableAttachment(attachment.filename);
+	const saveToDocuments = (attachment: MailAttachment, place: DocumentPlace) =>
+		setImportItems({
+			items: [{ label: attachment.filename, source: { kind: "attachment", attachmentId: attachment.id } }],
+			place,
+		});
+	const threadPlace: DocumentPlace = { clientId, projectId: project?.id ?? null, folderId: null };
 	const frameSrc = `${MAIL_FRAME_ORIGIN}/message/${message.id}${remoteImages ? "?images=1" : ""}`;
 	const frameHeight = measuredFrame?.messageId === message.id ? measuredFrame.height : null;
 	const ariaLabel = `Actions for message from ${from}`;
@@ -662,22 +689,12 @@ export function MessageView({
 											icon: "export",
 											onSelect: () => void save(attachment.id),
 										},
-										...(isPdf(attachment)
-											? [
-													{
-														id: "import",
-														label: "Add to documents",
-														icon: "documents" as const,
-														onSelect: () =>
-															setImportItems([
-																{
-																	label: attachment.filename,
-																	source: { kind: "attachment" as const, attachmentId: attachment.id },
-																},
-															]),
-													},
-												]
-											: []),
+										{
+											id: "import",
+											label: "Save to documents",
+											icon: "documents",
+											onSelect: () => saveToDocuments(attachment, threadPlace),
+										},
 										...(project
 											? [
 													{
@@ -697,10 +714,9 @@ export function MessageView({
 										>
 											<button
 												type="button"
-												disabled={!canOpen}
-												onClick={() => void openFile(attachment.id)}
-												title={canOpen ? `Open ${attachment.filename}` : attachment.mimeType}
-												className="flex min-w-0 items-center gap-2 text-left disabled:cursor-default"
+												onClick={(event) => attachmentClicks.click(attachment.id, event.detail)}
+												title={`Preview ${attachment.filename}`}
+												className="flex min-w-0 items-center gap-2 rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 											>
 												<AttachmentIcon filename={attachment.filename} mimeType={attachment.mimeType} />
 												<span className="flex min-w-0 max-w-[220px] flex-col">
@@ -723,8 +739,8 @@ export function MessageView({
 							</ul>
 							<p className="mt-1 text-micro text-[var(--ink-faint)]">
 								{canOpenHere
-									? "Documents, images and media open in your default app. Anything else is shown in its folder."
-									: "Trust the sender to open attachments from here."}
+									? "Click to preview. A double click opens documents, images and media in your default app."
+									: "Click to preview. Trust the sender to open attachments in their app from here."}
 							</p>
 						</div>
 					) : null}
@@ -858,10 +874,57 @@ export function MessageView({
 					ariaLabel={ariaLabel}
 				/>
 			) : null}
+			{previewAt !== null && visibleAttachments.length > 0 ? (
+				<FileQuickLook
+					files={visibleAttachments.map((attachment) => ({
+						key: attachment.id,
+						name: attachment.filename,
+						meta: [fileTypeLabel(attachment.filename, attachment.mimeType), formatBytes(attachment.size)].join(" · "),
+						source: { kind: "attachment", attachmentId: attachment.id },
+					}))}
+					index={previewAt}
+					onIndex={setPreviewAt}
+					onClose={() => setPreviewAt(null)}
+					closeLabel="Back to the message"
+					{...(canOpenHere ? { onOpen: (file: { key: string }) => void openFile(file.key) } : {})}
+					actions={(file) => {
+						const attachment = visibleAttachments.find((entry) => entry.id === file.key);
+						return attachment ? (
+							<>
+								<Button size="dense" disabled={!canOpenFile(attachment)} onClick={() => void openFile(attachment.id)}>
+									Open
+								</Button>
+								<Button size="dense" onClick={() => void save(attachment.id)}>
+									Download
+								</Button>
+								<Button size="dense" onClick={() => void reveal(attachment.id)}>
+									Show in folder
+								</Button>
+							</>
+						) : null;
+					}}
+					column={(file) => {
+						const attachment = visibleAttachments.find((entry) => entry.id === file.key);
+						return attachment ? (
+							<AttachmentSaveColumn
+								key={attachment.id}
+								clientId={clientId}
+								projectId={project?.id ?? null}
+								onSave={(owner) =>
+									saveToDocuments(attachment, { clientId: owner.clientId || null, projectId: owner.projectId || null, folderId: null })
+								}
+								{...(project
+									? { onAddToProject: () => void addToProject(attachment.id, attachment.filename), projectName: project.name }
+									: {})}
+							/>
+						) : null;
+					}}
+				/>
+			) : null}
 			{importItems ? (
-				<ImportFlow
-					items={importItems}
-					{...(project ? { projectId: project.id } : {})}
+				<AddFilesFlow
+					items={importItems.items}
+					place={importItems.place}
 					onDone={(outcome) => {
 						setImportItems(null);
 						const text = [describeOutcome(outcome), ...outcome.failures.map((entry) => entry.message)]

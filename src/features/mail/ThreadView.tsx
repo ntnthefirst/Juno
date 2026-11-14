@@ -472,6 +472,7 @@ export function ThreadView({
 								key={selected.message.id}
 								message={selected.message}
 								clientLinked={summary.clientId !== null}
+								clientId={summary.clientId}
 								project={
 									summary.projectId && summary.projectName
 										? { id: summary.projectId, name: summary.projectName }

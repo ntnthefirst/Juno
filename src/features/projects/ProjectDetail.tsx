@@ -32,8 +32,10 @@ import { scheduleRows, type ScheduleRow } from "../calendar/schedule-rows";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
 import { LinkedNotes } from "../notes/LinkedNotes";
 import { AssetList } from "./AssetList";
+import { FileQuickLook } from "../../components/FileQuickLook";
+import { fileTypeLabel } from "../../lib/file-type";
 import { CommandPanel } from "./CommandPanel";
-import { formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
+import { formatBytes, formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
 import { LinkMailDialog } from "./LinkMailDialog";
 import { LinkPanel } from "./LinkPanel";
 import { ProjectCalendar } from "./ProjectCalendar";
@@ -124,6 +126,8 @@ export function ProjectDetail({
 	const [storageOpen, setStorageOpen] = useState(false);
 	const [linkMailOpen, setLinkMailOpen] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
+	// The project file in the full preview, by id.
+	const [previewAsset, setPreviewAsset] = useState<string | null>(null);
 	// Bumped when a change made here adds to what a tab lists, so the tab reads again.
 	const [tick, setTick] = useState(0);
 
@@ -681,6 +685,7 @@ export function ProjectDetail({
 							assets={assets}
 							coverAssetId={project.coverAssetId}
 							previews
+							onPreview={(asset) => setPreviewAsset(asset.id)}
 							onOpen={(asset) =>
 								void window.juno.projects.assets.open(asset.id).catch((cause: unknown) => {
 									setNotice(messageOf(cause));
@@ -837,6 +842,45 @@ export function ProjectDetail({
 				/>
 			) : null}
 
+			{previewAsset !== null && assets.some((asset) => asset.id === previewAsset) ? (
+				<FileQuickLook
+					files={assets.map((asset) => ({
+						key: asset.id,
+						name: asset.fileName,
+						meta: [fileTypeLabel(asset.fileName, asset.mimeType ?? ""), formatBytes(asset.byteSize), asset.exists ? "" : "Missing"]
+							.filter(Boolean)
+							.join(" · "),
+						source: { kind: "asset", assetId: asset.id },
+					}))}
+					index={assets.findIndex((asset) => asset.id === previewAsset)}
+					onIndex={(at) => setPreviewAsset(assets[at]?.id ?? null)}
+					onClose={() => setPreviewAsset(null)}
+					closeLabel={`Back to ${current.name}`}
+					onOpen={(file) =>
+						void window.juno.projects.assets.open(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
+					}
+					actions={(file) => (
+						<>
+							<Button
+								size="dense"
+								onClick={() =>
+									void window.juno.projects.assets.open(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
+								}
+							>
+								Open
+							</Button>
+							<Button
+								size="dense"
+								onClick={() =>
+									void window.juno.projects.assets.reveal(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
+								}
+							>
+								Show in folder
+							</Button>
+						</>
+					)}
+				/>
+			) : null}
 			{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
 		</div>
 	);

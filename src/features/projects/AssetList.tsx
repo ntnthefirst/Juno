@@ -1,6 +1,7 @@
 import type { ProjectAsset } from "@shared/types";
 import { Icon } from "../../components/Icon";
 import { MenuButton, type MenuItem } from "../../components/Menu";
+import { useClickGate } from "../../lib/click-timing";
 import { ASSET_ICONS, assetImageUrl, formatBytes, pathTail } from "./format";
 
 type AssetListProps = {
@@ -9,6 +10,9 @@ type AssetListProps = {
 	coverAssetId: string | null;
 	/** Off draws every file as a row with an icon, images included. */
 	previews: boolean;
+	/** One click: the full preview. */
+	onPreview: (asset: ProjectAsset) => void;
+	/** A double click: the file in its own app. */
 	onOpen: (asset: ProjectAsset) => void;
 	onReveal: (asset: ProjectAsset) => void;
 	onSetCover: (asset: ProjectAsset | null) => void;
@@ -18,9 +22,10 @@ type AssetListProps = {
 function menuFor(
 	asset: ProjectAsset,
 	isCover: boolean,
-	props: Pick<AssetListProps, "onOpen" | "onReveal" | "onSetCover" | "onRemove">,
+	props: Pick<AssetListProps, "onPreview" | "onOpen" | "onReveal" | "onSetCover" | "onRemove">,
 ): MenuItem[] {
 	return [
+		{ id: "preview", label: "Open preview", icon: "visible", onSelect: () => props.onPreview(asset) },
 		{ id: "open", label: "Open", icon: "external", onSelect: () => props.onOpen(asset) },
 		{ id: "reveal", label: "Show in folder", icon: "folder-open", onSelect: () => props.onReveal(asset) },
 		{
@@ -57,12 +62,15 @@ export function AssetList({
 	assets,
 	coverAssetId,
 	previews,
+	onPreview,
 	onOpen,
 	onReveal,
 	onSetCover,
 	onRemove,
 }: AssetListProps) {
-	const handlers = { onOpen, onReveal, onSetCover, onRemove };
+	const handlers = { onPreview, onOpen, onReveal, onSetCover, onRemove };
+	// One click previews and two open, as a file does everywhere else (decision 75).
+	const clicks = useClickGate<ProjectAsset>({ single: onPreview, double: onOpen }, (a, b) => a.id === b.id);
 	const images = previews ? assets.filter((asset) => asset.kind === "image" && asset.exists) : [];
 	const rest = assets.filter((asset) => !images.includes(asset));
 
@@ -82,9 +90,9 @@ export function AssetList({
 							>
 								<button
 									type="button"
-									onClick={() => onOpen(asset)}
+									onClick={(event) => clicks.click(asset, event.detail)}
 									className="block w-full"
-									title={`Open ${asset.fileName}`}
+									title={`Preview ${asset.fileName}`}
 								>
 									<img
 										src={assetImageUrl(asset.id)}
@@ -127,8 +135,9 @@ export function AssetList({
 								</span>
 								<button
 									type="button"
-									onClick={() => onOpen(asset)}
-									className="min-w-0 flex-1 truncate text-left text-dense"
+									onClick={(event) => clicks.click(asset, event.detail)}
+									title={`Preview ${asset.fileName}`}
+									className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] text-left text-dense focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 								>
 									{asset.fileName}
 								</button>

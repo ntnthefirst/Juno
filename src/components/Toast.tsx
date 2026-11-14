@@ -26,11 +26,13 @@ export function Toast({ message, tone, actionLabel, onAction, onDismiss }: Toast
 		dismiss.current = onDismiss;
 	}, [onDismiss]);
 
+	// A new message shown in the same place starts its own countdown, so a
+	// second "Deleted" with its own Undo is not taken away early with the first.
 	useEffect(() => {
 		const id = window.setTimeout(() => dismiss.current(), DISMISS_AFTER_MS);
 		timer.current = id;
 		return () => window.clearTimeout(id);
-	}, []);
+	}, [message, actionLabel]);
 
 	function act() {
 		if (timer.current !== null) window.clearTimeout(timer.current);

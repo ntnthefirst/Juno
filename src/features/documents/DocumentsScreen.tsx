@@ -17,7 +17,7 @@ import type { ListCommand } from "../../lib/list-keys";
 import { NO_SELECTION, pruneSelection, selectOnly, type ListSelection } from "../../lib/list-selection";
 import { contextMenuFor } from "../../lib/native-menu";
 import { clearPending, peekPending } from "../../lib/open-entity";
-import { announceDocumentsChanged, carriesFiles, describeOutcome, itemsFromFiles, itemsFromPicked, type ImportItem } from "../../lib/pdf-drop";
+import { announceDocumentsChanged, BUSY_ADDING, carriesFiles, describeOutcome, itemsFromFiles, itemsFromPicked, type ImportItem } from "../../lib/pdf-drop";
 import { useScreenAction } from "../../lib/screen-actions";
 import { dragDocumentsOut, isOwnDrag, ownDrop } from "../../lib/document-drag";
 import { useRecentTouch } from "../../lib/use-recent-touch";
@@ -313,6 +313,12 @@ export function DocumentsScreen() {
 
 	function addFiles(items_: ImportItem[], target: DocumentPlace | null, name: string) {
 		if (items_.length === 0) return;
+		// A second batch while the first is still being asked about would take
+		// over its place in the flow and skip as many files as were done.
+		if (adding) {
+			setNotice(BUSY_ADDING);
+			return;
+		}
 		setAdding({ items: items_, place: target, name });
 	}
 

@@ -49,6 +49,9 @@ export function itemsFromPicked(picked: PickedPdf[]): ImportItem[] {
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
+/** Said to files dropped or chosen while an earlier batch is still being added. */
+export const BUSY_ADDING = "Finish adding the first files before adding more.";
+
 /** "2 files added, 1 version added." Past tense, one sentence. */
 export function describeOutcome(outcome: ImportOutcome): string | null {
 	const parts: string[] = [];

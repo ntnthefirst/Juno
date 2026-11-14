@@ -10,7 +10,7 @@ import { messageOf } from "../../lib/errors";
 import type { ListCommand } from "../../lib/list-keys";
 import { NO_SELECTION, pruneSelection, type ListSelection } from "../../lib/list-selection";
 import { contextMenuFor } from "../../lib/native-menu";
-import { describeOutcome, itemsFromFiles, itemsFromPicked, onDocumentsChanged, type ImportItem, type ImportOutcome } from "../../lib/pdf-drop";
+import { BUSY_ADDING, describeOutcome, itemsFromFiles, itemsFromPicked, onDocumentsChanged, type ImportItem, type ImportOutcome } from "../../lib/pdf-drop";
 import { useFileDrop } from "../../lib/use-file-drop";
 import { AddExistingDialog } from "./AddExistingDialog";
 import { AddFilesFlow } from "./AddFilesFlow";
@@ -99,17 +99,22 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged, onT
 		item.kind === "document" && selection.selected.includes(item.key) ? [item.record] : [],
 	);
 
+	/** A second batch while the first is still being asked about would take over its place in the flow. */
+	function start(next: ImportItem[]) {
+		if (next.length === 0) return;
+		if (items) setNotice(BUSY_ADDING);
+		else setItems(next);
+	}
+
 	async function bring(files: File[]) {
 		setNotice(null);
-		const read = await itemsFromFiles(files);
-		if (read.length > 0) setItems(read);
+		start(await itemsFromFiles(files));
 	}
 
 	async function choose() {
 		setNotice(null);
 		try {
-			const picked = await window.juno.documents.pickFiles();
-			if (picked.length > 0) setItems(itemsFromPicked(picked));
+			start(itemsFromPicked(await window.juno.documents.pickFiles()));
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 		}

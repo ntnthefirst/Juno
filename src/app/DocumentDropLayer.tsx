@@ -42,7 +42,8 @@ export function DocumentDropLayer() {
 			const dropped = Array.from(event.dataTransfer?.files ?? []);
 			if (dropped.length === 0 || ownDrop(dropped)) return;
 			void itemsFromFiles(dropped).then((read) => {
-				if (read.length > 0) setItems(read);
+				// A batch already being added keeps the flow; this one would skip into it.
+				if (read.length > 0) setItems((current) => current ?? read);
 			});
 		}
 

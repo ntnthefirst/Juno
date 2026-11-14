@@ -101,7 +101,17 @@ export function LocationField({ value, onChange }: LocationFieldProps) {
 	const showCard = open && query.length >= MIN_QUERY_LENGTH;
 
 	return (
-		<div ref={containerRef} className="relative">
+		<div
+			ref={containerRef}
+			className="relative"
+			onKeyDown={(event) => {
+				// Escape closes the suggestions and nothing else. Left alone, the page
+				// around the field reads it as leaving the form.
+				if (event.key !== "Escape" || !showCard) return;
+				event.preventDefault();
+				setOpen(false);
+			}}
+		>
 			<label htmlFor={id} className="mb-1 block text-sm text-[var(--ink-muted)]">
 				Location
 			</label>

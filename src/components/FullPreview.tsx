@@ -77,6 +77,14 @@ export function FullPreview({
 		};
 	}, []);
 
+	// Next on the last file is disabled under the focus, and a button the next file does not
+	// have goes with the last one; either drops the focus on the page, so it comes back here.
+	const at = position?.index ?? null;
+	useEffect(() => {
+		const active = document.activeElement;
+		if (active === null || active === document.body) frame.current?.focus({ preventScroll: true });
+	}, [at, title]);
+
 	useEffect(() => {
 		function onKey(event: KeyboardEvent) {
 			if (event.defaultPrevented) return;
@@ -129,7 +137,7 @@ export function FullPreview({
 				{position && position.total > 1 ? (
 					<div className="flex flex-none items-center gap-0.5">
 						<IconAction icon="chevron-left" label="Previous file" disabled={position.index <= 0} onClick={position.onPrevious} />
-						<span className="tabular min-w-[56px] text-center text-sm text-[var(--ink-muted)]">
+						<span aria-live="polite" className="tabular min-w-[56px] text-center text-sm text-[var(--ink-muted)]">
 							{position.index + 1} of {position.total}
 						</span>
 						<IconAction

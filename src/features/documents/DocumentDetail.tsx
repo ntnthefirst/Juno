@@ -62,6 +62,8 @@ type VersionBodyProps = {
 
 type DocumentDetailProps = {
 	documentId: string;
+	/** The name the list already shows, drawn while the document is read so the heading does not blink. */
+	knownTitle?: string;
 	/** Where it sits among the files of the folder it was opened from, for Previous and Next. */
 	position: { index: number; total: number; onPrevious: () => void; onNext: () => void } | null;
 	/** "Back to Contracts". */
@@ -120,6 +122,7 @@ function VersionBody({ version, caption, onOpen }: VersionBodyProps) {
  */
 export function DocumentDetail({
 	documentId,
+	knownTitle,
 	position,
 	closeLabel,
 	onClose,
@@ -240,7 +243,7 @@ export function DocumentDetail({
 
 	if (load.status !== "ready") {
 		return (
-			<FullPreview title="Document" closeLabel={closeLabel} onClose={onClose} position={position}>
+			<FullPreview title={knownTitle ?? "Document"} closeLabel={closeLabel} onClose={onClose} position={position}>
 				{load.status === "loading" ? (
 					<FilePreviewView state={{ status: "loading" }} />
 				) : (

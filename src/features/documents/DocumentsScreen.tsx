@@ -1044,6 +1044,9 @@ export function DocumentsScreen() {
 	};
 
 	const heading = needle ? `Results for "${needle}"` : (node?.name ?? "Documents");
+	// The list's name for the file being previewed, so Previous and Next show it before the record is read.
+	const previewItem = preview?.kind === "document" ? byKey.get(documentKey(preview.id)) : undefined;
+	const previewName = previewItem ? nameOf(previewItem) : undefined;
 	const searchFailed = needle && data.searchError !== null;
 	const count = needle
 		? searchFailed
@@ -1240,6 +1243,7 @@ export function DocumentsScreen() {
 			{preview?.kind === "document" ? (
 				<DocumentDetail
 					documentId={preview.id}
+					knownTitle={previewName}
 					position={position}
 					closeLabel={`Back to ${needle ? "the results" : placeName}`}
 					onClose={closePreview}

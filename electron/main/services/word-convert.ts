@@ -26,16 +26,27 @@ export const WORD_TIMEOUT_MS = 60_000;
  * One that is on screen or has documents open is theirs: it is not hidden and
  * not quit, and only the document opened here is closed. A Word this script
  * started is quit in the `finally`.
+ *
+ * A file opened through COM runs its macros unless Word is told otherwise:
+ * AutomationSecurity defaults to "enable all" for a program, whatever the
+ * person's own Trust Center says. A `.docm` or `.doc` from a mail would run its
+ * AutoOpen macro the moment it was converted, so macros are forced off before
+ * the file opens, and the setting is put back afterwards for a Word that is the
+ * person's.
  */
-const SCRIPT = [
+export const WORD_SCRIPT = [
 	"$ErrorActionPreference = 'Stop'",
 	"$word = $null",
 	"$doc = $null",
 	"$ours = $false",
+	"$security = $null",
 	"try {",
 	"  $word = New-Object -ComObject Word.Application",
 	"  $ours = (-not $word.Visible) -and ($word.Documents.Count -eq 0)",
 	"  if ($ours) { $word.Visible = $false; $word.DisplayAlerts = 0 }",
+	// msoAutomationSecurityForceDisable.
+	"  $security = $word.AutomationSecurity",
+	"  $word.AutomationSecurity = 3",
 	"  $doc = $word.Documents.Open($env:JUNO_WORD_INPUT, $false, $true, $false)",
 	"  $doc.SaveAs2($env:JUNO_WORD_OUTPUT, 17)",
 	"} finally {",
@@ -43,6 +54,7 @@ const SCRIPT = [
 	// passed for Close's or Quit's optional by-reference argument fails in
 	// PowerShell and leaves Word running hidden, so neither is given one.
 	"  if ($doc -ne $null) { try { $doc.Close() } catch {} ; [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($doc) }",
+	"  if ($word -ne $null -and $security -ne $null) { try { $word.AutomationSecurity = $security } catch {} }",
 	"  if ($word -ne $null) {",
 	"    if ($ours) { try { $word.Quit() } catch {} }",
 	"    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($word)",
@@ -83,7 +95,7 @@ export async function convertWithWord(inputPath: string, outputPath: string): Pr
 	try {
 		await run(
 			"powershell.exe",
-			["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SCRIPT],
+			["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", WORD_SCRIPT],
 			{
 				env: { ...process.env, JUNO_WORD_INPUT: inputPath, JUNO_WORD_OUTPUT: outputPath },
 				timeout: WORD_TIMEOUT_MS,

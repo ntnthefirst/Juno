@@ -157,6 +157,19 @@ describe("folders", () => {
 		expect(await folders.get(inner.id, db)).toMatchObject({ clientId: other.id, parentId: offers.id });
 		expect(await documents.get(doc.id, db)).toMatchObject({ clientId: other.id, folderId: inner.id });
 	});
+
+	it("refuses to move a folder where one of its documents' titles is taken, and moves nothing", async () => {
+		const { db, acme, other } = await setUp();
+		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
+		const doc = await importFile({ source: bytes("Offerte.txt", "Voor Acme."), folderId: offers.id }, db);
+		await importFile({ source: bytes("Offerte.txt", "Voor Noord."), clientId: other.id }, db);
+
+		await expect(folders.move(offers.id, { clientId: other.id }, db)).rejects.toThrow(
+			/Brouwerij Noord already has a document named "Offerte"/,
+		);
+		expect(await folders.get(offers.id, db)).toMatchObject({ clientId: acme.id });
+		expect(await documents.get(doc.id, db)).toMatchObject({ clientId: acme.id, folderId: offers.id });
+	});
 });
 
 describe("moving, duplicating, copying and renaming", () => {

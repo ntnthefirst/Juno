@@ -27,7 +27,7 @@ import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, documentFolders, documents, projects } from "../db/schema";
 import { resolveOwner } from "./document-owner";
-import { folderRow } from "./document-place";
+import { assertTitleFree, folderRow } from "./document-place";
 import * as templates from "./document-templates";
 
 type Row = typeof documentFolders.$inferSelect;
@@ -171,6 +171,18 @@ export async function move(id: string, target: DocumentFolderMove, db: Db = getD
 		.reduce((max, sibling) => Math.max(max, sibling.sortOrder), -1);
 	const stamp = now();
 	const affected = [id, ...inside.map((folder) => folder.id)];
+
+	// The documents go with the folder, so each title has to be free where
+	// they land, by the same rule a single move or an import keeps (decision 48).
+	if (place.clientId !== row.clientId || place.projectId !== row.projectId) {
+		const owner = resolveOwner({ clientId: place.clientId, projectId: place.projectId }, db);
+		const moving = db
+			.select({ id: documents.id, title: documents.title })
+			.from(documents)
+			.where(and(inArray(documents.folderId, affected), isNull(documents.deletedAt)))
+			.all();
+		for (const document of moving) assertTitleFree(owner, document.title, db, document.id);
+	}
 
 	db.transaction((tx) => {
 		tx.update(documentFolders)

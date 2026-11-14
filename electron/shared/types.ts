@@ -2179,6 +2179,32 @@ export type ImportSource =
 	  }
 	| { kind: "attachment"; attachmentId: string };
 
+/** A run of words two files share, or that the second adds or leaves out. */
+export interface TextDiffPart {
+	kind: "same" | "added" | "removed";
+	/** The words, one space between each. */
+	text: string;
+	words: number;
+}
+
+/** A file being compared: one Juno keeps, or one coming in. */
+export type CompareSource = ImportSource | { kind: "version"; versionId: string };
+
+export interface CompareTextInput {
+	/** The file Juno keeps: removed words are in it and not in `after`. */
+	before: { kind: "version"; versionId: string };
+	/** The file coming in, or another version: added words are in it and not in `before`. */
+	after: CompareSource;
+}
+
+/**
+ * What two files say differently, word by word. `unreadable` when one of them
+ * has no words Juno can read (a picture, a scan), naming which.
+ */
+export type TextComparison =
+	| { status: "compared"; parts: TextDiffPart[]; added: number; removed: number; same: number; truncated: boolean }
+	| { status: "unreadable"; side: "before" | "after" | "both" };
+
 /** A file read by the main process's picker, ready to be imported. */
 export interface PickedPdf {
 	fileName: string;

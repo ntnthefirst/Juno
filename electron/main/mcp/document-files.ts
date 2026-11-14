@@ -1,4 +1,5 @@
 import type { DocumentMoveInput, FilePreviewSource } from "../../shared/types";
+import * as compare from "../services/document-compare";
 import * as convert from "../services/document-convert";
 import * as folders from "../services/document-folders";
 import * as imports from "../services/document-import";
@@ -250,6 +251,34 @@ export const documentFileTools: ToolDescriptor[] = [
 			additionalProperties: false,
 		},
 		handler: async (args) => preview.previewForAgent(previewSource(args)),
+	},
+	{
+		name: "documents.compare",
+		title: "Compare a version with another file",
+		description:
+			"Which words two files share and which the second adds or leaves out, word by word, as runs of same, " +
+			"added and removed, with the counts. Use it to see why documents.find_matches says a file is nearly the " +
+			"same as a document. Compares a version (version_id, from documents.list_versions) with another version " +
+			"(other_version_id) or with a file on this machine (source_path). Reads PDF, Word, spreadsheet and text " +
+			"files; unreadable names the side with no words to read, such as a scan. Writes nothing.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				version_id: { type: "string", description: "The version kept in Juno. Removed words are in it." },
+				other_version_id: { type: "string", description: "Another version to compare with. Added words are in it." },
+				source_path: { type: "string", description: "Instead of other_version_id: absolute path to a file on this machine." },
+			},
+			required: ["version_id"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			compare.compareForAgent({
+				versionId: String(args.version_id),
+				...(typeof args.other_version_id === "string" ? { otherVersionId: args.other_version_id } : {}),
+				...(typeof args.source_path === "string" ? { sourcePath: args.source_path } : {}),
+			}),
 	},
 	{
 		name: "documents.convert_pdf",

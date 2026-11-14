@@ -496,6 +496,7 @@ const api: JunoApi = {
 		pickPdfs: () => call("documents.pickPdfs"),
 		pickFiles: () => call("documents.pickFiles"),
 		analyseImport: (input) => call("documents.analyseImport", input),
+		compareText: (input) => call("documents.compareText", input),
 		importFile: (input) => call("documents.importFile", input),
 		addVersion: (input) => call("documents.addVersion", input),
 		importFromMail: (input) => call("documents.importFromMail", input),

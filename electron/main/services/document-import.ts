@@ -135,7 +135,7 @@ export function resolveSource(source: ImportSource, db: Db): Resolved {
 }
 
 /** For the agent's tools, which name a file on this machine. */
-function resolvePath(sourcePath: string): Resolved {
+export function resolvePath(sourcePath: string): Resolved {
 	const label = basename(sourcePath);
 	if (!existsSync(sourcePath) || !statSync(sourcePath).isFile()) {
 		throw new Error(`Could not find "${label}". Check the file still exists at that location.`);

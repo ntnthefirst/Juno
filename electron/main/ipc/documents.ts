@@ -4,6 +4,7 @@
  */
 import { BrowserWindow, ipcMain } from "electron";
 import type {
+	CompareTextInput,
 	AddVersionInput,
 	AnalyseImportInput,
 	DocumentFolderInput,
@@ -18,6 +19,7 @@ import type {
 	VersionUse,
 } from "../../shared/types";
 import * as actions from "../services/document-actions";
+import * as compare from "../services/document-compare";
 import * as convert from "../services/document-convert";
 import { onDocumentsChanged } from "../services/document-events";
 import * as folders from "../services/document-folders";
@@ -73,6 +75,7 @@ export function registerDocumentsIpc(): void {
 		"documents.analyseImport",
 		(_event, input: AnalyseImportInput) => imports.analyseImport(input),
 	);
+	ipcMain.handle("documents.compareText", (_event, input: CompareTextInput) => compare.compareText(input));
 	ipcMain.handle("documents.importFile", (_event, input: ImportFileInput) => imports.importFile(input));
 	ipcMain.handle("documents.addVersion", (_event, input: AddVersionInput) => imports.addVersion(input));
 	ipcMain.handle("documents.versions", (_event, documentId: string) => versions.list(documentId));

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { DocumentPlace, FilePreviewSource, ImportAnalysis, ImportMatch, ImportSource } from "@shared/types";
+import type { DocumentPlace, FilePreviewSource, ImportAnalysis, ImportMatch, ImportSource, TextComparison } from "@shared/types";
 import { Button } from "../../components/Button";
 import { IconAction } from "../../components/IconAction";
+import { Segmented } from "../../components/Segmented";
 import { useContentHost } from "../../lib/content-host";
 import { messageOf } from "../../lib/errors";
 import { fileTypeLabel } from "../../lib/file-type";
@@ -10,6 +11,8 @@ import { modifiedLabel } from "../../lib/modified-label";
 import { announceDocumentsChanged, type ImportItem, type ImportOutcome } from "../../lib/pdf-drop";
 import { formatBytes } from "../projects/format";
 import { ComparePane } from "./ComparePane";
+import { diffSummary } from "./diff-runs";
+import { TextDiffView } from "./TextDiffView";
 import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
 import { firstMatch, needsAsking, reasonFor } from "./import-reasons";
 
@@ -68,6 +71,14 @@ async function addAsVersion(source: ImportSource, documentId: string): Promise<v
 	await window.juno.documents.addVersion({ documentId, source });
 }
 
+/** The words compared for one file and one match, keyed so a stale answer is never drawn under another pair. */
+type Compared = { key: string; result: TextComparison | null };
+
+const COMPARE_VIEWS = [
+	{ id: "files" as const, label: "Side by side" },
+	{ id: "words" as const, label: "What differs" },
+];
+
 const metaLine = (fileName: string | null, mediaType: string, size: number | null, date: string | null) =>
 	[fileTypeLabel(fileName, mediaType), size === null ? "" : formatBytes(size), modifiedLabel(date)].filter(Boolean).join(" · ");
 
@@ -91,6 +102,8 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 	const [owner, setOwner] = useState<DocumentOwnerChoice>({ clientId: "", projectId: "" });
 	const [step, setStep] = useState<Step>(place ? { status: "reading" } : { status: "where" });
 	const [error, setError] = useState<string | null>(null);
+	const [compared, setCompared] = useState<Compared | null>(null);
+	const [compareView, setCompareView] = useState<"files" | "words">("files");
 	const outcome = useRef<ImportOutcome>({ documents: 0, versions: 0, skipped: 0, failures: [] });
 	const finished = useRef(false);
 	// Held in a ref so a parent that re-renders with a new callback does not start the current file over.
@@ -144,6 +157,28 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 			cancelled = true;
 		};
 	}, [index, where, items, finish]);
+
+	// When a file is shown beside a document, its words are compared with that
+	// document's newest file, so the person can see what the share leaves out.
+	const asked = (step.status === "asking" || step.status === "saving") && !step.match.identical ? step.match : null;
+	const compareKey = asked?.latestVersion ? `${index}:${asked.documentId}:${asked.latestVersion.id}` : null;
+	const askedVersion = asked?.latestVersion?.id ?? null;
+	useEffect(() => {
+		const current = items[index];
+		if (!compareKey || !askedVersion || !current) return;
+		let cancelled = false;
+		window.juno.documents
+			.compareText({ before: { kind: "version", versionId: askedVersion }, after: current.source })
+			.then((result) => {
+				if (!cancelled) setCompared({ key: compareKey, result });
+			})
+			.catch(() => {
+				if (!cancelled) setCompared({ key: compareKey, result: null });
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [compareKey, askedVersion, index, items]);
 
 	function next(result: "documents" | "versions" | "skipped") {
 		outcome.current[result] += 1;
@@ -217,6 +252,9 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 		const { analysis, match } = step;
 		const busy = step.status === "saving";
 		const existing = match.latestVersion;
+		const words = compared && compared.key === compareKey && compared.result?.status === "compared" ? compared.result : null;
+		const changed = words !== null && words.added + words.removed > 0;
+		const showWords = changed && compareView === "words";
 		body = (
 			<div className="flex h-full min-h-0 flex-col">
 				<div className="flex-none px-6 pt-5 pb-4">
@@ -226,6 +264,15 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 							? "Nothing would change by adding it again. Skip it, or keep a separate copy anyway."
 							: `Add it as the next version of ${match.title}, or keep it as a document of its own named ${analysis.availableTitle}.`}
 					</p>
+					{changed ? (
+						<div className="mt-3 flex flex-wrap items-center gap-3">
+							<Segmented size="compact" label="Compare by" value={compareView} onChange={setCompareView} options={COMPARE_VIEWS} />
+							<p className="tabular text-sm text-[var(--ink-muted)]">
+								{diffSummary(words.added, words.removed)}
+								{words.truncated ? " Only the start was compared." : ""}
+							</p>
+						</div>
+					) : null}
 					{analysis.matches.length > 1 ? (
 						<div className="mt-3 flex flex-wrap items-center gap-1" role="group" aria-label="Documents it looks like">
 							{analysis.matches.map((other) => (
@@ -247,20 +294,32 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 					) : null}
 				</div>
 				<div className="flex min-h-0 flex-1 gap-4 px-6">
-					<ComparePane
-						label="Adding"
-						name={analysis.fileName}
-						meta={metaLine(analysis.fileName, analysis.mediaType, analysis.byteSize, analysis.fileDate)}
-						source={previewOf(item.source)}
-						emphasis
-					/>
-					<ComparePane
-						key={match.documentId}
-						label={`Already in Juno${match.clientName ? `, ${match.clientName}` : ""}`}
-						name={match.title}
-						meta={existing ? metaLine(existing.fileName, existing.mediaType, existing.byteSize, existing.fileDate) : ""}
-						source={existing ? { kind: "version", versionId: existing.id } : null}
-					/>
+					{showWords ? (
+						<TextDiffView
+							key={compareKey}
+							parts={words.parts}
+							addedLabel={analysis.fileName}
+							removedLabel={match.title}
+							truncated={words.truncated}
+						/>
+					) : (
+						<>
+							<ComparePane
+								label="Adding"
+								name={analysis.fileName}
+								meta={metaLine(analysis.fileName, analysis.mediaType, analysis.byteSize, analysis.fileDate)}
+								source={previewOf(item.source)}
+								emphasis
+							/>
+							<ComparePane
+								key={match.documentId}
+								label={`Already in Juno${match.clientName ? `, ${match.clientName}` : ""}`}
+								name={match.title}
+								meta={existing ? metaLine(existing.fileName, existing.mediaType, existing.byteSize, existing.fileDate) : ""}
+								source={existing ? { kind: "version", versionId: existing.id } : null}
+							/>
+						</>
+					)}
 				</div>
 				{error ? (
 					<p role="alert" data-selectable className="mx-6 mt-3 flex-none border-l-2 border-[var(--risk)] pl-3 text-sm text-[var(--risk)]">

@@ -97,6 +97,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"clients.timeline",
 		"contacts.list_for_client",
 		"desktop.get",
+		"documents.compare",
 		"documents.find_matches",
 		"documents.find_matches_in_mail",
 		"documents.folders.list",

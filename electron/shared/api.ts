@@ -93,6 +93,8 @@ import type {
 	DocumentTimelineEntry,
 	VersionUse,
 	GenerateDocumentInput,
+	CompareTextInput,
+	TextComparison,
 	GenerateDocumentResult,
 	AddVersionInput,
 	DocumentVersion,
@@ -895,6 +897,8 @@ export interface JunoApi {
 		 * to), before anything is written.
 		 */
 		analyseImport(input: AnalyseImportInput): Promise<ImportAnalysis>;
+		/** What an incoming file says differently from a kept version, word by word. */
+		compareText(input: CompareTextInput): Promise<TextComparison>;
 		/** A new document from the file, in a place or a folder. Refuses a title the place already has. */
 		importFile(input: ImportFileInput): Promise<DocumentRecord>;
 		/** Adds the file to a document as a version, placed by the file's own date. */

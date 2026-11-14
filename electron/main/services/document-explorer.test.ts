@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as clients from "./clients";
+import * as compare from "./document-compare";
 import * as folders from "./document-folders";
 import { analyseImport, importFile, importFromMail } from "./document-import";
 import * as organise from "./document-organise";
@@ -276,6 +277,23 @@ describe("folders", () => {
 		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
 		const page = await pages.create({ folderId: offers.id }, db);
 		expect(page.document).toMatchObject({ clientId: acme.id, projectId: null, folderId: offers.id, sourceKind: "page" });
+	});
+});
+
+describe("comparing an incoming file with a kept one", () => {
+	it("marks the words a dropped file adds and leaves out, and names a side it cannot read", async () => {
+		const { db, acme } = await setUp();
+		const kept = await importFile({ source: bytes("Offerte.txt", "De prijs is 100 euro per maand."), clientId: acme.id }, db);
+		const versionId = kept.latestVersion!.id;
+
+		const result = await compare.compareText(
+			{ before: { kind: "version", versionId }, after: bytes("Offerte getekend.txt", "De prijs is 120 euro per maand. Getekend.") },
+			db,
+		);
+		expect(result).toMatchObject({ status: "compared", added: 2, removed: 1 });
+
+		const picture = await compare.compareText({ before: { kind: "version", versionId }, after: bytes("Foto.png", PNG_BYTES) }, db);
+		expect(picture).toEqual({ status: "unreadable", side: "after" });
 	});
 });
 

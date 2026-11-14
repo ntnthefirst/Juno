@@ -409,7 +409,8 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 					? { id: "open", label: "Open", icon: "mail" }
 					: { id: "edit", label: "Edit", icon: "edit" },
 				...(message.state === "failed" ? [{ id: "retry", label: "Try again", icon: "sync", separatorBefore: true } as const] : []),
-				...(open ? [] : [REMOVE]),
+				// Delete works on the row in Drafts, so the menu says so.
+				...(open ? [] : [{ ...REMOVE, accelerator: "Delete" }]),
 			];
 		}
 

@@ -213,7 +213,16 @@ export function ThreadList({
 			step(-1);
 			return;
 		}
-		// The rest are thread actions, and an unsent message has none.
+		// A message that has not gone out is deleted with the same keys, which ask first (decision 78).
+		if (focusedEntry?.kind === "outbox") {
+			const { state } = focusedEntry.message;
+			if ((event.key === "Delete" || event.key === "Backspace") && state !== "sending" && state !== "sent" && outbox?.onDelete) {
+				event.preventDefault();
+				outbox.onDelete(focusedEntry.id);
+			}
+			return;
+		}
+		// The rest are thread actions.
 		if (focusedEntry?.kind !== "thread") return;
 		const focused = focusedEntry.thread;
 		const shortcuts: Record<string, ThreadAction> = {

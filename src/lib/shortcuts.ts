@@ -187,6 +187,20 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 		],
 	},
 	{
+		title: "In a file's preview",
+		rows: [
+			{ combos: ["arrowleft", "arrowright"], label: "Previous and next file" },
+			{ combos: ["escape"], label: "Close the preview" },
+		],
+	},
+	{
+		title: "On a mail attachment",
+		rows: [
+			{ combos: [LIST_COMBOS.preview], label: "Preview" },
+			{ combos: [LIST_COMBOS.open], label: "Open in its app, from a trusted sender" },
+		],
+	},
+	{
 		title: "In the mail list",
 		rows: [
 			{ combos: ["j", "k"], label: "Next and previous conversation" },
@@ -194,7 +208,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: ["s"], label: "Flag" },
 			{ combos: ["u"], label: "Mark read or unread" },
 			{ combos: ["m"], label: "Move to a folder" },
-			{ combos: ["delete"], label: "Move to trash" },
+			{ combos: ["delete"], label: "Move to trash, or delete a message not sent yet" },
 		],
 	},
 ];

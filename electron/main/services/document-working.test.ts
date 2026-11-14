@@ -317,3 +317,19 @@ describe("converting to PDF", () => {
 		120_000,
 	);
 });
+
+describe("a copy another program holds open", () => {
+	it("names the file and says what to do", () => {
+		for (const code of ["EBUSY", "EPERM", "EACCES"]) {
+			const error = Object.assign(new Error(`${code}: resource busy or locked, copyfile 'C:\\x'`), { code });
+			expect(working.lockedFileError(error, join("dir", "Offerte Jansen.docx")).message).toBe(
+				"Close Offerte Jansen.docx in the program that has it open, then try again.",
+			);
+		}
+	});
+
+	it("leaves any other failure as it was", () => {
+		const error = Object.assign(new Error("ENOSPC"), { code: "ENOSPC" });
+		expect(working.lockedFileError(error, "a.docx")).toBe(error);
+	});
+});

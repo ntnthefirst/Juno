@@ -79,6 +79,29 @@ function retire(row: Row, db: Db): void {
 		.run();
 }
 
+/**
+ * A copy another program holds open cannot be replaced or rewritten, and the
+ * system says so with a code, not a sentence. This names the file and the fix.
+ */
+export function lockedFileError(error: unknown, path: string): Error {
+	const code = (error as NodeJS.ErrnoException | null)?.code;
+	if (code === "EBUSY" || code === "EPERM" || code === "EACCES") {
+		return new Error(`Close ${basename(path)} in the program that has it open, then try again.`);
+	}
+	return error instanceof Error ? error : new Error(String(error));
+}
+
+/** Copies over `path`, making a read-only target writable first and naming the file if it is held open. */
+function copyOver(source: string, path: string, readOnly: boolean): void {
+	try {
+		makeWritable(path);
+		copyFileSync(source, path);
+		if (readOnly) chmodSync(path, 0o444);
+	} catch (error) {
+		throw lockedFileError(error, path);
+	}
+}
+
 function makeWritable(path: string): void {
 	try {
 		chmodSync(path, 0o644);
@@ -258,9 +281,7 @@ function readOnlyCopy(file: versions.VersionFile, title: string, label: string):
 	const dir = join(workingDir(file.documentId), "read-only");
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 	const path = join(dir, readableFileName(`${title} (${label})`, extensionOf(file.fileName || file.path)));
-	makeWritable(path);
-	copyFileSync(file.path, path);
-	chmodSync(path, 0o444);
+	copyOver(file.path, path, true);
 	return path;
 }
 
@@ -282,8 +303,7 @@ async function workingCopy(documentId: string, db: Db): Promise<string> {
 	const path = join(workingDir(documentId), readableFileName(record.title, extensionOf(latest.fileName || latest.path)));
 	// The copy of an older version, unchanged since (the check above kept any
 	// change), is replaced by the newest.
-	makeWritable(path);
-	copyFileSync(latest.path, path);
+	copyOver(latest.path, path, false);
 	const stat = statSync(path);
 	const values = {
 		versionId: latest.versionId,

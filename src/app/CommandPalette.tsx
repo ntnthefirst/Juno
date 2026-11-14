@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { MailThreadSummary } from "@shared/types";
 import { Icon, type IconName } from "../components/Icon";
 import { Kbd } from "../components/Kbd";
+import { RowsSkeleton } from "../components/RowsSkeleton";
 import { requestOpenClient } from "../lib/open-client";
 import { requestOpen } from "../lib/open-entity";
 import { rank } from "../lib/palette-search";
@@ -267,6 +268,16 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 	}, [term, scope, clients, projects, documents, notes, mail, onNavigate, onNew, onSettings, onLock, onHelp]);
 
 	const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
+
+	// Nothing matches is only true once every place the search looks has answered.
+	const looksIn = (kind: Scope) => scope === "all" || scope === kind;
+	const waiting =
+		term !== "" &&
+		((looksIn("client") && clients.status === "loading") ||
+			(looksIn("project") && projects.status === "loading") ||
+			(looksIn("document") && documents.status === "loading") ||
+			(looksIn("note") && notes.status === "loading") ||
+			(looksIn("mail") && term.length >= MIN_MAIL_QUERY && mail?.query !== term));
 	const index = Math.min(active, Math.max(0, flat.length - 1));
 
 	useEffect(() => {
@@ -385,7 +396,9 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 				) : null}
 
 				<div ref={list} id={listId} role="listbox" className="min-h-0 flex-1 overflow-y-auto p-2">
-					{flat.length === 0 ? (
+					{flat.length === 0 && waiting ? (
+						<RowsSkeleton rows={4} divided={false} trailing={false} label="Searching" />
+					) : flat.length === 0 ? (
 						<p className="px-3 py-8 text-center text-dense text-[var(--ink-muted)]">
 							Nothing matches.
 						</p>

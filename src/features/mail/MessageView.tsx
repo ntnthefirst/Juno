@@ -490,7 +490,7 @@ export function MessageView({
 				: "This email is not trusted. Content and links stay blocked."}
 		</Notice>
 	) : body?.suspicious ? (
-		<Notice role="status">Weird content was removed before this email was shown.</Notice>
+		<Notice role="status">Parts of this email that could run code or send data were removed before it was shown.</Notice>
 	) : null;
 
 	return (

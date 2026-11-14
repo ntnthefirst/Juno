@@ -9,6 +9,7 @@ export type ScreenId =
 	| "notes"
 	| "documents"
 	| "templates"
+	| "unfiled"
 	| "clients"
 	| "projects"
 	| "reminders"
@@ -45,6 +46,7 @@ export const SCREEN_LABELS: Record<ScreenId, string> = {
 	notes: "Notes",
 	documents: "Documents",
 	templates: "Templates",
+	unfiled: "Files without a client",
 	clients: "Clients",
 	projects: "Projects",
 	reminders: "Reminders",
@@ -60,6 +62,7 @@ export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
 	notes: "notes",
 	documents: "documents",
 	templates: "projects",
+	unfiled: "overview",
 	clients: "clients",
 	projects: "projects",
 	reminders: "overview",

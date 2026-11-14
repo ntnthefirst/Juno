@@ -80,7 +80,7 @@ export function AttachmentPlacePage({ fileNames, place, filing, busy, onSave, on
 						<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
 							{place && !place.linked
 								? `This mail looks like part of ${place.name}. Change it if it is not.`
-								: "Choose a client, a project, both or neither. Leave both empty to keep them in Unfiled."}
+								: "Choose a client or a project. The files are kept on its Documents tab."}
 						</p>
 						<ul className="mt-4 flex flex-col gap-1 text-dense text-[var(--ink-muted)]">
 							{fileNames.slice(0, 8).map((name, at) => (
@@ -103,7 +103,7 @@ export function AttachmentPlacePage({ fileNames, place, filing, busy, onSave, on
 							<Button onClick={onCancel}>Cancel</Button>
 							<Button
 								variant="primary"
-								disabled={busy}
+								disabled={busy || (!choice.clientId && !choice.projectId)}
 								onClick={() => onSave(placeOfChoice(choice), offer !== null && link)}
 							>
 								{busy ? "Saving" : one ? "Save the file" : `Save ${fileNames.length} files`}

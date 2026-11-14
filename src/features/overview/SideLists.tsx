@@ -4,9 +4,11 @@ import { Avatar } from "../../components/Avatar";
 import { CardHeader } from "../../components/CardHeader";
 import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
+import { showDocumentWhereKept } from "../../lib/show-in-record";
 import type { Loaded } from "../../lib/use-loaded";
 import { belongsTo } from "../documents/belongs-to";
 import { formatWhen, leadParticipant } from "../mail/format";
+import { UnfiledCard } from "./UnfiledCard";
 
 const SHOWN = 5;
 
@@ -75,10 +77,12 @@ type SideListsProps = {
 	statuses: ReferenceItem[];
 	clients: Loaded<ClientSummary[]>;
 	hasAccounts: boolean | null;
+	/** A file was given a place, so the documents are read again. */
+	onDocumentsChanged: () => void;
 };
 
-/** The right edge: what is unread, the documents touched last, and the clients with news. */
-export function SideLists({ unread, unreadCount, documents, statuses, clients, hasAccounts }: SideListsProps) {
+/** The right edge: what is unread, the documents touched last, the files with no place, and the clients with news. */
+export function SideLists({ unread, unreadCount, documents, statuses, clients, hasAccounts, onDocumentsChanged }: SideListsProps) {
 	const threads = useMemo(() => (unread.status === "ready" ? unread.value.slice(0, SHOWN) : []), [unread]);
 	const recentDocuments = useMemo(
 		() =>
@@ -95,7 +99,7 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 		[clients],
 	);
 	const statusOf = useMemo(() => new Map(statuses.map((item) => [item.id, item])), [statuses]);
-	const open = (screen: "mail" | "documents" | "clients") => () => requestOpen({ kind: "screen", screen });
+	const open = (screen: "mail" | "clients") => () => requestOpen({ kind: "screen", screen });
 
 	return (
 		<div className="flex flex-col gap-8">
@@ -125,12 +129,12 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 			</section>
 
 			<section>
-				<CardHeader title="Documents" link={{ label: "All documents", onClick: open("documents") }} />
+				<CardHeader title="Documents" />
 				<Block
 					state={documents}
 					what="your documents"
 					isEmpty={recentDocuments.length === 0}
-					empty="Documents you generate or import are listed here."
+					empty="Documents you add to a client or a project are listed here."
 				>
 					{recentDocuments.map((record) => (
 						<ListRow
@@ -140,11 +144,13 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 							title={record.title}
 							meta={belongsTo(record)}
 							trailing={record.statusId ? statusOf.get(record.statusId)?.label : undefined}
-							onClick={() => requestOpen({ kind: "document", id: record.id, name: record.title })}
+							onClick={() => showDocumentWhereKept(record)}
 						/>
 					))}
 				</Block>
 			</section>
+
+			<UnfiledCard documents={documents} onChanged={onDocumentsChanged} />
 
 			<section>
 				<CardHeader title="Clients" link={{ label: "All clients", onClick: open("clients") }} />

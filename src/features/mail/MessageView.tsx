@@ -21,6 +21,7 @@ import { Icon } from "../../components/Icon";
 import { IconAction } from "../../components/IconAction";
 import { contextMenuFor, type MenuHandlers, type MenuTarget } from "../../lib/native-menu";
 import { requestOpen } from "../../lib/open-entity";
+import { requestOpenClient } from "../../lib/open-client";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { messageOf } from "../../lib/errors";
 import { announceDocumentsChanged, describeOutcome, onDocumentsChanged, type ImportItem } from "../../lib/pdf-drop";
@@ -434,18 +435,18 @@ export function MessageView({
 		for (const entry of failed) parts.push(entry.message);
 		if (saved.length > 0) announceDocumentsChanged();
 		if (linked) onChanged();
-		const folderKey = result.place.folderId
-			? `folder:${result.place.folderId}`
-			: result.place.projectId
-				? `project:${result.place.projectId}`
-				: result.place.clientId
-					? `client:${result.place.clientId}`
-					: "unfiled";
+		// One file opens its preview; several open the Documents tab they went to.
+		const { projectId, clientId } = result.place;
+		const showAll = projectId
+			? () => requestOpen({ kind: "project", id: projectId, name: placeName ?? "Project", tab: "documents" })
+			: clientId
+				? () => requestOpenClient(clientId, placeName ?? "Client", { tab: "documents" })
+				: null;
 		const show =
 			saved.length === 1 && first
 				? { label: "Show", run: () => requestOpen({ kind: "document", id: first.id, name: first.title }) }
-				: saved.length > 1
-					? { label: "Show", run: () => requestOpen({ kind: "document-folder", key: folderKey }) }
+				: saved.length > 1 && showAll
+					? { label: "Show", run: showAll }
 					: undefined;
 		if (parts.length > 0) onNotice(parts.join(" "), show);
 		// A file that looks like a document already kept is shown beside it, and the person picks.

@@ -16,6 +16,7 @@ import { RemindersScreen } from "../features/reminders/RemindersScreen";
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { TemplatesScreen } from "../features/templates/TemplatesScreen";
 import { OverviewScreen } from "../features/overview/OverviewScreen";
+import { UnfiledScreen } from "../features/overview/UnfiledScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
 import { currentRequest, onOpenRequest, requestOpen, screenFor } from "../lib/open-entity";
@@ -414,6 +415,8 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 							<MailTemplatesScreen />
 						) : screen === "templates" ? (
 							<TemplatesScreen />
+						) : screen === "unfiled" ? (
+							<UnfiledScreen />
 						) : screen === "agent" ? (
 							<AgentScreen />
 						) : (

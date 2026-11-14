@@ -298,7 +298,7 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 				<div className="w-full max-w-[620px]">
 					<h3 className="text-h3">Where should {items.length === 1 ? "this file" : "these files"} go?</h3>
 					<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
-						Choose a client, a project, both or neither. Leave both empty to keep them in Unfiled.
+						Choose a client or a project. The files are kept on its Documents tab.
 					</p>
 					<ul className="mt-4 flex flex-col gap-1 text-dense text-[var(--ink-muted)]">
 						{items.slice(0, 8).map((entry, at) => (
@@ -315,6 +315,7 @@ export function AddFilesFlow({ items, place, placeName, onDone }: AddFilesFlowPr
 						<Button onClick={cancelAll}>Cancel</Button>
 						<Button
 							variant="primary"
+							disabled={!owner.clientId && !owner.projectId}
 							onClick={() => {
 								setStep({ status: "reading" });
 								setWhere({ clientId: owner.clientId || null, projectId: owner.projectId || null, folderId: null });

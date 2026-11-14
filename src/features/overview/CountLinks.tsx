@@ -6,7 +6,8 @@ type CountLinkProps = {
 	label: string;
 	/** Null while it is still being counted. */
 	value: number | null;
-	screen: ScreenId;
+	/** The screen it opens. Documents has none: they are on each client's and project's tab. */
+	screen: ScreenId | null;
 };
 
 type CountLinksProps = {
@@ -18,6 +19,14 @@ type CountLinksProps = {
 
 function CountLink({ label, value, screen }: CountLinkProps) {
 	const counted = useCountUp(value);
+	if (screen === null) {
+		return (
+			<span className="flex items-center gap-[6px] py-1 text-base">
+				<span className="text-ink-muted">{label}</span>
+				<span className="font-[var(--weight-semibold)] tabular-nums text-ink">{counted === null ? "-" : counted}</span>
+			</span>
+		);
+	}
 	return (
 		<button
 			type="button"
@@ -31,7 +40,7 @@ function CountLink({ label, value, screen }: CountLinkProps) {
 }
 
 /**
- * Four counts set in a line of text, each one a way into its screen. The
+ * Four counts set in a line of text, each but Documents a way into its screen. The
  * numbers come from the briefing service, not from counting rows here.
  */
 export function CountLinks({ clients, projects, documents, unread }: CountLinksProps) {
@@ -39,7 +48,7 @@ export function CountLinks({ clients, projects, documents, unread }: CountLinksP
 		<div className="flex flex-wrap gap-x-7 gap-y-1">
 			<CountLink label="Clients" value={clients} screen="clients" />
 			<CountLink label="Projects" value={projects} screen="projects" />
-			<CountLink label="Documents" value={documents} screen="documents" />
+			<CountLink label="Documents" value={documents} screen={null} />
 			<CountLink label="Unread mail" value={unread} screen="mail" />
 		</div>
 	);

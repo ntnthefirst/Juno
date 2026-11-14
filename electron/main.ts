@@ -1519,8 +1519,9 @@ if (!app.requestSingleInstanceLock()) {
 											const button = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Templates");
 											if (!button) return false;
 											button.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("main [data-explorer-item]"); tries++) await new Promise((r) => setTimeout(r, 150));
-											return Boolean(document.querySelector("main [data-explorer-item]"));
+											// A template row, not one of the client's documents still on screen while Templates mounts.
+											for (let tries = 0; tries < 40 && !document.querySelector("main [data-explorer-item^='tpl:']"); tries++) await new Promise((r) => setTimeout(r, 150));
+											return Boolean(document.querySelector("main [data-explorer-item^='tpl:']"));
 										})()`,
 									)) as boolean;
 									if (!opened) throw new Error("Smoke: no Templates button on the client's Documents tab, or the Templates screen lists nothing");
@@ -1618,8 +1619,9 @@ if (!app.requestSingleInstanceLock()) {
 											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
 											setValue.call(findInput, "hardwax");
 											findInput.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(500);
-											if (!main.querySelector("input[data-find]")) return "find did not reach the table cell";
+											// The marks are drawn on an animation frame, which a busy machine can be late with.
+											for (let tries = 0; tries < 20 && !main.querySelector("input[data-find]"); tries++) await wait(150);
+											if (!main.querySelector("input[data-find]")) return "find did not reach the table cell (bar: " + (findInput.parentElement?.parentElement?.textContent ?? "") + ", value " + findInput.value + ", focused " + (document.activeElement === findInput) + ", cells with it " + [...main.querySelectorAll("input")].filter((el) => el.value.toLowerCase().includes("hardwax")).length + ", hidden " + document.visibilityState + ")";
 											document.querySelector("button[aria-label='Close find']")?.click();
 											await wait(300);
 											const lines = [...main.querySelectorAll("[data-block-text]")];
@@ -1903,7 +1905,8 @@ if (!app.requestSingleInstanceLock()) {
 											}
 											if (!row) return "no client rows";
 											row.click();
-											await new Promise((r) => setTimeout(r, 700));
+											// The record reads its details first, which a busy machine takes a while over.
+											for (let waited = 0; waited < 5000 && !document.querySelector("main [role=tablist]"); waited += 250) await new Promise((r) => setTimeout(r, 250));
 											const main = document.querySelector("main");
 											if (!main.querySelector("[role=tablist]")) return "no tabs";
 											// Dates and reminders belong to the client too: the section is
@@ -2260,7 +2263,8 @@ if (!app.requestSingleInstanceLock()) {
 										await wait(200);
 										const held = rows().filter((el) => el.getAttribute("aria-selected") === "true").length;
 										if (held !== rows().length) return "Ctrl A selected " + held + " of " + rows().length;
-										first.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+										// Cancelable, as a real key press is: the list takes it, and the record behind it stays open.
+										first.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
 										await wait(200);
 										if (rows().some((el) => el.getAttribute("aria-selected") === "true")) return "Escape did not let the selection go";
 										return "ok";`,
@@ -2290,7 +2294,8 @@ if (!app.requestSingleInstanceLock()) {
 									const preview = async (name: string, find: string, ready: string, painted = false) => {
 										await step(
 											`preview of ${name}`,
-											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											`// Only a preview that is open is closed: Escape on the tab itself would close the record.
+											if (document.querySelector("[data-full-preview]")) window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(300);
 											const target = await until(() => row(${JSON.stringify(find)}));
 											if (!target) return "no row for " + ${JSON.stringify(find)};
@@ -2339,7 +2344,7 @@ if (!app.requestSingleInstanceLock()) {
 										// Next and Previous go through the list, and Escape closes the preview.
 										await step(
 											"previous and next",
-											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											`if (document.querySelector("[data-full-preview]")) window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(300);
 											const first = await until(() => row("Afspraken levering"));
 											if (!first) return "the tab does not list the note";
@@ -2706,7 +2711,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (back) back.click();
 											await wait(500);
 											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											const search = document.querySelector('input[aria-label="Search documents"]');
+											const search = document.querySelector('input[aria-label="Search templates"]');
 											if (!search) return "no search field";
 											setValue.call(search, "zzz-nothing-matches-zzz");
 											search.dispatchEvent(new Event("input", { bubbles: true }));

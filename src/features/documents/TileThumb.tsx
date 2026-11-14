@@ -53,7 +53,7 @@ export function TileThumb({ item, eager = false }: TileThumbProps) {
 	return (
 		<span
 			ref={holder}
-			className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-[var(--radius-md)] bg-[var(--sunken)]"
+			className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--sunken)]"
 		>
 			{picture ? (
 				<img

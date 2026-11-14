@@ -266,7 +266,13 @@ export function FolderTree({
 							</span>
 						)}
 						{count > 0 && renamingKey !== node.key ? (
-							<span className="tabular flex-none text-micro text-[var(--ink-muted)]">{count}</span>
+							<>
+								<span aria-hidden="true" className="tabular flex-none text-micro text-[var(--ink-muted)]">
+									{count}
+								</span>
+								{/* Read as words, so the name and the number do not run together as one. */}
+								<span className="sr-only">{`, ${count} ${count === 1 ? "item" : "items"}`}</span>
+							</>
 						) : null}
 					</RowShell>
 				);

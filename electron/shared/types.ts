@@ -2156,6 +2156,8 @@ export interface DocumentTimelineEntry {
 	detail: string | null;
 	/** The version this entry made, so the viewer can jump to it. Null for an email. */
 	versionId: string | null;
+	/** The conversation an email is in, once Juno has it, so the entry can open it. Null for everything else. */
+	threadId: string | null;
 }
 
 /** What the confirmation asks about, so the wording can say what will really happen. */

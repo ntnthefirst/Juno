@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, BrowserWindow, globalShortcut, Menu, nativeImage, nativeTheme, shell } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, Menu, nativeImage, nativeTheme, shell } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -185,9 +185,20 @@ if (!app.requestSingleInstanceLock()) {
 		const db = openDb(databasePath());
 
 		splashStep("Applying migrations");
-		// A copy first, and no migration if it cannot be made.
-		await createBeforeMigrations(getConnection());
-		const migrations = runMigrations(getConnection());
+		// A copy first, and no migration if it cannot be made. A failure here would
+		// otherwise be an unhandled rejection behind a splash that never closes, so
+		// the owner is told what happened and the app exits.
+		let migrations: ReturnType<typeof runMigrations>;
+		try {
+			await createBeforeMigrations(getConnection());
+			migrations = runMigrations(getConnection());
+		} catch (cause) {
+			closeSplash();
+			const reason = cause instanceof Error ? cause.message : String(cause);
+			dialog.showErrorBox("Juno could not start", reason);
+			app.exit(1);
+			return;
+		}
 		if (migrations.applied.length > 0) {
 			console.log(`Applied ${migrations.applied.length} migration(s):`, migrations.applied);
 		}

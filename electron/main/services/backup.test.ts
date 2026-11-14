@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { pendingMigrations, runMigrations } from "../db/migrate";
 import { openDatabase, type ShimDatabase } from "../db/node-sqlite-shim";
-import { configureBackups, createBeforeMigrations, list, validate } from "./backup";
+import { configureBackups, create, createBeforeMigrations, list, validate } from "./backup";
 
 let root: string;
 let migrations: string;
@@ -106,6 +106,19 @@ describe("createBeforeMigrations", () => {
 		expect(kept).toHaveLength(3);
 		expect(kept.some((n) => n.includes("2020-02-01"))).toBe(false);
 		expect(readdirSync(backups)).toContain("juno-2020-01-01T00-00-00Z.sqlite");
+	});
+
+	it("is not pruned by a manual backup, whatever number of them there are", async () => {
+		seedCurrent();
+		mkdirSync(backups, { recursive: true });
+		const mine = join(backups, "juno-before-update-2020-02-01T00-00-00Z-0001_a.sqlite");
+		writeFileSync(mine, "old");
+		for (let i = 10; i < 25; i++) {
+			writeFileSync(join(backups, `juno-2021-01-${i}T00-00-00Z.sqlite`), "manual");
+		}
+		await create();
+		expect(readdirSync(backups)).toContain("juno-before-update-2020-02-01T00-00-00Z-0001_a.sqlite");
+		expect((await list()).filter((b) => !b.path.includes("before-update"))).toHaveLength(10);
 	});
 
 	it("throws and leaves the database unmigrated when the copy cannot be made", async () => {

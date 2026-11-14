@@ -18,7 +18,7 @@
  */
 import { DatabaseSync } from "node:sqlite";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { BackupInfo } from "../../shared/types";
 import { pendingMigrations } from "../db/migrate";
 import type { ShimDatabase } from "../db/node-sqlite-shim";
@@ -161,7 +161,11 @@ export async function list(): Promise<BackupInfo[]> {
 }
 
 async function prune(): Promise<number> {
-	const all = await list();
+	// Pre-update copies have their own keep-3 rule and are not counted here, so a
+	// run of manual backups cannot push out the copy taken before the last update.
+	const all = (await list()).filter(
+		(backup) => !basename(backup.path).startsWith(BEFORE_UPDATE),
+	);
 	let removed = 0;
 	for (const backup of all.slice(KEEP)) {
 		rmSync(backup.path, { force: true });

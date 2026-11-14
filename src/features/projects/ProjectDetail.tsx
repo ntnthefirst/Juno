@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Client,
 	Project,
@@ -65,6 +65,13 @@ type ProjectDetailProps = {
 	onTimeForm: (entry: TimeEntry | null) => void;
 	onNameChange: (name: string) => void;
 	onDeleted: (project: ProjectSummary) => void;
+	/**
+	 * Raised by the screen when something changed the project from outside this
+	 * pane (the edit page, a time entry, a date). The record and the open tab
+	 * are read again in place rather than remounted, so the page keeps its
+	 * scroll and does not drop to a placeholder on every save.
+	 */
+	version?: number;
 };
 
 type Loaded = {
@@ -96,6 +103,7 @@ function typingIn(target: EventTarget | null): boolean {
  * below. The trail in the title bar says where you are and how to get back.
  */
 export function ProjectDetail({
+	version = 0,
 	projectId,
 	tab,
 	onTabChange,
@@ -172,6 +180,15 @@ export function ProjectDetail({
 	useEffect(() => {
 		reload();
 	}, [reload]);
+
+	// A save made outside this pane reads the record again, and the reload moves
+	// `tick`, which every tab that lists its own rows reads again on.
+	const seenVersion = useRef(version);
+	useEffect(() => {
+		if (seenVersion.current === version) return;
+		seenVersion.current = version;
+		reload();
+	}, [version, reload]);
 
 	// The logged time follows the timer, wherever it was started or stopped.
 	useEffect(() => window.juno.time.onRunningChange(() => reload()), [reload]);

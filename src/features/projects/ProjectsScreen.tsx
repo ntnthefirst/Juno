@@ -332,7 +332,8 @@ export function ProjectsScreen() {
 	if (selectedId !== null) {
 		return (
 			<ProjectDetail
-				key={`${selectedId}:${detailVersion}`}
+				key={selectedId}
+				version={detailVersion}
 				projectId={selectedId}
 				tab={tab}
 				onTabChange={setTab}

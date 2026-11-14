@@ -413,7 +413,7 @@ export async function snooze(
 	const [row] = db
 		.update(reminders)
 		.set({ snoozedUntil: until, updatedAt: now() })
-		.where(eq(reminders.id, id))
+		.where(and(eq(reminders.id, id), isNull(reminders.deletedAt)))
 		.returning()
 		.all();
 	if (!row) throw new Error("That reminder no longer exists.");
@@ -428,7 +428,7 @@ export async function reopen(
 	const [row] = db
 		.update(reminders)
 		.set({ completedAt: null, snoozedUntil: null, updatedAt: now() })
-		.where(eq(reminders.id, id))
+		.where(and(eq(reminders.id, id), isNull(reminders.deletedAt)))
 		.returning()
 		.all();
 	if (!row) throw new Error("That reminder no longer exists.");
@@ -443,7 +443,7 @@ export async function remove(
 	const [row] = db
 		.update(reminders)
 		.set({ deletedAt: now(), updatedAt: now() })
-		.where(eq(reminders.id, id))
+		.where(and(eq(reminders.id, id), isNull(reminders.deletedAt)))
 		.returning()
 		.all();
 	if (!row) throw new Error("That reminder no longer exists.");

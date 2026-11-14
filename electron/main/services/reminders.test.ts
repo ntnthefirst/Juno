@@ -11,6 +11,7 @@ import {
 	create,
 	history,
 	list,
+	remove,
 	reopen,
 	snooze,
 	update,
@@ -140,6 +141,14 @@ describe("snooze", () => {
 		const snoozed = await snooze(made.id, "2026-05-20", db, "2026-05-10");
 		expect(snoozed.completedAt).toBeNull();
 		expect(snoozed.bucket).toBe("snoozed");
+	});
+
+	it("refuses a deleted reminder, as snooze, reopen and delete all do", async () => {
+		const made = await create({ title: "Thing", dueOn: "2026-05-01" }, db, "2026-05-10");
+		await remove(made.id, db, "2026-05-10");
+		await expect(snooze(made.id, "2026-05-20", db, "2026-05-10")).rejects.toThrow(/no longer exists/);
+		await expect(reopen(made.id, db, "2026-05-10")).rejects.toThrow(/no longer exists/);
+		await expect(remove(made.id, db, "2026-05-10")).rejects.toThrow(/no longer exists/);
 	});
 });
 

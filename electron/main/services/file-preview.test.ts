@@ -10,7 +10,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { FilePreview } from "../../shared/types";
 import { parseCsv } from "./csv";
 import { importFile } from "./document-import";
-import { configureDocumentStorage } from "./documents";
+import { configureDocumentStorage, remove as removeDocument } from "./documents";
 import { familyOf, readableFileName } from "./file-kind";
 import {
 	AGREEMENT,
@@ -204,6 +204,17 @@ describe("a preview", () => {
 		expect(result).toMatchObject({ kind: "html", meta: { name: "Brief.docx" } });
 		const version = await preview({ kind: "version", versionId: record.latestVersion!.id }, db);
 		expect(version.kind).toBe("html");
+	});
+
+	it("refuses a deleted document and its versions, for the window and for an agent", async () => {
+		const db = freshDb();
+		configureDocumentStorage(mkdtempSync(join(tmpdir(), "juno-preview-")));
+		const record = await importFile({ source: bytes("Geheim.txt", "Wat in de prullenbak ligt.") }, db);
+		const versionId = record.latestVersion!.id;
+		await removeDocument(record.id, db);
+		await expect(preview({ kind: "document", documentId: record.id }, db)).rejects.toThrow(/no longer exists/);
+		await expect(preview({ kind: "version", versionId }, db)).rejects.toThrow(/no longer exists/);
+		await expect(previewForAgent({ kind: "version", versionId }, db)).rejects.toThrow(/no longer exists/);
 	});
 
 	it("gives an agent the words and cells, and no address", async () => {

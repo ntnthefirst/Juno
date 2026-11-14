@@ -32,6 +32,7 @@ import * as versions from "./document-versions";
 import { familyOf, isPdfBytes, isZipBytes, mediaTypeFor, safeExtensionOf, type FileFamily } from "./file-kind";
 import { readableText, readSheets } from "./file-text";
 import { MAX_IMPORT_BYTES } from "./document-import";
+import { get as getDocument } from "./documents";
 import { attachmentPath } from "./mail-threads";
 import * as projectAssets from "./project-assets";
 
@@ -143,6 +144,9 @@ async function resolve(source: FilePreviewSource, db: Db): Promise<SourceFile> {
 		case "version": {
 			const file =
 				source.kind === "document" ? versions.latestFileOf(source.documentId, db) : versions.fileOf(source.versionId, db);
+			// A version outlives its document's soft delete, and what is deleted is
+			// not shown, to the window or to an agent (data.md section 6).
+			if (!(await getDocument(file.documentId, db))) throw new Error("That document no longer exists.");
 			const { size, modified } = statOf(file.path);
 			return { name: file.fileName, mediaType: file.mediaType, size, modified, path: file.path, bytes: null };
 		}

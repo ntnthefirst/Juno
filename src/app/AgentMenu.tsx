@@ -7,6 +7,7 @@ import { isOpenable, openEntity } from "../features/agent/entity-links";
 import { logOutcome, timeAgo } from "../features/agent/format";
 import { toolVisual } from "../features/agent/tool-visual";
 import { TitleMenu, TitleMenuHeading } from "./TitleMenu";
+import { RowsSkeleton } from "../components/RowsSkeleton";
 
 type AgentMenuProps = {
 	at: { x: number; y: number };
@@ -115,7 +116,7 @@ export function AgentMenu({ at, onClose, onOpenScreen }: AgentMenuProps) {
 				</p>
 			) : null}
 			{load === null ? (
-				error ? null : <p className="px-2.5 py-3 text-dense text-[var(--ink-muted)]">Loading.</p>
+				error ? null : <RowsSkeleton rows={3} divided={false} trailing={false} />
 			) : (
 				<>
 					<TitleMenuHeading>Waiting for you</TitleMenuHeading>

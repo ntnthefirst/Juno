@@ -10,6 +10,7 @@ import { useRemotePictures } from "../../lib/remote-pictures";
 import { contextMenuFor } from "../../lib/native-menu";
 import { useCanvasFonts } from "../templates/mail/canvas/use-canvas-fonts";
 import { UseMailTemplateScreen } from "../templates/UseMailTemplateScreen";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type StyledMailPaneProps = {
 	onClose: () => void;
@@ -209,7 +210,7 @@ export function StyledMailPane({ onClose, onSent, escapeCloses = true }: StyledM
 								{loadError}
 							</li>
 						) : templates === null ? (
-							<li className="px-2 py-2 text-sm text-[var(--ink-muted)]">Loading.</li>
+							<li><RowsSkeleton rows={4} divided={false} trailing={false} /></li>
 						) : shown.length === 0 ? (
 							<li className="px-2 py-2 text-sm text-[var(--ink-muted)]">
 								{needle ? "Nothing matches." : "No styled mail yet. Make one in Styled mail."}

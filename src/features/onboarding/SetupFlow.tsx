@@ -11,6 +11,7 @@ import { AppearanceSection } from "../settings/AppearanceSection";
 import { LockDialog, type LockMode } from "../settings/LockSection";
 import { SoloSectionContext } from "../settings/section-layout";
 import welcomeHero from "../../assets/welcome-bureau.jpg";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 /**
  * Mirrors ONBOARDING_VERSION in electron/main/services/settings.ts. The
@@ -343,7 +344,13 @@ function AboutYouStep({ onBack, onContinue }: StepProps) {
 				</StepHead>
 
 				{profile === null ? (
-					<p className="mt-4 text-[var(--ink-muted)]">{loadError ?? "Loading."}</p>
+					loadError ? (
+						<p className="mt-4 text-[var(--risk)]">{loadError}</p>
+					) : (
+						<div className="mt-4">
+							<CardSkeleton lines={4} framed={false} />
+						</div>
+					)
 				) : (
 					<StepFields>
 						<div className="grid grid-cols-2 gap-4">
@@ -424,7 +431,13 @@ function BusinessStep({ onBack, onContinue }: StepProps) {
 				</StepHead>
 
 				{profile === null ? (
-					<p className="mt-4 text-[var(--ink-muted)]">{loadError ?? "Loading."}</p>
+					loadError ? (
+						<p className="mt-4 text-[var(--risk)]">{loadError}</p>
+					) : (
+						<div className="mt-4">
+							<CardSkeleton lines={4} framed={false} />
+						</div>
+					)
 				) : (
 					<StepFields>
 						<Field

@@ -15,6 +15,7 @@ import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { MessageView } from "./MessageView";
 import { ConversationPanel, type ThreadEntry } from "./ConversationPanel";
 import { OutgoingMessageView } from "./OutgoingMessageView";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type ThreadViewProps = {
 	threadId: string;
@@ -205,7 +206,11 @@ export function ThreadView({
 	}
 
 	if (load.status === "loading" || load.threadId !== threadId) {
-		return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
+		return (
+			<div className="p-8">
+				<CardSkeleton lines={6} label="Loading the conversation" />
+			</div>
+		);
 	}
 	if (load.status === "error") {
 		return (

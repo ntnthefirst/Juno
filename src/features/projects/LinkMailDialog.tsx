@@ -3,6 +3,7 @@ import type { MailThreadSummary } from "@shared/types";
 import { Avatar } from "../../components/Avatar";
 import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type LinkMailDialogProps = {
 	projectId: string;
@@ -83,7 +84,7 @@ export function LinkMailDialog({ projectId, projectName, onClose, onLinked }: Li
 			) : null}
 			<ul className="mt-3 max-h-[340px] overflow-y-auto">
 				{threads === null ? (
-					<li className="px-3 py-2 text-[var(--ink-muted)]">Loading.</li>
+					<li><RowsSkeleton rows={4} divided={false} /></li>
 				) : threads.length === 0 ? (
 					<li className="px-3 py-2 text-[var(--ink-muted)]">
 						{search ? "No conversation matches." : "There is no mail to link yet."}

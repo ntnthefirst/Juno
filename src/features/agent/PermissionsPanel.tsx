@@ -5,6 +5,7 @@ import { Segmented } from "../../components/Segmented";
 import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { Section } from "../settings/Section";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 const LEVEL_LABELS: Record<AgentLevel, string> = { off: "Off", ask: "Ask first", allow: "Allow" };
 const LEVELS: AgentLevel[] = ["off", "ask", "allow"];
@@ -56,7 +57,7 @@ export function PermissionsPanel({ onNotice }: PermissionsPanelProps) {
 	}
 
 	if (error) return <Notice tone="risk" layout="inline">{error}</Notice>;
-	if (!view || !sources) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (!view || !sources) return <RowsSkeleton rows={8} />;
 
 	return (
 		<>

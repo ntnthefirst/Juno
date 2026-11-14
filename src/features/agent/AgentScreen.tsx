@@ -8,6 +8,7 @@ import { AutomationList } from "./AutomationList";
 import { EntityChip } from "./EntityChip";
 import { formatLogWhen, logOutcome, logWho } from "./format";
 import { RequestList } from "./RequestList";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Tab = "requests" | "log" | "automations";
 
@@ -153,7 +154,7 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 			</div>
 		);
 	}
-	if (rows === null) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (rows === null) return <RowsSkeleton rows={4} />;
 
 	return (
 		<div>

@@ -118,6 +118,9 @@
 		*::before,
 		*::after {
 			animation-duration: 0.01ms !important;
+			/* An endless animation cut to nothing would flicker through its frames;
+			 * one run lands it on its resting state and leaves it there. */
+			animation-iteration-count: 1 !important;
 			transition-duration: 0.01ms !important;
 		}
 	}

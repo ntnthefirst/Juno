@@ -7,6 +7,7 @@ import { messageOf } from "../../lib/errors";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { AutomationForm } from "./AutomationForm";
 import { describeTrigger, formatWhen, RUN_LABELS, RUN_TONES } from "./format";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type AutomationListProps = {
 	onNotice: (message: string) => void;
@@ -71,7 +72,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 			</div>
 		);
 	}
-	if (load.status === "loading") return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (load.status === "loading") return <RowsSkeleton rows={3} />;
 
 	if (form) {
 		return (

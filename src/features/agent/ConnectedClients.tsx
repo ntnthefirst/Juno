@@ -3,6 +3,7 @@ import type { AgentConnection, AgentTokenCreated } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ConnectedClientsProps = {
 	onNotice: (message: string) => void;
@@ -98,7 +99,13 @@ export function ConnectedClients({ onNotice }: ConnectedClientsProps) {
 			</p>
 		);
 	}
-	if (rows === null) return <p className="mt-3 text-[var(--ink-muted)]">Loading.</p>;
+	if (rows === null) {
+		return (
+			<div className="mt-3">
+				<RowsSkeleton rows={2} />
+			</div>
+		);
+	}
 
 	return (
 		<div>

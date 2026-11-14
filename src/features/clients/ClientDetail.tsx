@@ -39,6 +39,7 @@ import { openNewRecord } from "../../lib/new-record";
 import { requestOpen } from "../../lib/open-entity";
 import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
+import { RecordSkeleton } from "../../components/RecordSkeleton";
 
 /** A non-breaking space, so an amount never wraps between its thousands. */
 const NBSP = String.fromCharCode(0xa0);
@@ -194,7 +195,7 @@ type ClientDetailProps = {
 	/**
 	 * Raised by the screen when something changed the client from outside this
 	 * pane (a side panel, a new-record window). The record is read again in
-	 * place rather than remounted, so the page does not drop to "Loading." and
+	 * place rather than remounted, so the page does not drop to a placeholder and
 	 * lose its scroll on every edit.
 	 */
 	version?: number;
@@ -436,7 +437,7 @@ export function ClientDetail({
 		}
 	}
 
-	if (load.status === "loading") return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (load.status === "loading") return <RecordSkeleton label="Loading the client" />;
 
 	if (load.status === "error") {
 		return (

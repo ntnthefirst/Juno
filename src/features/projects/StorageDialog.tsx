@@ -5,6 +5,7 @@ import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { formatBytes } from "./format";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type StorageDialogProps = {
 	projectId: string;
@@ -65,7 +66,7 @@ export function StorageDialog({ projectId, onClose, onMoved }: StorageDialogProp
 	return (
 		<Dialog title="Where this project's files are kept" onClose={onClose} width="base">
 			{info === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<CardSkeleton lines={4} framed={false} />
 			) : (
 				<div className="flex flex-col gap-5">
 					<div>

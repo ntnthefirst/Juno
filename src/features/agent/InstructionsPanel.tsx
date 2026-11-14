@@ -6,6 +6,7 @@ import { MenuButton } from "../../components/Menu";
 import { Notice } from "../../components/Notice";
 import { messageOf } from "../../lib/errors";
 import { Section } from "../settings/Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type InstructionsPanelProps = {
 	onNotice: (message: string) => void;
@@ -65,7 +66,7 @@ export function InstructionsPanel({ onNotice }: InstructionsPanelProps) {
 	}
 
 	if (error) return <Notice tone="risk" layout="inline">{error}</Notice>;
-	if (!view || !draft) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (!view || !draft) return <CardSkeleton lines={5} />;
 
 	const free = view.areas.filter((area) => !draft.areas.some((used) => used.area === area.id));
 

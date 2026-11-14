@@ -23,6 +23,7 @@ import { ProjectGrid } from "./ProjectGrid";
 import { ProjectTable } from "./ProjectTable";
 import { TimeEntryFormPage } from "./TimeEntryFormPage";
 import { ViewControls } from "./ViewControls";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Rows = { projects: ProjectSummary[]; statuses: ReferenceItem[] };
 
@@ -408,7 +409,7 @@ export function ProjectsScreen() {
 
 			<div className="min-h-0 w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("projects")}>
 				{load.status === "loading" || !view ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={8} label="Loading your projects" />
 				) : load.status === "error" ? (
 					<div className="border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">

@@ -64,6 +64,7 @@ import { useRecentTouch } from "../../lib/use-recent-touch";
 import { listAllClients } from "../../lib/list-all-clients";
 import { useGradualCount } from "../../lib/use-gradual-count";
 import { useRowSelection } from "../../lib/use-row-selection";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Load =
 	| { status: "loading" }
@@ -658,7 +659,7 @@ export function ClientsScreen() {
 
 			<div className="w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("clients")}>
 				{load.status === "loading" ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={10} avatar label="Loading your clients" />
 				) : load.status === "error" ? (
 					<ErrorNote message={load.message} />
 				) : load.rows.length === 0 ? (

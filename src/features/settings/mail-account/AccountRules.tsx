@@ -9,6 +9,7 @@ import { Toggle } from "../../../components/Toggle";
 import { messageOf } from "../../../lib/errors";
 import { moveBefore, moveBy } from "../../mail/blocks/block-text";
 import { SectionError } from "../Section";
+import { RowsSkeleton } from "../../../components/RowsSkeleton";
 
 type AccountRulesProps = {
 	accountId: string;
@@ -46,7 +47,7 @@ export function AccountRules({ accountId, rules, folders, onEdit, onChanged }: A
 
 	const reorder = (ids: string[]) => run(() => window.juno.mail.rules.reorder(accountId, ids));
 
-	if (rules === null) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (rules === null) return <RowsSkeleton rows={3} />;
 
 	return (
 		<>

@@ -1,6 +1,7 @@
 import type { MailRuleRun } from "@shared/types";
 import { formatWhen } from "../../mail/format";
 import { failedWords, runWords, skippedWords } from "./rule-draft";
+import { RowsSkeleton } from "../../../components/RowsSkeleton";
 
 type AccountRuleHistoryProps = {
 	runs: MailRuleRun[] | null;
@@ -18,7 +19,7 @@ const RESULT_TONE = {
  * cut to one line each.
  */
 export function AccountRuleHistory({ runs }: AccountRuleHistoryProps) {
-	if (runs === null) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (runs === null) return <RowsSkeleton rows={3} />;
 	if (runs.length === 0) {
 		return <p className="max-w-[62ch] text-[var(--ink-muted)]">Nothing yet. A rule's actions are listed here as they happen.</p>;
 	}

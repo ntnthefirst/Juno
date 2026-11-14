@@ -7,6 +7,7 @@ import { MenuButton } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
 import { listAllThreads } from "../../lib/list-all-threads";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ProjectMailProps = {
 	projectId: string;
@@ -92,7 +93,7 @@ export function ProjectMail({ projectId, version, onLinkMail, onChanged }: Proje
 
 			<div className="mt-3 flex-1">
 				{load.status === "loading" ? (
-					<p className="text-sm text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={3} />
 				) : load.status === "error" ? (
 					<p data-selectable className="text-sm text-[var(--risk)]">
 						{load.message}

@@ -9,6 +9,7 @@ import { messageOf } from "../../lib/errors";
 import { Section } from "../settings/Section";
 import { ClaudeDesktopConnect } from "./ClaudeDesktopConnect";
 import { ConnectedClients } from "./ConnectedClients";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type ConnectionPanelProps = {
 	onNotice: (message: string) => void;
@@ -85,7 +86,7 @@ export function ConnectionPanel({ onNotice, part }: ConnectionPanelProps) {
 			</div>
 		);
 	}
-	if (!status) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (!status) return <CardSkeleton lines={4} />;
 
 	const showServer = part === undefined || part === "server";
 	const showConnect = part === undefined || part === "connect";

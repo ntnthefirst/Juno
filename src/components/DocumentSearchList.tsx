@@ -1,6 +1,7 @@
 import type { DocumentRecord } from "@shared/types";
 import { AttachmentIcon } from "./AttachmentIcon";
 import { Checkbox } from "./Checkbox";
+import { RowsSkeleton } from "./RowsSkeleton";
 
 type DocumentSearchListProps = {
 	documents: DocumentRecord[] | null;
@@ -48,7 +49,7 @@ export function DocumentSearchList({
 	onPick,
 	emptyText,
 }: DocumentSearchListProps) {
-	if (documents === null) return <p className="px-2 py-2 text-[var(--ink-muted)]">Loading.</p>;
+	if (documents === null) return <RowsSkeleton rows={4} divided={false} trailing={false} />;
 	if (documents.length === 0) {
 		return <p className="px-2 py-2 text-sm text-[var(--ink-muted)]">{emptyText}</p>;
 	}

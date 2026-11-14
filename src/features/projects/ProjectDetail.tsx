@@ -45,6 +45,7 @@ import { RunConsole } from "./RunConsole";
 import { StorageDialog } from "./StorageDialog";
 import { dayLabel, formatDuration } from "./time-format";
 import { listAllThreads } from "../../lib/list-all-threads";
+import { RecordSkeleton } from "../../components/RecordSkeleton";
 
 export type ProjectTab = "notes" | "mail" | "timeline" | "time" | "calendar";
 
@@ -299,7 +300,11 @@ export function ProjectDetail({
 	});
 
 	if (load.status === "loading") {
-		return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
+		return (
+			<div className="p-6">
+				<RecordSkeleton shape="square" label="Loading the project" />
+			</div>
+		);
 	}
 	if (load.status === "error" || !data) {
 		return (

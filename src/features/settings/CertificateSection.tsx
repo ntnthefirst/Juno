@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type Load = { status: "loading" } | { status: "ready"; info: SigningCertificateInfo | null };
 
@@ -80,7 +81,7 @@ export function CertificateSection() {
 			}
 		>
 			{load.status === "loading" ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<CardSkeleton lines={3} framed={false} />
 			) : info ? (
 				<dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-4 gap-y-1 text-dense">
 					<dt className="text-[var(--ink-muted)]">Issued to</dt>

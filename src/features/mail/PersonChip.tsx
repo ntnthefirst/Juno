@@ -8,6 +8,7 @@ import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
 import { ConnectClientDialog } from "./ConnectClientDialog";
 import { displayName } from "./format";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type PersonChipProps = {
 	person: MailAddress;
@@ -170,7 +171,7 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 
 					<div className="mt-2 border-t border-[var(--line)] pt-2">
 						{lookup.status === "loading" ? (
-							<p className="text-[var(--ink-muted)]">Loading.</p>
+							<CardSkeleton lines={2} framed={false} />
 						) : lookup.status === "error" ? (
 							<p role="alert" className="text-[var(--risk)]">
 								{lookup.message}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { MailThreadSummary, ProjectSummary } from "@shared/types";
 import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type LinkProjectDialogProps = {
 	thread: MailThreadSummary;
@@ -89,7 +90,7 @@ export function LinkProjectDialog({ thread, onClose, onLinked }: LinkProjectDial
 			) : null}
 			<ul className="mt-3 max-h-[320px] overflow-y-auto">
 				{projects === null ? (
-					<li className="px-3 py-2 text-[var(--ink-muted)]">Loading.</li>
+					<li><RowsSkeleton rows={4} divided={false} trailing={false} /></li>
 				) : ordered.length === 0 ? (
 					<li className="px-3 py-2 text-[var(--ink-muted)]">
 						{projects.length === 0

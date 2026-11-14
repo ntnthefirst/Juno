@@ -25,6 +25,7 @@ import { useRecentTouch } from "../../lib/use-recent-touch";
 import { useRowSelection } from "../../lib/use-row-selection";
 import { editedLabel, groupLabel, noteTitle, notePreview, rowTime } from "./note-format";
 import { listAllNotes } from "../../lib/list-all-notes";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 const loadNotes = () => listAllNotes();
 
@@ -288,7 +289,7 @@ export function NotesScreen() {
 					</div>
 				) : null}
 				<div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-					{notes.status === "loading" ? <p className="px-4 text-dense text-[var(--ink-muted)]">Loading.</p> : null}
+					{notes.status === "loading" ? <RowsSkeleton rows={8} /> : null}
 					{notes.status === "error" ? (
 						<p data-selectable className="px-4 text-dense text-[var(--risk)]">
 							{notes.message}

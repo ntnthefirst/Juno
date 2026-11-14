@@ -445,6 +445,15 @@
 	}
 }
 
+/* A placeholder for content still on its way: the shape of what is coming,
+ * pulsing in opacity only, slowly enough not to be watched. Under reduced
+ * motion global.css stops it on its first frame, which is the resting one. */
+@keyframes juno-skeleton {
+	50% {
+		opacity: 0.45;
+	}
+}
+
 /* Tailwind v4 reads this block to generate utilities: bg-paper, text-ink-muted,
  * border-line, rounded-lg, and so on. Add a token above and to this block
  * together, or the utility silently does not exist. */
@@ -565,6 +574,7 @@
 	--animate-lift: juno-lift 320ms var(--ease-spring) backwards;
 	--animate-unread-pulse: juno-unread-pulse 2400ms var(--ease) infinite;
 	--animate-fade: juno-fade var(--duration-base) var(--ease);
+	--animate-skeleton: juno-skeleton 1600ms var(--ease) infinite;
 	--duration-fast: var(--duration-fast);
 	--duration-base: var(--duration-base);
 	--duration-slow: var(--duration-slow);

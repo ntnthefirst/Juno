@@ -40,6 +40,7 @@ import { ThreadToolbar } from "./ThreadToolbar";
 import { MailStatusBar } from "./MailStatusBar";
 import { StyledMailPane } from "./StyledMailPane";
 import { ThreadView } from "./ThreadView";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type LinkTarget = { threadId: string; currentClientId: string | null; senderAddress: string | null };
 
@@ -919,7 +920,7 @@ export function MailScreen() {
 	if (accounts === null) {
 		return (
 			<div className="p-8">
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={10} avatar label="Loading your mail" />
 			</div>
 		);
 	}

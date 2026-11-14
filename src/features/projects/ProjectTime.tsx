@@ -6,6 +6,7 @@ import { MenuButton } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { formatClock, formatDuration, shortDay } from "./time-format";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ProjectTimeProps = {
 	projectId: string;
@@ -99,7 +100,7 @@ export function ProjectTime({ projectId, version, onAddEntry, onEditEntry, onCha
 		}
 	}
 
-	if (load.status === "loading") return <p className="text-sm text-[var(--ink-muted)]">Loading.</p>;
+	if (load.status === "loading") return <RowsSkeleton rows={4} />;
 	if (load.status === "error") {
 		return (
 			<p data-selectable className="text-sm text-[var(--risk)]">

@@ -5,6 +5,7 @@ import { messageOf } from "../lib/errors";
 import { requestOpen } from "../lib/open-entity";
 import { BUCKET_LABELS, describeDue, todayIso } from "../features/reminders/format";
 import { TitleMenu, TitleMenuHeading } from "./TitleMenu";
+import { RowsSkeleton } from "../components/RowsSkeleton";
 
 type RemindersMenuProps = {
 	at: { x: number; y: number };
@@ -71,7 +72,7 @@ export function RemindersMenu({ at, onClose, onOpenScreen }: RemindersMenuProps)
 					{error}
 				</p>
 			) : rows === null ? (
-				<p className="px-2.5 py-3 text-dense text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={3} divided={false} />
 			) : rows.length === 0 ? (
 				<p className="px-2.5 py-3 text-dense text-[var(--ink-muted)]">Nothing is due this week.</p>
 			) : (

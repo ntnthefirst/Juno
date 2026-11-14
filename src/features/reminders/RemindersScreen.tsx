@@ -11,6 +11,7 @@ import { BUCKET_LABELS, BUCKET_ORDER, todayIso } from "./format";
 import { ReminderForm } from "./ReminderForm";
 import { ReminderRow } from "./ReminderRow";
 import { SnoozeDialog } from "./SnoozeDialog";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Load =
 	| { status: "loading" }
@@ -134,7 +135,7 @@ export function RemindersScreen() {
 				</TitleBarSlot>
 
 				{load.status === "loading" ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={6} label="Loading your reminders" />
 				) : load.status === "error" ? (
 					<div className="border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">

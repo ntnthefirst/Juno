@@ -12,6 +12,7 @@ import { contextMenuFor } from "../../lib/native-menu";
 import { startThreadDrag } from "./drag";
 import { formatWhen, leadParticipant, participantsLine } from "./format";
 import { OutboxRow } from "./OutboxRow";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 export type ThreadAction =
 	| "open"
@@ -139,7 +140,7 @@ export function ThreadList({
 		);
 	}
 	if (threads === null || (outbox && outbox.messages === null)) {
-		return <p className="px-4 text-[var(--ink-muted)]">Loading.</p>;
+		return <RowsSkeleton rows={10} avatar label="Loading the conversations" />;
 	}
 	if (merged.length === 0) {
 		return searching ? (

@@ -11,6 +11,7 @@ import { ACTION_LABELS, ACTION_TONES, formatArgs, formatWhen, parseMailPreview, 
 import { ToolTile } from "./ToolTile";
 import { toolVisual, VERBS } from "./tool-visual";
 import { useNow } from "./use-now";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type RequestListProps = {
 	actions: AgentAction[] | null;
@@ -63,7 +64,7 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 			</div>
 		);
 	}
-	if (actions === null) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (actions === null) return <RowsSkeleton rows={4} />;
 
 	const pending = actions.filter((action) => action.state === "pending");
 	const answered = actions.filter((action) => action.state !== "pending");

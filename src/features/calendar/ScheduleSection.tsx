@@ -10,6 +10,7 @@ import { requestOpen } from "../../lib/open-entity";
 import { addDays, formatDate, formatTime, todayIso } from "./dates";
 import { scheduleRows, type ScheduleRow } from "./schedule-rows";
 import type { ScheduleForm } from "./schedule-form";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ScheduleSectionProps = {
 	/** One of these. A project's list is its own; a client's list is everything under it. */
@@ -193,7 +194,7 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 					{load.message}
 				</p>
 			) : load.status === "loading" ? (
-				<p className="text-sm text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={3} />
 			) : rows.length === 0 ? (
 				<p className="text-sm text-[var(--ink-muted)]">
 					Nothing planned. Add a date for a meeting or a delivery, or a reminder for something to do.

@@ -4,6 +4,7 @@ import { MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
 import { shortDay } from "./time-format";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ProjectTimelineProps = {
 	projectId: string;
@@ -115,7 +116,7 @@ export function ProjectTimeline({ projectId, version, onOpenTime, onOpenFolder }
 			</div>
 
 			{load.status === "loading" ? (
-				<p className="text-sm text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={5} />
 			) : load.status === "error" ? (
 				<p data-selectable className="text-sm text-[var(--risk)]">
 					{load.message}

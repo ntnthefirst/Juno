@@ -18,6 +18,7 @@ import { CalendarSubscriptionPage } from "./calendar-subscriptions/CalendarSubsc
 import { CalendarSubscriptionsSection } from "./calendar-subscriptions/CalendarSubscriptionsSection";
 import { Section, SectionError } from "./Section";
 import { PAGE_PADDING } from "./section-layout";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type MailSectionProps = {
 	onSaved: (message: string) => void;
@@ -178,7 +179,7 @@ export function MailSection({ onSaved, page }: MailSectionProps) {
 					description={`Passwords are stored by ${isMac ? "macOS" : "Windows"} and never shown again. Open an account for its folders, its rules and what they did.`}
 				>
 					{accounts === null ? (
-						<p className="text-[var(--ink-muted)]">Loading.</p>
+						<RowsSkeleton rows={2} />
 					) : accounts.length === 0 ? (
 						<p className="text-[var(--ink-muted)]">No accounts yet.</p>
 					) : (

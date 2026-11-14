@@ -3,6 +3,7 @@ import type { MailFolder } from "@shared/types";
 import { Checkbox } from "../../../components/Checkbox";
 import { messageOf } from "../../../lib/errors";
 import { SectionError } from "../Section";
+import { RowsSkeleton } from "../../../components/RowsSkeleton";
 
 type AccountFoldersProps = {
 	folders: MailFolder[] | null;
@@ -25,7 +26,7 @@ export function AccountFolders({ folders, onChanged }: AccountFoldersProps) {
 	return (
 		<>
 			{folders === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={5} />
 			) : folders.length === 0 ? (
 				<p className="text-[var(--ink-muted)]">No folders listed yet. Sync the account first.</p>
 			) : (

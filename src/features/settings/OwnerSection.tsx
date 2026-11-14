@@ -5,6 +5,7 @@ import { Field } from "../../components/Field";
 import { messageOf } from "../../lib/errors";
 import { OwnerContactList } from "./OwnerContacts";
 import { Section, SectionError } from "./Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type OwnerSectionProps = {
 	/**
@@ -121,7 +122,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 					}
 				>
 					{profile === null ? (
-						<p className="text-[var(--ink-muted)]">Loading.</p>
+						<CardSkeleton lines={3} framed={false} />
 					) : (
 						<div className="grid max-w-[720px] grid-cols-1 gap-4 sm:grid-cols-6">
 							{FIELDS.map((field) => (
@@ -148,7 +149,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 						description="Documents print the primary one."
 					>
 						{profile === null ? (
-							<p className="text-[var(--ink-muted)]">Loading.</p>
+							<CardSkeleton lines={3} framed={false} />
 						) : (
 							<OwnerContactList<OwnerEmail>
 								items={profile.emails}
@@ -186,7 +187,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 						description="Documents print the primary one."
 					>
 						{profile === null ? (
-							<p className="text-[var(--ink-muted)]">Loading.</p>
+							<CardSkeleton lines={3} framed={false} />
 						) : (
 							<OwnerContactList<OwnerPhone>
 								items={profile.phones}

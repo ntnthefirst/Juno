@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 function formatSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -94,7 +95,7 @@ export function BackupSection({ onDone }: { onDone: (message: string) => void })
 
 			<div className="mt-5">
 			{backups === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={3} />
 			) : backups.length === 0 ? (
 				<p className="text-dense text-[var(--ink-muted)]">No backups yet.</p>
 			) : (

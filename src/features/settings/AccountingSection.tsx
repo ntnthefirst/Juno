@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 export function AccountingSection({ onSaved }: { onSaved: (message: string) => void }) {
 	const [tool, setTool] = useState<AccountingTool | null>(null);
@@ -51,7 +52,7 @@ export function AccountingSection({ onSaved }: { onSaved: (message: string) => v
 			}
 		>
 			{tool === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<CardSkeleton lines={3} framed={false} />
 			) : (
 				<div className="grid max-w-[720px] grid-cols-1 gap-4 sm:grid-cols-2">
 					<Field

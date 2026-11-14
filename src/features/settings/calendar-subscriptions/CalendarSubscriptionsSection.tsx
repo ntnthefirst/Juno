@@ -7,6 +7,7 @@ import { CALENDAR_TONES } from "../../../lib/calendar-colours";
 import { updatedLabel } from "../../../lib/calendar-subscriptions";
 import { messageOf } from "../../../lib/errors";
 import { SectionError } from "../Section";
+import { RowsSkeleton } from "../../../components/RowsSkeleton";
 
 type CalendarSubscriptionsSectionProps = {
 	/** Opens the Add calendar page, or the page of one subscription. */
@@ -78,7 +79,7 @@ export function CalendarSubscriptionsSection({ onOpen, refreshKey }: CalendarSub
 
 			<div className="mt-4">
 				{rows === null ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={2} />
 				) : rows.length === 0 ? (
 					<p className="text-[var(--ink-muted)]">No calendars yet. Add one with its address in iCal format.</p>
 				) : (

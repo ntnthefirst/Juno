@@ -32,6 +32,7 @@ import { PairingDialog } from "../features/agent/PairingDialog";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
 import { useTheme } from "../lib/theme";
+import { CardSkeleton } from "../components/CardSkeleton";
 
 type SettingsWindowProps = {
 	/**
@@ -329,7 +330,7 @@ function AboutSection() {
 			{error ? (
 				<p className="text-[var(--risk)]">{error}</p>
 			) : info === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<CardSkeleton lines={4} framed={false} />
 			) : (
 				<div className="flex flex-col gap-5">
 					<div className="flex items-center gap-4 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">

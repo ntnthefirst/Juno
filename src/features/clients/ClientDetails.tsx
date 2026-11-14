@@ -6,6 +6,7 @@ import { IconButton } from "../../components/IconButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { DetailRow } from "./DetailRow";
 import { DetailValue } from "./DetailValue";
+import { useClickGate } from "../../lib/click-timing";
 import { messageOf } from "../../lib/errors";
 
 /** What the remove dialog needs to ask about one value. */
@@ -75,6 +76,9 @@ export function ClientDetails({
 }: ClientDetailsProps) {
 	// What failed outside a field (Make primary, opening a link), said under the list.
 	const [problem, setProblem] = useState<string | null>(null);
+	// A double click on an address edits it, so a single click waits for the
+	// second before it opens the composer, which replaces the whole record.
+	const mailClick = useClickGate<string>({ single: onMailTo, double: () => undefined });
 
 	async function run(action: () => Promise<unknown>) {
 		setProblem(null);
@@ -166,9 +170,10 @@ export function ClientDetails({
 						<button
 							type="button"
 							title={`Write to ${email.email}`}
-							// A double click edits the value, so only the first click starts a message.
 							onClick={(event) => {
-								if (event.detail <= 1) onMailTo(email.email);
+								// Enter or Space has no second click to wait for.
+								if (event.detail === 0) onMailTo(email.email);
+								else mailClick.click(email.email, event.detail);
 							}}
 							className={LINK_CLASS}
 						>

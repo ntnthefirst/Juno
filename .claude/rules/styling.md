@@ -352,8 +352,12 @@ The animations are utilities, not keyframes written at the call site:
   and `0fr`, which the browser does without measuring.
 - **A press gives.** Buttons scale to 97% while down, icon buttons to 90%.
 - **Numbers count up** (`useCountUp`) the first time they have a value. Once.
-- **Loading is the shape of what is coming** (`CardSkeleton`), not the word, so
-  the card does not grow under whatever is below it.
+- **Loading is the shape of what is coming**, not the word, so the card does
+  not grow under whatever is below it. `RowsSkeleton` for a list (rows at
+  `--row-height`, roomy with `avatar`), `CardSkeleton` for a card or a section
+  (`framed={false}` inside one already drawn), `RecordSkeleton` for a client
+  or a project, and `SkeletonBar` for a single line. They pulse in opacity
+  (`animate-skeleton`), and reduced motion stops them on the resting frame.
 - **Reduced motion is honoured in one place.** `global.css` cuts every
   animation and transition to nothing under `prefers-reduced-motion`, and
   `prefersReducedMotion()` is for the code that waits on a delay of its own. A

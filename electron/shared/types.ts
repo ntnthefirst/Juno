@@ -3969,6 +3969,8 @@ export interface PageInput {
 	title?: string;
 	clientId?: string | null;
 	projectId?: string | null;
+	/** A folder the owner made. Its client and project win over the two above. */
+	folderId?: string | null;
 	blocks?: unknown;
 }
 

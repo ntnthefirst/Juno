@@ -339,8 +339,9 @@ export function DocumentsScreen() {
 	async function newPage() {
 		const place = placeHere ?? { clientId: null, projectId: null, folderId: null };
 		try {
-			const page = await window.juno.pages.create({ clientId: place.clientId, projectId: place.projectId });
-			if (place.folderId) await window.juno.documents.move(page.document.id, { folderId: place.folderId });
+			const page = await window.juno.pages.create(
+				place.folderId ? { folderId: place.folderId } : { clientId: place.clientId, projectId: place.projectId },
+			);
 			changed();
 			setMode({ kind: "page", id: page.document.id, title: page.document.title });
 		} catch (cause: unknown) {

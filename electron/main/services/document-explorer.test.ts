@@ -13,6 +13,7 @@ import * as folders from "./document-folders";
 import { analyseImport, importFile, importFromMail } from "./document-import";
 import * as organise from "./document-organise";
 import * as templates from "./document-templates";
+import * as pages from "./pages";
 import * as projects from "./projects";
 import * as documents from "./documents";
 import { configureDocumentStorage } from "./documents";
@@ -268,6 +269,13 @@ describe("folders", () => {
 		await expect(documents.generate({ templateId: template.id, clientId: other.id, folderId: designs.id }, db)).rejects.toThrow(
 			/kept under another client or project/,
 		);
+	});
+
+	it("writes a new page straight into a folder", async () => {
+		const { db, acme } = await setUp();
+		const offers = await folders.create({ name: "Offertes", clientId: acme.id }, db);
+		const page = await pages.create({ folderId: offers.id }, db);
+		expect(page.document).toMatchObject({ clientId: acme.id, projectId: null, folderId: offers.id, sourceKind: "page" });
 	});
 });
 

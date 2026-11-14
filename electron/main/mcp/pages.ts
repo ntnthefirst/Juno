@@ -45,6 +45,10 @@ export const pageTools: ToolDescriptor[] = [
 				title: { type: "string", description: "The title. Default Untitled page." },
 				client_id: { type: ["string", "null"], description: "The id of the client, from clients.list." },
 				project_id: { type: ["string", "null"], description: "The id of the project, from projects.list." },
+				folder_id: {
+					type: ["string", "null"],
+					description: "Optional. A folder from documents.folders.list to keep the page in; its client and project win.",
+				},
 				blocks: BLOCKS,
 			},
 			additionalProperties: false,
@@ -54,6 +58,7 @@ export const pageTools: ToolDescriptor[] = [
 				...(typeof args.title === "string" ? { title: args.title } : {}),
 				...("client_id" in args ? { clientId: args.client_id as string | null } : {}),
 				...("project_id" in args ? { projectId: args.project_id as string | null } : {}),
+				...("folder_id" in args ? { folderId: args.folder_id as string | null } : {}),
 				...("blocks" in args ? { blocks: args.blocks } : {}),
 			}),
 	},

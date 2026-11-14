@@ -15,6 +15,7 @@ import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { documents } from "../db/schema";
 import { resolveOwner } from "./document-owner";
+import { resolvePlace } from "./document-place";
 import * as docs from "./documents";
 
 const MAX_TITLE = 300;
@@ -58,13 +59,14 @@ export async function create(input: PageInput = {}, db: Db = getDb()): Promise<P
 	const title = input.title === undefined ? "Untitled page" : cleanTitle(input.title) || "Untitled page";
 	const blocks = input.blocks === undefined ? emptyBlocks() : cleanBlocks(input.blocks);
 	checkImages(blocks, null);
-	const owner = resolveOwner(input, db);
+	const owner = resolvePlace(input, db);
 	const stamp = now();
 	const row = db
 		.insert(documents)
 		.values({
 			clientId: owner.clientId,
 			projectId: owner.projectId,
+			folderId: owner.folderId,
 			title,
 			bodyHtml: blocksToHtml(blocks),
 			blocksJson: JSON.stringify(blocks),

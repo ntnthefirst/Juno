@@ -61,7 +61,6 @@ export const mailTemplates = sqliteTable(
  *   sending   in flight
  *   sent      accepted by the SMTP server
  *   failed    the server refused or could not be reached; retry is manual
- *   cancelled withdrawn before it went out
  *
  * A row only reaches `queued` through one function, and that function is the
  * gate. See services/mail-outbox.ts.

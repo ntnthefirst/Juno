@@ -27,6 +27,30 @@ export function migrationsDir(): string {
 	return join(__dirname, "migrations");
 }
 
+/**
+ * What a launch would apply, without applying it. `applied` is the journal in
+ * apply order, so its last entry is the schema the file is at now; an empty one
+ * is a database that has never been migrated.
+ */
+export function pendingMigrations(
+	connection: ShimDatabase,
+	dir = migrationsDir(),
+): { pending: string[]; applied: string[] } {
+	const journal = connection
+		.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_migrations'")
+		.get();
+	const applied = journal
+		? (connection.prepare("SELECT name FROM _migrations").all() as { name: string }[])
+				.map((r) => r.name)
+				.sort()
+		: [];
+	const done = new Set(applied);
+	const pending = readdirSync(dir)
+		.filter((f) => f.endsWith(".sql") && !done.has(f))
+		.sort();
+	return { pending, applied };
+}
+
 export function runMigrations(
 	connection: ShimDatabase,
 	dir = migrationsDir(),

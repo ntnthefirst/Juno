@@ -42,6 +42,10 @@ the code is written against it.
 Migrations are committed and run forward on launch. Never edit a migration that
 has been applied on a real machine; add a new one.
 
+**Amended:** before a launch applies a pending migration to a database that has
+data, a `VACUUM INTO` copy goes to the backups folder (`juno-before-update-*`, last
+three kept), and a failed copy stops the launch.
+
 ## 4. Every row: UUIDv7 id, `owner_id`, `created_at`, `updated_at`, `deleted_at`
 
 Non-negotiable, on every table, from the first migration.

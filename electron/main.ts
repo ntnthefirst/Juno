@@ -29,7 +29,7 @@ import * as agentAudit from "./main/services/agent-audit";
 import { configureClaudeDesktop } from "./main/services/claude-desktop";
 import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
-import { configureBackups, setCloseHook } from "./main/services/backup";
+import { configureBackups, createBeforeMigrations, setCloseHook } from "./main/services/backup";
 import { configureDocuments, printPdf } from "./main/services/document-pdf";
 import { configureConversion } from "./main/services/document-convert";
 import * as documentWorking from "./main/services/document-working";
@@ -185,6 +185,8 @@ if (!app.requestSingleInstanceLock()) {
 		const db = openDb(databasePath());
 
 		splashStep("Applying migrations");
+		// A copy first, and no migration if it cannot be made.
+		await createBeforeMigrations(getConnection());
 		const migrations = runMigrations(getConnection());
 		if (migrations.applied.length > 0) {
 			console.log(`Applied ${migrations.applied.length} migration(s):`, migrations.applied);

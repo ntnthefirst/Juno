@@ -20,12 +20,21 @@ import { DatabaseSync } from "node:sqlite";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { BackupInfo } from "../../shared/types";
+import { pendingMigrations } from "../db/migrate";
+import type { ShimDatabase } from "../db/node-sqlite-shim";
 
 /** Older copies past this are pruned, oldest first, after every new backup. */
 const KEEP = 10;
 
 const PREFIX = "juno-";
 const SUFFIX = ".sqlite";
+
+/**
+ * Copies taken before an update changes the database. They keep the `juno-`
+ * prefix so Settings > Backup lists and restores them like any other.
+ */
+const BEFORE_UPDATE = `${PREFIX}before-update-`;
+const KEEP_BEFORE_UPDATE = 3;
 
 let directory: string | null = null;
 let databaseFile: string | null = null;
@@ -100,6 +109,45 @@ export async function create(): Promise<BackupInfo> {
 	}
 
 	await prune();
+	return describe(target);
+}
+
+/**
+ * A safety copy taken on launch, only when a migration is about to run on a
+ * database that already has data. A current database costs nothing and a fresh
+ * one has nothing to lose. Throws when the copy cannot be made, and the caller
+ * must not migrate in that case.
+ */
+export async function createBeforeMigrations(
+	connection: ShimDatabase,
+	migrationsFolder?: string,
+): Promise<BackupInfo | null> {
+	const { pending, applied } = pendingMigrations(connection, migrationsFolder);
+	if (pending.length === 0 || applied.length === 0) return null;
+
+	const last = applied[applied.length - 1].replace(/\.sql$/, "");
+	let target: string;
+	try {
+		target = join(backupsFolder(), `${BEFORE_UPDATE}${stamp(new Date())}-${last}${SUFFIX}`);
+		if (existsSync(target)) rmSync(target);
+		// The live connection, outside any transaction, as VACUUM INTO requires.
+		connection.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`);
+	} catch (cause) {
+		const reason = cause instanceof Error ? cause.message : String(cause);
+		throw new Error(
+			`Juno could not copy your data before updating it (${reason}). Nothing was changed. Free some disk space or check the backups folder, then start Juno again.`,
+		);
+	}
+
+	// Only the pre-update copies are pruned here. A backup the owner made by hand
+	// is theirs to remove.
+	const copies = readdirSync(backupsFolder())
+		.filter((name) => name.startsWith(BEFORE_UPDATE) && name.endsWith(SUFFIX))
+		.sort()
+		.reverse();
+	for (const name of copies.slice(KEEP_BEFORE_UPDATE)) {
+		rmSync(join(backupsFolder(), name), { force: true });
+	}
 	return describe(target);
 }
 

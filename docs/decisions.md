@@ -2412,6 +2412,10 @@ and put New at the right of every screen.
 - **New is a text button at the right everywhere.** Where the screen makes one
   kind of record it makes that at once; elsewhere it opens the New menu. With a
   document open the plus at the left stays, as the page frame draws it.
+  Amended on 2026-11-14: a screen that starts several things opens a menu of
+  its own with only those (Mail, Calendar, Documents, `NEW_MENUS`), and only
+  Overview keeps the whole menu, because a menu of other screens' records on
+  Mail was noise.
 - **A list's search is in the title bar** (`app/TitleSearch.tsx`), on every
   screen that filters a list. Ctrl or Cmd F focuses it, an open message or page
   keeps the same keys for its own find, and Ctrl or Cmd Shift F opens the

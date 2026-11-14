@@ -5024,12 +5024,16 @@ if (!app.requestSingleInstanceLock()) {
 
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {
-											// Writing is an item in the New menu, which is New at the
-											// right of the title bar.
+											// Writing is an item in Mail's own New menu, which is New at
+											// the right of the title bar. It offers what Mail starts and
+											// nothing that belongs to another screen.
 											const plus = document.querySelector("button[aria-label='New']");
 											if (!plus) return "no new button";
 											plus.click();
 											await new Promise((r) => setTimeout(r, 300));
+											const labels = [...document.querySelectorAll("[role=menuitem]")].map((el) => el.textContent.trim());
+											if (!labels.some((label) => label.startsWith("Styled mail"))) return "no Styled mail in Mail's New menu";
+											if (labels.some((label) => label.startsWith("New client"))) return "Mail's New menu still offers a new client";
 											const open = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim().startsWith("New message"));
 											if (!open) return "no new message item";
 											open.click();

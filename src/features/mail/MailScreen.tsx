@@ -21,7 +21,7 @@ import { SPECIAL_LABELS } from "./folder-tree";
 import { messageOf } from "../../lib/errors";
 import { withAll } from "../../lib/select-all";
 import { useRecentTouch } from "../../lib/use-recent-touch";
-import { useScreenAction } from "../../lib/screen-actions";
+import { useLiveScreenAction, useScreenAction, type ScreenAction } from "../../lib/screen-actions";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { BlocksPage } from "./blocks/BlocksPage";
 import type { ManageTarget } from "./blocks/BlockMenu";
@@ -143,7 +143,6 @@ export function MailScreen() {
 	const [compose, setCompose] = useState<ComposeSeed | null>(() => composeSeedOf(peekPending("compose")));
 	// The page for intros and outros, and what to reopen when it is left.
 	const [blocksPage, setBlocksPage] = useState<{ target: ManageTarget; returnTo: ComposeSeed | null } | null>(null);
-	useScreenAction("mail", () => setCompose({}));
 	const [accountsVersion, setAccountsVersion] = useState(0);
 	const [outboxVersion, setOutboxVersion] = useState(0);
 	const [deleteConfirm, setDeleteConfirm] = useState<string[] | null>(null);
@@ -178,6 +177,47 @@ export function MailScreen() {
 	// The composer and the styled mail column both close on Escape. With both
 	// open, one press closes the one on top: the last one opened, or the one
 	// the keyboard went into after that.
+	// What Mail's New menu asks for. While Mail is on show it acts where it is, so
+	// the conversation being read stays open; brought up fresh, it acts once it
+	// has mounted. Both need an account for a folder or a rule: the one in view,
+	// or the first, read from the service when the list has not arrived yet.
+	function runNew(action: ScreenAction): boolean {
+		const withAccount = (then: (accountId: string) => void, none: () => void) => {
+			const known = selection?.accountId ?? accounts?.[0]?.id;
+			if (known) return then(known);
+			void window.juno.mail.accounts
+				.list()
+				.then((list) => (list[0] ? then(list[0].id) : none()))
+				.catch(none);
+		};
+		switch (action) {
+			case "new":
+				setCompose({ accountId: selection?.accountId ?? accounts?.[0]?.id });
+				return true;
+			case "styled-mail":
+				setStylesOpen(true);
+				return true;
+			case "new-folder":
+				withAccount(
+					(accountId) => setFolderForm({ mode: "create", accountId, parent: null }),
+					() => void window.juno.window.openSettings("mail"),
+				);
+				return true;
+			case "new-rule":
+				withAccount(
+					(accountId) => void window.juno.window.openSettings("mail", { kind: "new-rule", accountId }),
+					() => void window.juno.window.openSettings("mail"),
+				);
+				return true;
+			case "new-block":
+				setBlocksPage({ target: null, returnTo: null });
+				return true;
+			default:
+				return false;
+		}
+	}
+	useScreenAction("mail", (action) => void runNew(action));
+	useLiveScreenAction("mail", runNew);
 	const [front, setFront] = useState<"compose" | "styles">("compose");
 	const [seenOpen, setSeenOpen] = useState({ compose: false, styles: stylesOpen });
 	if (seenOpen.compose !== (compose !== null) || seenOpen.styles !== stylesOpen) {

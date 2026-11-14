@@ -76,7 +76,7 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
 	mail: { screen: "mail", label: "New message" },
 	"mail-templates": { screen: "mail", label: "New message" },
 	notes: { screen: "notes", label: "New note" },
-	documents: { screen: "documents", label: "New document" },
+	documents: { screen: "documents", label: "New from a template" },
 };
 
 /**
@@ -103,6 +103,36 @@ export const NEW_MENU: NewMenuEntry[] = [
 	{ screen: "documents", action: "import", label: "Import a file", icon: "import", separatorBefore: true },
 ];
 
+/**
+ * A screen that starts more than one kind of thing has a New menu of its own,
+ * with only what belongs there (frames in section 22 of the design). Overview
+ * keeps the whole of `NEW_MENU`, and a screen that makes one kind of record
+ * makes it at once (`NEW_AT_RIGHT`).
+ */
+const MAIL_NEW: NewMenuEntry[] = [
+	{ screen: "mail", label: "New message", icon: "mail" },
+	{ screen: "mail", action: "styled-mail", label: "Styled mail", icon: "templates" },
+	{ screen: "mail", action: "new-folder", label: "New folder", icon: "projects", separatorBefore: true },
+	{ screen: "mail", action: "new-rule", label: "New mailbox rule", icon: "filter" },
+	{ screen: "mail", action: "new-block", label: "New intro or outro", icon: "note" },
+];
+
+export const NEW_MENUS: Partial<Record<ScreenId, NewMenuEntry[]>> = {
+	mail: MAIL_NEW,
+	"mail-templates": MAIL_NEW,
+	calendar: [
+		{ screen: "calendar", label: "New event", icon: "calendar" },
+		{ screen: "calendar", action: "new-reminder", label: "New reminder", icon: "reminders" },
+		{ screen: "calendar", action: "subscribe", label: "Subscribe to a calendar", icon: "sync", separatorBefore: true },
+		{ screen: "calendar", action: "import-calendar", label: "Import a calendar file", icon: "import" },
+	],
+	documents: [
+		{ screen: "documents", action: "new-page", label: "New page", icon: "documents" },
+		{ screen: "documents", label: "New from a template", icon: "templates" },
+		{ screen: "documents", action: "import", label: "Import a file", icon: "import", separatorBefore: true },
+	],
+};
+
 /** The glyph of the entry a screen adds to the New menu when the design's list has none for it. */
 export const NEW_OWN_ICON: Record<string, IconName> = {
 	"New reminder": "reminders",
@@ -112,8 +142,9 @@ export const NEW_OWN_ICON: Record<string, IconName> = {
 
 /**
  * Screens where New, the text button at the right of the title bar, makes the
- * screen's own record at once. On every other screen it opens the New menu.
- * With a document open the plus at the left takes its place, as the page frame
- * draws it.
+ * screen's own record at once, because it is the one thing they start. A screen
+ * with its own list in `NEW_MENUS` opens that, and any other screen opens the
+ * whole New menu. With a document open the plus at the left takes its place, as
+ * the page frame draws it.
  */
-export const NEW_AT_RIGHT: ScreenId[] = ["notes", "calendar", "clients", "projects", "documents", "reminders"];
+export const NEW_AT_RIGHT: ScreenId[] = ["notes", "clients", "projects", "reminders"];

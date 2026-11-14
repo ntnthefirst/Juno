@@ -20,6 +20,7 @@ import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { clearPending, peekPending } from "../../lib/open-entity";
+import { useLiveScreenAction, useScreenAction, type ScreenAction } from "../../lib/screen-actions";
 import { ProjectForm } from "../projects/ProjectForm";
 import { ReminderForm } from "../reminders/ReminderForm";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
@@ -121,6 +122,16 @@ export function CalendarScreen() {
 	// Which way the range last moved, for the agenda's entrance. Held here
 	// because nothing below can tell a step forward from a jump to today.
 	const [direction, setDirection] = useState<-1 | 1>(1);
+	// Import a calendar file, from the New menu: where the calendar is, or once it
+	// has mounted when it was asked for from elsewhere. The other items in that
+	// menu need nothing from this screen (lib/screen-actions.ts).
+	function runNew(action: ScreenAction): boolean {
+		if (action !== "import-calendar") return false;
+		void importIcs();
+		return true;
+	}
+	useScreenAction("calendar", (action) => void runNew(action));
+	useLiveScreenAction("calendar", runNew);
 
 	// The clock is impure, so it is read here and kept current by the minute.
 	useEffect(() => {
@@ -554,13 +565,7 @@ export function CalendarScreen() {
 	}
 
 	const overflowItems: MenuItem[] = [
-		{
-			id: "new-reminder",
-			label: "New reminder",
-			icon: "reminders",
-			onSelect: () => anchor && createReminderAt(view === "month" ? (today ?? anchor) : anchor),
-		},
-		{ id: "import", label: "Import", icon: "import", separatorBefore: true, onSelect: () => void importIcs() },
+		{ id: "import", label: "Import", icon: "import", onSelect: () => void importIcs() },
 		{
 			id: "export",
 			label: "Export",

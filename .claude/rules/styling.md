@@ -185,10 +185,20 @@ What the bar holds, from the Title Bar component (`14:221`) and its variants:
 Search, Recent and Reminders at the left, then a divider and the page title,
 which is the record's name while one is open, after the way back and a slash.
 At the right are the screen's own actions, New as a text button, the record's
-"...", a divider and the agent. New makes the screen's own record at once where
-`NEW_AT_RIGHT` in `app/screens.ts` lists the screen, and opens the New menu
-everywhere else (note, page, event, client, project, then Import a file, from
-`NEW_MENU`). With a document open the plus at the left takes its place.
+"...", a divider and the agent. **New offers what the screen starts and nothing
+else** (frames in section 22). Where a screen starts one kind of record
+(`NEW_AT_RIGHT` in `app/screens.ts`: Notes, Clients, Projects, Reminders) it
+makes that at once. Where it starts several it opens that screen's own menu
+from `NEW_MENUS`: Mail (New message, Styled mail, then New folder, New mailbox
+rule, New intro or outro), Calendar (New event, New reminder, then Subscribe to
+a calendar, Import a calendar file) and Documents (New page, New from a
+template, then Import a file). Overview, which belongs to no one record, keeps
+the whole menu (`NEW_MENU`). An item reaches its screen through
+`requestScreenAction`; a screen on show takes it where it is
+(`useLiveScreenAction`), so the message being read stays open, and New mailbox
+rule and Subscribe to a calendar open the settings window on the page that
+makes one (`SettingsTarget`). With a document open the plus at the left takes
+its place.
 
 Recent, the bell and the agent each open a dropdown (`app/RecentMenu.tsx`,
 `app/RemindersMenu.tsx`, `app/AgentMenu.tsx`), and the foot of the last two

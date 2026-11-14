@@ -3,10 +3,26 @@ import type { NewRecordKind } from "@shared/types";
 import type { ScreenId } from "../app/screens";
 import { openNewRecord } from "./new-record";
 
-/** What can be asked of a screen from outside it. Start a new record, or on Documents a new page or an import. */
-export type ScreenAction = "new" | "new-page" | "import";
+/**
+ * What can be asked of a screen from outside it: start its new record, or one
+ * of the other things its New menu offers (app/screens.ts, `NEW_MENUS`).
+ */
+export type ScreenAction =
+	| "new"
+	| "new-page"
+	| "import"
+	| "styled-mail"
+	| "new-folder"
+	| "new-rule"
+	| "new-block"
+	| "new-reminder"
+	| "subscribe"
+	| "import-calendar";
 
 const EVENT = "juno:screen-action";
+
+/** The screens on show that act on a request where they are, rather than being brought up fresh. */
+const live = new Map<ScreenId, (action: ScreenAction) => boolean>();
 
 type Request = { screen: ScreenId; action: ScreenAction };
 
@@ -34,11 +50,23 @@ const WINDOWED: Partial<Record<ScreenId, NewRecordKind>> = {
  * screen up and have it open its own form.
  */
 export function requestScreenAction(screen: ScreenId, action: ScreenAction): void {
-	const windowed = WINDOWED[screen];
+	const windowed = action === "new" ? WINDOWED[screen] : undefined;
 	if (windowed) {
 		openNewRecord(windowed);
 		return;
 	}
+	// Two items in a screen's New menu need nothing from the screen itself.
+	if (action === "new-reminder") {
+		openNewRecord("reminder");
+		return;
+	}
+	if (action === "subscribe") {
+		void window.juno.window.openSettings("mail", { kind: "add-calendar" });
+		return;
+	}
+	// The screen is already showing and can act where it is, so what is open on
+	// it (the message being read, the week in view) stays.
+	if (live.get(screen)?.(action)) return;
 	pending = { screen, action };
 	window.dispatchEvent(new CustomEvent(EVENT));
 }
@@ -78,6 +106,26 @@ export function useScreenAction(screen: ScreenId, handler: (action: ScreenAction
 		});
 		return () => {
 			cancelled = true;
+		};
+	}, [screen]);
+}
+
+/**
+ * Called by a screen that can act on a request while it is on show. The
+ * handler answers whether it took the action; one it does not take falls back
+ * to bringing the screen up fresh, as `useScreenAction` handles.
+ */
+export function useLiveScreenAction(screen: ScreenId, handler: (action: ScreenAction) => boolean): void {
+	const latest = useRef(handler);
+	useEffect(() => {
+		latest.current = handler;
+	});
+
+	useEffect(() => {
+		const run = (action: ScreenAction) => latest.current(action);
+		live.set(screen, run);
+		return () => {
+			if (live.get(screen) === run) live.delete(screen);
 		};
 	}, [screen]);
 }

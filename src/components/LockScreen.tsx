@@ -33,8 +33,12 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 		if (!lockedOutUntil) return;
 		const id = setInterval(() => {
 			const remaining = Date.parse(lockedOutUntil) - Date.now();
-			if (remaining <= 0) setLockedOutUntil(null);
-			else setSecondsLeft(Math.ceil(remaining / 1000));
+			if (remaining <= 0) {
+				// The wait is over, so "Too many attempts." is no longer true and goes with it.
+				setLockedOutUntil(null);
+				setSecondsLeft(0);
+				setError(null);
+			} else setSecondsLeft(Math.ceil(remaining / 1000));
 		}, 250);
 		return () => clearInterval(id);
 	}, [lockedOutUntil]);

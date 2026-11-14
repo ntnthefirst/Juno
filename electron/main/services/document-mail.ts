@@ -254,7 +254,8 @@ export async function saveFromThread(
 		throw new Error(`That is ${chosen.length} attachments. Save at most ${MAX_ATTACHMENTS_PER_SAVE} at a time.`);
 	}
 
-	const asked = input.clientId || input.projectId || input.folderId;
+	// A place named at all, even Unfiled (all three null), is the place; none named is the conversation's own.
+	const asked = input.clientId !== undefined || input.projectId !== undefined || input.folderId !== undefined;
 	const { summary } = thread;
 	if (!asked && !summary.projectId && !summary.clientId) {
 		throw new Error("This conversation is not filed under a client or a project. Choose where the files go.");

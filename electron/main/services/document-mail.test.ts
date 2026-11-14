@@ -214,6 +214,15 @@ describe("a conversation filed under nothing", () => {
 		expect((await fromMail.forThread(threadId, db)).place).toMatchObject({ projectId: project.id, linked: true });
 	});
 
+	it("saves to Unfiled when that is the place chosen", async () => {
+		const threadId = thread("Prijs");
+		attachment(message(threadId), "Prijs.txt", "Prijs van de schuur.");
+
+		const result = await fromMail.saveFromThread({ threadId, clientId: null, projectId: null, folderId: null }, db);
+		expect(result.place).toEqual({ clientId: null, projectId: null, folderId: null });
+		expect(result.outcomes[0]).toMatchObject({ status: "saved", document: { clientId: null, projectId: null } });
+	});
+
 	it("saves nothing when the link cannot be made", async () => {
 		const mine = await clients.create({ name: "Claes" }, db);
 		const theirs = await clients.create({ name: "Janssens" }, db);

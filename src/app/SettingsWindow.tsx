@@ -67,8 +67,12 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	// Escape closes a modal dialog, and this window is one.
 	useEffect(() => {
 		const onKey = (event: globalThis.KeyboardEvent) => {
-			// The search field takes its own Escape, to clear itself first.
-			if (event.key === "Escape" && !event.defaultPrevented) void window.juno.window.closeSettings();
+			// The search field takes its own Escape, to clear itself first, and a
+			// page opened inside a section (an account, a rule, a calendar) takes
+			// it to step back to the section rather than closing the window.
+			if (event.key === "Escape" && !event.defaultPrevented && !document.querySelector("[data-form-page]")) {
+				void window.juno.window.closeSettings();
+			}
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
 				event.preventDefault();
 				searchField.current?.focus();

@@ -84,7 +84,9 @@ export function FormPage({
 	const current = sequence ? steps[Math.min(step, steps.length - 1)] : undefined;
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
+		// Marked so a window that closes on Escape (Settings) leaves the key to
+		// this page, which steps back to where it was opened from instead.
+		<div data-form-page className="flex h-full min-h-0 flex-col">
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-6">
 				<div className={`animate-rise mx-auto w-full ${measure}`}>
 					<header className="mb-4 flex flex-col items-start gap-2">

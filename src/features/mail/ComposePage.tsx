@@ -58,6 +58,11 @@ type ComposePageProps = {
 	 * where the composer has no screen to go back to, and the menus then only pick.
 	 */
 	onManage?: (draft: MailOutboxMessage | null, target: ManageTarget) => void;
+	/**
+	 * False while something else on the screen that Escape also closes is on
+	 * top (the styled mail column), so one press closes one thing.
+	 */
+	escapeCloses?: boolean;
 };
 
 type BlockState = Record<ComposeBlockKind, string | null>;
@@ -70,7 +75,7 @@ type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
  * form; this reads as a blank message the way a mail client's own compose
  * window does, on any size of screen.
  */
-export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: ComposePageProps) {
+export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escapeCloses = true }: ComposePageProps) {
 	const [accounts, setAccounts] = useState<MailAccount[]>([]);
 	const [templates, setTemplates] = useState<MailTemplate[]>([]);
 	const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);
@@ -629,6 +634,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 	// The close button is gone; Escape is the way out, the same as it is on
 	// every other full-screen form in the app.
 	useEffect(() => {
+		if (!escapeCloses) return;
 		function onKey(event: KeyboardEvent) {
 			// The recipient suggestions take their own Escape first.
 			if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -637,7 +643,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [handleClose]);
+	}, [handleClose, escapeCloses]);
 
 	const account = accounts.find((item) => item.id === accountId) ?? null;
 	const canSend = account !== null && account.smtpHost !== null;

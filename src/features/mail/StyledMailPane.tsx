@@ -15,6 +15,11 @@ type StyledMailPaneProps = {
 	onClose: () => void;
 	/** A message was queued from a template. */
 	onSent: () => void;
+	/**
+	 * False while the composer is open and on top of this column, so one press
+	 * of Escape closes one thing.
+	 */
+	escapeCloses?: boolean;
 };
 
 type Rendered = { templateId: string; subject: string; html: string } | { templateId: string; error: string };
@@ -34,7 +39,7 @@ const ICON_BUTTON =
  * narrows back again. Writing and changing templates is still the styled mail
  * screen, one press away.
  */
-export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
+export function StyledMailPane({ onClose, onSent, escapeCloses = true }: StyledMailPaneProps) {
 	const [templates, setTemplates] = useState<MailTemplate[] | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
@@ -63,6 +68,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 
 	// Escape steps back out of sending first, then closes the column.
 	useEffect(() => {
+		if (!escapeCloses) return;
 		const onKey = (event: KeyboardEvent) => {
 			if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("[role='dialog'], [role='menu']")) return;
 			if (usingId) setUsingId(null);
@@ -70,7 +76,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [usingId, onClose]);
+	}, [usingId, onClose, escapeCloses]);
 
 	const needle = search.trim().toLowerCase();
 	const shown = useMemo(

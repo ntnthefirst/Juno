@@ -168,6 +168,17 @@ export function MailScreen() {
 			// Without storage it only lasts until the screen changes.
 		}
 	}, [stylesOpen]);
+	// The composer and the styled mail column both close on Escape. With both
+	// open, one press closes the one on top: the last one opened, or the one
+	// the keyboard went into after that.
+	const [front, setFront] = useState<"compose" | "styles">("compose");
+	const [seenOpen, setSeenOpen] = useState({ compose: false, styles: stylesOpen });
+	if (seenOpen.compose !== (compose !== null) || seenOpen.styles !== stylesOpen) {
+		if (compose !== null && !seenOpen.compose) setFront("compose");
+		else if (stylesOpen && !seenOpen.styles) setFront("styles");
+		setSeenOpen({ compose: compose !== null, styles: stylesOpen });
+	}
+	const bothOpen = compose !== null && stylesOpen;
 	const openCount = useRef(1);
 	const composeOpen = useRef(false);
 	useEffect(() => {
@@ -1047,10 +1058,14 @@ export function MailScreen() {
 				/>
 			</div>
 
-			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
+			<div
+				className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]"
+				onFocus={compose ? () => setFront("compose") : undefined}
+			>
 				{compose ? (
 					<ComposePage
 						seed={compose}
+						escapeCloses={!bothOpen || front === "compose"}
 						onManage={(draft, target) => {
 							setBlocksPage({ target, returnTo: draft ? { draft } : compose });
 							setCompose(null);
@@ -1201,13 +1216,18 @@ export function MailScreen() {
 			</div>
 
 			{stylesOpen ? (
-				<StyledMailPane
-					onClose={() => setStylesOpen(false)}
-					onSent={() => {
-						setNotice("Message queued.");
-						setOutboxVersion((v) => v + 1);
-					}}
-				/>
+				// `contents` keeps the column a child of the row for layout while
+				// still hearing focus move into it.
+				<div className="contents" onFocus={() => setFront("styles")}>
+					<StyledMailPane
+						escapeCloses={!bothOpen || front === "styles"}
+						onClose={() => setStylesOpen(false)}
+						onSent={() => {
+							setNotice("Message queued.");
+							setOutboxVersion((v) => v + 1);
+						}}
+					/>
+				</div>
 			) : null}
 
 			{outboxDelete ? (

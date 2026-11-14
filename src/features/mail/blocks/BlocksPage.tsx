@@ -270,7 +270,8 @@ function BlockEditor({ block, newKind, onSaved, onDeleted }: BlockEditorProps) {
 				<Field label="Name" value={name} onChange={setName} />
 
 				<div>
-					<label htmlFor={textId} className={OVERLINE}>
+					{/* A field's label, like Name above it; the overline is for the group below. */}
+					<label htmlFor={textId} className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]">
 						Text
 					</label>
 					{/* Plain text, as the client reads it. An older block may still hold a

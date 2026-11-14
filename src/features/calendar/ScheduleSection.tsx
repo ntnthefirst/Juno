@@ -282,7 +282,11 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 					</RecordLink>
 				) : null}
 				{/* The title keeps its room; what is said after it gives way first. */}
-				{detail ? <span className="min-w-0 flex-1 truncate text-sm text-[var(--ink-muted)]">{detail}</span> : null}
+				{detail ? (
+					<span title={detail} className="min-w-0 flex-1 truncate text-sm text-[var(--ink-muted)]">
+						{detail}
+					</span>
+				) : null}
 			</span>
 			<span
 				className={`tabular flex-none text-sm ${overdue ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}

@@ -476,6 +476,24 @@ export const mailTools: ToolDescriptor[] = [
 			}),
 	},
 	{
+		name: "mail.threads.count_drafts",
+		title: "Count drafts",
+		description:
+			"How many rows Drafts lists: the server's draft conversations plus every message Juno has not sent yet " +
+			"(drafts, waiting for approval, queued and failed). The same number the mail sidebar shows beside Drafts. " +
+			"Leave account_id out for every account together.",
+		readOnly: true,
+		requiresConfirmation: false,
+		inputSchema: {
+			type: "object",
+			properties: {
+				account_id: { type: "string", description: "The mail account, from mail.accounts.list." },
+			},
+			additionalProperties: false,
+		},
+		handler: async (args) => threads.countDrafts(args.account_id !== undefined ? String(args.account_id) : undefined),
+	},
+	{
 		name: "mail.threads.get",
 		title: "Read a thread",
 		description:

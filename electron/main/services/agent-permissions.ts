@@ -132,6 +132,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"mail.templates.list",
 		"mail.templates.preview",
 		"mail.templates.render",
+		"mail.threads.count_drafts",
 		"mail.threads.get",
 		"mail.threads.list",
 		"mail.threads.list_ids",

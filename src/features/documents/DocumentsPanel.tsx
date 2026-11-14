@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { openedNotice } from "@shared/opened";
 import type { DocumentPlace, DocumentRecord, DocumentTreeNode, ReferenceItem } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
@@ -138,7 +139,8 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged, onT
 		}
 		try {
 			const opened = await window.juno.documents.open(record.id);
-			if (opened.readOnly) setNotice(`${record.title} opened read only, because it is signed.`);
+			const said = openedNotice(record.title, opened);
+			if (said) setNotice(said);
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 		}
@@ -254,6 +256,7 @@ export function DocumentsPanel({ scope, name, onGenerate, onOpen, onChanged, onT
 					if (message) setNotice(message);
 				},
 				failed: setNotice,
+				notice: setNotice,
 			},
 		)(event);
 	}

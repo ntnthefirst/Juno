@@ -981,7 +981,7 @@ export interface JunoApi {
 		sign(input: SignDocumentInput): Promise<DocumentSignature>;
 		signatures(documentId: string): Promise<DocumentSignature[]>;
 		/** Opens the PDF in whatever the OS uses for one. */
-		openPdf(id: string): Promise<void>;
+		openPdf(id: string): Promise<{ readOnly: boolean }>;
 		revealPdf(id: string): Promise<void>;
 	};
 

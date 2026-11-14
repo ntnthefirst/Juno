@@ -488,8 +488,8 @@ export async function readPdf(id: string, db: Db = getDb()): Promise<Uint8Array>
  * operating system's app for it: a working copy Juno watches for edits, or a
  * read-only copy of a signed one (document-working.ts).
  */
-export async function openPdf(id: string, db: Db = getDb()): Promise<void> {
-	await working.openDocument(id, db);
+export async function openPdf(id: string, db: Db = getDb()): Promise<{ readOnly: boolean }> {
+	return working.openDocument(id, db);
 }
 
 export async function revealPdf(id: string, db: Db = getDb()): Promise<void> {

@@ -1925,6 +1925,11 @@ entry, an automation or request row, the template list (it acts on
 a selection, with counts in the labels) and the text edit fallback. A mail
 attachment in the reader became native with decision 79 (`attachment`).
 
+A fifth outcome, `notice`, is for an item the main process did that changes
+nothing on screen but is worth a sentence: Open on a signed file says it opened
+read only, in the words Enter uses (`shared/opened.ts`). A screen that lists no
+`notice` handler shows it through `done`.
+
 ## 60. Making an event, client, project or reminder happens in a small window
 
 Amends decision 30. The design draws New event, New client, New project and New

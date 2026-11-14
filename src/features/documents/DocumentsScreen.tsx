@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { openedNotice } from "@shared/opened";
 import type { DocumentFolder, DocumentPlace, DocumentRecord, DocumentTemplate, DocumentTreeNode, GenerateDocumentResult } from "@shared/types";
 import { usePublishBreadcrumb, type Crumb } from "../../app/breadcrumb-context";
 import { TitleBarSlot } from "../../app/TitleBarSlot";
@@ -454,7 +455,8 @@ export function DocumentsScreen({ returnTo }: DocumentsScreenProps) {
 		}
 		try {
 			const opened = await window.juno.documents.open(record.id);
-			if (opened.readOnly) setNotice(`${record.title} opened read only, because it is signed.`);
+			const said = openedNotice(record.title, opened);
+			if (said) setNotice(said);
 		} catch (cause: unknown) {
 			fail(cause);
 		}
@@ -758,6 +760,7 @@ export function DocumentsScreen({ returnTo }: DocumentsScreenProps) {
 					if (message) setNotice(message);
 				},
 				failed: setNotice,
+				notice: setNotice,
 			},
 		)(event);
 	}

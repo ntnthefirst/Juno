@@ -146,6 +146,8 @@ export type MenuOutcome =
 	| { type: "none" }
 	/** The main process did it. The screen reloads and may show the note. */
 	| { type: "done"; message?: string }
+	/** The main process did it and nothing on screen changed. The screen shows the note and reads nothing again. */
+	| { type: "notice"; message: string }
 	/** It could not be done, in words worth showing. */
 	| { type: "failed"; message: string }
 	/** Only the screen can do this one. */

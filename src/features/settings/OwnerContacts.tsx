@@ -22,10 +22,11 @@ type OwnerContactListProps<T extends OwnerContactRow> = {
 	/** Lower-cased values to mark as coming from a configured mail account. */
 	markedValues?: ReadonlySet<string>;
 	markedText?: string;
-	onAdd: (value: string, label: string | null) => Promise<void>;
-	onUpdate: (id: string, value: string, label: string | null) => Promise<void>;
-	onMakePrimary: (id: string) => Promise<void>;
-	onRemove: (id: string) => Promise<void>;
+	/** Both resolve true when the value was saved, so a refused one stays in its field to be put right. */
+	onAdd: (value: string, label: string | null) => Promise<boolean>;
+	onUpdate: (id: string, value: string, label: string | null) => Promise<boolean>;
+	onMakePrimary: (id: string) => Promise<unknown>;
+	onRemove: (id: string) => Promise<unknown>;
 };
 
 const ROW_INPUT =
@@ -89,11 +90,12 @@ export function OwnerContactList<T extends OwnerContactRow>({
 											const trimmed = editValue.trim();
 											if (!trimmed || editBusy) return;
 											const id = item.id;
-											setEditingId(null);
 											setEditBusy(true);
-											void onUpdate(id, trimmed, editLabel.trim() || null).finally(() =>
-												setEditBusy(false),
-											);
+											void onUpdate(id, trimmed, editLabel.trim() || null)
+												.then((saved) => {
+													if (saved) setEditingId(null);
+												})
+												.finally(() => setEditBusy(false));
 										}}
 									>
 										<input
@@ -173,10 +175,14 @@ export function OwnerContactList<T extends OwnerContactRow>({
 					event.preventDefault();
 					const trimmed = newValue.trim();
 					if (!trimmed || addBusy) return;
-					setNewValue("");
-					setNewLabel("");
 					setAddBusy(true);
-					void onAdd(trimmed, newLabel.trim() || null).finally(() => setAddBusy(false));
+					void onAdd(trimmed, newLabel.trim() || null)
+						.then((saved) => {
+							if (!saved) return;
+							setNewValue("");
+							setNewLabel("");
+						})
+						.finally(() => setAddBusy(false));
 				}}
 			>
 				<input

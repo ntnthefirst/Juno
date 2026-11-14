@@ -86,23 +86,28 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 		}
 	}
 
-	async function applyEmail(action: () => Promise<OwnerProfile>, message?: string) {
+	// True when it was saved, so the field that asked keeps a refused value to put right.
+	async function applyEmail(action: () => Promise<OwnerProfile>, message?: string): Promise<boolean> {
 		setEmailsError(null);
 		try {
 			setProfile(await action());
 			if (message) onSaved(message);
+			return true;
 		} catch (cause: unknown) {
 			setEmailsError(messageOf(cause));
+			return false;
 		}
 	}
 
-	async function applyPhone(action: () => Promise<OwnerProfile>, message?: string) {
+	async function applyPhone(action: () => Promise<OwnerProfile>, message?: string): Promise<boolean> {
 		setPhonesError(null);
 		try {
 			setProfile(await action());
 			if (message) onSaved(message);
+			return true;
 		} catch (cause: unknown) {
 			setPhonesError(messageOf(cause));
+			return false;
 		}
 	}
 

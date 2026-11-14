@@ -73,7 +73,7 @@ export class PageSlide extends Component<PageSlideProps> {
 			this.props.axis === "x" ? `translateX(${percent}%)` : `translateY(${percent}%)`;
 		const timing: KeyframeAnimationOptions = {
 			duration: Number.parseFloat(motionToken("--duration-slow", "360ms")) || 360,
-			easing: motionToken("--ease-smooth", "cubic-bezier(0.16, 1, 0.3, 1)"),
+			easing: motionToken("--ease-smooth", "cubic-bezier(0.22, 1, 0.36, 1)"),
 		};
 		const animations = [
 			page.animate([{ transform: move(100 * sign) }, { transform: move(0) }], timing),

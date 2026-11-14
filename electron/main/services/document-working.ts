@@ -148,6 +148,15 @@ async function checkRow(row: Row, db: Db): Promise<DocumentVersion | null> {
 		retire(row, db);
 		return null;
 	}
+	// A copy opened before the document was signed stays open in the other
+	// app. Saving it afterwards must not make an unsigned edit the newest
+	// version over the signed one, which is what sending and opening the
+	// document would then use. The copy stops being watched; the file stays.
+	const latest = versions.latestFileOf(row.documentId, db);
+	if (latest.versionId !== row.versionId && isSigned(latest.kind)) {
+		retire(row, db);
+		return null;
+	}
 	const base = baseOf(row, db);
 	// The copy is kept as it is now, under a name the service builds. The
 	// working copy itself stays where the other app has it open.

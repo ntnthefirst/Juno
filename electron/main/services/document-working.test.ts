@@ -184,6 +184,21 @@ describe("a working copy", () => {
 		await expect(working.openDocument(record.id, db)).resolves.toEqual({ readOnly: false });
 	});
 
+	it("does not put an edit of an older copy on top of a signed version", async () => {
+		const { db, client, opened } = await setUp();
+		const record = await importFile({ source: bytes("Contract.txt", "Ontwerp."), clientId: client.id }, db);
+		await working.openDocument(record.id, db);
+		const signedPath = join(mkdtempSync(join(tmpdir(), "juno-signed-")), "signed.pdf");
+		writeFileSync(signedPath, await textPdf([...AGREEMENT, "Ondertekend"]));
+		versions.record(
+			{ documentId: record.id, kind: "stamped", source: "sign", pdfPath: signedPath, fileDate: new Date().toISOString() },
+			db,
+		);
+		saveElsewhere(opened[0]!, "Ontwerp, na de handtekening nog aangepast.");
+		expect((await working.checkAll(db)).changed).toEqual([]);
+		expect(versions.list(record.id, db)[0]).toMatchObject({ kind: "stamped", isLatest: true });
+	});
+
 	it("says so when no app could open the file", async () => {
 		const { db, client } = await setUp();
 		working.configureWorkingCopies({ openPath: async () => "No application is associated" });

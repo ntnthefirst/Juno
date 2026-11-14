@@ -10,8 +10,13 @@ type TooltipProps = {
 	side?: "right" | "bottom";
 	/** Classes for the element wrapping the trigger, which the label is measured from. */
 	className?: string;
-	/** Shows nothing while true, for a label that only helps sometimes (a name that is cut short). */
-	disabled?: boolean;
+	/**
+	 * Shows nothing while true, for a label that only helps sometimes. A
+	 * function is asked when the pointer arrives, for a condition that costs a
+	 * layout to know (a name that is cut short), so a list of names measures
+	 * the one under the pointer and not all of them as they mount.
+	 */
+	disabled?: boolean | (() => boolean);
 	children: ReactNode;
 };
 
@@ -74,7 +79,7 @@ export function Tooltip({ label, keys, side = "right", className = "flex", disab
 
 	function show() {
 		window.clearTimeout(timer.current);
-		if (disabled) return;
+		if (typeof disabled === "function" ? disabled() : disabled) return;
 		if (Date.now() - lastHiddenAt < WARM_WINDOW) {
 			reveal();
 			return;

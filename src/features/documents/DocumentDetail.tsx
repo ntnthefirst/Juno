@@ -4,6 +4,7 @@ import { BelongsToLinks } from "../../components/BelongsToLinks";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { FilePreviewView } from "../../components/FilePreviewView";
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { FullPreview } from "../../components/FullPreview";
 import { IconAction } from "../../components/IconAction";
 import { MenuButton, type MenuItem } from "../../components/Menu";
@@ -367,6 +368,8 @@ export function DocumentDetail({
 		{ id: "move-to", label: "Move to", icon: "move-right", onSelect: () => onMoveTo(record) },
 		{ id: "rename", label: "Rename", icon: "edit", hint: "F2", onSelect: () => setRenaming(true) },
 		{ id: "send", label: "Send by mail", icon: "mail", disabled: !hasFile, separatorBefore: true, onSelect: () => void guarded("email", () => onSend(record)) },
+		// A file that is not a PDF yet is converted first, and the PDF is what is signed.
+		...(canSign ? [{ id: "sign", label: "Sign", icon: "sign" as const, disabled: busy !== null, onSelect: sign }] : []),
 		{ id: "add-version", label: "Add a version", icon: "import", onSelect: addVersion },
 		{
 			id: "delete-version",
@@ -476,6 +479,7 @@ export function DocumentDetail({
 	return (
 		<FullPreview
 			title={record.title}
+			icon={viewing ? <FileTypeIcon filename={viewing.fileName} mimeType={viewing.mediaType} size={28} /> : undefined}
 			heading={renaming ? <RenameField value={record.title} onCommit={rename} onCancel={() => setRenaming(false)} /> : undefined}
 			badges={
 				<>
@@ -496,21 +500,18 @@ export function DocumentDetail({
 			onToggleColumn={onToggleDetails}
 			actions={
 				<>
-					<Button size="dense" disabled={!hasFile || busy !== null} onClick={openOutside}>
-						Open
-					</Button>
+					<IconAction icon="external" label="Open in its app" tooltip="bottom" disabled={!hasFile || busy !== null} onClick={openOutside} />
 					{latest && !newestIsPdf ? (
-						<Button size="dense" disabled={busy !== null} onClick={() => convert()}>
-							{busy === "convert" ? "Converting" : "Convert to PDF"}
-						</Button>
+						<IconAction
+							icon="sync"
+							label={busy === "convert" ? "Converting to PDF" : "Convert to PDF"}
+							tooltip="bottom"
+							disabled={busy !== null}
+							onClick={() => convert()}
+						/>
 					) : null}
-					{canSign ? (
-						<Button size="dense" variant="primary" disabled={busy !== null} onClick={sign}>
-							{newestIsPdf ? "Sign" : "Convert and sign"}
-						</Button>
-					) : null}
-					<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line)]" />
-					<IconAction icon="export" label="Download a copy" disabled={!hasFile} onClick={download} />
+					<span aria-hidden className="h-4 w-px bg-[var(--line)]" />
+					<IconAction icon="export" label="Download a copy" tooltip="bottom" disabled={!hasFile} onClick={download} />
 					<MenuButton size="dense" ariaLabel="More document actions" items={menu} />
 				</>
 			}

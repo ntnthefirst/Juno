@@ -13,6 +13,7 @@ import type {
 import { ActionMenu } from "../../components/ActionMenu";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/Button";
+import { IconAction } from "../../components/IconAction";
 import { Icon } from "../../components/Icon";
 import { MarkdownNotes } from "../../components/MarkdownNotes";
 import { MenuButton } from "../../components/Menu";
@@ -865,16 +866,14 @@ export function ProjectDetail({
 						void window.juno.projects.assets.open(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
 					}
 					actions={(file) => (
-						<>
-							<Button
-								size="dense"
-								onClick={() =>
-									void window.juno.projects.assets.open(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
-								}
-							>
-								Open
-							</Button>
-						</>
+						<IconAction
+							icon="external"
+							label="Open in its app"
+							tooltip="bottom"
+							onClick={() =>
+								void window.juno.projects.assets.open(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
+							}
+						/>
 					)}
 				/>
 			) : null}

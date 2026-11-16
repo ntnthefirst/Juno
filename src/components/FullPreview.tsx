@@ -8,6 +8,8 @@ import { Tooltip } from "./Tooltip";
 type FullPreviewProps = {
 	/** The file's name. The heading, and the region's accessible name. */
 	title: string;
+	/** Drawn left of the name: the file's type icon. */
+	icon?: ReactNode;
 	/** Drawn instead of the name, for a name being edited in place. */
 	heading?: ReactNode;
 	/** One line under the name: its type, size and date. */
@@ -50,6 +52,7 @@ function isTyping(target: EventTarget | null): boolean {
  */
 export function FullPreview({
 	title,
+	icon,
 	heading,
 	meta,
 	badges,
@@ -94,6 +97,12 @@ export function FullPreview({
 			if (event.key === "Escape") {
 				if (isTyping(event.target)) return;
 				event.preventDefault();
+				// Text selected in the file goes first, so a second Escape is what closes.
+				const selection = window.getSelection();
+				if (selection && !selection.isCollapsed && frame.current?.contains(selection.anchorNode)) {
+					selection.removeAllRanges();
+					return;
+				}
 				latest.current.onClose();
 				return;
 			}
@@ -121,8 +130,9 @@ export function FullPreview({
 			data-full-preview
 			className="animate-scale absolute inset-0 z-30 flex flex-col bg-[var(--surface)] focus:outline-none"
 		>
-			<div className="flex h-[56px] flex-none items-center gap-3 border-b border-[var(--line)] pr-3 pl-2">
-				<IconAction icon="close" label={closeLabel} size="base" onClick={onClose} />
+			<div className="flex h-[56px] flex-none items-center gap-2 border-b border-[var(--line)] px-3">
+				<IconAction icon="close" label={closeLabel} tooltip="bottom" onClick={onClose} />
+				{icon ? <span className="flex flex-none items-center">{icon}</span> : null}
 				<div className="min-w-0 flex-1">
 					<div className="flex min-w-0 items-center gap-2">
 						{heading ?? (
@@ -135,20 +145,27 @@ export function FullPreview({
 					{meta ? <p className="tabular truncate text-sm text-[var(--ink-muted)]">{meta}</p> : null}
 				</div>
 				{position && position.total > 1 ? (
-					<div className="flex flex-none items-center gap-0.5">
-						<IconAction icon="chevron-left" label="Previous file" disabled={position.index <= 0} onClick={position.onPrevious} />
-						<span aria-live="polite" className="tabular min-w-[56px] text-center text-sm text-[var(--ink-muted)]">
+					<div className="flex flex-none items-center gap-2">
+						<IconAction
+							icon="chevron-left"
+							label="Previous file"
+							tooltip="bottom"
+							disabled={position.index <= 0}
+							onClick={position.onPrevious}
+						/>
+						<span aria-live="polite" className="tabular min-w-[34px] text-center text-sm text-[var(--ink-muted)]">
 							{position.index + 1} of {position.total}
 						</span>
 						<IconAction
 							icon="chevron-right"
 							label="Next file"
+							tooltip="bottom"
 							disabled={position.index >= position.total - 1}
 							onClick={position.onNext}
 						/>
 					</div>
 				) : null}
-				{actions ? <div className="flex flex-none items-center gap-1">{actions}</div> : null}
+				{actions ? <div className="flex flex-none items-center gap-2">{actions}</div> : null}
 				{column && onToggleColumn ? (
 					<Tooltip label={columnOpen ? "Hide details" : "Show details"} side="bottom">
 						<button

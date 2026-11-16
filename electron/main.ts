@@ -33,8 +33,10 @@ import { configureDocuments, printPdf } from "./main/services/document-pdf";
 import { configureConversion } from "./main/services/document-convert";
 import * as documentWorking from "./main/services/document-working";
 import { configureWorkingCopies } from "./main/services/document-working";
-import { configurePreview, forgetPreviews } from "./main/services/file-preview";
-import { convertWithWord, wordInstalled } from "./main/services/word-convert";
+import { configurePreview, forgetPreviews, tidyPreviewCache } from "./main/services/file-preview";
+import { configureOfficePreview } from "./main/services/office-preview";
+import { configurePreviewCache } from "./main/services/preview-cache";
+import { convertWithPowerPoint, convertWithWord, powerpointInstalled, wordInstalled } from "./main/services/word-convert";
 import { configureDocumentStorage } from "./main/services/documents";
 import { apply as applyDocumentsFolder, configureDocumentsFolder } from "./main/services/documents-folder";
 import { configurePageImages } from "./main/services/page-images";
@@ -149,6 +151,19 @@ if (!app.requestSingleInstanceLock()) {
 			printHtml: ({ title, bodyHtml }) => printPdf({ title, bodyHtml, isSpecimen: false }),
 			wordAvailable: wordInstalled,
 			convertWithWord,
+			powerpointAvailable: powerpointInstalled,
+			convertWithPowerPoint,
+		});
+		// A Word file or a deck is previewed as the PDF its own program makes,
+		// kept under the data folder (decision 83). A smoke run starts no Office
+		// program unless asked to, so it is the same run on every machine.
+		configurePreviewCache({ directory: join(userDataDir(), "preview-cache") });
+		const officeInPreviews = !process.env.JUNO_SMOKE || process.env.JUNO_SMOKE_OFFICE === "1";
+		configureOfficePreview({
+			wordAvailable: officeInPreviews ? wordInstalled : async () => false,
+			powerpointAvailable: officeInPreviews ? powerpointInstalled : async () => false,
+			convertWithWord,
+			convertWithPowerPoint,
 		});
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
@@ -201,6 +216,12 @@ if (!app.requestSingleInstanceLock()) {
 		}
 		if (migrations.applied.length > 0) {
 			console.log(`Applied ${migrations.applied.length} migration(s):`, migrations.applied);
+		}
+		// The preview PDFs of versions deleted while Juno was not looking go now.
+		try {
+			tidyPreviewCache(db);
+		} catch {
+			// A cache that cannot be tidied is pruned again at the next write.
 		}
 
 		// Reference data is seeded before the window exists, so the first screen is

@@ -15,7 +15,8 @@ export function needsConversion(record: { latestVersion: { fileName: string | nu
 }
 
 /** What the person is told once a file has become a PDF, by Word or by Juno. */
-export function convertedSentence(via: "word" | "juno"): string {
+export function convertedSentence(via: "word" | "powerpoint" | "juno"): string {
+	if (via === "powerpoint") return "Converted to PDF through PowerPoint.";
 	return via === "juno"
 		? "Converted by Juno, because Word is not installed here. The layout may differ from the original."
 		: "Converted to PDF through Word.";

@@ -44,6 +44,8 @@ import { PREVIEW_LIMITS, readableText, readSheets } from "./file-text";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import { get as getDocument } from "./documents";
 import { attachmentPath } from "./mail-threads";
+import { officePdf } from "./office-preview";
+import * as previewCache from "./preview-cache";
 import * as projectAssets from "./project-assets";
 
 /** A preview reads a file into memory. Past this it shows the file's details and a thumbnail instead. */
@@ -159,6 +161,8 @@ interface SourceFile {
 	/** A file Juno keeps. Null for bytes the window handed over. */
 	path: string | null;
 	bytes: Buffer | null;
+	/** The version of a document the file is, whose bytes never change. Null for anything else. */
+	versionId: string | null;
 }
 
 function statOf(path: string): { size: number; modified: string | null } {
@@ -181,19 +185,35 @@ async function resolve(source: FilePreviewSource, db: Db): Promise<SourceFile> {
 			// not shown, to the window or to an agent (data.md section 6).
 			if (!(await getDocument(file.documentId, db))) throw new Error("That document no longer exists.");
 			const { size, modified } = statOf(file.path);
-			return { name: file.fileName, mediaType: file.mediaType, size, modified, path: file.path, bytes: null };
+			return {
+				name: file.fileName,
+				mediaType: file.mediaType,
+				size,
+				modified,
+				path: file.path,
+				bytes: null,
+				versionId: file.versionId,
+			};
 		}
 		case "attachment": {
 			const { path, filename } = attachmentPath(source.attachmentId, db);
 			const { size, modified } = statOf(path);
-			return { name: filename, mediaType: mediaTypeFor(filename), size, modified, path, bytes: null };
+			return { name: filename, mediaType: mediaTypeFor(filename), size, modified, path, bytes: null, versionId: null };
 		}
 		case "asset": {
 			const asset = await projectAssets.get(source.assetId, db);
 			if (!asset) throw new Error("That file is no longer in this project.");
 			const { path } = projectAssets.pathOf(source.assetId, db);
 			const { size, modified } = statOf(path);
-			return { name: asset.fileName, mediaType: mediaTypeFor(asset.fileName), size, modified, path, bytes: null };
+			return {
+				name: asset.fileName,
+				mediaType: mediaTypeFor(asset.fileName),
+				size,
+				modified,
+				path,
+				bytes: null,
+				versionId: null,
+			};
 		}
 		case "bytes": {
 			const bytes = Buffer.from(source.data);
@@ -206,6 +226,7 @@ async function resolve(source: FilePreviewSource, db: Db): Promise<SourceFile> {
 				modified: source.fileDate ?? null,
 				path: null,
 				bytes,
+				versionId: null,
 			};
 		}
 		default:
@@ -371,7 +392,14 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 			);
 			return { kind: "image", meta, url: urlFor(token) };
 		}
-		case "word": {
+		case "word":
+		case "legacy-word":
+		case "presentation": {
+			// Word or PowerPoint lays it out as it prints, when installed (decision 83).
+			const office = await officePdf({ name: file.name, path: file.path, bytes: file.bytes, versionId: file.versionId });
+			if (office) return { kind: "pdf", meta, data: new Uint8Array(office.pdf), via: office.via };
+			if (family === "presentation") return fallback(file, meta, "Juno shows a deck's slides through PowerPoint. Open it to see them.");
+			if (family === "legacy-word") return fallback(file, meta, "Juno has no preview for this kind of file. Open it to see it.");
 			if (file.size > MAX_WORD_BYTES) return fallback(file, meta, "This Word file is too large to preview. Open it to see it.");
 			const word = bytesOf(file);
 			if (isZipBytes(word) && !zipWithin(word, ZIP_LIMITS.word)) {
@@ -412,6 +440,14 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 		default:
 			return fallback(file, meta, "Juno has no preview for this kind of file. Open it to see it.");
 	}
+}
+
+/**
+ * Drops the cached PDF of every version deleted since the cache was last
+ * looked at, and prunes it to its ceiling. Run once after the database opens.
+ */
+export function tidyPreviewCache(db: Db = getDb()): number {
+	return previewCache.forgetDeletedVersions((ids) => versions.aliveIds(ids, db)) + previewCache.prune();
 }
 
 /** What the window draws for a file. */

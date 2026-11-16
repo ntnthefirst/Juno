@@ -2111,7 +2111,7 @@ export interface DocumentMoveInput {
 }
 
 /** How a PDF was made from a file (decision 77). `juno` means the layout may differ from the original. */
-export type ConversionRoute = "word" | "juno";
+export type ConversionRoute = "word" | "powerpoint" | "juno";
 
 export interface ConvertPdfResult {
 	document: DocumentRecord;
@@ -2168,7 +2168,9 @@ export interface PreviewSheet {
  * What the window draws for a file (decision 76). Decided in the main process
  * from the file's type; the window never gets a path.
  *
- * - `pdf`: the bytes, for the PDF viewer.
+ * - `pdf`: the bytes, for the PDF viewer. A Word file or a deck comes this
+ *   way too when Word or PowerPoint made a PDF of it (decision 83), and `via`
+ *   names which.
  * - `image`: a picture at an `app://preview/` address, for an `<img>` only.
  *   An SVG comes this way too, and `<img>` runs no script in it.
  * - `html`: a Word file made into sanitised HTML at an `app://preview/`
@@ -2180,7 +2182,7 @@ export interface PreviewSheet {
  * - `none`: nothing to show beyond `meta`; `reason` says why in a sentence.
  */
 export type FilePreview =
-	| { kind: "pdf"; meta: FilePreviewMeta; data: Uint8Array }
+	| { kind: "pdf"; meta: FilePreviewMeta; data: Uint8Array; via?: "word" | "powerpoint" }
 	| { kind: "image"; meta: FilePreviewMeta; url: string }
 	| { kind: "html"; meta: FilePreviewMeta; url: string }
 	| { kind: "text"; meta: FilePreviewMeta; text: string; truncated: boolean }

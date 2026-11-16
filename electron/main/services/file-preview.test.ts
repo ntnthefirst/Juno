@@ -84,6 +84,9 @@ describe("what a file is", () => {
 		expect(familyOf("Contract.PDF")).toBe("pdf");
 		expect(familyOf("brief.docx")).toBe("word");
 		expect(familyOf("oud.doc")).toBe("legacy-word");
+		expect(familyOf("Voorstel.pptx")).toBe("presentation");
+		expect(familyOf("show.ppsx")).toBe("presentation");
+		expect(familyOf("open.odp")).toBe("presentation");
 		expect(familyOf("prijzen.xlsx")).toBe("sheet");
 		expect(familyOf("lijst.csv")).toBe("csv");
 		expect(familyOf("logo.svg")).toBe("svg");

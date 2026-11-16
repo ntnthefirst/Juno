@@ -23,6 +23,7 @@ import type {
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { documentSignatures, documentVersions, documents } from "../db/schema";
+import * as previewCache from "./preview-cache";
 
 type Row = typeof documentVersions.$inferSelect;
 
@@ -213,7 +214,24 @@ export function remove(versionId: string, db: Db = getDb()): DocumentVersion {
 		.where(eq(documentVersions.id, versionId))
 		.run();
 	refreshLatest(version.documentId, db);
+	// What Word or PowerPoint made of it for a preview goes with it (decision 83).
+	previewCache.forgetVersion(versionId);
 	return version;
+}
+
+/** Which of these versions still exist, read in pages so a long list stays one bounded query each. */
+export function aliveIds(versionIds: string[], db: Db = getDb()): Set<string> {
+	const alive = new Set<string>();
+	for (let at = 0; at < versionIds.length; at += 500) {
+		const page = versionIds.slice(at, at + 500);
+		const rows = db
+			.select({ id: documentVersions.id })
+			.from(documentVersions)
+			.where(and(inArray(documentVersions.id, page), isNull(documentVersions.deletedAt)))
+			.all();
+		for (const row of rows) alive.add(row.id);
+	}
+	return alive;
 }
 
 /** The file behind one version, resolved from its id. */

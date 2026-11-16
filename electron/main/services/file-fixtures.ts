@@ -91,6 +91,73 @@ export async function iworkBytes(picture: Uint8Array, at = "preview.jpg"): Promi
 	return zip.generateAsync({ type: "uint8array" });
 }
 
+/* ------------------------------------------- iWork object files, written here */
+
+function varintBytes(value: number): number[] {
+	const out: number[] = [];
+	let rest = value;
+	while (rest >= 0x80) {
+		out.push((rest % 0x80) | 0x80);
+		rest = Math.floor(rest / 0x80);
+	}
+	out.push(rest);
+	return out;
+}
+
+/** A protobuf field: a number, or bytes with their length. */
+function protoField(number: number, value: number | Uint8Array | string): number[] {
+	if (typeof value === "number") return [...varintBytes(number * 8), ...varintBytes(value)];
+	const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+	return [...varintBytes(number * 8 + 2), ...varintBytes(bytes.length), ...bytes];
+}
+
+/** Raw Snappy written as literals only, which every decoder reads. */
+export function snappyLiterals(data: Uint8Array): Uint8Array {
+	const out: number[] = [...varintBytes(data.length)];
+	for (let at = 0; at < data.length; at += 0x10000) {
+		const part = data.subarray(at, Math.min(data.length, at + 0x10000));
+		const size = part.length - 1;
+		// Tag 61: the length minus one follows in two bytes.
+		out.push(61 << 2, size & 0xff, size >> 8, ...part);
+	}
+	return new Uint8Array(out);
+}
+
+/** One object of an iWork file: a run of text of a kind (body 0, header 1, text box 3, note 4, cell 5), or a table's strings. */
+export type IwaObject = { id: number; text?: { kind: number; text: string }; strings?: string[] };
+
+/** An `.iwa` file holding these objects, in one Snappy chunk. */
+export function iwaBytes(objects: IwaObject[]): Uint8Array {
+	const body: number[] = [];
+	for (const object of objects) {
+		const payload = object.text
+			? new Uint8Array([...protoField(1, object.text.kind), ...protoField(3, object.text.text)])
+			: new Uint8Array([
+					...protoField(1, 1),
+					...(object.strings ?? []).flatMap((value, key) =>
+						protoField(3, new Uint8Array([...protoField(1, key + 1), ...protoField(3, value)])),
+					),
+				]);
+		const type = object.text ? 2001 : 6005;
+		const info = new Uint8Array([
+			...protoField(1, object.id),
+			...protoField(2, new Uint8Array([...protoField(1, type), ...protoField(3, payload.length)])),
+		]);
+		body.push(...varintBytes(info.length), ...info, ...payload);
+	}
+	const compressed = snappyLiterals(new Uint8Array(body));
+	const length = compressed.length;
+	return new Uint8Array([0, length & 0xff, (length >> 8) & 0xff, (length >> 16) & 0xff, ...compressed]);
+}
+
+/** A modern iWork file: its object files under `Index/`, and its own picture when given. */
+export async function iworkTextBytes(files: Record<string, IwaObject[]>, picture?: Uint8Array): Promise<Uint8Array> {
+	const zip = new JSZip();
+	for (const [name, objects] of Object.entries(files)) zip.file(`Index/${name}`, iwaBytes(objects));
+	if (picture) zip.file("preview.jpg", picture);
+	return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+}
+
 /** Thirty-odd words, enough for a text match to mean something (pdf-text.ts). */
 export const AGREEMENT = [
 	"Overeenkomst voor het ontwikkelen van een website tussen de opdrachtgever en de opdrachtnemer.",

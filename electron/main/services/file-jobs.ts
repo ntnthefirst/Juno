@@ -14,10 +14,12 @@
  *
  * No Electron import and no database: a worker thread has neither.
  */
+import JSZip from "jszip";
 import mammoth from "mammoth";
 import sanitizeHtml from "sanitize-html";
 import type { PreviewSheet } from "../../shared/types";
 import { parseCsv } from "./csv";
+import { readIworkText, type IwaFile, type IworkApp, type IworkText } from "./iwork-read";
 import { diffWords, type WordDiff } from "./text-diff";
 
 /** How much of a workbook or a CSV is read: the sheets, rows and columns, and how long a cell may be. */
@@ -46,7 +48,9 @@ export type FileJob =
 	/** A PDF's text, a line per line of the page, or null when it has none. */
 	| { kind: "pdf-text" }
 	/** Which words `after` adds to `before` and leaves out (`text-diff.ts`). Takes no bytes. */
-	| { kind: "word-diff"; before: string; after: string };
+	| { kind: "word-diff"; before: string; after: string }
+	/** The words in a Pages, Numbers or Keynote file (`iwork-read.ts`), cut at `limit` characters. */
+	| { kind: "iwork-text"; app: IworkApp; limit: number };
 
 /** What each kind of job answers with. Plain data, so it crosses between threads as it is. */
 export interface FileJobOutput {
@@ -56,6 +60,7 @@ export interface FileJobOutput {
 	csv: SheetsResult;
 	"pdf-text": string | null;
 	"word-diff": WordDiff;
+	"iwork-text": IworkText;
 }
 
 export type FileJobKind = FileJob["kind"];
@@ -274,6 +279,25 @@ async function pdfText(bytes: Uint8Array): Promise<string | null> {
 	}
 }
 
+/* ---------------------------------------------------------------- iWork */
+
+/**
+ * The `Index/*.iwa` entries of an iWork zip, inflated, then read for their
+ * words. The caller has checked, in the main process, what those entries say
+ * they unpack to; nothing else in the zip is inflated.
+ */
+async function iworkText(bytes: Uint8Array, app: IworkApp, limit: number): Promise<IworkText> {
+	const zip = await JSZip.loadAsync(bytes);
+	const files: IwaFile[] = [];
+	for (const name of Object.keys(zip.files)) {
+		const entry = zip.files[name];
+		if (!entry || entry.dir || !/^Index\/.+\.iwa$/i.test(name)) continue;
+		files.push({ name, bytes: await entry.async("uint8array") });
+	}
+	if (files.length === 0) throw new Error("This file has no text Juno can read.");
+	return readIworkText(files, app, limit);
+}
+
 /* ------------------------------------------------------------------ run */
 
 /**
@@ -294,6 +318,8 @@ export async function runFileJob(job: FileJob, bytes: Uint8Array): Promise<FileJ
 			return pdfText(bytes);
 		case "word-diff":
 			return diffWords(job.before, job.after);
+		case "iwork-text":
+			return iworkText(bytes, job.app, job.limit);
 		default:
 			throw new Error("The file worker was asked for a job it does not know.");
 	}

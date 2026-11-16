@@ -188,6 +188,8 @@ export const ZIP_LIMITS = {
 	sheet: { maxInflated: 64 * 1024 * 1024, maxEntries: 10_000 },
 	/** One picture inside an iWork file. */
 	picture: { maxInflated: 20 * 1024 * 1024, maxEntries: 100_000 },
+	/** The `Index/*.iwa` entries of an iWork file together, which is all that is inflated to read its words. */
+	iwork: { maxInflated: 64 * 1024 * 1024, maxEntries: 100_000 },
 };
 
 /**

@@ -5,6 +5,7 @@ import { FileTypeIcon } from "./FileTypeIcon";
 import { Button } from "./Button";
 import { HtmlPreview } from "./HtmlPreview";
 import { ImagePreview } from "./ImagePreview";
+import { IworkPreview } from "./IworkPreview";
 import { PdfBytesViewer } from "./PdfBytesViewer";
 import { PreviewSkeleton } from "./PreviewSkeleton";
 import { SheetPreview } from "./SheetPreview";
@@ -102,6 +103,16 @@ export function FilePreviewView({ state, onOpen, caption, source }: FilePreviewV
 						</Button>
 					) : null}
 				</div>
+			);
+		case "iwork":
+			return (
+				<IworkPreview
+					app={preview.app}
+					name={preview.meta.name}
+					cover={preview.cover}
+					sections={preview.sections}
+					truncated={preview.truncated}
+				/>
 			);
 		case "none":
 			return (

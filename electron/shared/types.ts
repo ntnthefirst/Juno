@@ -2173,6 +2173,23 @@ export interface PreviewSheet {
 	totalRows: number;
 }
 
+/** Which Apple app made an iWork file, by its extension. */
+export type IworkApp = "pages" | "numbers" | "keynote";
+
+/**
+ * A part of what an iWork file says (decision 83), for the preview to draw in
+ * order.
+ * - `body`: a document's running text.
+ * - `slides`: the words on a deck's slides.
+ * - `notes`: a deck's presenter's notes.
+ * - `tables`: the words in tables.
+ * - `boxes`: text boxes, footnotes and anything else outside the running text.
+ */
+export interface IworkSection {
+	role: "body" | "slides" | "notes" | "tables" | "boxes";
+	text: string;
+}
+
 /**
  * What the window draws for a file (decision 76). Decided in the main process
  * from the file's type; the window never gets a path.
@@ -2189,6 +2206,9 @@ export interface PreviewSheet {
  * - `thumbnail`: a picture of the file at an `app://preview/` address: the
  *   one an iWork file carries, or the one Windows makes.
  * - `none`: nothing to show beyond `meta`; `reason` says why in a sentence.
+ * - `iwork`: a Pages, Numbers or Keynote file as the picture it carries of
+ *   itself (`cover`, an `app://preview/` address, null when it has none)
+ *   followed by its words, read from the file (decision 83).
  */
 export type FilePreview =
 	| { kind: "pdf"; meta: FilePreviewMeta; data: Uint8Array; via?: "word" | "powerpoint" }
@@ -2197,7 +2217,15 @@ export type FilePreview =
 	| { kind: "text"; meta: FilePreviewMeta; text: string; truncated: boolean }
 	| { kind: "table"; meta: FilePreviewMeta; sheets: PreviewSheet[]; truncatedSheets: boolean }
 	| { kind: "thumbnail"; meta: FilePreviewMeta; url: string; from: "iwork" | "system" }
-	| { kind: "none"; meta: FilePreviewMeta; reason: string };
+	| { kind: "none"; meta: FilePreviewMeta; reason: string }
+	| {
+			kind: "iwork";
+			meta: FilePreviewMeta;
+			app: IworkApp;
+			cover: string | null;
+			sections: IworkSection[];
+			truncated: boolean;
+	  };
 
 /** What an agent is given for a file: the same decision, with words and cells instead of addresses. */
 export interface FilePreviewForAgent {

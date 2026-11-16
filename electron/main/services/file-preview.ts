@@ -46,7 +46,8 @@ import {
 } from "./file-kind";
 import { sanitiseDocumentHtml } from "./file-jobs";
 import { FileReadError, readInWorker, type ReadOptions } from "./file-reader";
-import { PREVIEW_LIMITS, readableText, readSheets } from "./file-text";
+import { PREVIEW_LIMITS, readableText, readIwork, readSheets } from "./file-text";
+import { iworkAppOf } from "./iwork-read";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import { get as getDocument } from "./documents";
 import { attachmentPath } from "./mail-threads";
@@ -439,11 +440,16 @@ async function previewOf(file: SourceFile, family: FileFamily, options: FilePrev
 			return { kind: "text", meta, text, truncated };
 		}
 		case "iwork": {
-			const picture = await iworkPicture(bytesOf(file));
-			if (picture) {
-				const token = issue({ contentType: "image/jpeg", csp: IMAGE_CSP, body: picture });
-				return { kind: "thumbnail", meta, from: "iwork", url: urlFor(token) };
+			// The picture it carries of its first page, then its words (decision 83).
+			const bytes = bytesOf(file);
+			const picture = await iworkPicture(bytes);
+			const cover = picture ? urlFor(issue({ contentType: "image/jpeg", csp: IMAGE_CSP, body: picture })) : null;
+			const app = iworkAppOf(file.name);
+			const read = app ? await readIwork(bytes, file.name, PREVIEW_LIMITS.maxTextCharacters, { transfer: ownBytes(file) }) : null;
+			if (app && read && read.sections.length > 0) {
+				return { kind: "iwork", meta, app, cover, sections: read.sections, truncated: read.truncated };
 			}
+			if (cover) return { kind: "thumbnail", meta, from: "iwork", url: cover };
 			return fallback(file, meta, "This file carries no preview. Open it to see it.");
 		}
 		default:
@@ -504,9 +510,15 @@ export async function previewForAgent(source: FilePreviewSource, db: Db = getDb(
 						: family === "text"
 							? "text"
 							: family === "iwork"
-								? "thumbnail"
+								? "iwork"
 								: "none";
 	if (file.size > MAX_PREVIEW_BYTES) return { meta, kind: "none", text: null, truncated: false, sheets: null };
+	if (family === "iwork") {
+		// The same words the window shows under the cover picture (decision 83).
+		const read = await readIwork(bytesOf(file), file.name, PREVIEW_LIMITS.maxTextCharacters, { transfer: ownBytes(file) });
+		const text = read ? read.sections.map((section) => section.text).join("\n\n") : "";
+		return { meta, kind, text: text || null, truncated: read?.truncated ?? false, sheets: null };
+	}
 	if (family === "sheet" || family === "csv") {
 		try {
 			const { sheets } = await readSheets(bytesOf(file), file.name, PREVIEW_LIMITS, { transfer: ownBytes(file) });
@@ -515,7 +527,7 @@ export async function previewForAgent(source: FilePreviewSource, db: Db = getDb(
 			return { meta, kind: "none", text: null, truncated: false, sheets: null };
 		}
 	}
-	if (family === "image" || family === "svg" || family === "iwork" || family === "other" || family === "legacy-word") {
+	if (family === "image" || family === "svg" || family === "other" || family === "legacy-word" || family === "presentation") {
 		return { meta, kind, text: null, truncated: false, sheets: null };
 	}
 	const { text, truncated } = await readableText(bytesOf(file), file.name, PREVIEW_LIMITS.maxTextCharacters, {

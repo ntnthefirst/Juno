@@ -253,6 +253,13 @@
       "when": 1794659839811,
       "tag": "0035_documents_out_of_folders",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794788654807,
+      "tag": "0036_document_templates_soft_deleted",
+      "breakpoints": true
     }
   ]
 }

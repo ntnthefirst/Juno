@@ -2,6 +2,23 @@
 
 Newest first. The rules for writing an entry are in `.claude/rules/release-notes.md`.
 
+## 1.3.1
+Released: 2026-11-16
+
+A file's preview works like a real viewer: zoom, scroll, select and copy, with Word and PowerPoint shown page by page.
+
+### New
+- Word files and PowerPoint decks preview page by page with their real layout, made by Word or PowerPoint on your computer.
+- Every preview zooms with Ctrl and the wheel, Ctrl plus or minus, or the buttons above it, and Ctrl 0 fits it again.
+- Text in a PDF, a text file or a Word file can be selected and copied, and Ctrl F finds a word in it.
+- Cells in a spreadsheet preview can be selected and copied with Ctrl C, ready to paste into Excel.
+- A picture in a preview can be copied with Ctrl C or its right-click menu, and dragged around once you zoom in.
+- Pages, Keynote and Numbers files show their words under the cover picture, so you can read and copy them.
+
+### Improvements
+- Open and Convert to PDF are small icon buttons in the preview, and Sign moved to its "..." menu.
+- A PDF preview says which page you are on, and a second look at a Word file or deck opens at once.
+
 ## 1.3.0
 Released: 2026-11-16
 

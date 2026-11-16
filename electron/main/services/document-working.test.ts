@@ -268,6 +268,35 @@ describe("converting to PDF", () => {
 		expect(asked[0]![1]).toMatch(/juno-word-[^\\/]+[\\/]converted\.pdf$/);
 	});
 
+	it("asks PowerPoint for a deck, and refuses one when PowerPoint is not there", async () => {
+		const { db, client } = await setUp();
+		const asked: [string, string][] = [];
+		const word = async () => {
+			throw new Error("Word must not be asked.");
+		};
+		configureConversion({
+			printHtml: async () => {
+				throw new Error("The printer must not be asked.");
+			},
+			wordAvailable: async () => true,
+			convertWithWord: word,
+			powerpointAvailable: async () => true,
+			convertWithPowerPoint: async (input, output) => {
+				asked.push([input, output]);
+				writeFileSync(output, await fakePdf());
+			},
+		});
+		const deck = await importFile({ source: bytes("Voorstel.pptx", "a deck"), clientId: client.id }, db);
+		const result = await convertToPdf(deck.id, db);
+		expect(result.via).toBe("powerpoint");
+		expect(result.version.fileName).toBe("Voorstel.pdf");
+		expect(asked[0]![0]).toBe(deck.pdfPath);
+
+		configureConversion({ printHtml: async () => fakePdf(), wordAvailable: async () => true, convertWithWord: word });
+		const other = await importFile({ source: bytes("Ander.pptx", "another deck"), clientId: client.id }, db);
+		await expect(convertToPdf(other.id, db)).rejects.toThrow(/only through Microsoft PowerPoint/);
+	});
+
 	it("places a PNG on an A4 page, prints a spreadsheet and text, and refuses what it cannot draw", async () => {
 		const { db, client } = await setUp();
 		const printed: { title: string; bodyHtml: string }[] = [];

@@ -24,7 +24,13 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import JSZip from "jszip";
 import { extensionOf } from "../../shared/mime";
-import type { FilePreview, FilePreviewForAgent, FilePreviewMeta, FilePreviewSource } from "../../shared/types";
+import type {
+	FilePreview,
+	FilePreviewForAgent,
+	FilePreviewMeta,
+	FilePreviewOptions,
+	FilePreviewSource,
+} from "../../shared/types";
 import { getDb, type Db } from "../db";
 import * as versions from "./document-versions";
 import {
@@ -40,10 +46,13 @@ import {
 } from "./file-kind";
 import { sanitiseDocumentHtml } from "./file-jobs";
 import { FileReadError, readInWorker, type ReadOptions } from "./file-reader";
-import { PREVIEW_LIMITS, readableText, readSheets } from "./file-text";
+import { PREVIEW_LIMITS, readableText, readIwork, readSheets } from "./file-text";
+import { iworkAppOf } from "./iwork-read";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import { get as getDocument } from "./documents";
 import { attachmentPath } from "./mail-threads";
+import { officePdf } from "./office-preview";
+import * as previewCache from "./preview-cache";
 import * as projectAssets from "./project-assets";
 
 /** A preview reads a file into memory. Past this it shows the file's details and a thumbnail instead. */
@@ -159,6 +168,8 @@ interface SourceFile {
 	/** A file Juno keeps. Null for bytes the window handed over. */
 	path: string | null;
 	bytes: Buffer | null;
+	/** The version of a document the file is, whose bytes never change. Null for anything else. */
+	versionId: string | null;
 }
 
 function statOf(path: string): { size: number; modified: string | null } {
@@ -181,19 +192,35 @@ async function resolve(source: FilePreviewSource, db: Db): Promise<SourceFile> {
 			// not shown, to the window or to an agent (data.md section 6).
 			if (!(await getDocument(file.documentId, db))) throw new Error("That document no longer exists.");
 			const { size, modified } = statOf(file.path);
-			return { name: file.fileName, mediaType: file.mediaType, size, modified, path: file.path, bytes: null };
+			return {
+				name: file.fileName,
+				mediaType: file.mediaType,
+				size,
+				modified,
+				path: file.path,
+				bytes: null,
+				versionId: file.versionId,
+			};
 		}
 		case "attachment": {
 			const { path, filename } = attachmentPath(source.attachmentId, db);
 			const { size, modified } = statOf(path);
-			return { name: filename, mediaType: mediaTypeFor(filename), size, modified, path, bytes: null };
+			return { name: filename, mediaType: mediaTypeFor(filename), size, modified, path, bytes: null, versionId: null };
 		}
 		case "asset": {
 			const asset = await projectAssets.get(source.assetId, db);
 			if (!asset) throw new Error("That file is no longer in this project.");
 			const { path } = projectAssets.pathOf(source.assetId, db);
 			const { size, modified } = statOf(path);
-			return { name: asset.fileName, mediaType: mediaTypeFor(asset.fileName), size, modified, path, bytes: null };
+			return {
+				name: asset.fileName,
+				mediaType: mediaTypeFor(asset.fileName),
+				size,
+				modified,
+				path,
+				bytes: null,
+				versionId: null,
+			};
 		}
 		case "bytes": {
 			const bytes = Buffer.from(source.data);
@@ -206,6 +233,7 @@ async function resolve(source: FilePreviewSource, db: Db): Promise<SourceFile> {
 				modified: source.fileDate ?? null,
 				path: null,
 				bytes,
+				versionId: null,
 			};
 		}
 		default:
@@ -346,7 +374,7 @@ async function fallback(file: SourceFile, meta: FilePreviewMeta, reason: string)
 	return { kind: "none", meta, reason };
 }
 
-async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePreview> {
+async function previewOf(file: SourceFile, family: FileFamily, options: FilePreviewOptions = {}): Promise<FilePreview> {
 	const meta = metaOf(file);
 	if (file.size > MAX_PREVIEW_BYTES) {
 		return fallback(file, meta, "This file is too large to preview. Open it to see it.");
@@ -371,7 +399,17 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 			);
 			return { kind: "image", meta, url: urlFor(token) };
 		}
-		case "word": {
+		case "word":
+		case "legacy-word":
+		case "presentation": {
+			// Word or PowerPoint lays it out as it prints, when installed (decision 83).
+			const office = await officePdf(
+				{ name: file.name, path: file.path, bytes: file.bytes, versionId: file.versionId },
+				{ convert: options.convert !== false },
+			);
+			if (office) return { kind: "pdf", meta, data: new Uint8Array(office.pdf), via: office.via };
+			if (family === "presentation") return fallback(file, meta, "Juno shows a deck's slides through PowerPoint. Open it to see them.");
+			if (family === "legacy-word") return fallback(file, meta, "Juno has no preview for this kind of file. Open it to see it.");
 			if (file.size > MAX_WORD_BYTES) return fallback(file, meta, "This Word file is too large to preview. Open it to see it.");
 			const word = bytesOf(file);
 			if (isZipBytes(word) && !zipWithin(word, ZIP_LIMITS.word)) {
@@ -402,11 +440,16 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 			return { kind: "text", meta, text, truncated };
 		}
 		case "iwork": {
-			const picture = await iworkPicture(bytesOf(file));
-			if (picture) {
-				const token = issue({ contentType: "image/jpeg", csp: IMAGE_CSP, body: picture });
-				return { kind: "thumbnail", meta, from: "iwork", url: urlFor(token) };
+			// The picture it carries of its first page, then its words (decision 83).
+			const bytes = bytesOf(file);
+			const picture = await iworkPicture(bytes);
+			const cover = picture ? urlFor(issue({ contentType: "image/jpeg", csp: IMAGE_CSP, body: picture })) : null;
+			const app = iworkAppOf(file.name);
+			const read = app ? await readIwork(bytes, file.name, PREVIEW_LIMITS.maxTextCharacters, { transfer: ownBytes(file) }) : null;
+			if (app && read && read.sections.length > 0) {
+				return { kind: "iwork", meta, app, cover, sections: read.sections, truncated: read.truncated };
 			}
+			if (cover) return { kind: "thumbnail", meta, from: "iwork", url: cover };
 			return fallback(file, meta, "This file carries no preview. Open it to see it.");
 		}
 		default:
@@ -414,10 +457,37 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 	}
 }
 
-/** What the window draws for a file. */
-export async function preview(source: FilePreviewSource, db: Db = getDb()): Promise<FilePreview> {
+/**
+ * The bytes of a picture a preview shows, for copying it as a picture
+ * (decision 83). A PNG, a JPEG, or another picture the platform can read; an
+ * SVG is a document of its own and is refused, as is anything that is not a
+ * picture.
+ */
+export async function pictureOf(source: FilePreviewSource, db: Db = getDb()): Promise<{ name: string; bytes: Buffer }> {
 	const file = await resolve(source, db);
-	return previewOf(file, familyOf(file.name));
+	if (familyOf(file.name) !== "image") {
+		throw new Error(`"${file.name}" is not a picture Juno can copy. Open it and copy it from its own app.`);
+	}
+	if (file.size > MAX_PREVIEW_BYTES) throw new Error(`"${file.name}" is too large to copy as a picture.`);
+	return { name: file.name, bytes: bytesOf(file) };
+}
+
+/**
+ * Drops the cached PDF of every version deleted since the cache was last
+ * looked at, and prunes it to its ceiling. Run once after the database opens.
+ */
+export function tidyPreviewCache(db: Db = getDb()): number {
+	return previewCache.forgetDeletedVersions((ids) => versions.aliveIds(ids, db)) + previewCache.prune();
+}
+
+/** What the window draws for a file. A tile asks with `convert: false`, which never starts Word or PowerPoint. */
+export async function preview(
+	source: FilePreviewSource,
+	db: Db = getDb(),
+	options: FilePreviewOptions = {},
+): Promise<FilePreview> {
+	const file = await resolve(source, db);
+	return previewOf(file, familyOf(file.name), options);
 }
 
 /**
@@ -440,9 +510,15 @@ export async function previewForAgent(source: FilePreviewSource, db: Db = getDb(
 						: family === "text"
 							? "text"
 							: family === "iwork"
-								? "thumbnail"
+								? "iwork"
 								: "none";
 	if (file.size > MAX_PREVIEW_BYTES) return { meta, kind: "none", text: null, truncated: false, sheets: null };
+	if (family === "iwork") {
+		// The same words the window shows under the cover picture (decision 83).
+		const read = await readIwork(bytesOf(file), file.name, PREVIEW_LIMITS.maxTextCharacters, { transfer: ownBytes(file) });
+		const text = read ? read.sections.map((section) => section.text).join("\n\n") : "";
+		return { meta, kind, text: text || null, truncated: read?.truncated ?? false, sheets: null };
+	}
 	if (family === "sheet" || family === "csv") {
 		try {
 			const { sheets } = await readSheets(bytesOf(file), file.name, PREVIEW_LIMITS, { transfer: ownBytes(file) });
@@ -451,7 +527,7 @@ export async function previewForAgent(source: FilePreviewSource, db: Db = getDb(
 			return { meta, kind: "none", text: null, truncated: false, sheets: null };
 		}
 	}
-	if (family === "image" || family === "svg" || family === "iwork" || family === "other" || family === "legacy-word") {
+	if (family === "image" || family === "svg" || family === "other" || family === "legacy-word" || family === "presentation") {
 		return { meta, kind, text: null, truncated: false, sheets: null };
 	}
 	const { text, truncated } = await readableText(bytesOf(file), file.name, PREVIEW_LIMITS.maxTextCharacters, {

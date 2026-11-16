@@ -1,4 +1,5 @@
 import { Icon, type IconName } from "./Icon";
+import { Tooltip } from "./Tooltip";
 
 type IconActionProps = {
 	icon: IconName;
@@ -7,16 +8,22 @@ type IconActionProps = {
 	disabled?: boolean;
 	/** dense is 32px for a row, base is 40px for a toolbar or a panel header. */
 	size?: "dense" | "base";
+	/**
+	 * Names the button in the application's own label on that side, rather than
+	 * the platform's `title`. For a header or a toolbar, where the button has no
+	 * word beside it and the pointer rests on it to learn what it does.
+	 */
+	tooltip?: "bottom" | "right";
 	onClick: () => void;
 };
 
 /** An icon button. The label is the only wording it needs. */
-export function IconAction({ icon, label, danger = false, disabled = false, size = "dense", onClick }: IconActionProps) {
-	return (
+export function IconAction({ icon, label, danger = false, disabled = false, size = "dense", tooltip, onClick }: IconActionProps) {
+	const button = (
 		<button
 			type="button"
 			aria-label={label}
-			title={label}
+			title={tooltip ? undefined : label}
 			disabled={disabled}
 			onClick={(event) => {
 				event.stopPropagation();
@@ -34,5 +41,12 @@ export function IconAction({ icon, label, danger = false, disabled = false, size
 		>
 			<Icon name={icon} size={size === "base" ? 16 : 14} />
 		</button>
+	);
+	return tooltip ? (
+		<Tooltip label={label} side={tooltip}>
+			{button}
+		</Tooltip>
+	) : (
+		button
 	);
 }

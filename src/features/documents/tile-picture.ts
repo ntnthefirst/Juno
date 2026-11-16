@@ -62,8 +62,10 @@ async function pdfPicture(data: Uint8Array): Promise<TilePicture> {
 }
 
 async function read(source: FilePreviewSource): Promise<TilePicture> {
-	const preview = await window.juno.documents.preview(source);
+	// A tile never starts Word or PowerPoint: it takes their PDF only when a preview already made one.
+	const preview = await window.juno.documents.preview(source, { convert: false });
 	if (preview.kind === "image" || preview.kind === "thumbnail") return { url: preview.url };
+	if (preview.kind === "iwork") return preview.cover ? { url: preview.cover } : null;
 	if (preview.kind === "pdf") return pdfPicture(preview.data);
 	return null;
 }

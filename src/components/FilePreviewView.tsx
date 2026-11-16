@@ -1,10 +1,15 @@
 import type { ReactNode } from "react";
+import type { FilePreviewSource } from "@shared/types";
 import type { PreviewState } from "../lib/use-file-preview";
 import { FileTypeIcon } from "./FileTypeIcon";
 import { Button } from "./Button";
+import { HtmlPreview } from "./HtmlPreview";
+import { ImagePreview } from "./ImagePreview";
+import { IworkPreview } from "./IworkPreview";
 import { PdfBytesViewer } from "./PdfBytesViewer";
 import { PreviewSkeleton } from "./PreviewSkeleton";
 import { SheetPreview } from "./SheetPreview";
+import { TextPreview } from "./TextPreview";
 
 type FilePreviewViewProps = {
 	state: PreviewState;
@@ -12,6 +17,8 @@ type FilePreviewViewProps = {
 	onOpen?: () => void;
 	/** Drawn in the PDF viewer's toolbar. */
 	caption?: ReactNode;
+	/** What the preview was made from, so a picture can be copied from the same file, by id. */
+	source?: FilePreviewSource;
 };
 
 /**
@@ -24,7 +31,7 @@ type FilePreviewViewProps = {
  * While the file is read the space holds the shape of a page, so nothing moves
  * when it lands.
  */
-export function FilePreviewView({ state, onOpen, caption }: FilePreviewViewProps) {
+export function FilePreviewView({ state, onOpen, caption, source }: FilePreviewViewProps) {
 	if (state.status === "loading") return <PreviewSkeleton />;
 	if (state.status === "error") {
 		return (
@@ -50,49 +57,30 @@ export function FilePreviewView({ state, onOpen, caption }: FilePreviewViewProps
 	switch (preview.kind) {
 		case "pdf":
 			return <PdfBytesViewer name={preview.meta.name} data={preview.data} caption={caption} />;
-		case "image":
+		case "image": {
+			// An SVG is a document, not a picture the clipboard takes.
+			const copyable = source && preview.meta.extension !== "svg" ? source : null;
 			return (
-				<div className="animate-fade flex h-full items-center justify-center overflow-auto bg-[var(--sunken)] p-6">
-					<img
-						src={preview.url}
-						alt={preview.meta.name}
-						draggable={false}
-						className="max-h-full max-w-full rounded-[var(--radius-sm)] object-contain shadow-[var(--shadow-popover)]"
-					/>
-				</div>
+				<ImagePreview
+					url={preview.url}
+					name={preview.meta.name}
+					{...(copyable ? { onCopy: () => window.juno.documents.clipboard.copyPicture(copyable) } : {})}
+				/>
 			);
+		}
 		case "html":
-			return (
-				<div className="animate-fade h-full bg-[var(--sunken)] p-6">
-					<iframe
-						title={preview.meta.name}
-						src={preview.url}
-						sandbox=""
-						referrerPolicy="no-referrer"
-						className="mx-auto block h-full w-full max-w-[860px] rounded-[var(--radius-sm)] border border-[var(--line)] shadow-[var(--shadow-popover)]"
-					/>
-				</div>
-			);
+			return <HtmlPreview url={preview.url} name={preview.meta.name} />;
 		case "text":
 			return (
-				<div className="animate-fade flex h-full min-h-0 flex-col bg-[var(--surface)]">
-					<pre
-						data-selectable
-						className="min-h-0 flex-1 overflow-auto px-8 py-6 font-mono text-dense whitespace-pre-wrap text-[var(--ink)]"
-					>
-						{preview.text}
-					</pre>
-					{preview.truncated ? (
-						<p className="flex-none border-t border-[var(--line)] px-4 py-2 text-sm text-[var(--ink-muted)]">
-							This is the first part of the file. Open it to read the rest.
-						</p>
-					) : null}
-				</div>
+				<TextPreview
+					text={preview.text}
+					note={preview.truncated ? "This is the first part of the file. Open it to read the rest." : undefined}
+				/>
 			);
 		case "table":
 			return (
 				<div className="animate-fade h-full">
-					<SheetPreview sheets={preview.sheets} truncatedSheets={preview.truncatedSheets} />
+					<SheetPreview key={preview.meta.name} sheets={preview.sheets} truncatedSheets={preview.truncatedSheets} />
 				</div>
 			);
 		case "thumbnail":
@@ -115,6 +103,16 @@ export function FilePreviewView({ state, onOpen, caption }: FilePreviewViewProps
 						</Button>
 					) : null}
 				</div>
+			);
+		case "iwork":
+			return (
+				<IworkPreview
+					app={preview.app}
+					name={preview.meta.name}
+					cover={preview.cover}
+					sections={preview.sections}
+					truncated={preview.truncated}
+				/>
 			);
 		case "none":
 			return (

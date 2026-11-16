@@ -7,7 +7,9 @@
  * The worker is a bundled asset on the app's own origin, so the content policy
  * needs nothing beyond `'self'`.
  */
-export type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFPageProxy } from "pdfjs-dist";
+
+export type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 
 /**
  * pdf.js transfers the buffer it is given, so it gets a copy.
@@ -25,4 +27,39 @@ export async function openPdf(data: Uint8Array) {
 	]);
 	pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
 	return pdfjs.getDocument({ data: data.slice(), verbosity: pdfjs.VerbosityLevel.ERRORS }).promise;
+}
+
+/**
+ * A page's text as pdf.js lays it over the drawn page, transparent, so it can
+ * be selected, copied and found (decision 83). `container` is emptied first.
+ * `scale` is the page's CSS pixels over its points. Resolves when the text is
+ * in place; the returned `cancel` stops one still being laid out.
+ */
+export function renderTextLayer(
+	page: PDFPageProxy,
+	container: HTMLElement,
+	scale: number,
+): { done: Promise<void>; cancel: () => void } {
+	let cancelled = false;
+	let layer: { cancel: () => void } | null = null;
+	const done = import("pdfjs-dist").then(async (pdfjs) => {
+		if (cancelled) return;
+		container.replaceChildren();
+		container.style.setProperty("--total-scale-factor", String(scale));
+		const viewport = page.getViewport({ scale });
+		const text = new pdfjs.TextLayer({ textContentSource: page.streamTextContent(), container, viewport });
+		layer = text;
+		await text.render();
+		// Where a drag past the last line lands, so selecting to the end of a page does not jump.
+		const end = document.createElement("div");
+		end.className = "endOfContent";
+		container.append(end);
+	});
+	return {
+		done: done.catch(() => undefined),
+		cancel: () => {
+			cancelled = true;
+			layer?.cancel();
+		},
+	};
 }

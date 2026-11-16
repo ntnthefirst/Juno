@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { FilePreviewSource } from "@shared/types";
 import { useFilePreview } from "../lib/use-file-preview";
 import { FilePreviewView } from "./FilePreviewView";
+import { FileTypeIcon } from "./FileTypeIcon";
 import { FullPreview } from "./FullPreview";
 
 /** One file the quick look can show: a mail attachment, a project's file, anything the main process can preview. */
@@ -41,6 +42,7 @@ export function FileQuickLook({ files, index, onIndex, onClose, closeLabel, onOp
 	return (
 		<FullPreview
 			title={file.name}
+			icon={<FileTypeIcon filename={file.name} size={28} />}
 			meta={file.meta}
 			closeLabel={closeLabel}
 			onClose={onClose}
@@ -59,7 +61,7 @@ export function FileQuickLook({ files, index, onIndex, onClose, closeLabel, onOp
 			columnOpen={columnOpen}
 			onToggleColumn={() => setColumnOpen((open) => !open)}
 		>
-			<FilePreviewView state={state} {...(onOpen ? { onOpen: () => onOpen(file) } : {})} />
+			<FilePreviewView state={state} source={file.source} {...(onOpen ? { onOpen: () => onOpen(file) } : {})} />
 		</FullPreview>
 	);
 }

@@ -115,7 +115,8 @@ export const documentFileTools: ToolDescriptor[] = [
 		title: "Read a file's content",
 		description:
 			"What a file says, without opening it: its name, size, type and date, and its words (a PDF, a Word " +
-			"file, text) or its cells per sheet (a spreadsheet or a CSV), cut at a limit. A picture or any other " +
+			"file, text, a Pages, Numbers or Keynote file) or its cells per sheet (a spreadsheet or a CSV), cut at " +
+			"a limit. An iWork file's words come in the order the file keeps them. A picture or any other " +
 			"file gives its details only. Name one of document_id (its newest version), version_id, " +
 			"attachment_id (a mail attachment) or asset_id (a project file).",
 		readOnly: true,

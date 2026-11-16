@@ -14,9 +14,10 @@
  *
  * No Electron import, so every rule here is covered by a test.
  */
-import { familyOf, isPdfBytes, isZipBytes, ZIP_LIMITS, zipWithin } from "./file-kind";
+import { familyOf, isPdfBytes, isZipBytes, ZIP_LIMITS, zipEntrySizes, zipWithin } from "./file-kind";
 import { decodeText, type SheetsResult } from "./file-jobs";
 import { readInWorker, type ReadOptions } from "./file-reader";
+import { iworkAppOf, type IworkText } from "./iwork-read";
 import { extractText, normalise, readText } from "./pdf-text";
 
 export { decodeText, type SheetsResult } from "./file-jobs";
@@ -88,6 +89,33 @@ export async function readSheets(
 	return readInWorker({ kind: "workbook", limits }, bytes, { fileName, transfer: options.transfer });
 }
 
+/**
+ * The words in a Pages, Numbers or Keynote file (decision 83), or null when it
+ * has none Juno can read: not a zip, older than the format read here, or more
+ * than Juno reads. Only the `Index/*.iwa` entries are inflated, so only their
+ * sizes are checked; a deck's films are never touched.
+ */
+export async function readIwork(
+	bytes: Uint8Array,
+	fileName: string,
+	limit = PREVIEW_LIMITS.maxTextCharacters,
+	options: Pick<ReadOptions, "transfer"> = {},
+): Promise<IworkText | null> {
+	const app = iworkAppOf(fileName);
+	if (!app || !isZipBytes(bytes)) return null;
+	const entries = zipEntrySizes(bytes);
+	if (!entries || entries.length > ZIP_LIMITS.iwork.maxEntries) return null;
+	const inflated = entries
+		.filter((entry) => /^Index\/.+\.iwa$/i.test(entry.name))
+		.reduce((total, entry) => total + entry.inflated, 0);
+	if (inflated === 0 || inflated > ZIP_LIMITS.iwork.maxInflated) return null;
+	try {
+		return await readInWorker({ kind: "iwork-text", app, limit }, bytes, { fileName, transfer: options.transfer });
+	} catch {
+		return null;
+	}
+}
+
 export interface ReadableText {
 	text: string | null;
 	truncated: boolean;
@@ -129,6 +157,12 @@ export async function readableText(
 					...sheet.rows.map((row) => row.join("\t")),
 				]);
 				return cut(lines.join("\n"), limit);
+			}
+			case "iwork": {
+				const read = await readIwork(bytes, fileName, limit, options);
+				if (!read) return { text: null, truncated: false };
+				const words = cut(read.sections.map((section) => section.text).join("\n\n"), limit);
+				return read.truncated && words.text !== null ? { text: words.text, truncated: true } : words;
 			}
 			case "text":
 			case "svg": {

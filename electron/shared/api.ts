@@ -96,6 +96,7 @@ import type {
 	DocumentMoveInput,
 	ConvertPdfResult,
 	FilePreview,
+	FilePreviewOptions,
 	FilePreviewSource,
 	DocumentsChanged,
 	IsoDate,
@@ -851,13 +852,19 @@ export interface JunoApi {
 		clipboard: {
 			copy(ids: string[], mode: "copy" | "cut"): Promise<ClipboardCopyResult>;
 			paste(place: DocumentPlace): Promise<PasteResult>;
+			/**
+			 * Puts the picture a preview shows on the system clipboard as a
+			 * picture, read in the main process from the same source the preview
+			 * was made from, never a path (decision 83). Interface only.
+			 */
+			copyPicture(source: FilePreviewSource): Promise<void>;
 		};
 		/** A new document from the newest version, under another client or project. */
 		copyTo(id: string, target: DocumentMoveInput): Promise<DocumentRecord>;
 		/** Keeps a PDF of the newest version as the next version. `via: "juno"` means the layout may differ. */
 		convertPdf(id: string): Promise<ConvertPdfResult>;
 		/** What to draw for a file. Never a path; pictures and Word files come as `app://preview/` addresses. */
-		preview(source: FilePreviewSource): Promise<FilePreview>;
+		preview(source: FilePreviewSource, options?: FilePreviewOptions): Promise<FilePreview>;
 		/**
 		 * Opens the newest version in the operating system's app for it: a working
 		 * copy whose saved edits come back as versions, or read only when it is signed.

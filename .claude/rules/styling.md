@@ -390,7 +390,11 @@ The animations are utilities, not keyframes written at the call site:
 - **A file's full preview scales in** (`components/FullPreview.tsx`,
   `animate-scale`) over the content area, the tiles of a folder rise one after
   another, and while a preview is read the space holds the shape of a page
-  (`PreviewSkeleton`), so nothing moves when it lands.
+  (`PreviewSkeleton`), so nothing moves when it lands. That includes the few
+  seconds Word or PowerPoint takes to lay out a file the first time
+  (decision 83). A zoom is not animated: the page takes its new size at once,
+  and a PDF page keeps its old drawing, stretched, until the sharp one is
+  ready, so it never blanks.
 - **The calendar pages like a scroll** (`features/calendar/PageSlide.tsx`):
   the old month or week slides out the whole way while the next one follows
   edge to edge, with no fade, and the page waits for its items before it
@@ -487,7 +491,10 @@ Not for amounts, which are tabular sans.
 
 `src/styles/global.css` holds the Tailwind import, the tokens import, the
 bundled `@font-face` rules for Inter and JetBrains Mono (decision 10, no network
-fetch), and base `html`/`body` background, colour and font. Nothing else.
+fetch), and base `html`/`body` background, colour and font. Nothing else,
+except rules for markup no utility can reach: the Find highlights (the CSS
+Custom Highlight API) and the `.textLayer` pdf.js writes over a PDF page so
+its text can be selected (decision 83), copied from pdf.js's own rules.
 
 No component classes, no `@apply` chains, no `!important`. Everything else is a
 utility class on the element.

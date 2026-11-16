@@ -26,13 +26,14 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { ClipboardCopyResult, DocumentPlace, PasteResult, PickedFile } from "../../shared/types";
+import type { ClipboardCopyResult, DocumentPlace, FilePreviewSource, PasteResult, PickedFile } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import * as organise from "./document-organise";
 import { dragFileNames } from "./drag-name";
 import * as documents from "./documents";
 import { mediaTypeFor } from "./file-kind";
+import { pictureOf } from "./file-preview";
 
 export type SystemClipboard = {
 	/** Paths of the files copied in Explorer, in order. Empty when the clipboard holds no files. */
@@ -44,6 +45,8 @@ export type SystemClipboard = {
 	hasContent(): boolean;
 	/** Puts these files on the clipboard. False when the platform would not take them. */
 	writeFiles(paths: string[]): Promise<boolean>;
+	/** Puts a picture on the clipboard, from its PNG or JPEG bytes. False when the platform cannot read it. */
+	writeImage(bytes: Uint8Array): boolean;
 };
 
 const NOTHING: SystemClipboard = {
@@ -52,6 +55,7 @@ const NOTHING: SystemClipboard = {
 	readText: () => "",
 	hasContent: () => false,
 	writeFiles: async () => false,
+	writeImage: () => false,
 };
 
 /**
@@ -69,6 +73,12 @@ export function memoryClipboard(start: { files?: string[]; image?: Uint8Array | 
 		writeFiles: async (paths) => {
 			state.files = [...paths];
 			state.image = null;
+			state.text = "";
+			return true;
+		},
+		writeImage: (bytes) => {
+			state.files = [];
+			state.image = new Uint8Array(bytes);
 			state.text = "";
 			return true;
 		},
@@ -145,6 +155,20 @@ async function filesFor(ids: readonly string[], db: Db): Promise<string[]> {
 		copyFileSync(record.pdfPath!, target);
 		return target;
 	});
+}
+
+/**
+ * Ctrl C, or Copy picture, on a picture in a file's preview (decision 83):
+ * the picture itself goes on the clipboard, not the file, so it pastes into a
+ * mail or a document as a picture. Read from the same source the preview was
+ * made from, by id. Like a paste, it has no agent tool.
+ */
+export async function copyPicture(source: FilePreviewSource, db: Db = getDb()): Promise<void> {
+	const picture = await pictureOf(source, db);
+	held = null;
+	if (!system.writeImage(picture.bytes)) {
+		throw new Error(`"${picture.name}" cannot be copied as a picture. Open it and copy it from its own app.`);
+	}
 }
 
 /**

@@ -11,6 +11,8 @@ type FindBarProps = {
 	onNext: () => void;
 	onPrevious: () => void;
 	onClose: () => void;
+	/** The field's accessible name: what is being searched. */
+	fieldLabel?: string;
 };
 
 /**
@@ -19,7 +21,16 @@ type FindBarProps = {
  * back the count, so the same bar serves a message in a frame and a page.
  * Enter goes to the next match, Shift+Enter to the previous, Escape closes.
  */
-export function FindBar({ query, onQueryChange, count, current, onNext, onPrevious, onClose }: FindBarProps) {
+export function FindBar({
+	query,
+	onQueryChange,
+	count,
+	current,
+	onNext,
+	onPrevious,
+	onClose,
+	fieldLabel = "Find in this message",
+}: FindBarProps) {
 	const input = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -52,7 +63,7 @@ export function FindBar({ query, onQueryChange, count, current, onNext, onPrevio
 				value={query}
 				onChange={(event) => onQueryChange(event.target.value)}
 				onKeyDown={onKeyDown}
-				aria-label="Find in this message"
+				aria-label={fieldLabel}
 				placeholder="Find"
 				className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-[var(--ink-faint)]"
 			/>

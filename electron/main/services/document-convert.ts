@@ -1,7 +1,7 @@
 /**
  * A file becomes a PDF (decision 77): through Word when Word is installed,
  * which keeps the layout exactly, and through Juno when it is not, which may
- * not. The PDF is kept as a new version of the same document, so the
+ * not. A slide deck goes through PowerPoint, and only through it (decision 83). The PDF is kept as a new version of the same document, so the
  * original stays, and signing then works on it.
  *
  * What Juno converts itself:
@@ -35,6 +35,8 @@ import * as versions from "./document-versions";
 import { documentStorageDir, fileNameFor, get } from "./documents";
 import { familyOf, isPdfBytes, isPdfMediaType, ZIP_LIMITS, zipWithin } from "./file-kind";
 import { readInWorker } from "./file-reader";
+import { officeRouteFor, type OfficeRoute } from "./office-preview";
+import * as previewCache from "./preview-cache";
 import { decodeText, MAX_CSV_BYTES, PREVIEW_LIMITS, readSheets } from "./file-text";
 import { extractText } from "./pdf-text";
 import { escapeHtml } from "./template-render";
@@ -46,6 +48,10 @@ type Hooks = {
 	wordAvailable: () => Promise<boolean>;
 	/** Asks Word to save `inputPath` as a PDF at `outputPath`. */
 	convertWithWord: (inputPath: string, outputPath: string) => Promise<void>;
+	/** Whether PowerPoint is installed. Left out, a deck is never converted. */
+	powerpointAvailable?: () => Promise<boolean>;
+	/** Asks PowerPoint to save a deck as a PDF (decision 83). */
+	convertWithPowerPoint?: (inputPath: string, outputPath: string) => Promise<void>;
 };
 
 let hooks: Hooks | null = null;
@@ -59,8 +65,6 @@ function configured(): Hooks {
 	return hooks;
 }
 
-/** Word opens these; Juno can read only the first. */
-const WORD_FAMILIES = new Set(["word", "legacy-word"]);
 
 const TABLE_CSS =
 	"<style>.juno-sheet{margin:0 0 18pt}.juno-sheet h2{font-size:12pt;margin:0 0 6pt}" +
@@ -158,6 +162,10 @@ async function convertInJuno(bytes: Uint8Array, fileName: string, title: string)
 			throw new Error(
 				`Juno can make a PDF of a .${extension} file only through Microsoft Word, which is not installed here. Save it as .docx or as PDF in the app that made it.`,
 			);
+		case "presentation":
+			throw new Error(
+				"Juno can make a PDF of a deck only through Microsoft PowerPoint, which is not installed here. Save it as PDF in the app that made it.",
+			);
 		case "sheet":
 		case "csv": {
 			if (familyOf(fileName) === "csv" && bytes.length > MAX_CSV_BYTES) throw tooLongToConvert(fileName);
@@ -180,14 +188,26 @@ async function convertInJuno(bytes: Uint8Array, fileName: string, title: string)
 	}
 }
 
-/** Asks Word for the PDF, in a folder of its own that is removed afterwards. */
-async function convertThroughWord(sourcePath: string): Promise<Buffer> {
+/** Whether the program a file needs is installed: Word for what Word opens, PowerPoint for a deck. */
+async function officeAvailable(route: OfficeRoute | null): Promise<boolean> {
+	const { wordAvailable, powerpointAvailable } = configured();
+	if (route === "word") return wordAvailable();
+	if (route === "powerpoint") return powerpointAvailable ? powerpointAvailable() : false;
+	return false;
+}
+
+/** Asks Word or PowerPoint for the PDF, in a folder of its own that is removed afterwards. */
+async function convertThroughOffice(route: OfficeRoute, sourcePath: string): Promise<Buffer> {
+	const { convertWithWord, convertWithPowerPoint } = configured();
+	const name = route === "word" ? "Word" : "PowerPoint";
 	const folder = mkdtempSync(join(tmpdir(), "juno-word-"));
 	const output = join(folder, "converted.pdf");
 	try {
-		await configured().convertWithWord(sourcePath, output);
+		if (route === "word") await convertWithWord(sourcePath, output);
+		else if (convertWithPowerPoint) await convertWithPowerPoint(sourcePath, output);
+		else throw new Error("PowerPoint is not set up here.");
 		const bytes = readFileSync(output);
-		if (!isPdfBytes(bytes)) throw new Error("Word did not write a PDF. Open the file in Word to check it, then try again.");
+		if (!isPdfBytes(bytes)) throw new Error(`${name} did not write a PDF. Open the file in ${name} to check it, then try again.`);
 		return bytes;
 	} finally {
 		rmSync(folder, { recursive: true, force: true });
@@ -204,12 +224,17 @@ export async function convertToPdf(documentId: string, db: Db = getDb()): Promis
 	const latest = versions.latestFileOf(documentId, db);
 	if (isPdfMediaType(latest.mediaType)) throw new Error(`The newest version of "${record.title}" is a PDF already.`);
 
-	const family = familyOf(latest.fileName);
-	const useWord = WORD_FAMILIES.has(family) && (await configured().wordAvailable());
-	const bytes = useWord
-		? await convertThroughWord(latest.path)
-		: await convertInJuno(readFileSync(latest.path), latest.fileName, escapeHtml(record.title));
-	const via: ConversionRoute = useWord ? "word" : "juno";
+	const route = officeRouteFor(latest.fileName);
+	const useOffice = route !== null && (await officeAvailable(route));
+	// A preview may have had the same program make this PDF already (decision 83).
+	const previewed = useOffice ? previewCache.read({ versionId: latest.versionId }) : null;
+	const bytes =
+		previewed && isPdfBytes(previewed)
+			? previewed
+			: useOffice
+				? await convertThroughOffice(route, latest.path)
+				: await convertInJuno(readFileSync(latest.path), latest.fileName, escapeHtml(record.title));
+	const via: ConversionRoute = useOffice ? route : "juno";
 
 	const destination = join(documentStorageDir(), fileNameFor(record.title, "-pdf", "pdf"));
 	writeFileSync(destination, bytes);

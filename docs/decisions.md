@@ -2893,3 +2893,79 @@ that is not an exception on the Overview.
 every client, often enough that writing them by hand costs real time. That
 would be a decision about generating documents again, starting from Word,
 not a return of the canvas on paper.
+
+## 83. A file's preview is a viewer: Office lays out Word and decks, iWork shows its words, and everything zooms
+
+Amends decisions 76 and 77. The owner wanted the full preview to feel like a
+real viewer: a Word file as it prints, a deck's slides, a Pages file's words,
+and the zoom, selection and copy any reader has, without ever editing the
+file.
+
+- **Word and PowerPoint lay out their own files.** When Word is installed a
+  `.docx`, `.docm`, `.doc`, `.rtf` or `.odt` is previewed as the PDF Word
+  makes of it, and when PowerPoint is installed a `.pptx`, `.pptm`, `.ppt`,
+  `.pps`, `.ppsx` or `.odp` the same way through PowerPoint, so pages and
+  slides scroll with their real layout in the PDF viewer
+  (`services/office-preview.ts`). The program reads a copy in a folder of its
+  own under the system's temporary folder, driven exactly as decision 77
+  drives Word: a script whose text never changes, the paths as environment
+  variables, macros forced off, a password it fails on rather than a hidden
+  prompt (PowerPoint takes it after the name, `name::password::`), a time
+  limit, and the copy of the program a stopped run left behind stopped too.
+  One run at a time for both programs (`word-convert.ts`), because
+  PowerPoint is one process per session and two runs would share it.
+- **What they make is kept.** The PDF goes to `preview-cache` in the data
+  folder, named by the version's id or by the hash of the bytes, never
+  beside a document and never by a file name, with a ceiling of 512 MB
+  pruned by when each was last looked at (`services/preview-cache.ts`). A
+  deleted version takes its PDF with it, at once and at the next start for
+  one deleted any other way. The first look at a contract takes Word about
+  seven seconds and a short deck about five; the second is a file read.
+  Convert to PDF takes a deck through PowerPoint too and uses a preview's PDF
+  when there is one. A tile on a Documents tab never starts either program:
+  it takes their PDF only when a full preview already made it.
+- **Without the program, or when it fails, nothing is an error.** A Word file
+  is its HTML as before, a deck the picture Windows draws, and a file the
+  program failed on is not tried again until Juno restarts. A smoke run
+  starts neither program unless `JUNO_SMOKE_OFFICE=1` is set.
+- **An iWork file shows its picture and its words.** Windows has nothing that
+  draws Pages, Numbers or Keynote, and the picture a file carries is its first
+  page only. Its `Index/*.iwa` files are Snappy-compressed protobuf objects,
+  read by a small decoder and a schema-free protobuf reader in the file
+  worker (`services/iwork-read.ts`), inflating only those entries and
+  checking every length. The text lives in its text storages and its tables'
+  string lists. Pages shows its running text in order, then its tables and
+  boxes; Keynote the words on its slides and its presenter notes; Numbers the
+  words in its tables and boxes. The order of slides, of tables and of a
+  workbook's cells lives in messages that differ between the apps and their
+  versions, so it is not read and the preview says so. A Keynote file's
+  slide thumbnails, a workbook as a grid and numbers in cells are not shown.
+  An agent's `documents.preview` and the match against kept documents read
+  the same words.
+- **Every kind zooms, nothing edits.** The zoom is the same in every kind
+  (`lib/preview-zoom.ts`): the viewer's toolbar (zoom out, the percentage,
+  zoom in, fit), Ctrl or Cmd with the wheel, Ctrl or Cmd with plus, minus and
+  0, which goes back to fit. A PDF page is drawn again, sharp, at every zoom,
+  with pdf.js's text layer over it, so its text is selected and copied, and
+  the page being read is counted ("Page 2 of 7"). A picture fits the view
+  and is dragged to pan once it is larger. Text, a table and Word as HTML
+  scale their type. Ctrl or Cmd F finds in a PDF, text and an iWork file's
+  words; it does not reach into Word's HTML, which runs in a frame that
+  lets nothing out. A sheet's cells are selected with a click, Shift, a drag
+  or Ctrl or Cmd A, and copied as tab-separated text. Ctrl or Cmd C copies
+  the selection, or a picture as a picture through the main process, read
+  from the same source the preview was made from; it never copies the
+  documents behind the preview. Escape clears a selection before it closes
+  the preview. Copying a picture has no agent tool, for the reason a paste
+  has none (decision 82).
+- **The header is icons.** After the name and Previous and Next: Open in its
+  app and Convert to PDF as icon buttons with the application's tooltips,
+  then Download, the "..." menu and the details toggle, as the frames
+  `15 Documents / Preview, Word` and `15 Documents / Preview, workbook`
+  draw it. Convert and sign is gone from the header; Sign is in the "..."
+  menu and converts first when the file is not a PDF yet.
+
+**What would reverse this:** a renderer for Word, PowerPoint or iWork that
+ships inside the app and keeps their layout, which would replace the Office
+route and the iWork words both; or the owner asking for edits in the
+preview, which would be an editor and a decision of its own.

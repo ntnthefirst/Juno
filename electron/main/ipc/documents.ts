@@ -10,6 +10,7 @@ import type {
 	AnalyseImportInput,
 	DocumentMoveInput,
 	DocumentPlace,
+	FilePreviewOptions,
 	FilePreviewSource,
 	ImportFileInput,
 	ImportFromMailInput,
@@ -42,9 +43,12 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.duplicate", (_event, id: string) => organise.duplicate(id));
 	ipcMain.handle("documents.clipboard.copy", (_event, ids: string[], mode: "copy" | "cut") => clipboard.copy(ids, mode));
 	ipcMain.handle("documents.clipboard.paste", (_event, place: DocumentPlace) => clipboard.paste(place));
+	ipcMain.handle("documents.clipboard.copyPicture", (_event, source: FilePreviewSource) => clipboard.copyPicture(source));
 	ipcMain.handle("documents.copyTo", (_event, id: string, target: DocumentMoveInput) => organise.copyTo(id, target));
 	ipcMain.handle("documents.convertPdf", (_event, id: string) => convert.convertToPdf(id));
-	ipcMain.handle("documents.preview", (_event, source: FilePreviewSource) => preview.preview(source));
+	ipcMain.handle("documents.preview", (_event, source: FilePreviewSource, options?: FilePreviewOptions) =>
+		preview.preview(source, undefined, options),
+	);
 	ipcMain.handle("documents.open", (_event, id: string) => working.openDocument(id));
 	// The platform's drag of the newest files, which only the window that is dragging can start.
 	ipcMain.handle("documents.startDrag", async (event, ids: string[]) => {

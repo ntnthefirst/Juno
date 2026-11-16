@@ -129,6 +129,24 @@ describe("pasting", () => {
 	});
 });
 
+describe("copying a picture from its preview", () => {
+	it("puts the picture itself on the clipboard, by the id the preview was made from", async () => {
+		const { db, system, acme } = await setUp({ text: "earlier" });
+		const logo = await importFile({ source: { kind: "bytes", fileName: "Logo.png", data: PNG_BYTES }, clientId: acme.id }, db);
+		await clipboard.copyPicture({ kind: "document", documentId: logo.id }, db);
+		expect(system.state.image).toEqual(PNG_BYTES);
+		expect(system.state.text).toBe("");
+		await clipboard.copyPicture({ kind: "bytes", fileName: "Foto.png", data: PNG_BYTES }, db);
+		expect(system.state.image).toEqual(PNG_BYTES);
+	});
+
+	it("refuses what is not a picture, an SVG included", async () => {
+		const { db } = await setUp();
+		await expect(clipboard.copyPicture(text("Logo.svg", "<svg/>"), db)).rejects.toThrow(/not a picture Juno can copy/);
+		await expect(clipboard.copyPicture(text("Brief.txt", "Hallo"), db)).rejects.toThrow(/not a picture Juno can copy/);
+	});
+});
+
 describe("keeping contents as a file, for an agent", () => {
 	it("keeps text or base64 bytes, and refuses both or neither", async () => {
 		const { db, acme } = await setUp();

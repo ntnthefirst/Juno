@@ -1026,12 +1026,15 @@ export function MessageView({
 						const attachment = visibleAttachments.find((entry) => entry.id === file.key);
 						return attachment ? (
 							<>
-								<Button size="dense" disabled={!canOpenFile(attachment)} onClick={() => void openFile(attachment.id)}>
-									Open
-								</Button>
-								<Button size="dense" onClick={() => void save(attachment.id)}>
-									Download
-								</Button>
+								<IconAction
+									icon="external"
+									label="Open in its app"
+									tooltip="bottom"
+									disabled={!canOpenFile(attachment)}
+									onClick={() => void openFile(attachment.id)}
+								/>
+								<span aria-hidden className="h-4 w-px bg-[var(--line)]" />
+								<IconAction icon="export" label="Download a copy" tooltip="bottom" onClick={() => void save(attachment.id)} />
 							</>
 						) : null;
 					}}

@@ -12,6 +12,8 @@ export type FileFamily =
 	| "pdf"
 	| "word"
 	| "legacy-word"
+	/** A slide deck, which only PowerPoint draws. */
+	| "presentation"
 	| "sheet"
 	| "csv"
 	| "text"
@@ -74,11 +76,15 @@ const TEXT_EXTENSIONS = new Set([
 /** Word formats Word itself opens, and that Juno can only convert through it. */
 const LEGACY_WORD = new Set(["doc", "rtf", "odt"]);
 
+/** Slide decks PowerPoint opens: its own formats, a show, and an OpenDocument presentation. */
+const PRESENTATIONS = new Set(["pptx", "pptm", "ppt", "pps", "ppsx", "odp"]);
+
 export function familyOf(fileName: string): FileFamily {
 	const extension = extensionOf(fileName);
 	if (extension === "pdf") return "pdf";
 	if (extension === "docx" || extension === "docm") return "word";
 	if (LEGACY_WORD.has(extension)) return "legacy-word";
+	if (PRESENTATIONS.has(extension)) return "presentation";
 	if (extension === "xlsx" || extension === "xlsm") return "sheet";
 	if (extension === "csv") return "csv";
 	if (extension === "svg") return "svg";
@@ -182,6 +188,8 @@ export const ZIP_LIMITS = {
 	sheet: { maxInflated: 64 * 1024 * 1024, maxEntries: 10_000 },
 	/** One picture inside an iWork file. */
 	picture: { maxInflated: 20 * 1024 * 1024, maxEntries: 100_000 },
+	/** The `Index/*.iwa` entries of an iWork file together, which is all that is inflated to read its words. */
+	iwork: { maxInflated: 64 * 1024 * 1024, maxEntries: 100_000 },
 };
 
 /**

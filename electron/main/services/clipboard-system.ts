@@ -11,7 +11,7 @@
  * never starts PowerShell at all.
  */
 import { execFile } from "node:child_process";
-import { clipboard } from "electron";
+import { clipboard, nativeImage } from "electron";
 import type { SystemClipboard } from "./clipboard";
 
 const READ_FILES =
@@ -70,6 +70,12 @@ export const systemClipboard: SystemClipboard = {
 	},
 	hasContent() {
 		return firstFile() !== "" || clipboard.availableFormats().some((format) => format.startsWith("image/")) || clipboard.readText().trim() !== "";
+	},
+	writeImage(bytes) {
+		const image = nativeImage.createFromBuffer(Buffer.from(bytes));
+		if (image.isEmpty()) return false;
+		clipboard.writeImage(image);
+		return true;
 	},
 	async writeFiles(paths) {
 		if (process.platform !== "win32" || paths.length === 0) return false;

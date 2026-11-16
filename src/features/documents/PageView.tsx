@@ -11,7 +11,7 @@ import { SkeletonBar } from "../../components/SkeletonBar";
 import { messageOf } from "../../lib/errors";
 import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { editedLabel } from "../notes/note-format";
-import { useFind } from "../notes/use-find";
+import { useFind } from "../../lib/use-find";
 import { DocumentOwnerFields, type DocumentOwnerChoice } from "./DocumentOwnerFields";
 
 type PageViewProps = {

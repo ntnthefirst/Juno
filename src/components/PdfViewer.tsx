@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { IconAction } from "./IconAction";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { messageOf } from "../lib/errors";
 import { openPdf, type PDFDocumentProxy } from "../lib/pdf";
+import { COMBOS, matchesCombo } from "../lib/shortcuts";
+import { useFind } from "../lib/use-find";
+import { usePreviewZoom } from "../lib/use-preview-zoom";
+import { FindBar } from "./FindBar";
 import { PdfPageView } from "./PdfPageView";
+import { ZoomControls } from "./ZoomControls";
 
 type PdfViewerProps = {
 	/** Changes when the file behind the viewer does, so the new one is opened. Null for no file. */
@@ -15,31 +19,41 @@ type PdfViewerProps = {
 	empty: ReactNode;
 };
 
+/** A page's size in CSS pixels at 100%, from its size in points. */
+type PageSize = { width: number; height: number };
+
 /** Tagged with the file it belongs to, so a stale one is never shown for a new key. */
-type Opened = { fileKey: string; pdf: PDFDocumentProxy; aspects: number[] };
+type Opened = { fileKey: string; pdf: PDFDocumentProxy; sizes: PageSize[] };
 type Failure = { fileKey: string; message: string };
 type Reading = { fileKey: string; page: number };
 
-const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-const DEFAULT_ZOOM = 2;
-const MAX_PAGE_WIDTH = 900;
+/** A point is 1/72 of an inch and a CSS pixel 1/96, so 100% is the page at its printed size. */
+const PX_PER_PT = 96 / 72;
+/** At fit a page is as wide as the pane allows, up to a comfortable reading width. */
+const MAX_FIT_WIDTH = 900;
 const GUTTER = 48;
 
 /**
- * A PDF to read, one page after another on a sunken ground, with a toolbar for
- * the page count and the zoom. It draws to a canvas, so text cannot be selected
- * here: the file opens outside for that.
+ * A PDF to read, one page after another on a sunken ground, with a toolbar
+ * for where you are ("Page 2 of 7") and the zoom (decision 83). Each page is
+ * drawn on a canvas and again, sharp, at every zoom, with its text laid over
+ * it, so text is selected and copied as in any reader, and Ctrl or Cmd F
+ * finds in every page.
  *
- * At 100% a page is as wide as the pane allows, up to a comfortable reading
- * width, and the zoom is a multiple of that.
+ * At fit a page is as wide as the pane allows, up to a comfortable reading
+ * width; the percentage is the page against its printed size.
  */
 export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 	const [loaded, setLoaded] = useState<Opened | null>(null);
 	const [failure, setFailure] = useState<Failure | null>(null);
-	const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 	const [paneWidth, setPaneWidth] = useState(0);
 	const [reading, setReading] = useState<Reading | null>(null);
+	const [finding, setFinding] = useState(false);
+	const [query, setQuery] = useState("");
+	const [textVersion, setTextVersion] = useState(0);
 	const pane = useRef<HTMLDivElement>(null);
+	const pages = useRef<HTMLDivElement>(null);
+	const scrolled = useRef(0);
 
 	useEffect(() => {
 		if (fileKey === null) return;
@@ -48,12 +62,12 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 		(async () => {
 			const bytes = await read(fileKey);
 			pdf = await openPdf(bytes);
-			const aspects: number[] = [];
+			const sizes: PageSize[] = [];
 			for (let number = 1; number <= pdf.numPages; number += 1) {
 				const view = (await pdf.getPage(number)).getViewport({ scale: 1 });
-				aspects.push(view.height / view.width);
+				sizes.push({ width: view.width * PX_PER_PT, height: view.height * PX_PER_PT });
 			}
-			if (!cancelled) setLoaded({ fileKey, pdf, aspects });
+			if (!cancelled) setLoaded({ fileKey, pdf, sizes });
 		})().catch((cause: unknown) => {
 			if (!cancelled) setFailure({ fileKey, message: messageOf(cause) });
 		});
@@ -76,12 +90,37 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 	const opened = loaded !== null && loaded.fileKey === fileKey ? loaded : null;
 	const error = failure !== null && failure.fileKey === fileKey ? failure.message : null;
 	const current = reading !== null && reading.fileKey === fileKey ? reading.page : 1;
-	const fit = Math.max(200, Math.min(MAX_PAGE_WIDTH, paneWidth - GUTTER));
-	const pageWidth = Math.floor(fit * ZOOMS[zoom]!);
+	const widest = opened ? Math.max(...opened.sizes.map((size) => size.width)) : 0;
+	const fitWidth = Math.max(200, Math.min(MAX_FIT_WIDTH, paneWidth - GUTTER));
+	const zoom = usePreviewZoom(widest > 0 ? fitWidth / widest : 1, pane);
+	const scale = zoom.scale;
+
+	// A zoom keeps the place being read: the same share of the way down.
+	useLayoutEffect(() => {
+		const element = pane.current;
+		if (!element) return;
+		element.scrollTop = scrolled.current * element.scrollHeight;
+	}, [scale]);
+
+	// On the document, which hears Ctrl F before the title bar's list search does.
+	useEffect(() => {
+		if (!opened) return;
+		function onKey(event: KeyboardEvent) {
+			if (!matchesCombo(event, COMBOS.find) || document.querySelector("[role='dialog']")) return;
+			event.preventDefault();
+			setFinding(true);
+		}
+		document.addEventListener("keydown", onKey);
+		return () => document.removeEventListener("keydown", onKey);
+	}, [opened]);
+
+	const find = useFind(pages, query, finding, `${textVersion}:${scale}`);
+	const textReady = useCallback(() => setTextVersion((value) => value + 1), []);
 
 	function trackPage() {
 		const element = pane.current;
 		if (!element || fileKey === null) return;
+		scrolled.current = element.scrollHeight > 0 ? element.scrollTop / element.scrollHeight : 0;
 		const top = element.getBoundingClientRect().top;
 		let nearest = 1;
 		let best = Number.POSITIVE_INFINITY;
@@ -96,36 +135,43 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 	}
 
 	const count = opened?.pdf.numPages ?? 0;
+	const widestShown = Math.floor(widest * scale);
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
+		<div className="relative flex h-full min-h-0 flex-col">
 			<div className="flex h-[48px] shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-4">
 				<div className="min-w-0 truncate text-sm text-[var(--ink-muted)]">{caption}</div>
 				{opened ? (
-					<div className="flex shrink-0 items-center gap-1">
-						<span className="tabular mr-2 text-sm text-[var(--ink-muted)]">
+					<div className="flex shrink-0 items-center gap-3">
+						<span className="tabular text-sm text-[var(--ink-muted)]" data-page-indicator>
 							Page {current} of {count}
 						</span>
-						<IconAction
-							icon="minus"
-							label="Zoom out"
-							disabled={zoom === 0}
-							onClick={() => setZoom((value) => Math.max(0, value - 1))}
-						/>
-						<span className="tabular w-11 text-center text-sm">
-							{Math.round(ZOOMS[zoom]! * 100)}%
-						</span>
-						<IconAction
-							icon="add"
-							label="Zoom in"
-							disabled={zoom === ZOOMS.length - 1}
-							onClick={() => setZoom((value) => Math.min(ZOOMS.length - 1, value + 1))}
-						/>
+						<ZoomControls zoom={zoom} />
 					</div>
 				) : null}
 			</div>
 
-			<div ref={pane} onScroll={trackPage} className="min-h-0 flex-1 overflow-auto bg-[var(--sunken)]">
+			{finding ? (
+				<div className="pointer-events-none absolute top-[60px] right-6 z-20">
+					<div className="pointer-events-auto">
+						<FindBar
+							query={query}
+							onQueryChange={setQuery}
+							count={find.count}
+							current={find.current}
+							onNext={find.next}
+							onPrevious={find.previous}
+							fieldLabel="Find in this file"
+							onClose={() => {
+								setFinding(false);
+								setQuery("");
+							}}
+						/>
+					</div>
+				</div>
+			) : null}
+
+			<div ref={pane} onScroll={trackPage} className="min-h-0 flex-1 overflow-auto bg-[var(--sunken)]" data-pdf-pane>
 				{fileKey === null ? (
 					<div className="flex h-full items-center justify-center p-8 text-center">{empty}</div>
 				) : error ? (
@@ -138,17 +184,17 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 				) : !opened ? (
 					<p className="p-8 text-[var(--ink-muted)]">Opening the PDF.</p>
 				) : (
-					<div
-						className="flex flex-col items-center gap-4 p-4"
-						style={{ minWidth: pageWidth + 32 }}
-					>
-						{Array.from({ length: count }, (_, index) => index + 1).map((number) => (
-							<div key={number} data-page={number}>
+					<div ref={pages} className="flex flex-col items-center gap-4 p-4" style={{ minWidth: widestShown + 32 }}>
+						{opened.sizes.map((size, index) => (
+							<div key={index + 1} data-page={index + 1}>
 								<PdfPageView
 									pdf={opened.pdf}
-									pageNumber={number}
-									width={pageWidth}
-									aspect={opened.aspects[number - 1]!}
+									pageNumber={index + 1}
+									width={Math.floor(size.width * scale)}
+									aspect={size.height / size.width}
+									selectable
+									textEverywhere={finding}
+									onText={textReady}
 								/>
 							</div>
 						))}

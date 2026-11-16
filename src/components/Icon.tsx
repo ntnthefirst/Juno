@@ -245,6 +245,7 @@ export type IconName =
 	| "wrap"
 	| "keyboard"
 	| "minus"
+	| "fit-width"
 	// File types, for the attachments of a message.
 	| "file"
 	| "file-sheet"
@@ -310,6 +311,8 @@ const DRAWN = {
 			<path d="M14.5 5v14" />
 		</>,
 	),
+	// Two arrows out to two edges: a page as wide as the view.
+	fitWidth: glyph(<path d="M4 5v14M20 5v14M7.5 12h9m-6.5-3-3 3 3 3m6-6 3 3-3 3" />),
 	columns: glyph(
 		<>
 			<rect x="3.5" y="5" width="7.5" height="14" rx="1.5" />
@@ -615,6 +618,7 @@ const ICONS: Record<IconName, Glyph> = {
 	wrap: DRAWN.wrap,
 	keyboard: DRAWN.keyboard,
 	minus: MinusIcon,
+	"fit-width": DRAWN.fitWidth,
 	file: DocumentIcon,
 	"file-sheet": TableCellsIcon,
 	"file-slides": PresentationChartBarIcon,

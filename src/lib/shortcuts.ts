@@ -62,6 +62,8 @@ const NAMED: Record<string, string> = {
 	delete: "Del",
 	space: "Space",
 	backspace: "Backspace",
+	// The zoom keys: the key that types = is drawn as the plus it is with Shift.
+	"=": "+",
 };
 
 /** The keys of a shortcut as they are drawn on this machine: ["Ctrl", "K"] or ["⌘", "K"]. */
@@ -188,7 +190,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 		title: "In a file's preview",
 		rows: [
 			{ combos: ["arrowleft", "arrowright"], label: "Previous and next file" },
-			{ combos: ["escape"], label: "Close the preview" },
+			{ combos: ["mod+=", "mod+-"], label: "Zoom in and out, or turn the wheel with Ctrl held" },
+			{ combos: ["mod+0"], label: "Fit the file to the window again" },
+			{ combos: [COMBOS.find], label: "Find in a PDF or a text file" },
+			{ combos: ["escape"], label: "Clear the selection, then close the preview" },
 		],
 	},
 	{

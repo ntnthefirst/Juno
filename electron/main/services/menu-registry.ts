@@ -24,6 +24,7 @@ import * as calendar from "./calendar";
 import * as calendarSubscriptions from "./calendar-subscriptions";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
+import * as clipboard from "./clipboard";
 import * as documents from "./documents";
 import * as mailDocuments from "./document-mail";
 import * as outbox from "./mail-outbox";
@@ -70,12 +71,13 @@ function blank(area: string, context: MenuRequest["context"]): MenuEntry[] {
 			{ id: "toggle-styled-mail", label: "Styled mail", icon: "templates", separatorBefore: true },
 		];
 	}
-	// A Documents tab's empty space fills the client or project it is on.
+	// A Documents tab's empty space, and Files', fills the place it is in.
 	if (area === "documents") {
+		const paste = clipboard.canPaste();
 		return [
+			...(paste ? [{ id: "paste", label: "Paste", icon: "import", accelerator: "CommandOrControl+V" } as const] : []),
+			{ id: "new-page", label: "New page", icon: "add", separatorBefore: paste },
 			{ id: "add-files", label: "Add files", icon: "import" },
-			{ id: "new-page", label: "New page", icon: "documents", separatorBefore: true },
-			...EVERYWHERE.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
 		];
 	}
 	const own = OWN_NEW[area as BlankArea];
@@ -207,37 +209,39 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 		case "file": {
 			const file = await documents.get(id, db);
 			if (!file) return [];
-			// A page has no file to hand to another program, convert or sign.
-			if (file.sourceKind === "page") {
+			const page = file.sourceKind === "page";
+			const latest = file.latestVersion;
+			// A file explorer's menu (decision 82): open, the clipboard, then what Juno adds.
+			const clip: MenuEntry[] = [
+				{ id: "copy", label: "Copy", icon: "copy", accelerator: "CommandOrControl+C", separatorBefore: true },
+				...(clipboard.canPaste() ? [{ id: "paste", label: "Paste", icon: "import", accelerator: "CommandOrControl+V" } as const] : []),
+				...(page || latest ? [{ id: "duplicate", label: "Duplicate", icon: "templates", accelerator: "CommandOrControl+D" } as const] : []),
+			];
+			// Several selected: only what applies to all of them at once.
+			if (context === "several") {
 				return [
-					{ id: "open", label: "Open", icon: "external" },
-					{ id: "move-to", label: "Move to", icon: "move-right", separatorBefore: true },
-					{ id: "rename", label: "Rename", icon: "edit", accelerator: "F2" },
+					...clip,
+					{ id: "copy-to", label: "Copy to", icon: "copy", separatorBefore: true },
+					{ id: "move-to", label: "Move to", icon: "move-right" },
 					{ ...REMOVE, accelerator: "Delete" },
 				];
 			}
-			const latest = file.latestVersion;
-			const pdf = latest ? isPdfName(latest.fileName, latest.mediaType) : false;
-			const entries: MenuEntry[] = [
-				{ id: "preview", label: "Open preview", icon: "visible", accelerator: "Space" },
-				...(latest
-					? [
-							{ id: "open-in-default-app", label: "Open", icon: "external", accelerator: "Enter" } as const,
-						]
-					: []),
-				...(latest
-					? [{ id: "duplicate-file", label: "Duplicate", icon: "templates", accelerator: "CommandOrControl+D", separatorBefore: true } as const]
-					: []),
-				{ id: "copy-to", label: "Copy to", icon: "copy", separatorBefore: !latest },
+			const entries: MenuEntry[] = page
+				? [{ id: "open", label: "Open", icon: "external", accelerator: "Enter" }]
+				: [
+						...(latest ? [{ id: "open-in-default-app", label: "Open", icon: "external", accelerator: "Enter" } as const] : []),
+						{ id: "preview", label: "Preview", icon: "panel", accelerator: "Space" },
+					];
+			entries.push(...clip, { id: "rename", label: "Rename", icon: "edit", accelerator: "F2" });
+			entries.push(
+				{ id: "copy-to", label: "Copy to", icon: "copy", separatorBefore: true },
 				{ id: "move-to", label: "Move to", icon: "move-right" },
-				{ id: "rename", label: "Rename", icon: "edit", accelerator: "F2" },
-			];
-			if (latest && !pdf) entries.push({ id: "convert-pdf", label: "Convert to PDF", icon: "sync", separatorBefore: true });
-			// A specimen is never signed (docs/templates.md), so it is not offered.
-			if (latest && !file.isSpecimen) {
-				entries.push({ id: "sign", label: pdf ? "Sign" : "Convert and sign", icon: "sign", separatorBefore: pdf });
-			}
-			if (latest) {
+			);
+			if (latest && !page) {
+				const pdf = isPdfName(latest.fileName, latest.mediaType);
+				if (!pdf) entries.push({ id: "convert-pdf", label: "Convert to PDF", icon: "sync", separatorBefore: true });
+				// A specimen is never signed, so it is not offered.
+				if (!file.isSpecimen) entries.push({ id: "sign", label: pdf ? "Sign" : "Convert and sign", icon: "sign", separatorBefore: pdf });
 				entries.push(
 					{ id: "download-file", label: "Download", icon: "export", separatorBefore: true },
 					{ id: "send-file", label: "Send by mail", icon: "mail" },
@@ -246,7 +250,6 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 			entries.push({ ...REMOVE, accelerator: "Delete" });
 			return entries;
 		}
-
 
 		case "attachment":
 			return attachmentEntries(id, context, db);

@@ -181,7 +181,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: [LIST_COMBOS.duplicate], label: "Duplicate" },
 			{ combos: [LIST_COMBOS.copy], label: "Copy" },
 			{ combos: [LIST_COMBOS.cut], label: "Cut, to move with the next paste" },
-			{ combos: [LIST_COMBOS.paste], label: "Paste into this client or project" },
+			{ combos: [LIST_COMBOS.paste], label: "Paste here: documents, or files, a picture or text copied elsewhere" },
 		],
 	},
 	{

@@ -103,6 +103,8 @@ export function DocumentsPanel({ scope, name, search = "", openDocumentId = null
 	const [clip, setClip] = useState(readClipboard);
 	// The document asked for from elsewhere is shown once, when the list it is in has been read.
 	const asked = useRef(openDocumentId);
+	// The files being added came from a paste, so the toast says pasted.
+	const [pasting, setPasting] = useState(false);
 
 	const files = "files" in scope;
 	const clientId = "clientId" in scope ? scope.clientId : null;
@@ -224,8 +226,10 @@ export function DocumentsPanel({ scope, name, search = "", openDocumentId = null
 
 	function finished(outcome: ImportOutcome) {
 		setItems(null);
+		const verb = pasting ? "pasted" : "added";
+		setPasting(false);
 		const failures = outcome.failures.map((entry) => `${entry.name}: ${entry.message}`).join(" ");
-		setNotice([describeOutcome(outcome), failures].filter(Boolean).join(" ") || null);
+		setNotice([describeOutcome(outcome, verb), failures].filter(Boolean).join(" ") || null);
 		if (outcome.documents + outcome.versions > 0) {
 			reload();
 			onChanged();
@@ -297,36 +301,57 @@ export function DocumentsPanel({ scope, name, search = "", openDocumentId = null
 		);
 	}
 
-	function copyOrCut(mode: "copy" | "cut") {
-		const ids = selected.map((record) => record.id);
+	/**
+	 * Ctrl C or Ctrl X. The main process holds what was copied and puts the
+	 * files on the system clipboard too, so they paste into Explorer
+	 * (decision 82). The list remembers a cut only to draw it faded.
+	 */
+	async function copyOrCut(mode: "copy" | "cut", chosen: DocumentRecord[] = selected) {
+		const ids = chosen.map((record) => record.id);
 		if (ids.length === 0) return;
-		writeClipboard({ mode, ids });
-		setClip(readClipboard());
-		setNotice(
-			mode === "copy"
-				? `${plural(ids.length, "document", "documents")} copied. Paste them on any Documents tab or in Files.`
-				: `${plural(ids.length, "document", "documents")} cut. Paste them where they should go.`,
-		);
-	}
-
-	async function paste() {
-		const held = readClipboard();
-		if (!held) return;
-		// Cut and pasted where it already is: nothing moves, and the cut is let go, as in Explorer.
-		const ids = held.mode === "cut" ? held.ids.filter((id) => !byKey.has(documentKey(id))) : held.ids;
 		try {
-			for (const id of ids) {
-				if (held.mode === "copy") await window.juno.documents.copyTo(id, here);
-				else await window.juno.documents.move(id, here);
-			}
-			if (held.mode === "cut") writeClipboard(null);
+			const result = await window.juno.documents.clipboard.copy(ids, mode);
+			writeClipboard({ mode, ids });
 			setClip(readClipboard());
-			if (ids.length > 0)
-				setNotice(`${plural(ids.length, "document", "documents")} ${held.mode === "copy" ? "copied" : "moved"} to ${name}.`);
+			const what = result.count === 1 ? "Document" : `${result.count} documents`;
+			setNotice(`${what} ${mode === "copy" ? "copied" : "cut"}.`);
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
 		}
-		if (ids.length > 0) changed();
+	}
+
+	/**
+	 * Ctrl V: what the system clipboard holds, read by the main process, lands
+	 * here. Documents copied in Juno are pasted at once; files from Explorer, a
+	 * picture or text go through the same questions as Add files.
+	 */
+	async function paste() {
+		try {
+			const result = await window.juno.documents.clipboard.paste(here);
+			if (result.kind === "empty") {
+				setNotice("There is nothing to paste.");
+				return;
+			}
+			if (result.kind === "files") {
+				setPasting(true);
+				start(itemsFromPicked(result.files));
+				return;
+			}
+			if (result.mode === "cut") writeClipboard(null);
+			setClip(readClipboard());
+			const count = result.documents.length;
+			if (count > 0) {
+				setNotice(
+					result.mode === "copy"
+						? `${plural(count, noun[0], noun[1])} pasted.`
+						: `${plural(count, "document", "documents")} moved to ${name}.`,
+				);
+				setSelection({ selected: result.documents.map((record) => documentKey(record.id)), anchor: null, focus: null });
+				changed();
+			}
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
 	}
 
 	async function remove(gone: DocumentRecord[]) {
@@ -363,10 +388,10 @@ export function DocumentsPanel({ scope, name, search = "", openDocumentId = null
 				duplicate(selected);
 				return;
 			case "copy":
-				copyOrCut("copy");
+				void copyOrCut("copy");
 				return;
 			case "cut":
-				copyOrCut("cut");
+				void copyOrCut("cut");
 				return;
 			case "paste":
 				void paste();
@@ -389,12 +414,15 @@ export function DocumentsPanel({ scope, name, search = "", openDocumentId = null
 		// An action on one of several selected rows is an action on all of them.
 		const together = selected.some((other) => other.id === record.id) && selected.length > 1 ? selected : [record];
 		contextMenuFor(
-			{ kind: "file", id: record.id },
+			{ kind: "file", id: record.id, ...(together.length > 1 ? { context: "several" as const } : {}) },
 			{
 				preview: () => show(record),
 				// The registry offers Open as `open` only for a page; a file's Open is the
 				// main process's `open-in-default-app`. Either way it does what Enter does.
 				open: () => void openOutside(record),
+				copy: () => void copyOrCut("copy", together),
+				paste: () => void paste(),
+				duplicate: () => duplicate(together),
 				"copy-to": () => pickFor("copy", together),
 				"move-to": () => pickFor("move", together),
 				"convert-pdf": () => void convert(record),
@@ -413,6 +441,7 @@ export function DocumentsPanel({ scope, name, search = "", openDocumentId = null
 	}
 
 	const blankMenu = blankMenuFor("documents", {
+		paste: () => void paste(),
 		"add-files": () => void choose(),
 		"new-page": () => void newPage(),
 	});

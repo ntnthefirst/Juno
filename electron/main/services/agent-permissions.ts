@@ -202,6 +202,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"documents.add_version",
 		"documents.convert_pdf",
 		"documents.copy",
+		"documents.create_file",
 		"documents.duplicate",
 		"documents.import",
 		"documents.import_from_mail",

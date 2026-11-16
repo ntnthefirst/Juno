@@ -1929,6 +1929,32 @@ export interface PickedFile extends PickedPdf {
 	mediaType: string;
 }
 
+/** What Ctrl C or Ctrl X on documents did. `toSystem` is false when only Juno can paste them. */
+export interface ClipboardCopyResult {
+	count: number;
+	mode: "copy" | "cut";
+	toSystem: boolean;
+}
+
+/**
+ * What Ctrl V found (decision 82): documents copied in Juno, already pasted;
+ * files copied in Explorer, a picture or text, handed back as files for the
+ * window to add the way Add files does; or nothing.
+ */
+export type PasteResult =
+	| { kind: "documents"; mode: "copy" | "cut"; documents: DocumentRecord[] }
+	| { kind: "files"; source: "files" | "image" | "text"; files: PickedFile[] }
+	| { kind: "empty" };
+
+/** A file an agent has the contents of, kept as a document. Text or base64 bytes, not both. */
+export interface CreateFileInput {
+	fileName: string;
+	text?: string;
+	dataBase64?: string;
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
 /**
  * Why an existing document is offered for an incoming file: the very same
  * bytes, the same words (a signed or re-saved copy, decision 39), or only the

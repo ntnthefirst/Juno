@@ -11,6 +11,7 @@ import { mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/s
 import * as calendar from "./calendar";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
+import { configureClipboard, memoryClipboard } from "./clipboard";
 import { importFile } from "./document-import";
 import { configureDocumentStorage } from "./documents";
 import * as accounts from "./mail-accounts";
@@ -145,8 +146,9 @@ describe("note menu", () => {
 	});
 
 	it("gives a page only what a page can do, since it has no file", async () => {
+		configureClipboard(memoryClipboard());
 		const page = await pages.create({}, db);
-		expect(ids(await ask("file", page.document.id))).toEqual(["open", "move-to", "rename", "delete"]);
+		expect(ids(await ask("file", page.document.id))).toEqual(["open", "copy", "duplicate", "rename", "copy-to", "move-to", "delete"]);
 	});
 
 	it("starts the Notes blank menu with a note, and leaves pages to a Documents tab", async () => {
@@ -161,21 +163,26 @@ describe("documents explorer menus", () => {
 		configureDocumentStorage(mkdtempSync(join(tmpdir(), "juno-menu-storage-")));
 	});
 
-	it("offers a file everything the explorer does, and Convert and sign for a file that is not a PDF", async () => {
+	it("offers a file what an explorer does, then Convert and sign for a file that is not a PDF", async () => {
+		configureClipboard(memoryClipboard({ text: "iets" }));
 		const record = await importFile({ source: { kind: "bytes", fileName: "Notes.txt", data: bytes("Prijs per meter") } }, db);
 		expect(ids(await ask("file", record.id))).toEqual([
-			"preview",
 			"open-in-default-app",
-			"duplicate-file",
+			"preview",
+			"copy",
+			"paste",
+			"duplicate",
+			"rename",
 			"copy-to",
 			"move-to",
-			"rename",
 			"convert-pdf",
 			"sign",
 			"download-file",
 			"send-file",
 			"delete",
 		]);
+		const glyphs = Object.fromEntries((await ask("file", record.id)).map((entry) => [entry.id, entry.icon]));
+		expect(glyphs).toMatchObject({ "open-in-default-app": "external", preview: "panel", copy: "copy", paste: "import", rename: "edit", delete: "remove" });
 		const sign = (await ask("file", record.id)).find((entry) => entry.id === "sign");
 		expect(sign?.label).toBe("Convert and sign");
 	});
@@ -188,10 +195,17 @@ describe("documents explorer menus", () => {
 		expect(entries).toContain("sign");
 	});
 
-	it("starts a Documents tab's blank menu with adding to that record, and offers no folder", async () => {
-		const entries = ids(await ask("blank", "documents"));
-		expect(entries.slice(0, 2)).toEqual(["add-files", "new-page"]);
-		expect(entries).not.toContain("new-folder");
+	it("offers only what applies to several files when several are selected", async () => {
+		configureClipboard(memoryClipboard());
+		const record = await importFile({ source: { kind: "bytes", fileName: "Een.txt", data: bytes("1") } }, db);
+		expect(ids(await ask("file", record.id, "several"))).toEqual(["copy", "duplicate", "copy-to", "move-to", "delete"]);
+	});
+
+	it("gives a Documents tab's empty space Paste, New page and Add files, and Paste only with something to paste", async () => {
+		configureClipboard(memoryClipboard());
+		expect(ids(await ask("blank", "documents"))).toEqual(["new-page", "add-files"]);
+		configureClipboard(memoryClipboard({ text: "iets" }));
+		expect(ids(await ask("blank", "documents"))).toEqual(["paste", "new-page", "add-files"]);
 	});
 });
 

@@ -38,6 +38,8 @@ import { convertWithWord, wordInstalled } from "./main/services/word-convert";
 import { configureDocumentStorage } from "./main/services/documents";
 import { apply as applyDocumentsFolder, configureDocumentsFolder } from "./main/services/documents-folder";
 import { configurePageImages } from "./main/services/page-images";
+import { configureClipboard, memoryClipboard } from "./main/services/clipboard";
+import { systemClipboard } from "./main/services/clipboard-system";
 import { configureOutboxFiles, prune as pruneOutboxFiles } from "./main/services/mail-outbox-files";
 import { configureProjectStorage } from "./main/services/project-storage";
 import * as projectRunner from "./main/services/project-runner";
@@ -123,6 +125,8 @@ if (!app.requestSingleInstanceLock()) {
 		// The folder new documents go to is the owner's to choose, and an unusable
 		// one falls back to the default. Page pictures stay under the default.
 		configurePageImages(documentsDir());
+		// A smoke run copies and pastes, and must not overwrite what the person running it has copied.
+		configureClipboard(process.env.JUNO_SMOKE ? memoryClipboard() : systemClipboard);
 		configureDocumentsFolder({
 			defaultDirectory: documentsDir(),
 			apply: (directory) => {

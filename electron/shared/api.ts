@@ -84,6 +84,9 @@ import type {
 	ImportFileInput,
 	PickedPdf,
 	PickedFile,
+	ClipboardCopyResult,
+	PasteResult,
+	DocumentPlace,
 	AnalyseImportInput,
 	ImportFromMailInput,
 	ImportFromMailResult,
@@ -839,8 +842,16 @@ export interface JunoApi {
 		move(id: string, input: DocumentMoveInput): Promise<DocumentRecord>;
 		/** Changes the title only. */
 		rename(id: string, title: string): Promise<DocumentRecord>;
-		/** A new document from the newest version, in the same place, named "<title> (copy)". */
+		/** A new document from the newest version, in the same place, named "<title> (copy)". A page is copied with its pictures. */
 		duplicate(id: string): Promise<DocumentRecord>;
+		/**
+		 * Ctrl C, Ctrl X and Ctrl V on a Documents tab and in Files. The main
+		 * process reads the system clipboard; the window only says where to paste.
+		 */
+		clipboard: {
+			copy(ids: string[], mode: "copy" | "cut"): Promise<ClipboardCopyResult>;
+			paste(place: DocumentPlace): Promise<PasteResult>;
+		};
 		/** A new document from the newest version, under another client or project. */
 		copyTo(id: string, target: DocumentMoveInput): Promise<DocumentRecord>;
 		/** Keeps a PDF of the newest version as the next version. `via: "juno"` means the layout may differ. */

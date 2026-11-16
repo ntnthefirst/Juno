@@ -129,6 +129,38 @@ export const documentTools: ToolDescriptor[] = [
 		},
 	},
 	{
+		name: "documents.create_file",
+		title: "Keep text or a picture as a document",
+		description:
+			"Makes a document from contents rather than from a file on this machine: text (a .txt, .csv or .md " +
+			"file) or the bytes of any file in base64 (a PNG picture, a PDF). Kept under a client, a project, " +
+			"both, or neither, which is Files, the owner's own. The owner's paste of text or a picture makes the " +
+			"same kind of document. Refused when the place already has a document with the same title: check " +
+			"documents.find_matches first.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				file_name: { type: "string", description: "The name with its extension, such as Afspraken.txt or Logo.png. The title is the name without it." },
+				text: { type: "string", description: "The contents as text. Give this or data_base64." },
+				data_base64: { type: "string", description: "The contents as base64 bytes. Give this or text." },
+				client_id: { type: ["string", "null"], description: "Optional. " + OWNER_RULE },
+				project_id: { type: ["string", "null"], description: "Optional. Must belong to the client when both are given." },
+			},
+			required: ["file_name"],
+			additionalProperties: false,
+		},
+		handler: async (args) =>
+			imports.createFile({
+				fileName: String(args.file_name),
+				...(args.text !== undefined ? { text: String(args.text) } : {}),
+				...(args.data_base64 !== undefined ? { dataBase64: String(args.data_base64) } : {}),
+				clientId: (args.client_id as string | null | undefined) ?? null,
+				projectId: (args.project_id as string | null | undefined) ?? null,
+			}),
+	},
+	{
 		name: "documents.list_versions",
 		title: "List a document's versions",
 		description:

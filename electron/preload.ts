@@ -474,6 +474,10 @@ const api: JunoApi = {
 		move: (id, input) => call("documents.move", id, input),
 		rename: (id, title) => call("documents.rename", id, title),
 		duplicate: (id) => call("documents.duplicate", id),
+		clipboard: {
+			copy: (ids, mode) => call("documents.clipboard.copy", ids, mode),
+			paste: (place) => call("documents.clipboard.paste", place),
+		},
 		copyTo: (id, target) => call("documents.copyTo", id, target),
 		convertPdf: (id) => call("documents.convertPdf", id),
 		preview: (source) => call("documents.preview", source),

@@ -9,6 +9,7 @@ import type {
 	AddVersionInput,
 	AnalyseImportInput,
 	DocumentMoveInput,
+	DocumentPlace,
 	FilePreviewSource,
 	ImportFileInput,
 	ImportFromMailInput,
@@ -17,6 +18,7 @@ import type {
 	VersionUse,
 } from "../../shared/types";
 import * as actions from "../services/document-actions";
+import * as clipboard from "../services/clipboard";
 import * as compare from "../services/document-compare";
 import * as convert from "../services/document-convert";
 import * as drag from "../services/document-drag";
@@ -38,6 +40,8 @@ export function registerDocumentsIpc(): void {
 	ipcMain.handle("documents.move", (_event, id: string, input: DocumentMoveInput) => organise.move(id, input));
 	ipcMain.handle("documents.rename", (_event, id: string, title: string) => organise.rename(id, title));
 	ipcMain.handle("documents.duplicate", (_event, id: string) => organise.duplicate(id));
+	ipcMain.handle("documents.clipboard.copy", (_event, ids: string[], mode: "copy" | "cut") => clipboard.copy(ids, mode));
+	ipcMain.handle("documents.clipboard.paste", (_event, place: DocumentPlace) => clipboard.paste(place));
 	ipcMain.handle("documents.copyTo", (_event, id: string, target: DocumentMoveInput) => organise.copyTo(id, target));
 	ipcMain.handle("documents.convertPdf", (_event, id: string) => convert.convertToPdf(id));
 	ipcMain.handle("documents.preview", (_event, source: FilePreviewSource) => preview.preview(source));

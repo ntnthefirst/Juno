@@ -46,8 +46,9 @@ export const BLOCK_KINDS = ["intro", "outro"] as const;
  * - `reader`: a conversation's own "..." button, which acts on the message in view.
  * - `subscription`: an event-kind chip from a calendar subscription, which is read only.
  * - `untrusted`: an attachment whose sender is not trusted, which is previewed and kept but not opened in its app.
+ * - `several`: a file that is one of several selected, so the menu acts on all of them.
  */
-export const MENU_CONTEXTS = ["deadline", "trash", "detail", "unread", "reader", "subscription", "untrusted"] as const;
+export const MENU_CONTEXTS = ["deadline", "trash", "detail", "unread", "reader", "subscription", "untrusted", "several"] as const;
 export type MenuContext = (typeof MENU_CONTEXTS)[number];
 
 export type MenuRequest = {
@@ -127,11 +128,14 @@ export const MENU_ACTIONS = [
 	"save-to",
 	"add-to-project-files",
 	"open-document",
+	"copy",
+	"paste",
+	"duplicate",
 ] as const;
 export type MenuAction = (typeof MENU_ACTIONS)[number];
 
 /** What the main process does itself, through the same services the buttons use. */
-export const MENU_MAIN_ACTIONS = ["snooze-tomorrow", "open-in-default-app", "open-folder", "copy-path", "pin-note", "unpin-note", "duplicate-note", "duplicate-event", "archive-client", "download-file", "duplicate-file"] as const;
+export const MENU_MAIN_ACTIONS = ["snooze-tomorrow", "open-in-default-app", "open-folder", "copy-path", "pin-note", "unpin-note", "duplicate-note", "duplicate-event", "archive-client", "download-file"] as const;
 export type MenuMainAction = (typeof MENU_MAIN_ACTIONS)[number];
 
 export type MenuOutcome =
@@ -174,6 +178,7 @@ export const MENU_ICONS = [
 	"mail",
 	"move-right",
 	"note",
+	"panel",
 	"play",
 	"projects",
 	"read",

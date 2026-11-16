@@ -157,6 +157,8 @@ function special(toolName: string, args: Record<string, unknown>, db: Db): strin
 			return "Fetch new mail";
 		case "documents.import":
 			return "Import a document";
+		case "documents.create_file":
+			return typeof args.file_name === "string" && args.file_name ? `Keep "${clip(args.file_name)}" as a document` : "Keep a file as a document";
 		case "documents.import_from_thread":
 			return named ? `Keep the attachments of "${named}" as documents` : "Keep a conversation's attachments as documents";
 		case "documents.list_from_thread":

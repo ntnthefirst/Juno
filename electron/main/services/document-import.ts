@@ -26,6 +26,7 @@ import type {
 	ImportAnalysis,
 	ImportDocumentInput,
 	ImportFileInput,
+	CreateFileInput,
 	ImportFromMailInput,
 	ImportFromMailResult,
 	ImportMatch,
@@ -321,6 +322,25 @@ export async function createDocument(
 /** A new document from a file the window handed over. */
 export async function importFile(input: ImportFileInput, db: Db = getDb()): Promise<DocumentRecord> {
 	return (await createDocument(resolveSource(input.source, db), input, db)).record;
+}
+
+/**
+ * A new document from contents an agent has rather than a file on this
+ * machine: text, or bytes in base64. The same import as a paste of text or a
+ * picture in the window, which reaches it through Add files.
+ */
+export async function createFile(input: CreateFileInput, db: Db = getDb()): Promise<DocumentRecord> {
+	const fileName = String(input.fileName ?? "").trim();
+	if (!fileName) throw new Error("A file needs a name with its extension, such as Notities.txt.");
+	const hasText = typeof input.text === "string";
+	const hasBytes = typeof input.dataBase64 === "string";
+	if (hasText === hasBytes) throw new Error("Give the file's text or its bytes in base64, one of the two.");
+	const data = hasText ? new Uint8Array(Buffer.from(input.text!, "utf8")) : new Uint8Array(Buffer.from(input.dataBase64!, "base64"));
+	if (data.byteLength === 0) throw new Error(`"${fileName}" is empty. Give it some contents first.`);
+	return importFile(
+		{ source: { kind: "bytes", fileName, data }, clientId: input.clientId ?? null, projectId: input.projectId ?? null },
+		db,
+	);
 }
 
 /**

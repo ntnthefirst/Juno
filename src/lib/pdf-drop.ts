@@ -53,9 +53,9 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 export const BUSY_ADDING = "Finish adding the first files before adding more.";
 
 /** "2 files added, 1 version added." Past tense, one sentence. */
-export function describeOutcome(outcome: ImportOutcome): string | null {
+export function describeOutcome(outcome: ImportOutcome, verb: "added" | "pasted" = "added"): string | null {
 	const parts: string[] = [];
-	if (outcome.documents > 0) parts.push(`${plural(outcome.documents, "file", "files")} added`);
+	if (outcome.documents > 0) parts.push(`${plural(outcome.documents, "file", "files")} ${verb}`);
 	if (outcome.versions > 0) parts.push(`${plural(outcome.versions, "version", "versions")} added`);
 	if (outcome.skipped > 0) parts.push(`${outcome.skipped} skipped`);
 	if (outcome.failures.length > 0) parts.push(`${outcome.failures.length} not added`);

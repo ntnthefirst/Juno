@@ -59,7 +59,7 @@ amended by what actually happened, and the structure map says which.
 | `/screen-new` | A new renderer screen |
 | `/mcp-tool-new` | Exposing an existing service function to the agent |
 | `/migration-new` | Any schema change |
-| `/template-new` | A new document or email template |
+| `/template-new` | A new mail template |
 | `/commit-work` | Splitting finished work into clean commits |
 | `/ship-check` | Pre-release verification and the list of what is missing |
 
@@ -135,22 +135,23 @@ editable, and are **never hard-deleted** (decision 16). Removing one sets
 `hidden_at`, because rows already point at it. Those rows carry `is_system`,
 `hidden_at`, `sort_order`, `seed_key` and `customised_at` on top of the five
 mandatory columns. Reset is per set and global; an upgrade never overwrites an
-edited row and never resurrects a hidden one. Mail templates and document
-templates are no longer seeded: an install that has the old ones (four mail
-templates, five document templates) keeps them as they are, and a first install
-gets one example of each that is an ordinary template. No code may look either
-kind of template up by key.
+edited row and never resurrects a hidden one. Mail templates are no longer
+seeded: an install that has the old ones keeps them as they are, and a first
+install gets one example that is an ordinary template. No code may look a
+template up by key. Document templates were removed (decision 82); their rows
+stay, soft deleted.
 [.claude/rules/data.md](.claude/rules/data.md).
 
 ## The rail
 
-Six places and Settings: Overview, Calendar, Clients, Projects, Mail, Notes
-(decisions 61 and 81). **Documents live on a client's and a project's
-Documents tab**, not in a place of their own, and there are no folders. A note
-is its own record, and **a page is a kind of document** (decision 62), so pages
-are listed, owned and deleted as documents are, on those tabs. Templates is a
-screen without an entry, lit under Projects. A seventh place is a decision,
-not an edit.
+Seven places and Settings: Overview, Calendar, Clients, Projects, Mail, Notes,
+Files (decisions 61, 81 and 82). **Documents live on a client's and a
+project's Documents tab**, and the owner's own, kept under no client and no
+project, in **Files**, which is the same list with no record. There are no
+folders. A note is its own record, and **a page is a kind of document**
+(decision 62), so pages are listed, owned and deleted as documents are.
+Document templates no longer exist; mail templates (Styled mail) do. An
+eighth place is a decision, not an edit.
 
 ## Windows
 

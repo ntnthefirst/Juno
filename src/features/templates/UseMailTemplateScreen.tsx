@@ -73,7 +73,7 @@ function parseAddressLine(line: string): MailAddress[] {
 }
 
 /**
- * Link, Fill, Review and send: docs/editors.md section 4.
+ * Link, Fill, Review and send: docs/editors.md section 3.
  *
  * Who it goes to comes first, because that is the question with an answer in
  * the records, and what the message says comes second, because nothing in the

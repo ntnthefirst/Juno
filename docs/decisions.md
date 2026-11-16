@@ -2820,3 +2820,76 @@ thing.
 several clients, or keeps files that belong to no client or project as a
 matter of course. Either wants a place of its own for documents again, and
 it would be a decision about that place, not a revert of this one.
+
+## 82. Document templates are removed, and Files is the seventh place
+
+Amends decisions 19, 41, 62, 65, 75 and 81. The owner used none of the
+document templates and wanted the room they took: a file is something that
+arrives, is written in Word or kept as a page, and the canvas on paper, the
+components and the Word import were a second editor nobody opened. The same
+owner keeps files that are about no client and no job, the terms and
+conditions, a price list, the logo, a checklist, and wanted a place for them
+that is not an exception on the Overview.
+
+- **Document templates are gone, in every layer.** The Templates screen, its
+  editors, Components, Import Word file, using a template, the Templates
+  button and New from a template on a Documents tab, the palette command,
+  the services, the channels and the agent tools (`templates.*`,
+  `templates.components.*`, `templates.import_docx`, `documents.generate`)
+  with their permission rows. A first install is given no example any more.
+  Mail templates and Styled mail are a separate thing and stay as they are.
+- **The rows stay, soft deleted.** Migration 0036 sets `deleted_at` on every
+  document template, its pictures, every component and their pictures, and
+  drops no table: a document made from a template keeps the `template_id` it
+  was made with, the row it names still exists, and nothing reads it. Such a
+  document is an ordinary document: it opens, previews, prints its stored
+  body again and is signed like any other. One that came from a template
+  nobody reviewed stays a specimen and still cannot be signed, because what
+  it says has not changed; the way out is the owner's own checked text as a
+  new document.
+- **Files is the seventh place on the rail**, after Notes, with the
+  documents glyph. It is a client's Documents tab with no client: the same
+  list, tiles, columns, keys and menus (`features/files/FilesScreen.tsx`
+  over `DocumentsPanel` with the place `{ files: true }`), a search in the
+  title bar, and New makes a page and Add files keeps files there, without
+  asking for a place. It replaces the Files without a client card and list
+  on the Overview. Adding files with no record in view, Copy to and Move to
+  all accept Files as an answer. The digits follow the rail, so Files is
+  Ctrl or Cmd 7 and the agent Ctrl or Cmd 8.
+- **The lists behave like a file explorer**, in Files and on every Documents
+  tab. A click selects one, Ctrl a click toggles one, Shift a run, Ctrl A
+  everything, the arrows move and Shift extends, Escape and a click on the
+  empty space let go, and the bar reads "3 of 7 selected". Enter opens,
+  Space previews, Delete deletes with an undo, F2 renames, Ctrl D
+  duplicates, Ctrl C copies, Ctrl X cuts and Ctrl V pastes, while the list
+  or its empty space has the focus. The right-click menu is the platform's
+  (decision 59): Open, Preview, then Copy, Paste, Duplicate and Rename, then
+  Copy to, Move to and what a file can have done to it, then Delete; with
+  several selected only Copy, Duplicate, Copy to, Move to and Delete; and on
+  the empty space Paste, New page and Add files. Duplicate and Copy to copy
+  a page too, with its own copies of its pictures.
+- **Copy and paste go through the system clipboard, read in the main
+  process.** Copying documents puts a copy of each newest file, named by its
+  title, on the Windows clipboard, so they paste into Explorer. A paste
+  takes, in this order: documents copied in Juno while the clipboard still
+  holds what that copy put there (pasted as copies, or moved after a cut);
+  files copied in Explorer, all of them, through the questions Add files
+  asks; a picture, as "Pasted image" and the date and time; text, as
+  "Pasted text" and the date and time. The window only says where to paste
+  and never names a path. Chromium reads only the first file of a copy and
+  cannot write a list, so on Windows the file list is read and written by
+  PowerShell's Get-Clipboard and Set-Clipboard, in a script whose text never
+  changes, with the paths passed as data (as decision 77 hands Word its
+  paths). A smoke run uses a clipboard of its own.
+- **Reading the clipboard is not an agent tool.** It is something a person
+  does at the window, like opening a menu (decision 59), and an agent that
+  could read whatever the owner last copied would see a password manager's
+  output as readily as a file. What a paste makes is made by tools an agent
+  already has, `documents.duplicate` and `documents.copy`, and one new one,
+  `documents.create_file`, which keeps text or base64 bytes as a document,
+  in the same permission row as `documents.import`.
+
+**What would reverse this:** documents that are the same text filled in for
+every client, often enough that writing them by hand costs real time. That
+would be a decision about generating documents again, starting from Word,
+not a return of the canvas on paper.

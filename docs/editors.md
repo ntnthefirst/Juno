@@ -1,10 +1,11 @@
 # The editors
 
-Three editing surfaces, and they are deliberately not the same thing. A note is
+Editing surfaces, and they are deliberately not the same thing. A note is
 typed prose. A mail template is a canvas that compiles to HTML somebody else's
-mail client has to render. A document template is a page that will be printed
-and signed. Treating those as one editor is what produces a tool that is bad at
-all three.
+mail client has to render. A page is a document written in place. Treating
+those as one editor is what produces a tool that is bad at all of them.
+Document templates, the canvas on paper and the page model they had, were
+removed (decision 82).
 
 ---
 
@@ -651,93 +652,7 @@ into it, fonts and appearance included, so the tool description tells a caller
 to read the template first. Loading a Google font for the canvas is not a tool,
 and decision 36 says why.
 
-## 3. Document templates: the canvas, on paper
-
-`src/features/templates/CanvasTemplateEditor.tsx`, the mail template's editor,
-given a `CanvasSource` that loads, saves and previews a document template, over
-`DocumentCanvas` in `electron/shared/types.ts`, the paper rules in
-`electron/shared/paper.ts` and the compiler in
-`electron/main/services/document-canvas.ts`. Decision 41.
-
-Everything in section 2 holds, the keyboard, the layers, the design panel and
-undo included, except what paper changes:
-
-| | |
-| --- | --- |
-| **Paper** | A3, A4, A5, A6, Letter or Legal, portrait or landscape, chosen in the design panel with nothing selected. Changing it resizes every page and keeps what is on them |
-| **Pages** | Every top-level container is a page: a section the size of the sheet, whose padding is the page margin. Its size and place are the paper's, and `normaliseCanvas` puts them back whoever wrote the canvas. A block that would land at the top level lands on the last page instead. "Add page" in the layers adds one at the end with the last page's margin and fill |
-| **Overflow** | A page prints as one sheet and clips what runs past its foot, so the canvas flags a page that runs over, and "Flow onto the next pages" moves the first block that does not fit, and everything after it, onto a new page, until every page fits. A block taller than a page stays where it is and stays flagged |
-| **Pictures** | Files the template keeps, PNG, JPEG, GIF or WebP, chosen from the toolbar's picture tools or the design panel. The canvas draws one from `app://asset/template/<id>`; rendering writes its bytes into the document inline |
-| **Inputs** | The only values it fills in. A placeholder naming a record is refused on save. An image input is a picture chosen when the template is used |
-| **Not here** | Breakpoints, the HTML code view and the page's own position and size controls. Hover actions are offered and do nothing on paper |
-| **Preview** | The PDF it prints as, with each input at its starting value |
-
-**Importing a Word file.** "Import Word file" on the list reads a `.docx`
-(`services/document-docx.ts`): headings, paragraphs with their bold, italics,
-underlines and links, lists, tables as a columns table with a stroke on each
-cell, and pictures, all onto the first page, which the editor then flows onto
-as many pages as it needs. A field written `{{ name }}` or
-`{{ document.name }}` becomes a required text input keyed `name`. Fonts,
-spacing and Word's own page layout are not carried.
-
-**Using one** is three steps (`UseCanvasTemplateScreen.tsx`): fill in the
-inputs, see the PDF, and then, asked as soon as the PDF is made, connect it to a
-client and a project, which keeps it as one of their documents, or save the PDF
-as a file Juno does not keep.
-
-## 3b. Document templates: the page model
-
-The editor every document template had before the canvas, and still the one a
-template without a canvas opens in. `src/features/templates/TemplateEditor.tsx`, over the model in
-`electron/shared/types.ts` (`DocumentLayout`) and the compiler in
-`electron/main/services/document-layout.ts`.
-
-The model is what a PDF is: pages, a margin, and two ways to place something.
-
-| | |
-| --- | --- |
-| **Pages** | Explicit. Adding a page adds a page, and content does not silently reflow onto a page the author did not ask for |
-| **Margin** | One margin for the whole document, in mm, drawn as a guide |
-| **Flow** | Blocks stacked down the column inside the margin. Text, headings, lists, tables, images, spacers, rules |
-| **Boxes** | A block pinned to a position on the paper, measured from the paper's corner, painted over the flow. An address block in a window envelope's window is a box |
-
-`bodyHtml` is compiled from the layout on every save, so the renderer, the
-placeholder substitution and `printToPDF` below it never learn that a page
-editor exists. The layout is the source; the HTML is output. They cannot
-disagree, because one write produces both.
-
-A template written before this editor existed has `layout: null` and is edited
-as HTML. That stays supported. Converting one is a deliberate act, because
-compiling a hand-written contract into blocks would lose whatever the author
-did by hand.
-
-A new template is neither: the plus on the list opens into a name field, and
-Enter creates the template with one empty page of A4 on the canvas (section 3)
-and opens it there.
-
-### What the editor must not pretend
-
-It is not Word. There is no text wrap around an image, no columns inside a
-flow, no styles panel with forty controls. The block set above is the set.
-
-Content that overruns its page is shown as overrunning, with a warning saying
-which page. Silently clipping it would put a clause off the bottom of a signed
-contract, and silently reflowing it would move the signature block.
-
-### What ships
-
-Nothing is seeded into the list of document templates any more, bar one example
-on a first install. The five that used to ship (`nda`, `development_agreement`,
-`hosting_agreement`, `project_scope`, `addendum`) are gone from the code. An
-install that has them keeps them as they are; a new install never gets them.
-
-The example is one page-model template in Dutch with "u", laid out on two pages:
-headings, a list, a table, the client's address pinned to the paper, and both
-signature blocks pinned side by side at the foot of the second. It asks for
-three inputs, a textarea, a choice and a number. It is unreviewed, so a document
-made from it carries the specimen banner.
-
-## 4. Declared inputs, and using a template
+## 3. Declared inputs, and using a template
 
 A template asks for what the records cannot answer. An input is a key, a
 label, a kind, and whether it is required. The key becomes the placeholder:
@@ -757,27 +672,19 @@ For a mail template the order is Link, Fill, Review (decision 47):
 3. **Review.** The message as it will be sent, and Send, which queues it
    through the outbox gate.
 
-A document template on paper is Fill, see the PDF, then a client to keep it
-under (decision 41). An older document template still links a client first,
-which is what fills its `{{client.*}}`.
-
 Nothing is sent or filed by that screen. A draft still goes through the outbox
-gate, and a document still has to be signed by a person
-([.claude/rules/mcp.md](../.claude/rules/mcp.md) section 4).
+gate ([.claude/rules/mcp.md](../.claude/rules/mcp.md) section 4).
 
 Clicking a template in a list shows a preview, not the editor. Reading is the
 common case; editing is the rare one. A mail template's preview is a page of
 its own, the whole message with Edit and Use above it, and Back from either
 returns to it.
 
-## 5. A document is a PDF
+## 4. A document is any file
 
-Only PDFs. Two ways in:
-
-- **Generated** from a template. The PDF is written at generation, not later,
-  so a document record always points at a file that exists.
-- **Imported.** An existing PDF copied in, with no template and no body. The
-  copy is what Juno holds; the original is never moved or deleted.
-
-Either can be opened, reviewed and signed. An imported PDF cannot be
-re-rendered, and the service refuses rather than writing an empty page over it.
+Any file is a document (decision 75): a PDF, a Word file, a spreadsheet, a
+picture, a page written in Juno. Each keeps every file it has been as a
+version and opens as the newest. A document made from a template while there
+were templates keeps the body it was made with and can print it again; it has
+no template behind it any more. Only a PDF is signed, and anything else is
+converted first (decision 77).

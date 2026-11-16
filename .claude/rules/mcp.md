@@ -30,7 +30,7 @@ clients.list          clients.get          clients.create
 clients.update        clients.archive
 mail.sync             mail.search          mail.get_thread
 mail.draft            mail.reply
-documents.render      documents.sign       documents.list_templates
+documents.render      documents.sign       documents.duplicate
 calendar.list_events  calendar.create_event
 reminders.list        reminders.complete
 ```
@@ -67,7 +67,7 @@ the registration. There is no third category.
 
 **Read-only** (safe to call unattended, any number of times): `clients.list`,
 `clients.get`, `mail.search`, `mail.get_thread`, `calendar.list_events`,
-`reminders.list`, `documents.list_templates`.
+`reminders.list`, `documents.list_unfiled`.
 
 **Side-effectful**: everything that writes, and in particular everything that
 **signs, deletes or files something**: `documents.sign`, `documents.file`,
@@ -172,7 +172,10 @@ If step 3 cannot be one line, stop and fix the service first.
 - Don't expose a tool that returns a credential, in any form, masked or not.
 - Don't add a tool that drives the UI ("open the clients screen"). The agent
   operates the business, not the window. The right-click menus (`menu.show`,
-  decision 59) are interface only for the same reason.
+  decision 59) are interface only for the same reason, and so is reading the
+  system clipboard for a paste (decision 82): what a paste makes, an agent
+  makes with `documents.duplicate`, `documents.copy` and
+  `documents.create_file`.
 - Don't let a tool be the only caller of a service function. If the UI cannot do
   it, question whether it should exist.
 - Don't version tools by suffix (`clients.list_v2`). Change the schema and the

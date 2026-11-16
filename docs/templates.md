@@ -1,208 +1,56 @@
-# Writing a document template
+# Writing a mail template
 
-A template is the legal text with placeholders in it. The body is HTML, per
-[decision 19](decisions.md). Templates live in the database and are edited in the
-app, not on disk.
+A mail template is a message laid out once and sent many times, from Styled
+mail. Templates live in the database and are edited in the app, not on disk.
+The canvas they are laid out on is in [editors.md](editors.md) section 2.
 
-**Nothing that ships is fit to send to anyone.** A new install gets one example
-template and no other, and it is a specimen until you have read it and marked it
-as reviewed. An install that still has the five older invented templates
-(`nda`, `development_agreement`, `hosting_agreement`, `project_scope`,
-`addendum`) keeps them, and they are just as unfit. See
-[../TODO.md](../TODO.md) item 1.
+**There are no document templates any more** (decision 82). A document made
+from one earlier stays an ordinary document: it opens, previews and prints the
+body it was made with. One made from a template nobody reviewed is a
+**specimen**, recorded on the document itself: its PDF carries a red banner,
+the audit page of a signature repeats the warning, and the service refuses to
+sign it. Write the contract with your own checked text as a new document and
+sign that.
 
 ---
 
-## What ships
-
-One example on a first install, and nothing else. It is laid out on the canvas
-on two pages of A4 with a heading, a list, a table and a place for two
-signatures, and it asks for fifteen values when it is used: the date and place,
-who the two parties are, what is being done and for what, the dates, the fee and
-how it is paid. A canvas template reads nothing from the records, so every name
-and address a contract would take from a client is one of those inputs. It is
-written in Dutch with "u", it is an example and not legal advice, it is an
-ordinary template you can edit or delete, and it starts unreviewed like every
-template.
-
-An install that has the five older templates keeps them exactly as they are, and
-a new one never gets them. Nothing may look a template up by key, because most
-installs will not have the one you want.
-
-## A template on paper
-
-A new template is laid out on the canvas, on paper of a fixed size
-([editors.md](editors.md) section 3, decision 41), and it works differently
-from everything below in one way: **it fills in only what it asks for.** None
-of the `owner.*`, `client.*`, `project.*` or `document.*` values listed under
-"Available values" reach it. Every value it prints is one of its own inputs,
-written `{{document.<key>}}`, typed by a person or an agent when it is used. A
-placeholder naming anything else is refused when the template is saved, with a
-message saying which. The conditionals still work on inputs:
-`{{#if document.vat}}...{{/if}}`.
-
-So if a document should carry the client's name, give it an input for the
-name. The PDF is then made before anybody chooses a client, and choosing one
-only decides where the document is kept.
-
-A picture the template always carries, a logo or a signature line, is added on
-the canvas and kept as a file; it is written `{{asset.<key>}}` as an image's
-source and you never type that yourself. A picture that changes each time is an
-input of kind image, chosen from a file when the template is used.
-
-An agent has the same surface: `templates.create` and `templates.update` take a
-`canvas` and `inputs`, `templates.add_image` stores a picture, `templates.fill`
-checks the values against a canvas without storing anything,
-`templates.import_docx` reads a Word file, and `documents.generate` makes the
-document for a client from `extras`. Everything that writes parks for a person
-to approve.
-
-## Components
-
-A piece you use in several templates, a letterhead or a signature block, is made
-once as a **component** (Templates, then Components) and placed in each template
-from the design panel with nothing selected (decision 65). It is a container
-made in the same editor, and it declares inputs of its own, which it writes as
-`{{document.<key>}}` like a template does.
-
-Placing it asks for a value for each input, and each is either text typed at the
-placement or one of the template's own inputs passed through, so a letterhead can
-ask for a reference number without every template declaring it. A placed
-component is not a copy: change it and every template that places it changes, and
-each of them has to be reviewed again. A document you already made keeps the
-component as it was. Detach copies its content into one template and cuts the
-link, and the component cannot be deleted while a template still places it. An
-agent has `templates.components.list`, `get`, `create`, `update`, `delete`,
-`detach`, `add_image` and `list_images`; a component placed in a template is a
-container with `component: { componentId, values }` on a page.
-
 ## Syntax
 
-Four forms, and deliberately no more. A contract needs substitution and "leave
-this paragraph out when there is no VAT number". Anything beyond that is a
-programming language inside a legal document.
+Four forms, and deliberately no more. A message needs substitution and "leave
+this line out when there is no value". Anything beyond that is a programming
+language inside a letter.
 
 | Form | Does |
 | --- | --- |
-| `{{ client.name }}` | The value, HTML-escaped |
-| `{{& client.name }}` | The value, raw. Opt in, and rarely the right answer |
-| `{{#if client.vatNumber }} … {{/if}}` | Include when present and not empty |
-| `{{#unless client.vatNumber }} … {{/unless}}` | The mirror of `if` |
+| `{{ document.contact_name }}` | The value, HTML-escaped |
+| `{{& document.contact_name }}` | The value, raw. Opt in, and rarely the right answer |
+| `{{#if document.reference }} … {{/if}}` | Include when present and not empty |
+| `{{#unless document.reference }} … {{/unless}}` | The mirror of `if` |
 
-Whitespace inside the braces is ignored, so `{{client.name}}` and
-`{{ client.name }}` are the same thing.
+Whitespace inside the braces is ignored, so `{{document.title}}` and
+`{{ document.title }}` are the same thing.
 
 ### Three behaviours worth knowing
 
-**Everything is escaped by default.** A client called `<script>` or a note
+**Everything is escaped by default.** A value of `<script>` or one
 containing markup becomes text, not markup. Use `{{& … }}` only for a value you
 control and that is genuinely meant to be HTML.
 
-**A missing value is printed, not skipped.** `{{ client.iban }}` with no IBAN
-renders a red marked box reading `[ontbreekt: client.iban]`, on the page and in
-the PDF. This is deliberate: a blank space in a contract gets signed, and a
-marked gap gets questioned. Wrap the paragraph in `{{#if …}}` when the value is
+**A missing value is printed, not skipped.** `{{ document.iban }}` with no
+value renders a red marked box reading `[ontbreekt: document.iban]`. This is
+deliberate: a blank space gets sent, and a marked gap gets questioned, and a
+message with one is refused. Wrap the line in `{{#if …}}` when the value is
 genuinely optional.
 
-**A page layout cannot use the raw form.** A layout escapes an ampersand on its
-way into the page, so `{{& … }}` is never recognised there. Plain values and
+**A canvas cannot use the raw form.** The canvas escapes an ampersand on its
+way into the message, so `{{& … }}` is never recognised there. Plain values and
 conditions work in every template; the raw form only in one written as HTML.
 
-## Available values
+## What a mail template prints
 
-### `owner.*`
-
-From **Settings → Your details**. Fill that in before generating anything.
-
-`businessName`, `contactName`, `email`, `phone`, `vatNumber`, `iban`,
-`addressLine1`, `addressLine2`, `postalCode`, `city`, `country`
-
-`contactName` falls back to `businessName` when it is empty, so a sentence
-addressing a person stays grammatical.
-
-### `client.*`
-
-`name`, `email`, `phone`, `website`, `vatNumber`, `language` (`nl`, `nl-je`, `fr` or `en`), `addressLine1`,
-`addressLine2`, `postalCode`, `city`, `country`
-
-Plus, from the client's **primary** contact: `contactName`, `contactRole`,
-`contactEmail`. A client with no primary contact leaves these empty, which is why
-the signature block wraps them in `{{#if …}}`.
-
-### `project.*`
-
-Only when a project was chosen. Empty otherwise, so guard with `{{#if project.name}}`.
-
-| Path | Note |
-| --- | --- |
-| `name`, `description` | As entered |
-| `startsOn`, `dueOn` | Already formatted `14/11/2026` |
-| `agreedValue` | Already formatted `€ 2 100,00` |
-| `agreedValueCents` | The raw integer, if you need arithmetic in prose |
-
-### `document.*`
-
-`title`, `issuedOn` (formatted), `issuedOnIso` (`YYYY-MM-DD`), plus anything
-typed into the extra fields when generating, such as `changeSummary` on an
-addendum.
-
-## Formatting is done for you
-
-Dates arrive as `14/11/2026` and money as `€ 2 100,00`, in Belgian convention
-with a non-breaking thousands space. Do not reformat them in the template, and
-do not do arithmetic on `agreedValueCents` in prose: money is integer cents
-everywhere for a reason.
-
-## Styling
-
-The print stylesheet is in `electron/main/services/document-style.ts` and is
-applied to every document. It is **not** the application's theme tokens: a
-contract is printed in ink on paper and has to look the same whether Juno is
-running in dark mode or not.
-
-Classes worth using:
-
-| Class | For |
-| --- | --- |
-| `juno-clause` | A clause that should not be split across a page break |
-| `juno-parties` | The `<dl>` holding the two parties |
-| `juno-doc-meta` | Small grey line under the title |
-| `juno-signatures`, `juno-signature` | The signature block at the end |
-
-`h2` never breaks away from the text under it, so a clause heading cannot be
-orphaned at the foot of a page.
-
-## The specimen flag
-
-A template with no `reviewedAt` is a specimen. That is the state every template
-starts in, the example included, and it has teeth:
-
-- Every document generated from it carries `isSpecimen`, recorded **on the
-  document**, so reviewing the template later cannot silently reclassify a
-  contract that has already gone out.
-- The PDF prints a red banner on it, from the shell rather than from any
-  template, so it cannot be edited out by accident.
-- The audit page on a signed specimen repeats the warning.
-
-**Editing a template's body clears its review flag** and bumps its version.
-Reviewing is a claim about the content, so it has to be made deliberately and
-never as a side effect of an edit.
-
-## What a signature is worth
-
-A signature is a PNG, a timestamp and a SHA-256 of the exact bytes that were
-signed, plus an audit page stating all of it. That is appropriate for low-stakes
-and internal documents.
-
-It is **not** a qualified electronic signature under eIDAS, the audit page says
-so in plain Dutch, and anything where that distinction matters should go through
-a provider that offers one. See decision 8.
-
-## Mail templates
-
-A mail template uses the same syntax and works like a template on paper:
-**it fills in only what it asks for** (decision 47). None of the values under
-"Available values" reach it. Every value it prints is one of its own inputs,
+**A mail template fills in only what it asks for** (decision 47). Nothing from
+a client, a project or your settings reaches it. Every value it prints is one
+of its own inputs,
 each with a key, a label, a kind and whether it is required, written
 `{{document.<key>}}`. A placeholder naming anything else is refused when the
 template is saved. The canvas it is laid out on is in
@@ -231,3 +79,13 @@ Two things to know when writing one:
 - Conditionals do not nest. The first closing tag ends the conditional it
   meets, so an `if` inside an `if` leaves the outer one open. Give each
   optional line its own.
+
+## What a signature is worth
+
+A signature is a PNG, a timestamp and a SHA-256 of the exact bytes that were
+signed, plus an audit page stating all of it. That is appropriate for low-stakes
+and internal documents.
+
+It is **not** a qualified electronic signature under eIDAS, the audit page says
+so in plain Dutch, and anything where that distinction matters should go through
+a provider that offers one. See decision 8.

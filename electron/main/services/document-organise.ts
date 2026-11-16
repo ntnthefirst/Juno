@@ -7,11 +7,12 @@
  * - **Duplicate** makes a new document from the newest version, in the same
  *   place. **Copy to** does the same into another place. The file is copied on
  *   disk under a name the service builds, keeping its extension; the copy has
- *   one version and none of the original's history, signatures included.
+ *   one version and none of the original's history, signatures included. A
+ *   page is copied with its blocks and its own copies of its pictures.
  * - **Rename** changes the title and nothing on disk.
  *
- * A duplicate of a document made from an unreviewed template is still a
- * specimen, because what it says has not changed.
+ * A duplicate of a document made from an unreviewed template, while there
+ * were templates, is still a specimen, because what it says has not changed.
  *
  * No Electron import, so every rule here is covered by a test.
  */
@@ -25,6 +26,7 @@ import { now } from "../db/columns";
 import { documents } from "../db/schema";
 import { assertTitleFree, availableTitle, resolvePlace } from "./document-place";
 import * as versions from "./document-versions";
+import * as pages from "./pages";
 import { documentStorageDir, fileNameFor, get, type DocumentRecord } from "./documents";
 
 const MAX_TITLE = 200;
@@ -78,14 +80,12 @@ function copyTitle(place: { clientId: string | null; projectId: string | null },
 
 async function copyInto(id: string, target: Partial<DocumentPlace>, sameTitleWhenFree: boolean, db: Db) {
 	const row = requireDocument(id, db);
-	if (row.sourceKind === "page") {
-		throw new Error("A page cannot be copied yet. Make a new page and copy its text into it.");
-	}
 	const place = resolvePlace(target, db);
 	const title =
 		sameTitleWhenFree && availableTitle(place, row.title, db) === row.title.trim()
 			? row.title.trim()
 			: copyTitle(place, row.title.trim(), db);
+	if (row.sourceKind === "page") return (await pages.copyPage(id, place, title, db)).document;
 
 	const latest = versions.summaries([id], db).get(id)?.latest ?? null;
 	const file = latest ? versions.fileOf(latest.id, db) : null;

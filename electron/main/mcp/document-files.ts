@@ -81,8 +81,9 @@ export const documentFileTools: ToolDescriptor[] = [
 		name: "documents.duplicate",
 		title: "Duplicate a document",
 		description:
-			"Makes a new document from the newest version, in the same place, named '<title> (copy)'. The copy " +
-			"has one version and none of the original's signatures. A page cannot be duplicated this way.",
+			"Makes a new document from the newest version, in the same place, named '<title> (copy)', then " +
+			"'<title> (copy 2)' and on. The copy has one version and none of the original's signatures. A page " +
+			"is copied with its blocks and its own copies of its pictures.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {

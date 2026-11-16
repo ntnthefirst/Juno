@@ -285,14 +285,15 @@ export function DocumentsPanel({ scope, name, search = "", openDocumentId = null
 		else onTakeOver({ kind: "sign", record });
 	}
 
+	/** A page, or a document with a file: one with no file yet has nothing to copy. */
 	function duplicate(chosen: DocumentRecord[]) {
-		const files = chosen.filter((record) => record.latestVersion !== null);
-		if (files.length === 0) return;
+		const copies = chosen.filter((record) => record.sourceKind === "page" || record.latestVersion !== null);
+		if (copies.length === 0) return;
 		void act(
 			async () => {
-				for (const record of files) await window.juno.documents.duplicate(record.id);
+				for (const record of copies) await window.juno.documents.duplicate(record.id);
 			},
-			files.length === 1 ? `${files[0]!.title} duplicated.` : `${files.length} documents duplicated.`,
+			copies.length === 1 ? "Document duplicated." : `${copies.length} documents duplicated.`,
 		);
 	}
 

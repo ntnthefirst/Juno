@@ -13,6 +13,7 @@ import * as compare from "./document-compare";
 import * as drag from "./document-drag";
 import { analyseImport, importFile, importFromMail } from "./document-import";
 import * as organise from "./document-organise";
+import * as pageImages from "./page-images";
 import * as pages from "./pages";
 import * as projects from "./projects";
 import * as documents from "./documents";
@@ -222,6 +223,23 @@ describe("moving, duplicating, copying and renaming", () => {
 
 		const second = await organise.duplicate(original.id, db);
 		expect(second.title).toBe("Offerte (copy 2)");
+	});
+
+	it("duplicates a page in Files with its blocks and its own copy of each picture", async () => {
+		const { db } = await setUp();
+		const page = await pages.create({ title: "Checklist" }, db);
+		const picture = pageImages.store(page.document.id, { fileName: "logo.png", data: PNG_BYTES }, db);
+		await pages.update(page.document.id, { blocks: [...page.blocks, picture] }, db);
+
+		const copy = await organise.duplicate(page.document.id, db);
+		expect(copy).toMatchObject({ title: "Checklist (copy)", clientId: null, projectId: null, sourceKind: "page" });
+		const copied = await pages.get(copy.id, db);
+		const image = copied.blocks.find((block) => block.type === "image");
+		expect(image && image.type === "image" ? image.path : "").toMatch(new RegExp(`^pages/${copy.id}/`));
+		expect(image && image.type === "image" ? Buffer.compare(Buffer.from(pageImages.read(image.path)!), Buffer.from(PNG_BYTES)) : 1).toBe(0);
+		expect((await organise.duplicate(page.document.id, db)).title).toBe("Checklist (copy 2)");
+		// Both are listed in Files, beside the original.
+		expect((await documents.listUnfiled(db)).map((row) => row.title).sort()).toEqual(["Checklist", "Checklist (copy 2)", "Checklist (copy)"]);
 	});
 
 	it("copies to another client keeping the title when it is free there", async () => {

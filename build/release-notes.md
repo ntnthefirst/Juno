@@ -2,6 +2,40 @@
 
 Newest first. The rules for writing an entry are in `.claude/rules/release-notes.md`.
 
+## 1.3.0
+Released: 2026-11-16
+
+Documents live with their client or project, your own files have a place called Files, and files copy and paste like in Explorer.
+
+### New
+- Files in the sidebar holds your own files that belong to no client or project, such as a price list or your terms.
+- Each client and project has a Documents tab with every file, page and signed document kept for it.
+- Files copy and paste with Ctrl C and Ctrl V, also from Explorer, and pasted text or a picture becomes a file.
+- Select files like in Explorer with Ctrl, Shift, Ctrl A and the arrow keys, and duplicate one with Ctrl D.
+- Space previews a Word file, workbook, PDF or picture inside Juno, and Enter opens it in its own app.
+- A new version of a file marks the words it adds and leaves out compared with the one before.
+- A mail attachment saves to the conversation's project in one click, and any attachment can be previewed first.
+- A message waiting in the outbox can be edited or deleted before it is sent.
+- Juno copies your data before an update changes it, and says so at launch if that copy failed.
+- Names of clients, projects and events in a line of text open that record when clicked.
+
+### Improvements
+- Document templates are gone: write a contract in Word or as a page and keep it on the client's Documents tab.
+- Documents left the sidebar and moved to the Documents tab of each client and project.
+- Every file shows the icon of its type, in documents, project files and mail attachments.
+- New in Mail and Calendar opens a menu with what each of them can start.
+- A mail you open is marked read at once, and the server hears it at the next sync.
+- Lists and cards show the shape of what is loading instead of the word.
+- Escape steps back from a settings page instead of closing Settings.
+
+### Fixes
+- Deleting a note straight after typing used to lose the last keystrokes.
+- A reminder ticked in two places at once used to skip an occurrence.
+- The agenda used to show 00:00 on the later days of an event that ends late.
+- A resized event in the week view used to be saved twice.
+- A refused email address or phone number used to vanish from its field.
+- The palette used to say Nothing matches before its lists had loaded.
+
 ## 1.2.0
 Released: 2026-11-08
 
